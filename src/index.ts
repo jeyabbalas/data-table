@@ -12,3 +12,11 @@ export * from './core/types';
 
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
+
+// Worker types (for advanced usage)
+export type {
+  WorkerMessage,
+  WorkerResponse,
+  WorkerMessageType,
+  WorkerResponseType,
+} from './worker/types';

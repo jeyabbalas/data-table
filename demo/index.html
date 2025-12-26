@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Data Table - Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 2rem;
+      background: #f5f5f5;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    .info {
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    #demo-container {
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      min-height: 400px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Interactive Data Table - Demo</h1>
+  <div class="info">
+    <p><strong>Library Version:</strong> <span id="version">Loading...</span></p>
+  </div>
+  <div id="demo-container">
+    <p>Demo content will appear here as the library is developed.</p>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

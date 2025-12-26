@@ -5,5 +5,7 @@
  * using DuckDB WASM for in-browser analytics.
  */
 
-// Placeholder export - will be expanded in subsequent tasks
 export const VERSION = '0.1.0';
+
+// Core types
+export * from './core/types';

@@ -54,4 +54,6 @@ export interface ProgressPayload {
   percent: number;
   loaded?: number;
   total?: number;
+  estimatedRemaining?: number;
+  cancelable: boolean;
 }

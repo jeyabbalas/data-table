@@ -8,15 +8,16 @@ import type {
   WorkerMessageType,
   QueryPayload,
   LoadPayload,
-  ProgressPayload,
 } from '../worker/types';
+import type { ProgressInfo, ProgressCallback } from '../core/Progress';
+
+// Re-export for convenience
+export type { ProgressInfo, ProgressCallback } from '../core/Progress';
 
 export interface LoadOptions {
   format: 'csv' | 'json' | 'parquet';
   tableName?: string;
 }
-
-export type ProgressCallback = (progress: ProgressPayload) => void;
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -194,7 +195,7 @@ export class WorkerBridge {
 
       case 'progress':
         if (request.onProgress) {
-          request.onProgress(payload as ProgressPayload);
+          request.onProgress(payload as ProgressInfo);
         }
         break;
     }

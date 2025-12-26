@@ -13,9 +13,22 @@ export * from './core/types';
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 
+// Progress reporting
+export type {
+  ProgressInfo,
+  ProgressCallback,
+  ProgressStage,
+} from './core/Progress';
+export {
+  estimateTimeRemaining,
+  formatProgress,
+  formatBytes,
+  formatDuration,
+} from './core/Progress';
+
 // Data layer
 export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
-export type { LoadOptions, ProgressCallback } from './data/WorkerBridge';
+export type { LoadOptions } from './data/WorkerBridge';
 
 // Worker types (for advanced usage)
 export type {

@@ -1,4 +1,5 @@
 import { VERSION } from '../src/index';
+import { WorkerBridge } from '../src/data/WorkerBridge';
 
 // Display library version
 const versionEl = document.getElementById('version');
@@ -18,48 +19,36 @@ function addStatus(message: string, isError = false): void {
   }
 }
 
-// Test worker and DuckDB
+// Test WorkerBridge
 const demoContainer = document.getElementById('demo-container');
 if (demoContainer) {
-  demoContainer.innerHTML = '<p>Testing Web Worker and DuckDB...</p>';
+  demoContainer.innerHTML = '<p>Testing WorkerBridge...</p>';
 
-  try {
-    const worker = new Worker(
-      new URL('../src/worker/worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+  const bridge = new WorkerBridge();
 
-    worker.onmessage = (event) => {
-      const { id, type, payload } = event.data;
+  bridge
+    .initialize()
+    .then(() => {
+      demoContainer.innerHTML = '';
+      addStatus('✓ WorkerBridge initialized (Worker + DuckDB ready)');
+      return bridge.query<{ answer: number; greeting: string }>(
+        "SELECT 42 as answer, 'hello' as greeting"
+      );
+    })
+    .then((rows) => {
+      addStatus('✓ Query executed via WorkerBridge');
+      addStatus(`   Result: ${JSON.stringify(rows)}`);
 
-      if (id === '__ready__') {
-        demoContainer.innerHTML = ''; // Clear initial message
-        addStatus('✓ Web Worker loaded');
-        // Initialize DuckDB
-        worker.postMessage({ id: 'init-1', type: 'init', payload: {} });
-      } else if (id === 'init-1' && type === 'result') {
-        addStatus('✓ DuckDB initialized');
-        // Test query
-        worker.postMessage({
-          id: 'query-1',
-          type: 'query',
-          payload: { sql: "SELECT 42 as answer, 'hello' as greeting" },
-        });
-      } else if (id === 'query-1' && type === 'result') {
-        addStatus(`✓ Query executed successfully`);
-        addStatus(`   Result: ${JSON.stringify(payload.rows)}`);
-      } else if (type === 'error') {
-        addStatus(`✗ Error: ${payload.message}`, true);
-      }
-    };
-
-    worker.onerror = (error) => {
-      addStatus(`✗ Worker error: ${error.message}`, true);
-    };
-  } catch (error) {
-    demoContainer.innerHTML = '';
-    addStatus(`✗ Failed to create worker: ${error}`, true);
-  }
+      // Test AbortController
+      const controller = new AbortController();
+      controller.abort(); // Abort immediately
+      return bridge.query('SELECT 1', controller.signal).catch((err) => {
+        addStatus('✓ AbortController works: ' + err.message);
+      });
+    })
+    .catch((error) => {
+      addStatus(`✗ Error: ${error.message}`, true);
+    });
 }
 
 console.log('Data Table Library loaded, version:', VERSION);

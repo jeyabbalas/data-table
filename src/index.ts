@@ -13,6 +13,10 @@ export * from './core/types';
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 
+// Data layer
+export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
+export type { LoadOptions, ProgressCallback } from './data/WorkerBridge';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

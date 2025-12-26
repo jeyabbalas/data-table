@@ -9,3 +9,6 @@ export const VERSION = '0.1.0';
 
 // Core types
 export * from './core/types';
+
+// Core classes
+export { EventEmitter } from './core/EventEmitter';

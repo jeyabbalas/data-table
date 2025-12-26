@@ -1,0 +1,48 @@
+{
+  "name": "@jeyabbalas/data-table",
+  "version": "0.1.0",
+  "description": "A client-side JavaScript library for interactive, explorable data tables using DuckDB WASM",
+  "type": "module",
+  "main": "./dist/data-table.umd.cjs",
+  "module": "./dist/data-table.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/data-table.js",
+      "require": "./dist/data-table.umd.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage"
+  },
+  "keywords": [
+    "data-table",
+    "duckdb",
+    "analytics",
+    "visualization",
+    "interactive"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "overrides": {
+    "esbuild": "npm:esbuild-wasm@latest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vitest": "^4.0.16"
+  }
+}

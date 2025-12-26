@@ -7,7 +7,13 @@ import type {
   WorkerMessage,
   WorkerResponse,
   WorkerResponseType,
+  QueryPayload,
 } from './types';
+import {
+  initializeDuckDB,
+  executeQuery,
+  isInitialized,
+} from './duckdb';
 
 // Send response back to main thread
 function respond(id: string, type: WorkerResponseType, payload: unknown): void {
@@ -17,19 +23,25 @@ function respond(id: string, type: WorkerResponseType, payload: unknown): void {
 
 // Handle incoming messages
 async function handleMessage(message: WorkerMessage): Promise<void> {
-  const { id, type } = message;
+  const { id, type, payload } = message;
 
   try {
     switch (type) {
       case 'init':
-        // TODO: Initialize DuckDB (Task 1.2)
+        await initializeDuckDB();
         respond(id, 'result', { initialized: true });
         break;
 
-      case 'query':
-        // TODO: Execute query (Task 1.2)
-        respond(id, 'result', { rows: [] });
+      case 'query': {
+        if (!isInitialized()) {
+          respond(id, 'error', { message: 'DuckDB not initialized' });
+          break;
+        }
+        const { sql } = payload as QueryPayload;
+        const rows = await executeQuery(sql);
+        respond(id, 'result', { rows });
         break;
+      }
 
       case 'load':
         // TODO: Load data (Tasks 1.5-1.7)

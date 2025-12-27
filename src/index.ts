@@ -13,6 +13,10 @@ export * from './core/types';
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 
+// Signals and reactive state
+export { createSignal, computed, batch } from './core/Signal';
+export type { Signal, Computed } from './core/Signal';
+
 // Progress reporting
 export type {
   ProgressInfo,

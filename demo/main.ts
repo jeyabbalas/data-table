@@ -1,4 +1,4 @@
-import { VERSION } from '../src/index';
+import { VERSION, createSignal, computed } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { DataLoader } from '../src/data/DataLoader';
 import { detectSchema } from '../src/data/SchemaDetector';
@@ -7,6 +7,7 @@ import { detectAllColumnPatterns } from '../src/data/PatternDetector';
 import type { ColumnSchema } from '../src/core/types';
 import type { TypeInferenceResult } from '../src/data/TypeInference';
 import type { PatternDetectionResult } from '../src/data/PatternDetector';
+import type { Signal } from '../src/core/Signal';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -161,6 +162,60 @@ urlInput.addEventListener('keydown', (e) => {
     const url = urlInput.value.trim();
     if (url) loadData(url);
   }
+});
+
+// ============================================
+// Signal Demo - Reactive State
+// ============================================
+
+// Signal demo elements
+const counterDisplay = document.getElementById('counter-display')!;
+const doubledDisplay = document.getElementById('doubled-display')!;
+const squaredDisplay = document.getElementById('squared-display')!;
+const updateCountDisplay = document.getElementById('update-count')!;
+const incrementBtn = document.getElementById('increment-btn') as HTMLButtonElement;
+const decrementBtn = document.getElementById('decrement-btn') as HTMLButtonElement;
+const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
+
+// Create reactive signals
+const counter = createSignal(0);
+const updateCount = createSignal(0);
+
+// Create computed values that automatically update
+const doubled = computed(() => counter.get() * 2, [counter]);
+const squared = computed(() => counter.get() ** 2, [counter]);
+
+// Subscribe to counter changes - update display and increment update count
+counter.subscribe((value) => {
+  counterDisplay.textContent = String(value);
+  updateCount.set(updateCount.get() + 1);
+});
+
+// Subscribe to computed values
+doubled.subscribe((value) => {
+  doubledDisplay.textContent = String(value);
+});
+
+squared.subscribe((value) => {
+  squaredDisplay.textContent = String(value);
+});
+
+// Subscribe to update count
+updateCount.subscribe((value) => {
+  updateCountDisplay.textContent = String(value);
+});
+
+// Button handlers
+incrementBtn.addEventListener('click', () => {
+  counter.set(counter.get() + 1);
+});
+
+decrementBtn.addEventListener('click', () => {
+  counter.set(counter.get() - 1);
+});
+
+resetBtn.addEventListener('click', () => {
+  counter.set(0);
 });
 
 console.log('Data Table Library loaded, version:', VERSION);

@@ -61,7 +61,7 @@
     }
     .dt-scroll-container {
       flex: 1;
-      overflow: auto;
+      overflow: hidden;  /* Remove scrolling here - body handles it */
       display: flex;
       flex-direction: column;
     }
@@ -78,6 +78,13 @@
       z-index: 10;
       border-bottom: 1px solid #e5e7eb;
       background: #f9fafb;
+      overflow-x: auto;  /* Allow horizontal scroll (synced with body) */
+      overflow-y: hidden;
+      -ms-overflow-style: none;  /* Hide scrollbar in IE/Edge */
+      scrollbar-width: none;  /* Hide scrollbar in Firefox */
+    }
+    .dt-header::-webkit-scrollbar {
+      display: none;  /* Hide scrollbar in Chrome/Safari */
     }
     .dt-body {
       flex: 1;
@@ -155,8 +162,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      overflow-y: auto;
-      overflow-x: visible;
+      overflow: auto;  /* Both vertical AND horizontal scrolling */
     }
     .dt-virtual-content {
       position: relative;

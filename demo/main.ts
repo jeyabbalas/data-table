@@ -73,6 +73,26 @@ async function loadData(source: File | string): Promise<void> {
   try {
     await actions.loadData(source, { tableName });
     updateTableInfo();
+
+    // Subscribe to scroll events AFTER table is rendered
+    const tableBody = tableContainer?.getTableBody();
+    if (tableBody) {
+      const virtualScroller = tableBody.getVirtualScroller();
+
+      // Update info box on scroll
+      virtualScroller.onScroll(() => {
+        updateTableInfo();
+      });
+
+      // Sync horizontal scroll between body and header
+      const scrollContainer = virtualScroller.getScrollContainer();
+      const header = tableContainer?.getElement().querySelector('.dt-header') as HTMLElement;
+      if (header) {
+        scrollContainer.addEventListener('scroll', () => {
+          header.scrollLeft = scrollContainer.scrollLeft;
+        }, { passive: true });
+      }
+    }
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -104,10 +124,6 @@ bridge
         updateTableInfo();
       }
     });
-
-    // Update info when table body scrolls
-    // We can periodically update or subscribe to a scroll event
-    // For now, just update on selection/sort changes
 
     // Update info with dimensions
     tableContainer.onResize((dims) => {

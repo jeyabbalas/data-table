@@ -324,6 +324,15 @@ export class VirtualScroller {
   }
 
   /**
+   * Get the content container element
+   *
+   * This is the spacer element that sets the scrollable area size.
+   */
+  getContentContainer(): HTMLElement {
+    return this.contentContainer;
+  }
+
+  /**
    * Get the current scroll top position
    */
   getScrollTop(): number {

@@ -378,6 +378,12 @@ export class TableBody {
         }
       }
     }
+
+    // Set content width for horizontal scrolling
+    // The content container needs an explicit width since the viewport is absolute positioned
+    const contentContainer = this.virtualScroller.getContentContainer();
+    const totalWidth = visibleColumns.length * 150; // 150px per column (matches CSS)
+    contentContainer.style.width = `${totalWidth}px`;
   }
 
   /**

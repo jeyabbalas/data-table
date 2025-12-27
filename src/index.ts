@@ -47,6 +47,9 @@ export type {
 export { TableBody } from './table/TableBody';
 export type { TableBodyOptions, RowData } from './table/TableBody';
 
+export { CellRenderer } from './table/Cell';
+export type { CellOptions } from './table/Cell';
+
 // Progress reporting
 export type {
   ProgressInfo,

@@ -6,6 +6,7 @@
  */
 
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
+import { CellRenderer } from './Cell';
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -60,6 +61,7 @@ export class TableBody {
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
+  private readonly cellRenderer: CellRenderer;
 
   constructor(
     container: HTMLElement,
@@ -70,6 +72,7 @@ export class TableBody {
   ) {
     this.rowHeight = options.rowHeight ?? 32;
     this.classPrefix = options.classPrefix ?? 'dt';
+    this.cellRenderer = new CellRenderer({ classPrefix: this.classPrefix });
 
     // Create virtual scroller
     this.virtualScroller = new VirtualScroller(container, {
@@ -510,99 +513,7 @@ export class TableBody {
       const colName = columns[i];
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
-      this.updateCellContent(cells[i] as HTMLElement, value, colSchema);
-    }
-  }
-
-  /**
-   * Update the content of a cell element
-   */
-  private updateCellContent(
-    cellEl: HTMLElement,
-    value: unknown,
-    schema?: ColumnSchema
-  ): void {
-    const nullClass = `${this.classPrefix}-cell--null`;
-    const numberClass = `${this.classPrefix}-cell--number`;
-
-    if (value === null || value === undefined) {
-      cellEl.textContent = 'null';
-      cellEl.classList.add(nullClass);
-      cellEl.classList.remove(numberClass);
-    } else {
-      const formatted = this.formatCellValue(value, schema);
-      cellEl.textContent = formatted;
-      cellEl.classList.remove(nullClass);
-
-      if (schema && ['integer', 'float', 'decimal'].includes(schema.type)) {
-        cellEl.classList.add(numberClass);
-      } else {
-        cellEl.classList.remove(numberClass);
-      }
-    }
-  }
-
-  /**
-   * Format a cell value based on its type
-   */
-  private formatCellValue(value: unknown, schema?: ColumnSchema): string {
-    if (value === null || value === undefined) {
-      return 'null';
-    }
-
-    if (!schema) {
-      return String(value);
-    }
-
-    switch (schema.type) {
-      case 'integer':
-        return typeof value === 'number' ? value.toLocaleString() : String(value);
-
-      case 'float':
-      case 'decimal':
-        if (typeof value === 'number') {
-          // Show up to 4 decimal places, remove trailing zeros
-          return value.toLocaleString(undefined, {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 4,
-          });
-        }
-        return String(value);
-
-      case 'boolean':
-        return value ? 'true' : 'false';
-
-      case 'date':
-        if (value instanceof Date) {
-          return value.toISOString().split('T')[0];
-        }
-        // DuckDB may return date as string
-        return String(value);
-
-      case 'timestamp':
-        if (value instanceof Date) {
-          return value.toLocaleString();
-        }
-        // Try to parse as date
-        try {
-          const date = new Date(String(value));
-          if (!isNaN(date.getTime())) {
-            return date.toLocaleString();
-          }
-        } catch {
-          // Fall through to string
-        }
-        return String(value);
-
-      case 'time':
-        return String(value);
-
-      case 'interval':
-        return String(value);
-
-      case 'string':
-      default:
-        return String(value);
+      this.cellRenderer.render(cells[i] as HTMLElement, value, colSchema);
     }
   }
 

@@ -1,3 +1,13 @@
+/**
+ * Demo: Task 3.5 - Cell Rendering
+ *
+ * This demo showcases the CellRenderer functionality:
+ * - Type-aware value formatting (integers, floats, dates, timestamps, booleans)
+ * - Locale-aware number formatting with thousand separators
+ * - Null value display with distinctive styling
+ * - Text truncation with ellipsis for long strings
+ */
+
 import {
   VERSION,
   createTableState,
@@ -31,15 +41,25 @@ function updateInfo(message: string): void {
 }
 
 function updateTableInfo(): void {
-  const sortColumns = tableState.sortColumns.get();
-  const selectedRows = tableState.selectedRows.get();
   const rowCount = tableState.totalRows.get();
-  const colCount = tableState.schema.get().length;
+  const schema = tableState.schema.get();
+  const colCount = schema.length;
   const tableName = tableState.tableName.get();
 
   if (!tableName) return;
 
+  // Build type summary
+  const typeCounts = new Map<string, number>();
+  for (const col of schema) {
+    typeCounts.set(col.type, (typeCounts.get(col.type) || 0) + 1);
+  }
+
+  const typeInfo = Array.from(typeCounts.entries())
+    .map(([type, count]) => `${type}: ${count}`)
+    .join(', ');
+
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
+  info += `<br><span style="color: #6b7280; font-size: 0.8rem;">Types: ${typeInfo}</span>`;
 
   // Show visible range from table body
   const tableBody = tableContainer?.getTableBody();
@@ -51,14 +71,16 @@ function updateTableInfo(): void {
   }
 
   // Show selection info
+  const selectedRows = tableState.selectedRows.get();
   if (selectedRows.size > 0) {
     info += ` | <strong>Selected:</strong> ${selectedRows.size} row${selectedRows.size > 1 ? 's' : ''}`;
   }
 
   // Show sort info
+  const sortColumns = tableState.sortColumns.get();
   if (sortColumns.length > 0) {
     const sortDesc = sortColumns
-      .map((s, i) => `${s.column} (${s.direction === 'asc' ? '▲' : '▼'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
+      .map((s, i) => `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
       .join(', ');
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
   }
@@ -109,7 +131,7 @@ bridge
       tableContainerEl,
       tableState,
       actions,
-      bridge  // Pass bridge for TableBody
+      bridge
     );
 
     // Subscribe to state changes to update info display

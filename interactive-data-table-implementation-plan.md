@@ -408,8 +408,10 @@ export function detectPattern(values: string[]): DetectedPattern {
 **Verification:**
 - Detects email addresses
 - Detects URLs
-- Detects UUIDs
+- Detects UUIDs (in VARCHAR columns)
 - Returns null for generic strings
+
+**Note:** Pattern detection only runs on VARCHAR/STRING columns. If DuckDB already detects a column as UUID type (common with JSON data containing UUID-formatted strings), pattern detection is unnecessary - the type system already knows it's a UUID. The "Pattern" column in the demo will show "-" for such columns, which is correct behavior.
 
 ### Task 2.4: Create Signal/Observable System
 

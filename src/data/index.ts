@@ -12,3 +12,6 @@ export { detectSchema, mapDuckDBType } from './SchemaDetector';
 
 export { inferStringColumnType, inferAllStringColumnTypes } from './TypeInference';
 export type { TypeInferenceResult, TypeInferenceOptions } from './TypeInference';
+
+export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './PatternDetector';
+export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './PatternDetector';

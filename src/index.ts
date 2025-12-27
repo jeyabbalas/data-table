@@ -41,6 +41,10 @@ export { detectSchema, mapDuckDBType } from './data/SchemaDetector';
 export { inferStringColumnType, inferAllStringColumnTypes } from './data/TypeInference';
 export type { TypeInferenceResult, TypeInferenceOptions } from './data/TypeInference';
 
+// Pattern detection
+export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './data/PatternDetector';
+export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './data/PatternDetector';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

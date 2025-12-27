@@ -64,6 +64,7 @@ export class VirtualScroller {
   private scrollContainer: HTMLElement;
   private contentContainer: HTMLElement;
   private viewportContainer: HTMLElement;
+  private widthSpacer: HTMLElement;
   private totalRows: number = 0;
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
   private scrollCallbacks: Set<ScrollCallback> = new Set();
@@ -87,9 +88,12 @@ export class VirtualScroller {
     // Create DOM structure
     this.scrollContainer = this.createScrollContainer();
     this.contentContainer = this.createContentContainer();
+    this.widthSpacer = this.createWidthSpacer();
     this.viewportContainer = this.createViewportContainer();
 
     // Assemble structure
+    // Width spacer is in normal flow to force horizontal scroll width
+    this.contentContainer.appendChild(this.widthSpacer);
     this.contentContainer.appendChild(this.viewportContainer);
     this.scrollContainer.appendChild(this.contentContainer);
     container.appendChild(this.scrollContainer);
@@ -130,6 +134,22 @@ export class VirtualScroller {
   private createViewportContainer(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.classPrefix}-virtual-viewport`;
+    return el;
+  }
+
+  /**
+   * Create the width spacer element
+   *
+   * This element is in normal document flow (not absolutely positioned)
+   * and forces the scroll container to have the correct horizontal scroll width.
+   * Without this, the absolutely positioned viewport doesn't contribute to scrollWidth.
+   */
+  private createWidthSpacer(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.classPrefix}-width-spacer`;
+    el.style.height = '1px';
+    el.style.width = '0px';
+    el.style.pointerEvents = 'none';
     return el;
   }
 
@@ -240,6 +260,22 @@ export class VirtualScroller {
 
     // Recalculate visible range
     this.updateVisibleRange();
+  }
+
+  /**
+   * Set the content width for horizontal scrolling
+   *
+   * This sets the width of the spacer element AND the content containers
+   * to force the scroll container to recognize the full content width.
+   *
+   * @param width - Total width in pixels
+   */
+  setContentWidth(width: number): void {
+    if (this.destroyed) return;
+    const widthPx = `${width}px`;
+    this.widthSpacer.style.width = widthPx;
+    this.contentContainer.style.minWidth = widthPx;
+    this.viewportContainer.style.minWidth = widthPx;
   }
 
   /**

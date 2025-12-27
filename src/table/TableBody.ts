@@ -379,11 +379,17 @@ export class TableBody {
       }
     }
 
-    // Set content width for horizontal scrolling
-    // The content container needs an explicit width since the viewport is absolute positioned
-    const contentContainer = this.virtualScroller.getContentContainer();
+    // Set width for horizontal scrolling
+    // Uses a width spacer element in normal flow to force correct scrollWidth
     const totalWidth = visibleColumns.length * 150; // 150px per column (matches CSS)
-    contentContainer.style.width = `${totalWidth}px`;
+    this.virtualScroller.setContentWidth(totalWidth);
+
+    // Also set header row width to match for scroll synchronization
+    const scrollContainer = this.virtualScroller.getScrollContainer();
+    const headerRow = scrollContainer.closest('.dt-root')?.querySelector('.dt-header-row') as HTMLElement;
+    if (headerRow) {
+      headerRow.style.minWidth = `${totalWidth}px`;
+    }
   }
 
   /**

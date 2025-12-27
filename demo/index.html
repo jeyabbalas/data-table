@@ -61,7 +61,8 @@
     }
     .dt-scroll-container {
       flex: 1;
-      overflow: hidden;  /* Remove scrolling here - body handles it */
+      overflow-x: auto;   /* Allow horizontal scrolling for header + body together */
+      overflow-y: hidden; /* Body's virtual scroller handles vertical */
       display: flex;
       flex-direction: column;
     }
@@ -160,19 +161,25 @@
       position: absolute;  /* Use absolute positioning to constrain height */
       top: 0;
       left: 0;
-      right: 0;
+      width: 100%;  /* Use width instead of right:0 to allow content overflow */
       bottom: 0;
-      overflow: auto;  /* Both vertical AND horizontal scrolling */
+      overflow-x: hidden; /* Parent (.dt-scroll-container) handles horizontal */
+      overflow-y: auto;   /* Virtual scroller handles vertical only */
     }
     .dt-virtual-content {
       position: relative;
-      min-width: fit-content;
+      /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
     }
     .dt-virtual-viewport {
       position: absolute;
       top: 0;
       left: 0;
-      min-width: fit-content;
+      /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
+    }
+    .dt-width-spacer {
+      height: 1px;
+      pointer-events: none;
+      /* Width set dynamically via JavaScript to force horizontal scroll */
     }
 
     /* Virtual scroll info (for demo) */

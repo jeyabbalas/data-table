@@ -2,7 +2,9 @@ import { VERSION } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { DataLoader } from '../src/data/DataLoader';
 import { detectSchema } from '../src/data/SchemaDetector';
+import { inferAllStringColumnTypes } from '../src/data/TypeInference';
 import type { ColumnSchema } from '../src/core/types';
+import type { TypeInferenceResult } from '../src/data/TypeInference';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -32,9 +34,21 @@ function showResult(
   tableName: string,
   rowCount: number,
   schema: ColumnSchema[],
+  typeInference: Map<string, TypeInferenceResult>,
   rows: Record<string, unknown>[]
 ): void {
   const columns = schema.map((col) => col.name);
+
+  // Format type inference suggestion for a column
+  const formatSuggestion = (col: ColumnSchema): string => {
+    const inference = typeInference.get(col.name);
+    if (!inference || inference.suggestedType === 'string') {
+      return '-';
+    }
+    const pct = (inference.confidence * 100).toFixed(0);
+    return `<span style="color: #059669;">${inference.suggestedType}</span> <span style="color: #6b7280;">(${pct}% confidence)</span>`;
+  };
+
   const html = `
     <div class="status success">Data loaded successfully!</div>
     <div class="metadata">
@@ -42,10 +56,10 @@ function showResult(
       <p><strong>Total Rows:</strong> ${rowCount.toLocaleString()}</p>
       <p><strong>Columns:</strong> ${schema.length}</p>
     </div>
-    <h3>Schema (detected via detectSchema)</h3>
+    <h3>Schema (with Type Inference)</h3>
     <table>
-      <tr><th>Column</th><th>Type</th><th>Original DuckDB Type</th><th>Nullable</th></tr>
-      ${schema.map((col) => `<tr><td>${col.name}</td><td class="mono">${col.type}</td><td class="mono">${col.originalType}</td><td>${col.nullable ? 'Yes' : 'No'}</td></tr>`).join('')}
+      <tr><th>Column</th><th>Type</th><th>Original DuckDB Type</th><th>Nullable</th><th>Suggested Type</th></tr>
+      ${schema.map((col) => `<tr><td>${col.name}</td><td class="mono">${col.type}</td><td class="mono">${col.originalType}</td><td>${col.nullable ? 'Yes' : 'No'}</td><td>${formatSuggestion(col)}</td></tr>`).join('')}
     </table>
     <h3>First ${rows.length} Rows</h3>
     <div style="overflow-x: auto;">
@@ -78,15 +92,19 @@ async function loadData(source: File | string): Promise<void> {
   try {
     const result = await loader.load(source, { tableName });
 
-    // Detect schema using the new detectSchema function
+    // Detect schema using detectSchema
     const schema = await detectSchema(tableName, bridge);
+
+    // Infer types for string columns
+    showStatus('Analyzing column types...', 'info');
+    const typeInference = await inferAllStringColumnTypes(tableName, bridge);
 
     // Get first 3 rows
     const rows = await bridge.query<Record<string, unknown>>(
       `SELECT * FROM "${tableName}" LIMIT 3`
     );
 
-    showResult(tableName, result.rowCount, schema, rows);
+    showResult(tableName, result.rowCount, schema, typeInference, rows);
   } catch (error) {
     showStatus(
       `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,

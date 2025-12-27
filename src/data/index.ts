@@ -9,3 +9,6 @@ export { DataLoader } from './DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './DataLoader';
 
 export { detectSchema, mapDuckDBType } from './SchemaDetector';
+
+export { inferStringColumnType, inferAllStringColumnTypes } from './TypeInference';
+export type { TypeInferenceResult, TypeInferenceOptions } from './TypeInference';

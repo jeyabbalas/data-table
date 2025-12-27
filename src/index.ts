@@ -37,6 +37,10 @@ export type { DataFormat, LoadResult, DataLoaderOptions } from './data/DataLoade
 // Schema detection
 export { detectSchema, mapDuckDBType } from './data/SchemaDetector';
 
+// Type inference
+export { inferStringColumnType, inferAllStringColumnTypes } from './data/TypeInference';
+export type { TypeInferenceResult, TypeInferenceOptions } from './data/TypeInference';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

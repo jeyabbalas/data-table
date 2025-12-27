@@ -34,6 +34,9 @@ export type { LoadOptions } from './data/WorkerBridge';
 export { DataLoader } from './data/DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './data/DataLoader';
 
+// Schema detection
+export { detectSchema, mapDuckDBType } from './data/SchemaDetector';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

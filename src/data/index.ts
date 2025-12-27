@@ -7,3 +7,5 @@ export type { LoadOptions, ProgressInfo, ProgressCallback } from './WorkerBridge
 
 export { DataLoader } from './DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './DataLoader';
+
+export { detectSchema, mapDuckDBType } from './SchemaDetector';

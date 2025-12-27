@@ -57,3 +57,10 @@ export interface ProgressPayload {
   estimatedRemaining?: number;
   cancelable: boolean;
 }
+
+export interface LoadResultPayload {
+  loaded: boolean;
+  tableName: string;
+  rowCount: number;
+  columns: string[];
+}

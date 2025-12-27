@@ -8,12 +8,14 @@ import type {
   WorkerResponse,
   WorkerResponseType,
   QueryPayload,
+  LoadPayload,
 } from './types';
 import {
   initializeDuckDB,
   executeQuery,
   isInitialized,
 } from './duckdb';
+import { loadCSV } from './loaders/csv';
 
 // Send response back to main thread
 function respond(id: string, type: WorkerResponseType, payload: unknown): void {
@@ -43,10 +45,59 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
         break;
       }
 
-      case 'load':
-        // TODO: Load data (Tasks 1.5-1.7)
-        respond(id, 'result', { loaded: true });
+      case 'load': {
+        if (!isInitialized()) {
+          respond(id, 'error', { message: 'DuckDB not initialized' });
+          break;
+        }
+
+        const { data, format, tableName } = payload as LoadPayload;
+
+        // Report start of loading
+        respond(id, 'progress', {
+          stage: 'reading',
+          percent: 0,
+          cancelable: true,
+        });
+
+        try {
+          let result;
+
+          if (format === 'csv') {
+            respond(id, 'progress', {
+              stage: 'parsing',
+              percent: 25,
+              cancelable: true,
+            });
+
+            result = await loadCSV(data, { tableName });
+
+            respond(id, 'progress', {
+              stage: 'indexing',
+              percent: 90,
+              cancelable: false,
+            });
+          } else {
+            respond(id, 'error', {
+              message: `Format '${format}' not yet supported`,
+            });
+            break;
+          }
+
+          respond(id, 'result', {
+            loaded: true,
+            tableName: result.tableName,
+            rowCount: result.rowCount,
+            columns: result.columns,
+          });
+        } catch (error) {
+          respond(id, 'error', {
+            message:
+              error instanceof Error ? error.message : 'Failed to load data',
+          });
+        }
         break;
+      }
 
       case 'cancel':
         // TODO: Cancel operation

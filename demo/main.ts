@@ -46,6 +46,28 @@ if (demoContainer) {
         addStatus('✓ AbortController works: ' + err.message);
       });
     })
+    .then(() => {
+      // Test CSV loading
+      addStatus('');
+      addStatus('Testing CSV loading...');
+
+      const csvData = `id,name,value
+1,Alice,100
+2,Bob,200
+3,Charlie,300`;
+
+      return bridge.loadData(csvData, { format: 'csv', tableName: 'demo_table' });
+    })
+    .then(() => {
+      addStatus('✓ CSV data loaded into demo_table');
+      return bridge.query<{ id: number; name: string; value: number }>(
+        'SELECT * FROM demo_table ORDER BY id'
+      );
+    })
+    .then((rows) => {
+      addStatus(`✓ Query from loaded CSV: ${rows.length} rows`);
+      addStatus(`   Data: ${JSON.stringify(rows)}`);
+    })
     .catch((error) => {
       addStatus(`✗ Error: ${error.message}`, true);
     });

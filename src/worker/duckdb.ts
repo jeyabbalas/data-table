@@ -42,6 +42,30 @@ export async function initializeDuckDB(): Promise<void> {
 }
 
 /**
+ * Convert BigInt values to Numbers for JSON serialization
+ * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify()
+ */
+function convertBigInts(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigInts);
+  }
+  if (typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = convertBigInts(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
+/**
  * Execute a SQL query and return results as an array of objects
  */
 export async function executeQuery<T = Record<string, unknown>>(
@@ -52,7 +76,7 @@ export async function executeQuery<T = Record<string, unknown>>(
   }
 
   const result = await conn.query(sql);
-  return result.toArray().map((row) => row.toJSON() as T);
+  return result.toArray().map((row) => convertBigInts(row.toJSON()) as T);
 }
 
 /**

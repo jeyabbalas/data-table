@@ -29,6 +29,10 @@ export type { TableState } from './core/State';
 export { StateActions } from './core/Actions';
 export type { LoadDataOptions } from './core/Actions';
 
+// Table components
+export { TableContainer } from './table/TableContainer';
+export type { TableContainerOptions, ResizeCallback } from './table/TableContainer';
+
 // Progress reporting
 export type {
   ProgressInfo,

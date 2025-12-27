@@ -15,7 +15,6 @@
     }
     h1 { margin-bottom: 1rem; color: #333; }
     h2 { margin: 0 0 0.5rem; color: #555; font-size: 1.1rem; }
-    h3 { margin: 1rem 0 0.5rem; color: #555; font-size: 1rem; }
     .card {
       background: white;
       padding: 1rem;
@@ -41,85 +40,66 @@
     }
     button:hover { background: #1d4ed8; }
     button:disabled { background: #9ca3af; cursor: not-allowed; }
-    .status { padding: 0.5rem; border-radius: 4px; margin: 0.5rem 0; }
-    .status.success { background: #d1fae5; color: #065f46; }
-    .status.error { background: #fee2e2; color: #991b1b; }
-    .status.info { background: #dbeafe; color: #1e40af; }
-    .metadata { font-family: monospace; font-size: 0.9rem; margin: 0.5rem 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
-    th, td { border: 1px solid #ddd; padding: 0.4rem 0.5rem; text-align: left; }
-    th { background: #f3f4f6; font-weight: 600; }
-    .mono { font-family: monospace; }
-    .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .status-bar .version { color: #6b7280; }
+    .status-bar .init-status { font-weight: 500; }
+
+    /* TableContainer CSS classes */
+    .dt-root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: white;
+    }
+    .dt-header {
+      flex-shrink: 0;
+      overflow-x: hidden;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    .dt-body {
+      flex: 1;
+      overflow: auto;
+    }
   </style>
 </head>
 <body>
-  <h1>Interactive Data Table - Demo</h1>
+  <h1>Interactive Data Table</h1>
 
   <div class="card">
-    <p><strong>Library Version:</strong> <span id="version">Loading...</span></p>
-    <p id="init-status"></p>
-  </div>
-
-  <div class="card">
-    <h2>File Upload</h2>
-    <div class="row">
-      <input type="file" id="file-input" accept=".csv,.json,.parquet">
-      <button id="load-file-btn" disabled>Load File</button>
+    <div class="status-bar">
+      <span class="version">v<span id="version">...</span></span>
+      <span id="init-status" class="init-status">Initializing...</span>
     </div>
   </div>
 
   <div class="card">
-    <h2>Load from URL</h2>
+    <h2>Load Data</h2>
+    <div class="row" style="margin-bottom: 0.5rem;">
+      <input type="file" id="file-input" accept=".csv,.json,.parquet">
+      <button id="load-file-btn" disabled>Load File</button>
+    </div>
     <div class="row">
-      <input type="text" id="url-input" placeholder="https://raw.githubusercontent.com/.../data.csv">
+      <input type="text" id="url-input" placeholder="Enter URL to CSV, JSON, or Parquet file...">
       <button id="load-url-btn" disabled>Load URL</button>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Signal Demo (Reactive State)</h2>
-    <div id="signal-demo">
-      <div class="row" style="align-items: center; margin-bottom: 0.5rem;">
-        <button id="decrement-btn">-</button>
-        <span id="counter-display" style="font-size: 1.5rem; font-weight: bold; min-width: 60px; text-align: center;">0</span>
-        <button id="increment-btn">+</button>
-        <button id="reset-btn" style="margin-left: 1rem; background: #6b7280;">Reset</button>
-      </div>
-      <div class="metadata">
-        <p>Doubled: <span id="doubled-display">0</span></p>
-        <p>Squared: <span id="squared-display">0</span></p>
-        <p>Update Count: <span id="update-count">0</span></p>
-      </div>
-    </div>
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div id="table-container" style="height: 500px;"></div>
   </div>
 
   <div class="card">
-    <h2>Table State (Load data to see state)</h2>
-    <div class="metadata" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.25rem 1rem;">
-      <p><strong>Table Name:</strong> <span id="state-table-name">(none)</span></p>
-      <p><strong>Total Rows:</strong> <span id="state-total-rows">0</span></p>
-      <p><strong>Filtered Rows:</strong> <span id="state-filtered-rows">0</span></p>
-      <p><strong>Active Filters:</strong> <span id="state-filters-count">0</span></p>
-      <p><strong>Sort Columns:</strong> <span id="state-sort-count">0</span></p>
-      <p><strong>Visible Columns:</strong> <span id="state-visible-cols">0</span></p>
-      <p><strong>Pinned Columns:</strong> <span id="state-pinned-cols">0</span></p>
-      <p><strong>Selected Rows:</strong> <span id="state-selected-rows">0</span></p>
-    </div>
-    <h3>Actions Demo (load data first)</h3>
-    <div class="row" style="margin-top: 0.5rem;">
-      <button id="action-add-filter" disabled style="background: #059669;">Add Filter</button>
-      <button id="action-clear-filters" disabled style="background: #dc2626;">Clear Filters</button>
-      <button id="action-toggle-sort" disabled style="background: #7c3aed;">Toggle Sort</button>
-      <button id="action-select-rows" disabled style="background: #0891b2;">Select Rows 0-4</button>
-      <button id="action-clear-selection" disabled style="background: #6b7280;">Clear Selection</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Result</h2>
-    <div id="result-container">
-      <p class="status info">Load a file or URL to see results</p>
+    <div id="table-info" style="font-size: 0.85rem; color: #6b7280;">
+      Load a file or URL to see the data table
     </div>
   </div>
 

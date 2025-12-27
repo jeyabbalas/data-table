@@ -4,6 +4,7 @@
 
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, ParquetLoadOptions } from './types';
+import { mapDuckDBType } from '../../data/SchemaDetector';
 
 let tableCounter = 0;
 
@@ -52,13 +53,19 @@ export async function loadParquet(
     );
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
-    // Get column names
-    const columnsResult = await conn.query(`DESCRIBE "${tableName}"`);
-    const columns = columnsResult
-      .toArray()
-      .map((row) => String(row.toJSON().column_name));
+    // Get full schema info from DESCRIBE
+    const describeResult = await conn.query(`DESCRIBE "${tableName}"`);
+    const describeRows = describeResult.toArray().map((row) => row.toJSON());
 
-    return { tableName, rowCount, columns };
+    const columns = describeRows.map((row) => String(row.column_name));
+    const schema = describeRows.map((row) => ({
+      name: String(row.column_name),
+      type: mapDuckDBType(String(row.column_type)),
+      nullable: row.null === 'YES',
+      originalType: String(row.column_type),
+    }));
+
+    return { tableName, rowCount, columns, schema };
   } finally {
     // Clean up virtual file
     await db.dropFile(fileName);

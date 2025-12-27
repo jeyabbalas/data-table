@@ -124,6 +124,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             tableName: result.tableName,
             rowCount: result.rowCount,
             columns: result.columns,
+            schema: result.schema,
           });
         } catch (error) {
           respond(id, 'error', {

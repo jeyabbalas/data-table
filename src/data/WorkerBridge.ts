@@ -10,6 +10,7 @@ import type {
   LoadPayload,
 } from '../worker/types';
 import type { ProgressInfo, ProgressCallback } from '../core/Progress';
+import type { ColumnSchema } from '../core/types';
 
 // Re-export for convenience
 export type { ProgressInfo, ProgressCallback } from '../core/Progress';
@@ -17,6 +18,13 @@ export type { ProgressInfo, ProgressCallback } from '../core/Progress';
 export interface LoadOptions {
   format: 'csv' | 'json' | 'parquet';
   tableName?: string;
+}
+
+export interface LoadDataResult {
+  tableName: string;
+  rowCount: number;
+  columns: string[];
+  schema: ColumnSchema[];
 }
 
 interface PendingRequest {
@@ -86,13 +94,16 @@ export class WorkerBridge {
 
   /**
    * Load data into DuckDB
+   *
+   * Returns table name, row count, columns, and full schema info.
+   * All metadata queries happen in the worker to avoid blocking the main thread.
    */
   async loadData(
     source: ArrayBuffer | string,
     options: LoadOptions,
     onProgress?: ProgressCallback,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<LoadDataResult> {
     this.ensureInitialized();
 
     const payload: LoadPayload = {
@@ -100,7 +111,19 @@ export class WorkerBridge {
       format: options.format,
       tableName: options.tableName,
     };
-    await this.sendMessage('load', payload, onProgress, signal);
+    const result = (await this.sendMessage('load', payload, onProgress, signal)) as {
+      tableName: string;
+      rowCount: number;
+      columns: string[];
+      schema: ColumnSchema[];
+    };
+
+    return {
+      tableName: result.tableName,
+      rowCount: result.rowCount,
+      columns: result.columns,
+      schema: result.schema,
+    };
   }
 
   /**

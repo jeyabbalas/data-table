@@ -59,15 +59,29 @@
       border-radius: 8px;
       background: white;
     }
+    .dt-scroll-container {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .dt-table-inner {
+      min-width: fit-content;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
     .dt-header {
       flex-shrink: 0;
-      overflow-x: auto;
+      position: sticky;
+      top: 0;
+      z-index: 10;
       border-bottom: 1px solid #e5e7eb;
       background: #f9fafb;
     }
     .dt-body {
       flex: 1;
-      overflow: auto;
+      min-height: 0;
     }
 
     /* Column Header CSS */
@@ -78,7 +92,8 @@
     .dt-col-header {
       display: flex;
       flex-direction: column;
-      min-width: 150px;
+      width: 150px;
+      flex-shrink: 0;
       padding: 0.5rem 0.75rem;
       border-right: 1px solid #e5e7eb;
       cursor: pointer;
@@ -136,17 +151,17 @@
     .dt-virtual-scroll {
       height: 100%;
       overflow-y: auto;
-      overflow-x: hidden;
+      overflow-x: visible;
     }
     .dt-virtual-content {
       position: relative;
-      width: 100%;
+      min-width: fit-content;
     }
     .dt-virtual-viewport {
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
+      min-width: fit-content;
     }
 
     /* Virtual scroll info (for demo) */
@@ -155,6 +170,54 @@
       text-align: center;
       color: #6b7280;
       font-size: 0.875rem;
+    }
+
+    /* Row styles */
+    .dt-row {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #f3f4f6;
+      cursor: pointer;
+      background: white;
+      transition: background 0.1s ease;
+    }
+    .dt-row:hover,
+    .dt-row--hover {
+      background: #f9fafb;
+    }
+    .dt-row--selected {
+      background: #eff6ff;
+    }
+    .dt-row--selected:hover,
+    .dt-row--selected.dt-row--hover {
+      background: #dbeafe;
+    }
+    .dt-row--loading {
+      background: #fafafa;
+    }
+
+    /* Cell styles */
+    .dt-cell {
+      padding: 0 0.75rem;
+      width: 150px;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.875rem;
+      color: #111827;
+      border-right: 1px solid #f3f4f6;
+    }
+    .dt-cell:last-child {
+      border-right: none;
+    }
+    .dt-cell--null {
+      color: #9ca3af;
+      font-style: italic;
+    }
+    .dt-cell--number {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
   </style>
 </head>

@@ -11,7 +11,6 @@ import { resetTableState, initializeColumnsFromSchema } from './State';
 import type { Filter, FilterType, SortColumn } from './types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
-import { detectSchema } from '../data/SchemaDetector';
 
 /**
  * Options for loading data
@@ -27,7 +26,7 @@ export class StateActions {
 
   constructor(
     private state: TableState,
-    private bridge: WorkerBridge
+    bridge: WorkerBridge
   ) {
     this.loader = new DataLoader(bridge);
   }
@@ -39,6 +38,9 @@ export class StateActions {
   /**
    * Load data from a file or URL
    *
+   * All metadata (row count, schema) is retrieved in the worker to avoid
+   * blocking the main thread with sequential queries.
+   *
    * @param source - File object or URL string
    * @param options - Loading options (tableName, format)
    */
@@ -49,17 +51,14 @@ export class StateActions {
     // Reset state for new data
     resetTableState(this.state);
 
-    // Load data
+    // Load data - schema is included in the result (no more blocking queries!)
     const result = await this.loader.load(source, options);
 
-    // Detect schema
-    const schema = await detectSchema(result.tableName, this.bridge);
-
-    // Update state
+    // Update state with schema from loader result
     this.state.tableName.set(result.tableName);
     this.state.totalRows.set(result.rowCount);
     this.state.filteredRows.set(result.rowCount);
-    initializeColumnsFromSchema(this.state, schema);
+    initializeColumnsFromSchema(this.state, result.schema);
   }
 
   // =========================================

@@ -44,6 +44,9 @@ export type {
   ScrollAlign,
 } from './table/VirtualScroller';
 
+export { TableBody } from './table/TableBody';
+export type { TableBodyOptions, RowData } from './table/TableBody';
+
 // Progress reporting
 export type {
   ProgressInfo,

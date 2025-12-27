@@ -9,7 +9,9 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import type { WorkerBridge } from '../data/WorkerBridge';
 import { ColumnHeader } from './ColumnHeader';
+import { TableBody } from './TableBody';
 
 /**
  * Options for configuring the TableContainer
@@ -43,6 +45,8 @@ export type ResizeCallback = (dimensions: { width: number; height: number }) => 
  */
 export class TableContainer {
   private element: HTMLElement;
+  private scrollContainer: HTMLElement;
+  private tableInner: HTMLElement;
   private headerRow: HTMLElement;
   private bodyContainer: HTMLElement;
   private resizeObserver: ResizeObserver;
@@ -51,6 +55,7 @@ export class TableContainer {
   private resizeCallbacks: Set<ResizeCallback> = new Set();
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
   private columnHeaders: ColumnHeader[] = [];
+  private tableBody: TableBody | null = null;
 
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
@@ -59,6 +64,7 @@ export class TableContainer {
     private container: HTMLElement,
     private state: TableState,
     private actions?: StateActions,
+    private bridge?: WorkerBridge,
     options: TableContainerOptions = {}
   ) {
     // Apply defaults
@@ -71,12 +77,16 @@ export class TableContainer {
 
     // Create DOM structure
     this.element = this.createRootElement();
+    this.scrollContainer = this.createScrollContainer();
+    this.tableInner = this.createTableInner();
     this.headerRow = this.createHeaderRow();
     this.bodyContainer = this.createBodyContainer();
 
-    // Assemble structure
-    this.element.appendChild(this.headerRow);
-    this.element.appendChild(this.bodyContainer);
+    // Assemble structure: root > scrollContainer > tableInner > (header + body)
+    this.tableInner.appendChild(this.headerRow);
+    this.tableInner.appendChild(this.bodyContainer);
+    this.scrollContainer.appendChild(this.tableInner);
+    this.element.appendChild(this.scrollContainer);
     this.container.appendChild(this.element);
 
     // Set up resize observer
@@ -101,6 +111,24 @@ export class TableContainer {
     el.className = `${this.resolvedOptions.classPrefix}-root`;
     el.setAttribute('role', 'table');
     el.setAttribute('aria-label', 'Data table');
+    return el;
+  }
+
+  /**
+   * Create the scroll container for unified horizontal/vertical scrolling
+   */
+  private createScrollContainer(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-scroll-container`;
+    return el;
+  }
+
+  /**
+   * Create the table inner container
+   */
+  private createTableInner(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-table-inner`;
     return el;
   }
 
@@ -303,14 +331,40 @@ export class TableContainer {
 
       this.headerRow.appendChild(headerRowEl);
 
-      // Body placeholder
-      const bodyPlaceholder = document.createElement('div');
-      bodyPlaceholder.className = `${this.resolvedOptions.classPrefix}-body-placeholder`;
-      bodyPlaceholder.style.padding = '2rem';
-      bodyPlaceholder.style.textAlign = 'center';
-      bodyPlaceholder.style.color = '#6b7280';
-      bodyPlaceholder.textContent = `${this.state.totalRows.get().toLocaleString()} rows (table body rendering coming in Task 3.4)`;
-      this.bodyContainer.appendChild(bodyPlaceholder);
+      // Create or update TableBody
+      if (this.bridge && this.actions) {
+        // Destroy existing table body if present
+        if (this.tableBody) {
+          this.tableBody.destroy();
+          this.tableBody = null;
+        }
+
+        // Create new table body
+        this.tableBody = new TableBody(
+          this.bodyContainer,
+          this.state,
+          this.bridge,
+          this.actions,
+          {
+            rowHeight: this.resolvedOptions.rowHeight,
+            classPrefix: this.resolvedOptions.classPrefix,
+          }
+        );
+
+        // Initialize table body asynchronously
+        this.tableBody.initialize().catch((error) => {
+          console.error('Error initializing table body:', error);
+        });
+      } else {
+        // Fallback: show row count if no bridge/actions
+        const bodyPlaceholder = document.createElement('div');
+        bodyPlaceholder.className = `${this.resolvedOptions.classPrefix}-body-placeholder`;
+        bodyPlaceholder.style.padding = '2rem';
+        bodyPlaceholder.style.textAlign = 'center';
+        bodyPlaceholder.style.color = '#6b7280';
+        bodyPlaceholder.textContent = `${this.state.totalRows.get().toLocaleString()} rows`;
+        this.bodyContainer.appendChild(bodyPlaceholder);
+      }
     }
   }
 
@@ -357,6 +411,13 @@ export class TableContainer {
   }
 
   /**
+   * Get the table body instance
+   */
+  getTableBody(): TableBody | null {
+    return this.tableBody;
+  }
+
+  /**
    * Destroy the table container and clean up resources
    */
   destroy(): void {
@@ -365,6 +426,12 @@ export class TableContainer {
 
     // Destroy all column headers
     this.destroyColumnHeaders();
+
+    // Destroy table body
+    if (this.tableBody) {
+      this.tableBody.destroy();
+      this.tableBody = null;
+    }
 
     // Disconnect resize observer
     this.resizeObserver.disconnect();

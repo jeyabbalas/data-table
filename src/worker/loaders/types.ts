@@ -2,6 +2,8 @@
  * Common types for data loaders
  */
 
+import type { ColumnSchema } from '../../core/types';
+
 /**
  * Result from loading data into DuckDB
  */
@@ -12,6 +14,8 @@ export interface LoadResult {
   rowCount: number;
   /** List of column names */
   columns: string[];
+  /** Full schema with type information */
+  schema: ColumnSchema[];
 }
 
 /**

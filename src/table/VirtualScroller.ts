@@ -76,6 +76,9 @@ export class VirtualScroller {
   // Bound event handler for cleanup
   private handleScrollBound: () => void;
 
+  // Scroll throttling with requestAnimationFrame
+  private scrollRAF: number | null = null;
+
   constructor(container: HTMLElement, options: VirtualScrollerOptions) {
     this.rowHeight = options.rowHeight;
     this.bufferRows = options.bufferRows ?? 5;
@@ -135,11 +138,23 @@ export class VirtualScroller {
   // =========================================
 
   /**
-   * Handle scroll events
+   * Handle scroll events with requestAnimationFrame throttling
+   *
+   * This prevents scroll event storms during fast scrolling by ensuring
+   * we only update once per animation frame (~60fps).
    */
   private handleScroll(): void {
     if (this.destroyed) return;
-    this.updateVisibleRange();
+
+    // Throttle with requestAnimationFrame
+    if (this.scrollRAF !== null) return;
+
+    this.scrollRAF = requestAnimationFrame(() => {
+      this.scrollRAF = null;
+      if (!this.destroyed) {
+        this.updateVisibleRange();
+      }
+    });
   }
 
   /**
@@ -352,6 +367,12 @@ export class VirtualScroller {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // Cancel any pending RAF
+    if (this.scrollRAF !== null) {
+      cancelAnimationFrame(this.scrollRAF);
+      this.scrollRAF = null;
+    }
 
     // Remove scroll listener
     this.scrollContainer.removeEventListener('scroll', this.handleScrollBound);

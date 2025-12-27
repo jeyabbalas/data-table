@@ -97,7 +97,7 @@ describe('TableContainer', () => {
         classPrefix: 'custom',
       };
 
-      const tableContainer = new TableContainer(container, state, undefined, customOptions);
+      const tableContainer = new TableContainer(container, state, undefined, undefined, customOptions);
 
       const options = tableContainer.getOptions();
       expect(options.rowHeight).toBe(40);
@@ -108,7 +108,7 @@ describe('TableContainer', () => {
     });
 
     it('should partially override default options', () => {
-      const tableContainer = new TableContainer(container, state, undefined, {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
         rowHeight: 50,
       });
 
@@ -149,7 +149,7 @@ describe('TableContainer', () => {
     });
 
     it('should have root element with custom class prefix', () => {
-      const tableContainer = new TableContainer(container, state, undefined, {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
         classPrefix: 'my-table',
       });
 
@@ -184,18 +184,25 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
-    it('should have header and body as children of root', () => {
+    it('should have header and body inside scroll structure', () => {
       const tableContainer = new TableContainer(container, state);
       const root = tableContainer.getElement();
 
-      expect(root.children[0]).toBe(tableContainer.getHeaderRow());
-      expect(root.children[1]).toBe(tableContainer.getBodyContainer());
+      // New structure: root > scrollContainer > tableInner > (header + body)
+      const scrollContainer = root.children[0];
+      expect(scrollContainer.className).toContain('scroll-container');
+
+      const tableInner = scrollContainer.children[0];
+      expect(tableInner.className).toContain('table-inner');
+
+      expect(tableInner.children[0]).toBe(tableContainer.getHeaderRow());
+      expect(tableInner.children[1]).toBe(tableContainer.getBodyContainer());
 
       tableContainer.destroy();
     });
 
     it('should set header min-height based on options', () => {
-      const tableContainer = new TableContainer(container, state, undefined, {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
         headerHeight: 200,
       });
 

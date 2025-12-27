@@ -3,6 +3,7 @@
  */
 
 import type { WorkerBridge } from './WorkerBridge';
+import type { ColumnSchema } from '../core/types';
 
 export type DataFormat = 'csv' | 'json' | 'parquet';
 
@@ -10,6 +11,7 @@ export interface LoadResult {
   tableName: string;
   rowCount: number;
   columns: string[];
+  schema: ColumnSchema[];
 }
 
 export interface DataLoaderOptions {
@@ -22,6 +24,9 @@ export class DataLoader {
 
   /**
    * Load data from File, URL, or raw data
+   *
+   * All metadata (row count, schema) is retrieved in the worker to avoid
+   * blocking the main thread with sequential queries.
    */
   async load(
     source: File | string | ArrayBuffer,
@@ -54,27 +59,18 @@ export class DataLoader {
       data = source;
     }
 
-    await this.bridge.loadData(data, {
+    // Load data and get metadata in a single worker call
+    // No more blocking queries on the main thread!
+    const result = await this.bridge.loadData(data, {
       format,
       tableName: options.tableName,
     });
 
-    // Query metadata
-    const tableName = options.tableName || 'loaded_data';
-    const countResult = await this.bridge.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM "${tableName}"`
-    );
-    const columnsResult = await this.bridge.query<{
-      column_name: string;
-      data_type: string;
-    }>(
-      `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '${tableName}'`
-    );
-
     return {
-      tableName,
-      rowCount: countResult[0]?.count || 0,
-      columns: columnsResult.map((r) => r.column_name),
+      tableName: result.tableName,
+      rowCount: result.rowCount,
+      columns: result.columns,
+      schema: result.schema,
     };
   }
 

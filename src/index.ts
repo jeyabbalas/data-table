@@ -25,6 +25,10 @@ export {
 } from './core/State';
 export type { TableState } from './core/State';
 
+// State actions
+export { StateActions } from './core/Actions';
+export type { LoadDataOptions } from './core/Actions';
+
 // Progress reporting
 export type {
   ProgressInfo,

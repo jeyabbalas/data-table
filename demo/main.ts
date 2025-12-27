@@ -3,10 +3,9 @@ import {
   createSignal,
   computed,
   createTableState,
-  initializeColumnsFromSchema,
+  StateActions,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
-import { DataLoader } from '../src/data/DataLoader';
 import { detectSchema } from '../src/data/SchemaDetector';
 import { inferAllStringColumnTypes } from '../src/data/TypeInference';
 import { detectAllColumnPatterns } from '../src/data/PatternDetector';
@@ -28,11 +27,11 @@ versionEl.textContent = VERSION;
 
 // Initialize
 const bridge = new WorkerBridge();
-const loader = new DataLoader(bridge);
 let tableCounter = 0;
 
-// Create table state
+// Create table state and actions
 const tableState = createTableState();
+let actions: StateActions;
 
 function showStatus(
   message: string,
@@ -112,31 +111,28 @@ async function loadData(source: File | string): Promise<void> {
   showStatus('Loading...', 'info');
 
   try {
-    const result = await loader.load(source, { tableName });
+    // Use StateActions to load data (handles state updates automatically)
+    await actions.loadData(source, { tableName });
 
-    // Detect schema using detectSchema
-    const schema = await detectSchema(tableName, bridge);
-
-    // Update table state with loaded data
-    tableState.tableName.set(tableName);
-    tableState.totalRows.set(result.rowCount);
-    tableState.filteredRows.set(result.rowCount); // Initially all rows match
-    initializeColumnsFromSchema(tableState, schema);
+    // Get state values
+    const loadedTableName = tableState.tableName.get()!;
+    const rowCount = tableState.totalRows.get();
+    const schema = tableState.schema.get();
 
     // Infer types for string columns
     showStatus('Analyzing column types...', 'info');
-    const typeInference = await inferAllStringColumnTypes(tableName, bridge);
+    const typeInference = await inferAllStringColumnTypes(loadedTableName, bridge);
 
     // Detect patterns for string columns
     showStatus('Detecting patterns...', 'info');
-    const patterns = await detectAllColumnPatterns(tableName, bridge);
+    const patterns = await detectAllColumnPatterns(loadedTableName, bridge);
 
     // Get first 3 rows
     const rows = await bridge.query<Record<string, unknown>>(
-      `SELECT * FROM "${tableName}" LIMIT 3`
+      `SELECT * FROM "${loadedTableName}" LIMIT 3`
     );
 
-    showResult(tableName, result.rowCount, schema, typeInference, patterns, rows);
+    showResult(loadedTableName, rowCount, schema, typeInference, patterns, rows);
     updateStateDisplay();
   } catch (error) {
     showStatus(
@@ -151,6 +147,9 @@ initStatusEl.textContent = 'Initializing DuckDB...';
 bridge
   .initialize()
   .then(() => {
+    // Create StateActions after bridge is initialized
+    actions = new StateActions(tableState, bridge);
+
     initStatusEl.innerHTML =
       '<span style="color: green;">DuckDB ready</span>';
     loadFileBtn.disabled = false;
@@ -269,5 +268,70 @@ tableState.selectedRows.subscribe(() => updateStateDisplay());
 
 // Initial state display
 updateStateDisplay();
+
+// ============================================
+// Actions Demo
+// ============================================
+
+const actionAddFilter = document.getElementById('action-add-filter') as HTMLButtonElement;
+const actionClearFilters = document.getElementById('action-clear-filters') as HTMLButtonElement;
+const actionToggleSort = document.getElementById('action-toggle-sort') as HTMLButtonElement;
+const actionSelectRows = document.getElementById('action-select-rows') as HTMLButtonElement;
+const actionClearSelection = document.getElementById('action-clear-selection') as HTMLButtonElement;
+
+function enableActionButtons(): void {
+  actionAddFilter.disabled = false;
+  actionClearFilters.disabled = false;
+  actionToggleSort.disabled = false;
+  actionSelectRows.disabled = false;
+  actionClearSelection.disabled = false;
+}
+
+// Enable action buttons after data is loaded
+tableState.tableName.subscribe((name) => {
+  if (name) {
+    enableActionButtons();
+  }
+});
+
+// Action button handlers
+actionAddFilter.addEventListener('click', () => {
+  const columns = tableState.visibleColumns.get();
+  if (columns.length > 0) {
+    const firstColumn = columns[0];
+    actions.addFilter({
+      column: firstColumn,
+      type: 'not-null',
+      value: null,
+    });
+    updateStateDisplay();
+  }
+});
+
+actionClearFilters.addEventListener('click', () => {
+  actions.clearFilters();
+  updateStateDisplay();
+});
+
+actionToggleSort.addEventListener('click', () => {
+  const columns = tableState.visibleColumns.get();
+  if (columns.length > 0) {
+    const firstColumn = columns[0];
+    actions.toggleSort(firstColumn);
+    updateStateDisplay();
+  }
+});
+
+actionSelectRows.addEventListener('click', () => {
+  // Select rows 0-4
+  actions.selectRow(0, 'replace');
+  actions.selectRow(4, 'range');
+  updateStateDisplay();
+});
+
+actionClearSelection.addEventListener('click', () => {
+  actions.clearSelection();
+  updateStateDisplay();
+});
 
 console.log('Data Table Library loaded, version:', VERSION);

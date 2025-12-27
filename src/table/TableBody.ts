@@ -25,11 +25,6 @@ export interface TableBodyOptions {
    * instead of creating its own scroll container.
    */
   scrollContainer?: HTMLElement;
-  /**
-   * Height of the header in pixels (used with scrollContainer).
-   * Needed to calculate visible body area correctly.
-   */
-  headerHeight?: number;
 }
 
 /**
@@ -81,7 +76,6 @@ export class TableBody {
       rowHeight: this.rowHeight,
       classPrefix: this.classPrefix,
       externalScrollContainer: options.scrollContainer,
-      headerHeight: options.headerHeight,
     });
   }
 

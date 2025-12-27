@@ -188,15 +188,22 @@ describe('TableContainer', () => {
       const tableContainer = new TableContainer(container, state);
       const root = tableContainer.getElement();
 
-      // New structure: root > scrollContainer > tableInner > (header + body)
-      const scrollContainer = root.children[0];
-      expect(scrollContainer.className).toContain('scroll-container');
+      // New structure:
+      // root > headerArea > (headerScroll > header) + scrollbarGutter
+      //      > bodyScroll > body
+      const headerArea = root.children[0];
+      expect(headerArea.className).toContain('header-area');
 
-      const tableInner = scrollContainer.children[0];
-      expect(tableInner.className).toContain('table-inner');
+      const headerScroll = headerArea.children[0];
+      expect(headerScroll.className).toContain('header-scroll');
+      expect(headerScroll.children[0]).toBe(tableContainer.getHeaderRow());
 
-      expect(tableInner.children[0]).toBe(tableContainer.getHeaderRow());
-      expect(tableInner.children[1]).toBe(tableContainer.getBodyContainer());
+      const scrollbarGutter = headerArea.children[1];
+      expect(scrollbarGutter.className).toContain('scrollbar-gutter');
+
+      const bodyScroll = root.children[1];
+      expect(bodyScroll.className).toContain('body-scroll');
+      expect(bodyScroll.children[0]).toBe(tableContainer.getBodyContainer());
 
       tableContainer.destroy();
     });

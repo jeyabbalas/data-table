@@ -26,11 +26,6 @@ export interface VirtualScrollerOptions {
    * scrollbars appear on a single outer container.
    */
   externalScrollContainer?: HTMLElement;
-  /**
-   * Height of the header in pixels (used when externalScrollContainer is provided).
-   * This is needed to calculate the visible body area correctly.
-   */
-  headerHeight?: number;
 }
 
 /**
@@ -87,7 +82,6 @@ export class VirtualScroller {
   private readonly bufferRows: number;
   private readonly classPrefix: string;
   private readonly useExternalScroller: boolean;
-  private readonly headerHeight: number;
 
   // Reference to the body container when using external scroller
   private bodyContainer: HTMLElement | null = null;
@@ -103,7 +97,6 @@ export class VirtualScroller {
     this.bufferRows = options.bufferRows ?? 5;
     this.classPrefix = options.classPrefix ?? 'dt';
     this.useExternalScroller = !!options.externalScrollContainer;
-    this.headerHeight = options.headerHeight ?? 0;
 
     if (options.externalScrollContainer) {
       // External scroll container mode:
@@ -253,11 +246,9 @@ export class VirtualScroller {
       return { start: 0, end: 0, offsetY: 0 };
     }
 
-    // When using external scroll container, the visible body area is reduced
-    // by the header height (which is sticky at the top)
-    const visibleBodyHeight = this.useExternalScroller
-      ? Math.max(0, viewportHeight - this.headerHeight)
-      : viewportHeight;
+    // The visible body height is the full viewport height
+    // (headerHeight adjustment removed - body scroll now only contains the body)
+    const visibleBodyHeight = viewportHeight;
 
     // Calculate raw range (without buffer)
     const rawStart = Math.floor(scrollTop / this.rowHeight);

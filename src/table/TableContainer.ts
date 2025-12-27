@@ -45,9 +45,11 @@ export type ResizeCallback = (dimensions: { width: number; height: number }) => 
  */
 export class TableContainer {
   private element: HTMLElement;
-  private scrollContainer: HTMLElement;
-  private tableInner: HTMLElement;
+  private headerArea: HTMLElement;
+  private headerScroll: HTMLElement;
+  private scrollbarGutter: HTMLElement;
   private headerRow: HTMLElement;
+  private bodyScroll: HTMLElement;
   private bodyContainer: HTMLElement;
   private resizeObserver: ResizeObserver;
   private unsubscribes: (() => void)[] = [];
@@ -77,16 +79,22 @@ export class TableContainer {
 
     // Create DOM structure
     this.element = this.createRootElement();
-    this.scrollContainer = this.createScrollContainer();
-    this.tableInner = this.createTableInner();
+    this.headerArea = this.createHeaderArea();
+    this.headerScroll = this.createHeaderScroll();
+    this.scrollbarGutter = this.createScrollbarGutter();
     this.headerRow = this.createHeaderRow();
+    this.bodyScroll = this.createBodyScroll();
     this.bodyContainer = this.createBodyContainer();
 
-    // Assemble structure: root > scrollContainer > tableInner > (header + body)
-    this.tableInner.appendChild(this.headerRow);
-    this.tableInner.appendChild(this.bodyContainer);
-    this.scrollContainer.appendChild(this.tableInner);
-    this.element.appendChild(this.scrollContainer);
+    // Assemble structure:
+    // root > headerArea > (headerScroll > headerRow) + scrollbarGutter
+    //      > bodyScroll > bodyContainer
+    this.headerScroll.appendChild(this.headerRow);
+    this.headerArea.appendChild(this.headerScroll);
+    this.headerArea.appendChild(this.scrollbarGutter);
+    this.bodyScroll.appendChild(this.bodyContainer);
+    this.element.appendChild(this.headerArea);
+    this.element.appendChild(this.bodyScroll);
     this.container.appendChild(this.element);
 
     // Set up resize observer
@@ -115,20 +123,29 @@ export class TableContainer {
   }
 
   /**
-   * Create the scroll container for unified horizontal/vertical scrolling
+   * Create the header area container (holds header scroll + scrollbar gutter)
    */
-  private createScrollContainer(): HTMLElement {
+  private createHeaderArea(): HTMLElement {
     const el = document.createElement('div');
-    el.className = `${this.resolvedOptions.classPrefix}-scroll-container`;
+    el.className = `${this.resolvedOptions.classPrefix}-header-area`;
     return el;
   }
 
   /**
-   * Create the table inner container
+   * Create the header scroll container (hidden scrollbar, synced with body)
    */
-  private createTableInner(): HTMLElement {
+  private createHeaderScroll(): HTMLElement {
     const el = document.createElement('div');
-    el.className = `${this.resolvedOptions.classPrefix}-table-inner`;
+    el.className = `${this.resolvedOptions.classPrefix}-header-scroll`;
+    return el;
+  }
+
+  /**
+   * Create the scrollbar gutter (aligns with body's vertical scrollbar)
+   */
+  private createScrollbarGutter(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-scrollbar-gutter`;
     return el;
   }
 
@@ -140,6 +157,15 @@ export class TableContainer {
     el.className = `${this.resolvedOptions.classPrefix}-header`;
     el.setAttribute('role', 'rowgroup');
     el.style.minHeight = `${this.resolvedOptions.headerHeight}px`;
+    return el;
+  }
+
+  /**
+   * Create the body scroll container (handles both horizontal and vertical scrolling)
+   */
+  private createBodyScroll(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-body-scroll`;
     return el;
   }
 
@@ -348,8 +374,8 @@ export class TableContainer {
           {
             rowHeight: this.resolvedOptions.rowHeight,
             classPrefix: this.resolvedOptions.classPrefix,
-            scrollContainer: this.scrollContainer,
-            headerHeight: this.resolvedOptions.headerHeight,
+            scrollContainer: this.bodyScroll,
+            // headerHeight no longer needed - body scroll only contains body
           }
         );
 
@@ -392,12 +418,22 @@ export class TableContainer {
   }
 
   /**
-   * Get the scroll container element
+   * Get the scroll container element (body scroll)
    *
-   * This is the container that handles both horizontal and vertical scrolling.
+   * This is the container that handles both horizontal and vertical scrolling for the body.
    */
   getScrollContainer(): HTMLElement {
-    return this.scrollContainer;
+    return this.bodyScroll;
+  }
+
+  /**
+   * Get the header scroll element
+   *
+   * This is the container that handles horizontal scrolling for the header.
+   * It should be synced with the body scroll.
+   */
+  getHeaderScroll(): HTMLElement {
+    return this.headerScroll;
   }
 
   /**

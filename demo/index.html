@@ -59,25 +59,45 @@
       border-radius: 8px;
       background: white;
     }
-    .dt-scroll-container {
+
+    /* Header area with scrollbar gutter */
+    .dt-header-area {
+      display: flex;
+      flex-shrink: 0;
+    }
+    .dt-header-scroll {
       flex: 1;
-      overflow: auto;     /* Both horizontal and vertical scrollbars */
-      min-height: 0;      /* Allow flex shrinking for proper scrolling */
+      overflow-x: scroll;
+      /* Hide scrollbar - sync with body scroll via JavaScript */
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE/Edge */
     }
-    .dt-table-inner {
-      min-width: fit-content;
-      /* No flex: 1 - height is determined by header + body content */
+    .dt-header-scroll::-webkit-scrollbar {
+      display: none; /* Chrome/Safari */
     }
+    .dt-scrollbar-gutter {
+      /* Match typical scrollbar width - reserves space for body's vertical scrollbar */
+      width: 17px;
+      flex-shrink: 0;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    /* Body scroll container - handles both horizontal and vertical scrolling */
+    .dt-body-scroll {
+      flex: 1;
+      overflow: auto;
+      min-height: 0;
+    }
+
     .dt-header {
       flex-shrink: 0;
-      position: sticky;
-      top: 0;
-      z-index: 10;
       border-bottom: 1px solid #e5e7eb;
       background: #f9fafb;
     }
     .dt-body {
       position: relative;  /* Positioning context for virtual scroll */
+      min-width: fit-content;
       /* Height is set dynamically via JavaScript based on total rows */
     }
 

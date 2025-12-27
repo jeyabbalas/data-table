@@ -45,3 +45,13 @@ export interface JSONLoadOptions {
   /** Maximum depth for nested objects (default: unlimited) */
   maxDepth?: number;
 }
+
+/**
+ * Options for loading Parquet data
+ */
+export interface ParquetLoadOptions {
+  /** Table name to create (auto-generated if not provided) */
+  tableName?: string;
+  /** Columns to load (default: all columns) */
+  columns?: string[];
+}

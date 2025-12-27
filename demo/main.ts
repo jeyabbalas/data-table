@@ -90,6 +90,10 @@ if (demoContainer) {
     .then((rows) => {
       addStatus(`✓ Query from loaded JSON: ${rows.length} rows`);
       addStatus(`   Data: ${JSON.stringify(rows)}`);
+
+      // Note about Parquet support
+      addStatus('');
+      addStatus('Note: Parquet loader implemented (requires binary ArrayBuffer)');
     })
     .catch((error) => {
       addStatus(`✗ Error: ${error.message}`, true);

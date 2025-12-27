@@ -17,6 +17,7 @@ import {
 } from './duckdb';
 import { loadCSV } from './loaders/csv';
 import { loadJSON } from './loaders/json';
+import { loadParquet } from './loaders/parquet';
 
 // Send response back to main thread
 function respond(id: string, type: WorkerResponseType, payload: unknown): void {
@@ -86,6 +87,25 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             });
 
             result = await loadJSON(data, { tableName });
+
+            respond(id, 'progress', {
+              stage: 'indexing',
+              percent: 90,
+              cancelable: false,
+            });
+          } else if (format === 'parquet') {
+            respond(id, 'progress', {
+              stage: 'parsing',
+              percent: 25,
+              cancelable: true,
+            });
+
+            // Parquet requires ArrayBuffer
+            const buffer =
+              typeof data === 'string'
+                ? new TextEncoder().encode(data).buffer
+                : data;
+            result = await loadParquet(buffer, { tableName });
 
             respond(id, 'progress', {
               stage: 'indexing',

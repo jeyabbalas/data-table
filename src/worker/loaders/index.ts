@@ -4,4 +4,10 @@
 
 export { loadCSV, dropTable } from './csv';
 export { loadJSON } from './json';
-export type { LoadResult, CSVLoadOptions, JSONLoadOptions } from './types';
+export { loadParquet } from './parquet';
+export type {
+  LoadResult,
+  CSVLoadOptions,
+  JSONLoadOptions,
+  ParquetLoadOptions,
+} from './types';

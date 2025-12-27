@@ -97,7 +97,7 @@ describe('TableContainer', () => {
         classPrefix: 'custom',
       };
 
-      const tableContainer = new TableContainer(container, state, customOptions);
+      const tableContainer = new TableContainer(container, state, undefined, customOptions);
 
       const options = tableContainer.getOptions();
       expect(options.rowHeight).toBe(40);
@@ -108,7 +108,7 @@ describe('TableContainer', () => {
     });
 
     it('should partially override default options', () => {
-      const tableContainer = new TableContainer(container, state, {
+      const tableContainer = new TableContainer(container, state, undefined, {
         rowHeight: 50,
       });
 
@@ -149,7 +149,7 @@ describe('TableContainer', () => {
     });
 
     it('should have root element with custom class prefix', () => {
-      const tableContainer = new TableContainer(container, state, {
+      const tableContainer = new TableContainer(container, state, undefined, {
         classPrefix: 'my-table',
       });
 
@@ -195,7 +195,7 @@ describe('TableContainer', () => {
     });
 
     it('should set header min-height based on options', () => {
-      const tableContainer = new TableContainer(container, state, {
+      const tableContainer = new TableContainer(container, state, undefined, {
         headerHeight: 200,
       });
 

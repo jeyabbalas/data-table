@@ -33,6 +33,9 @@ export type { LoadDataOptions } from './core/Actions';
 export { TableContainer } from './table/TableContainer';
 export type { TableContainerOptions, ResizeCallback } from './table/TableContainer';
 
+export { ColumnHeader } from './table/ColumnHeader';
+export type { ColumnHeaderOptions } from './table/ColumnHeader';
+
 // Progress reporting
 export type {
   ProgressInfo,

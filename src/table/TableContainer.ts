@@ -8,6 +8,8 @@
  */
 
 import type { TableState } from '../core/State';
+import type { StateActions } from '../core/Actions';
+import { ColumnHeader } from './ColumnHeader';
 
 /**
  * Options for configuring the TableContainer
@@ -48,6 +50,7 @@ export class TableContainer {
   private destroyed = false;
   private resizeCallbacks: Set<ResizeCallback> = new Set();
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
+  private columnHeaders: ColumnHeader[] = [];
 
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
@@ -55,6 +58,7 @@ export class TableContainer {
   constructor(
     private container: HTMLElement,
     private state: TableState,
+    private actions?: StateActions,
     options: TableContainerOptions = {}
   ) {
     // Apply defaults
@@ -208,6 +212,16 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubWidths);
+
+    // Subscribe to sort columns for sort indicator updates
+    // (ColumnHeaders subscribe individually, but this ensures render is called)
+    const unsubSort = this.state.sortColumns.subscribe(() => {
+      if (!this.destroyed) {
+        // Individual column headers will update their own sort indicators
+        // No need to full re-render here
+      }
+    });
+    this.unsubscribes.push(unsubSort);
   }
 
   // =========================================
@@ -215,10 +229,20 @@ export class TableContainer {
   // =========================================
 
   /**
+   * Destroy all existing column headers
+   */
+  private destroyColumnHeaders(): void {
+    for (const header of this.columnHeaders) {
+      header.destroy();
+    }
+    this.columnHeaders = [];
+  }
+
+  /**
    * Render the table container
    *
-   * For now, this renders placeholder content. Column headers and body rows
-   * will be implemented in subsequent tasks.
+   * Creates ColumnHeader components for each visible column and renders
+   * placeholder content for the body (to be implemented in Task 3.4).
    */
   render(): void {
     if (this.destroyed) return;
@@ -227,7 +251,8 @@ export class TableContainer {
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
 
-    // Clear existing content
+    // Clear existing column headers
+    this.destroyColumnHeaders();
     this.headerRow.innerHTML = '';
     this.bodyContainer.innerHTML = '';
 
@@ -241,28 +266,42 @@ export class TableContainer {
       placeholder.style.color = '#6b7280';
       this.bodyContainer.appendChild(placeholder);
     } else {
-      // Data is loaded - show column count info (headers implemented later)
-      const headerInfo = document.createElement('div');
-      headerInfo.className = `${this.resolvedOptions.classPrefix}-header-info`;
-      headerInfo.style.padding = '0.5rem 1rem';
-      headerInfo.style.display = 'flex';
-      headerInfo.style.gap = '1rem';
-      headerInfo.style.flexWrap = 'wrap';
+      // Create header row container
+      const headerRowEl = document.createElement('div');
+      headerRowEl.className = `${this.resolvedOptions.classPrefix}-header-row`;
+      headerRowEl.setAttribute('role', 'row');
 
-      for (const colName of visibleColumns) {
-        const colSchema = schema.find((s) => s.name === colName);
-        if (colSchema) {
-          const colEl = document.createElement('div');
-          colEl.className = `${this.resolvedOptions.classPrefix}-column-placeholder`;
-          colEl.style.padding = '0.25rem 0.5rem';
-          colEl.style.background = '#e5e7eb';
-          colEl.style.borderRadius = '4px';
-          colEl.style.fontSize = '0.75rem';
-          colEl.innerHTML = `<strong>${colSchema.name}</strong> <span style="color:#6b7280;">(${colSchema.type})</span>`;
-          headerInfo.appendChild(colEl);
+      // Create column headers
+      if (this.actions) {
+        for (const colName of visibleColumns) {
+          const colSchema = schema.find((s) => s.name === colName);
+          if (colSchema) {
+            const columnHeader = new ColumnHeader(
+              colSchema,
+              this.state,
+              this.actions,
+              { classPrefix: this.resolvedOptions.classPrefix }
+            );
+            this.columnHeaders.push(columnHeader);
+            headerRowEl.appendChild(columnHeader.getElement());
+          }
+        }
+      } else {
+        // Fallback if no actions provided - show simple placeholders
+        for (const colName of visibleColumns) {
+          const colSchema = schema.find((s) => s.name === colName);
+          if (colSchema) {
+            const colEl = document.createElement('div');
+            colEl.className = `${this.resolvedOptions.classPrefix}-col-header`;
+            colEl.style.padding = '0.5rem';
+            colEl.style.minWidth = '120px';
+            colEl.innerHTML = `<strong>${colSchema.name}</strong><br><small>${colSchema.type}</small>`;
+            headerRowEl.appendChild(colEl);
+          }
         }
       }
-      this.headerRow.appendChild(headerInfo);
+
+      this.headerRow.appendChild(headerRowEl);
 
       // Body placeholder
       const bodyPlaceholder = document.createElement('div');
@@ -323,6 +362,9 @@ export class TableContainer {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // Destroy all column headers
+    this.destroyColumnHeaders();
 
     // Disconnect resize observer
     this.resizeObserver.disconnect();

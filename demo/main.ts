@@ -27,7 +27,29 @@ let tableContainer: TableContainer | null = null;
 let tableCounter = 0;
 
 function updateInfo(message: string): void {
-  tableInfoEl.textContent = message;
+  tableInfoEl.innerHTML = message;
+}
+
+function updateSortInfo(): void {
+  const sortColumns = tableState.sortColumns.get();
+  const rowCount = tableState.totalRows.get();
+  const colCount = tableState.schema.get().length;
+  const tableName = tableState.tableName.get();
+
+  if (!tableName) return;
+
+  let info = `${rowCount.toLocaleString()} rows, ${colCount} columns`;
+
+  if (sortColumns.length > 0) {
+    const sortDesc = sortColumns
+      .map((s, i) => `${s.column} (${s.direction === 'asc' ? '▲' : '▼'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
+      .join(', ');
+    info += ` | <strong>Sort:</strong> ${sortDesc}`;
+  } else {
+    info += ' | Click column headers to sort';
+  }
+
+  updateInfo(info);
 }
 
 async function loadData(source: File | string): Promise<void> {
@@ -36,14 +58,7 @@ async function loadData(source: File | string): Promise<void> {
 
   try {
     await actions.loadData(source, { tableName });
-
-    const rowCount = tableState.totalRows.get();
-    const colCount = tableState.schema.get().length;
-    const name = typeof source === 'string' ? source.split('/').pop() : source.name;
-
-    updateInfo(
-      `Loaded "${name}" - ${rowCount.toLocaleString()} rows, ${colCount} columns`
-    );
+    updateSortInfo();
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -54,7 +69,14 @@ bridge
   .initialize()
   .then(() => {
     actions = new StateActions(tableState, bridge);
-    tableContainer = new TableContainer(tableContainerEl, tableState);
+    tableContainer = new TableContainer(tableContainerEl, tableState, actions);
+
+    // Subscribe to sort changes to update info display
+    tableState.sortColumns.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateSortInfo();
+      }
+    });
 
     // Update info with dimensions
     tableContainer.onResize((dims) => {

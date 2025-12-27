@@ -30,6 +30,10 @@ export {
 export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
 export type { LoadOptions } from './data/WorkerBridge';
 
+// Data loader
+export { DataLoader } from './data/DataLoader';
+export type { DataFormat, LoadResult, DataLoaderOptions } from './data/DataLoader';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

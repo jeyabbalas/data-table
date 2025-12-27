@@ -1,103 +1,133 @@
 import { VERSION } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
+import { DataLoader } from '../src/data/DataLoader';
 
-// Display library version
-const versionEl = document.getElementById('version');
-if (versionEl) {
-  versionEl.textContent = VERSION;
+// Elements
+const versionEl = document.getElementById('version')!;
+const initStatusEl = document.getElementById('init-status')!;
+const fileInput = document.getElementById('file-input') as HTMLInputElement;
+const loadFileBtn = document.getElementById('load-file-btn') as HTMLButtonElement;
+const urlInput = document.getElementById('url-input') as HTMLInputElement;
+const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
+const resultContainer = document.getElementById('result-container')!;
+
+// Display version
+versionEl.textContent = VERSION;
+
+// Initialize
+const bridge = new WorkerBridge();
+const loader = new DataLoader(bridge);
+let tableCounter = 0;
+
+function showStatus(
+  message: string,
+  type: 'success' | 'error' | 'info' = 'info'
+): void {
+  resultContainer.innerHTML = `<p class="status ${type}">${message}</p>`;
 }
 
-// Helper to add status messages
-function addStatus(message: string, isError = false): void {
-  const demoContainer = document.getElementById('demo-container');
-  if (demoContainer) {
-    const p = document.createElement('p');
-    p.style.color = isError ? 'red' : 'green';
-    p.style.margin = '0.5rem 0';
-    p.textContent = message;
-    demoContainer.appendChild(p);
+function showResult(
+  tableName: string,
+  rowCount: number,
+  columns: string[],
+  columnTypes: string[],
+  rows: Record<string, unknown>[]
+): void {
+  const html = `
+    <div class="status success">Data loaded successfully!</div>
+    <div class="metadata">
+      <p><strong>Table:</strong> ${tableName}</p>
+      <p><strong>Total Rows:</strong> ${rowCount.toLocaleString()}</p>
+      <p><strong>Columns:</strong> ${columns.length}</p>
+    </div>
+    <h3>Schema</h3>
+    <table>
+      <tr><th>Column</th><th>Type</th></tr>
+      ${columns.map((col, i) => `<tr><td>${col}</td><td class="mono">${columnTypes[i] || 'unknown'}</td></tr>`).join('')}
+    </table>
+    <h3>First ${rows.length} Rows</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <tr>${columns.map((c) => `<th>${c}</th>`).join('')}</tr>
+        ${rows.map((row) => `<tr>${columns.map((c) => `<td class="mono truncate">${formatCell(row[c])}</td>`).join('')}</tr>`).join('')}
+      </table>
+    </div>
+  `;
+  resultContainer.innerHTML = html;
+}
+
+function formatCell(value: unknown): string {
+  if (value === null || value === undefined) return '<em>null</em>';
+  if (typeof value === 'string' && value.length > 50)
+    return escapeHtml(value.slice(0, 47)) + '...';
+  return escapeHtml(String(value));
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function loadData(source: File | string): Promise<void> {
+  const tableName = `table_${++tableCounter}`;
+  showStatus('Loading...', 'info');
+
+  try {
+    const result = await loader.load(source, { tableName });
+
+    // Get column types using DESCRIBE
+    const schemaResult = await bridge.query<{
+      column_name: string;
+      column_type: string;
+    }>(`DESCRIBE "${tableName}"`);
+    const columnTypes = schemaResult.map((r) => r.column_type);
+
+    // Get first 3 rows
+    const rows = await bridge.query<Record<string, unknown>>(
+      `SELECT * FROM "${tableName}" LIMIT 3`
+    );
+
+    showResult(tableName, result.rowCount, result.columns, columnTypes, rows);
+  } catch (error) {
+    showStatus(
+      `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'error'
+    );
   }
 }
 
-// Test WorkerBridge
-const demoContainer = document.getElementById('demo-container');
-if (demoContainer) {
-  demoContainer.innerHTML = '<p>Testing WorkerBridge...</p>';
+// Initialize bridge
+initStatusEl.textContent = 'Initializing DuckDB...';
+bridge
+  .initialize()
+  .then(() => {
+    initStatusEl.innerHTML =
+      '<span style="color: green;">DuckDB ready</span>';
+    loadFileBtn.disabled = false;
+    loadUrlBtn.disabled = false;
+  })
+  .catch((error) => {
+    initStatusEl.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+  });
 
-  const bridge = new WorkerBridge();
+// Event handlers
+loadFileBtn.addEventListener('click', () => {
+  const file = fileInput.files?.[0];
+  if (file) loadData(file);
+});
 
-  bridge
-    .initialize()
-    .then(() => {
-      demoContainer.innerHTML = '';
-      addStatus('✓ WorkerBridge initialized (Worker + DuckDB ready)');
-      return bridge.query<{ answer: number; greeting: string }>(
-        "SELECT 42 as answer, 'hello' as greeting"
-      );
-    })
-    .then((rows) => {
-      addStatus('✓ Query executed via WorkerBridge');
-      addStatus(`   Result: ${JSON.stringify(rows)}`);
+loadUrlBtn.addEventListener('click', () => {
+  const url = urlInput.value.trim();
+  if (url) loadData(url);
+});
 
-      // Test AbortController
-      const controller = new AbortController();
-      controller.abort(); // Abort immediately
-      return bridge.query('SELECT 1', controller.signal).catch((err) => {
-        addStatus('✓ AbortController works: ' + err.message);
-      });
-    })
-    .then(() => {
-      // Test CSV loading
-      addStatus('');
-      addStatus('Testing CSV loading...');
-
-      const csvData = `id,name,value
-1,Alice,100
-2,Bob,200
-3,Charlie,300`;
-
-      return bridge.loadData(csvData, { format: 'csv', tableName: 'demo_table' });
-    })
-    .then(() => {
-      addStatus('✓ CSV data loaded into demo_table');
-      return bridge.query<{ id: number; name: string; value: number }>(
-        'SELECT * FROM demo_table ORDER BY id'
-      );
-    })
-    .then((rows) => {
-      addStatus(`✓ Query from loaded CSV: ${rows.length} rows`);
-      addStatus(`   Data: ${JSON.stringify(rows)}`);
-    })
-    .then(() => {
-      // Test JSON loading
-      addStatus('');
-      addStatus('Testing JSON loading...');
-
-      const jsonData = JSON.stringify([
-        { id: 1, name: 'Alice', value: 100 },
-        { id: 2, name: 'Bob', value: 200 },
-        { id: 3, name: 'Charlie', value: 300 },
-      ]);
-
-      return bridge.loadData(jsonData, { format: 'json', tableName: 'json_demo' });
-    })
-    .then(() => {
-      addStatus('✓ JSON data loaded into json_demo');
-      return bridge.query<{ id: number; name: string; value: number }>(
-        'SELECT * FROM json_demo ORDER BY id'
-      );
-    })
-    .then((rows) => {
-      addStatus(`✓ Query from loaded JSON: ${rows.length} rows`);
-      addStatus(`   Data: ${JSON.stringify(rows)}`);
-
-      // Note about Parquet support
-      addStatus('');
-      addStatus('Note: Parquet loader implemented (requires binary ArrayBuffer)');
-    })
-    .catch((error) => {
-      addStatus(`✗ Error: ${error.message}`, true);
-    });
-}
+// Also trigger on Enter key in URL input
+urlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !loadUrlBtn.disabled) {
+    const url = urlInput.value.trim();
+    if (url) loadData(url);
+  }
+});
 
 console.log('Data Table Library loaded, version:', VERSION);

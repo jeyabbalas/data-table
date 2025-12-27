@@ -82,6 +82,7 @@
     .dt-body {
       flex: 1;
       min-height: 0;
+      position: relative;  /* Required for absolute positioning of virtual scroll */
     }
 
     /* Column Header CSS */
@@ -149,7 +150,11 @@
 
     /* Virtual Scroller CSS */
     .dt-virtual-scroll {
-      height: 100%;
+      position: absolute;  /* Use absolute positioning to constrain height */
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       overflow-y: auto;
       overflow-x: visible;
     }

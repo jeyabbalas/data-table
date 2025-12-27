@@ -456,12 +456,12 @@ export class TableBody {
    * Return a row element to the pool for reuse
    */
   private returnRowToPool(rowEl: HTMLElement): void {
-    // Remove event listeners by cloning (they're reattached when reused)
-    // Note: We'll reattach listeners in attachRowEventListeners when reusing
-    // For now, just push to pool - the row will get new listeners when reused
+    // Clone the element to remove all event listeners
+    // When reused, new listeners will be attached via attachRowEventListeners
+    const cleanEl = rowEl.cloneNode(true) as HTMLElement;
 
     // Clear stale state
-    rowEl.classList.remove(
+    cleanEl.classList.remove(
       `${this.classPrefix}-row--selected`,
       `${this.classPrefix}-row--hover`,
       `${this.classPrefix}-row--loading`
@@ -469,7 +469,7 @@ export class TableBody {
 
     // Limit pool size to prevent memory bloat
     if (this.rowPool.length < 100) {
-      this.rowPool.push(rowEl);
+      this.rowPool.push(cleanEl);
     }
   }
 

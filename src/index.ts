@@ -17,6 +17,14 @@ export { EventEmitter } from './core/EventEmitter';
 export { createSignal, computed, batch } from './core/Signal';
 export type { Signal, Computed } from './core/Signal';
 
+// State management
+export {
+  createTableState,
+  resetTableState,
+  initializeColumnsFromSchema,
+} from './core/State';
+export type { TableState } from './core/State';
+
 // Progress reporting
 export type {
   ProgressInfo,

@@ -1,4 +1,10 @@
-import { VERSION, createSignal, computed } from '../src/index';
+import {
+  VERSION,
+  createSignal,
+  computed,
+  createTableState,
+  initializeColumnsFromSchema,
+} from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { DataLoader } from '../src/data/DataLoader';
 import { detectSchema } from '../src/data/SchemaDetector';
@@ -7,7 +13,6 @@ import { detectAllColumnPatterns } from '../src/data/PatternDetector';
 import type { ColumnSchema } from '../src/core/types';
 import type { TypeInferenceResult } from '../src/data/TypeInference';
 import type { PatternDetectionResult } from '../src/data/PatternDetector';
-import type { Signal } from '../src/core/Signal';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -25,6 +30,9 @@ versionEl.textContent = VERSION;
 const bridge = new WorkerBridge();
 const loader = new DataLoader(bridge);
 let tableCounter = 0;
+
+// Create table state
+const tableState = createTableState();
 
 function showStatus(
   message: string,
@@ -109,6 +117,12 @@ async function loadData(source: File | string): Promise<void> {
     // Detect schema using detectSchema
     const schema = await detectSchema(tableName, bridge);
 
+    // Update table state with loaded data
+    tableState.tableName.set(tableName);
+    tableState.totalRows.set(result.rowCount);
+    tableState.filteredRows.set(result.rowCount); // Initially all rows match
+    initializeColumnsFromSchema(tableState, schema);
+
     // Infer types for string columns
     showStatus('Analyzing column types...', 'info');
     const typeInference = await inferAllStringColumnTypes(tableName, bridge);
@@ -123,6 +137,7 @@ async function loadData(source: File | string): Promise<void> {
     );
 
     showResult(tableName, result.rowCount, schema, typeInference, patterns, rows);
+    updateStateDisplay();
   } catch (error) {
     showStatus(
       `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -217,5 +232,42 @@ decrementBtn.addEventListener('click', () => {
 resetBtn.addEventListener('click', () => {
   counter.set(0);
 });
+
+// ============================================
+// Table State Display
+// ============================================
+
+const stateTableName = document.getElementById('state-table-name')!;
+const stateTotalRows = document.getElementById('state-total-rows')!;
+const stateFilteredRows = document.getElementById('state-filtered-rows')!;
+const stateFiltersCount = document.getElementById('state-filters-count')!;
+const stateSortCount = document.getElementById('state-sort-count')!;
+const stateVisibleCols = document.getElementById('state-visible-cols')!;
+const statePinnedCols = document.getElementById('state-pinned-cols')!;
+const stateSelectedRows = document.getElementById('state-selected-rows')!;
+
+function updateStateDisplay(): void {
+  stateTableName.textContent = tableState.tableName.get() || '(none)';
+  stateTotalRows.textContent = tableState.totalRows.get().toLocaleString();
+  stateFilteredRows.textContent = tableState.filteredRows.get().toLocaleString();
+  stateFiltersCount.textContent = String(tableState.filters.get().length);
+  stateSortCount.textContent = String(tableState.sortColumns.get().length);
+  stateVisibleCols.textContent = String(tableState.visibleColumns.get().length);
+  statePinnedCols.textContent = String(tableState.pinnedColumns.get().length);
+  stateSelectedRows.textContent = String(tableState.selectedRows.get().size);
+}
+
+// Subscribe to state changes to update display
+tableState.tableName.subscribe(() => updateStateDisplay());
+tableState.totalRows.subscribe(() => updateStateDisplay());
+tableState.filteredRows.subscribe(() => updateStateDisplay());
+tableState.filters.subscribe(() => updateStateDisplay());
+tableState.sortColumns.subscribe(() => updateStateDisplay());
+tableState.visibleColumns.subscribe(() => updateStateDisplay());
+tableState.pinnedColumns.subscribe(() => updateStateDisplay());
+tableState.selectedRows.subscribe(() => updateStateDisplay());
+
+// Initial state display
+updateStateDisplay();
 
 console.log('Data Table Library loaded, version:', VERSION);

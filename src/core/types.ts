@@ -31,6 +31,15 @@ export interface Filter {
   value: unknown;
 }
 
+// Sort direction
+export type SortDirection = 'asc' | 'desc';
+
+// Sort column configuration
+export interface SortColumn {
+  column: string;
+  direction: SortDirection;
+}
+
 // Configuration options
 export interface DataTableOptions {
   container?: HTMLElement;

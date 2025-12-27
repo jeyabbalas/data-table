@@ -31,3 +31,17 @@ export interface CSVLoadOptions {
   /** Null value strings (default: ['', 'NULL', 'null', 'NA', 'N/A']) */
   nullValues?: string[];
 }
+
+/**
+ * Options for loading JSON data
+ */
+export interface JSONLoadOptions {
+  /** Table name to create (auto-generated if not provided) */
+  tableName?: string;
+  /** JSON format: 'array' (array of objects) or 'ndjson' (newline-delimited) */
+  format?: 'array' | 'ndjson';
+  /** Number of sample rows for type detection (default: 1000) */
+  sampleSize?: number;
+  /** Maximum depth for nested objects (default: unlimited) */
+  maxDepth?: number;
+}

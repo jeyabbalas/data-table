@@ -3,4 +3,5 @@
  */
 
 export { loadCSV, dropTable } from './csv';
-export type { LoadResult, CSVLoadOptions } from './types';
+export { loadJSON } from './json';
+export type { LoadResult, CSVLoadOptions, JSONLoadOptions } from './types';

@@ -16,6 +16,7 @@ import {
   isInitialized,
 } from './duckdb';
 import { loadCSV } from './loaders/csv';
+import { loadJSON } from './loaders/json';
 
 // Send response back to main thread
 function respond(id: string, type: WorkerResponseType, payload: unknown): void {
@@ -71,6 +72,20 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             });
 
             result = await loadCSV(data, { tableName });
+
+            respond(id, 'progress', {
+              stage: 'indexing',
+              percent: 90,
+              cancelable: false,
+            });
+          } else if (format === 'json') {
+            respond(id, 'progress', {
+              stage: 'parsing',
+              percent: 25,
+              cancelable: true,
+            });
+
+            result = await loadJSON(data, { tableName });
 
             respond(id, 'progress', {
               stage: 'indexing',

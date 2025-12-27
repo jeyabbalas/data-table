@@ -68,6 +68,29 @@ if (demoContainer) {
       addStatus(`✓ Query from loaded CSV: ${rows.length} rows`);
       addStatus(`   Data: ${JSON.stringify(rows)}`);
     })
+    .then(() => {
+      // Test JSON loading
+      addStatus('');
+      addStatus('Testing JSON loading...');
+
+      const jsonData = JSON.stringify([
+        { id: 1, name: 'Alice', value: 100 },
+        { id: 2, name: 'Bob', value: 200 },
+        { id: 3, name: 'Charlie', value: 300 },
+      ]);
+
+      return bridge.loadData(jsonData, { format: 'json', tableName: 'json_demo' });
+    })
+    .then(() => {
+      addStatus('✓ JSON data loaded into json_demo');
+      return bridge.query<{ id: number; name: string; value: number }>(
+        'SELECT * FROM json_demo ORDER BY id'
+      );
+    })
+    .then((rows) => {
+      addStatus(`✓ Query from loaded JSON: ${rows.length} rows`);
+      addStatus(`   Data: ${JSON.stringify(rows)}`);
+    })
     .catch((error) => {
       addStatus(`✗ Error: ${error.message}`, true);
     });

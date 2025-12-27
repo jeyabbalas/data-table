@@ -348,6 +348,8 @@ export class TableContainer {
           {
             rowHeight: this.resolvedOptions.rowHeight,
             classPrefix: this.resolvedOptions.classPrefix,
+            scrollContainer: this.scrollContainer,
+            headerHeight: this.resolvedOptions.headerHeight,
           }
         );
 
@@ -387,6 +389,15 @@ export class TableContainer {
    */
   getBodyContainer(): HTMLElement {
     return this.bodyContainer;
+  }
+
+  /**
+   * Get the scroll container element
+   *
+   * This is the container that handles both horizontal and vertical scrolling.
+   */
+  getScrollContainer(): HTMLElement {
+    return this.scrollContainer;
   }
 
   /**

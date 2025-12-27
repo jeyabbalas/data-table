@@ -19,6 +19,18 @@ export interface VirtualScrollerOptions {
   bufferRows?: number;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /**
+   * External scroll container to use for scroll events.
+   * If provided, VirtualScroller won't create its own scroll container.
+   * This enables unified scrolling where both horizontal and vertical
+   * scrollbars appear on a single outer container.
+   */
+  externalScrollContainer?: HTMLElement;
+  /**
+   * Height of the header in pixels (used when externalScrollContainer is provided).
+   * This is needed to calculate the visible body area correctly.
+   */
+  headerHeight?: number;
 }
 
 /**
@@ -61,10 +73,11 @@ export type ScrollAlign = 'start' | 'center' | 'end';
  * ```
  */
 export class VirtualScroller {
-  private scrollContainer: HTMLElement;
+  private scrollContainer: HTMLElement | null;
   private contentContainer: HTMLElement;
   private viewportContainer: HTMLElement;
   private widthSpacer: HTMLElement;
+  private scrollSource: HTMLElement;  // Element to listen for scroll events (parent or self)
   private totalRows: number = 0;
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
   private scrollCallbacks: Set<ScrollCallback> = new Set();
@@ -73,6 +86,11 @@ export class VirtualScroller {
   private readonly rowHeight: number;
   private readonly bufferRows: number;
   private readonly classPrefix: string;
+  private readonly useExternalScroller: boolean;
+  private readonly headerHeight: number;
+
+  // Reference to the body container when using external scroller
+  private bodyContainer: HTMLElement | null = null;
 
   // Bound event handler for cleanup
   private handleScrollBound: () => void;
@@ -84,23 +102,48 @@ export class VirtualScroller {
     this.rowHeight = options.rowHeight;
     this.bufferRows = options.bufferRows ?? 5;
     this.classPrefix = options.classPrefix ?? 'dt';
+    this.useExternalScroller = !!options.externalScrollContainer;
+    this.headerHeight = options.headerHeight ?? 0;
 
-    // Create DOM structure
-    this.scrollContainer = this.createScrollContainer();
-    this.contentContainer = this.createContentContainer();
-    this.widthSpacer = this.createWidthSpacer();
-    this.viewportContainer = this.createViewportContainer();
+    if (options.externalScrollContainer) {
+      // External scroll container mode:
+      // - Don't create our own scroll container
+      // - Use the external container for scroll events
+      // - Attach content directly to the provided container (body)
+      this.scrollContainer = null;
+      this.scrollSource = options.externalScrollContainer;
+      this.bodyContainer = container;
 
-    // Assemble structure
-    // Width spacer is in normal flow to force horizontal scroll width
-    this.contentContainer.appendChild(this.widthSpacer);
-    this.contentContainer.appendChild(this.viewportContainer);
-    this.scrollContainer.appendChild(this.contentContainer);
-    container.appendChild(this.scrollContainer);
+      // Create content and viewport containers
+      this.contentContainer = this.createContentContainer();
+      this.widthSpacer = this.createWidthSpacer();
+      this.viewportContainer = this.createViewportContainer();
 
-    // Bind and attach scroll listener
+      // Assemble structure directly in body container
+      this.contentContainer.appendChild(this.widthSpacer);
+      this.contentContainer.appendChild(this.viewportContainer);
+      container.appendChild(this.contentContainer);
+    } else {
+      // Legacy mode: create own scroll container
+      this.scrollContainer = this.createScrollContainer();
+      this.contentContainer = this.createContentContainer();
+      this.widthSpacer = this.createWidthSpacer();
+      this.viewportContainer = this.createViewportContainer();
+
+      // Assemble structure
+      // Width spacer is in normal flow to force horizontal scroll width
+      this.contentContainer.appendChild(this.widthSpacer);
+      this.contentContainer.appendChild(this.viewportContainer);
+      this.scrollContainer.appendChild(this.contentContainer);
+      container.appendChild(this.scrollContainer);
+
+      // Use own scroll container for vertical scrolling
+      this.scrollSource = this.scrollContainer;
+    }
+
+    // Bind and attach scroll listener to scroll source
     this.handleScrollBound = this.handleScroll.bind(this);
-    this.scrollContainer.addEventListener('scroll', this.handleScrollBound, { passive: true });
+    this.scrollSource.addEventListener('scroll', this.handleScrollBound, { passive: true });
 
     // Calculate initial range
     this.updateVisibleRange();
@@ -202,17 +245,23 @@ export class VirtualScroller {
       return { start: 0, end: 0, offsetY: 0 };
     }
 
-    const scrollTop = this.scrollContainer.scrollTop;
-    const viewportHeight = this.scrollContainer.clientHeight;
+    const scrollTop = this.scrollSource.scrollTop;
+    const viewportHeight = this.scrollSource.clientHeight;
 
     // Handle case where viewport hasn't been measured yet
     if (viewportHeight === 0) {
       return { start: 0, end: 0, offsetY: 0 };
     }
 
+    // When using external scroll container, the visible body area is reduced
+    // by the header height (which is sticky at the top)
+    const visibleBodyHeight = this.useExternalScroller
+      ? Math.max(0, viewportHeight - this.headerHeight)
+      : viewportHeight;
+
     // Calculate raw range (without buffer)
     const rawStart = Math.floor(scrollTop / this.rowHeight);
-    const rawEnd = Math.ceil((scrollTop + viewportHeight) / this.rowHeight);
+    const rawEnd = Math.ceil((scrollTop + visibleBodyHeight) / this.rowHeight);
 
     // Apply buffer (clamp to valid range)
     const start = Math.max(0, rawStart - this.bufferRows);
@@ -257,6 +306,12 @@ export class VirtualScroller {
     // Update content height for scrollbar
     const totalHeight = count * this.rowHeight;
     this.contentContainer.style.height = `${totalHeight}px`;
+
+    // When using external scroll container, also set height on body container
+    // This ensures the scroll container knows the total scrollable height
+    if (this.useExternalScroller && this.bodyContainer) {
+      this.bodyContainer.style.height = `${totalHeight}px`;
+    }
 
     // Recalculate visible range
     this.updateVisibleRange();
@@ -304,7 +359,7 @@ export class VirtualScroller {
     // Clamp index to valid range
     const clampedIndex = Math.max(0, Math.min(this.totalRows - 1, index));
     const rowTop = clampedIndex * this.rowHeight;
-    const viewportHeight = this.scrollContainer.clientHeight;
+    const viewportHeight = this.scrollSource.clientHeight;
 
     let scrollTop: number;
     switch (align) {
@@ -321,7 +376,7 @@ export class VirtualScroller {
 
     // Clamp to valid scroll range
     const maxScroll = this.contentContainer.offsetHeight - viewportHeight;
-    this.scrollContainer.scrollTop = Math.max(0, Math.min(maxScroll, scrollTop));
+    this.scrollSource.scrollTop = Math.max(0, Math.min(maxScroll, scrollTop));
   }
 
   /**
@@ -354,9 +409,12 @@ export class VirtualScroller {
 
   /**
    * Get the scroll container element
+   *
+   * In external mode, returns the external scroll source.
+   * In legacy mode, returns the internal scroll container.
    */
   getScrollContainer(): HTMLElement {
-    return this.scrollContainer;
+    return this.scrollSource;
   }
 
   /**
@@ -372,14 +430,14 @@ export class VirtualScroller {
    * Get the current scroll top position
    */
   getScrollTop(): number {
-    return this.scrollContainer.scrollTop;
+    return this.scrollSource.scrollTop;
   }
 
   /**
    * Get the viewport height
    */
   getViewportHeight(): number {
-    return this.scrollContainer.clientHeight;
+    return this.scrollSource.clientHeight;
   }
 
   /**
@@ -419,15 +477,23 @@ export class VirtualScroller {
       this.scrollRAF = null;
     }
 
-    // Remove scroll listener
-    this.scrollContainer.removeEventListener('scroll', this.handleScrollBound);
+    // Remove scroll listener from scroll source
+    this.scrollSource.removeEventListener('scroll', this.handleScrollBound);
 
     // Clear callbacks
     this.scrollCallbacks.clear();
 
     // Remove from DOM
-    if (this.scrollContainer.parentNode) {
-      this.scrollContainer.parentNode.removeChild(this.scrollContainer);
+    if (this.useExternalScroller) {
+      // In external mode, we only created the content container
+      if (this.contentContainer.parentNode) {
+        this.contentContainer.parentNode.removeChild(this.contentContainer);
+      }
+    } else {
+      // In legacy mode, remove the scroll container
+      if (this.scrollContainer && this.scrollContainer.parentNode) {
+        this.scrollContainer.parentNode.removeChild(this.scrollContainer);
+      }
     }
   }
 }

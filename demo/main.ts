@@ -84,14 +84,8 @@ async function loadData(source: File | string): Promise<void> {
         updateTableInfo();
       });
 
-      // Sync horizontal scroll between body and header
-      const scrollContainer = virtualScroller.getScrollContainer();
-      const header = tableContainer?.getElement().querySelector('.dt-header') as HTMLElement;
-      if (header) {
-        scrollContainer.addEventListener('scroll', () => {
-          header.scrollLeft = scrollContainer.scrollLeft;
-        }, { passive: true });
-      }
+      // Note: With unified scroll container, horizontal scroll sync between
+      // header and body happens automatically (header uses position: sticky)
     }
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);

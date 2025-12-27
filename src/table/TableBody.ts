@@ -19,6 +19,17 @@ export interface TableBodyOptions {
   rowHeight?: number;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /**
+   * External scroll container for unified scrolling.
+   * When provided, VirtualScroller will use this container for scroll events
+   * instead of creating its own scroll container.
+   */
+  scrollContainer?: HTMLElement;
+  /**
+   * Height of the header in pixels (used with scrollContainer).
+   * Needed to calculate visible body area correctly.
+   */
+  headerHeight?: number;
 }
 
 /**
@@ -69,6 +80,8 @@ export class TableBody {
     this.virtualScroller = new VirtualScroller(container, {
       rowHeight: this.rowHeight,
       classPrefix: this.classPrefix,
+      externalScrollContainer: options.scrollContainer,
+      headerHeight: options.headerHeight,
     });
   }
 

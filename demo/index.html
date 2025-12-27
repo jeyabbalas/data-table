@@ -61,16 +61,12 @@
     }
     .dt-scroll-container {
       flex: 1;
-      overflow-x: auto;   /* Allow horizontal scrolling for header + body together */
-      overflow-y: hidden; /* Body's virtual scroller handles vertical */
-      display: flex;
-      flex-direction: column;
+      overflow: auto;     /* Both horizontal and vertical scrollbars */
+      min-height: 0;      /* Allow flex shrinking for proper scrolling */
     }
     .dt-table-inner {
       min-width: fit-content;
-      display: flex;
-      flex-direction: column;
-      flex: 1;
+      /* No flex: 1 - height is determined by header + body content */
     }
     .dt-header {
       flex-shrink: 0;
@@ -79,18 +75,10 @@
       z-index: 10;
       border-bottom: 1px solid #e5e7eb;
       background: #f9fafb;
-      overflow-x: auto;  /* Allow horizontal scroll (synced with body) */
-      overflow-y: hidden;
-      -ms-overflow-style: none;  /* Hide scrollbar in IE/Edge */
-      scrollbar-width: none;  /* Hide scrollbar in Firefox */
-    }
-    .dt-header::-webkit-scrollbar {
-      display: none;  /* Hide scrollbar in Chrome/Safari */
     }
     .dt-body {
-      flex: 1;
-      min-height: 0;
-      position: relative;  /* Required for absolute positioning of virtual scroll */
+      position: relative;  /* Positioning context for virtual scroll */
+      /* Height is set dynamically via JavaScript based on total rows */
     }
 
     /* Column Header CSS */
@@ -157,23 +145,18 @@
     }
 
     /* Virtual Scroller CSS */
-    .dt-virtual-scroll {
-      position: absolute;  /* Use absolute positioning to constrain height */
-      top: 0;
-      left: 0;
-      width: 100%;  /* Use width instead of right:0 to allow content overflow */
-      bottom: 0;
-      overflow-x: hidden; /* Parent (.dt-scroll-container) handles horizontal */
-      overflow-y: auto;   /* Virtual scroller handles vertical only */
-    }
+    /* Note: .dt-virtual-scroll is not used when using unified scroll container */
+    /* The following styles support the new unified scrolling approach */
     .dt-virtual-content {
       position: relative;
+      /* Height set dynamically via JavaScript = totalRows * rowHeight */
       /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
     }
     .dt-virtual-viewport {
       position: absolute;
       top: 0;
       left: 0;
+      /* Positioned via transform: translateY() for GPU acceleration */
       /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
     }
     .dt-width-spacer {

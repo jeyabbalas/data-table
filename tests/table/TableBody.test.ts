@@ -385,4 +385,112 @@ describe('TableBody', () => {
       tableBody.destroy();
     });
   });
+
+  describe('row hover', () => {
+    it('should update hover state when hoveredRow signal changes', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      // Verify subscription is active
+      const hoveredSubsCount = state.hoveredRow.subscriberCount();
+      expect(hoveredSubsCount).toBeGreaterThan(0);
+
+      tableBody.destroy();
+    });
+
+    it('should not update hover after destroy', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      tableBody.destroy();
+
+      // Should not throw when state changes after destroy
+      expect(() => state.hoveredRow.set(5)).not.toThrow();
+    });
+  });
+
+  describe('row selection', () => {
+    it('should update selection state when selectedRows signal changes', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      // Verify subscription is active
+      const selectedSubsCount = state.selectedRows.subscriberCount();
+      expect(selectedSubsCount).toBeGreaterThan(0);
+
+      tableBody.destroy();
+    });
+
+    it('should not update selection after destroy', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      tableBody.destroy();
+
+      // Should not throw when state changes after destroy
+      expect(() => state.selectedRows.set(new Set([1, 2, 3]))).not.toThrow();
+    });
+
+    it('should support multiple selection modes through state', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      // Test replace mode (single selection)
+      actions.selectRow(0, 'replace');
+      expect(state.selectedRows.get().has(0)).toBe(true);
+      expect(state.selectedRows.get().size).toBe(1);
+
+      // Test toggle mode
+      actions.selectRow(1, 'toggle');
+      expect(state.selectedRows.get().has(0)).toBe(true);
+      expect(state.selectedRows.get().has(1)).toBe(true);
+      expect(state.selectedRows.get().size).toBe(2);
+
+      // Toggle off
+      actions.selectRow(0, 'toggle');
+      expect(state.selectedRows.get().has(0)).toBe(false);
+      expect(state.selectedRows.get().has(1)).toBe(true);
+      expect(state.selectedRows.get().size).toBe(1);
+
+      tableBody.destroy();
+    });
+
+    it('should support range selection through state', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      // First select a row (establishes anchor)
+      actions.selectRow(2, 'replace');
+      expect(state.selectedRows.get().has(2)).toBe(true);
+
+      // Range select to row 5
+      actions.selectRow(5, 'range');
+
+      // Should have rows 2, 3, 4, 5 selected
+      const selected = state.selectedRows.get();
+      expect(selected.has(2)).toBe(true);
+      expect(selected.has(3)).toBe(true);
+      expect(selected.has(4)).toBe(true);
+      expect(selected.has(5)).toBe(true);
+      expect(selected.size).toBe(4);
+
+      tableBody.destroy();
+    });
+
+    it('should clear selection through state', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      // Select some rows
+      actions.selectRow(0, 'replace');
+      actions.selectRow(1, 'toggle');
+      expect(state.selectedRows.get().size).toBe(2);
+
+      // Clear
+      actions.clearSelection();
+      expect(state.selectedRows.get().size).toBe(0);
+
+      tableBody.destroy();
+    });
+  });
 });

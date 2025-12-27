@@ -5,6 +5,7 @@ import {
   TableContainer,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
+import { VirtualScroller, type VisibleRange } from '../src/table/VirtualScroller';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -24,13 +25,15 @@ const bridge = new WorkerBridge();
 const tableState = createTableState();
 let actions: StateActions;
 let tableContainer: TableContainer | null = null;
+let virtualScroller: VirtualScroller | null = null;
 let tableCounter = 0;
+let currentVisibleRange: VisibleRange | null = null;
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
 }
 
-function updateSortInfo(): void {
+function updateTableInfo(): void {
   const sortColumns = tableState.sortColumns.get();
   const rowCount = tableState.totalRows.get();
   const colCount = tableState.schema.get().length;
@@ -40,13 +43,19 @@ function updateSortInfo(): void {
 
   let info = `${rowCount.toLocaleString()} rows, ${colCount} columns`;
 
+  // Show visible range if virtual scroller is active
+  if (currentVisibleRange && currentVisibleRange.end > 0) {
+    info += ` | <strong>Visible:</strong> rows ${currentVisibleRange.start + 1}-${currentVisibleRange.end}`;
+  }
+
+  // Show sort info
   if (sortColumns.length > 0) {
     const sortDesc = sortColumns
       .map((s, i) => `${s.column} (${s.direction === 'asc' ? '▲' : '▼'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
       .join(', ');
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
   } else {
-    info += ' | Click column headers to sort';
+    info += ' | Click headers to sort, scroll to test virtual scrolling';
   }
 
   updateInfo(info);
@@ -58,10 +67,59 @@ async function loadData(source: File | string): Promise<void> {
 
   try {
     await actions.loadData(source, { tableName });
-    updateSortInfo();
+
+    // Create virtual scroller in body container
+    setupVirtualScroller();
+
+    updateTableInfo();
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+function setupVirtualScroller(): void {
+  // Destroy existing scroller
+  if (virtualScroller) {
+    virtualScroller.destroy();
+    virtualScroller = null;
+  }
+
+  if (!tableContainer) return;
+
+  const bodyContainer = tableContainer.getBodyContainer();
+  const totalRows = tableState.totalRows.get();
+  const rowHeight = tableContainer.getOptions().rowHeight;
+
+  // Clear body container
+  bodyContainer.innerHTML = '';
+
+  // Create virtual scroller
+  virtualScroller = new VirtualScroller(bodyContainer, { rowHeight });
+  virtualScroller.setTotalRows(totalRows);
+
+  // Subscribe to scroll events
+  virtualScroller.onScroll((range) => {
+    currentVisibleRange = range;
+    updateTableInfo();
+
+    // Render placeholder rows in the viewport (actual row rendering in Task 3.4)
+    const viewport = virtualScroller!.getViewportContainer();
+    viewport.innerHTML = '';
+
+    for (let i = range.start; i < range.end; i++) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'dt-row-placeholder';
+      rowEl.style.height = `${rowHeight}px`;
+      rowEl.style.display = 'flex';
+      rowEl.style.alignItems = 'center';
+      rowEl.style.padding = '0 0.75rem';
+      rowEl.style.borderBottom = '1px solid #f3f4f6';
+      rowEl.style.fontSize = '0.875rem';
+      rowEl.style.color = '#6b7280';
+      rowEl.textContent = `Row ${i + 1} (placeholder - actual data rendering in Task 3.4)`;
+      viewport.appendChild(rowEl);
+    }
+  });
 }
 
 // Initialize
@@ -74,7 +132,7 @@ bridge
     // Subscribe to sort changes to update info display
     tableState.sortColumns.subscribe(() => {
       if (tableState.tableName.get()) {
-        updateSortInfo();
+        updateTableInfo();
       }
     });
 

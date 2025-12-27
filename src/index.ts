@@ -36,6 +36,14 @@ export type { TableContainerOptions, ResizeCallback } from './table/TableContain
 export { ColumnHeader } from './table/ColumnHeader';
 export type { ColumnHeaderOptions } from './table/ColumnHeader';
 
+export { VirtualScroller } from './table/VirtualScroller';
+export type {
+  VirtualScrollerOptions,
+  VisibleRange,
+  ScrollCallback,
+  ScrollAlign,
+} from './table/VirtualScroller';
+
 // Progress reporting
 export type {
   ProgressInfo,

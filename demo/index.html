@@ -131,6 +131,31 @@
       margin-left: 4px;
       vertical-align: middle;
     }
+
+    /* Virtual Scroller CSS */
+    .dt-virtual-scroll {
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .dt-virtual-content {
+      position: relative;
+      width: 100%;
+    }
+    .dt-virtual-viewport {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+    }
+
+    /* Virtual scroll info (for demo) */
+    .dt-scroll-info {
+      padding: 1rem;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
   </style>
 </head>
 <body>

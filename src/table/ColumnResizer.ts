@@ -64,6 +64,7 @@ export class ColumnResizer {
     private header: HTMLElement,
     private onResize: ResizeCallback,
     private onReset?: () => void,
+    private onBeforeReset?: () => HTMLElement[],
     options: ColumnResizerOptions = {}
   ) {
     this.minWidth = options.minWidth ?? 50;
@@ -225,13 +226,17 @@ export class ColumnResizer {
 
     const resettingClass = `${this.classPrefix}-col-resetting`;
 
-    // Add transition class for smooth animation
+    // Get cells to animate (before state update)
+    const cells = this.onBeforeReset?.() ?? [];
+
+    // Add transition class to header and cells
     this.header.classList.add(resettingClass);
+    cells.forEach((cell) => cell.classList.add(resettingClass));
 
     // Animate to default width
     this.header.style.width = '150px';
 
-    // Call reset callback to update state
+    // Call reset callback to update state (cells get new width)
     if (this.onReset) {
       this.onReset();
     }
@@ -239,6 +244,7 @@ export class ColumnResizer {
     // Remove transition class after animation completes
     const cleanup = () => {
       this.header.classList.remove(resettingClass);
+      cells.forEach((cell) => cell.classList.remove(resettingClass));
       this.header.removeEventListener('transitionend', cleanup);
     };
     this.header.addEventListener('transitionend', cleanup);
@@ -246,6 +252,7 @@ export class ColumnResizer {
     // Fallback cleanup in case transitionend doesn't fire
     setTimeout(() => {
       this.header.classList.remove(resettingClass);
+      cells.forEach((cell) => cell.classList.remove(resettingClass));
     }, 250);
   }
 

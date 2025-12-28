@@ -63,6 +63,7 @@ export class ColumnHeader {
       this.element,
       (width) => this.actions.setColumnWidth(this.column.name, width),
       () => this.actions.resetColumnWidth(this.column.name),
+      () => this.getColumnCells(),
       { classPrefix: this.classPrefix }
     );
 
@@ -203,6 +204,24 @@ export class ColumnHeader {
     } else {
       this.statsEl.textContent = '';
     }
+  }
+
+  /**
+   * Get all cells in this column for transition animations
+   */
+  private getColumnCells(): HTMLElement[] {
+    const visibleColumns = this.state.visibleColumns.get();
+    const columnIndex = visibleColumns.indexOf(this.column.name);
+    if (columnIndex === -1) return [];
+
+    const root = this.element.closest(`.${this.classPrefix}-root`);
+    if (!root) return [];
+
+    // Query all cells at this column index (nth-child is 1-based)
+    const cells = root.querySelectorAll(
+      `.${this.classPrefix}-row > .${this.classPrefix}-cell:nth-child(${columnIndex + 1})`
+    );
+    return Array.from(cells) as HTMLElement[];
   }
 
   // =========================================

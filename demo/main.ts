@@ -1,11 +1,12 @@
 /**
- * Demo: Task 3.9 - Column Reordering
+ * Interactive Data Table - Demo Application
  *
- * This demo showcases the column reordering functionality:
+ * This demo showcases the data table functionality:
  * - Drag column headers to reorder columns
- * - Drop indicator shows insertion point
- * - Reset order button to restore original order
- * - Also includes: resize, sorting, selection
+ * - Resize columns by dragging edges
+ * - Click headers to sort (Shift+click for multi-sort)
+ * - Click rows to select (Ctrl+click to toggle, Shift+click for range)
+ * - Virtual scrolling for large datasets
  */
 
 import {
@@ -62,7 +63,7 @@ function updateTableInfo(): void {
     .join(', ');
 
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += `<br><span style="color: #6b7280; font-size: 0.8rem;">Types: ${typeInfo}</span>`;
+  info += `<br><span class="info-text--secondary">Types: ${typeInfo}</span>`;
 
   // Show visible range from table body
   const tableBody = tableContainer?.getTableBody();
@@ -95,7 +96,7 @@ function updateTableInfo(): void {
   if (isReordered) {
     const orderPreview = currentOrder.slice(0, 5).join(', ');
     const more = currentOrder.length > 5 ? ` ... (+${currentOrder.length - 5} more)` : '';
-    info += `<br><span style="color: #2563eb; font-size: 0.8rem;">Column order: ${orderPreview}${more}</span>`;
+    info += `<br><span class="info-text--primary">Column order: ${orderPreview}${more}</span>`;
   }
 
   // Show column width info
@@ -106,7 +107,7 @@ function updateTableInfo(): void {
       .map(([col, width]) => `${col}: ${width}px`)
       .join(', ');
     const more = columnWidths.size > 3 ? ` (+${columnWidths.size - 3} more)` : '';
-    info += `<br><span style="color: #6b7280; font-size: 0.8rem;">Custom widths: ${widthInfo}${more}</span>`;
+    info += `<br><span class="info-text--secondary">Custom widths: ${widthInfo}${more}</span>`;
   }
 
   updateInfo(info);
@@ -186,13 +187,13 @@ bridge
     });
 
     initStatusEl.textContent = 'DuckDB Ready';
-    initStatusEl.style.color = '#059669';
+    initStatusEl.classList.add('init-status--success');
     loadFileBtn.disabled = false;
     loadUrlBtn.disabled = false;
   })
   .catch((error) => {
     initStatusEl.textContent = `Error: ${error.message}`;
-    initStatusEl.style.color = '#dc2626';
+    initStatusEl.classList.add('init-status--error');
   });
 
 // Event handlers

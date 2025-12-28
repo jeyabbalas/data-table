@@ -11,11 +11,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/data-table.js",
       "require": "./dist/data-table.umd.cjs"
-    }
+    },
+    "./styles": "./dist/data-table.css",
+    "./styles.css": "./dist/data-table.css"
   },
   "files": [
     "dist"
   ],
+  "style": "./dist/data-table.css",
   "scripts": {
     "dev": "vite",
     "dev:demo": "vite --config vite.demo.config.ts",

@@ -3,361 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task 3.9: Column Reordering - Interactive Data Table Demo</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding: 2rem;
-      background: #f5f5f5;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    h1 { margin-bottom: 1rem; color: #333; }
-    h2 { margin: 0 0 0.5rem; color: #555; font-size: 1.1rem; }
-    .card {
-      background: white;
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
-    input[type="text"], input[type="file"] {
-      padding: 0.5rem;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      flex: 1;
-      min-width: 200px;
-    }
-    button {
-      padding: 0.5rem 1rem;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover { background: #1d4ed8; }
-    button:disabled { background: #9ca3af; cursor: not-allowed; }
-    .status-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.9rem;
-    }
-    .status-bar .version { color: #6b7280; }
-    .status-bar .init-status { font-weight: 500; }
-
-    /* TableContainer CSS classes */
-    .dt-root {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: white;
-    }
-
-    /* Header area with scrollbar gutter */
-    .dt-header-area {
-      display: flex;
-      flex-shrink: 0;
-    }
-    .dt-header-scroll {
-      flex: 1;
-      overflow-x: scroll;
-      /* Hide scrollbar - sync with body scroll via JavaScript */
-      scrollbar-width: none; /* Firefox */
-      -ms-overflow-style: none; /* IE/Edge */
-    }
-    .dt-header-scroll::-webkit-scrollbar {
-      display: none; /* Chrome/Safari */
-    }
-    .dt-scrollbar-gutter {
-      /* Match typical scrollbar width - reserves space for body's vertical scrollbar */
-      width: 17px;
-      flex-shrink: 0;
-      background: #f9fafb;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    /* Body scroll container - handles both horizontal and vertical scrolling */
-    .dt-body-scroll {
-      flex: 1;
-      overflow: auto;
-      min-height: 0;
-    }
-
-    .dt-header {
-      flex-shrink: 0;
-      border-bottom: 1px solid #e5e7eb;
-      background: #f9fafb;
-    }
-    .dt-body {
-      position: relative;  /* Positioning context for virtual scroll */
-      min-width: fit-content;
-      /* Height is set dynamically via JavaScript based on total rows */
-    }
-
-    /* Column Header CSS */
-    .dt-header-row {
-      display: flex;
-      min-width: fit-content;
-      position: relative;  /* Positioning context for drop indicator */
-    }
-    .dt-col-header {
-      display: flex;
-      flex-direction: column;
-      position: relative;  /* For absolute positioning of resize handle */
-      width: 150px;
-      flex-shrink: 0;
-      padding: 0.5rem 0.75rem;
-      border-right: 1px solid #e5e7eb;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s ease;
-    }
-
-    /* Column resize handle */
-    .dt-col-resize-handle {
-      position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 5px;
-      cursor: col-resize;
-      background: transparent;
-      z-index: 1;
-    }
-    .dt-col-resize-handle:hover {
-      background: rgba(37, 99, 235, 0.5);
-    }
-    .dt-col-resize-handle--active {
-      background: #2563eb;
-    }
-    .dt-col-header:hover {
-      background: #f3f4f6;
-    }
-    .dt-col-header:last-child {
-      border-right: none;
-    }
-    .dt-col-name {
-      font-weight: 600;
-      font-size: 0.875rem;
-      color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .dt-col-type {
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-top: 0.125rem;
-    }
-    .dt-col-stats {
-      font-size: 0.7rem;
-      color: #9ca3af;
-      margin-top: 0.25rem;
-    }
-    .dt-col-viz {
-      height: 60px;
-      margin-top: 0.25rem;
-      background: #f9fafb;
-      border-radius: 4px;
-    }
-    .dt-col-sort {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-top: 0.25rem;
-      height: 1.25rem;
-    }
-
-    /* Sort button with SVG arrows */
-    .dt-col-sort-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2px 6px;
-      border: none;
-      background: transparent;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s ease;
-    }
-    .dt-col-sort-btn:hover {
-      background: rgba(0, 0, 0, 0.08);
-    }
-    .dt-col-sort-btn:focus {
-      outline: 2px solid #2563eb;
-      outline-offset: 1px;
-    }
-    .dt-col-sort-btn svg {
-      width: 10px;
-      height: 14px;
-    }
-    .dt-col-sort-btn .arrow-up,
-    .dt-col-sort-btn .arrow-down {
-      fill: #d1d5db;
-      transition: fill 0.15s ease;
-    }
-    .dt-col-sort-btn:hover .arrow-up,
-    .dt-col-sort-btn:hover .arrow-down {
-      fill: #9ca3af;
-    }
-    .dt-col-sort-btn--asc .arrow-up {
-      fill: #2563eb;
-    }
-    .dt-col-sort-btn--desc .arrow-down {
-      fill: #2563eb;
-    }
-
-    .dt-col-sort-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: #2563eb;
-      color: white;
-      font-size: 0.65rem;
-      min-width: 14px;
-      height: 14px;
-      padding: 0 3px;
-      border-radius: 50%;
-      text-align: center;
-    }
-
-    /* Virtual Scroller CSS */
-    /* Note: .dt-virtual-scroll is not used when using unified scroll container */
-    /* The following styles support the new unified scrolling approach */
-    .dt-virtual-content {
-      position: relative;
-      /* Height set dynamically via JavaScript = totalRows * rowHeight */
-      /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
-    }
-    .dt-virtual-viewport {
-      position: absolute;
-      top: 0;
-      left: 0;
-      /* Positioned via transform: translateY() for GPU acceleration */
-      /* Width set dynamically via JavaScript in TableBody.renderVisibleRows() */
-    }
-    .dt-width-spacer {
-      height: 1px;
-      pointer-events: none;
-      /* Width set dynamically via JavaScript to force horizontal scroll */
-    }
-
-    /* Virtual scroll info (for demo) */
-    .dt-scroll-info {
-      padding: 1rem;
-      text-align: center;
-      color: #6b7280;
-      font-size: 0.875rem;
-    }
-
-    /* Row styles */
-    .dt-row {
-      display: flex;
-      align-items: center;
-      border-bottom: 1px solid #f3f4f6;
-      cursor: pointer;
-      background: white;
-      transition: background 0.1s ease;
-      user-select: none;  /* Prevent text selection on Shift+click */
-    }
-    .dt-row:hover,
-    .dt-row--hover {
-      background: #f9fafb;
-    }
-    .dt-row--selected {
-      background: #eff6ff;
-    }
-    .dt-row--selected:hover,
-    .dt-row--selected.dt-row--hover {
-      background: #dbeafe;
-    }
-    .dt-row--loading {
-      background: #fafafa;
-    }
-
-    /* Cell styles */
-    .dt-cell {
-      padding: 0 0.75rem;
-      width: 150px;
-      flex-shrink: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 0.875rem;
-      color: #111827;
-      border-right: 1px solid #f3f4f6;
-    }
-    .dt-cell:last-child {
-      border-right: none;
-    }
-    .dt-cell--null {
-      color: #9ca3af;
-      font-style: italic;
-    }
-    .dt-cell--number {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    /* Column Reordering CSS */
-    body.dt-column-potential-drag,
-    body.dt-column-dragging {
-      cursor: grabbing !important;
-      user-select: none;
-    }
-    body.dt-column-potential-drag *,
-    body.dt-column-dragging * {
-      cursor: grabbing !important;
-    }
-    .dt-col-header {
-      cursor: grab;
-    }
-    .dt-col-header--dragging {
-      opacity: 0.5;
-      background: #e5e7eb;
-    }
-    .dt-col-resize-handle {
-      cursor: col-resize !important;
-    }
-    .dt-drop-indicator {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      background: #2563eb;
-      pointer-events: none;
-      z-index: 100;
-      border-radius: 2px;
-      box-shadow: 0 0 4px rgba(37, 99, 235, 0.5);
-    }
-  </style>
+  <title>Interactive Data Table - Demo</title>
+  <!-- Data Table Library Styles -->
+  <link rel="stylesheet" href="../src/styles/data-table.css">
+  <!-- Demo-specific Styles -->
+  <link rel="stylesheet" href="./demo.css">
 </head>
 <body>
-  <h1>Task 3.9: Column Reordering</h1>
+  <h1>Interactive Data Table</h1>
 
   <div class="card">
     <div class="status-bar">
       <span class="version">v<span id="version">...</span></span>
       <span id="init-status" class="init-status">Initializing...</span>
     </div>
-    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #6b7280;">
+    <div class="features-bar">
       <strong>Features:</strong> Drag column headers to reorder |
-      Drop indicator shows insertion point |
-      <button id="reset-order-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #6b7280;">Reset Order</button>
-      <button id="reset-widths-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #6b7280;">Reset Widths</button>
+      Resize columns by dragging edges |
+      Click headers to sort |
+      <button id="reset-order-btn" class="btn--secondary">Reset Order</button>
+      <button id="reset-widths-btn" class="btn--secondary">Reset Widths</button>
     </div>
   </div>
 
   <div class="card">
     <h2>Load Data</h2>
-    <div class="row" style="margin-bottom: 0.5rem;">
+    <div class="row row--mb">
       <input type="file" id="file-input" accept=".csv,.json,.parquet">
       <button id="load-file-btn" disabled>Load File</button>
     </div>
@@ -367,12 +38,12 @@
     </div>
   </div>
 
-  <div class="card" style="padding: 0; overflow: hidden;">
-    <div id="table-container" style="height: 500px;"></div>
+  <div class="card card--no-padding">
+    <div id="table-container" class="table-wrapper"></div>
   </div>
 
   <div class="card">
-    <div id="table-info" style="font-size: 0.85rem; color: #6b7280;">
+    <div id="table-info" class="info-panel">
       Load a file or URL to see the data table
     </div>
   </div>

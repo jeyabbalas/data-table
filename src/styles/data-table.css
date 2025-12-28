@@ -1,0 +1,440 @@
+/**
+ * Interactive Data Table - Default Styles
+ *
+ * This CSS file provides default styling for the data table library.
+ * All colors and sizing use CSS custom properties for easy customization.
+ *
+ * Usage:
+ *   import '@jeyabbalas/data-table/styles';
+ *   // or
+ *   <link rel="stylesheet" href="path/to/data-table.css">
+ *
+ * Customization:
+ *   Override any --dt-* variable in your own CSS to customize the theme.
+ *   Example:
+ *     :root {
+ *       --dt-primary: #10b981;
+ *     }
+ */
+
+/* ===========================================
+   CSS Custom Properties (Theme Variables)
+   =========================================== */
+
+:root {
+  /* Primary colors */
+  --dt-primary: #2563eb;
+  --dt-primary-hover: #1d4ed8;
+  --dt-primary-light: #eff6ff;
+  --dt-primary-lighter: #dbeafe;
+
+  /* Neutral colors */
+  --dt-bg: #ffffff;
+  --dt-bg-secondary: #f9fafb;
+  --dt-bg-tertiary: #f3f4f6;
+  --dt-border: #e5e7eb;
+  --dt-border-light: #f3f4f6;
+
+  /* Text colors */
+  --dt-text: #111827;
+  --dt-text-secondary: #6b7280;
+  --dt-text-tertiary: #9ca3af;
+
+  /* Sort arrow colors */
+  --dt-arrow-default: #d1d5db;
+  --dt-arrow-hover: #9ca3af;
+
+  /* Sizing */
+  --dt-header-height: 120px;
+  --dt-row-height: 32px;
+  --dt-col-width: 150px;
+  --dt-scrollbar-width: 17px;
+
+  /* Misc */
+  --dt-radius: 8px;
+  --dt-radius-sm: 4px;
+  --dt-transition: 0.15s ease;
+  --dt-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --dt-font-size: 0.875rem;
+  --dt-font-size-sm: 0.75rem;
+  --dt-font-size-xs: 0.7rem;
+}
+
+/* Dark mode - automatic based on system preference */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Primary colors - slightly lighter for dark mode */
+    --dt-primary: #3b82f6;
+    --dt-primary-hover: #60a5fa;
+    --dt-primary-light: #1e3a5f;
+    --dt-primary-lighter: #1e40af;
+
+    /* Neutral colors - inverted */
+    --dt-bg: #111827;
+    --dt-bg-secondary: #1f2937;
+    --dt-bg-tertiary: #374151;
+    --dt-border: #374151;
+    --dt-border-light: #1f2937;
+
+    /* Text colors - inverted */
+    --dt-text: #f9fafb;
+    --dt-text-secondary: #d1d5db;
+    --dt-text-tertiary: #9ca3af;
+
+    /* Sort arrow colors */
+    --dt-arrow-default: #4b5563;
+    --dt-arrow-hover: #6b7280;
+  }
+}
+
+/* ===========================================
+   Root Container
+   =========================================== */
+
+.dt-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  background: var(--dt-bg);
+  font-family: var(--dt-font-family);
+}
+
+/* ===========================================
+   Header Area
+   =========================================== */
+
+.dt-header-area {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.dt-header-scroll {
+  flex: 1;
+  overflow-x: scroll;
+  /* Hide scrollbar - sync with body scroll via JavaScript */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.dt-header-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.dt-scrollbar-gutter {
+  /* Reserves space for body's vertical scrollbar */
+  width: var(--dt-scrollbar-width);
+  flex-shrink: 0;
+  background: var(--dt-bg-secondary);
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--dt-border);
+  background: var(--dt-bg-secondary);
+}
+
+.dt-header-row {
+  display: flex;
+  min-width: fit-content;
+  position: relative; /* Positioning context for drop indicator */
+}
+
+/* ===========================================
+   Body Area
+   =========================================== */
+
+.dt-body-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.dt-body {
+  position: relative; /* Positioning context for virtual scroll */
+  min-width: fit-content;
+}
+
+/* ===========================================
+   Column Headers
+   =========================================== */
+
+.dt-col-header {
+  display: flex;
+  flex-direction: column;
+  position: relative; /* For absolute positioning of resize handle */
+  width: var(--dt-col-width);
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem;
+  border-right: 1px solid var(--dt-border);
+  cursor: grab;
+  user-select: none;
+  transition: background var(--dt-transition);
+}
+
+.dt-col-header:hover {
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-col-header:last-child {
+  border-right: none;
+}
+
+.dt-col-header--dragging {
+  opacity: 0.5;
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-col-name {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-col-type {
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.dt-col-stats {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  margin-top: 0.25rem;
+}
+
+.dt-col-viz {
+  height: 60px;
+  margin-top: 0.25rem;
+  background: var(--dt-bg-secondary);
+  border-radius: var(--dt-radius-sm);
+}
+
+/* ===========================================
+   Column Resize Handle
+   =========================================== */
+
+.dt-col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize !important;
+  background: transparent;
+  z-index: 1;
+}
+
+.dt-col-resize-handle:hover {
+  background: rgba(37, 99, 235, 0.5);
+}
+
+.dt-col-resize-handle--active {
+  background: var(--dt-primary);
+}
+
+/* ===========================================
+   Sort Button
+   =========================================== */
+
+.dt-col-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0.25rem;
+  height: 1.25rem;
+}
+
+.dt-col-sort-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  transition: background var(--dt-transition);
+}
+
+.dt-col-sort-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.dt-col-sort-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-col-sort-btn svg {
+  width: 10px;
+  height: 14px;
+}
+
+.dt-col-sort-btn .arrow-up,
+.dt-col-sort-btn .arrow-down {
+  fill: var(--dt-arrow-default);
+  transition: fill var(--dt-transition);
+}
+
+.dt-col-sort-btn:hover .arrow-up,
+.dt-col-sort-btn:hover .arrow-down {
+  fill: var(--dt-arrow-hover);
+}
+
+.dt-col-sort-btn--asc .arrow-up {
+  fill: var(--dt-primary);
+}
+
+.dt-col-sort-btn--desc .arrow-down {
+  fill: var(--dt-primary);
+}
+
+.dt-col-sort-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-primary);
+  color: white;
+  font-size: 0.65rem;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 50%;
+  text-align: center;
+}
+
+/* ===========================================
+   Virtual Scroller
+   =========================================== */
+
+.dt-virtual-content {
+  position: relative;
+  /* Height set dynamically via JavaScript = totalRows * rowHeight */
+}
+
+.dt-virtual-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Positioned via transform: translateY() for GPU acceleration */
+}
+
+.dt-width-spacer {
+  height: 1px;
+  pointer-events: none;
+  /* Width set dynamically via JavaScript to force horizontal scroll */
+}
+
+/* ===========================================
+   Rows
+   =========================================== */
+
+.dt-row {
+  display: flex;
+  align-items: center;
+  height: var(--dt-row-height);
+  border-bottom: 1px solid var(--dt-border-light);
+  cursor: pointer;
+  background: var(--dt-bg);
+  transition: background 0.1s ease;
+  user-select: none; /* Prevent text selection on Shift+click */
+}
+
+.dt-row:hover,
+.dt-row--hover {
+  background: var(--dt-bg-secondary);
+}
+
+.dt-row--selected {
+  background: var(--dt-primary-light);
+}
+
+.dt-row--selected:hover,
+.dt-row--selected.dt-row--hover {
+  background: var(--dt-primary-lighter);
+}
+
+.dt-row--loading {
+  background: var(--dt-bg-secondary);
+}
+
+/* ===========================================
+   Cells
+   =========================================== */
+
+.dt-cell {
+  padding: 0 0.75rem;
+  width: var(--dt-col-width);
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  border-right: 1px solid var(--dt-border-light);
+}
+
+.dt-cell:last-child {
+  border-right: none;
+}
+
+.dt-cell--null {
+  color: var(--dt-text-tertiary);
+  font-style: italic;
+}
+
+.dt-cell--number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================
+   Column Reordering
+   =========================================== */
+
+body.dt-column-potential-drag,
+body.dt-column-dragging {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+body.dt-column-potential-drag *,
+body.dt-column-dragging * {
+  cursor: grabbing !important;
+}
+
+.dt-drop-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--dt-primary);
+  pointer-events: none;
+  z-index: 100;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(37, 99, 235, 0.5);
+}
+
+/* ===========================================
+   Placeholder States
+   =========================================== */
+
+.dt-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: var(--dt-text-secondary);
+}
+
+.dt-scroll-info {
+  padding: 1rem;
+  text-align: center;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size);
+}

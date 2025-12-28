@@ -11,6 +11,7 @@ import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { ColumnHeader } from './ColumnHeader';
+import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
 
 /**
@@ -58,6 +59,7 @@ export class TableContainer {
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
   private columnHeaders: ColumnHeader[] = [];
   private tableBody: TableBody | null = null;
+  private columnReorder: ColumnReorder | null = null;
 
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
@@ -102,6 +104,15 @@ export class TableContainer {
 
     // Subscribe to state changes
     this.subscribeToState();
+
+    // Create column reorder handler
+    if (this.actions) {
+      this.columnReorder = new ColumnReorder(
+        this.headerRow,
+        (newOrder) => this.actions?.setColumnOrder(newOrder),
+        { classPrefix: this.resolvedOptions.classPrefix }
+      );
+    }
 
     // Initial render
     this.render();
@@ -388,6 +399,9 @@ export class TableContainer {
 
       this.headerRow.appendChild(headerRowEl);
 
+      // Refresh column reorder handlers for new headers
+      this.columnReorder?.refresh();
+
       // Create or update TableBody
       if (this.bridge && this.actions) {
         // Destroy existing table body if present
@@ -509,6 +523,12 @@ export class TableContainer {
     if (this.tableBody) {
       this.tableBody.destroy();
       this.tableBody = null;
+    }
+
+    // Destroy column reorder handler
+    if (this.columnReorder) {
+      this.columnReorder.destroy();
+      this.columnReorder = null;
     }
 
     // Disconnect resize observer

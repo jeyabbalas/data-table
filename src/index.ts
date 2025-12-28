@@ -50,6 +50,9 @@ export type { TableBodyOptions, RowData } from './table/TableBody';
 export { CellRenderer } from './table/Cell';
 export type { CellOptions } from './table/Cell';
 
+export { ColumnReorder } from './table/ColumnReorder';
+export type { ColumnReorderOptions, ReorderCallback } from './table/ColumnReorder';
+
 // Progress reporting
 export type {
   ProgressInfo,

@@ -1,11 +1,11 @@
 /**
- * Demo: Task 3.8 - Column Resizing
+ * Demo: Task 3.9 - Column Reordering
  *
- * This demo showcases the column resizing functionality:
- * - Drag column borders to resize columns
- * - Min/max width constraints (50-500px)
- * - Headers and cells stay synchronized
- * - Reset widths button to restore defaults
+ * This demo showcases the column reordering functionality:
+ * - Drag column headers to reorder columns
+ * - Drop indicator shows insertion point
+ * - Reset order button to restore original order
+ * - Also includes: resize, sorting, selection
  */
 
 import {
@@ -23,6 +23,7 @@ const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const loadFileBtn = document.getElementById('load-file-btn') as HTMLButtonElement;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
+const resetOrderBtn = document.getElementById('reset-order-btn') as HTMLButtonElement;
 const resetWidthsBtn = document.getElementById('reset-widths-btn') as HTMLButtonElement;
 const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
@@ -36,6 +37,7 @@ const tableState = createTableState();
 let actions: StateActions;
 let tableContainer: TableContainer | null = null;
 let tableCounter = 0;
+let originalColumnOrder: string[] = [];
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
@@ -86,6 +88,16 @@ function updateTableInfo(): void {
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
   }
 
+  // Show column order info (if reordered from original)
+  const currentOrder = tableState.visibleColumns.get();
+  const isReordered = originalColumnOrder.length > 0 &&
+    JSON.stringify(currentOrder) !== JSON.stringify(originalColumnOrder);
+  if (isReordered) {
+    const orderPreview = currentOrder.slice(0, 5).join(', ');
+    const more = currentOrder.length > 5 ? ` ... (+${currentOrder.length - 5} more)` : '';
+    info += `<br><span style="color: #2563eb; font-size: 0.8rem;">Column order: ${orderPreview}${more}</span>`;
+  }
+
   // Show column width info
   const columnWidths = tableState.columnWidths.get();
   if (columnWidths.size > 0) {
@@ -106,6 +118,8 @@ async function loadData(source: File | string): Promise<void> {
 
   try {
     await actions.loadData(source, { tableName });
+    // Store original column order for reset functionality
+    originalColumnOrder = [...tableState.visibleColumns.get()];
     updateTableInfo();
 
     // Subscribe to scroll events AFTER table is rendered
@@ -179,6 +193,12 @@ bridge
       }
     });
 
+    tableState.visibleColumns.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+      }
+    });
+
     // Update info with dimensions
     tableContainer.onResize((dims) => {
       if (!tableState.tableName.get()) {
@@ -211,6 +231,13 @@ urlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !loadUrlBtn.disabled) {
     const url = urlInput.value.trim();
     if (url) loadData(url);
+  }
+});
+
+// Reset column order to original
+resetOrderBtn.addEventListener('click', () => {
+  if (originalColumnOrder.length > 0) {
+    actions.setColumnOrder(originalColumnOrder);
   }
 });
 

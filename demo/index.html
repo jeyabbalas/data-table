@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task 3.8: Column Resizing - Interactive Data Table Demo</title>
+  <title>Task 3.9: Column Reordering - Interactive Data Table Demo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -105,6 +105,7 @@
     .dt-header-row {
       display: flex;
       min-width: fit-content;
+      position: relative;  /* Positioning context for drop indicator */
     }
     .dt-col-header {
       display: flex;
@@ -304,10 +305,42 @@
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
+
+    /* Column Reordering CSS */
+    body.dt-column-potential-drag,
+    body.dt-column-dragging {
+      cursor: grabbing !important;
+      user-select: none;
+    }
+    body.dt-column-potential-drag *,
+    body.dt-column-dragging * {
+      cursor: grabbing !important;
+    }
+    .dt-col-header {
+      cursor: grab;
+    }
+    .dt-col-header--dragging {
+      opacity: 0.5;
+      background: #e5e7eb;
+    }
+    .dt-col-resize-handle {
+      cursor: col-resize !important;
+    }
+    .dt-drop-indicator {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: #2563eb;
+      pointer-events: none;
+      z-index: 100;
+      border-radius: 2px;
+      box-shadow: 0 0 4px rgba(37, 99, 235, 0.5);
+    }
   </style>
 </head>
 <body>
-  <h1>Task 3.8: Column Resizing</h1>
+  <h1>Task 3.9: Column Reordering</h1>
 
   <div class="card">
     <div class="status-bar">
@@ -315,9 +348,9 @@
       <span id="init-status" class="init-status">Initializing...</span>
     </div>
     <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #6b7280;">
-      <strong>Features:</strong> Drag column borders to resize |
-      Min/max width constraints (50-500px) |
-      Headers and cells stay synchronized |
+      <strong>Features:</strong> Drag column headers to reorder |
+      Drop indicator shows insertion point |
+      <button id="reset-order-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #6b7280;">Reset Order</button>
       <button id="reset-widths-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #6b7280;">Reset Widths</button>
     </div>
   </div>

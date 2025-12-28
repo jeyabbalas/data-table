@@ -370,6 +370,11 @@ export class TableContainer {
   render(): void {
     if (this.destroyed) return;
 
+    // Save scroll positions before re-rendering (both containers for robustness)
+    const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
+    const savedBodyScrollTop = this.bodyScroll.scrollTop;
+    const savedHeaderScrollLeft = this.headerScroll.scrollLeft;
+
     const schema = this.state.schema.get();
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
@@ -477,6 +482,15 @@ export class TableContainer {
         this.bodyContainer.appendChild(bodyPlaceholder);
       }
     }
+
+    // Restore scroll positions after DOM updates (both containers for robustness)
+    requestAnimationFrame(() => {
+      if (!this.destroyed) {
+        this.bodyScroll.scrollLeft = savedBodyScrollLeft;
+        this.bodyScroll.scrollTop = savedBodyScrollTop;
+        this.headerScroll.scrollLeft = savedHeaderScrollLeft;
+      }
+    });
   }
 
   /**

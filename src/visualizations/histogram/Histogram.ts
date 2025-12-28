@@ -13,7 +13,7 @@ import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { fetchHistogramData } from './HistogramData';
-import type { HistogramData, HistogramBin } from './HistogramData';
+import type { HistogramData } from './HistogramData';
 
 // =========================================
 // Constants
@@ -557,12 +557,15 @@ export class Histogram extends BaseVisualization {
       if (this.brushState.active) return;
     }
 
-    // If brush is committed, check if hovering inside it for grab cursor
+    // If brush is committed, skip hover logic to preserve brush stats
     if (this.brushState.committed) {
       if (this.isInsideBrush(x, y)) {
         this.canvas.style.cursor = 'grab';
-        return;
+      } else {
+        this.canvas.style.cursor = 'default';
       }
+      // Skip all hover logic when brush is committed
+      return;
     }
 
     const prevHoveredBin = this.hoveredBin;
@@ -807,6 +810,10 @@ export class Histogram extends BaseVisualization {
     if (this.brushState.startBinIndex !== -1 && this.brushState.active) {
       this.brushState.active = false;
       this.brushState.committed = true;
+      // Clear any hover state so bars render uniformly within brush
+      this.hoveredBin = null;
+      this.hoveredNull = false;
+      this.render();
       this.canvas.style.cursor = 'grab';
       this.updateBrushStats();
       return;
@@ -871,33 +878,6 @@ export class Histogram extends BaseVisualization {
     if (newEndIndex !== this.brushState.endBinIndex) {
       this.brushState.endBinIndex = newEndIndex;
       this.render();
-    }
-  }
-
-  /**
-   * Complete brush selection and create range filter
-   */
-  private completeBrush(): void {
-    if (!this.brushState.active || !this.data) return;
-
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-
-    const startBin = this.data.bins[startIdx];
-    const endBin = this.data.bins[endIdx];
-
-    if (startBin && endBin) {
-      this.options.onFilterChange?.({
-        column: this.column.name,
-        type: 'range',
-        value: { min: startBin.x0, max: endBin.x1 },
-      });
     }
   }
 

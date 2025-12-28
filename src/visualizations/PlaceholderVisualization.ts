@@ -121,4 +121,25 @@ export class PlaceholderVisualization extends BaseVisualization {
     this.hovered = false;
     this.render();
   }
+
+  /**
+   * Handle mouse down - no-op for placeholder
+   */
+  protected handleMouseDown(_x: number, _y: number): void {
+    // Not implemented for placeholder
+  }
+
+  /**
+   * Handle mouse up - no-op for placeholder
+   */
+  protected handleMouseUp(_x: number, _y: number): void {
+    // Not implemented for placeholder
+  }
+
+  /**
+   * Handle key down - no-op for placeholder
+   */
+  protected handleKeyDown(_key: string): void {
+    // Not implemented for placeholder
+  }
 }

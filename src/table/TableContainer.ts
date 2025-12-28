@@ -260,9 +260,11 @@ export class TableContainer {
     this.unsubscribes.push(unsubVisible);
 
     // Subscribe to column widths for sizing updates
+    // NOTE: We call updateColumnWidths() instead of render() to avoid
+    // destroying ColumnHeaders mid-drag (which would kill the resize operation)
     const unsubWidths = this.state.columnWidths.subscribe(() => {
       if (!this.destroyed) {
-        this.render();
+        this.updateColumnWidths();
       }
     });
     this.unsubscribes.push(unsubWidths);
@@ -293,6 +295,24 @@ export class TableContainer {
   }
 
   /**
+   * Update column widths without re-rendering
+   *
+   * This is called when columnWidths state changes. We update styles in-place
+   * rather than calling render() to avoid destroying ColumnHeaders mid-drag
+   * (which would kill any active resize operation).
+   */
+  private updateColumnWidths(): void {
+    const columnWidths = this.state.columnWidths.get();
+
+    // Update header widths
+    for (const header of this.columnHeaders) {
+      const col = header.getColumn();
+      const width = columnWidths.get(col.name) ?? 150;
+      header.getElement().style.width = `${width}px`;
+    }
+  }
+
+  /**
    * Render the table container
    *
    * Creates ColumnHeader components for each visible column and renders
@@ -304,6 +324,7 @@ export class TableContainer {
     const schema = this.state.schema.get();
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
+    const columnWidths = this.state.columnWidths.get();
 
     // Clear existing column headers
     this.destroyColumnHeaders();
@@ -337,7 +358,13 @@ export class TableContainer {
               { classPrefix: this.resolvedOptions.classPrefix }
             );
             this.columnHeaders.push(columnHeader);
-            headerRowEl.appendChild(columnHeader.getElement());
+
+            // Apply dynamic width from state (default to 150px)
+            const headerEl = columnHeader.getElement();
+            const width = columnWidths.get(colName) ?? 150;
+            headerEl.style.width = `${width}px`;
+
+            headerRowEl.appendChild(headerEl);
           }
         }
       } else {
@@ -348,7 +375,11 @@ export class TableContainer {
             const colEl = document.createElement('div');
             colEl.className = `${this.resolvedOptions.classPrefix}-col-header`;
             colEl.style.padding = '0.5rem';
-            colEl.style.minWidth = '120px';
+
+            // Apply dynamic width from state (default to 150px)
+            const width = columnWidths.get(colName) ?? 150;
+            colEl.style.width = `${width}px`;
+
             colEl.innerHTML = `<strong>${colSchema.name}</strong><br><small>${colSchema.type}</small>`;
             headerRowEl.appendChild(colEl);
           }

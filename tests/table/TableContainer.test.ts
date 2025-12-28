@@ -371,13 +371,15 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
-    it('should re-render when column widths change', () => {
+    it('should update column widths in place when column widths change (without re-render)', () => {
       const tableContainer = new TableContainer(container, state);
       const renderSpy = vi.spyOn(tableContainer, 'render');
 
       state.columnWidths.set(new Map([['col1', 100]]));
 
-      expect(renderSpy).toHaveBeenCalled();
+      // We no longer call render() on columnWidths change to avoid killing
+      // the resize operation mid-drag. Instead, we update widths in place.
+      expect(renderSpy).not.toHaveBeenCalled();
 
       tableContainer.destroy();
     });

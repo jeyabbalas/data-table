@@ -1,11 +1,11 @@
 /**
- * Demo: Task 3.5 - Cell Rendering
+ * Demo: Task 3.8 - Column Resizing
  *
- * This demo showcases the CellRenderer functionality:
- * - Type-aware value formatting (integers, floats, dates, timestamps, booleans)
- * - Locale-aware number formatting with thousand separators
- * - Null value display with distinctive styling
- * - Text truncation with ellipsis for long strings
+ * This demo showcases the column resizing functionality:
+ * - Drag column borders to resize columns
+ * - Min/max width constraints (50-500px)
+ * - Headers and cells stay synchronized
+ * - Reset widths button to restore defaults
  */
 
 import {
@@ -23,6 +23,7 @@ const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const loadFileBtn = document.getElementById('load-file-btn') as HTMLButtonElement;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
+const resetWidthsBtn = document.getElementById('reset-widths-btn') as HTMLButtonElement;
 const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
 
@@ -85,6 +86,17 @@ function updateTableInfo(): void {
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
   }
 
+  // Show column width info
+  const columnWidths = tableState.columnWidths.get();
+  if (columnWidths.size > 0) {
+    const widthInfo = Array.from(columnWidths.entries())
+      .slice(0, 3)
+      .map(([col, width]) => `${col}: ${width}px`)
+      .join(', ');
+    const more = columnWidths.size > 3 ? ` (+${columnWidths.size - 3} more)` : '';
+    info += `<br><span style="color: #6b7280; font-size: 0.8rem;">Custom widths: ${widthInfo}${more}</span>`;
+  }
+
   updateInfo(info);
 }
 
@@ -106,12 +118,26 @@ async function loadData(source: File | string): Promise<void> {
         updateTableInfo();
       });
 
-      // Sync horizontal scroll between body and header
+      // Sync horizontal scroll between body and header (bi-directional)
       const bodyScroll = tableContainer?.getScrollContainer();
       const headerScroll = tableContainer?.getHeaderScroll();
       if (bodyScroll && headerScroll) {
+        let isScrolling = false;
+
+        // Body → Header sync
         bodyScroll.addEventListener('scroll', () => {
+          if (isScrolling) return;
+          isScrolling = true;
           headerScroll.scrollLeft = bodyScroll.scrollLeft;
+          isScrolling = false;
+        }, { passive: true });
+
+        // Header → Body sync
+        headerScroll.addEventListener('scroll', () => {
+          if (isScrolling) return;
+          isScrolling = true;
+          bodyScroll.scrollLeft = headerScroll.scrollLeft;
+          isScrolling = false;
         }, { passive: true });
       }
     }
@@ -142,6 +168,12 @@ bridge
     });
 
     tableState.selectedRows.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+      }
+    });
+
+    tableState.columnWidths.subscribe(() => {
       if (tableState.tableName.get()) {
         updateTableInfo();
       }
@@ -180,4 +212,10 @@ urlInput.addEventListener('keydown', (e) => {
     const url = urlInput.value.trim();
     if (url) loadData(url);
   }
+});
+
+// Reset column widths to default
+resetWidthsBtn.addEventListener('click', () => {
+  // Clear all custom column widths
+  tableState.columnWidths.set(new Map());
 });

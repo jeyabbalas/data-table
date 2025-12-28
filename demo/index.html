@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task 3.5: Cell Rendering - Interactive Data Table Demo</title>
+  <title>Task 3.8: Column Resizing - Interactive Data Table Demo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -109,6 +109,7 @@
     .dt-col-header {
       display: flex;
       flex-direction: column;
+      position: relative;  /* For absolute positioning of resize handle */
       width: 150px;
       flex-shrink: 0;
       padding: 0.5rem 0.75rem;
@@ -116,6 +117,24 @@
       cursor: pointer;
       user-select: none;
       transition: background 0.15s ease;
+    }
+
+    /* Column resize handle */
+    .dt-col-resize-handle {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      cursor: col-resize;
+      background: transparent;
+      z-index: 1;
+    }
+    .dt-col-resize-handle:hover {
+      background: rgba(37, 99, 235, 0.5);
+    }
+    .dt-col-resize-handle--active {
+      background: #2563eb;
     }
     .dt-col-header:hover {
       background: #f3f4f6;
@@ -148,24 +167,64 @@
       border-radius: 4px;
     }
     .dt-col-sort {
-      font-size: 0.75rem;
-      color: #2563eb;
+      display: flex;
+      align-items: center;
+      gap: 4px;
       margin-top: 0.25rem;
       height: 1.25rem;
     }
+
+    /* Sort button with SVG arrows */
+    .dt-col-sort-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 6px;
+      border: none;
+      background: transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .dt-col-sort-btn:hover {
+      background: rgba(0, 0, 0, 0.08);
+    }
+    .dt-col-sort-btn:focus {
+      outline: 2px solid #2563eb;
+      outline-offset: 1px;
+    }
+    .dt-col-sort-btn svg {
+      width: 10px;
+      height: 14px;
+    }
+    .dt-col-sort-btn .arrow-up,
+    .dt-col-sort-btn .arrow-down {
+      fill: #d1d5db;
+      transition: fill 0.15s ease;
+    }
+    .dt-col-sort-btn:hover .arrow-up,
+    .dt-col-sort-btn:hover .arrow-down {
+      fill: #9ca3af;
+    }
+    .dt-col-sort-btn--asc .arrow-up {
+      fill: #2563eb;
+    }
+    .dt-col-sort-btn--desc .arrow-down {
+      fill: #2563eb;
+    }
+
     .dt-col-sort-badge {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       background: #2563eb;
       color: white;
       font-size: 0.65rem;
-      width: 14px;
+      min-width: 14px;
       height: 14px;
-      line-height: 14px;
-      padding: 0;
+      padding: 0 3px;
       border-radius: 50%;
       text-align: center;
-      margin-left: 4px;
-      vertical-align: middle;
     }
 
     /* Virtual Scroller CSS */
@@ -248,7 +307,7 @@
   </style>
 </head>
 <body>
-  <h1>Task 3.5: Cell Rendering</h1>
+  <h1>Task 3.8: Column Resizing</h1>
 
   <div class="card">
     <div class="status-bar">
@@ -256,9 +315,10 @@
       <span id="init-status" class="init-status">Initializing...</span>
     </div>
     <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #6b7280;">
-      <strong>Features:</strong> Type-aware formatting | Locale numbers (1,234,567) |
-      Null styling (<span style="color: #9ca3af; font-style: italic;">null</span>) |
-      Right-aligned numbers | Text truncation
+      <strong>Features:</strong> Drag column borders to resize |
+      Min/max width constraints (50-500px) |
+      Headers and cells stay synchronized |
+      <button id="reset-widths-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: #6b7280;">Reset Widths</button>
     </div>
   </div>
 

@@ -115,63 +115,72 @@ describe('ColumnHeader', () => {
     });
   });
 
-  describe('sort indicator', () => {
-    it('should show no indicator when not sorted', () => {
+  describe('sort button', () => {
+    it('should show sort button with SVG arrows', () => {
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.textContent).toBe('');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
+      expect(sortBtn).toBeTruthy();
+      expect(sortBtn?.querySelector('svg')).toBeTruthy();
+      expect(sortBtn?.querySelector('.arrow-up')).toBeTruthy();
+      expect(sortBtn?.querySelector('.arrow-down')).toBeTruthy();
       expect(header.getElement().getAttribute('aria-sort')).toBe('none');
 
       header.destroy();
     });
 
-    it('should show ascending indicator', () => {
+    it('should have ascending class when sorted ascending', () => {
       state.sortColumns.set([{ column: 'test_column', direction: 'asc' }]);
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.textContent).toBe('\u25B2'); // ▲
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(true);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(false);
       expect(header.getElement().getAttribute('aria-sort')).toBe('ascending');
 
       header.destroy();
     });
 
-    it('should show descending indicator', () => {
+    it('should have descending class when sorted descending', () => {
       state.sortColumns.set([{ column: 'test_column', direction: 'desc' }]);
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.textContent).toBe('\u25BC'); // ▼
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(true);
       expect(header.getElement().getAttribute('aria-sort')).toBe('descending');
 
       header.destroy();
     });
 
-    it('should update indicator when sort changes', () => {
+    it('should update button class when sort changes', () => {
       const header = new ColumnHeader(column, state, actions);
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
 
-      expect(sortEl?.textContent).toBe('');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(false);
 
       state.sortColumns.set([{ column: 'test_column', direction: 'asc' }]);
-      expect(sortEl?.textContent).toBe('\u25B2');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(true);
 
       state.sortColumns.set([{ column: 'test_column', direction: 'desc' }]);
-      expect(sortEl?.textContent).toBe('\u25BC');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(true);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
 
       state.sortColumns.set([]);
-      expect(sortEl?.textContent).toBe('');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(false);
 
       header.destroy();
     });
 
-    it('should not show indicator when other column is sorted', () => {
+    it('should not show sort state when other column is sorted', () => {
       state.sortColumns.set([{ column: 'other_column', direction: 'asc' }]);
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.textContent).toBe('');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--desc')).toBe(false);
 
       header.destroy();
     });
@@ -185,11 +194,10 @@ describe('ColumnHeader', () => {
       ]);
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.innerHTML).toContain('\u25BC'); // ▼
-      const badge = sortEl?.querySelector('.dt-col-sort-badge');
+      const badge = header.getElement().querySelector('.dt-col-sort-badge');
       expect(badge).toBeTruthy();
       expect(badge?.textContent).toBe('2');
+      expect(badge?.style.display).not.toBe('none');
 
       header.destroy();
     });
@@ -203,64 +211,80 @@ describe('ColumnHeader', () => {
 
       const badge = header.getElement().querySelector('.dt-col-sort-badge');
       expect(badge?.textContent).toBe('1');
+      expect(badge?.style.display).not.toBe('none');
 
       header.destroy();
     });
 
-    it('should not show badge for single sort', () => {
+    it('should hide badge for single sort', () => {
       state.sortColumns.set([{ column: 'test_column', direction: 'asc' }]);
       const header = new ColumnHeader(column, state, actions);
 
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
-      expect(sortEl?.textContent).toBe('\u25B2');
-      expect(sortEl?.querySelector('.dt-col-sort-badge')).toBeNull();
+      const badge = header.getElement().querySelector('.dt-col-sort-badge');
+      expect(badge?.style.display).toBe('none');
 
       header.destroy();
     });
   });
 
   describe('click handling', () => {
-    it('should call toggleSort on regular click', () => {
+    it('should call toggleSort on sort button click', () => {
       const header = new ColumnHeader(column, state, actions);
       const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
-      header.getElement().click();
+      sortBtn.click();
 
       expect(toggleSortSpy).toHaveBeenCalledWith('test_column');
 
       header.destroy();
     });
 
-    it('should call addToSort on Shift+click', () => {
+    it('should NOT call toggleSort when clicking header (only sort button triggers sort)', () => {
+      const header = new ColumnHeader(column, state, actions);
+      const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
+
+      // Click on the header itself, not the sort button
+      header.getElement().click();
+
+      expect(toggleSortSpy).not.toHaveBeenCalled();
+
+      header.destroy();
+    });
+
+    it('should call addToSort on Shift+click sort button', () => {
       const header = new ColumnHeader(column, state, actions);
       const addToSortSpy = vi.spyOn(actions, 'addToSort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
       const event = new MouseEvent('click', { shiftKey: true, bubbles: true });
-      header.getElement().dispatchEvent(event);
+      sortBtn.dispatchEvent(event);
 
       expect(addToSortSpy).toHaveBeenCalledWith('test_column');
 
       header.destroy();
     });
 
-    it('should cycle through sort states on regular clicks', () => {
+    it('should cycle through sort states on sort button clicks', () => {
       const header = new ColumnHeader(column, state, actions);
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
       // Initial: no sort
-      expect(sortEl?.textContent).toBe('');
+      expect(sortBtn.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn.classList.contains('dt-col-sort-btn--desc')).toBe(false);
 
       // First click: ascending
-      header.getElement().click();
-      expect(sortEl?.textContent).toBe('\u25B2');
+      sortBtn.click();
+      expect(sortBtn.classList.contains('dt-col-sort-btn--asc')).toBe(true);
 
       // Second click: descending
-      header.getElement().click();
-      expect(sortEl?.textContent).toBe('\u25BC');
+      sortBtn.click();
+      expect(sortBtn.classList.contains('dt-col-sort-btn--desc')).toBe(true);
 
       // Third click: no sort
-      header.getElement().click();
-      expect(sortEl?.textContent).toBe('');
+      sortBtn.click();
+      expect(sortBtn.classList.contains('dt-col-sort-btn--asc')).toBe(false);
+      expect(sortBtn.classList.contains('dt-col-sort-btn--desc')).toBe(false);
 
       header.destroy();
     });
@@ -295,12 +319,13 @@ describe('ColumnHeader', () => {
   });
 
   describe('destroy', () => {
-    it('should remove click listener', () => {
+    it('should remove click listener from sort button', () => {
       const header = new ColumnHeader(column, state, actions);
       const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
       header.destroy();
-      header.getElement().click();
+      sortBtn.click();
 
       expect(toggleSortSpy).not.toHaveBeenCalled();
     });
@@ -338,24 +363,25 @@ describe('ColumnHeader', () => {
 
     it('should not update after destroy', () => {
       const header = new ColumnHeader(column, state, actions);
-      const sortEl = header.getElement().querySelector('.dt-col-sort');
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn');
 
       header.destroy();
 
       // Change state after destroy
       state.sortColumns.set([{ column: 'test_column', direction: 'asc' }]);
 
-      // Should still be empty
-      expect(sortEl?.textContent).toBe('');
+      // Should not have sort class
+      expect(sortBtn?.classList.contains('dt-col-sort-btn--asc')).toBe(false);
     });
 
-    it('should not respond to clicks after destroy', () => {
+    it('should not respond to sort button clicks after destroy', () => {
       const header = new ColumnHeader(column, state, actions);
+      const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
       header.destroy();
 
       // This should not throw or change state
-      header.getElement().click();
+      sortBtn.click();
 
       expect(state.sortColumns.get()).toEqual([]);
     });

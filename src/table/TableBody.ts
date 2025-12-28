@@ -149,6 +149,14 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubTotalRows);
 
+    // Update cell widths when column widths change
+    const unsubWidths = this.state.columnWidths.subscribe(() => {
+      if (!this.destroyed) {
+        this.updateCellWidths();
+      }
+    });
+    this.unsubscribes.push(unsubWidths);
+
     // Update selection styling
     const unsubSelected = this.state.selectedRows.subscribe(() => {
       if (!this.destroyed) {
@@ -389,9 +397,16 @@ export class TableBody {
       }
     }
 
+    // Calculate total width from actual column widths
+    const columnWidths = this.state.columnWidths.get();
+    let totalWidth = 0;
+    for (const colName of visibleColumns) {
+      const width = columnWidths.get(colName) ?? 150;
+      totalWidth += width;
+    }
+
     // Set width for horizontal scrolling
     // Uses a width spacer element in normal flow to force correct scrollWidth
-    const totalWidth = visibleColumns.length * 150; // 150px per column (matches CSS)
     this.virtualScroller.setContentWidth(totalWidth);
 
     // Also set header row width to match for scroll synchronization
@@ -508,12 +523,19 @@ export class TableBody {
     rowEl.setAttribute('data-row-index', String(index));
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
 
+    const columnWidths = this.state.columnWidths.get();
     const cells = rowEl.children;
     for (let i = 0; i < columns.length && i < cells.length; i++) {
       const colName = columns[i];
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
-      this.cellRenderer.render(cells[i] as HTMLElement, value, colSchema);
+      const cellEl = cells[i] as HTMLElement;
+
+      // Apply dynamic width
+      const width = columnWidths.get(colName) ?? 150;
+      cellEl.style.width = `${width}px`;
+
+      this.cellRenderer.render(cellEl, value, colSchema);
     }
   }
 
@@ -622,6 +644,39 @@ export class TableBody {
     }
 
     this.previousHoveredRow = hoveredRow;
+  }
+
+  /**
+   * Update cell widths when column widths change
+   */
+  private updateCellWidths(): void {
+    const visibleColumns = this.state.visibleColumns.get();
+    const columnWidths = this.state.columnWidths.get();
+
+    // Update cell widths for all visible rows
+    for (const [, rowEl] of this.rowElementMap) {
+      const cells = rowEl.children;
+      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
+        const colName = visibleColumns[i];
+        const width = columnWidths.get(colName) ?? 150;
+        (cells[i] as HTMLElement).style.width = `${width}px`;
+      }
+    }
+
+    // Update total content width
+    let totalWidth = 0;
+    for (const colName of visibleColumns) {
+      const width = columnWidths.get(colName) ?? 150;
+      totalWidth += width;
+    }
+    this.virtualScroller.setContentWidth(totalWidth);
+
+    // Update header row width
+    const scrollContainer = this.virtualScroller.getScrollContainer();
+    const headerRow = scrollContainer.closest('.dt-root')?.querySelector('.dt-header-row') as HTMLElement;
+    if (headerRow) {
+      headerRow.style.minWidth = `${totalWidth}px`;
+    }
   }
 
   // =========================================

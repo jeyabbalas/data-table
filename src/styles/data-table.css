@@ -224,6 +224,7 @@
   margin-top: 0.25rem;
   background: var(--dt-bg-secondary);
   border-radius: var(--dt-radius-sm);
+  border: 1px solid var(--dt-border);
 }
 
 /* ===========================================

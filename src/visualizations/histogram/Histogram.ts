@@ -140,20 +140,27 @@ export class Histogram extends BaseVisualization {
   private hoveredBin: number | null = null;
   private hoveredNull: boolean = false;
 
+  // Selection state (single bar click-to-select)
+  private selectedBin: number | null = null;
+  private selectedNull: boolean = false;
+
+  // Flag to prevent handleClick from acting after handleMouseDown cleared something
+  private clickConsumedByMouseDown = false;
+
   // Brush state for range selection
   private brushState = {
     active: false, // True while creating new brush (dragging)
     committed: false, // True after mouseup, brush stays visible
     sliding: false, // True while sliding existing brush
     slideStartX: 0, // X position where slide started
-    startX: 0,
-    startBinIndex: -1,
-    endBinIndex: -1,
+    startX: 0, // Pixel position where brush started
+    currentX: 0, // Current pixel position (for smooth animation)
+    startBinIndex: -1, // First bin fully within brush
+    endBinIndex: -1, // Last bin fully within brush
     lastClickTime: 0, // For double-click detection
     lastClickX: 0,
     lastClickY: 0,
   };
-  private static readonly DRAG_THRESHOLD = 5; // Pixels before drag starts
 
   // Computed layout (updated on render)
   private chartArea = { x: 0, y: 0, width: 0, height: 0 };
@@ -334,6 +341,9 @@ export class Histogram extends BaseVisualization {
     // Check if any bar is hovered
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
 
+    // Check if a bar is selected (single-click selection)
+    const hasSelection = this.selectedBin !== null || this.selectedNull;
+
     // Check if brush is active or committed
     const hasBrush = this.brushState.active || this.brushState.committed;
     let brushStartIdx = -1;
@@ -363,12 +373,19 @@ export class Histogram extends BaseVisualization {
         heightRatio * this.chartArea.height
       );
 
-      // Determine color based on hover and brush state
+      // Determine color based on selection, hover, and brush state
       const isThisHovered = this.hoveredBin === i;
+      const isThisSelected = this.selectedBin === i;
       const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
 
       let fillColor: string;
-      if (isThisHovered) {
+      if (isThisSelected) {
+        // Selected bar: dark color
+        fillColor = COLORS.barHover;
+      } else if (hasSelection) {
+        // Other bars when one is selected: faded
+        fillColor = COLORS.barFaded;
+      } else if (isThisHovered) {
         // Hover takes precedence
         fillColor = COLORS.barHover;
       } else if (hasBrush) {
@@ -447,12 +464,19 @@ export class Histogram extends BaseVisualization {
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
-    // Determine color based on hover and brush state
+    // Determine color based on selection, hover, and brush state
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
+    const hasSelection = this.selectedBin !== null || this.selectedNull;
     const hasBrush = this.brushState.active || this.brushState.committed;
 
     let fillColor: string;
-    if (this.hoveredNull) {
+    if (this.selectedNull) {
+      // Null bar is selected: dark color
+      fillColor = COLORS.nullHover;
+    } else if (hasSelection) {
+      // Other bar is selected: faded
+      fillColor = COLORS.nullFaded;
+    } else if (this.hoveredNull) {
       fillColor = COLORS.nullHover;
     } else if (hasBrush) {
       // Null bar is always "outside" the brush (brush only covers histogram bins)
@@ -551,7 +575,7 @@ export class Histogram extends BaseVisualization {
     }
 
     // If creating a new brush (not yet committed)
-    if (this.brushState.startBinIndex !== -1 && !this.brushState.committed) {
+    if (this.brushState.startX !== 0 && !this.brushState.committed) {
       this.updateBrush(x);
       // Skip hover logic while actively brushing
       if (this.brushState.active) return;
@@ -565,6 +589,12 @@ export class Histogram extends BaseVisualization {
         this.canvas.style.cursor = 'default';
       }
       // Skip all hover logic when brush is committed
+      return;
+    }
+
+    // If a bar is selected, skip hover logic to preserve selected bar stats
+    if (this.selectedBin !== null || this.selectedNull) {
+      this.canvas.style.cursor = 'default';
       return;
     }
 
@@ -659,9 +689,15 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Handle click - create filter for clicked bar
+   * Handle click - select bar (freeze stats) instead of creating filter
    */
   protected handleClick(x: number, y: number): void {
+    // If handleMouseDown already handled this click (cleared brush), skip
+    if (this.clickConsumedByMouseDown) {
+      this.clickConsumedByMouseDown = false;
+      return;
+    }
+
     if (!this.data) return;
 
     // If brush is active or committed, clicks are handled by mousedown/mouseup
@@ -670,37 +706,80 @@ export class Histogram extends BaseVisualization {
     // Skip if brush was just started (will be handled by mouseup)
     if (this.brushState.startBinIndex !== -1) return;
 
+    // If something is already selected, any click clears it first
+    // (Cannot select a different bar while one is selected - must deselect first)
+    if (this.selectedBin !== null || this.selectedNull) {
+      this.clearSelection();
+      return;
+    }
+
     // Check if click is in the chart area
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
 
-    // Check null bar - create null filter
+    // Check null bar - select it
     if (
       this.data.nullCount > 0 &&
       x >= this.nullBarArea.x &&
       x <= this.nullBarArea.x + this.nullBarArea.width
     ) {
-      this.options.onFilterChange?.({
-        column: this.column.name,
-        type: 'null',
-        value: null,
-      });
+      this.selectedBin = null;
+      this.selectedNull = true;
+      this.hoveredBin = null;
+      this.hoveredNull = false;
+      this.render();
+      this.updateSelectedStats();
       return;
     }
 
-    // Check histogram bars - create range filter
+    // Check histogram bars - select bar
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
-        const bin = this.data.bins[pos.binIndex];
-        if (bin) {
-          this.options.onFilterChange?.({
-            column: this.column.name,
-            type: 'range',
-            value: { min: bin.x0, max: bin.x1 },
-          });
-        }
+        this.selectedBin = pos.binIndex;
+        this.selectedNull = false;
+        this.hoveredBin = null;
+        this.hoveredNull = false;
+        this.render();
+        this.updateSelectedStats();
         return;
       }
     }
+  }
+
+  /**
+   * Update stats line to show selected bar info
+   */
+  private updateSelectedStats(): void {
+    if (!this.data) return;
+
+    if (this.selectedBin !== null) {
+      const bin = this.data.bins[this.selectedBin];
+      if (bin) {
+        const rangeStr = `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
+        const count = formatCount(bin.count);
+        const percent = formatPercent(bin.count / this.data.total);
+        this.options.onStatsChange?.(
+          `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+          `<span class="stats-label">Count:</span> ${count} (${percent})`
+        );
+      }
+    } else if (this.selectedNull) {
+      const count = formatCount(this.data.nullCount);
+      const percent = formatPercent(this.data.nullCount / this.data.total);
+      this.options.onStatsChange?.(
+        `<span class="stats-label">Bin:</span> null<br>` +
+        `<span class="stats-label">Count:</span> ${count} (${percent})`
+      );
+    }
+  }
+
+  /**
+   * Clear single bar selection
+   */
+  private clearSelection(): void {
+    this.selectedBin = null;
+    this.selectedNull = false;
+    this.options.onStatsChange?.(null);
+    this.render();
   }
 
   /**
@@ -708,8 +787,8 @@ export class Histogram extends BaseVisualization {
    */
   protected handleMouseLeave(): void {
     this.canvas.style.cursor = 'default';
-    // Restore default stats (unless brush is committed - keep showing brush stats)
-    if (!this.brushState.committed) {
+    // Restore default stats (unless brush is committed or bar is selected - keep showing stats)
+    if (!this.brushState.committed && this.selectedBin === null && !this.selectedNull) {
       this.options.onStatsChange?.(null);
     }
     if (this.hoveredBin !== null || this.hoveredNull) {
@@ -730,6 +809,53 @@ export class Histogram extends BaseVisualization {
     if (!this.data || this.data.bins.length === 0) return;
 
     const now = Date.now();
+
+    // Check for double-click on selected bar to clear selection
+    if (this.selectedBin !== null || this.selectedNull) {
+      const timeSinceLastClick = now - this.brushState.lastClickTime;
+      const distance = Math.hypot(
+        x - this.brushState.lastClickX,
+        y - this.brushState.lastClickY
+      );
+
+      // Check if clicking on the selected bar/null
+      let clickingOnSelected = false;
+      if (this.selectedNull && this.data.nullCount > 0) {
+        clickingOnSelected =
+          x >= this.nullBarArea.x &&
+          x <= this.nullBarArea.x + this.nullBarArea.width &&
+          y >= PADDING.top &&
+          y <= this.height - PADDING.bottom;
+      } else if (this.selectedBin !== null) {
+        const pos = this.barPositions[this.selectedBin];
+        if (pos) {
+          clickingOnSelected =
+            x >= pos.x &&
+            x <= pos.x + pos.width &&
+            y >= PADDING.top &&
+            y <= this.height - PADDING.bottom;
+        }
+      }
+
+      if (
+        clickingOnSelected &&
+        timeSinceLastClick < DOUBLE_CLICK_THRESHOLD &&
+        distance < DOUBLE_CLICK_DISTANCE
+      ) {
+        // Double-click on selected bar - clear selection
+        this.clearSelection();
+        this.brushState.lastClickTime = 0; // Reset to prevent triple-click issues
+        return;
+      }
+
+      // Update click tracking
+      this.brushState.lastClickTime = now;
+      this.brushState.lastClickX = x;
+      this.brushState.lastClickY = y;
+
+      // If a bar is selected, don't start a brush - let handleClick handle deselection
+      return;
+    }
 
     // Check for double-click inside committed brush to clear it
     if (this.brushState.committed && this.isInsideBrush(x, y)) {
@@ -764,11 +890,12 @@ export class Histogram extends BaseVisualization {
     this.brushState.lastClickX = x;
     this.brushState.lastClickY = y;
 
-    // If clicking outside committed brush, clear it
+    // If clicking outside committed brush, clear it (don't start a new brush on this click)
     if (this.brushState.committed) {
       this.resetBrush();
       this.render();
-      // Fall through to possibly start a new brush
+      this.clickConsumedByMouseDown = true; // Prevent handleClick from selecting a bar
+      return;
     }
 
     // Only start brush in chart area (not on null bar or outside)
@@ -779,13 +906,14 @@ export class Histogram extends BaseVisualization {
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
         this.brushState = {
-          active: false, // Becomes true after DRAG_THRESHOLD
+          active: false, // Becomes true on first mouse move
           committed: false,
           sliding: false,
           slideStartX: 0,
           startX: x,
-          startBinIndex: pos.binIndex,
-          endBinIndex: pos.binIndex,
+          currentX: x, // Track current position for smooth animation
+          startBinIndex: -1, // Will be set when brush becomes active
+          endBinIndex: -1,
           lastClickTime: now,
           lastClickX: x,
           lastClickY: y,
@@ -806,21 +934,29 @@ export class Histogram extends BaseVisualization {
       return;
     }
 
-    // Commit brush after creating it
-    if (this.brushState.startBinIndex !== -1 && this.brushState.active) {
-      this.brushState.active = false;
-      this.brushState.committed = true;
-      // Clear any hover state so bars render uniformly within brush
-      this.hoveredBin = null;
-      this.hoveredNull = false;
-      this.render();
-      this.canvas.style.cursor = 'grab';
-      this.updateBrushStats();
-      return;
+    // Commit brush after creating it - only if at least one full bin is selected
+    if (this.brushState.active) {
+      if (this.brushState.startBinIndex !== -1 && this.brushState.endBinIndex !== -1) {
+        // At least one bin is fully within the brush - commit it
+        this.brushState.active = false;
+        this.brushState.committed = true;
+        // Clear any hover state so bars render uniformly within brush
+        this.hoveredBin = null;
+        this.hoveredNull = false;
+        this.render();
+        this.canvas.style.cursor = 'grab';
+        this.updateBrushStats();
+        return;
+      } else {
+        // No full bin selected - cancel the brush
+        this.resetBrush();
+        this.render();
+        return;
+      }
     }
 
-    // Was just a click (not a brush), reset
-    if (this.brushState.startBinIndex !== -1) {
+    // Was just a click (no drag), reset brush state
+    if (this.brushState.startX !== 0) {
       this.resetBrush();
     }
   }
@@ -838,47 +974,47 @@ export class Histogram extends BaseVisualization {
    * Update brush selection during mouse move
    */
   private updateBrush(x: number): void {
-    if (this.brushState.startBinIndex === -1) return;
+    // Check if we have a potential brush started (startX is set but not active yet)
+    const hasPotentialBrush = this.brushState.startX !== 0 && !this.brushState.committed;
 
-    // Check if we've exceeded drag threshold to activate brush
-    if (
-      !this.brushState.active &&
-      Math.abs(x - this.brushState.startX) > Histogram.DRAG_THRESHOLD
-    ) {
+    if (!hasPotentialBrush && !this.brushState.active) return;
+
+    // Activate brush on first mouse move (any distance)
+    if (!this.brushState.active) {
       this.brushState.active = true;
       this.canvas.style.cursor = 'crosshair';
     }
 
-    if (!this.brushState.active) return;
+    // Update current position for smooth overlay
+    this.brushState.currentX = x;
 
-    // Find the bin under current mouse position
-    let newEndIndex = this.brushState.startBinIndex;
+    // Calculate which bins are FULLY within the brush range
+    const minX = Math.min(this.brushState.startX, x);
+    const maxX = Math.max(this.brushState.startX, x);
 
-    // Check if x is before first bar
-    if (this.barPositions.length > 0 && x < this.barPositions[0].x) {
-      newEndIndex = 0;
-    } else if (
-      this.barPositions.length > 0 &&
-      x > this.barPositions[this.barPositions.length - 1].x +
-        this.barPositions[this.barPositions.length - 1].width
-    ) {
-      // Check if x is after last bar
-      newEndIndex = this.barPositions.length - 1;
-    } else {
-      // Find the bin containing x
-      for (const pos of this.barPositions) {
-        if (x >= pos.x && x <= pos.x + pos.width) {
-          newEndIndex = pos.binIndex;
-          break;
+    // Find bins that are fully covered
+    let newStartIdx = -1;
+    let newEndIdx = -1;
+
+    for (const pos of this.barPositions) {
+      const barLeft = pos.x;
+      const barRight = pos.x + pos.width;
+
+      // A bin is "fully within" if its entire width is within [minX, maxX]
+      if (barLeft >= minX && barRight <= maxX) {
+        if (newStartIdx === -1) {
+          newStartIdx = pos.binIndex;
         }
+        newEndIdx = pos.binIndex;
       }
     }
 
-    // Update and re-render if changed
-    if (newEndIndex !== this.brushState.endBinIndex) {
-      this.brushState.endBinIndex = newEndIndex;
-      this.render();
-    }
+    // Update indices
+    this.brushState.startBinIndex = newStartIdx;
+    this.brushState.endBinIndex = newEndIdx;
+
+    // Always re-render to show smooth overlay animation
+    this.render();
   }
 
   /**
@@ -899,6 +1035,7 @@ export class Histogram extends BaseVisualization {
       sliding: false,
       slideStartX: 0,
       startX: 0,
+      currentX: 0,
       startBinIndex: -1,
       endBinIndex: -1,
       lastClickTime: 0,
@@ -992,25 +1129,50 @@ export class Histogram extends BaseVisualization {
       return;
     }
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-
-    const startPos = this.barPositions[startIdx];
-    const endPos = this.barPositions[endIdx];
-
-    if (!startPos || !endPos) return;
-
     const ctx = this.ctx;
-    const x = startPos.x;
-    const width = endPos.x + endPos.width - startPos.x;
     const y = this.chartArea.y;
     const height = this.chartArea.height;
+
+    // For active brush (being created): use pixel positions for smooth animation
+    // For committed brush: use bar positions for precise alignment
+    let x: number;
+    let width: number;
+
+    if (this.brushState.committed) {
+      // Committed brush: snap to bar positions
+      const startIdx = Math.min(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+      const endIdx = Math.max(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+
+      const startPos = this.barPositions[startIdx];
+      const endPos = this.barPositions[endIdx];
+
+      if (!startPos || !endPos) return;
+
+      x = startPos.x;
+      width = endPos.x + endPos.width - startPos.x;
+    } else {
+      // Active brush: use pixel positions for smooth animation
+      x = Math.min(this.brushState.startX, this.brushState.currentX);
+      width = Math.abs(this.brushState.currentX - this.brushState.startX);
+
+      // Clamp to chart area
+      const chartRight = this.chartArea.x + this.chartArea.width;
+      if (x < this.chartArea.x) {
+        width -= this.chartArea.x - x;
+        x = this.chartArea.x;
+      }
+      if (x + width > chartRight) {
+        width = chartRight - x;
+      }
+    }
+
+    if (width <= 0) return;
 
     // Draw semi-transparent overlay
     ctx.fillStyle = COLORS.brushOverlay;

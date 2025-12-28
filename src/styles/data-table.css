@@ -188,6 +188,10 @@
   background: var(--dt-bg-tertiary);
 }
 
+.dt-col-header.dt-col-resetting {
+  transition: width 0.2s ease-out;
+}
+
 .dt-col-name {
   font-weight: 600;
   font-size: var(--dt-font-size);
@@ -383,6 +387,10 @@
 
 .dt-cell:last-child {
   border-right: none;
+}
+
+.dt-cell.dt-col-resetting {
+  transition: width 0.2s ease-out;
 }
 
 .dt-cell--null {

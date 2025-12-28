@@ -245,6 +245,15 @@ export class StateActions {
     this.state.columnWidths.set(widths);
   }
 
+  /**
+   * Reset column width to default
+   */
+  resetColumnWidth(column: string): void {
+    const widths = new Map(this.state.columnWidths.get());
+    widths.delete(column);
+    this.state.columnWidths.set(widths);
+  }
+
   // =========================================
   // Row Selection Actions
   // =========================================

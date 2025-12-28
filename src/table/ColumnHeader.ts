@@ -62,6 +62,7 @@ export class ColumnHeader {
     this.resizer = new ColumnResizer(
       this.element,
       (width) => this.actions.setColumnWidth(this.column.name, width),
+      () => this.actions.resetColumnWidth(this.column.name),
       { classPrefix: this.classPrefix }
     );
 

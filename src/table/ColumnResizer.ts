@@ -58,10 +58,12 @@ export class ColumnResizer {
   private readonly boundMouseDown: (e: MouseEvent) => void;
   private readonly boundMouseMove: (e: MouseEvent) => void;
   private readonly boundMouseUp: (e: MouseEvent) => void;
+  private readonly boundDoubleClick: (e: MouseEvent) => void;
 
   constructor(
     private header: HTMLElement,
     private onResize: ResizeCallback,
+    private onReset?: () => void,
     options: ColumnResizerOptions = {}
   ) {
     this.minWidth = options.minWidth ?? 50;
@@ -72,6 +74,7 @@ export class ColumnResizer {
     this.boundMouseDown = this.handleMouseDown.bind(this);
     this.boundMouseMove = this.handleMouseMove.bind(this);
     this.boundMouseUp = this.handleMouseUp.bind(this);
+    this.boundDoubleClick = this.handleDoubleClick.bind(this);
 
     // Attach the resize handle
     this.attachHandle();
@@ -94,8 +97,9 @@ export class ColumnResizer {
     this.handle.setAttribute('aria-orientation', 'vertical');
     this.handle.setAttribute('aria-label', 'Resize column');
 
-    // Attach mouse event
+    // Attach mouse events
     this.handle.addEventListener('mousedown', this.boundMouseDown);
+    this.handle.addEventListener('dblclick', this.boundDoubleClick);
 
     // Insert handle into header
     this.header.appendChild(this.handle);
@@ -116,6 +120,7 @@ export class ColumnResizer {
     // Remove handle from DOM
     if (this.handle) {
       this.handle.removeEventListener('mousedown', this.boundMouseDown);
+      this.handle.removeEventListener('dblclick', this.boundDoubleClick);
       if (this.handle.parentNode) {
         this.handle.parentNode.removeChild(this.handle);
       }
@@ -209,6 +214,39 @@ export class ColumnResizer {
     // Remove document-level listeners
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+  }
+
+  /**
+   * Handle double-click to reset column width with smooth animation
+   */
+  private handleDoubleClick(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const resettingClass = `${this.classPrefix}-col-resetting`;
+
+    // Add transition class for smooth animation
+    this.header.classList.add(resettingClass);
+
+    // Animate to default width
+    this.header.style.width = '150px';
+
+    // Call reset callback to update state
+    if (this.onReset) {
+      this.onReset();
+    }
+
+    // Remove transition class after animation completes
+    const cleanup = () => {
+      this.header.classList.remove(resettingClass);
+      this.header.removeEventListener('transitionend', cleanup);
+    };
+    this.header.addEventListener('transitionend', cleanup);
+
+    // Fallback cleanup in case transitionend doesn't fire
+    setTimeout(() => {
+      this.header.classList.remove(resettingClass);
+    }, 250);
   }
 
   // =========================================

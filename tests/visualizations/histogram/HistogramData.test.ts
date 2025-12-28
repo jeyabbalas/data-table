@@ -375,23 +375,26 @@ describe('fetchHistogramData', () => {
       bins: [],
     });
 
+    // Note: minimum bins is 5, so passing 5 as maxBins
     const result = await fetchHistogramData(
       'test_table',
       'value',
-      4,
+      5,
       [],
       mockBridge
     );
 
-    expect(result.bins).toHaveLength(4);
+    expect(result.bins).toHaveLength(5);
     expect(result.bins[0].x0).toBe(0);
-    expect(result.bins[0].x1).toBe(25);
-    expect(result.bins[1].x0).toBe(25);
-    expect(result.bins[1].x1).toBe(50);
-    expect(result.bins[2].x0).toBe(50);
-    expect(result.bins[2].x1).toBe(75);
-    expect(result.bins[3].x0).toBe(75);
-    expect(result.bins[3].x1).toBe(100); // Last bin includes max
+    expect(result.bins[0].x1).toBe(20);
+    expect(result.bins[1].x0).toBe(20);
+    expect(result.bins[1].x1).toBe(40);
+    expect(result.bins[2].x0).toBe(40);
+    expect(result.bins[2].x1).toBe(60);
+    expect(result.bins[3].x0).toBe(60);
+    expect(result.bins[3].x1).toBe(80);
+    expect(result.bins[4].x0).toBe(80);
+    expect(result.bins[4].x1).toBe(100); // Last bin includes max
   });
 
   it('should throw error with context on query failure', async () => {

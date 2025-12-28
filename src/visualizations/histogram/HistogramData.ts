@@ -202,13 +202,15 @@ export function filtersToWhereClause(
  * @param max - Maximum value in the data
  * @param count - Number of non-null values
  * @param iqr - Interquartile range (Q3 - Q1)
- * @returns Optimal number of bins, clamped to [5, 100]
+ * @param maxBins - Maximum allowed bins (default: 100)
+ * @returns Optimal number of bins, clamped to [5, maxBins]
  */
 export function calculateOptimalBins(
   min: number,
   max: number,
   count: number,
-  iqr: number
+  iqr: number,
+  maxBins: number = 100
 ): number {
   // Edge cases
   if (count <= 1) {
@@ -226,22 +228,23 @@ export function calculateOptimalBins(
     const binWidth = (2 * iqr) / Math.pow(count, 1 / 3);
     if (binWidth > 0) {
       const numBins = Math.ceil(range / binWidth);
-      return clampBins(numBins);
+      return clampBins(numBins, maxBins);
     }
   }
 
   // Fallback to Sturges' rule
   const sturgesBins = Math.ceil(Math.log2(count) + 1);
-  return clampBins(sturgesBins);
+  return clampBins(sturgesBins, maxBins);
 }
 
 /**
  * Clamp bin count to reasonable range
+ * @param numBins - Calculated number of bins
+ * @param maxBins - Maximum allowed bins (default: 100)
  */
-function clampBins(numBins: number): number {
+function clampBins(numBins: number, maxBins: number = 100): number {
   const MIN_BINS = 5;
-  const MAX_BINS = 100;
-  return Math.max(MIN_BINS, Math.min(MAX_BINS, numBins));
+  return Math.max(MIN_BINS, Math.min(maxBins, numBins));
 }
 
 // =========================================
@@ -344,7 +347,7 @@ function buildHistogramSQL(
  *
  * @param tableName - Name of the DuckDB table
  * @param column - Name of the column to histogram
- * @param numBins - Number of bins, or 'auto' to calculate optimal bins
+ * @param maxBins - Maximum number of bins (optimal bins calculated and clamped to this)
  * @param filters - Active filters to apply
  * @param bridge - WorkerBridge for executing queries
  * @returns HistogramData with bins and metadata
@@ -352,7 +355,7 @@ function buildHistogramSQL(
 export async function fetchHistogramData(
   tableName: string,
   column: string,
-  numBins: number | 'auto',
+  maxBins: number | 'auto',
   filters: Filter[],
   bridge: WorkerBridge
 ): Promise<HistogramData> {
@@ -371,15 +374,17 @@ export async function fetchHistogramData(
       };
     }
 
-    // Step 2: Calculate number of bins
-    let actualBins: number;
-    if (numBins === 'auto') {
-      const iqr =
-        stats.q1 !== null && stats.q3 !== null ? stats.q3 - stats.q1 : 0;
-      actualBins = calculateOptimalBins(stats.min, stats.max, stats.count, iqr);
-    } else {
-      actualBins = Math.max(1, Math.min(100, Math.round(numBins)));
-    }
+    // Step 2: Calculate optimal number of bins (clamped to maxBins)
+    const iqr =
+      stats.q1 !== null && stats.q3 !== null ? stats.q3 - stats.q1 : 0;
+    const maxBinsValue = maxBins === 'auto' ? 100 : maxBins;
+    const actualBins = calculateOptimalBins(
+      stats.min,
+      stats.max,
+      stats.count,
+      iqr,
+      maxBinsValue
+    );
 
     // Handle edge case: all same value
     if (stats.min === stats.max) {

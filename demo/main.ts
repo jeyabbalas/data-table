@@ -1,13 +1,13 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.2: Testing Histogram Data Fetching
+ * Phase 4, Task 4.3: Testing Histogram Visualization Rendering
  *
  * This demo tests:
- * - fetchHistogramData function with real DuckDB data
- * - Automatic bin calculation (Freedman-Diaconis/Sturges)
- * - Filter-to-SQL conversion
- * - Histogram data display for numeric columns
+ * - Histogram class rendering in column headers
+ * - Elegant bar styling with rounded corners
+ * - Hover interaction with in-place axis labels
+ * - Null bar rendering in amber color
  */
 
 import {
@@ -17,8 +17,9 @@ import {
   TableContainer,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
-import { fetchHistogramData, type HistogramData } from '../src/visualizations/histogram';
+import { Histogram } from '../src/visualizations/histogram';
 import type { DataType, ColumnSchema } from '../src/core/types';
+import type { BaseVisualization } from '../src/visualizations';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -40,6 +41,9 @@ let actions: StateActions;
 let tableContainer: TableContainer | null = null;
 let tableCounter = 0;
 
+// Keep track of active visualizations for cleanup
+let activeVisualizations: BaseVisualization[] = [];
+
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
 }
@@ -52,88 +56,45 @@ function isNumericType(type: DataType): boolean {
 }
 
 /**
- * Format histogram data for display
+ * Attach histogram visualizations to numeric column headers
  */
-function formatHistogramInfo(column: ColumnSchema, data: HistogramData): string {
-  const totalNonNull = data.bins.reduce((sum, bin) => sum + bin.count, 0);
-  const maxCount = Math.max(...data.bins.map(b => b.count), 0);
+function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
+  if (!tableContainer) return;
 
-  // Create a simple ASCII bar chart
-  const barWidth = 20;
-  const bars = data.bins.map(bin => {
-    const barLength = maxCount > 0 ? Math.round((bin.count / maxCount) * barWidth) : 0;
-    const bar = '\u2588'.repeat(barLength);
-    return `  [${bin.x0.toFixed(1)}-${bin.x1.toFixed(1)}]: ${bar} ${bin.count}`;
-  }).join('\n');
-
-  return `
-<strong>${column.name}</strong> (${column.type})
-  Range: ${data.min.toLocaleString()} to ${data.max.toLocaleString()}
-  Bins: ${data.bins.length}, Total: ${data.total.toLocaleString()}, Nulls: ${data.nullCount.toLocaleString()}
-${bars}`;
-}
-
-/**
- * Fetch and display histogram data for all numeric columns
- */
-async function fetchHistograms(tableName: string, schema: ColumnSchema[]): Promise<void> {
-  const numericColumns = schema.filter(col => isNumericType(col.type));
-
-  if (numericColumns.length === 0) {
-    console.log('No numeric columns found for histograms');
-    return;
+  // Clean up previous visualizations
+  for (const viz of activeVisualizations) {
+    viz.destroy();
   }
+  activeVisualizations = [];
 
-  console.log(`Fetching histograms for ${numericColumns.length} numeric column(s)...`);
+  // Get all column headers
+  const headers = tableContainer.getColumnHeaders();
+  const numericCount = schema.filter((col) => isNumericType(col.type)).length;
 
-  const histogramResults: string[] = [];
+  console.log(
+    `[Demo] Attaching histograms to ${numericCount} numeric columns out of ${headers.length} total`
+  );
 
-  for (const column of numericColumns) {
-    try {
-      console.log(`Fetching histogram for "${column.name}"...`);
-      const startTime = performance.now();
+  for (const header of headers) {
+    const column = header.getColumn();
 
-      const data = await fetchHistogramData(
-        tableName,
-        column.name,
-        'auto',
-        [], // No filters
-        bridge
-      );
-
-      const elapsed = (performance.now() - startTime).toFixed(1);
-      console.log(`Histogram for "${column.name}" fetched in ${elapsed}ms:`, data);
-
-      histogramResults.push(formatHistogramInfo(column, data));
-    } catch (error) {
-      console.error(`Error fetching histogram for "${column.name}":`, error);
-      histogramResults.push(`<strong>${column.name}</strong>: Error - ${error instanceof Error ? error.message : 'Unknown'}`);
+    // Only attach histograms to numeric columns
+    if (!isNumericType(column.type)) {
+      continue;
     }
-  }
 
-  // Display histogram results
-  if (histogramResults.length > 0) {
-    const histogramInfoEl = document.createElement('div');
-    histogramInfoEl.id = 'histogram-info';
-    histogramInfoEl.style.cssText = `
-      margin-top: 16px;
-      padding: 12px;
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-      max-height: 300px;
-      overflow-y: auto;
-    `;
-    histogramInfoEl.innerHTML = `<strong>Histogram Data (Task 4.2 Test):</strong>\n\n${histogramResults.join('\n\n')}`;
+    const vizContainer = header.getVizContainer();
 
-    // Remove old histogram info if exists
-    const oldInfo = document.getElementById('histogram-info');
-    if (oldInfo) oldInfo.remove();
+    // Create histogram visualization
+    const histogram = new Histogram(vizContainer, column, {
+      tableName,
+      bridge,
+      filters: [],
+    });
 
-    tableInfoEl.parentElement?.appendChild(histogramInfoEl);
+    activeVisualizations.push(histogram);
+
+    console.log(`[Demo] Created histogram for "${column.name}" (${column.type})`);
   }
 }
 
@@ -145,16 +106,20 @@ function updateTableInfo(): void {
 
   if (!tableName) return;
 
-  const numericCols = schema.filter(col => isNumericType(col.type)).length;
+  const numericCols = schema.filter((col) => isNumericType(col.type)).length;
+  const histogramCount = activeVisualizations.length;
 
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += ` | <strong>${numericCols}</strong> numeric (histogram-ready)`;
+  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric columns)`;
 
   // Show sort info if any
   const sortColumns = tableState.sortColumns.get();
   if (sortColumns.length > 0) {
     const sortDesc = sortColumns
-      .map((s, i) => `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
+      .map(
+        (s, i) =>
+          `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`
+      )
       .join(', ');
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
   }
@@ -166,21 +131,20 @@ async function loadData(source: File | string): Promise<void> {
   const tableName = `table_${++tableCounter}`;
   updateInfo('Loading data...');
 
-  // Remove old histogram info
-  const oldInfo = document.getElementById('histogram-info');
-  if (oldInfo) oldInfo.remove();
-
   try {
     await actions.loadData(source, { tableName });
     updateTableInfo();
 
-    // Fetch histograms for numeric columns
+    // Attach histograms after data loads
     const schema = tableState.schema.get();
     const currentTableName = tableState.tableName.get();
     if (currentTableName) {
-      await fetchHistograms(currentTableName, schema);
+      // Small delay to ensure table is rendered
+      setTimeout(() => {
+        attachHistograms(currentTableName, schema);
+        updateTableInfo();
+      }, 100);
     }
-
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

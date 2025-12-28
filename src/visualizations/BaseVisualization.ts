@@ -30,6 +30,8 @@ export interface VisualizationOptions {
   filters: Filter[];
   /** Callback when visualization creates a filter */
   onFilterChange?: (filter: Filter) => void;
+  /** Maximum number of histogram bins (default: 30) */
+  maxBins?: number;
 }
 
 /**

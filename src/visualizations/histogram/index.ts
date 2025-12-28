@@ -1,9 +1,13 @@
 /**
  * Histogram visualization module
  *
- * Exports data fetching utilities for histogram visualizations.
+ * Exports the Histogram visualization class and data fetching utilities.
  */
 
+// Histogram visualization class
+export { Histogram } from './Histogram';
+
+// Data types and fetching utilities
 export {
   // Types
   type HistogramBin,

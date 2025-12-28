@@ -9,6 +9,7 @@ export type DataType =
   | 'decimal'
   | 'string'
   | 'boolean'
+  | 'uuid'
   | 'date'
   | 'timestamp'
   | 'time'

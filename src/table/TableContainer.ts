@@ -61,6 +61,10 @@ export class TableContainer {
   private tableBody: TableBody | null = null;
   private columnReorder: ColumnReorder | null = null;
 
+  // Scroll synchronization handlers
+  private boundBodyScrollHandler: (() => void) | null = null;
+  private boundHeaderScrollHandler: (() => void) | null = null;
+
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
 
@@ -113,6 +117,9 @@ export class TableContainer {
         { classPrefix: this.resolvedOptions.classPrefix }
       );
     }
+
+    // Set up scroll synchronization between header and body
+    this.setupScrollSync();
 
     // Initial render
     this.render();
@@ -244,6 +251,37 @@ export class TableContainer {
     return () => {
       this.resizeCallbacks.delete(callback);
     };
+  }
+
+  // =========================================
+  // Scroll Synchronization
+  // =========================================
+
+  /**
+   * Set up bidirectional scroll synchronization between header and body
+   *
+   * This ensures the header stays aligned with the body when scrolling horizontally.
+   * Uses a flag to prevent infinite scroll loops.
+   */
+  private setupScrollSync(): void {
+    let isScrolling = false;
+
+    this.boundBodyScrollHandler = () => {
+      if (isScrolling) return;
+      isScrolling = true;
+      this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+      isScrolling = false;
+    };
+
+    this.boundHeaderScrollHandler = () => {
+      if (isScrolling) return;
+      isScrolling = true;
+      this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
+      isScrolling = false;
+    };
+
+    this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
+    this.headerScroll.addEventListener('scroll', this.boundHeaderScrollHandler, { passive: true });
   }
 
   // =========================================
@@ -536,6 +574,16 @@ export class TableContainer {
 
     // Clear resize callbacks
     this.resizeCallbacks.clear();
+
+    // Clean up scroll sync listeners
+    if (this.boundBodyScrollHandler) {
+      this.bodyScroll.removeEventListener('scroll', this.boundBodyScrollHandler);
+      this.boundBodyScrollHandler = null;
+    }
+    if (this.boundHeaderScrollHandler) {
+      this.headerScroll.removeEventListener('scroll', this.boundHeaderScrollHandler);
+      this.boundHeaderScrollHandler = null;
+    }
 
     // Unsubscribe from all state subscriptions
     for (const unsub of this.unsubscribes) {

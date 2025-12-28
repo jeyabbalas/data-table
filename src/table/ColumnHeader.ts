@@ -40,6 +40,7 @@ export class ColumnHeader {
   private element: HTMLElement;
   private sortButton: HTMLElement;
   private sortBadge: HTMLElement;
+  private statsEl: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
@@ -55,6 +56,7 @@ export class ColumnHeader {
     this.element = this.createElement();
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
+    this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
 
     // Create resizer for column width adjustment
     this.resizer = new ColumnResizer(
@@ -94,10 +96,10 @@ export class ColumnHeader {
     typeEl.textContent = this.column.type;
     el.appendChild(typeEl);
 
-    // Stats line (placeholder)
+    // Stats line (shows row count, updated via subscription)
     const statsEl = document.createElement('div');
     statsEl.className = `${this.classPrefix}-col-stats`;
-    statsEl.textContent = 'Stats coming...';
+    // Initially empty - will be updated when subscribed to totalRows
     el.appendChild(statsEl);
 
     // Visualization container (placeholder for Phase 4)
@@ -168,15 +170,38 @@ export class ColumnHeader {
   // =========================================
 
   /**
-   * Subscribe to state changes for sort updates
+   * Subscribe to state changes for sort and stats updates
    */
   private subscribeToState(): void {
+    // Subscribe to sort changes
     const unsubSort = this.state.sortColumns.subscribe(() => {
       if (!this.destroyed) {
         this.update();
       }
     });
     this.unsubscribes.push(unsubSort);
+
+    // Subscribe to totalRows to update stats line
+    const unsubRows = this.state.totalRows.subscribe((count) => {
+      if (!this.destroyed) {
+        this.updateStatsLine(count);
+      }
+    });
+    this.unsubscribes.push(unsubRows);
+
+    // Set initial stats value (subscription only fires on changes, not initial value)
+    this.updateStatsLine(this.state.totalRows.get());
+  }
+
+  /**
+   * Update the stats line with row count
+   */
+  private updateStatsLine(count: number): void {
+    if (count > 0) {
+      this.statsEl.textContent = `${count.toLocaleString()} rows`;
+    } else {
+      this.statsEl.textContent = '';
+    }
   }
 
   // =========================================

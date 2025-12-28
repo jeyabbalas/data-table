@@ -9,12 +9,13 @@ describe('Core Types', () => {
       'decimal',
       'string',
       'boolean',
+      'uuid',
       'date',
       'timestamp',
       'time',
       'interval',
     ];
-    expect(types).toHaveLength(9);
+    expect(types).toHaveLength(10);
   });
 
   it('should allow valid ColumnSchema', () => {

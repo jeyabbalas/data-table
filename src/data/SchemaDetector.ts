@@ -115,8 +115,13 @@ export function mapDuckDBType(duckdbType: string): DataType {
     return 'interval';
   }
 
+  // UUID type
+  if (baseType === 'UUID') {
+    return 'uuid';
+  }
+
   // String types (including fallback for complex types)
-  // VARCHAR, CHAR, TEXT, STRING, UUID, BLOB, JSON, etc.
+  // VARCHAR, CHAR, TEXT, STRING, BLOB, JSON, etc.
   return 'string';
 }
 

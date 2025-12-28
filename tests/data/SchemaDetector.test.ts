@@ -112,6 +112,12 @@ describe('SchemaDetector', () => {
       });
     });
 
+    describe('uuid type', () => {
+      it('should map UUID to uuid', () => {
+        expect(mapDuckDBType('UUID')).toBe('uuid');
+      });
+    });
+
     describe('string types', () => {
       it('should map VARCHAR to string', () => {
         expect(mapDuckDBType('VARCHAR')).toBe('string');
@@ -126,10 +132,6 @@ describe('SchemaDetector', () => {
       it('should map TEXT/STRING to string', () => {
         expect(mapDuckDBType('TEXT')).toBe('string');
         expect(mapDuckDBType('STRING')).toBe('string');
-      });
-
-      it('should map UUID to string', () => {
-        expect(mapDuckDBType('UUID')).toBe('string');
       });
 
       it('should map BLOB to string', () => {

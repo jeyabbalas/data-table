@@ -96,11 +96,38 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
 
-    it('should display stats placeholder', () => {
+    it('should display row count in stats line', () => {
+      // Set row count before header is created
+      state.totalRows.set(1234);
+
       const header = new ColumnHeader(column, state, actions);
 
       const statsEl = header.getElement().querySelector('.dt-col-stats');
-      expect(statsEl?.textContent).toBe('Stats coming...');
+      expect(statsEl?.textContent).toBe('1,234 rows');
+
+      header.destroy();
+    });
+
+    it('should update stats line when row count changes', () => {
+      const header = new ColumnHeader(column, state, actions);
+
+      // Initially empty (0 rows)
+      let statsEl = header.getElement().querySelector('.dt-col-stats');
+      expect(statsEl?.textContent).toBe('');
+
+      // Update row count - subscription triggers update
+      state.totalRows.set(5678);
+      expect(statsEl?.textContent).toBe('5,678 rows');
+
+      header.destroy();
+    });
+
+    it('should display empty stats line when no rows', () => {
+      // State starts with 0 rows (default)
+      const header = new ColumnHeader(column, state, actions);
+
+      const statsEl = header.getElement().querySelector('.dt-col-stats');
+      expect(statsEl?.textContent).toBe('');
 
       header.destroy();
     });

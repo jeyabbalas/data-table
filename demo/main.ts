@@ -132,28 +132,7 @@ async function loadData(source: File | string): Promise<void> {
         updateTableInfo();
       });
 
-      // Sync horizontal scroll between body and header (bi-directional)
-      const bodyScroll = tableContainer?.getScrollContainer();
-      const headerScroll = tableContainer?.getHeaderScroll();
-      if (bodyScroll && headerScroll) {
-        let isScrolling = false;
-
-        // Body → Header sync
-        bodyScroll.addEventListener('scroll', () => {
-          if (isScrolling) return;
-          isScrolling = true;
-          headerScroll.scrollLeft = bodyScroll.scrollLeft;
-          isScrolling = false;
-        }, { passive: true });
-
-        // Header → Body sync
-        headerScroll.addEventListener('scroll', () => {
-          if (isScrolling) return;
-          isScrolling = true;
-          bodyScroll.scrollLeft = headerScroll.scrollLeft;
-          isScrolling = false;
-        }, { passive: true });
-      }
+      // Note: Scroll sync between header and body is now handled internally by TableContainer
     }
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);

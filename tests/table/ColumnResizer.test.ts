@@ -45,7 +45,7 @@ describe('ColumnResizer', () => {
     });
 
     it('uses custom class prefix', () => {
-      const resizer = new ColumnResizer(header, onResize, { classPrefix: 'custom' });
+      const resizer = new ColumnResizer(header, onResize, undefined, undefined, { classPrefix: 'custom' });
 
       const handle = header.querySelector('.custom-col-resize-handle');
       expect(handle).not.toBeNull();
@@ -54,7 +54,7 @@ describe('ColumnResizer', () => {
     });
 
     it('applies custom min and max width constraints', () => {
-      const resizer = new ColumnResizer(header, onResize, {
+      const resizer = new ColumnResizer(header, onResize, undefined, undefined, {
         minWidth: 100,
         maxWidth: 300,
       });
@@ -190,7 +190,7 @@ describe('ColumnResizer', () => {
     });
 
     it('enforces minimum width', () => {
-      const resizer = new ColumnResizer(header, onResize, { minWidth: 80 });
+      const resizer = new ColumnResizer(header, onResize, undefined, undefined, { minWidth: 80 });
       const handle = resizer.getHandle()!;
 
       // Start dragging at x=200
@@ -218,7 +218,7 @@ describe('ColumnResizer', () => {
     });
 
     it('enforces maximum width', () => {
-      const resizer = new ColumnResizer(header, onResize, { maxWidth: 200 });
+      const resizer = new ColumnResizer(header, onResize, undefined, undefined, { maxWidth: 200 });
       const handle = resizer.getHandle()!;
 
       // Start dragging at x=200

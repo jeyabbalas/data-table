@@ -109,6 +109,7 @@
 .dt-header-area {
   display: flex;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--dt-border);
 }
 
 .dt-header-scroll {
@@ -128,12 +129,10 @@
   width: var(--dt-scrollbar-width);
   flex-shrink: 0;
   background: var(--dt-bg-secondary);
-  border-bottom: 1px solid var(--dt-border);
 }
 
 .dt-header {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--dt-border);
   background: var(--dt-bg-secondary);
 }
 
@@ -173,6 +172,7 @@
   cursor: grab;
   user-select: none;
   transition: background var(--dt-transition);
+  background: var(--dt-bg-secondary);
 }
 
 .dt-col-header:hover {

@@ -1,13 +1,13 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.3: Testing Histogram Visualization Rendering
+ * Phase 4, Task 4.4: Testing Histogram Interaction
  *
  * This demo tests:
- * - Histogram class rendering in column headers
- * - Elegant bar styling with rounded corners
- * - Hover interaction with in-place axis labels
- * - Null bar rendering in amber color
+ * - Histogram click-to-filter (single bin or null bar)
+ * - Brush selection for range filtering
+ * - Stats line updates on hover
+ * - Hover interaction with tooltips
  */
 
 import {
@@ -43,6 +43,8 @@ let tableCounter = 0;
 
 // Keep track of active visualizations for cleanup
 let activeVisualizations: BaseVisualization[] = [];
+let histogramsAttached = false;
+let reorderTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
@@ -84,18 +86,34 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
     }
 
     const vizContainer = header.getVizContainer();
+    const statsEl = header.getStatsElement();
+    const defaultStats = `<span class="stats-label">Rows:</span> ${tableState.totalRows.get().toLocaleString()}`;
 
-    // Create histogram visualization
+    // Create histogram visualization with filter and stats callbacks
     const histogram = new Histogram(vizContainer, column, {
       tableName,
       bridge,
-      filters: [],
+      filters: tableState.filters.get(),
+      onFilterChange: (filter) => {
+        console.log('[Demo] Filter created:', filter);
+        actions.addFilter(filter);
+      },
+      onStatsChange: (stats) => {
+        if (stats) {
+          statsEl.innerHTML = stats;
+        } else {
+          // Restore default
+          statsEl.innerHTML = defaultStats;
+        }
+      },
     });
 
     activeVisualizations.push(histogram);
 
     console.log(`[Demo] Created histogram for "${column.name}" (${column.type})`);
   }
+
+  histogramsAttached = true;
 }
 
 function updateTableInfo(): void {
@@ -169,6 +187,27 @@ bridge
       if (tableState.tableName.get()) {
         updateTableInfo();
       }
+    });
+
+    // Subscribe to column reorder to re-attach histograms
+    tableState.visibleColumns.subscribe(() => {
+      const tableName = tableState.tableName.get();
+
+      // Only re-attach if histograms were already attached initially
+      if (!tableName || !histogramsAttached) return;
+
+      // Clear any pending reorder timeout
+      if (reorderTimeout) {
+        clearTimeout(reorderTimeout);
+      }
+
+      // Debounce re-attachment
+      reorderTimeout = setTimeout(() => {
+        reorderTimeout = null;
+        const schema = tableState.schema.get();
+        attachHistograms(tableName, schema);
+        updateTableInfo();
+      }, 100);
     });
 
     // Update info with dimensions

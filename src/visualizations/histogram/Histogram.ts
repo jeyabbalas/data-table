@@ -40,6 +40,10 @@ const COLORS = {
 
   // Background
   chartBg: 'transparent',
+
+  // Brush selection
+  brushOverlay: 'rgba(37, 99, 235, 0.2)', // Blue-600 with low alpha
+  brushBorder: 'rgba(37, 99, 235, 0.6)', // Blue-600 with medium alpha
 };
 
 /** Typography settings */
@@ -62,6 +66,10 @@ const LAYOUT = {
   barRadius: 2, // Rounded corner radius
   minBarHeight: 2, // Minimum visible bar height
 };
+
+/** Double-click detection constants */
+const DOUBLE_CLICK_THRESHOLD = 300; // ms
+const DOUBLE_CLICK_DISTANCE = 10; // pixels
 
 // =========================================
 // Utility Functions
@@ -132,14 +140,26 @@ export class Histogram extends BaseVisualization {
   private hoveredBin: number | null = null;
   private hoveredNull: boolean = false;
 
+  // Brush state for range selection
+  private brushState = {
+    active: false, // True while creating new brush (dragging)
+    committed: false, // True after mouseup, brush stays visible
+    sliding: false, // True while sliding existing brush
+    slideStartX: 0, // X position where slide started
+    startX: 0,
+    startBinIndex: -1,
+    endBinIndex: -1,
+    lastClickTime: 0, // For double-click detection
+    lastClickX: 0,
+    lastClickY: 0,
+  };
+  private static readonly DRAG_THRESHOLD = 5; // Pixels before drag starts
+
   // Computed layout (updated on render)
   private chartArea = { x: 0, y: 0, width: 0, height: 0 };
   private nullBarArea = { x: 0, y: 0, width: 0, height: 0 };
   private barPositions: Array<{ x: number; width: number; binIndex: number }> =
     [];
-
-  // Tooltip element
-  private tooltip: HTMLElement;
 
   constructor(
     container: HTMLElement,
@@ -147,24 +167,6 @@ export class Histogram extends BaseVisualization {
     options: VisualizationOptions
   ) {
     super(container, column, options);
-
-    // Create tooltip element
-    this.tooltip = document.createElement('div');
-    this.tooltip.className = 'histogram-tooltip';
-    this.tooltip.style.cssText = `
-      position: absolute;
-      background: #1e293b;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font: 500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      white-space: nowrap;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
-      z-index: 1000;
-    `;
-    document.body.appendChild(this.tooltip);
 
     // Fetch data immediately
     this.fetchData();
@@ -229,6 +231,11 @@ export class Histogram extends BaseVisualization {
     this.drawBars();
     this.drawNullBar();
     this.drawAxisLabels();
+
+    // Draw brush overlay if active or committed
+    if (this.brushState.active || this.brushState.committed) {
+      this.drawBrushOverlay();
+    }
   }
 
   /**
@@ -323,7 +330,25 @@ export class Histogram extends BaseVisualization {
     const ctx = this.ctx;
     const maxCount = Math.max(...this.data.bins.map((b) => b.count), 1);
     const chartBottom = this.chartArea.y + this.chartArea.height;
+
+    // Check if any bar is hovered
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
+
+    // Check if brush is active or committed
+    const hasBrush = this.brushState.active || this.brushState.committed;
+    let brushStartIdx = -1;
+    let brushEndIdx = -1;
+
+    if (hasBrush && this.brushState.startBinIndex !== -1) {
+      brushStartIdx = Math.min(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+      brushEndIdx = Math.max(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+    }
 
     for (let i = 0; i < this.data.bins.length; i++) {
       const bin = this.data.bins[i];
@@ -338,12 +363,19 @@ export class Histogram extends BaseVisualization {
         heightRatio * this.chartArea.height
       );
 
-      // Determine color based on hover state
+      // Determine color based on hover and brush state
       const isThisHovered = this.hoveredBin === i;
+      const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
+
       let fillColor: string;
       if (isThisHovered) {
+        // Hover takes precedence
         fillColor = COLORS.barHover;
+      } else if (hasBrush) {
+        // Brush is active: inside = dark, outside = faded
+        fillColor = isInsideBrush ? COLORS.barHover : COLORS.barFaded;
       } else if (isAnyHovered) {
+        // Regular hover behavior
         fillColor = COLORS.barFaded;
       } else {
         fillColor = COLORS.barFill;
@@ -415,11 +447,16 @@ export class Histogram extends BaseVisualization {
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
-    // Determine color based on hover state
+    // Determine color based on hover and brush state
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
+    const hasBrush = this.brushState.active || this.brushState.committed;
+
     let fillColor: string;
     if (this.hoveredNull) {
       fillColor = COLORS.nullHover;
+    } else if (hasBrush) {
+      // Null bar is always "outside" the brush (brush only covers histogram bins)
+      fillColor = COLORS.nullFaded;
     } else if (isAnyHovered) {
       fillColor = COLORS.nullFaded;
     } else {
@@ -500,43 +537,34 @@ export class Histogram extends BaseVisualization {
   }
 
   // =========================================
-  // Tooltip
-  // =========================================
-
-  /**
-   * Show tooltip with bin information
-   */
-  private showTooltip(
-    content: string,
-    barCenterX: number,
-    _barTopY: number
-  ): void {
-    this.tooltip.innerHTML = content;
-    this.tooltip.style.opacity = '1';
-
-    // Position below the chart
-    const rect = this.canvas.getBoundingClientRect();
-    const chartBottom = rect.top + this.chartArea.y + this.chartArea.height;
-    this.tooltip.style.left = `${rect.left + barCenterX}px`;
-    this.tooltip.style.top = `${chartBottom + 4}px`;
-    this.tooltip.style.transform = 'translate(-50%, 0)';
-  }
-
-  /**
-   * Hide the tooltip
-   */
-  private hideTooltip(): void {
-    this.tooltip.style.opacity = '0';
-  }
-
-  // =========================================
   // Mouse Interaction
   // =========================================
 
   /**
-   * Handle mouse movement - detect which bar is under cursor and show tooltip
+   * Handle mouse movement - detect which bar is under cursor and update stats
    */
   protected handleMouseMove(x: number, y: number): void {
+    // If sliding a committed brush
+    if (this.brushState.sliding) {
+      this.slideBrush(x);
+      return;
+    }
+
+    // If creating a new brush (not yet committed)
+    if (this.brushState.startBinIndex !== -1 && !this.brushState.committed) {
+      this.updateBrush(x);
+      // Skip hover logic while actively brushing
+      if (this.brushState.active) return;
+    }
+
+    // If brush is committed, check if hovering inside it for grab cursor
+    if (this.brushState.committed) {
+      if (this.isInsideBrush(x, y)) {
+        this.canvas.style.cursor = 'grab';
+        return;
+      }
+    }
+
     const prevHoveredBin = this.hoveredBin;
     const prevHoveredNull = this.hoveredNull;
 
@@ -577,86 +605,95 @@ export class Histogram extends BaseVisualization {
       // Re-render for bar highlighting
       this.render();
 
-      // Show or hide tooltip
+      // Update stats line with formatted HTML
       if (this.hoveredBin !== null && this.data) {
         const bin = this.data.bins[this.hoveredBin];
-        const pos = this.barPositions[this.hoveredBin];
-        if (bin && pos) {
-          const range = `[${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}]`;
+        if (bin) {
+          const rangeStr = `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
           const count = formatCount(bin.count);
           const percent = formatPercent(bin.count / this.data.total);
-          const content = `${range}<br><b>${count}</b> (${percent})`;
 
-          // Calculate bar top position
-          const maxCount = Math.max(...this.data.bins.map((b) => b.count), 1);
-          const heightRatio = bin.count / maxCount;
-          const barHeight = Math.max(
-            bin.count > 0 ? LAYOUT.minBarHeight : 0,
-            heightRatio * this.chartArea.height
+          this.options.onStatsChange?.(
+            `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+            `<span class="stats-label">Count:</span> ${count} (${percent})`
           );
-          const barTopY = this.chartArea.y + this.chartArea.height - barHeight;
-
-          this.showTooltip(content, pos.x + pos.width / 2, barTopY);
         }
       } else if (this.hoveredNull && this.data) {
         const count = formatCount(this.data.nullCount);
         const percent = formatPercent(this.data.nullCount / this.data.total);
-        const content = `[null]<br><b>${count}</b> (${percent})`;
 
-        // Calculate null bar top position
-        const maxCount = Math.max(
-          ...this.data.bins.map((b) => b.count),
-          this.data.nullCount,
-          1
-        );
-        const heightRatio = this.data.nullCount / maxCount;
-        const barHeight = Math.max(
-          LAYOUT.minBarHeight,
-          heightRatio * this.nullBarArea.height
-        );
-        const barTopY = this.nullBarArea.y + this.nullBarArea.height - barHeight;
-
-        this.showTooltip(
-          content,
-          this.nullBarArea.x + this.nullBarArea.width / 2,
-          barTopY
+        this.options.onStatsChange?.(
+          `<span class="stats-label">Bin:</span> null<br>` +
+          `<span class="stats-label">Count:</span> ${count} (${percent})`
         );
       } else {
-        this.hideTooltip();
+        // Restore default stats
+        this.options.onStatsChange?.(null);
       }
     }
   }
 
   /**
-   * Handle click - log clicked bar info (filtering in Task 4.4)
+   * Check if a point is inside the committed brush area
+   */
+  private isInsideBrush(x: number, y: number): boolean {
+    if (!this.brushState.committed) return false;
+    if (y < PADDING.top || y > this.height - PADDING.bottom) return false;
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const startPos = this.barPositions[startIdx];
+    const endPos = this.barPositions[endIdx];
+
+    if (!startPos || !endPos) return false;
+    return x >= startPos.x && x <= endPos.x + endPos.width;
+  }
+
+  /**
+   * Handle click - create filter for clicked bar
    */
   protected handleClick(x: number, y: number): void {
     if (!this.data) return;
 
+    // If brush is active or committed, clicks are handled by mousedown/mouseup
+    if (this.brushState.committed || this.brushState.active) return;
+
+    // Skip if brush was just started (will be handled by mouseup)
+    if (this.brushState.startBinIndex !== -1) return;
+
     // Check if click is in the chart area
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
 
-    // Check null bar
+    // Check null bar - create null filter
     if (
       this.data.nullCount > 0 &&
       x >= this.nullBarArea.x &&
       x <= this.nullBarArea.x + this.nullBarArea.width
     ) {
-      console.log(
-        `[Histogram] Clicked null bar on "${this.column.name}": ${this.data.nullCount} nulls`
-      );
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'null',
+        value: null,
+      });
       return;
     }
 
-    // Check histogram bars
+    // Check histogram bars - create range filter
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
         const bin = this.data.bins[pos.binIndex];
         if (bin) {
-          console.log(
-            `[Histogram] Clicked bin ${pos.binIndex} on "${this.column.name}": ` +
-              `[${bin.x0}, ${bin.x1}) = ${bin.count} rows`
-          );
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'range',
+            value: { min: bin.x0, max: bin.x1 },
+          });
         }
         return;
       }
@@ -664,11 +701,14 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Handle mouse leave - clear hover states and hide tooltip
+   * Handle mouse leave - clear hover states
    */
   protected handleMouseLeave(): void {
     this.canvas.style.cursor = 'default';
-    this.hideTooltip();
+    // Restore default stats (unless brush is committed - keep showing brush stats)
+    if (!this.brushState.committed) {
+      this.options.onStatsChange?.(null);
+    }
     if (this.hoveredBin !== null || this.hoveredNull) {
       this.hoveredBin = null;
       this.hoveredNull = false;
@@ -676,15 +716,329 @@ export class Histogram extends BaseVisualization {
     }
   }
 
+  // =========================================
+  // Brush Selection
+  // =========================================
+
   /**
-   * Override destroy to clean up tooltip element
+   * Handle mouse down - start potential brush selection or start sliding
    */
-  destroy(): void {
-    // Remove tooltip from DOM
-    if (this.tooltip.parentNode) {
-      this.tooltip.parentNode.removeChild(this.tooltip);
+  protected handleMouseDown(x: number, y: number): void {
+    if (!this.data || this.data.bins.length === 0) return;
+
+    const now = Date.now();
+
+    // Check for double-click inside committed brush to clear it
+    if (this.brushState.committed && this.isInsideBrush(x, y)) {
+      const timeSinceLastClick = now - this.brushState.lastClickTime;
+      const distance = Math.hypot(
+        x - this.brushState.lastClickX,
+        y - this.brushState.lastClickY
+      );
+
+      if (
+        timeSinceLastClick < DOUBLE_CLICK_THRESHOLD &&
+        distance < DOUBLE_CLICK_DISTANCE
+      ) {
+        // Double-click detected - clear brush
+        this.resetBrush();
+        this.render();
+        return;
+      }
+
+      // Not a double-click, start sliding
+      this.brushState.sliding = true;
+      this.brushState.slideStartX = x;
+      this.brushState.lastClickTime = now;
+      this.brushState.lastClickX = x;
+      this.brushState.lastClickY = y;
+      this.canvas.style.cursor = 'grabbing';
+      return;
     }
-    // Call parent destroy
-    super.destroy();
+
+    // Update click tracking for potential future double-click
+    this.brushState.lastClickTime = now;
+    this.brushState.lastClickX = x;
+    this.brushState.lastClickY = y;
+
+    // If clicking outside committed brush, clear it
+    if (this.brushState.committed) {
+      this.resetBrush();
+      this.render();
+      // Fall through to possibly start a new brush
+    }
+
+    // Only start brush in chart area (not on null bar or outside)
+    if (y < PADDING.top || y > this.height - PADDING.bottom) return;
+    if (this.data.nullCount > 0 && x >= this.nullBarArea.x) return;
+
+    // Find which bin we're starting on
+    for (const pos of this.barPositions) {
+      if (x >= pos.x && x <= pos.x + pos.width) {
+        this.brushState = {
+          active: false, // Becomes true after DRAG_THRESHOLD
+          committed: false,
+          sliding: false,
+          slideStartX: 0,
+          startX: x,
+          startBinIndex: pos.binIndex,
+          endBinIndex: pos.binIndex,
+          lastClickTime: now,
+          lastClickX: x,
+          lastClickY: y,
+        };
+        return;
+      }
+    }
+  }
+
+  /**
+   * Handle mouse up - stop sliding or commit brush
+   */
+  protected handleMouseUp(_x: number, _y: number): void {
+    // Stop sliding
+    if (this.brushState.sliding) {
+      this.brushState.sliding = false;
+      this.canvas.style.cursor = 'grab';
+      return;
+    }
+
+    // Commit brush after creating it
+    if (this.brushState.startBinIndex !== -1 && this.brushState.active) {
+      this.brushState.active = false;
+      this.brushState.committed = true;
+      this.canvas.style.cursor = 'grab';
+      this.updateBrushStats();
+      return;
+    }
+
+    // Was just a click (not a brush), reset
+    if (this.brushState.startBinIndex !== -1) {
+      this.resetBrush();
+    }
+  }
+
+  /**
+   * Handle keyboard events - Escape cancels brush
+   */
+  protected handleKeyDown(key: string): void {
+    if (key === 'Escape' && (this.brushState.active || this.brushState.committed)) {
+      this.cancelBrush();
+    }
+  }
+
+  /**
+   * Update brush selection during mouse move
+   */
+  private updateBrush(x: number): void {
+    if (this.brushState.startBinIndex === -1) return;
+
+    // Check if we've exceeded drag threshold to activate brush
+    if (
+      !this.brushState.active &&
+      Math.abs(x - this.brushState.startX) > Histogram.DRAG_THRESHOLD
+    ) {
+      this.brushState.active = true;
+      this.canvas.style.cursor = 'crosshair';
+    }
+
+    if (!this.brushState.active) return;
+
+    // Find the bin under current mouse position
+    let newEndIndex = this.brushState.startBinIndex;
+
+    // Check if x is before first bar
+    if (this.barPositions.length > 0 && x < this.barPositions[0].x) {
+      newEndIndex = 0;
+    } else if (
+      this.barPositions.length > 0 &&
+      x > this.barPositions[this.barPositions.length - 1].x +
+        this.barPositions[this.barPositions.length - 1].width
+    ) {
+      // Check if x is after last bar
+      newEndIndex = this.barPositions.length - 1;
+    } else {
+      // Find the bin containing x
+      for (const pos of this.barPositions) {
+        if (x >= pos.x && x <= pos.x + pos.width) {
+          newEndIndex = pos.binIndex;
+          break;
+        }
+      }
+    }
+
+    // Update and re-render if changed
+    if (newEndIndex !== this.brushState.endBinIndex) {
+      this.brushState.endBinIndex = newEndIndex;
+      this.render();
+    }
+  }
+
+  /**
+   * Complete brush selection and create range filter
+   */
+  private completeBrush(): void {
+    if (!this.brushState.active || !this.data) return;
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+
+    const startBin = this.data.bins[startIdx];
+    const endBin = this.data.bins[endIdx];
+
+    if (startBin && endBin) {
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'range',
+        value: { min: startBin.x0, max: endBin.x1 },
+      });
+    }
+  }
+
+  /**
+   * Cancel brush selection (e.g., on Escape key)
+   */
+  private cancelBrush(): void {
+    this.resetBrush();
+    this.render();
+  }
+
+  /**
+   * Reset brush state
+   */
+  private resetBrush(): void {
+    this.brushState = {
+      active: false,
+      committed: false,
+      sliding: false,
+      slideStartX: 0,
+      startX: 0,
+      startBinIndex: -1,
+      endBinIndex: -1,
+      lastClickTime: 0,
+      lastClickX: 0,
+      lastClickY: 0,
+    };
+    this.canvas.style.cursor = 'default';
+    this.options.onStatsChange?.(null); // Restore default stats
+  }
+
+  /**
+   * Slide the brush horizontally
+   */
+  private slideBrush(x: number): void {
+    if (!this.brushState.sliding || !this.data) return;
+
+    const delta = x - this.brushState.slideStartX;
+    const binWidth = this.barPositions[0]?.width ?? 0;
+    const binShift = Math.round(delta / (binWidth + LAYOUT.barGap));
+
+    if (binShift === 0) return;
+
+    // Calculate new indices
+    const brushSize = Math.abs(
+      this.brushState.endBinIndex - this.brushState.startBinIndex
+    );
+    let newStart = this.brushState.startBinIndex + binShift;
+    let newEnd = this.brushState.endBinIndex + binShift;
+
+    // Clamp to valid range
+    const maxBin = this.data.bins.length - 1;
+    if (newStart < 0) {
+      newStart = 0;
+      newEnd = brushSize;
+    }
+    if (newEnd > maxBin) {
+      newEnd = maxBin;
+      newStart = maxBin - brushSize;
+    }
+
+    // Only update if we actually moved (prevents drift when clamped)
+    const actualShift = newStart - this.brushState.startBinIndex;
+    if (actualShift !== 0) {
+      this.brushState.startBinIndex = newStart;
+      this.brushState.endBinIndex = newEnd;
+      // Update slideStartX proportional to actual movement, not requested
+      this.brushState.slideStartX += actualShift * (binWidth + LAYOUT.barGap);
+      this.render();
+      this.updateBrushStats();
+    }
+  }
+
+  /**
+   * Update stats line to show current brush selection
+   */
+  private updateBrushStats(): void {
+    if (!this.data) return;
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const startBin = this.data.bins[startIdx];
+    const endBin = this.data.bins[endIdx];
+
+    if (startBin && endBin) {
+      // Sum counts in range
+      let rangeCount = 0;
+      for (let i = startIdx; i <= endIdx; i++) {
+        rangeCount += this.data.bins[i].count;
+      }
+      const percent = formatPercent(rangeCount / this.data.total);
+      const rangeStr = `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
+
+      this.options.onStatsChange?.(
+        `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+        `<span class="stats-label">Count:</span> ${formatCount(rangeCount)} (${percent})`
+      );
+    }
+  }
+
+  /**
+   * Draw brush selection overlay
+   */
+  private drawBrushOverlay(): void {
+    if ((!this.brushState.active && !this.brushState.committed) || !this.data) {
+      return;
+    }
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+
+    const startPos = this.barPositions[startIdx];
+    const endPos = this.barPositions[endIdx];
+
+    if (!startPos || !endPos) return;
+
+    const ctx = this.ctx;
+    const x = startPos.x;
+    const width = endPos.x + endPos.width - startPos.x;
+    const y = this.chartArea.y;
+    const height = this.chartArea.height;
+
+    // Draw semi-transparent overlay
+    ctx.fillStyle = COLORS.brushOverlay;
+    ctx.fillRect(x, y, width, height);
+
+    // Draw border
+    ctx.strokeStyle = COLORS.brushBorder;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, width, height);
   }
 }

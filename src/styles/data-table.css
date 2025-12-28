@@ -211,6 +211,12 @@
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-tertiary);
   margin-top: 0.25rem;
+  min-height: 2.2em;
+  line-height: 1.1;
+}
+
+.dt-col-stats .stats-label {
+  font-weight: 600;
 }
 
 .dt-col-viz {

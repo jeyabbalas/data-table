@@ -30,6 +30,8 @@ export interface VisualizationOptions {
   filters: Filter[];
   /** Callback when visualization creates a filter */
   onFilterChange?: (filter: Filter) => void;
+  /** Callback to update stats line on hover (null restores default) */
+  onStatsChange?: (stats: string | null) => void;
   /** Maximum number of histogram bins (default: 30) */
   maxBins?: number;
 }
@@ -62,6 +64,9 @@ export abstract class BaseVisualization {
   private boundMouseMove: (e: MouseEvent) => void;
   private boundMouseLeave: (e: MouseEvent) => void;
   private boundClick: (e: MouseEvent) => void;
+  private boundMouseDown: (e: MouseEvent) => void;
+  private boundMouseUp: (e: MouseEvent) => void;
+  private boundKeyDown: (e: KeyboardEvent) => void;
   private resizeObserver: ResizeObserver;
 
   constructor(
@@ -92,6 +97,9 @@ export abstract class BaseVisualization {
     this.boundMouseMove = this.onMouseMove.bind(this);
     this.boundMouseLeave = this.onMouseLeave.bind(this);
     this.boundClick = this.onClick.bind(this);
+    this.boundMouseDown = this.onMouseDown.bind(this);
+    this.boundMouseUp = this.onMouseUp.bind(this);
+    this.boundKeyDown = this.onKeyDown.bind(this);
 
     // Setup resize observer for responsive sizing
     this.resizeObserver = new ResizeObserver(this.handleResize.bind(this));
@@ -138,6 +146,29 @@ export abstract class BaseVisualization {
    */
   protected abstract handleMouseLeave(): void;
 
+  /**
+   * Handle mouse down on the visualization.
+   * Used for brush/drag interactions.
+   * @param x - X coordinate relative to canvas
+   * @param y - Y coordinate relative to canvas
+   */
+  protected abstract handleMouseDown(x: number, y: number): void;
+
+  /**
+   * Handle mouse up on the visualization.
+   * Used for completing brush/drag interactions.
+   * @param x - X coordinate relative to canvas
+   * @param y - Y coordinate relative to canvas
+   */
+  protected abstract handleMouseUp(x: number, y: number): void;
+
+  /**
+   * Handle keyboard events for the visualization.
+   * Used for canceling brush with Escape, etc.
+   * @param key - The key that was pressed
+   */
+  protected abstract handleKeyDown(key: string): void;
+
   // =========================================
   // Canvas Sizing
   // =========================================
@@ -180,6 +211,10 @@ export abstract class BaseVisualization {
     this.canvas.addEventListener('mousemove', this.boundMouseMove);
     this.canvas.addEventListener('mouseleave', this.boundMouseLeave);
     this.canvas.addEventListener('click', this.boundClick);
+    this.canvas.addEventListener('mousedown', this.boundMouseDown);
+    // mouseup and keydown on window to catch events outside canvas
+    window.addEventListener('mouseup', this.boundMouseUp);
+    window.addEventListener('keydown', this.boundKeyDown);
   }
 
   /**
@@ -210,6 +245,36 @@ export abstract class BaseVisualization {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     this.handleClick(x, y);
+  }
+
+  /**
+   * Translate mousedown event to canvas coordinates and forward to handler
+   */
+  private onMouseDown(e: MouseEvent): void {
+    if (this.destroyed) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    this.handleMouseDown(x, y);
+  }
+
+  /**
+   * Translate mouseup event to canvas coordinates and forward to handler
+   */
+  private onMouseUp(e: MouseEvent): void {
+    if (this.destroyed) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    this.handleMouseUp(x, y);
+  }
+
+  /**
+   * Forward keydown event to handler
+   */
+  private onKeyDown(e: KeyboardEvent): void {
+    if (this.destroyed) return;
+    this.handleKeyDown(e.key);
   }
 
   // =========================================
@@ -256,10 +321,15 @@ export abstract class BaseVisualization {
     if (this.destroyed) return;
     this.destroyed = true;
 
-    // Remove event listeners
+    // Remove event listeners from canvas
     this.canvas.removeEventListener('mousemove', this.boundMouseMove);
     this.canvas.removeEventListener('mouseleave', this.boundMouseLeave);
     this.canvas.removeEventListener('click', this.boundClick);
+    this.canvas.removeEventListener('mousedown', this.boundMouseDown);
+
+    // Remove event listeners from window
+    window.removeEventListener('mouseup', this.boundMouseUp);
+    window.removeEventListener('keydown', this.boundKeyDown);
 
     // Stop observing resize
     this.resizeObserver.disconnect();

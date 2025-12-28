@@ -145,6 +145,14 @@ export class ColumnReorder {
       return;
     }
 
+    // Don't start drag if clicking on visualization canvas
+    if (
+      target.tagName === 'CANVAS' ||
+      target.closest(`.${this.classPrefix}-col-viz`)
+    ) {
+      return;
+    }
+
     // Find the column header
     const header = target.closest(`.${this.classPrefix}-col-header`) as HTMLElement;
     if (!header) return;

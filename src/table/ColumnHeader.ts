@@ -298,6 +298,13 @@ export class ColumnHeader {
   }
 
   /**
+   * Get the stats element for external updates (e.g., histogram hover).
+   */
+  getStatsElement(): HTMLElement {
+    return this.statsEl;
+  }
+
+  /**
    * Destroy the column header and clean up resources
    */
   destroy(): void {

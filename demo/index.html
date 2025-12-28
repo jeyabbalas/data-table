@@ -3,27 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactive Data Table - Demo</title>
-  <!-- Data Table Library Styles -->
+  <title>Interactive Data Table - Visualization Test</title>
   <link rel="stylesheet" href="../src/styles/data-table.css">
-  <!-- Demo-specific Styles -->
   <link rel="stylesheet" href="./demo.css">
 </head>
 <body>
-  <h1>Interactive Data Table</h1>
+  <h1>Phase 4: Visualization Test</h1>
 
   <div class="card">
     <div class="status-bar">
       <span class="version">v<span id="version">...</span></span>
       <span id="init-status" class="init-status">Initializing...</span>
     </div>
-    <div class="features-bar">
-      <strong>Features:</strong> Drag column headers to reorder |
-      Resize columns by dragging edges |
-      Click headers to sort |
-      <button id="reset-order-btn" class="btn--secondary">Reset Order</button>
-      <button id="reset-widths-btn" class="btn--secondary">Reset Widths</button>
-    </div>
+    <p class="test-info">
+      <strong>Testing:</strong> BaseVisualization class renders placeholder charts in column headers.
+      Hover over charts to see interaction. Click to log to console.
+    </p>
   </div>
 
   <div class="card">
@@ -44,7 +39,7 @@
 
   <div class="card">
     <div id="table-info" class="info-panel">
-      Load a file or URL to see the data table
+      Load a file or URL to see visualizations in column headers
     </div>
   </div>
 

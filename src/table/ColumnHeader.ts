@@ -290,6 +290,14 @@ export class ColumnHeader {
   }
 
   /**
+   * Get the visualization container element.
+   * This is where Phase 4 visualizations will be rendered.
+   */
+  getVizContainer(): HTMLElement {
+    return this.element.querySelector(`.${this.classPrefix}-col-viz`)!;
+  }
+
+  /**
    * Destroy the column header and clean up resources
    */
   destroy(): void {

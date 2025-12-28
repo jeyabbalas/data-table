@@ -548,6 +548,14 @@ export class TableContainer {
   }
 
   /**
+   * Get all column header instances.
+   * Useful for accessing visualization containers in each header.
+   */
+  getColumnHeaders(): ColumnHeader[] {
+    return [...this.columnHeaders];
+  }
+
+  /**
    * Destroy the table container and clean up resources
    */
   destroy(): void {

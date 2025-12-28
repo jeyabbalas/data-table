@@ -1,12 +1,12 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * This demo showcases the data table functionality:
- * - Drag column headers to reorder columns
- * - Resize columns by dragging edges
- * - Click headers to sort (Shift+click for multi-sort)
- * - Click rows to select (Ctrl+click to toggle, Shift+click for range)
- * - Virtual scrolling for large datasets
+ * Phase 4, Task 4.1: Testing BaseVisualization
+ *
+ * This demo tests the visualization infrastructure:
+ * - PlaceholderVisualization renders in each column header
+ * - Mouse events work (hover, click)
+ * - Canvas resizes properly
  */
 
 import {
@@ -16,6 +16,8 @@ import {
   TableContainer,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
+import { PlaceholderVisualization } from '../src/visualizations';
+import type { BaseVisualization } from '../src/visualizations';
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -24,8 +26,6 @@ const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const loadFileBtn = document.getElementById('load-file-btn') as HTMLButtonElement;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
-const resetOrderBtn = document.getElementById('reset-order-btn') as HTMLButtonElement;
-const resetWidthsBtn = document.getElementById('reset-widths-btn') as HTMLButtonElement;
 const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
 
@@ -38,10 +38,47 @@ const tableState = createTableState();
 let actions: StateActions;
 let tableContainer: TableContainer | null = null;
 let tableCounter = 0;
-let originalColumnOrder: string[] = [];
+
+// Track visualizations for cleanup
+let visualizations: BaseVisualization[] = [];
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
+}
+
+function destroyVisualizations(): void {
+  for (const viz of visualizations) {
+    viz.destroy();
+  }
+  visualizations = [];
+}
+
+function createVisualizations(): void {
+  if (!tableContainer) return;
+
+  // Destroy existing visualizations
+  destroyVisualizations();
+
+  const tableName = tableState.tableName.get();
+  if (!tableName) return;
+
+  // Get column headers and create visualizations
+  const columnHeaders = tableContainer.getColumnHeaders();
+
+  for (const header of columnHeaders) {
+    const vizContainer = header.getVizContainer();
+    const column = header.getColumn();
+
+    const viz = new PlaceholderVisualization(vizContainer, column, {
+      tableName,
+      bridge,
+      filters: [],
+    });
+
+    visualizations.push(viz);
+  }
+
+  console.log(`Created ${visualizations.length} visualizations`);
 }
 
 function updateTableInfo(): void {
@@ -52,62 +89,16 @@ function updateTableInfo(): void {
 
   if (!tableName) return;
 
-  // Build type summary
-  const typeCounts = new Map<string, number>();
-  for (const col of schema) {
-    typeCounts.set(col.type, (typeCounts.get(col.type) || 0) + 1);
-  }
-
-  const typeInfo = Array.from(typeCounts.entries())
-    .map(([type, count]) => `${type}: ${count}`)
-    .join(', ');
-
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += `<br><span class="info-text--secondary">Types: ${typeInfo}</span>`;
+  info += ` | <strong>${visualizations.length}</strong> visualizations`;
 
-  // Show visible range from table body
-  const tableBody = tableContainer?.getTableBody();
-  if (tableBody) {
-    const range = tableBody.getVisibleRange();
-    if (range.end > 0) {
-      info += ` | <strong>Visible:</strong> ${range.start + 1}-${range.end}`;
-    }
-  }
-
-  // Show selection info
-  const selectedRows = tableState.selectedRows.get();
-  if (selectedRows.size > 0) {
-    info += ` | <strong>Selected:</strong> ${selectedRows.size} row${selectedRows.size > 1 ? 's' : ''}`;
-  }
-
-  // Show sort info
+  // Show sort info if any
   const sortColumns = tableState.sortColumns.get();
   if (sortColumns.length > 0) {
     const sortDesc = sortColumns
       .map((s, i) => `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sortColumns.length > 1 ? ` #${i + 1}` : ''})`)
       .join(', ');
     info += ` | <strong>Sort:</strong> ${sortDesc}`;
-  }
-
-  // Show column order info (if reordered from original)
-  const currentOrder = tableState.visibleColumns.get();
-  const isReordered = originalColumnOrder.length > 0 &&
-    JSON.stringify(currentOrder) !== JSON.stringify(originalColumnOrder);
-  if (isReordered) {
-    const orderPreview = currentOrder.slice(0, 5).join(', ');
-    const more = currentOrder.length > 5 ? ` ... (+${currentOrder.length - 5} more)` : '';
-    info += `<br><span class="info-text--primary">Column order: ${orderPreview}${more}</span>`;
-  }
-
-  // Show column width info
-  const columnWidths = tableState.columnWidths.get();
-  if (columnWidths.size > 0) {
-    const widthInfo = Array.from(columnWidths.entries())
-      .slice(0, 3)
-      .map(([col, width]) => `${col}: ${width}px`)
-      .join(', ');
-    const more = columnWidths.size > 3 ? ` (+${columnWidths.size - 3} more)` : '';
-    info += `<br><span class="info-text--secondary">Custom widths: ${widthInfo}${more}</span>`;
   }
 
   updateInfo(info);
@@ -119,22 +110,14 @@ async function loadData(source: File | string): Promise<void> {
 
   try {
     await actions.loadData(source, { tableName });
-    // Store original column order for reset functionality
-    originalColumnOrder = [...tableState.visibleColumns.get()];
     updateTableInfo();
 
-    // Subscribe to scroll events AFTER table is rendered
-    const tableBody = tableContainer?.getTableBody();
-    if (tableBody) {
-      const virtualScroller = tableBody.getVirtualScroller();
+    // Create visualizations after a short delay to ensure headers are rendered
+    setTimeout(() => {
+      createVisualizations();
+      updateTableInfo();
+    }, 100);
 
-      // Update info box on scroll
-      virtualScroller.onScroll(() => {
-        updateTableInfo();
-      });
-
-      // Note: Scroll sync between header and body is now handled internally by TableContainer
-    }
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -146,7 +129,7 @@ bridge
   .then(() => {
     actions = new StateActions(tableState, bridge);
 
-    // Create TableContainer with bridge - TableBody is created internally
+    // Create TableContainer with bridge
     tableContainer = new TableContainer(
       tableContainerEl,
       tableState,
@@ -154,26 +137,8 @@ bridge
       bridge
     );
 
-    // Subscribe to state changes to update info display
+    // Subscribe to state changes
     tableState.sortColumns.subscribe(() => {
-      if (tableState.tableName.get()) {
-        updateTableInfo();
-      }
-    });
-
-    tableState.selectedRows.subscribe(() => {
-      if (tableState.tableName.get()) {
-        updateTableInfo();
-      }
-    });
-
-    tableState.columnWidths.subscribe(() => {
-      if (tableState.tableName.get()) {
-        updateTableInfo();
-      }
-    });
-
-    tableState.visibleColumns.subscribe(() => {
       if (tableState.tableName.get()) {
         updateTableInfo();
       }
@@ -212,17 +177,4 @@ urlInput.addEventListener('keydown', (e) => {
     const url = urlInput.value.trim();
     if (url) loadData(url);
   }
-});
-
-// Reset column order to original
-resetOrderBtn.addEventListener('click', () => {
-  if (originalColumnOrder.length > 0) {
-    actions.setColumnOrder(originalColumnOrder);
-  }
-});
-
-// Reset column widths to default
-resetWidthsBtn.addEventListener('click', () => {
-  // Clear all custom column widths
-  tableState.columnWidths.set(new Map());
 });

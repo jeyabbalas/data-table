@@ -1,6 +1,6 @@
 # Dataset Schema Documentation
 
-This directory contains two datasets in three formats each (CSV, JSON, Parquet) for testing JavaScript data processing libraries.
+This directory contains three datasets in three formats each (CSV, JSON, Parquet) for testing JavaScript data processing libraries.
 
 ## Titanic Dataset
 
@@ -71,6 +71,7 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 ### Enumerated Values
 
 **RatecodeID:**
+
 | Value | Description |
 |-------|-------------|
 | 1 | Standard rate |
@@ -81,6 +82,7 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 | 6 | Group ride |
 
 **payment_type:**
+
 | Value | Description |
 |-------|-------------|
 | 1 | Credit card |
@@ -89,6 +91,37 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 | 4 | Dispute |
 | 5 | Unknown |
 | 6 | Voided trip |
+
+---
+
+## Numeric Stress Tests Dataset
+
+**Source:** Synthetically generated for stress testing histogram visualization of numeric variables
+
+**Description:** A dataset designed to test edge cases in numeric data visualization, particularly histogram rendering. Contains columns with extreme values, scientific notation, all-null columns, single-value columns, and mixed data types.
+
+**Size:** 100 rows × 16 columns
+
+### Schema
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `id` | integer | No | Row identifier (1-100) |
+| `all_nulls` | null | Yes | 100% null values - tests empty column handling |
+| `single_value` | integer | No | All values = 42 - tests single-bin histogram |
+| `two_values` | integer | No | Only values 0 and 1 - tests binary distribution |
+| `extreme_large` | float | No | Very large numbers (1e9 to 1e15) - tests axis label abbreviation |
+| `tiny_values` | float | No | Very small numbers (0.0001 to 1e-10) - tests scientific notation display |
+| `all_negative` | float | No | All negative numbers (-999 to -50.5) - tests negative axis rendering |
+| `mixed_pos_neg` | float | No | Range from -100 to +98 - tests zero-crossing axis |
+| `mixed_type` | string | No | Mix of numeric strings ("42", "100.5") and text ("N/A", "error", "12abc") |
+| `numeric_1` | float | No | Normal-like distribution (~35-88) |
+| `numeric_2` | integer | No | Uniform distribution (45-901) |
+| `numeric_3` | float | No | Exponential-like growth (1.1 to 295M) |
+| `numeric_4` | integer | No | Integers (12-91) |
+| `numeric_5` | float | No | High-precision decimals (9 decimal places) |
+| `scientific_notation` | float | No | Values in scientific notation (1.23e-60 to 9.87e60) |
+| `category` | string | No | Categorical values: A, B, C, D |
 
 ---
 
@@ -113,7 +146,5 @@ The JSON files use the "records" orientation (array of objects):
   ...
 ]
 ```
-
-The JSON dataset was further truncated
 
 Datetime values are serialized as ISO 8601 strings (e.g., `"2024-01-15T08:30:00"`).

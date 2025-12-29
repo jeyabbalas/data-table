@@ -46,6 +46,24 @@ let activeVisualizations: BaseVisualization[] = [];
 let histogramsAttached = false;
 let reorderTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// State persistence maps for brush and selection states
+const brushStates = new Map<
+  string,
+  { startBinIndex: number; endBinIndex: number }
+>();
+const selectionStates = new Map<
+  string,
+  { selectedBin: number | null; selectedNull: boolean }
+>();
+
+// LIFO stack for interactions (brushes and selections)
+interface ActiveInteraction {
+  type: 'brush' | 'selection';
+  columnName: string;
+  histogram: Histogram;
+}
+const interactionStack: ActiveInteraction[] = [];
+
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
 }
@@ -63,11 +81,29 @@ function isNumericType(type: DataType): boolean {
 function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   if (!tableContainer) return;
 
+  // Save brush/selection states before destroying histograms
+  for (const viz of activeVisualizations) {
+    if (viz instanceof Histogram) {
+      const column = viz.getColumn();
+      const brushState = viz.getBrushState();
+      if (brushState) {
+        brushStates.set(column.name, brushState);
+      }
+      const selState = viz.getSelectionState();
+      if (selState.selectedBin !== null || selState.selectedNull) {
+        selectionStates.set(column.name, selState);
+      }
+    }
+  }
+
   // Clean up previous visualizations
   for (const viz of activeVisualizations) {
     viz.destroy();
   }
   activeVisualizations = [];
+
+  // Clear interaction stack entries for destroyed histograms
+  interactionStack.length = 0;
 
   // Get all column headers
   const headers = tableContainer.getColumnHeaders();
@@ -106,9 +142,86 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
           statsEl.innerHTML = defaultStats;
         }
       },
+      // Callback when brush is committed - add to LIFO stack
+      onBrushCommit: (colName) => {
+        // Remove any existing brush entry for this column
+        const idx = interactionStack.findIndex(
+          (i) => i.type === 'brush' && i.columnName === colName
+        );
+        if (idx >= 0) interactionStack.splice(idx, 1);
+        // Add to top of stack
+        interactionStack.push({
+          type: 'brush',
+          columnName: colName,
+          histogram,
+        });
+        // Save state
+        const state = histogram.getBrushState();
+        if (state) brushStates.set(colName, state);
+      },
+      // Callback when brush is cleared - remove from stack
+      onBrushClear: (colName) => {
+        const idx = interactionStack.findIndex(
+          (i) => i.type === 'brush' && i.columnName === colName
+        );
+        if (idx >= 0) interactionStack.splice(idx, 1);
+        brushStates.delete(colName);
+      },
+      // Callback when selection changes
+      onSelectionChange: (colName, hasSelection) => {
+        const idx = interactionStack.findIndex(
+          (i) => i.type === 'selection' && i.columnName === colName
+        );
+        if (hasSelection) {
+          if (idx < 0) {
+            interactionStack.push({
+              type: 'selection',
+              columnName: colName,
+              histogram,
+            });
+          }
+          // Save state
+          const state = histogram.getSelectionState();
+          selectionStates.set(colName, state);
+        } else {
+          if (idx >= 0) interactionStack.splice(idx, 1);
+          selectionStates.delete(colName);
+        }
+      },
     });
 
     activeVisualizations.push(histogram);
+
+    // Restore brush state if exists (after data is loaded)
+    const savedBrush = brushStates.get(column.name);
+    const savedSelection = selectionStates.get(column.name);
+
+    if (savedBrush || savedSelection) {
+      // Wait for data to load before restoring state
+      // Use waitForData() instead of fetchData() to avoid triggering a redundant fetch
+      histogram.waitForData().then(() => {
+        if (savedBrush) {
+          histogram.setBrushState(savedBrush);
+          // Add back to interaction stack
+          interactionStack.push({
+            type: 'brush',
+            columnName: column.name,
+            histogram,
+          });
+        }
+        if (savedSelection) {
+          histogram.setSelectionState(savedSelection);
+          // Add back to interaction stack
+          if (savedSelection.selectedBin !== null || savedSelection.selectedNull) {
+            interactionStack.push({
+              type: 'selection',
+              columnName: column.name,
+              histogram,
+            });
+          }
+        }
+      });
+    }
 
     console.log(`[Demo] Created histogram for "${column.name}" (${column.type})`);
   }
@@ -208,6 +321,20 @@ bridge
         attachHistograms(tableName, schema);
         updateTableInfo();
       }, 100);
+    });
+
+    // Global Esc handler for LIFO brush/selection clearing
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && interactionStack.length > 0) {
+        const last = interactionStack.pop()!;
+        if (last.type === 'brush') {
+          last.histogram.clearBrush();
+        } else {
+          last.histogram.clearSelection();
+        }
+        e.stopPropagation();
+        e.preventDefault();
+      }
     });
 
     // Update info with dimensions

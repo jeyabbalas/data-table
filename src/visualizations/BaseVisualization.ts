@@ -34,6 +34,12 @@ export interface VisualizationOptions {
   onStatsChange?: (stats: string | null) => void;
   /** Maximum number of histogram bins (default: 30) */
   maxBins?: number;
+  /** Callback when brush is committed (column name passed) */
+  onBrushCommit?: (columnName: string) => void;
+  /** Callback when brush is cleared (column name passed) */
+  onBrushClear?: (columnName: string) => void;
+  /** Callback when selection changes (column name and hasSelection passed) */
+  onSelectionChange?: (columnName: string, hasSelection: boolean) => void;
 }
 
 /**

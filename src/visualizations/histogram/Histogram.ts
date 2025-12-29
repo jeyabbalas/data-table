@@ -142,6 +142,9 @@ export class Histogram extends BaseVisualization {
   private data: HistogramData | null = null;
   // Note: backgroundData for crossfilter will be added in Phase 5
 
+  // Promise for initial data load (used by waitForData)
+  private dataPromise: Promise<void>;
+
   // Interaction state
   private hoveredBin: number | null = null;
   private hoveredNull: boolean = false;
@@ -160,6 +163,7 @@ export class Histogram extends BaseVisualization {
     sliding: false, // True while sliding existing brush
     slideStartX: 0, // X position where slide started
     slideVisualOffset: 0, // Pixel offset for smooth visual during slide
+    slideClickOffset: 0, // Offset from click position to brush left edge
     startX: 0, // Pixel position where brush started
     currentX: 0, // Current pixel position (for smooth animation)
     startBinIndex: -1, // First bin fully within brush
@@ -182,8 +186,8 @@ export class Histogram extends BaseVisualization {
   ) {
     super(container, column, options);
 
-    // Fetch data immediately
-    this.fetchData();
+    // Fetch data immediately and store the promise
+    this.dataPromise = this.fetchData();
   }
 
   // =========================================
@@ -805,6 +809,8 @@ export class Histogram extends BaseVisualization {
       this.hoveredNull = false;
       this.render();
       this.updateSelectedStats();
+      // Notify callback that selection changed
+      this.options.onSelectionChange?.(this.column.name, true);
       return;
     }
 
@@ -820,6 +826,8 @@ export class Histogram extends BaseVisualization {
           this.hoveredNull = false;
           this.render();
           this.updateSelectedStats();
+          // Notify callback that selection changed
+          this.options.onSelectionChange?.(this.column.name, true);
         }
         return; // Still return to prevent further processing
       }
@@ -857,13 +865,18 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Clear single bar selection
+   * Clear single bar selection (public for LIFO handling)
    */
-  private clearSelection(): void {
+  public clearSelection(): void {
+    const hadSelection = this.selectedBin !== null || this.selectedNull;
     this.selectedBin = null;
     this.selectedNull = false;
     this.options.onStatsChange?.(null);
     this.render();
+    // Notify callback if selection was cleared
+    if (hadSelection) {
+      this.options.onSelectionChange?.(this.column.name, false);
+    }
   }
 
   /**
@@ -924,6 +937,17 @@ export class Histogram extends BaseVisualization {
       this.brushState.lastClickTime = now;
       this.brushState.lastClickX = x;
       this.brushState.lastClickY = y;
+
+      // Calculate offset from click position to brush left edge for cursor sync
+      const startIdx = Math.min(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+      const startPos = this.barPositions[startIdx];
+      if (startPos) {
+        this.brushState.slideClickOffset = x - startPos.x;
+      }
+
       this.canvas.style.cursor = 'grabbing';
       return;
     }
@@ -954,6 +978,7 @@ export class Histogram extends BaseVisualization {
           sliding: false,
           slideStartX: 0,
           slideVisualOffset: 0,
+          slideClickOffset: 0,
           startX: x,
           currentX: x, // Track current position for smooth animation
           startBinIndex: -1, // Will be set when brush becomes active
@@ -994,6 +1019,8 @@ export class Histogram extends BaseVisualization {
         this.render();
         this.canvas.style.cursor = 'grab';
         this.updateBrushStats();
+        // Notify callback that brush was committed
+        this.options.onBrushCommit?.(this.column.name);
         return;
       } else {
         // No full bin selected - cancel the brush
@@ -1004,18 +1031,20 @@ export class Histogram extends BaseVisualization {
     }
 
     // Was just a click (no drag), reset brush state
-    if (this.brushState.startX !== 0) {
+    // Note: Also check !committed to prevent clearing committed brushes from
+    // window mouseup events triggered by clicks on other histograms
+    if (this.brushState.startX !== 0 && !this.brushState.committed) {
       this.resetBrush();
     }
   }
 
   /**
-   * Handle keyboard events - Escape cancels brush
+   * Handle keyboard events
+   * Note: Escape is handled globally in demo/main.ts for LIFO behavior across columns
    */
-  protected handleKeyDown(key: string): void {
-    if (key === 'Escape' && (this.brushState.active || this.brushState.committed)) {
-      this.cancelBrush();
-    }
+  protected handleKeyDown(_key: string): void {
+    // Escape handling moved to global handler for LIFO behavior
+    // Other keys can be handled here if needed
   }
 
   /**
@@ -1067,23 +1096,18 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Cancel brush selection (e.g., on Escape key)
-   */
-  private cancelBrush(): void {
-    this.resetBrush();
-    this.render();
-  }
-
-  /**
    * Reset brush state
    */
   private resetBrush(): void {
+    const wasCommitted = this.brushState.committed; // Check BEFORE clearing
+
     this.brushState = {
       active: false,
       committed: false,
       sliding: false,
       slideStartX: 0,
       slideVisualOffset: 0,
+      slideClickOffset: 0,
       startX: 0,
       currentX: 0,
       startBinIndex: -1,
@@ -1094,6 +1118,11 @@ export class Histogram extends BaseVisualization {
     };
     this.canvas.style.cursor = 'default';
     this.options.onStatsChange?.(null); // Restore default stats
+
+    // Notify callback if brush was committed (for state cleanup in demo)
+    if (wasCommitted) {
+      this.options.onBrushClear?.(this.column.name);
+    }
   }
 
   /**
@@ -1102,15 +1131,27 @@ export class Histogram extends BaseVisualization {
   private slideBrush(x: number): void {
     if (!this.brushState.sliding || !this.data) return;
 
-    const delta = x - this.brushState.slideStartX;
+    // Calculate where brush left edge should be based on cursor position and click offset
+    const brushLeftX = x - this.brushState.slideClickOffset;
+
     const binWidth = this.barPositions[0]?.width ?? 0;
     const binStep = binWidth + LAYOUT.barGap;
+    const chartLeft = this.chartArea.x;
 
-    // Track visual offset for smooth rendering (continuous)
-    this.brushState.slideVisualOffset = delta;
+    // Calculate which bin the brush left edge should snap to
+    const targetBinFloat = (brushLeftX - chartLeft) / binStep;
+    const targetBinIndex = Math.round(targetBinFloat);
 
-    // Calculate discrete bin shift
-    const binShift = Math.round(delta / binStep);
+    // Calculate bin shift from current position
+    const currentStartIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const binShift = targetBinIndex - currentStartIdx;
+
+    // Calculate visual offset for smooth rendering (difference from snapped position)
+    const snappedBrushLeft = chartLeft + targetBinIndex * binStep;
+    this.brushState.slideVisualOffset = brushLeftX - snappedBrushLeft;
 
     if (binShift !== 0) {
       // Calculate new indices
@@ -1136,9 +1177,9 @@ export class Histogram extends BaseVisualization {
       if (actualShift !== 0) {
         this.brushState.startBinIndex = newStart;
         this.brushState.endBinIndex = newEnd;
-        // Reset slideStartX and visual offset when bin indices change
-        this.brushState.slideStartX = x;
-        this.brushState.slideVisualOffset = 0;
+        // Recalculate visual offset after index change
+        const newSnappedLeft = chartLeft + newStart * binStep;
+        this.brushState.slideVisualOffset = brushLeftX - newSnappedLeft;
         this.updateBrushStats();
       }
     }
@@ -1260,5 +1301,100 @@ export class Histogram extends BaseVisualization {
     ctx.strokeStyle = COLORS.brushBorder;
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, width, height);
+  }
+
+  // =========================================
+  // Public State Getters/Setters
+  // =========================================
+
+  /**
+   * Wait for initial data to be loaded without triggering a new fetch.
+   * Use this when you need to restore state after histogram creation.
+   */
+  public waitForData(): Promise<void> {
+    return this.dataPromise;
+  }
+
+  /**
+   * Get the current brush state for persistence
+   * Returns null if no brush is committed
+   */
+  public getBrushState(): { startBinIndex: number; endBinIndex: number } | null {
+    if (!this.brushState.committed) return null;
+    return {
+      startBinIndex: this.brushState.startBinIndex,
+      endBinIndex: this.brushState.endBinIndex,
+    };
+  }
+
+  /**
+   * Restore brush state from saved state
+   * Call after data is loaded (fetchData completed)
+   */
+  public setBrushState(
+    state: { startBinIndex: number; endBinIndex: number } | null
+  ): void {
+    if (!state || !this.data) {
+      return;
+    }
+    // Validate indices are within bounds
+    const maxBin = this.data.bins.length - 1;
+    if (state.startBinIndex < 0 || state.endBinIndex > maxBin) {
+      return;
+    }
+
+    this.brushState.committed = true;
+    this.brushState.startBinIndex = state.startBinIndex;
+    this.brushState.endBinIndex = state.endBinIndex;
+    this.canvas.style.cursor = 'grab';
+    this.render();
+    this.updateBrushStats();
+  }
+
+  /**
+   * Get the current selection state for persistence
+   */
+  public getSelectionState(): {
+    selectedBin: number | null;
+    selectedNull: boolean;
+  } {
+    return {
+      selectedBin: this.selectedBin,
+      selectedNull: this.selectedNull,
+    };
+  }
+
+  /**
+   * Restore selection state from saved state
+   * Call after data is loaded (fetchData completed)
+   */
+  public setSelectionState(state: {
+    selectedBin: number | null;
+    selectedNull: boolean;
+  }): void {
+    if (!this.data) return;
+
+    // Validate selectedBin is within bounds
+    if (
+      state.selectedBin !== null &&
+      (state.selectedBin < 0 || state.selectedBin >= this.data.bins.length)
+    ) {
+      return;
+    }
+
+    this.selectedBin = state.selectedBin;
+    this.selectedNull = state.selectedNull;
+    this.render();
+    if (this.selectedBin !== null || this.selectedNull) {
+      this.updateSelectedStats();
+    }
+  }
+
+  /**
+   * Clear the brush (public method for external LIFO handling)
+   */
+  public clearBrush(): void {
+    this.resetBrush(); // This now calls onBrushClear if brush was committed
+    this.render();
   }
 }

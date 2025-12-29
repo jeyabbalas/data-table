@@ -59,7 +59,7 @@ const FONTS = {
 const PADDING = {
   top: 3,
   right: 4,
-  bottom: 18,
+  bottom: 22, // Increased to accommodate selection indicator (18 + 2 gap + 2 indicator)
   left: 4,
 };
 
@@ -69,6 +69,8 @@ const LAYOUT = {
   barGap: 1, // Gap between histogram bars
   barRadius: 2, // Rounded corner radius
   minBarHeight: 2, // Minimum visible bar height
+  selectionIndicatorHeight: 2, // Height of selection indicator line
+  selectionIndicatorGap: 2, // Gap between x-axis and indicator
 };
 
 /** Double-click detection constants */
@@ -247,6 +249,7 @@ export class Histogram extends BaseVisualization {
     this.drawAxisLine();
     this.drawBars();
     this.drawNullBar();
+    this.drawSelectionIndicators();
     this.drawAxisLabels();
 
     // Draw brush overlay if active or committed
@@ -510,6 +513,59 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
+   * Draw underline indicators below selected/brushed bars
+   */
+  private drawSelectionIndicators(): void {
+    if (!this.data) return;
+
+    const ctx = this.ctx;
+    const indicatorY =
+      this.chartArea.y + this.chartArea.height + LAYOUT.selectionIndicatorGap;
+    const indicatorHeight = LAYOUT.selectionIndicatorHeight;
+
+    // Check for brush selection
+    const hasBrush = this.brushState.active || this.brushState.committed;
+    let brushStartIdx = -1;
+    let brushEndIdx = -1;
+
+    if (hasBrush && this.brushState.startBinIndex !== -1) {
+      brushStartIdx = Math.min(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+      brushEndIdx = Math.max(
+        this.brushState.startBinIndex,
+        this.brushState.endBinIndex
+      );
+    }
+
+    // Draw indicators for histogram bars
+    for (let i = 0; i < this.data.bins.length; i++) {
+      const pos = this.barPositions[i];
+      if (!pos) continue;
+
+      const isSelected = this.selectedBin === i;
+      const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
+
+      if (isSelected || isInsideBrush) {
+        ctx.fillStyle = COLORS.selectionIndicator;
+        ctx.fillRect(pos.x, indicatorY, pos.width, indicatorHeight);
+      }
+    }
+
+    // Draw indicator for null bar if selected
+    if (this.selectedNull && this.data.nullCount > 0) {
+      ctx.fillStyle = COLORS.nullSelectionIndicator;
+      ctx.fillRect(
+        this.nullBarArea.x,
+        indicatorY,
+        this.nullBarArea.width,
+        indicatorHeight
+      );
+    }
+  }
+
+  /**
    * Draw axis labels (min/max always visible, hover stats shown via tooltip)
    */
   private drawAxisLabels(): void {
@@ -751,16 +807,20 @@ export class Histogram extends BaseVisualization {
       return;
     }
 
-    // Check histogram bars - select bar
+    // Check histogram bars - select bar (only if it has data)
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
-        this.selectedBin = pos.binIndex;
-        this.selectedNull = false;
-        this.hoveredBin = null;
-        this.hoveredNull = false;
-        this.render();
-        this.updateSelectedStats();
-        return;
+        // Only allow selection if bar has data
+        const bin = this.data.bins[pos.binIndex];
+        if (bin && bin.count > 0) {
+          this.selectedBin = pos.binIndex;
+          this.selectedNull = false;
+          this.hoveredBin = null;
+          this.hoveredNull = false;
+          this.render();
+          this.updateSelectedStats();
+        }
+        return; // Still return to prevent further processing
       }
     }
   }
@@ -941,6 +1001,8 @@ export class Histogram extends BaseVisualization {
           lastClickX: x,
           lastClickY: y,
         };
+        // Immediate cursor feedback for brush creation
+        this.canvas.style.cursor = 'crosshair';
         return;
       }
     }
@@ -1011,11 +1073,11 @@ export class Histogram extends BaseVisualization {
     // Update current position for smooth overlay
     this.brushState.currentX = x;
 
-    // Calculate which bins are FULLY within the brush range
+    // Calculate which bins overlap with the brush range
     const minX = Math.min(this.brushState.startX, x);
     const maxX = Math.max(this.brushState.startX, x);
 
-    // Find bins that are fully covered
+    // Find bins that have ANY overlap with the brush
     let newStartIdx = -1;
     let newEndIdx = -1;
 
@@ -1023,8 +1085,9 @@ export class Histogram extends BaseVisualization {
       const barLeft = pos.x;
       const barRight = pos.x + pos.width;
 
-      // A bin is "fully within" if its entire width is within [minX, maxX]
-      if (barLeft >= minX && barRight <= maxX) {
+      // A bin is selected if ANY part of it overlaps with [minX, maxX]
+      // Overlap exists when: barLeft < maxX AND barRight > minX
+      if (barLeft < maxX && barRight > minX) {
         if (newStartIdx === -1) {
           newStartIdx = pos.binIndex;
         }

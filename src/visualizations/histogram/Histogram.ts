@@ -159,6 +159,7 @@ export class Histogram extends BaseVisualization {
     committed: false, // True after mouseup, brush stays visible
     sliding: false, // True while sliding existing brush
     slideStartX: 0, // X position where slide started
+    slideVisualOffset: 0, // Pixel offset for smooth visual during slide
     startX: 0, // Pixel position where brush started
     currentX: 0, // Current pixel position (for smooth animation)
     startBinIndex: -1, // First bin fully within brush
@@ -993,6 +994,7 @@ export class Histogram extends BaseVisualization {
           committed: false,
           sliding: false,
           slideStartX: 0,
+          slideVisualOffset: 0,
           startX: x,
           currentX: x, // Track current position for smooth animation
           startBinIndex: -1, // Will be set when brush becomes active
@@ -1015,7 +1017,9 @@ export class Histogram extends BaseVisualization {
     // Stop sliding
     if (this.brushState.sliding) {
       this.brushState.sliding = false;
+      this.brushState.slideVisualOffset = 0; // Reset visual offset to snap to bin
       this.canvas.style.cursor = 'grab';
+      this.render(); // Re-render to show snapped position
       return;
     }
 
@@ -1120,6 +1124,7 @@ export class Histogram extends BaseVisualization {
       committed: false,
       sliding: false,
       slideStartX: 0,
+      slideVisualOffset: 0,
       startX: 0,
       currentX: 0,
       startBinIndex: -1,
@@ -1140,38 +1145,47 @@ export class Histogram extends BaseVisualization {
 
     const delta = x - this.brushState.slideStartX;
     const binWidth = this.barPositions[0]?.width ?? 0;
-    const binShift = Math.round(delta / (binWidth + LAYOUT.barGap));
+    const binStep = binWidth + LAYOUT.barGap;
 
-    if (binShift === 0) return;
+    // Track visual offset for smooth rendering (continuous)
+    this.brushState.slideVisualOffset = delta;
 
-    // Calculate new indices
-    const brushSize = Math.abs(
-      this.brushState.endBinIndex - this.brushState.startBinIndex
-    );
-    let newStart = this.brushState.startBinIndex + binShift;
-    let newEnd = this.brushState.endBinIndex + binShift;
+    // Calculate discrete bin shift
+    const binShift = Math.round(delta / binStep);
 
-    // Clamp to valid range
-    const maxBin = this.data.bins.length - 1;
-    if (newStart < 0) {
-      newStart = 0;
-      newEnd = brushSize;
+    if (binShift !== 0) {
+      // Calculate new indices
+      const brushSize = Math.abs(
+        this.brushState.endBinIndex - this.brushState.startBinIndex
+      );
+      let newStart = this.brushState.startBinIndex + binShift;
+      let newEnd = this.brushState.endBinIndex + binShift;
+
+      // Clamp to valid range
+      const maxBin = this.data.bins.length - 1;
+      if (newStart < 0) {
+        newStart = 0;
+        newEnd = brushSize;
+      }
+      if (newEnd > maxBin) {
+        newEnd = maxBin;
+        newStart = maxBin - brushSize;
+      }
+
+      // Only update indices if we actually moved (prevents drift when clamped)
+      const actualShift = newStart - this.brushState.startBinIndex;
+      if (actualShift !== 0) {
+        this.brushState.startBinIndex = newStart;
+        this.brushState.endBinIndex = newEnd;
+        // Reset slideStartX and visual offset when bin indices change
+        this.brushState.slideStartX = x;
+        this.brushState.slideVisualOffset = 0;
+        this.updateBrushStats();
+      }
     }
-    if (newEnd > maxBin) {
-      newEnd = maxBin;
-      newStart = maxBin - brushSize;
-    }
 
-    // Only update if we actually moved (prevents drift when clamped)
-    const actualShift = newStart - this.brushState.startBinIndex;
-    if (actualShift !== 0) {
-      this.brushState.startBinIndex = newStart;
-      this.brushState.endBinIndex = newEnd;
-      // Update slideStartX proportional to actual movement, not requested
-      this.brushState.slideStartX += actualShift * (binWidth + LAYOUT.barGap);
-      this.render();
-      this.updateBrushStats();
-    }
+    // Always re-render for smooth visual (even if bin indices haven't changed)
+    this.render();
   }
 
   /**
@@ -1228,7 +1242,7 @@ export class Histogram extends BaseVisualization {
     let width: number;
 
     if (this.brushState.committed) {
-      // Committed brush: snap to bar positions
+      // Committed brush: calculate base position from bar positions
       const startIdx = Math.min(
         this.brushState.startBinIndex,
         this.brushState.endBinIndex
@@ -1245,6 +1259,22 @@ export class Histogram extends BaseVisualization {
 
       x = startPos.x;
       width = endPos.x + endPos.width - startPos.x;
+
+      // Apply visual offset during sliding for smooth animation
+      if (this.brushState.sliding) {
+        x += this.brushState.slideVisualOffset;
+
+        // Clamp to chart area bounds
+        const chartLeft = this.chartArea.x;
+        const chartRight = this.chartArea.x + this.chartArea.width;
+
+        if (x < chartLeft) {
+          x = chartLeft;
+        }
+        if (x + width > chartRight) {
+          x = chartRight - width;
+        }
+      }
     } else {
       // Active brush: use pixel positions for smooth animation
       x = Math.min(this.brushState.startX, this.brushState.currentX);

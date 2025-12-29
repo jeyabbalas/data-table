@@ -894,50 +894,8 @@ export class Histogram extends BaseVisualization {
 
     const now = Date.now();
 
-    // Check for double-click on selected bar to clear selection
+    // If a bar is selected, don't start a brush - let handleClick handle toggle
     if (this.selectedBin !== null || this.selectedNull) {
-      const timeSinceLastClick = now - this.brushState.lastClickTime;
-      const distance = Math.hypot(
-        x - this.brushState.lastClickX,
-        y - this.brushState.lastClickY
-      );
-
-      // Check if clicking on the selected bar/null
-      let clickingOnSelected = false;
-      if (this.selectedNull && this.data.nullCount > 0) {
-        clickingOnSelected =
-          x >= this.nullBarArea.x &&
-          x <= this.nullBarArea.x + this.nullBarArea.width &&
-          y >= PADDING.top &&
-          y <= this.height - PADDING.bottom;
-      } else if (this.selectedBin !== null) {
-        const pos = this.barPositions[this.selectedBin];
-        if (pos) {
-          clickingOnSelected =
-            x >= pos.x &&
-            x <= pos.x + pos.width &&
-            y >= PADDING.top &&
-            y <= this.height - PADDING.bottom;
-        }
-      }
-
-      if (
-        clickingOnSelected &&
-        timeSinceLastClick < DOUBLE_CLICK_THRESHOLD &&
-        distance < DOUBLE_CLICK_DISTANCE
-      ) {
-        // Double-click on selected bar - clear selection
-        this.clearSelection();
-        this.brushState.lastClickTime = 0; // Reset to prevent triple-click issues
-        return;
-      }
-
-      // Update click tracking
-      this.brushState.lastClickTime = now;
-      this.brushState.lastClickX = x;
-      this.brushState.lastClickY = y;
-
-      // If a bar is selected, don't start a brush - let handleClick handle deselection
       return;
     }
 
@@ -956,6 +914,7 @@ export class Histogram extends BaseVisualization {
         // Double-click detected - clear brush
         this.resetBrush();
         this.render();
+        this.clickConsumedByMouseDown = true; // Prevent bar selection
         return;
       }
 

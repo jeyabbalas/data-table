@@ -52,14 +52,25 @@ describe('CellRenderer', () => {
 
     describe('integer type', () => {
       it('should format number with locale separators', () => {
-        const result = renderer.formatValue(1234567, 'integer');
-        // Locale-specific, but should contain separators
-        expect(result).toMatch(/1.?234.?567/);
+        const result = renderer.formatValue(123456, 'integer');
+        // Locale-specific, but should contain separators (using value < 1e6)
+        expect(result).toMatch(/123.?456/);
       });
 
       it('should handle bigint', () => {
-        const result = renderer.formatValue(BigInt(1234567), 'integer');
-        expect(result).toMatch(/1.?234.?567/);
+        const result = renderer.formatValue(BigInt(123456), 'integer');
+        expect(result).toMatch(/123.?456/);
+      });
+
+      it('should use scientific notation for large numbers', () => {
+        const result = renderer.formatValue(1234567, 'integer');
+        // Values >= 1e6 should use scientific notation
+        expect(result).toBe('1.23e+6');
+      });
+
+      it('should use scientific notation for large bigint', () => {
+        const result = renderer.formatValue(BigInt(1234567890), 'integer');
+        expect(result).toBe('1.23e+9');
       });
 
       it('should handle string value', () => {
@@ -217,8 +228,15 @@ describe('CellRenderer', () => {
 
     describe('integer values', () => {
       it('should format with locale separators', () => {
+        renderer.render(cellEl, 123456, schema);
+        // Using value < 1e6 to test locale separators
+        expect(cellEl.textContent).toMatch(/123.?456/);
+      });
+
+      it('should use scientific notation for large values', () => {
         renderer.render(cellEl, 1234567, schema);
-        expect(cellEl.textContent).toMatch(/1.?234.?567/);
+        // Values >= 1e6 should use scientific notation
+        expect(cellEl.textContent).toBe('1.23e+6');
       });
 
       it('should add number class', () => {
@@ -336,8 +354,15 @@ describe('CellRenderer', () => {
       });
 
       it('should set title for numbers with formatting', () => {
+        renderer.render(cellEl, 123456, schema);
+        // Using value < 1e6 to test locale separator formatting in title
+        expect(cellEl.title).toMatch(/123.?456/);
+      });
+
+      it('should set title for large numbers with scientific notation', () => {
         renderer.render(cellEl, 1234567, schema);
-        expect(cellEl.title).toMatch(/1.?234.?567/);
+        // Values >= 1e6 should use scientific notation in title
+        expect(cellEl.title).toBe('1.23e+6');
       });
 
       it('should set empty title for null values', () => {

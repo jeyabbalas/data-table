@@ -211,8 +211,8 @@
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-tertiary);
   margin-top: 0.25rem;
-  min-height: 2.2em;
-  line-height: 1.1;
+  min-height: 2.6em; /* Increased from 2.2em to accommodate scientific notation overflow */
+  line-height: 1.3; /* Slightly increased from 1.1 for readability */
 }
 
 .dt-col-stats .stats-label {

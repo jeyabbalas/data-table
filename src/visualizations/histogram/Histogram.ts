@@ -73,6 +73,12 @@ const LAYOUT = {
   selectionIndicatorGap: 2, // Gap between x-axis and indicator
 };
 
+/** Adaptive spacing for histograms with few bins */
+const FEW_BINS_THRESHOLD = 5;
+const FEW_BINS_GAP_RATIO = 0.15; // 15% of bar width as gap
+const FEW_BINS_MAX_BAR_WIDTH = 40; // Maximum bar width in pixels
+const FEW_BINS_SIDE_PADDING = 8; // Extra padding on sides
+
 /** Double-click detection constants */
 const DOUBLE_CLICK_THRESHOLD = 300; // ms
 const DOUBLE_CLICK_DISTANCE = 20; // pixels
@@ -82,39 +88,43 @@ const DOUBLE_CLICK_DISTANCE = 20; // pixels
 // =========================================
 
 /**
- * Format a number for axis labels with appropriate abbreviation
- * Prefers 1 decimal place, shows 2 only if needed, never more than 2
+ * Format a number for display with improved readability
+ *
+ * Rules:
+ * - Scientific notation for |value| >= 1e6 or |value| < 0.01 (except 0)
+ * - Locale-formatted integers for whole numbers
+ * - Up to 2 decimal places for regular decimals
  */
 function formatAxisValue(value: number): string {
+  // Handle special cases
+  if (!Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (value === 0) {
+    return '0';
+  }
+
   const abs = Math.abs(value);
 
-  if (abs >= 1e9) {
-    return (value / 1e9).toFixed(1) + 'B';
-  }
+  // Scientific notation for very large numbers
   if (abs >= 1e6) {
-    return (value / 1e6).toFixed(1) + 'M';
+    return value.toExponential(2);
   }
-  if (abs >= 1e3) {
-    return (value / 1e3).toFixed(1) + 'K';
+
+  // Scientific notation for very small numbers
+  if (abs < 0.01) {
+    return value.toExponential(2);
   }
-  if (abs < 0.01 && abs > 0) {
-    return value.toExponential(1);
-  }
+
+  // Integer formatting with thousands separators
   if (Number.isInteger(value)) {
     return value.toLocaleString();
   }
 
-  // Round to 1 decimal, but show 2 if needed for precision
-  const rounded1 = Math.round(value * 10) / 10;
-  if (rounded1 === value || Math.abs(rounded1 - value) < 0.001) {
-    return value.toLocaleString(undefined, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    });
-  }
-  // Value needs 2 decimals for precision
+  // Decimal formatting: up to 2 decimal places
   return value.toLocaleString(undefined, {
-    minimumFractionDigits: 1,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
 }
@@ -310,6 +320,7 @@ export class Histogram extends BaseVisualization {
 
   /**
    * Calculate x position and width for each bar
+   * Uses adaptive spacing for histograms with few bins
    */
   private calculateBarPositions(): void {
     if (!this.data) return;
@@ -320,6 +331,39 @@ export class Histogram extends BaseVisualization {
       return;
     }
 
+    // Use adaptive spacing for few bins to create visual separation
+    if (numBins <= FEW_BINS_THRESHOLD) {
+      const sidePadding = FEW_BINS_SIDE_PADDING;
+      const innerWidth = this.chartArea.width - 2 * sidePadding;
+
+      // Start with ideal bar width, cap at max
+      let barWidth = Math.min(
+        FEW_BINS_MAX_BAR_WIDTH,
+        (innerWidth / numBins) * 0.7 // 70% of equal division
+      );
+
+      // Calculate gap as ratio of bar width (minimum is standard barGap)
+      const gap = Math.max(LAYOUT.barGap, barWidth * FEW_BINS_GAP_RATIO);
+
+      // Recalculate to fit within innerWidth
+      const totalGaps = (numBins - 1) * gap;
+      const availableForBars = innerWidth - totalGaps;
+      barWidth = Math.min(barWidth, availableForBars / numBins);
+
+      // Center the bars within the chart area
+      const totalBarsWidth = numBins * barWidth + totalGaps;
+      const startX =
+        this.chartArea.x + (this.chartArea.width - totalBarsWidth) / 2;
+
+      this.barPositions = this.data.bins.map((_, index) => ({
+        x: startX + index * (barWidth + gap),
+        width: barWidth,
+        binIndex: index,
+      }));
+      return;
+    }
+
+    // Original logic for many bins (unchanged)
     const totalGaps = (numBins - 1) * LAYOUT.barGap;
     const availableWidth = this.chartArea.width - totalGaps;
     const barWidth = Math.max(1, availableWidth / numBins);
@@ -589,8 +633,23 @@ export class Histogram extends BaseVisualization {
       const label = formatAxisValue(this.data.min);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
-    } else {
-      // Normal case: min on left, max on right
+    }
+    // Handle discrete bins - show first and last value labels
+    else if (this.data.isDiscrete && this.data.bins.length > 0) {
+      const firstBin = this.data.bins[0];
+      const lastBin = this.data.bins[this.data.bins.length - 1];
+
+      ctx.textAlign = 'left';
+      ctx.fillText(formatAxisValue(firstBin.x0), PADDING.left, labelY);
+
+      ctx.textAlign = 'right';
+      const maxX = this.data.nullCount > 0
+        ? this.nullBarArea.x - LAYOUT.nullBarGap
+        : this.width - PADDING.right;
+      ctx.fillText(formatAxisValue(lastBin.x0), maxX, labelY);
+    }
+    // Normal continuous case: min on left, max on right
+    else {
       ctx.textAlign = 'left';
       const minLabel = formatAxisValue(this.data.min);
       ctx.fillText(minLabel, PADDING.left, labelY);
@@ -720,8 +779,8 @@ export class Histogram extends BaseVisualization {
       if (this.hoveredBin !== null && this.data) {
         const bin = this.data.bins[this.hoveredBin];
         if (bin) {
-          // Show single value without range for single-value columns
-          const rangeStr = this.data.isSingleValue
+          // Show single value without range for single-value or discrete columns
+          const rangeStr = (this.data.isSingleValue || this.data.isDiscrete)
             ? formatAxisValue(bin.x0)
             : `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
           const count = formatCount(bin.count);
@@ -1212,8 +1271,8 @@ export class Histogram extends BaseVisualization {
         rangeCount += this.data.bins[i].count;
       }
       const percent = formatPercent(rangeCount / this.data.total);
-      // Show single value without range for single-value columns
-      const rangeStr = this.data.isSingleValue
+      // Show single value without range for single-value or discrete columns
+      const rangeStr = (this.data.isSingleValue || this.data.isDiscrete)
         ? formatAxisValue(startBin.x0)
         : `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
 

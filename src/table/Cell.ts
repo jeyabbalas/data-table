@@ -8,6 +8,36 @@
 import type { ColumnSchema, DataType } from '../core/types';
 
 /**
+ * Format a number with scientific notation for extreme values.
+ * Same thresholds as histogram: |value| >= 1e6 or |value| < 0.01
+ *
+ * @returns Formatted string, or null to signal standard formatting should be used
+ */
+function formatNumberWithScientific(value: number): string | null {
+  if (!Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (value === 0) {
+    return null; // Use standard formatting for zero
+  }
+
+  const abs = Math.abs(value);
+
+  // Scientific notation for very large numbers
+  if (abs >= 1e6) {
+    return value.toExponential(2);
+  }
+
+  // Scientific notation for very small numbers
+  if (abs < 0.01) {
+    return value.toExponential(2);
+  }
+
+  return null; // Signal to use standard formatting
+}
+
+/**
  * Options for configuring the CellRenderer
  */
 export interface CellOptions {
@@ -119,12 +149,26 @@ export class CellRenderer {
 
   /**
    * Format an integer value with locale-aware thousand separators.
+   * Uses scientific notation for extreme values (|value| >= 1e6).
    */
   private formatInteger(value: unknown): string {
     if (typeof value === 'number') {
+      // Check if scientific notation is needed
+      const scientific = formatNumberWithScientific(value);
+      if (scientific !== null) {
+        return scientific;
+      }
       return value.toLocaleString(this.locale);
     }
     if (typeof value === 'bigint') {
+      // BigInt: check magnitude for scientific notation
+      const num = Number(value);
+      if (Number.isFinite(num)) {
+        const scientific = formatNumberWithScientific(num);
+        if (scientific !== null) {
+          return scientific;
+        }
+      }
       return value.toLocaleString(this.locale);
     }
     return String(value);
@@ -133,9 +177,15 @@ export class CellRenderer {
   /**
    * Format a decimal/float value with up to 4 decimal places.
    * Trailing zeros are removed.
+   * Uses scientific notation for extreme values (|value| >= 1e6 or |value| < 0.01).
    */
   private formatDecimal(value: unknown): string {
     if (typeof value === 'number') {
+      // Check if scientific notation is needed
+      const scientific = formatNumberWithScientific(value);
+      if (scientific !== null) {
+        return scientific;
+      }
       return value.toLocaleString(this.locale, {
         minimumFractionDigits: 0,
         maximumFractionDigits: 4,

@@ -10,6 +10,9 @@
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 
+/** Maximum distinct values to use discrete binning (one bin per unique value) */
+const DISCRETE_BIN_THRESHOLD = 5;
+
 // =========================================
 // Interfaces
 // =========================================
@@ -42,6 +45,8 @@ export interface HistogramData {
   total: number;
   /** True when all non-null values are identical (single value column) */
   isSingleValue: boolean;
+  /** True when using discrete binning (one bin per unique value, ≤ threshold) */
+  isDiscrete: boolean;
 }
 
 /**
@@ -54,6 +59,7 @@ interface ColumnStats {
   nullCount: number;
   q1: number | null;
   q3: number | null;
+  distinctCount: number;
 }
 
 /**
@@ -66,6 +72,7 @@ interface StatsResult {
   null_count: number;
   q1: number | null;
   q3: number | null;
+  distinct_count: number;
 }
 
 /**
@@ -73,6 +80,14 @@ interface StatsResult {
  */
 interface BinResult {
   bin_idx: number;
+  count: number;
+}
+
+/**
+ * SQL query result for discrete value counts
+ */
+interface DiscreteResult {
+  value: number;
   count: number;
 }
 
@@ -272,7 +287,8 @@ async function fetchColumnStats(
       COUNT("${column}") as count,
       COUNT(*) - COUNT("${column}") as null_count,
       APPROX_QUANTILE("${column}", 0.25) as q1,
-      APPROX_QUANTILE("${column}", 0.75) as q3
+      APPROX_QUANTILE("${column}", 0.75) as q3,
+      COUNT(DISTINCT "${column}") as distinct_count
     FROM "${tableName}"
     ${whereSQL}
   `;
@@ -287,6 +303,7 @@ async function fetchColumnStats(
       nullCount: 0,
       q1: null,
       q3: null,
+      distinctCount: 0,
     };
   }
 
@@ -298,7 +315,35 @@ async function fetchColumnStats(
     nullCount: Number(row.null_count),
     q1: row.q1,
     q3: row.q3,
+    distinctCount: Number(row.distinct_count),
   };
+}
+
+/**
+ * Fetch distinct values with counts for discrete binning
+ * Used when a column has few unique values (≤ DISCRETE_BIN_THRESHOLD)
+ */
+async function fetchDiscreteValues(
+  tableName: string,
+  column: string,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<DiscreteResult[]> {
+  const whereClause = filtersToWhereClause(filters);
+  const baseCondition = `"${column}" IS NOT NULL`;
+  const whereSQL = whereClause
+    ? `WHERE ${baseCondition} AND ${whereClause}`
+    : `WHERE ${baseCondition}`;
+
+  const sql = `
+    SELECT "${column}" as value, COUNT(*) as count
+    FROM "${tableName}"
+    ${whereSQL}
+    GROUP BY "${column}"
+    ORDER BY "${column}"
+  `;
+
+  return bridge.query<DiscreteResult>(sql);
 }
 
 /**
@@ -374,6 +419,7 @@ export async function fetchHistogramData(
         max: NaN,  // NaN indicates no valid numeric range
         total: stats.count + stats.nullCount,
         isSingleValue: false,
+        isDiscrete: false,
       };
     }
 
@@ -398,6 +444,34 @@ export async function fetchHistogramData(
         max: stats.max,
         total: stats.count + stats.nullCount,
         isSingleValue: true,
+        isDiscrete: true, // Single value is also discrete
+      };
+    }
+
+    // Step 2.5: Check for discrete binning (few unique values)
+    if (stats.distinctCount <= DISCRETE_BIN_THRESHOLD) {
+      const discreteValues = await fetchDiscreteValues(
+        tableName,
+        column,
+        filters,
+        bridge
+      );
+
+      // Create one bin per unique value (x0 = x1 = value)
+      const bins: HistogramBin[] = discreteValues.map((dv) => ({
+        x0: dv.value,
+        x1: dv.value,
+        count: Number(dv.count),
+      }));
+
+      return {
+        bins,
+        nullCount: stats.nullCount,
+        min: stats.min,
+        max: stats.max,
+        total: stats.count + stats.nullCount,
+        isSingleValue: false,
+        isDiscrete: true,
       };
     }
 
@@ -438,6 +512,7 @@ export async function fetchHistogramData(
       max: stats.max,
       total: stats.count + stats.nullCount,
       isSingleValue: false,
+      isDiscrete: false,
     };
   } catch (error) {
     throw new Error(

@@ -44,6 +44,10 @@ const COLORS = {
   // Brush selection
   brushOverlay: 'rgba(37, 99, 235, 0.2)', // Blue-600 with low alpha
   brushBorder: 'rgba(37, 99, 235, 0.6)', // Blue-600 with medium alpha
+
+  // Selection indicator
+  selectionIndicator: '#2563eb', // Blue-600 (same as barHover)
+  nullSelectionIndicator: '#d97706', // Amber-600 (same as nullHover)
 };
 
 /** Typography settings */
@@ -69,7 +73,7 @@ const LAYOUT = {
 
 /** Double-click detection constants */
 const DOUBLE_CLICK_THRESHOLD = 300; // ms
-const DOUBLE_CLICK_DISTANCE = 10; // pixels
+const DOUBLE_CLICK_DISTANCE = 20; // pixels
 
 // =========================================
 // Utility Functions
@@ -188,6 +192,12 @@ export class Histogram extends BaseVisualization {
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
+
+    // Clear any existing brush/selection state before fetching new data
+    // This ensures stale brush indices don't point to wrong bins after data refresh
+    this.resetBrush();
+    this.selectedBin = null;
+    this.selectedNull = false;
 
     try {
       // Use configured maxBins (default 20) - algorithm calculates optimal
@@ -512,18 +522,25 @@ export class Histogram extends BaseVisualization {
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = COLORS.axisText;
 
-    // Min label (left aligned)
-    ctx.textAlign = 'left';
-    const minLabel = formatAxisValue(this.data.min);
-    ctx.fillText(minLabel, PADDING.left, labelY);
+    // Handle single value case - show centered label instead of "X – X"
+    if (this.data.isSingleValue) {
+      ctx.textAlign = 'center';
+      const label = formatAxisValue(this.data.min);
+      const centerX = this.chartArea.x + this.chartArea.width / 2;
+      ctx.fillText(label, centerX, labelY);
+    } else {
+      // Normal case: min on left, max on right
+      ctx.textAlign = 'left';
+      const minLabel = formatAxisValue(this.data.min);
+      ctx.fillText(minLabel, PADDING.left, labelY);
 
-    // Max label (right aligned, before null bar if present)
-    ctx.textAlign = 'right';
-    const maxLabel = formatAxisValue(this.data.max);
-    const maxX = this.data.nullCount > 0
-      ? this.nullBarArea.x - LAYOUT.nullBarGap
-      : this.width - PADDING.right;
-    ctx.fillText(maxLabel, maxX, labelY);
+      ctx.textAlign = 'right';
+      const maxLabel = formatAxisValue(this.data.max);
+      const maxX = this.data.nullCount > 0
+        ? this.nullBarArea.x - LAYOUT.nullBarGap
+        : this.width - PADDING.right;
+      ctx.fillText(maxLabel, maxX, labelY);
+    }
 
     // Draw null symbol if nulls exist
     if (this.data.nullCount > 0) {
@@ -642,7 +659,10 @@ export class Histogram extends BaseVisualization {
       if (this.hoveredBin !== null && this.data) {
         const bin = this.data.bins[this.hoveredBin];
         if (bin) {
-          const rangeStr = `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
+          // Show single value without range for single-value columns
+          const rangeStr = this.data.isSingleValue
+            ? formatAxisValue(bin.x0)
+            : `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
           const count = formatCount(bin.count);
           const percent = formatPercent(bin.count / this.data.total);
 
@@ -754,7 +774,10 @@ export class Histogram extends BaseVisualization {
     if (this.selectedBin !== null) {
       const bin = this.data.bins[this.selectedBin];
       if (bin) {
-        const rangeStr = `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
+        // Show single value without range for single-value columns
+        const rangeStr = this.data.isSingleValue
+          ? formatAxisValue(bin.x0)
+          : `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
         const count = formatCount(bin.count);
         const percent = formatPercent(bin.count / this.data.total);
         this.options.onStatsChange?.(
@@ -1112,7 +1135,10 @@ export class Histogram extends BaseVisualization {
         rangeCount += this.data.bins[i].count;
       }
       const percent = formatPercent(rangeCount / this.data.total);
-      const rangeStr = `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
+      // Show single value without range for single-value columns
+      const rangeStr = this.data.isSingleValue
+        ? formatAxisValue(startBin.x0)
+        : `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
 
       this.options.onStatsChange?.(
         `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +

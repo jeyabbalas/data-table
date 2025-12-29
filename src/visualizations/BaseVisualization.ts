@@ -331,8 +331,8 @@ export abstract class BaseVisualization {
     window.removeEventListener('mouseup', this.boundMouseUp);
     window.removeEventListener('keydown', this.boundKeyDown);
 
-    // Stop observing resize
-    this.resizeObserver.disconnect();
+    // Stop observing resize (optional chaining in case constructor failed partially)
+    this.resizeObserver?.disconnect();
 
     // Remove canvas from DOM
     if (this.canvas.parentNode) {

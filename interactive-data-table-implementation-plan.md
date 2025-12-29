@@ -985,6 +985,12 @@ export class VisualizationFactory {
 }
 ```
 
+File: BaseVisualization.ts
+
+Problem: Window listeners for mouseup and keydown are attached per-visualization instance. If visualizations are created/destroyed rapidly (e.g., during column reorder), listeners accumulate. Leads to performance degradation over time. 
+
+Fix: Use event delegation or a shared listener manager.
+
 **Verification:**
 - Correct visualization type selected per column type
 - Plugin registration works

@@ -40,6 +40,8 @@ export interface HistogramData {
   max: number;
   /** Total count of all values (including nulls) */
   total: number;
+  /** True when all non-null values are identical (single value column) */
+  isSingleValue: boolean;
 }
 
 /**
@@ -363,14 +365,15 @@ export async function fetchHistogramData(
     // Step 1: Fetch column statistics
     const stats = await fetchColumnStats(tableName, column, filters, bridge);
 
-    // Handle edge case: no data
+    // Handle edge case: no data (all nulls or empty)
     if (stats.count === 0 || stats.min === null || stats.max === null) {
       return {
         bins: [],
         nullCount: stats.nullCount,
-        min: 0,
-        max: 0,
+        min: NaN,  // NaN indicates no valid numeric range
+        max: NaN,  // NaN indicates no valid numeric range
         total: stats.count + stats.nullCount,
+        isSingleValue: false,
       };
     }
 
@@ -386,7 +389,7 @@ export async function fetchHistogramData(
       maxBinsValue
     );
 
-    // Handle edge case: all same value
+    // Handle edge case: all same value (single value column)
     if (stats.min === stats.max) {
       return {
         bins: [{ x0: stats.min, x1: stats.min, count: stats.count }],
@@ -394,6 +397,7 @@ export async function fetchHistogramData(
         min: stats.min,
         max: stats.max,
         total: stats.count + stats.nullCount,
+        isSingleValue: true,
       };
     }
 
@@ -433,6 +437,7 @@ export async function fetchHistogramData(
       min: stats.min,
       max: stats.max,
       total: stats.count + stats.nullCount,
+      isSingleValue: false,
     };
   } catch (error) {
     throw new Error(

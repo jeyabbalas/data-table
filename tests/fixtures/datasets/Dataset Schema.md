@@ -125,6 +125,94 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 
 ---
 
+## DateTime Stress Tests Dataset
+
+**Source:** Synthetically generated for stress testing datetime histogram visualization
+
+**Description:** A comprehensive dataset designed to test edge cases in datetime data visualization, particularly histogram rendering with automatic time interval detection. Contains columns covering all DuckDB datetime types, various time ranges for interval testing, edge cases, precision variants, and string format columns for parsing tests.
+
+**Size:** 450 rows × 39 columns
+
+**Specification:** See `docs/duckdb-datetime-stress-test.md` for detailed requirements.
+
+### Schema
+
+#### Core DateTime Types
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `id` | integer | No | Row identifier (1-450) |
+| `date_standard` | DATE | No | Standard ISO dates spanning 50 years |
+| `time_standard` | TIME | No | Random times with microsecond precision |
+| `timestamp_standard` | TIMESTAMP | No | Timestamps spanning 50 years |
+| `timestamp_tz` | TIMESTAMPTZ | No | Timezone-aware timestamps with various offsets |
+
+#### Time Range Coverage (Interval Detection Testing)
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `range_seconds` | TIMESTAMP | No | ~2 minutes of data - tests 'second' interval |
+| `range_minutes` | TIMESTAMP | No | ~2 hours of data - tests 'minute' interval |
+| `range_hours` | TIMESTAMP | No | ~2 days of data - tests 'hour' interval |
+| `range_days` | TIMESTAMP | No | ~2 months of data - tests 'day' interval |
+| `range_weeks` | TIMESTAMP | No | ~6 months of data - tests 'week' interval |
+| `range_months` | TIMESTAMP | No | ~3 years of data - tests 'month' interval |
+| `range_years` | TIMESTAMP | No | ~20 years of data - tests 'year' interval |
+
+#### Edge Cases
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `all_nulls` | TIMESTAMP | Yes | 100% null values - tests empty column handling |
+| `single_value` | TIMESTAMP | No | All identical timestamps - tests single-bin histogram |
+| `with_nulls` | TIMESTAMP | Yes | ~20% null values - tests mixed null handling |
+| `epoch_boundary` | TIMESTAMP | No | Values around Unix epoch (1970-01-01) |
+| `y2k_boundary` | TIMESTAMP | No | Values around Y2K (2000-01-01) |
+| `leap_year_dates` | DATE | No | Feb 28/29 across leap and non-leap years |
+| `month_boundaries` | DATE | No | End of months (28, 29, 30, 31 day variants) |
+
+#### Precision Variants
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `precision_whole_sec` | TIMESTAMP | No | Whole seconds only (no fractional) |
+| `precision_milli` | TIMESTAMP | No | Millisecond precision |
+| `precision_micro` | TIMESTAMP | No | Full microsecond precision |
+
+#### Special Cases
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `midnight_times` | TIME | No | 00:00:00 values with varying microseconds |
+| `end_of_day` | TIME | No | 23:59:59.999999 values |
+| `timezone_variety` | TIMESTAMPTZ | No | 15 different UTC offsets |
+
+#### String Format Columns (strptime Parsing Tests)
+
+| Column | Data Type | Format | Example |
+|--------|-----------|--------|---------|
+| `str_date_iso` | VARCHAR | `%Y-%m-%d` | `2025-12-30` |
+| `str_date_us` | VARCHAR | `%m/%d/%Y` | `12/30/2025` |
+| `str_date_eu` | VARCHAR | `%d/%m/%Y` | `30/12/2025` |
+| `str_date_compact` | VARCHAR | `%Y%m%d` | `20251230` |
+| `str_date_long` | VARCHAR | `%B %d, %Y` | `December 30, 2025` |
+| `str_time_24h` | VARCHAR | `%H:%M:%S` | `14:30:45` |
+| `str_time_12h` | VARCHAR | `%I:%M:%S %p` | `02:30:45 PM` |
+| `str_time_micro` | VARCHAR | `%H:%M:%S.%f` | `14:30:45.123456` |
+| `str_datetime_iso` | VARCHAR | `%Y-%m-%d %H:%M:%S` | `2025-12-30 14:30:45` |
+| `str_datetime_iso_t` | VARCHAR | `%Y-%m-%dT%H:%M:%S` | `2025-12-30T14:30:45` |
+| `str_datetime_us` | VARCHAR | `%m/%d/%Y %I:%M:%S %p` | `12/30/2025 02:30:45 PM` |
+| `str_datetime_eu` | VARCHAR | `%d/%m/%Y %H:%M:%S` | `30/12/2025 14:30:45` |
+
+#### Ambiguous Format Test Cases
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `ambig_date` | VARCHAR | No | Dates where MM and DD are both 01-12 (ambiguous format) |
+| `str_date_short_year` | VARCHAR | No | 2-digit year format (`%d/%m/%y`) |
+
+---
+
 ## File Formats
 
 Each dataset is provided in three formats:

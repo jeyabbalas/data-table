@@ -787,7 +787,8 @@ export class Histogram extends BaseVisualization {
           const percent = formatPercent(bin.count / this.data.total);
 
           this.options.onStatsChange?.(
-            `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+            `<span class="stats-label">Bin:</span><br>` +
+            `${rangeStr}<br>` +
             `<span class="stats-label">Count:</span> ${count} (${percent})`
           );
         }
@@ -796,7 +797,8 @@ export class Histogram extends BaseVisualization {
         const percent = formatPercent(this.data.nullCount / this.data.total);
 
         this.options.onStatsChange?.(
-          `<span class="stats-label">Bin:</span> null<br>` +
+          `<span class="stats-label">Bin:</span><br>` +
+          `null<br>` +
           `<span class="stats-label">Count:</span> ${count} (${percent})`
         );
       } else {
@@ -909,7 +911,8 @@ export class Histogram extends BaseVisualization {
         const count = formatCount(bin.count);
         const percent = formatPercent(bin.count / this.data.total);
         this.options.onStatsChange?.(
-          `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+          `<span class="stats-label">Bin:</span><br>` +
+          `${rangeStr}<br>` +
           `<span class="stats-label">Count:</span> ${count} (${percent})`
         );
       }
@@ -917,7 +920,8 @@ export class Histogram extends BaseVisualization {
       const count = formatCount(this.data.nullCount);
       const percent = formatPercent(this.data.nullCount / this.data.total);
       this.options.onStatsChange?.(
-        `<span class="stats-label">Bin:</span> null<br>` +
+        `<span class="stats-label">Bin:</span><br>` +
+        `null<br>` +
         `<span class="stats-label">Count:</span> ${count} (${percent})`
       );
     }
@@ -1277,7 +1281,8 @@ export class Histogram extends BaseVisualization {
         : `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
 
       this.options.onStatsChange?.(
-        `<span class="stats-label">Bin:</span> ${rangeStr}<br>` +
+        `<span class="stats-label">Bin:</span><br>` +
+        `${rangeStr}<br>` +
         `<span class="stats-label">Count:</span> ${formatCount(rangeCount)} (${percent})`
       );
     }

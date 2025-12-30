@@ -1,13 +1,16 @@
 /**
  * Histogram visualization module
  *
- * Exports the Histogram visualization class and data fetching utilities.
+ * Exports histogram visualizations for numeric and date/timestamp columns.
  */
 
-// Histogram visualization class
+// Numeric histogram
 export { Histogram } from './Histogram';
 
-// Data types and fetching utilities
+// Date/timestamp histogram
+export { DateHistogram } from './DateHistogram';
+
+// Numeric histogram data types and utilities
 export {
   // Types
   type HistogramBin,
@@ -18,3 +21,22 @@ export {
   filtersToWhereClause,
   formatSQLValue,
 } from './HistogramData';
+
+// Date histogram data types and utilities
+export {
+  // Types
+  type DateHistogramBin,
+  type DateHistogramData,
+  type TimeInterval,
+  // Functions
+  fetchDateHistogramData,
+} from './DateHistogramData';
+
+// Date formatting utilities
+export {
+  type DateFormatContext,
+  analyzeDateContext,
+  formatDateLabel,
+  formatDateRange,
+  formatDateForStats,
+} from './DateFormatters';

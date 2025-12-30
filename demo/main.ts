@@ -1,13 +1,15 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.4: Testing Histogram Interaction
+ * Phase 4, Task 4.5: Testing Date Histogram
  *
  * This demo tests:
- * - Histogram click-to-filter (single bin or null bar)
- * - Brush selection for range filtering
- * - Stats line updates on hover
- * - Hover interaction with tooltips
+ * - DateHistogram for date/timestamp columns
+ * - Histogram for numeric columns
+ * - Context-aware date labels (Jan, Jan 2, 10am, etc.)
+ * - All interaction patterns (hover, click, brush)
+ *
+ * Test with NYC Taxi dataset to see DateHistogram in action.
  */
 
 import {
@@ -17,7 +19,7 @@ import {
   TableContainer,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
-import { Histogram } from '../src/visualizations/histogram';
+import { Histogram, DateHistogram } from '../src/visualizations/histogram';
 import type { DataType, ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
 
@@ -60,7 +62,7 @@ const selectionStates = new Map<
 interface ActiveInteraction {
   type: 'brush' | 'selection';
   columnName: string;
-  histogram: Histogram;
+  histogram: Histogram | DateHistogram;
 }
 const interactionStack: ActiveInteraction[] = [];
 
@@ -69,21 +71,28 @@ function updateInfo(message: string): void {
 }
 
 /**
- * Check if a column type is numeric (suitable for histogram)
+ * Check if a column type is numeric (suitable for numeric histogram)
  */
 function isNumericType(type: DataType): boolean {
   return type === 'integer' || type === 'float' || type === 'decimal';
 }
 
 /**
- * Attach histogram visualizations to numeric column headers
+ * Check if a column type is date/timestamp (suitable for date histogram)
+ */
+function isDateType(type: DataType): boolean {
+  return type === 'date' || type === 'timestamp';
+}
+
+/**
+ * Attach histogram visualizations to numeric and date/timestamp columns
  */
 function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   if (!tableContainer) return;
 
   // Save brush/selection states before destroying histograms
   for (const viz of activeVisualizations) {
-    if (viz instanceof Histogram) {
+    if (viz instanceof Histogram || viz instanceof DateHistogram) {
       const column = viz.getColumn();
       const brushState = viz.getBrushState();
       if (brushState) {
@@ -108,16 +117,17 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   // Get all column headers
   const headers = tableContainer.getColumnHeaders();
   const numericCount = schema.filter((col) => isNumericType(col.type)).length;
+  const dateCount = schema.filter((col) => isDateType(col.type)).length;
 
   console.log(
-    `[Demo] Attaching histograms to ${numericCount} numeric columns out of ${headers.length} total`
+    `[Demo] Attaching histograms: ${numericCount} numeric + ${dateCount} date columns out of ${headers.length} total`
   );
 
   for (const header of headers) {
     const column = header.getColumn();
 
-    // Only attach histograms to numeric columns
-    if (!isNumericType(column.type)) {
+    // Skip columns that don't need visualization
+    if (!isNumericType(column.type) && !isDateType(column.type)) {
       continue;
     }
 
@@ -125,50 +135,43 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
     const statsEl = header.getStatsElement();
     const defaultStats = `<span class="stats-label">Rows:</span> ${tableState.totalRows.get().toLocaleString()}`;
 
-    // Create histogram visualization with filter and stats callbacks
-    const histogram = new Histogram(vizContainer, column, {
+    // Common visualization options
+    const vizOptions = {
       tableName,
       bridge,
       filters: tableState.filters.get(),
-      onFilterChange: (filter) => {
+      onFilterChange: (filter: import('../src/core/types').Filter) => {
         console.log('[Demo] Filter created:', filter);
         actions.addFilter(filter);
       },
-      onStatsChange: (stats) => {
+      onStatsChange: (stats: string | null) => {
         if (stats) {
           statsEl.innerHTML = stats;
         } else {
-          // Restore default
           statsEl.innerHTML = defaultStats;
         }
       },
-      // Callback when brush is committed - add to LIFO stack
-      onBrushCommit: (colName) => {
-        // Remove any existing brush entry for this column
+      onBrushCommit: (colName: string) => {
         const idx = interactionStack.findIndex(
           (i) => i.type === 'brush' && i.columnName === colName
         );
         if (idx >= 0) interactionStack.splice(idx, 1);
-        // Add to top of stack
         interactionStack.push({
           type: 'brush',
           columnName: colName,
-          histogram,
+          histogram: visualization,
         });
-        // Save state
-        const state = histogram.getBrushState();
+        const state = visualization.getBrushState();
         if (state) brushStates.set(colName, state);
       },
-      // Callback when brush is cleared - remove from stack
-      onBrushClear: (colName) => {
+      onBrushClear: (colName: string) => {
         const idx = interactionStack.findIndex(
           (i) => i.type === 'brush' && i.columnName === colName
         );
         if (idx >= 0) interactionStack.splice(idx, 1);
         brushStates.delete(colName);
       },
-      // Callback when selection changes
-      onSelectionChange: (colName, hasSelection) => {
+      onSelectionChange: (colName: string, hasSelection: boolean) => {
         const idx = interactionStack.findIndex(
           (i) => i.type === 'selection' && i.columnName === colName
         );
@@ -177,53 +180,56 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
             interactionStack.push({
               type: 'selection',
               columnName: colName,
-              histogram,
+              histogram: visualization,
             });
           }
-          // Save state
-          const state = histogram.getSelectionState();
+          const state = visualization.getSelectionState();
           selectionStates.set(colName, state);
         } else {
           if (idx >= 0) interactionStack.splice(idx, 1);
           selectionStates.delete(colName);
         }
       },
-    });
+    };
 
-    activeVisualizations.push(histogram);
+    // Create appropriate visualization based on column type
+    let visualization: Histogram | DateHistogram;
+    if (isDateType(column.type)) {
+      visualization = new DateHistogram(vizContainer, column, vizOptions);
+      console.log(`[Demo] Created DateHistogram for "${column.name}" (${column.type})`);
+    } else {
+      visualization = new Histogram(vizContainer, column, vizOptions);
+      console.log(`[Demo] Created Histogram for "${column.name}" (${column.type})`);
+    }
 
-    // Restore brush state if exists (after data is loaded)
+    activeVisualizations.push(visualization);
+
+    // Restore brush/selection state if exists
     const savedBrush = brushStates.get(column.name);
     const savedSelection = selectionStates.get(column.name);
 
     if (savedBrush || savedSelection) {
-      // Wait for data to load before restoring state
-      // Use waitForData() instead of fetchData() to avoid triggering a redundant fetch
-      histogram.waitForData().then(() => {
+      visualization.waitForData().then(() => {
         if (savedBrush) {
-          histogram.setBrushState(savedBrush);
-          // Add back to interaction stack
+          visualization.setBrushState(savedBrush);
           interactionStack.push({
             type: 'brush',
             columnName: column.name,
-            histogram,
+            histogram: visualization,
           });
         }
         if (savedSelection) {
-          histogram.setSelectionState(savedSelection);
-          // Add back to interaction stack
+          visualization.setSelectionState(savedSelection);
           if (savedSelection.selectedBin !== null || savedSelection.selectedNull) {
             interactionStack.push({
               type: 'selection',
               columnName: column.name,
-              histogram,
+              histogram: visualization,
             });
           }
         }
       });
     }
-
-    console.log(`[Demo] Created histogram for "${column.name}" (${column.type})`);
   }
 
   histogramsAttached = true;
@@ -238,10 +244,11 @@ function updateTableInfo(): void {
   if (!tableName) return;
 
   const numericCols = schema.filter((col) => isNumericType(col.type)).length;
+  const dateCols = schema.filter((col) => isDateType(col.type)).length;
   const histogramCount = activeVisualizations.length;
 
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric columns)`;
+  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric, ${dateCols} date)`;
 
   // Show sort info if any
   const sortColumns = tableState.sortColumns.get();

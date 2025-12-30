@@ -5,6 +5,7 @@
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, ParquetLoadOptions } from './types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
+import { enhanceSchemaTypes } from './common';
 
 let tableCounter = 0;
 
@@ -59,7 +60,10 @@ export async function loadParquet(
 
     // Get full schema info from DESCRIBE
     const describeResult = await conn.query(`DESCRIBE "${tableName}"`);
-    const describeRows = describeResult.toArray().map((row) => row.toJSON());
+    let describeRows = describeResult.toArray().map((row) => row.toJSON());
+
+    // Enhance schema by detecting and converting string columns to appropriate types
+    describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => ({

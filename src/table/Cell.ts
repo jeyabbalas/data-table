@@ -88,7 +88,7 @@ export class CellRenderer {
       cellEl.classList.add(nullClass);
       cellEl.classList.remove(numberClass);
     } else {
-      const formatted = this.formatValue(value, schema?.type);
+      const formatted = this.formatValue(value, schema?.type, schema?.originalType);
       cellEl.textContent = formatted;
       cellEl.title = formatted;  // Tooltip shows full text on hover
       cellEl.classList.remove(nullClass);
@@ -107,9 +107,10 @@ export class CellRenderer {
    *
    * @param value - The value to format
    * @param type - The data type (optional)
+   * @param originalType - The original DuckDB type (optional, used for TIMESTAMPTZ detection)
    * @returns Formatted string representation
    */
-  formatValue(value: unknown, type?: DataType): string {
+  formatValue(value: unknown, type?: DataType, originalType?: string): string {
     if (value === null || value === undefined) {
       return 'null';
     }
@@ -133,13 +134,13 @@ export class CellRenderer {
         return this.formatDate(value);
 
       case 'timestamp':
-        return this.formatTimestamp(value);
+        return this.formatTimestamp(value, originalType);
 
       case 'time':
         return this.formatTimeValue(value);
 
       case 'interval':
-        return String(value);
+        return this.formatInterval(value);
 
       case 'string':
       default:
@@ -196,53 +197,217 @@ export class CellRenderer {
 
   /**
    * Format a date value as ISO date string (YYYY-MM-DD).
+   * Handles: Date objects, ISO strings, and BigInt/number/string (milliseconds from DuckDB-WASM).
    */
   private formatDate(value: unknown): string {
     if (value instanceof Date) {
       return value.toISOString().split('T')[0];
     }
-    // DuckDB may return date as string in ISO format
+    // DuckDB-WASM returns DATE as milliseconds since epoch (via row.toJSON())
+    if (typeof value === 'bigint' || typeof value === 'number') {
+      const date = new Date(Number(value)); // Value IS milliseconds
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+      return String(value);
+    }
+    // Handle string values
+    if (typeof value === 'string') {
+      // Check if it's a numeric string (milliseconds since epoch)
+      if (/^-?\d+(\.\d+)?$/.test(value)) {
+        const date = new Date(Number(value)); // Value IS milliseconds
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0];
+        }
+      }
+      // Already formatted string (ISO date or other format)
+      return value;
+    }
     return String(value);
   }
 
   /**
-   * Format a timestamp value using locale-aware formatting.
+   * Format a timestamp value in consistent UTC format.
+   * Output: "2025-12-30 14:30:45" or "2025-12-30 14:30:45.123" (trailing zeros removed)
+   * For TIMESTAMPTZ: "2025-12-30 14:30:45 +00:00" (with timezone offset)
+   * Handles: Date objects, ISO strings, and BigInt/number/string (milliseconds from DuckDB-WASM).
    */
-  private formatTimestamp(value: unknown): string {
-    if (value instanceof Date) {
-      return value.toLocaleString(this.locale);
+  private formatTimestamp(value: unknown, originalType?: string): string {
+    const isTimestampTz = originalType?.toUpperCase().includes('TIMESTAMPTZ') ||
+      originalType?.toUpperCase().includes('WITH TIME ZONE');
+
+    // Helper to format the result with optional timezone
+    const formatResult = (date: Date): string => {
+      const formatted = this.formatTimestampCore(date);
+      if (isTimestampTz) {
+        return `${formatted} +00:00`;
+      }
+      return formatted;
+    };
+
+    // DuckDB-WASM returns TIMESTAMP as milliseconds since epoch (via row.toJSON())
+    if (typeof value === 'bigint' || typeof value === 'number') {
+      const date = new Date(Number(value)); // Value IS milliseconds
+      if (!isNaN(date.getTime())) {
+        return formatResult(date);
+      }
+      return String(value);
     }
-    // Try to parse string as date
+
+    // Handle string values
     if (typeof value === 'string') {
-      try {
-        const date = new Date(value);
+      // Check if it's a numeric string (milliseconds since epoch)
+      if (/^-?\d+(\.\d+)?$/.test(value)) {
+        const date = new Date(Number(value)); // Value IS milliseconds
         if (!isNaN(date.getTime())) {
-          return date.toLocaleString(this.locale);
+          return formatResult(date);
+        }
+      }
+
+      // Check if string value has timezone offset: 2025-12-30T14:30:45+05:00
+      const tzMatch = value.match(/^(.+?)([+-]\d{2}:?\d{2})$/);
+      if (tzMatch) {
+        const [, , offset] = tzMatch;
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          const formatted = this.formatTimestampCore(parsed);
+          const normalizedOffset = offset.includes(':') ? offset :
+            `${offset.slice(0, 3)}:${offset.slice(3)}`;
+          return `${formatted} ${normalizedOffset}`;
+        }
+      }
+
+      // Try to parse as ISO date string
+      try {
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          return formatResult(parsed);
         }
       } catch {
-        // Fall through to string
+        // Fall through
       }
     }
+
+    // Handle Date objects
+    if (value instanceof Date) {
+      return formatResult(value);
+    }
+
     return String(value);
+  }
+
+  /**
+   * Core timestamp formatting logic - produces "2025-12-30 14:30:45.123" format
+   */
+  private formatTimestampCore(date: Date): string {
+    // Use ISO format: "2025-12-30T14:30:45.123Z"
+    const iso = date.toISOString();
+    // Replace T with space, remove Z: "2025-12-30 14:30:45.123"
+    let formatted = iso.replace('T', ' ').replace('Z', '');
+    // Remove trailing zeros from milliseconds
+    // ".120" → ".12", ".100" → ".1", ".000" → ""
+    formatted = formatted.replace(/(\.\d*)0+$/, '$1').replace(/\.$/, '');
+    return formatted;
+  }
+
+  /**
+   * Format an INTERVAL value in compact human-readable format.
+   * DuckDB formats: "1 year 2 months 3 days 04:05:06", "2 days", "00:00:00"
+   * Output: "1y 2mo 3d 4h 5m 6s", "2d", "0s"
+   */
+  private formatInterval(value: unknown): string {
+    if (typeof value !== 'string') {
+      return String(value);
+    }
+
+    const input = value.trim();
+    if (!input) return '0s';
+
+    const parts: string[] = [];
+
+    // Parse year/month/day components
+    const yearMatch = input.match(/(\d+)\s*years?/i);
+    const monthMatch = input.match(/(\d+)\s*months?/i);
+    const dayMatch = input.match(/(\d+)\s*days?/i);
+
+    if (yearMatch) parts.push(`${parseInt(yearMatch[1], 10)}y`);
+    if (monthMatch) parts.push(`${parseInt(monthMatch[1], 10)}mo`);
+    if (dayMatch) parts.push(`${parseInt(dayMatch[1], 10)}d`);
+
+    // Parse time component (HH:MM:SS or HH:MM:SS.ffffff)
+    const timeMatch = input.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
+    if (timeMatch) {
+      const hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+      const seconds = parseInt(timeMatch[3], 10);
+      const fraction = timeMatch[4];
+
+      if (hours > 0) parts.push(`${hours}h`);
+      if (minutes > 0) parts.push(`${minutes}m`);
+      if (seconds > 0 || fraction) {
+        if (fraction) {
+          // Remove trailing zeros from fraction
+          const trimmedFraction = fraction.replace(/0+$/, '');
+          if (trimmedFraction) {
+            parts.push(`${seconds}.${trimmedFraction}s`);
+          } else {
+            parts.push(`${seconds}s`);
+          }
+        } else {
+          parts.push(`${seconds}s`);
+        }
+      }
+    }
+
+    // Return "0s" for zero interval
+    return parts.length > 0 ? parts.join(' ') : '0s';
   }
 
   /**
    * Format a TIME value.
-   * DuckDB returns TIME as "HH:MM:SS" or "HH:MM:SS.ffffff".
-   * Truncate microseconds to milliseconds for cleaner display.
+   * DuckDB returns TIME as "HH:MM:SS" or "HH:MM:SS.ffffff", or BigInt (microseconds since midnight).
+   * Truncate microseconds to milliseconds and remove trailing zeros.
+   * Examples: "14:30:45.100" → "14:30:45.1", "14:30:45.000" → "14:30:45"
    */
   private formatTimeValue(value: unknown): string {
+    // DuckDB returns TIME as BigInt: microseconds since midnight
+    if (typeof value === 'bigint' || typeof value === 'number') {
+      const totalMicros = Number(value);
+      const totalSeconds = Math.floor(totalMicros / 1_000_000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      const micros = totalMicros % 1_000_000;
+
+      const hh = String(hours).padStart(2, '0');
+      const mm = String(minutes).padStart(2, '0');
+      const ss = String(seconds).padStart(2, '0');
+
+      if (micros > 0) {
+        // Truncate to milliseconds (first 3 digits of microseconds) and remove trailing zeros
+        const ms = Math.floor(micros / 1000);
+        const frac = String(ms).padStart(3, '0').replace(/0+$/, '');
+        if (frac) {
+          return `${hh}:${mm}:${ss}.${frac}`;
+        }
+      }
+      return `${hh}:${mm}:${ss}`;
+    }
+
     if (typeof value === 'string') {
       // Match TIME format: HH:MM:SS or HH:MM:SS.ffffff
       const match = value.match(/^(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
       if (match) {
         const [, time, frac] = match;
-        // If fractional seconds exist and have more than 3 digits, truncate to milliseconds
-        if (frac && frac.length > 3) {
-          return `${time}.${frac.slice(0, 3)}`;
+        if (frac) {
+          // Truncate to milliseconds (3 digits) and remove trailing zeros
+          const truncated = frac.slice(0, 3).replace(/0+$/, '');
+          if (truncated) {
+            return `${time}.${truncated}`;
+          }
         }
-        // Return as-is (either no fraction or already <= 3 digits)
-        return value;
+        // No fractional part or all zeros
+        return time;
       }
     }
     return String(value);

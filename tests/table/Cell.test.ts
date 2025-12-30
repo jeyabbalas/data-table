@@ -171,8 +171,30 @@ describe('CellRenderer', () => {
     });
 
     describe('interval type', () => {
-      it('should convert to string', () => {
-        expect(renderer.formatValue('1 day', 'interval')).toBe('1 day');
+      it('should format days in compact form', () => {
+        expect(renderer.formatValue('1 day', 'interval')).toBe('1d');
+        expect(renderer.formatValue('5 days', 'interval')).toBe('5d');
+      });
+
+      it('should format years, months, days', () => {
+        expect(renderer.formatValue('1 year 2 months 3 days', 'interval')).toBe('1y 2mo 3d');
+      });
+
+      it('should format time components', () => {
+        expect(renderer.formatValue('04:05:06', 'interval')).toBe('4h 5m 6s');
+      });
+
+      it('should format full interval', () => {
+        expect(renderer.formatValue('1 year 2 months 3 days 04:05:06', 'interval')).toBe('1y 2mo 3d 4h 5m 6s');
+      });
+
+      it('should return 0s for zero interval', () => {
+        expect(renderer.formatValue('00:00:00', 'interval')).toBe('0s');
+      });
+
+      it('should skip zero components', () => {
+        expect(renderer.formatValue('2 months', 'interval')).toBe('2mo');
+        expect(renderer.formatValue('01:00:00', 'interval')).toBe('1h');
       });
     });
 

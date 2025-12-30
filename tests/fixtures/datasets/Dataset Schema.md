@@ -125,6 +125,56 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 
 ---
 
+## DateTime Stress Tests Dataset
+
+**Source:** Synthetically generated for stress testing date histogram visualization of temporal variables
+
+**Description:** A dataset designed to test edge cases in temporal data visualization, particularly date histogram rendering with various time intervals. Contains columns testing different histogram bin intervals (second through year), edge cases (all nulls, single values, extreme dates), and special scenarios (leap years, DST transitions, time-only values).
+
+**Size:** 100 rows × 20 columns
+
+### Schema
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `id` | integer | No | Row identifier (1-100) |
+| `all_nulls` | timestamp | Yes | 100% null values - tests empty histogram handling |
+| `single_timestamp` | timestamp | No | All values = 2024-06-15T12:00:00 - tests single-bin histogram |
+| `two_timestamps` | timestamp | No | Alternating between 2024-01-01 and 2024-12-31 - tests binary distribution |
+| `dense_seconds` | timestamp | No | ~60 second range (600ms intervals) - tests second-level binning |
+| `dense_minutes` | timestamp | No | ~60 minute range (36s intervals) - tests minute-level binning |
+| `dense_hours` | timestamp | No | ~24 hour range (14.4min intervals) - tests hour-level binning |
+| `dense_days` | timestamp | No | ~30 day range (7.2hr intervals) - tests day-level binning |
+| `dense_weeks` | timestamp | No | ~120 day range (1.2 day intervals) - tests week-level binning |
+| `dense_months` | timestamp | No | ~18 month range (5.47 day intervals) - tests month-level binning |
+| `dense_quarters` | timestamp | No | ~5 year range (18.26 day intervals) - tests quarter-level binning |
+| `dense_years` | timestamp | No | ~50 year range (182.62 day intervals) - tests year-level binning |
+| `extreme_past` | timestamp | No | Dates from 1900-1950 - tests historical date handling |
+| `extreme_future` | timestamp | No | Dates from 2100-2150 - tests future date handling |
+| `mixed_with_nulls` | timestamp | Yes | 80% valid timestamps + 20% nulls - tests partial null handling |
+| `leap_year_dates` | date | No | Feb 28, Feb 29, Mar 1 from leap years (2000-2024) - tests leap year edge cases |
+| `dst_transitions` | timestamp | No | US DST transition dates (March/November) - tests timezone-sensitive rendering |
+| `time_only` | time | No | Time values 00:00:00 to 23:59:59 (864s intervals) - tests time-only histogram |
+| `mixed_type` | string | No | Mix of valid ISO dates and invalid strings ("not-a-date", "13/45/2024") |
+| `category` | string | No | Categorical values: A, B, C, D |
+
+### Time Interval Testing
+
+Each `dense_*` column is designed to trigger a specific binning interval in the date histogram:
+
+| Column | Date Range | Expected Interval |
+|--------|------------|-------------------|
+| `dense_seconds` | ~1 minute | second |
+| `dense_minutes` | ~1 hour | minute |
+| `dense_hours` | ~24 hours | hour |
+| `dense_days` | ~30 days | day |
+| `dense_weeks` | ~4 months | week |
+| `dense_months` | ~18 months | month |
+| `dense_quarters` | ~5 years | quarter |
+| `dense_years` | ~50 years | year |
+
+---
+
 ## File Formats
 
 Each dataset is provided in three formats:

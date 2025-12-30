@@ -76,8 +76,6 @@ const LAYOUT = {
 /** Adaptive spacing for histograms with few bins */
 const FEW_BINS_THRESHOLD = 5;
 const FEW_BINS_GAP_RATIO = 0.15; // 15% of bar width as gap
-const FEW_BINS_MAX_BAR_WIDTH = 40; // Maximum bar width in pixels
-const FEW_BINS_SIDE_PADDING = 8; // Extra padding on sides
 
 /** Double-click detection constants */
 const DOUBLE_CLICK_THRESHOLD = 300; // ms
@@ -332,31 +330,17 @@ export class Histogram extends BaseVisualization {
     }
 
     // Use adaptive spacing for few bins to create visual separation
+    // Bars extend edge-to-edge with gaps only between bars (not on sides)
     if (numBins <= FEW_BINS_THRESHOLD) {
-      const sidePadding = FEW_BINS_SIDE_PADDING;
-      const innerWidth = this.chartArea.width - 2 * sidePadding;
-
-      // Start with ideal bar width, cap at max
-      let barWidth = Math.min(
-        FEW_BINS_MAX_BAR_WIDTH,
-        (innerWidth / numBins) * 0.7 // 70% of equal division
-      );
-
-      // Calculate gap as ratio of bar width (minimum is standard barGap)
-      const gap = Math.max(LAYOUT.barGap, barWidth * FEW_BINS_GAP_RATIO);
-
-      // Recalculate to fit within innerWidth
-      const totalGaps = (numBins - 1) * gap;
-      const availableForBars = innerWidth - totalGaps;
-      barWidth = Math.min(barWidth, availableForBars / numBins);
-
-      // Center the bars within the chart area
-      const totalBarsWidth = numBins * barWidth + totalGaps;
-      const startX =
-        this.chartArea.x + (this.chartArea.width - totalBarsWidth) / 2;
+      // Solve: numBins * barWidth + (numBins - 1) * gap = chartWidth
+      //        gap = FEW_BINS_GAP_RATIO * barWidth
+      // => barWidth = chartWidth / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO)
+      const barWidth =
+        this.chartArea.width / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO);
+      const gap = barWidth * FEW_BINS_GAP_RATIO;
 
       this.barPositions = this.data.bins.map((_, index) => ({
-        x: startX + index * (barWidth + gap),
+        x: this.chartArea.x + index * (barWidth + gap),
         width: barWidth,
         binIndex: index,
       }));

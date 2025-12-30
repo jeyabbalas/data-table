@@ -5,6 +5,7 @@
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, CSVLoadOptions } from './types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
+import { enhanceSchemaTypes } from './common';
 
 let tableCounter = 0;
 
@@ -29,6 +30,10 @@ export async function loadCSV(
   const db = getDatabase();
   const conn = getConnection();
   const tableName = options.tableName || generateTableName();
+
+  // Set timezone for TIMESTAMPTZ columns (default: UTC)
+  const timezone = options.timezone ?? 'UTC';
+  await conn.query(`SET TimeZone = '${timezone}'`);
 
   // Convert to Uint8Array for DuckDB's file system
   const content =
@@ -73,7 +78,11 @@ export async function loadCSV(
 
     // Get full schema info from DESCRIBE
     const describeResult = await conn.query(`DESCRIBE "${tableName}"`);
-    const describeRows = describeResult.toArray().map((row) => row.toJSON());
+    let describeRows = describeResult.toArray().map((row) => row.toJSON());
+
+    // Enhance schema by detecting and converting string columns to appropriate types
+    // This detects ISO timestamps in VARCHAR columns and converts them to TIMESTAMP
+    describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => ({

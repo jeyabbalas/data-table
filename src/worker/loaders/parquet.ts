@@ -30,6 +30,10 @@ export async function loadParquet(
   const conn = getConnection();
   const tableName = options.tableName || generateTableName();
 
+  // Set timezone for TIMESTAMPTZ columns (default: UTC)
+  const timezone = options.timezone ?? 'UTC';
+  await conn.query(`SET TimeZone = '${timezone}'`);
+
   // Convert to Uint8Array for DuckDB's file system
   const content = new Uint8Array(data);
 

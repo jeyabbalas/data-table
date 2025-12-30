@@ -34,6 +34,8 @@ export interface CSVLoadOptions {
   skip?: number;
   /** Null value strings (default: ['', 'NULL', 'null', 'NA', 'N/A']) */
   nullValues?: string[];
+  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  timezone?: string;
 }
 
 /**
@@ -48,6 +50,8 @@ export interface JSONLoadOptions {
   sampleSize?: number;
   /** Maximum depth for nested objects (default: unlimited) */
   maxDepth?: number;
+  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  timezone?: string;
 }
 
 /**
@@ -58,4 +62,6 @@ export interface ParquetLoadOptions {
   tableName?: string;
   /** Columns to load (default: all columns) */
   columns?: string[];
+  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  timezone?: string;
 }

@@ -137,34 +137,36 @@ function intervalToDateTruncPart(interval: TimeInterval): string {
 
 /**
  * Compute the end date of a bin given its start and interval
+ *
+ * Uses UTC methods to avoid timezone-related date shifts at boundaries.
  */
 function computeBinEnd(binStart: Date, interval: TimeInterval): Date {
   const end = new Date(binStart);
 
   switch (interval) {
     case 'second':
-      end.setSeconds(end.getSeconds() + 1);
+      end.setUTCSeconds(end.getUTCSeconds() + 1);
       break;
     case 'minute':
-      end.setMinutes(end.getMinutes() + 1);
+      end.setUTCMinutes(end.getUTCMinutes() + 1);
       break;
     case 'hour':
-      end.setHours(end.getHours() + 1);
+      end.setUTCHours(end.getUTCHours() + 1);
       break;
     case 'day':
-      end.setDate(end.getDate() + 1);
+      end.setUTCDate(end.getUTCDate() + 1);
       break;
     case 'week':
-      end.setDate(end.getDate() + 7);
+      end.setUTCDate(end.getUTCDate() + 7);
       break;
     case 'month':
-      end.setMonth(end.getMonth() + 1);
+      end.setUTCMonth(end.getUTCMonth() + 1);
       break;
     case 'quarter':
-      end.setMonth(end.getMonth() + 3);
+      end.setUTCMonth(end.getUTCMonth() + 3);
       break;
     case 'year':
-      end.setFullYear(end.getFullYear() + 1);
+      end.setUTCFullYear(end.getUTCFullYear() + 1);
       break;
   }
 

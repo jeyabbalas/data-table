@@ -109,15 +109,23 @@ function getQuarter(month: number): number {
  *
  * Used to decide what date parts to include in labels.
  * For example, if all dates are in the same year, we can omit the year.
+ *
+ * Note: Uses UTC methods to avoid timezone-related date shifts.
  */
 export function analyzeDateContext(min: Date, max: Date): DateFormatContext {
+  // Use UTC methods to avoid timezone shifts at date boundaries
+  const minYear = min.getUTCFullYear();
+  const maxYear = max.getUTCFullYear();
+  const minMonth = min.getUTCMonth();
+  const maxMonth = max.getUTCMonth();
+  const minDay = min.getUTCDate();
+  const maxDay = max.getUTCDate();
+
   return {
-    sameYear: min.getFullYear() === max.getFullYear(),
-    sameMonth:
-      min.getFullYear() === max.getFullYear() &&
-      min.getMonth() === max.getMonth(),
-    sameDay: min.toDateString() === max.toDateString(),
-    referenceYear: min.getFullYear(),
+    sameYear: minYear === maxYear,
+    sameMonth: minYear === maxYear && minMonth === maxMonth,
+    sameDay: minYear === maxYear && minMonth === maxMonth && minDay === maxDay,
+    referenceYear: minYear,
   };
 }
 
@@ -139,13 +147,14 @@ export function formatDateLabel(
   interval: TimeInterval,
   context: DateFormatContext
 ): string {
-  const month = MONTHS_SHORT[date.getMonth()];
-  const day = date.getDate();
-  const year = date.getFullYear();
+  // Use UTC methods to avoid timezone shifts at date boundaries
+  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
   const yearSuffix = getYearSuffix(year);
-  const hour = date.getHours();
-  const minute = date.getMinutes();
-  const second = date.getSeconds();
+  const hour = date.getUTCHours();
+  const minute = date.getUTCMinutes();
+  const second = date.getUTCSeconds();
 
   switch (interval) {
     case 'second':
@@ -186,7 +195,7 @@ export function formatDateLabel(
     case 'quarter':
       // Same year: "Q1"
       // Different year: "Q1 '24"
-      const quarter = getQuarter(date.getMonth());
+      const quarter = getQuarter(date.getUTCMonth());
       return context.sameYear ? `Q${quarter}` : `Q${quarter} ${yearSuffix}`;
 
     case 'year':
@@ -215,13 +224,15 @@ export function formatDateRange(
   switch (interval) {
     case 'second': {
       // Show time range: "10:30:45 - 10:30:46"
-      const endTime = formatTime(end.getHours(), end.getMinutes(), end.getSeconds());
+      // Use UTC methods to avoid timezone shifts
+      const endTime = formatTime(end.getUTCHours(), end.getUTCMinutes(), end.getUTCSeconds());
       return `${startStr} - ${endTime}`;
     }
 
     case 'minute': {
       // Show time range: "10:30 - 10:31"
-      const endTime = formatTime(end.getHours(), end.getMinutes());
+      // Use UTC methods to avoid timezone shifts
+      const endTime = formatTime(end.getUTCHours(), end.getUTCMinutes());
       return `${startStr} - ${endTime}`;
     }
 
@@ -229,7 +240,8 @@ export function formatDateRange(
       // Same day: "10am - 11am"
       // Different days: just show start label
       if (context.sameDay) {
-        return `${startStr} - ${formatHour(end.getHours())}`;
+        // Use UTC methods to avoid timezone shifts
+        return `${startStr} - ${formatHour(end.getUTCHours())}`;
       }
       return startStr;
     }
@@ -249,12 +261,13 @@ export function formatDateRange(
  * Used for more verbose stats display
  */
 export function formatDateForStats(date: Date, interval: TimeInterval): string {
-  const month = MONTHS_SHORT[date.getMonth()];
-  const day = date.getDate();
-  const year = date.getFullYear();
-  const hour = date.getHours();
-  const minute = date.getMinutes();
-  const second = date.getSeconds();
+  // Use UTC methods to avoid timezone shifts at date boundaries
+  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+  const hour = date.getUTCHours();
+  const minute = date.getUTCMinutes();
+  const second = date.getUTCSeconds();
 
   switch (interval) {
     case 'second':
@@ -274,9 +287,91 @@ export function formatDateForStats(date: Date, interval: TimeInterval): string {
       return `${month} ${year}`;
 
     case 'quarter':
-      return `Q${getQuarter(date.getMonth())} ${year}`;
+      return `Q${getQuarter(date.getUTCMonth())} ${year}`;
 
     case 'year':
       return String(year);
   }
+}
+
+// =========================================
+// TIME-only Formatters (for TIME histogram)
+// =========================================
+
+/**
+ * Convert seconds from midnight to hour, minute, second components
+ */
+function secondsToComponents(seconds: number): { h: number; m: number; s: number } {
+  const totalSeconds = Math.floor(seconds);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return { h, m, s };
+}
+
+/**
+ * Format seconds from midnight as time-only axis label
+ *
+ * Produces compact labels for TIME histogram axes:
+ * - second:  "10:30:45"
+ * - minute:  "10:30"
+ * - hour:    "10am"
+ */
+export function formatTimeOnlyLabel(seconds: number, interval: TimeInterval): string {
+  const { h, m, s } = secondsToComponents(seconds);
+
+  switch (interval) {
+    case 'second':
+      return formatTime(h, m, s);
+
+    case 'minute':
+      return formatTime(h, m);
+
+    case 'hour':
+    default:
+      return formatHour(h);
+  }
+}
+
+/**
+ * Format a time-only range for display in stats line (hover/selection)
+ *
+ * Produces a range string like:
+ * - "10:30:45 - 10:30:46" (seconds)
+ * - "10:30 - 10:31" (minutes)
+ * - "10am - 11am" (hours)
+ */
+export function formatTimeOnlyRange(
+  startSec: number,
+  endSec: number,
+  interval: TimeInterval
+): string {
+  const startStr = formatTimeOnlyLabel(startSec, interval);
+
+  switch (interval) {
+    case 'second': {
+      const { h, m, s } = secondsToComponents(endSec);
+      return `${startStr} - ${formatTime(h, m, s)}`;
+    }
+
+    case 'minute': {
+      const { h, m } = secondsToComponents(endSec);
+      return `${startStr} - ${formatTime(h, m)}`;
+    }
+
+    case 'hour':
+    default: {
+      const { h } = secondsToComponents(endSec);
+      return `${startStr} - ${formatHour(h)}`;
+    }
+  }
+}
+
+/**
+ * Format seconds from midnight for verbose stats display
+ * Shows full HH:MM:SS format regardless of interval
+ */
+export function formatTimeOnlyForStats(seconds: number): string {
+  const { h, m, s } = secondsToComponents(seconds);
+  return formatTime(h, m, s);
 }

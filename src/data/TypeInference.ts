@@ -114,6 +114,92 @@ function isISOTimestamp(value: string): boolean {
 }
 
 /**
+ * Check if a value looks like a US date (MM/DD/YYYY)
+ * Returns true only if it could be a valid US date (month 1-12, day 1-31)
+ */
+function isUSDate(value: string): boolean {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return false;
+
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  // Validate ranges
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (year < 1000 || year > 9999) return false;
+
+  // Additional validation for days in month
+  const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day > daysInMonth[month - 1]) return false;
+
+  return true;
+}
+
+/**
+ * Check if a value looks like an EU date (DD/MM/YYYY)
+ * Returns true only if it could be a valid EU date (day 1-31, month 1-12)
+ */
+function isEUDate(value: string): boolean {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return false;
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  // Validate ranges
+  if (day < 1 || day > 31) return false;
+  if (month < 1 || month > 12) return false;
+  if (year < 1000 || year > 9999) return false;
+
+  // Additional validation for days in month
+  const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day > daysInMonth[month - 1]) return false;
+
+  return true;
+}
+
+/**
+ * Check if a date string is ambiguous (could be US or EU format)
+ * This happens when both the first and second number could be month OR day (1-12)
+ */
+function isAmbiguousSlashDate(value: string): boolean {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return false;
+
+  const first = parseInt(match[1], 10);
+  const second = parseInt(match[2], 10);
+
+  // If both numbers are <= 12, it's ambiguous
+  return first >= 1 && first <= 12 && second >= 1 && second <= 12;
+}
+
+/**
+ * Check if a value looks like a TIME (HH:MM:SS with optional fractional seconds)
+ * Matches formats: "12:30:45", "12:30:45.123", "12:30:45.123456"
+ */
+function isTime(value: string): boolean {
+  const trimmed = value.trim();
+  // Match HH:MM:SS or HH:MM:SS.ffffff (1-6 fractional digits)
+  const match = trimmed.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/);
+  if (!match) return false;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = parseInt(match[3], 10);
+
+  // Validate ranges
+  return hours >= 0 && hours <= 23 &&
+         minutes >= 0 && minutes <= 59 &&
+         seconds >= 0 && seconds <= 59;
+}
+
+/**
  * Test values against each type and return the best match
  */
 function analyzeValues(values: string[]): {
@@ -128,6 +214,10 @@ function analyzeValues(values: string[]): {
   // Count matches for each type
   let timestampMatches = 0;
   let dateMatches = 0;
+  let usDateMatches = 0;
+  let euDateMatches = 0;
+  let ambiguousSlashDateCount = 0;
+  let timeMatches = 0;
   let booleanMatches = 0;
   let integerMatches = 0;
   let floatMatches = 0;
@@ -138,6 +228,18 @@ function analyzeValues(values: string[]): {
     }
     if (isISODate(value)) {
       dateMatches++;
+    }
+    if (isUSDate(value)) {
+      usDateMatches++;
+      if (isAmbiguousSlashDate(value)) {
+        ambiguousSlashDateCount++;
+      }
+    }
+    if (isEUDate(value)) {
+      euDateMatches++;
+    }
+    if (isTime(value)) {
+      timeMatches++;
     }
     if (isBoolean(value)) {
       booleanMatches++;
@@ -151,6 +253,7 @@ function analyzeValues(values: string[]): {
   }
 
   const total = values.length;
+  const confidenceThreshold = 0.95;
 
   // Return the best match (most specific first)
   // Timestamps are more specific than dates
@@ -160,6 +263,24 @@ function analyzeValues(values: string[]): {
 
   if (dateMatches === total) {
     return { type: 'date', pattern: 'ISO 8601 date', matched: dateMatches };
+  }
+
+  // Check for US date format (only if unambiguous)
+  // If all values match US date AND none are ambiguous, it's likely US format
+  if (usDateMatches === total && ambiguousSlashDateCount === 0) {
+    return { type: 'date', pattern: 'US date (MM/DD/YYYY)', matched: usDateMatches };
+  }
+
+  // Check for EU date format (only if unambiguous)
+  // EU dates where day > 12 are unambiguous (e.g., 30/12/2025)
+  if (euDateMatches === total && usDateMatches < total) {
+    // Some values can only be EU format (day > 12)
+    return { type: 'date', pattern: 'EU date (DD/MM/YYYY)', matched: euDateMatches };
+  }
+
+  // Check for TIME format (HH:MM:SS with optional microseconds)
+  if (timeMatches === total) {
+    return { type: 'time', pattern: 'TIME (HH:MM:SS)', matched: timeMatches };
   }
 
   if (booleanMatches === total) {
@@ -175,14 +296,27 @@ function analyzeValues(values: string[]): {
   }
 
   // Check for partial matches with high confidence
-  const confidenceThreshold = 0.95;
-
   if (timestampMatches / total >= confidenceThreshold) {
     return { type: 'timestamp', pattern: 'ISO 8601 timestamp', matched: timestampMatches };
   }
 
   if (dateMatches / total >= confidenceThreshold) {
     return { type: 'date', pattern: 'ISO 8601 date', matched: dateMatches };
+  }
+
+  // US date with high confidence (only if unambiguous)
+  if (usDateMatches / total >= confidenceThreshold && ambiguousSlashDateCount === 0) {
+    return { type: 'date', pattern: 'US date (MM/DD/YYYY)', matched: usDateMatches };
+  }
+
+  // EU date with high confidence (only if distinguishable from US)
+  if (euDateMatches / total >= confidenceThreshold && usDateMatches / total < confidenceThreshold) {
+    return { type: 'date', pattern: 'EU date (DD/MM/YYYY)', matched: euDateMatches };
+  }
+
+  // TIME with high confidence
+  if (timeMatches / total >= confidenceThreshold) {
+    return { type: 'time', pattern: 'TIME (HH:MM:SS)', matched: timeMatches };
   }
 
   if (booleanMatches / total >= confidenceThreshold) {
@@ -197,7 +331,7 @@ function analyzeValues(values: string[]): {
     return { type: 'float', pattern: 'decimal number', matched: floatMatches };
   }
 
-  // Default to string
+  // Default to string (includes ambiguous slash date formats)
   return { type: 'string', pattern: 'mixed/text', matched: total };
 }
 

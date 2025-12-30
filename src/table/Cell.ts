@@ -136,7 +136,7 @@ export class CellRenderer {
         return this.formatTimestamp(value);
 
       case 'time':
-        return String(value);
+        return this.formatTimeValue(value);
 
       case 'interval':
         return String(value);
@@ -221,6 +221,28 @@ export class CellRenderer {
         }
       } catch {
         // Fall through to string
+      }
+    }
+    return String(value);
+  }
+
+  /**
+   * Format a TIME value.
+   * DuckDB returns TIME as "HH:MM:SS" or "HH:MM:SS.ffffff".
+   * Truncate microseconds to milliseconds for cleaner display.
+   */
+  private formatTimeValue(value: unknown): string {
+    if (typeof value === 'string') {
+      // Match TIME format: HH:MM:SS or HH:MM:SS.ffffff
+      const match = value.match(/^(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
+      if (match) {
+        const [, time, frac] = match;
+        // If fractional seconds exist and have more than 3 digits, truncate to milliseconds
+        if (frac && frac.length > 3) {
+          return `${time}.${frac.slice(0, 3)}`;
+        }
+        // Return as-is (either no fraction or already <= 3 digits)
+        return value;
       }
     }
     return String(value);

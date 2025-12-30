@@ -1,7 +1,7 @@
 /**
  * Histogram visualization module
  *
- * Exports histogram visualizations for numeric and date/timestamp columns.
+ * Exports histogram visualizations for numeric, date/timestamp, and time columns.
  */
 
 // Numeric histogram
@@ -9,6 +9,9 @@ export { Histogram } from './Histogram';
 
 // Date/timestamp histogram
 export { DateHistogram } from './DateHistogram';
+
+// Time histogram (for TIME type columns)
+export { TimeHistogram } from './TimeHistogram';
 
 // Numeric histogram data types and utilities
 export {
@@ -32,6 +35,19 @@ export {
   fetchDateHistogramData,
 } from './DateHistogramData';
 
+// Time histogram data types and utilities
+export {
+  // Types
+  type TimeHistogramBin,
+  type TimeHistogramData,
+  // Functions
+  fetchTimeHistogramData,
+  parseTimeToSeconds,
+  secondsToTimeString,
+  detectTimeIntervalForTime,
+  formatTimeForSQL,
+} from './TimeHistogramData';
+
 // Date formatting utilities
 export {
   type DateFormatContext,
@@ -39,4 +55,8 @@ export {
   formatDateLabel,
   formatDateRange,
   formatDateForStats,
+  // Time-only formatters
+  formatTimeOnlyLabel,
+  formatTimeOnlyRange,
+  formatTimeOnlyForStats,
 } from './DateFormatters';

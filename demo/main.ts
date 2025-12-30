@@ -19,7 +19,7 @@ import {
   TableContainer,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
-import { Histogram, DateHistogram } from '../src/visualizations/histogram';
+import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
 import type { DataType, ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
 
@@ -62,7 +62,7 @@ const selectionStates = new Map<
 interface ActiveInteraction {
   type: 'brush' | 'selection';
   columnName: string;
-  histogram: Histogram | DateHistogram;
+  histogram: Histogram | DateHistogram | TimeHistogram;
 }
 const interactionStack: ActiveInteraction[] = [];
 
@@ -85,14 +85,21 @@ function isDateType(type: DataType): boolean {
 }
 
 /**
- * Attach histogram visualizations to numeric and date/timestamp columns
+ * Check if a column type is time (suitable for time histogram)
+ */
+function isTimeType(type: DataType): boolean {
+  return type === 'time';
+}
+
+/**
+ * Attach histogram visualizations to numeric, date/timestamp, and time columns
  */
 function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   if (!tableContainer) return;
 
   // Save brush/selection states before destroying histograms
   for (const viz of activeVisualizations) {
-    if (viz instanceof Histogram || viz instanceof DateHistogram) {
+    if (viz instanceof Histogram || viz instanceof DateHistogram || viz instanceof TimeHistogram) {
       const column = viz.getColumn();
       const brushState = viz.getBrushState();
       if (brushState) {
@@ -118,16 +125,17 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   const headers = tableContainer.getColumnHeaders();
   const numericCount = schema.filter((col) => isNumericType(col.type)).length;
   const dateCount = schema.filter((col) => isDateType(col.type)).length;
+  const timeCount = schema.filter((col) => isTimeType(col.type)).length;
 
   console.log(
-    `[Demo] Attaching histograms: ${numericCount} numeric + ${dateCount} date columns out of ${headers.length} total`
+    `[Demo] Attaching histograms: ${numericCount} numeric + ${dateCount} date + ${timeCount} time columns out of ${headers.length} total`
   );
 
   for (const header of headers) {
     const column = header.getColumn();
 
     // Skip columns that don't need visualization
-    if (!isNumericType(column.type) && !isDateType(column.type)) {
+    if (!isNumericType(column.type) && !isDateType(column.type) && !isTimeType(column.type)) {
       continue;
     }
 
@@ -193,8 +201,11 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
     };
 
     // Create appropriate visualization based on column type
-    let visualization: Histogram | DateHistogram;
-    if (isDateType(column.type)) {
+    let visualization: Histogram | DateHistogram | TimeHistogram;
+    if (isTimeType(column.type)) {
+      visualization = new TimeHistogram(vizContainer, column, vizOptions);
+      console.log(`[Demo] Created TimeHistogram for "${column.name}" (${column.type})`);
+    } else if (isDateType(column.type)) {
       visualization = new DateHistogram(vizContainer, column, vizOptions);
       console.log(`[Demo] Created DateHistogram for "${column.name}" (${column.type})`);
     } else {
@@ -245,10 +256,11 @@ function updateTableInfo(): void {
 
   const numericCols = schema.filter((col) => isNumericType(col.type)).length;
   const dateCols = schema.filter((col) => isDateType(col.type)).length;
+  const timeCols = schema.filter((col) => isTimeType(col.type)).length;
   const histogramCount = activeVisualizations.length;
 
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric, ${dateCols} date)`;
+  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric, ${dateCols} date, ${timeCols} time)`;
 
   // Show sort info if any
   const sortColumns = tableState.sortColumns.get();

@@ -16,7 +16,7 @@ import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { fetchTimeHistogramData, secondsToTimeString } from './TimeHistogramData';
 import type { TimeHistogramData } from './TimeHistogramData';
-import { formatTimeOnlyLabel, formatTimeOnlyRange } from './DateFormatters';
+import { formatTimeOnlyLabel, formatTimeOnlyLabelNumeric, formatTimeOnlyRange, formatTimeOnlyRangeNumeric } from './DateFormatters';
 
 // =========================================
 // Constants (identical to Histogram.ts)
@@ -174,11 +174,15 @@ export class TimeHistogram extends BaseVisualization {
     this.selectedNull = false;
 
     try {
+      // Use configured maxBins (default 15) - interval will be coarsened if needed
+      const maxBins = this.options.maxBins ?? 15;
+
       this.data = await fetchTimeHistogramData(
         this.options.tableName,
         this.column.name,
         this.options.filters,
-        this.options.bridge
+        this.options.bridge,
+        maxBins
       );
 
       this.render();
@@ -555,10 +559,12 @@ export class TimeHistogram extends BaseVisualization {
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
       ctx.textAlign = 'center';
-      const label = formatTimeOnlyLabel(
-        this.data.bins[0].binStartSeconds,
-        this.data.interval
-      );
+      const label = this.data.isNumericBinning
+        ? formatTimeOnlyLabelNumeric(this.data.bins[0].binStartSeconds)
+        : formatTimeOnlyLabel(
+            this.data.bins[0].binStartSeconds,
+            this.data.interval
+          );
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0) {
@@ -567,17 +573,21 @@ export class TimeHistogram extends BaseVisualization {
       const lastBin = this.data.bins[this.data.bins.length - 1];
 
       ctx.textAlign = 'left';
-      const minLabel = formatTimeOnlyLabel(
-        firstBin.binStartSeconds,
-        this.data.interval
-      );
+      const minLabel = this.data.isNumericBinning
+        ? formatTimeOnlyLabelNumeric(firstBin.binStartSeconds)
+        : formatTimeOnlyLabel(
+            firstBin.binStartSeconds,
+            this.data.interval
+          );
       ctx.fillText(minLabel, PADDING.left, labelY);
 
       ctx.textAlign = 'right';
-      const maxLabel = formatTimeOnlyLabel(
-        lastBin.binStartSeconds,
-        this.data.interval
-      );
+      const maxLabel = this.data.isNumericBinning
+        ? formatTimeOnlyLabelNumeric(lastBin.binEndSeconds)
+        : formatTimeOnlyLabel(
+            lastBin.binStartSeconds,
+            this.data.interval
+          );
       const maxX = this.data.nullCount > 0
         ? this.nullBarArea.x - LAYOUT.nullBarGap
         : this.width - PADDING.right;
@@ -698,11 +708,13 @@ export class TimeHistogram extends BaseVisualization {
       if (this.hoveredBin !== null && this.data) {
         const bin = this.data.bins[this.hoveredBin];
         if (bin) {
-          const rangeStr = formatTimeOnlyRange(
-            bin.binStartSeconds,
-            bin.binEndSeconds,
-            this.data.interval
-          );
+          const rangeStr = this.data.isNumericBinning
+            ? formatTimeOnlyRangeNumeric(bin.binStartSeconds, bin.binEndSeconds)
+            : formatTimeOnlyRange(
+                bin.binStartSeconds,
+                bin.binEndSeconds,
+                this.data.interval
+              );
           const count = formatCount(bin.count);
           const percent = formatPercent(bin.count / this.data.total);
 
@@ -818,11 +830,13 @@ export class TimeHistogram extends BaseVisualization {
     if (this.selectedBin !== null) {
       const bin = this.data.bins[this.selectedBin];
       if (bin) {
-        const rangeStr = formatTimeOnlyRange(
-          bin.binStartSeconds,
-          bin.binEndSeconds,
-          this.data.interval
-        );
+        const rangeStr = this.data.isNumericBinning
+          ? formatTimeOnlyRangeNumeric(bin.binStartSeconds, bin.binEndSeconds)
+          : formatTimeOnlyRange(
+              bin.binStartSeconds,
+              bin.binEndSeconds,
+              this.data.interval
+            );
         const count = formatCount(bin.count);
         const percent = formatPercent(bin.count / this.data.total);
         this.options.onStatsChange?.(
@@ -1163,13 +1177,20 @@ export class TimeHistogram extends BaseVisualization {
       const percent = formatPercent(rangeCount / this.data.total);
 
       // Format time range
-      const rangeStr = startIdx === endIdx
-        ? formatTimeOnlyRange(
-            startBin.binStartSeconds,
-            startBin.binEndSeconds,
-            this.data.interval
-          )
-        : `${formatTimeOnlyLabel(startBin.binStartSeconds, this.data.interval)} – ${formatTimeOnlyLabel(endBin.binStartSeconds, this.data.interval)}`;
+      let rangeStr: string;
+      if (this.data.isNumericBinning) {
+        rangeStr = startIdx === endIdx
+          ? formatTimeOnlyRangeNumeric(startBin.binStartSeconds, startBin.binEndSeconds)
+          : formatTimeOnlyRangeNumeric(startBin.binStartSeconds, endBin.binEndSeconds);
+      } else {
+        rangeStr = startIdx === endIdx
+          ? formatTimeOnlyRange(
+              startBin.binStartSeconds,
+              startBin.binEndSeconds,
+              this.data.interval
+            )
+          : `${formatTimeOnlyLabel(startBin.binStartSeconds, this.data.interval)} – ${formatTimeOnlyLabel(endBin.binStartSeconds, this.data.interval)}`;
+      }
 
       this.options.onStatsChange?.(
         `<span class="stats-label">Bin:</span><br>` +

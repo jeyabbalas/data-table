@@ -215,9 +215,9 @@ export class Histogram extends BaseVisualization {
     this.selectedNull = false;
 
     try {
-      // Use configured maxBins (default 20) - algorithm calculates optimal
+      // Use configured maxBins (default 15) - algorithm calculates optimal
       // bins using Freedman-Diaconis/Sturges and clamps to this max
-      const maxBins = this.options.maxBins ?? 20;
+      const maxBins = this.options.maxBins ?? 15;
 
       this.data = await fetchHistogramData(
         this.options.tableName,

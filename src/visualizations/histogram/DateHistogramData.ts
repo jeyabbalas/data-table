@@ -49,6 +49,8 @@ export interface DateHistogramData {
   interval: TimeInterval;
   /** True when all non-null values are identical (single timestamp) */
   isSingleValue: boolean;
+  /** True when using numeric binning fallback (bins not aligned to calendar intervals) */
+  isNumericBinning: boolean;
 }
 
 /**
@@ -72,6 +74,76 @@ interface DateBinResult {
 // =========================================
 // Interval Detection
 // =========================================
+
+/**
+ * Ordered list of time intervals from finest to coarsest
+ */
+const TIME_INTERVALS: TimeInterval[] = [
+  'second',
+  'minute',
+  'hour',
+  'day',
+  'week',
+  'month',
+  'quarter',
+  'year',
+];
+
+/**
+ * Estimate the number of bins for a given time interval
+ */
+function estimateBinCount(min: Date, max: Date, interval: TimeInterval): number {
+  const rangeMs = max.getTime() - min.getTime();
+
+  switch (interval) {
+    case 'second':
+      return Math.ceil(rangeMs / 1000);
+    case 'minute':
+      return Math.ceil(rangeMs / 60000);
+    case 'hour':
+      return Math.ceil(rangeMs / 3600000);
+    case 'day':
+      return Math.ceil(rangeMs / 86400000);
+    case 'week':
+      return Math.ceil(rangeMs / 604800000);
+    case 'month':
+      return Math.ceil(rangeMs / 2592000000); // ~30 days
+    case 'quarter':
+      return Math.ceil(rangeMs / 7776000000); // ~90 days
+    case 'year':
+      return Math.ceil(rangeMs / 31536000000); // ~365 days
+    default:
+      return 1;
+  }
+}
+
+/**
+ * Adjust the time interval to ensure bins don't exceed maxBins
+ *
+ * Starts from the initial interval and coarsens it (e.g., day → week → month)
+ * until the estimated bin count is within the limit.
+ */
+function adjustIntervalForMaxBins(
+  min: Date,
+  max: Date,
+  initialInterval: TimeInterval,
+  maxBins: number
+): TimeInterval {
+  let idx = TIME_INTERVALS.indexOf(initialInterval);
+  let interval = initialInterval;
+
+  // Coarsen the interval until bin count is within limit
+  while (idx < TIME_INTERVALS.length - 1) {
+    const estimatedBins = estimateBinCount(min, max, interval);
+    if (estimatedBins <= maxBins) {
+      break;
+    }
+    idx++;
+    interval = TIME_INTERVALS[idx];
+  }
+
+  return interval;
+}
 
 /**
  * Detect the optimal time interval for binning based on data range
@@ -176,14 +248,30 @@ function computeBinEnd(binStart: Date, interval: TimeInterval): Date {
 /**
  * Parse a date string from DuckDB result
  * Handles ISO format and DuckDB timestamp format
+ *
+ * DuckDB returns timezone-naive strings like "2020-12-31 23:59:59".
+ * We interpret these as UTC to match our UTC-based formatting.
  */
 function parseDate(value: string | null): Date | null {
   if (value === null || value === undefined) {
     return null;
   }
 
-  // DuckDB may return timestamps as ISO strings or as Date objects
-  const date = new Date(value);
+  // DuckDB returns timezone-naive strings like "2020-12-31 23:59:59"
+  // We need to interpret as UTC to match our UTC-based formatting
+  let dateStr = value;
+
+  // Check if the string already has timezone info (Z, +, or - after position 10)
+  const hasTimezone = value.includes('Z') ||
+    value.includes('+') ||
+    (value.length > 10 && value.lastIndexOf('-') > 10);
+
+  if (!hasTimezone) {
+    // No timezone info - treat as UTC by converting to ISO format with Z suffix
+    dateStr = value.replace(' ', 'T') + 'Z';
+  }
+
+  const date = new Date(dateStr);
   if (isNaN(date.getTime())) {
     console.warn(`[DateHistogramData] Failed to parse date: ${value}`);
     return null;
@@ -269,19 +357,125 @@ function buildDateHistogramSQL(
 }
 
 /**
+ * SQL query result for numeric binning
+ */
+interface NumericBinResult {
+  bin_idx: number;
+  count: number;
+}
+
+/**
+ * Build SQL query for numeric date histogram binning
+ *
+ * Used as a fallback when interval-based binning exceeds maxBins.
+ * Treats dates as epoch milliseconds and divides into equal-width bins.
+ */
+function buildNumericDateHistogramSQL(
+  tableName: string,
+  column: string,
+  numBins: number,
+  minMs: number,
+  maxMs: number,
+  filters: Filter[]
+): string {
+  const whereClause = filtersToWhereClause(filters);
+  const baseCondition = `"${column}" IS NOT NULL`;
+  const whereSQL = whereClause
+    ? `WHERE ${baseCondition} AND ${whereClause}`
+    : `WHERE ${baseCondition}`;
+
+  const binWidth = (maxMs - minMs) / numBins;
+
+  // Use EPOCH to convert timestamp to seconds, then multiply by 1000 for milliseconds
+  return `
+    SELECT
+      LEAST(FLOOR((EXTRACT(EPOCH FROM "${column}") * 1000 - ${minMs}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      COUNT(*) as count
+    FROM "${tableName}"
+    ${whereSQL}
+    GROUP BY bin_idx
+    HAVING bin_idx >= 0 AND bin_idx < ${numBins}
+    ORDER BY bin_idx
+  `;
+}
+
+/**
+ * Fetch date histogram data using numeric binning
+ *
+ * Fallback for when interval-based binning exceeds maxBins.
+ * Creates exactly numBins equal-width bins based on epoch milliseconds.
+ */
+async function fetchDateHistogramWithNumericBinning(
+  tableName: string,
+  column: string,
+  numBins: number,
+  stats: { min: Date; max: Date; count: number; nullCount: number },
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<DateHistogramData> {
+  const minMs = stats.min.getTime();
+  const maxMs = stats.max.getTime();
+  const binWidth = (maxMs - minMs) / numBins;
+
+  const sql = buildNumericDateHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    minMs,
+    maxMs,
+    filters
+  );
+  const binResults = await bridge.query<NumericBinResult>(sql);
+
+  // Create all bins (even empty ones) for consistent visualization
+  const bins: DateHistogramBin[] = [];
+  for (let i = 0; i < numBins; i++) {
+    const binStartMs = minMs + i * binWidth;
+    const binEndMs = i === numBins - 1 ? maxMs : minMs + (i + 1) * binWidth;
+    bins.push({
+      binStart: new Date(binStartMs),
+      binEnd: new Date(binEndMs),
+      count: 0,
+    });
+  }
+
+  // Fill in counts from query results
+  for (const result of binResults) {
+    const idx = Number(result.bin_idx);
+    if (idx >= 0 && idx < bins.length) {
+      bins[idx].count = Number(result.count);
+    }
+  }
+
+  return {
+    bins,
+    nullCount: stats.nullCount,
+    min: stats.min,
+    max: stats.max,
+    total: stats.count + stats.nullCount,
+    interval: 'day', // Placeholder - not used for numeric binning
+    isSingleValue: false,
+    isNumericBinning: true,
+  };
+}
+
+/**
  * Fetch date histogram data for a date/timestamp column
  *
  * @param tableName - Name of the DuckDB table
  * @param column - Name of the column to histogram
  * @param filters - Active filters to apply
  * @param bridge - WorkerBridge for executing queries
+ * @param maxBins - Maximum number of bins (default: 15). The time interval will be
+ *                  coarsened if necessary to keep bins within this limit.
  * @returns DateHistogramData with bins and metadata
  */
 export async function fetchDateHistogramData(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
+  maxBins: number = 15
 ): Promise<DateHistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -297,11 +491,33 @@ export async function fetchDateHistogramData(
         total: stats.count + stats.nullCount,
         interval: 'day', // Default interval for empty data
         isSingleValue: false,
+        isNumericBinning: false,
       };
     }
 
-    // Step 2: Detect optimal time interval
-    const interval = detectTimeInterval(stats.min, stats.max);
+    // Step 2: Detect optimal time interval, then adjust for maxBins
+    const initialInterval = detectTimeInterval(stats.min, stats.max);
+    const interval = adjustIntervalForMaxBins(
+      stats.min,
+      stats.max,
+      initialInterval,
+      maxBins
+    );
+
+    // Step 2.5: Check if even the adjusted interval exceeds maxBins
+    // If so, fall back to numeric binning
+    const estimatedBins = estimateBinCount(stats.min, stats.max, interval);
+    if (estimatedBins > maxBins) {
+      // stats.min and stats.max are guaranteed non-null here (checked above)
+      return await fetchDateHistogramWithNumericBinning(
+        tableName,
+        column,
+        maxBins,
+        { min: stats.min, max: stats.max, count: stats.count, nullCount: stats.nullCount },
+        filters,
+        bridge
+      );
+    }
 
     // Handle edge case: single value (all same timestamp)
     if (stats.min.getTime() === stats.max.getTime()) {
@@ -320,6 +536,7 @@ export async function fetchDateHistogramData(
         total: stats.count + stats.nullCount,
         interval,
         isSingleValue: true,
+        isNumericBinning: false,
       };
     }
 
@@ -350,6 +567,7 @@ export async function fetchDateHistogramData(
       total: stats.count + stats.nullCount,
       interval,
       isSingleValue: false,
+      isNumericBinning: false,
     };
   } catch (error) {
     throw new Error(

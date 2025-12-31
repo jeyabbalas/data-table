@@ -32,7 +32,7 @@ export interface VisualizationOptions {
   onFilterChange?: (filter: Filter) => void;
   /** Callback to update stats line on hover (null restores default) */
   onStatsChange?: (stats: string | null) => void;
-  /** Maximum number of histogram bins (default: 30) */
+  /** Maximum number of histogram bins (default: 15) */
   maxBins?: number;
   /** Callback when brush is committed (column name passed) */
   onBrushCommit?: (columnName: string) => void;

@@ -20,6 +20,8 @@ import {
   analyzeDateContext,
   formatDateLabel,
   formatDateRange,
+  formatDateForType,
+  formatDateRangeForType,
 } from './DateFormatters';
 import type { DateFormatContext } from './DateFormatters';
 
@@ -180,11 +182,15 @@ export class DateHistogram extends BaseVisualization {
     this.selectedNull = false;
 
     try {
+      // Use configured maxBins (default 15) - interval will be coarsened if needed
+      const maxBins = this.options.maxBins ?? 15;
+
       this.data = await fetchDateHistogramData(
         this.options.tableName,
         this.column.name,
         this.options.filters,
-        this.options.bridge
+        this.options.bridge,
+        maxBins
       );
 
       // Compute format context if we have data
@@ -569,32 +575,38 @@ export class DateHistogram extends BaseVisualization {
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
       ctx.textAlign = 'center';
-      const label = formatDateLabel(
-        this.data.bins[0].binStart,
-        this.data.interval,
-        this.formatContext
-      );
+      const label = this.data.isNumericBinning && this.data.min
+        ? formatDateForType(this.data.min, this.column.type)
+        : formatDateLabel(
+            this.data.bins[0].binStart,
+            this.data.interval,
+            this.formatContext
+          );
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
-    } else if (this.data.bins.length > 0) {
+    } else if (this.data.bins.length > 0 && this.data.min && this.data.max) {
       // Normal case: min on left, max on right
       const firstBin = this.data.bins[0];
       const lastBin = this.data.bins[this.data.bins.length - 1];
 
       ctx.textAlign = 'left';
-      const minLabel = formatDateLabel(
-        firstBin.binStart,
-        this.data.interval,
-        this.formatContext
-      );
+      const minLabel = this.data.isNumericBinning
+        ? formatDateForType(this.data.min, this.column.type)
+        : formatDateLabel(
+            firstBin.binStart,
+            this.data.interval,
+            this.formatContext
+          );
       ctx.fillText(minLabel, PADDING.left, labelY);
 
       ctx.textAlign = 'right';
-      const maxLabel = formatDateLabel(
-        lastBin.binStart,
-        this.data.interval,
-        this.formatContext
-      );
+      const maxLabel = this.data.isNumericBinning
+        ? formatDateForType(this.data.max, this.column.type)
+        : formatDateLabel(
+            lastBin.binStart,
+            this.data.interval,
+            this.formatContext
+          );
       const maxX = this.data.nullCount > 0
         ? this.nullBarArea.x - LAYOUT.nullBarGap
         : this.width - PADDING.right;
@@ -715,12 +727,14 @@ export class DateHistogram extends BaseVisualization {
       if (this.hoveredBin !== null && this.data && this.formatContext) {
         const bin = this.data.bins[this.hoveredBin];
         if (bin) {
-          const rangeStr = formatDateRange(
-            bin.binStart,
-            bin.binEnd,
-            this.data.interval,
-            this.formatContext
-          );
+          const rangeStr = this.data.isNumericBinning
+            ? formatDateRangeForType(bin.binStart, bin.binEnd, this.column.type)
+            : formatDateRange(
+                bin.binStart,
+                bin.binEnd,
+                this.data.interval,
+                this.formatContext
+              );
           const count = formatCount(bin.count);
           const percent = formatPercent(bin.count / this.data.total);
 
@@ -1182,14 +1196,21 @@ export class DateHistogram extends BaseVisualization {
       const percent = formatPercent(rangeCount / this.data.total);
 
       // Format date range
-      const rangeStr = startIdx === endIdx
-        ? formatDateRange(
-            startBin.binStart,
-            startBin.binEnd,
-            this.data.interval,
-            this.formatContext
-          )
-        : `${formatDateLabel(startBin.binStart, this.data.interval, this.formatContext)} – ${formatDateLabel(endBin.binStart, this.data.interval, this.formatContext)}`;
+      let rangeStr: string;
+      if (this.data.isNumericBinning) {
+        rangeStr = startIdx === endIdx
+          ? formatDateRangeForType(startBin.binStart, startBin.binEnd, this.column.type)
+          : formatDateRangeForType(startBin.binStart, endBin.binEnd, this.column.type);
+      } else {
+        rangeStr = startIdx === endIdx
+          ? formatDateRange(
+              startBin.binStart,
+              startBin.binEnd,
+              this.data.interval,
+              this.formatContext
+            )
+          : `${formatDateLabel(startBin.binStart, this.data.interval, this.formatContext)} – ${formatDateLabel(endBin.binStart, this.data.interval, this.formatContext)}`;
+      }
 
       this.options.onStatsChange?.(
         `<span class="stats-label">Bin:</span><br>` +

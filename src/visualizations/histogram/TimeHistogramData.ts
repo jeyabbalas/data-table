@@ -53,6 +53,8 @@ export interface TimeHistogramData {
   interval: TimeInterval;
   /** True when all non-null values are identical */
   isSingleValue: boolean;
+  /** True when using numeric binning fallback (bins not aligned to time intervals) */
+  isNumericBinning: boolean;
 }
 
 /**
@@ -150,6 +152,62 @@ export function secondsToTimeString(seconds: number, includeFraction = false): s
 // =========================================
 // Interval Detection
 // =========================================
+
+/**
+ * Ordered list of time intervals from finest to coarsest (for TIME type)
+ * TIME columns only use second, minute, hour since they represent time-of-day
+ */
+const TIME_INTERVALS: TimeInterval[] = ['second', 'minute', 'hour'];
+
+/**
+ * Estimate the number of bins for a given time interval
+ */
+function estimateBinCountForTime(
+  minSec: number,
+  maxSec: number,
+  interval: TimeInterval
+): number {
+  const rangeSec = maxSec - minSec;
+
+  switch (interval) {
+    case 'second':
+      return Math.ceil(rangeSec);
+    case 'minute':
+      return Math.ceil(rangeSec / 60);
+    case 'hour':
+      return Math.ceil(rangeSec / 3600);
+    default:
+      return 1;
+  }
+}
+
+/**
+ * Adjust the time interval to ensure bins don't exceed maxBins
+ *
+ * Starts from the initial interval and coarsens it (e.g., second → minute → hour)
+ * until the estimated bin count is within the limit.
+ */
+function adjustIntervalForMaxBinsTime(
+  minSec: number,
+  maxSec: number,
+  initialInterval: TimeInterval,
+  maxBins: number
+): TimeInterval {
+  let idx = TIME_INTERVALS.indexOf(initialInterval);
+  let interval = initialInterval;
+
+  // Coarsen the interval until bin count is within limit
+  while (idx < TIME_INTERVALS.length - 1) {
+    const estimatedBins = estimateBinCountForTime(minSec, maxSec, interval);
+    if (estimatedBins <= maxBins) {
+      break;
+    }
+    idx++;
+    interval = TIME_INTERVALS[idx];
+  }
+
+  return interval;
+}
 
 /**
  * Detect the optimal time interval for binning based on data range
@@ -276,19 +334,123 @@ function buildTimeHistogramSQL(
 }
 
 /**
+ * SQL query result for numeric binning
+ */
+interface NumericBinResult {
+  bin_idx: number;
+  count: number;
+}
+
+/**
+ * Build SQL query for numeric time histogram binning
+ *
+ * Used as a fallback when interval-based binning exceeds maxBins.
+ * Treats times as seconds from midnight and divides into equal-width bins.
+ */
+function buildNumericTimeHistogramSQL(
+  tableName: string,
+  column: string,
+  numBins: number,
+  minSec: number,
+  maxSec: number,
+  filters: Filter[]
+): string {
+  const whereClause = filtersToWhereClause(filters);
+  const baseCondition = `"${column}" IS NOT NULL`;
+  const whereSQL = whereClause
+    ? `WHERE ${baseCondition} AND ${whereClause}`
+    : `WHERE ${baseCondition}`;
+
+  const binWidth = (maxSec - minSec) / numBins;
+
+  // Use EPOCH to convert TIME to seconds from midnight
+  return `
+    SELECT
+      LEAST(FLOOR((EXTRACT(EPOCH FROM "${column}") - ${minSec}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      COUNT(*) as count
+    FROM "${tableName}"
+    ${whereSQL}
+    GROUP BY bin_idx
+    HAVING bin_idx >= 0 AND bin_idx < ${numBins}
+    ORDER BY bin_idx
+  `;
+}
+
+/**
+ * Fetch time histogram data using numeric binning
+ *
+ * Fallback for when interval-based binning exceeds maxBins.
+ * Creates exactly numBins equal-width bins based on seconds from midnight.
+ */
+async function fetchTimeHistogramWithNumericBinning(
+  tableName: string,
+  column: string,
+  numBins: number,
+  stats: { minSeconds: number; maxSeconds: number; count: number; nullCount: number },
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<TimeHistogramData> {
+  const binWidth = (stats.maxSeconds - stats.minSeconds) / numBins;
+
+  const sql = buildNumericTimeHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    stats.minSeconds,
+    stats.maxSeconds,
+    filters
+  );
+  const binResults = await bridge.query<NumericBinResult>(sql);
+
+  // Create all bins (even empty ones) for consistent visualization
+  const bins: TimeHistogramBin[] = [];
+  for (let i = 0; i < numBins; i++) {
+    const binStartSeconds = stats.minSeconds + i * binWidth;
+    const binEndSeconds = i === numBins - 1 ? stats.maxSeconds : stats.minSeconds + (i + 1) * binWidth;
+    bins.push({
+      binStartSeconds,
+      binEndSeconds,
+      count: 0,
+    });
+  }
+
+  // Fill in counts from query results
+  for (const result of binResults) {
+    const idx = Number(result.bin_idx);
+    if (idx >= 0 && idx < bins.length) {
+      bins[idx].count = Number(result.count);
+    }
+  }
+
+  return {
+    bins,
+    nullCount: stats.nullCount,
+    minSeconds: stats.minSeconds,
+    maxSeconds: stats.maxSeconds,
+    total: stats.count + stats.nullCount,
+    interval: 'hour', // Placeholder - not used for numeric binning
+    isSingleValue: false,
+    isNumericBinning: true,
+  };
+}
+
+/**
  * Fetch time histogram data for a TIME column
  *
  * @param tableName - Name of the DuckDB table
  * @param column - Name of the TIME column to histogram
  * @param filters - Active filters to apply
  * @param bridge - WorkerBridge for executing queries
+ * @param maxBins - Maximum number of bins (default: 15). The time interval will be
+ *                  coarsened if necessary to keep bins within this limit.
  * @returns TimeHistogramData with bins and metadata
  */
 export async function fetchTimeHistogramData(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
+  maxBins: number = 15
 ): Promise<TimeHistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -304,11 +466,33 @@ export async function fetchTimeHistogramData(
         total: stats.count + stats.nullCount,
         interval: 'hour', // Default interval for empty data
         isSingleValue: false,
+        isNumericBinning: false,
       };
     }
 
-    // Step 2: Detect optimal time interval
-    const interval = detectTimeIntervalForTime(stats.minSeconds, stats.maxSeconds);
+    // Step 2: Detect optimal time interval, then adjust for maxBins
+    const initialInterval = detectTimeIntervalForTime(stats.minSeconds, stats.maxSeconds);
+    const interval = adjustIntervalForMaxBinsTime(
+      stats.minSeconds,
+      stats.maxSeconds,
+      initialInterval,
+      maxBins
+    );
+
+    // Step 2.5: Check if even the adjusted interval exceeds maxBins
+    // If so, fall back to numeric binning
+    const estimatedBins = estimateBinCountForTime(stats.minSeconds, stats.maxSeconds, interval);
+    if (estimatedBins > maxBins) {
+      // stats.minSeconds and stats.maxSeconds are guaranteed non-null here (checked above)
+      return await fetchTimeHistogramWithNumericBinning(
+        tableName,
+        column,
+        maxBins,
+        { minSeconds: stats.minSeconds, maxSeconds: stats.maxSeconds, count: stats.count, nullCount: stats.nullCount },
+        filters,
+        bridge
+      );
+    }
 
     // Handle edge case: single value (all same time)
     if (stats.minSeconds === stats.maxSeconds) {
@@ -327,6 +511,7 @@ export async function fetchTimeHistogramData(
         total: stats.count + stats.nullCount,
         interval,
         isSingleValue: true,
+        isNumericBinning: false,
       };
     }
 
@@ -355,6 +540,7 @@ export async function fetchTimeHistogramData(
       total: stats.count + stats.nullCount,
       interval,
       isSingleValue: false,
+      isNumericBinning: false,
     };
   } catch (error) {
     throw new Error(

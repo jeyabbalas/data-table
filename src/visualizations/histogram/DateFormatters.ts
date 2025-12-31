@@ -375,3 +375,120 @@ export function formatTimeOnlyForStats(seconds: number): string {
   const { h, m, s } = secondsToComponents(seconds);
   return formatTime(h, m, s);
 }
+
+// =========================================
+// Numeric Binning Formatters
+// =========================================
+
+/**
+ * Format a date range for numeric binning (shows actual timestamps)
+ *
+ * Used when date histograms fall back to numeric binning because the data
+ * range exceeds what can be displayed with interval-based bins.
+ *
+ * Produces a range string like:
+ * - "Jan 5, 1980 14:32 – Mar 22, 1983 08:15"
+ */
+export function formatDateRangeNumeric(start: Date, end: Date): string {
+  const formatFull = (d: Date): string => {
+    const month = MONTHS_SHORT[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+    const hour = d.getUTCHours();
+    const minute = d.getUTCMinutes();
+    return `${month} ${day}, ${year} ${formatTime(hour, minute)}`;
+  };
+  return `${formatFull(start)} – ${formatFull(end)}`;
+}
+
+/**
+ * Format a time-only range for numeric binning (shows actual times with seconds)
+ *
+ * Used when time histograms fall back to numeric binning because the data
+ * range exceeds what can be displayed with interval-based bins.
+ *
+ * Produces a range string like:
+ * - "14:32:17 – 20:15:43"
+ */
+export function formatTimeOnlyRangeNumeric(startSec: number, endSec: number): string {
+  const formatFull = (sec: number): string => {
+    const { h, m, s } = secondsToComponents(sec);
+    return formatTime(h, m, s);
+  };
+  return `${formatFull(startSec)} – ${formatFull(endSec)}`;
+}
+
+/**
+ * Format a single date for axis label in numeric binning mode
+ *
+ * Shows full date with time for clarity when bins are not aligned to
+ * calendar intervals.
+ *
+ * Produces a label like:
+ * - "Jan 5, 1980 14:32"
+ */
+export function formatDateLabelNumeric(date: Date): string {
+  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+  const hour = date.getUTCHours();
+  const minute = date.getUTCMinutes();
+  return `${month} ${day}, ${year} ${formatTime(hour, minute)}`;
+}
+
+/**
+ * Format a single time for axis label in numeric binning mode
+ *
+ * Shows full HH:MM:SS for clarity when bins are not aligned to
+ * time intervals.
+ *
+ * Produces a label like:
+ * - "14:32:17"
+ */
+export function formatTimeOnlyLabelNumeric(seconds: number): string {
+  const { h, m, s } = secondsToComponents(seconds);
+  return formatTime(h, m, s);
+}
+
+// =========================================
+// Type-Aware Formatters (respects column precision)
+// =========================================
+
+/**
+ * Format a date for display based on column type precision
+ *
+ * - DATE type: Shows date only (e.g., "Jan 5, 1980")
+ * - TIMESTAMP type: Shows date + time (e.g., "Jan 5, 1980 14:32")
+ *
+ * @param date - The date to format
+ * @param columnType - The column type ('date' or 'timestamp')
+ */
+export function formatDateForType(date: Date, columnType: string): string {
+  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+
+  if (columnType === 'date') {
+    // DATE type: no time component
+    return `${month} ${day}, ${year}`;
+  } else {
+    // TIMESTAMP type: include time
+    const hour = date.getUTCHours();
+    const minute = date.getUTCMinutes();
+    return `${month} ${day}, ${year} ${formatTime(hour, minute)}`;
+  }
+}
+
+/**
+ * Format a date range for display based on column type precision
+ *
+ * - DATE type: Shows date only (e.g., "Jan 5, 1980 – Mar 22, 1983")
+ * - TIMESTAMP type: Shows date + time (e.g., "Jan 5, 1980 14:32 – Mar 22, 1983 08:15")
+ *
+ * @param start - Start date of the range
+ * @param end - End date of the range
+ * @param columnType - The column type ('date' or 'timestamp')
+ */
+export function formatDateRangeForType(start: Date, end: Date, columnType: string): string {
+  return `${formatDateForType(start, columnType)} – ${formatDateForType(end, columnType)}`;
+}

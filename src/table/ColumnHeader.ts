@@ -107,11 +107,32 @@ export class ColumnHeader {
     `;
     nameRow.appendChild(dragHandle);
 
-    // Column name
+    // Column name (flex-grow to push sort button to the right)
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
+    nameEl.setAttribute('title', this.column.name); // Tooltip for truncated names
     nameRow.appendChild(nameEl);
+
+    // Sort button with SVG arrows (in name row, at right end)
+    const sortBtn = document.createElement('button');
+    sortBtn.className = `${this.classPrefix}-col-sort-btn`;
+    sortBtn.setAttribute('type', 'button');
+    sortBtn.setAttribute('aria-label', `Sort by ${this.column.name}`);
+    sortBtn.innerHTML = `
+      <svg viewBox="0 0 10 14" aria-hidden="true">
+        <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
+        <path d="M5 14 L10 9 L0 9 Z" class="arrow-down" />
+      </svg>
+    `;
+
+    // Sort badge for multi-sort (inside button, positioned absolutely)
+    const sortBadge = document.createElement('span');
+    sortBadge.className = `${this.classPrefix}-col-sort-badge`;
+    sortBadge.style.display = 'none';
+    sortBtn.appendChild(sortBadge);
+
+    nameRow.appendChild(sortBtn);
 
     el.appendChild(nameRow);
 
@@ -131,30 +152,6 @@ export class ColumnHeader {
     const vizEl = document.createElement('div');
     vizEl.className = `${this.classPrefix}-col-viz`;
     el.appendChild(vizEl);
-
-    // Sort button container
-    const sortContainer = document.createElement('div');
-    sortContainer.className = `${this.classPrefix}-col-sort`;
-    el.appendChild(sortContainer);
-
-    // Sort button with SVG arrows
-    const sortBtn = document.createElement('button');
-    sortBtn.className = `${this.classPrefix}-col-sort-btn`;
-    sortBtn.setAttribute('type', 'button');
-    sortBtn.setAttribute('aria-label', `Sort by ${this.column.name}`);
-    sortBtn.innerHTML = `
-      <svg viewBox="0 0 10 14" aria-hidden="true">
-        <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
-        <path d="M5 14 L10 9 L0 9 Z" class="arrow-down" />
-      </svg>
-    `;
-    sortContainer.appendChild(sortBtn);
-
-    // Sort badge for multi-sort (hidden by default)
-    const sortBadge = document.createElement('span');
-    sortBadge.className = `${this.classPrefix}-col-sort-badge`;
-    sortBadge.style.display = 'none';
-    sortContainer.appendChild(sortBadge);
 
     return el;
   }

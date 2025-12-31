@@ -49,7 +49,7 @@ describe('ColumnHeader', () => {
       expect(el.querySelector('.dt-col-type')).toBeTruthy();
       expect(el.querySelector('.dt-col-stats')).toBeTruthy();
       expect(el.querySelector('.dt-col-viz')).toBeTruthy();
-      expect(el.querySelector('.dt-col-sort')).toBeTruthy();
+      expect(el.querySelector('.dt-col-sort-btn')).toBeTruthy();
 
       header.destroy();
     });
@@ -85,7 +85,7 @@ describe('ColumnHeader', () => {
       expect(el.className).toBe('custom-col-header');
       expect(el.querySelector('.custom-col-name')).toBeTruthy();
       expect(el.querySelector('.custom-col-type')).toBeTruthy();
-      expect(el.querySelector('.custom-col-sort')).toBeTruthy();
+      expect(el.querySelector('.custom-col-sort-btn')).toBeTruthy();
 
       header.destroy();
     });

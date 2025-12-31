@@ -1,15 +1,15 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.5: Testing Date Histogram
+ * Phase 4, Task 4.6: Testing Value Counts Visualization
  *
  * This demo tests:
- * - DateHistogram for date/timestamp columns
- * - Histogram for numeric columns
- * - Context-aware date labels (Jan, Jan 2, 10am, etc.)
- * - All interaction patterns (hover, click, brush)
+ * - ValueCounts for categorical columns (string, boolean, uuid)
+ * - Blue gradient segments with light borders
+ * - Hover and click-to-select interactions
+ * - All existing histogram visualizations
  *
- * Test with NYC Taxi dataset to see DateHistogram in action.
+ * Test with datasets containing string columns to see ValueCounts in action.
  */
 
 import {
@@ -20,8 +20,12 @@ import {
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
+import { ValueCounts } from '../src/visualizations/valuecounts';
 import type { DataType, ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
+
+// Visualization type union for type safety
+type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -45,7 +49,7 @@ let tableCounter = 0;
 
 // Keep track of active visualizations for cleanup
 let activeVisualizations: BaseVisualization[] = [];
-let histogramsAttached = false;
+let visualizationsAttached = false;
 let reorderTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // State persistence maps for brush and selection states
@@ -55,14 +59,15 @@ const brushStates = new Map<
 >();
 const selectionStates = new Map<
   string,
-  { selectedBin: number | null; selectedNull: boolean }
+  // Histogram/DateHistogram/TimeHistogram use selectedBin, ValueCounts uses selectedSegment
+  { selectedBin?: number | null; selectedSegment?: number | null; selectedNull: boolean }
 >();
 
 // LIFO stack for interactions (brushes and selections)
 interface ActiveInteraction {
   type: 'brush' | 'selection';
   columnName: string;
-  histogram: Histogram | DateHistogram | TimeHistogram;
+  visualization: VisualizationType;
 }
 const interactionStack: ActiveInteraction[] = [];
 
@@ -92,15 +97,30 @@ function isTimeType(type: DataType): boolean {
 }
 
 /**
- * Attach histogram visualizations to numeric, date/timestamp, and time columns
+ * Check if a column type is categorical (suitable for value counts)
  */
-function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
+function isCategoricalType(type: DataType): boolean {
+  return type === 'string' || type === 'boolean' || type === 'uuid';
+}
+
+/**
+ * Check if a column type needs a visualization
+ */
+function needsVisualization(type: DataType): boolean {
+  return isNumericType(type) || isDateType(type) || isTimeType(type) || isCategoricalType(type);
+}
+
+/**
+ * Attach visualizations to columns based on their types
+ */
+function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
   if (!tableContainer) return;
 
-  // Save brush/selection states before destroying histograms
+  // Save brush/selection states before destroying visualizations
   for (const viz of activeVisualizations) {
+    const column = viz.getColumn();
+
     if (viz instanceof Histogram || viz instanceof DateHistogram || viz instanceof TimeHistogram) {
-      const column = viz.getColumn();
       const brushState = viz.getBrushState();
       if (brushState) {
         brushStates.set(column.name, brushState);
@@ -108,6 +128,14 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
       const selState = viz.getSelectionState();
       if (selState.selectedBin !== null || selState.selectedNull) {
         selectionStates.set(column.name, selState);
+      }
+    } else if (viz instanceof ValueCounts) {
+      const selState = viz.getSelectionState();
+      if (selState.selectedSegment !== null || selState.selectedNull) {
+        selectionStates.set(column.name, {
+          selectedSegment: selState.selectedSegment,
+          selectedNull: selState.selectedNull,
+        });
       }
     }
   }
@@ -118,7 +146,7 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   }
   activeVisualizations = [];
 
-  // Clear interaction stack entries for destroyed histograms
+  // Clear interaction stack entries for destroyed visualizations
   interactionStack.length = 0;
 
   // Get all column headers
@@ -126,22 +154,26 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
   const numericCount = schema.filter((col) => isNumericType(col.type)).length;
   const dateCount = schema.filter((col) => isDateType(col.type)).length;
   const timeCount = schema.filter((col) => isTimeType(col.type)).length;
+  const categoricalCount = schema.filter((col) => isCategoricalType(col.type)).length;
 
   console.log(
-    `[Demo] Attaching histograms: ${numericCount} numeric + ${dateCount} date + ${timeCount} time columns out of ${headers.length} total`
+    `[Demo] Attaching visualizations: ${numericCount} numeric, ${dateCount} date, ${timeCount} time, ${categoricalCount} categorical out of ${headers.length} total`
   );
 
   for (const header of headers) {
     const column = header.getColumn();
 
     // Skip columns that don't need visualization
-    if (!isNumericType(column.type) && !isDateType(column.type) && !isTimeType(column.type)) {
+    if (!needsVisualization(column.type)) {
       continue;
     }
 
     const vizContainer = header.getVizContainer();
     const statsEl = header.getStatsElement();
     const defaultStats = `<span class="stats-label">Rows:</span> ${tableState.totalRows.get().toLocaleString()}`;
+
+    // Declare visualization variable
+    let visualization: VisualizationType;
 
     // Common visualization options
     const vizOptions = {
@@ -167,10 +199,12 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
         interactionStack.push({
           type: 'brush',
           columnName: colName,
-          histogram: visualization,
+          visualization: visualization,
         });
-        const state = visualization.getBrushState();
-        if (state) brushStates.set(colName, state);
+        if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
+          const state = visualization.getBrushState();
+          if (state) brushStates.set(colName, state);
+        }
       },
       onBrushClear: (colName: string) => {
         const idx = interactionStack.findIndex(
@@ -188,11 +222,20 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
             interactionStack.push({
               type: 'selection',
               columnName: colName,
-              histogram: visualization,
+              visualization: visualization,
             });
           }
-          const state = visualization.getSelectionState();
-          selectionStates.set(colName, state);
+          // Save state based on visualization type
+          if (visualization instanceof ValueCounts) {
+            const state = visualization.getSelectionState();
+            selectionStates.set(colName, {
+              selectedSegment: state.selectedSegment,
+              selectedNull: state.selectedNull,
+            });
+          } else if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
+            const state = visualization.getSelectionState();
+            selectionStates.set(colName, state);
+          }
         } else {
           if (idx >= 0) interactionStack.splice(idx, 1);
           selectionStates.delete(colName);
@@ -201,16 +244,20 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
     };
 
     // Create appropriate visualization based on column type
-    let visualization: Histogram | DateHistogram | TimeHistogram;
     if (isTimeType(column.type)) {
       visualization = new TimeHistogram(vizContainer, column, vizOptions);
       console.log(`[Demo] Created TimeHistogram for "${column.name}" (${column.type})`);
     } else if (isDateType(column.type)) {
       visualization = new DateHistogram(vizContainer, column, vizOptions);
       console.log(`[Demo] Created DateHistogram for "${column.name}" (${column.type})`);
-    } else {
+    } else if (isNumericType(column.type)) {
       visualization = new Histogram(vizContainer, column, vizOptions);
       console.log(`[Demo] Created Histogram for "${column.name}" (${column.type})`);
+    } else if (isCategoricalType(column.type)) {
+      visualization = new ValueCounts(vizContainer, column, vizOptions);
+      console.log(`[Demo] Created ValueCounts for "${column.name}" (${column.type})`);
+    } else {
+      continue;
     }
 
     activeVisualizations.push(visualization);
@@ -221,29 +268,49 @@ function attachHistograms(tableName: string, schema: ColumnSchema[]): void {
 
     if (savedBrush || savedSelection) {
       visualization.waitForData().then(() => {
-        if (savedBrush) {
+        // Restore brush state (only for histograms)
+        if (savedBrush && (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram)) {
           visualization.setBrushState(savedBrush);
           interactionStack.push({
             type: 'brush',
             columnName: column.name,
-            histogram: visualization,
+            visualization: visualization,
           });
         }
+
+        // Restore selection state
         if (savedSelection) {
-          visualization.setSelectionState(savedSelection);
-          if (savedSelection.selectedBin !== null || savedSelection.selectedNull) {
-            interactionStack.push({
-              type: 'selection',
-              columnName: column.name,
-              histogram: visualization,
+          if (visualization instanceof ValueCounts && savedSelection.selectedSegment !== undefined) {
+            visualization.setSelectionState({
+              selectedSegment: savedSelection.selectedSegment,
+              selectedNull: savedSelection.selectedNull,
             });
+            if (savedSelection.selectedSegment !== null || savedSelection.selectedNull) {
+              interactionStack.push({
+                type: 'selection',
+                columnName: column.name,
+                visualization: visualization,
+              });
+            }
+          } else if ((visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) && savedSelection.selectedBin !== undefined) {
+            visualization.setSelectionState({
+              selectedBin: savedSelection.selectedBin,
+              selectedNull: savedSelection.selectedNull,
+            });
+            if (savedSelection.selectedBin !== null || savedSelection.selectedNull) {
+              interactionStack.push({
+                type: 'selection',
+                columnName: column.name,
+                visualization: visualization,
+              });
+            }
           }
         }
       });
     }
   }
 
-  histogramsAttached = true;
+  visualizationsAttached = true;
 }
 
 function updateTableInfo(): void {
@@ -257,10 +324,12 @@ function updateTableInfo(): void {
   const numericCols = schema.filter((col) => isNumericType(col.type)).length;
   const dateCols = schema.filter((col) => isDateType(col.type)).length;
   const timeCols = schema.filter((col) => isTimeType(col.type)).length;
-  const histogramCount = activeVisualizations.length;
+  const categoricalCols = schema.filter((col) => isCategoricalType(col.type)).length;
+  const vizCount = activeVisualizations.length;
 
   let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
-  info += ` | <strong>${histogramCount}</strong> histograms (${numericCols} numeric, ${dateCols} date, ${timeCols} time)`;
+  info += ` | <strong>${vizCount}</strong> visualizations`;
+  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
 
   // Show sort info if any
   const sortColumns = tableState.sortColumns.get();
@@ -285,13 +354,13 @@ async function loadData(source: File | string): Promise<void> {
     await actions.loadData(source, { tableName });
     updateTableInfo();
 
-    // Attach histograms after data loads
+    // Attach visualizations after data loads
     const schema = tableState.schema.get();
     const currentTableName = tableState.tableName.get();
     if (currentTableName) {
       // Small delay to ensure table is rendered
       setTimeout(() => {
-        attachHistograms(currentTableName, schema);
+        attachVisualizations(currentTableName, schema);
         updateTableInfo();
       }, 100);
     }
@@ -321,12 +390,12 @@ bridge
       }
     });
 
-    // Subscribe to column reorder to re-attach histograms
+    // Subscribe to column reorder to re-attach visualizations
     tableState.visibleColumns.subscribe(() => {
       const tableName = tableState.tableName.get();
 
-      // Only re-attach if histograms were already attached initially
-      if (!tableName || !histogramsAttached) return;
+      // Only re-attach if visualizations were already attached initially
+      if (!tableName || !visualizationsAttached) return;
 
       // Clear any pending reorder timeout
       if (reorderTimeout) {
@@ -337,7 +406,7 @@ bridge
       reorderTimeout = setTimeout(() => {
         reorderTimeout = null;
         const schema = tableState.schema.get();
-        attachHistograms(tableName, schema);
+        attachVisualizations(tableName, schema);
         updateTableInfo();
       }, 100);
     });
@@ -347,9 +416,9 @@ bridge
       if (e.key === 'Escape' && interactionStack.length > 0) {
         const last = interactionStack.pop()!;
         if (last.type === 'brush') {
-          last.histogram.clearBrush();
+          last.visualization.clearBrush();
         } else {
-          last.histogram.clearSelection();
+          last.visualization.clearSelection();
         }
         e.stopPropagation();
         e.preventDefault();

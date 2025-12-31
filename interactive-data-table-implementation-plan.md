@@ -978,7 +978,7 @@ export class VisualizationFactory {
     // For numeric: Histogram
     // For date/timestamp: DateHistogram
     // For string/boolean: ValueCounts
-    // For time: TimeOfDayHistogram (optional)
+    // For time: TimeHistogram
   }
   
   static isApplicable(type: string, column: ColumnSchema): boolean;

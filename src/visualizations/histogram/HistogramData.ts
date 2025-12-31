@@ -152,6 +152,15 @@ function filterToSQL(filter: Filter): string {
       return `${column} IN (${formattedValues})`;
     }
 
+    case 'not-set': {
+      const values = filter.value as unknown[];
+      if (values.length === 0) {
+        return 'TRUE'; // Empty exclusion matches everything
+      }
+      const formattedValues = values.map(formatSQLValue).join(', ');
+      return `${column} NOT IN (${formattedValues})`;
+    }
+
     case 'null': {
       return `${column} IS NULL`;
     }

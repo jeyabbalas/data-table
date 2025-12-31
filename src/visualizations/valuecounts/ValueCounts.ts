@@ -160,6 +160,9 @@ export class ValueCounts extends BaseVisualization {
   // Combined segments including null for rendering
   private renderSegments: RenderSegment[] = [];
 
+  // Top N category values for exclusion filter (used when clicking "Other")
+  private topCategoryValues: string[] = [];
+
   constructor(
     container: HTMLElement,
     column: ColumnSchema,
@@ -240,6 +243,7 @@ export class ValueCounts extends BaseVisualization {
   private buildRenderSegments(): void {
     if (!this.data) {
       this.renderSegments = [];
+      this.topCategoryValues = [];
       return;
     }
 
@@ -251,6 +255,11 @@ export class ValueCounts extends BaseVisualization {
       isNull: false,
       otherCount: seg.otherCount,
     }));
+
+    // Store top N category values (non-Other) for exclusion filter
+    this.topCategoryValues = this.data.segments
+      .filter((seg) => !seg.isOther)
+      .map((seg) => seg.value);
 
     // Add null segment at the end if there are nulls
     if (this.data.nullCount > 0) {
@@ -671,7 +680,7 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
-   * Handle click - select segment (freeze stats)
+   * Handle click - select segment and create filter
    */
   protected handleClick(x: number, y: number): void {
     if (!this.data) return;
@@ -690,14 +699,46 @@ export class ValueCounts extends BaseVisualization {
       if (x >= pos.x && x <= pos.x + pos.width) {
         const segment = this.renderSegments[pos.index];
         if (segment && segment.count > 0) {
+          // Visual selection
           this.selectedSegment = pos.index;
           this.hoveredSegment = null;
           this.render();
           this.updateSelectedStats();
           this.options.onSelectionChange?.(this.column.name, true);
+
+          // Create filter for segment
+          this.createFilterForSegment(segment);
         }
         return;
       }
+    }
+  }
+
+  /**
+   * Create and emit filter for clicked segment
+   */
+  private createFilterForSegment(segment: RenderSegment): void {
+    if (segment.isNull) {
+      // Null filter
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'null',
+        value: null,
+      });
+    } else if (segment.isOther) {
+      // Exclusion filter - NOT IN top N values
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'not-set',
+        value: this.topCategoryValues,
+      });
+    } else {
+      // Point filter for category value
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'point',
+        value: segment.value,
+      });
     }
   }
 

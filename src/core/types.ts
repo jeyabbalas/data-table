@@ -24,7 +24,7 @@ export interface ColumnSchema {
 }
 
 // Filter types
-export type FilterType = 'range' | 'point' | 'set' | 'null' | 'not-null' | 'pattern';
+export type FilterType = 'range' | 'point' | 'set' | 'not-set' | 'null' | 'not-null' | 'pattern';
 
 export interface Filter {
   column: string;

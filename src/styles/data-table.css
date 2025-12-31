@@ -167,10 +167,9 @@
   position: relative; /* For absolute positioning of resize handle */
   width: var(--dt-col-width);
   flex-shrink: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem; /* Symmetric padding - no extra left padding */
   border-right: 1px solid var(--dt-border);
-  cursor: grab;
-  user-select: none;
+  cursor: default; /* No grab cursor - use drag handle instead */
   transition: background var(--dt-transition);
   background: var(--dt-bg-secondary);
 }
@@ -192,6 +191,13 @@
   transition: width 0.2s ease-out;
 }
 
+/* Name row: flex container for drag handle + column name */
+.dt-col-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .dt-col-name {
   font-weight: 600;
   font-size: var(--dt-font-size);
@@ -205,6 +211,7 @@
   font-size: var(--dt-font-size-sm);
   color: var(--dt-text-secondary);
   margin-top: 0.125rem;
+  margin-left: calc(16px + 0.25rem); /* Align with name (drag handle width + gap) */
 }
 
 .dt-col-stats {
@@ -248,6 +255,59 @@
 
 .dt-col-resize-handle--active {
   background: var(--dt-primary);
+}
+
+/* ===========================================
+   Drag Handle
+   =========================================== */
+
+.dt-col-drag-handle {
+  /* Inline element within name-row flex container */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: grab;
+  opacity: 0.3;
+  transition: opacity var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-col-drag-handle:hover {
+  opacity: 0.7;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.dt-col-drag-handle:active {
+  cursor: grabbing;
+  opacity: 1;
+}
+
+.dt-col-drag-handle:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+  opacity: 0.7;
+}
+
+.dt-col-drag-handle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dt-col-drag-handle circle {
+  fill: var(--dt-text-secondary);
+}
+
+/* Dark mode adjustments for drag handle */
+@media (prefers-color-scheme: dark) {
+  .dt-col-drag-handle:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
 }
 
 /* ===========================================
@@ -299,11 +359,15 @@
   fill: var(--dt-arrow-hover);
 }
 
-.dt-col-sort-btn--asc .arrow-up {
+/* Sorted ascending - arrow up stays blue even on hover */
+.dt-col-sort-btn--asc .arrow-up,
+.dt-col-sort-btn--asc:hover .arrow-up {
   fill: var(--dt-primary);
 }
 
-.dt-col-sort-btn--desc .arrow-down {
+/* Sorted descending - arrow down stays blue even on hover */
+.dt-col-sort-btn--desc .arrow-down,
+.dt-col-sort-btn--desc:hover .arrow-down {
   fill: var(--dt-primary);
 }
 

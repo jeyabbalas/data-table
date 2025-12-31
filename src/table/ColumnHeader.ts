@@ -86,11 +86,34 @@ export class ColumnHeader {
     el.setAttribute('aria-label', `${this.column.name}, ${this.column.type}`);
     el.setAttribute('data-column', this.column.name);
 
+    // Name row container (holds drag handle + name inline)
+    const nameRow = document.createElement('div');
+    nameRow.className = `${this.classPrefix}-col-name-row`;
+
+    // Drag handle (inline with name)
+    const dragHandle = document.createElement('button');
+    dragHandle.className = `${this.classPrefix}-col-drag-handle`;
+    dragHandle.setAttribute('type', 'button');
+    dragHandle.setAttribute('aria-label', `Drag to reorder ${this.column.name}`);
+    dragHandle.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="5" cy="4" r="1.5" />
+        <circle cx="11" cy="4" r="1.5" />
+        <circle cx="5" cy="8" r="1.5" />
+        <circle cx="11" cy="8" r="1.5" />
+        <circle cx="5" cy="12" r="1.5" />
+        <circle cx="11" cy="12" r="1.5" />
+      </svg>
+    `;
+    nameRow.appendChild(dragHandle);
+
     // Column name
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
-    el.appendChild(nameEl);
+    nameRow.appendChild(nameEl);
+
+    el.appendChild(nameRow);
 
     // Type label
     const typeEl = document.createElement('div');

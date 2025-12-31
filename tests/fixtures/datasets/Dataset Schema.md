@@ -161,15 +161,15 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 
 #### Edge Cases
 
-| Column | Data Type | Nullable | Description |
-|--------|-----------|----------|-------------|
-| `all_nulls` | TIMESTAMP | Yes | 100% null values - tests empty column handling |
-| `single_value` | TIMESTAMP | No | All identical timestamps - tests single-bin histogram |
-| `with_nulls` | TIMESTAMP | Yes | ~20% null values - tests mixed null handling |
-| `epoch_boundary` | TIMESTAMP | No | Values around Unix epoch (1970-01-01) |
-| `y2k_boundary` | TIMESTAMP | No | Values around Y2K (2000-01-01) |
-| `leap_year_dates` | DATE | No | Feb 28/29 across leap and non-leap years |
-| `month_boundaries` | DATE | No | End of months (28, 29, 30, 31 day variants) |
+| Column | Data Type      | Nullable | Description |
+|--------|----------------|----------|-------------|
+| `all_nulls` | STRING/INTEGER | Yes | 100% null values - tests empty column handling |
+| `single_value` | TIMESTAMP      | No | All identical timestamps - tests single-bin histogram |
+| `with_nulls` | TIMESTAMP      | Yes | ~20% null values - tests mixed null handling |
+| `epoch_boundary` | TIMESTAMP      | No | Values around Unix epoch (1970-01-01) |
+| `y2k_boundary` | TIMESTAMP      | No | Values around Y2K (2000-01-01) |
+| `leap_year_dates` | DATE           | No | Feb 28/29 across leap and non-leap years |
+| `month_boundaries` | DATE           | No | End of months (28, 29, 30, 31 day variants) |
 
 #### Precision Variants
 
@@ -187,7 +187,7 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 | `end_of_day` | TIME | No | 23:59:59.999999 values |
 | `timezone_variety` | TIMESTAMPTZ | No | 15 different UTC offsets |
 
-#### String Format Columns (strptime Parsing Tests)
+#### String Format Columns (`strptime` Parsing Tests)
 
 | Column | Data Type | Format | Example |
 |--------|-----------|--------|---------|

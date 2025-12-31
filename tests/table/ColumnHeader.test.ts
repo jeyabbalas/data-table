@@ -43,11 +43,36 @@ describe('ColumnHeader', () => {
       const el = header.getElement();
       expect(el).toBeDefined();
       expect(el.className).toBe('dt-col-header');
+      expect(el.querySelector('.dt-col-name-row')).toBeTruthy();
+      expect(el.querySelector('.dt-col-drag-handle')).toBeTruthy();
       expect(el.querySelector('.dt-col-name')).toBeTruthy();
       expect(el.querySelector('.dt-col-type')).toBeTruthy();
       expect(el.querySelector('.dt-col-stats')).toBeTruthy();
       expect(el.querySelector('.dt-col-viz')).toBeTruthy();
       expect(el.querySelector('.dt-col-sort')).toBeTruthy();
+
+      header.destroy();
+    });
+
+    it('should create drag handle inline with name in name-row', () => {
+      const header = new ColumnHeader(column, state, actions);
+
+      const el = header.getElement();
+      const nameRow = el.querySelector('.dt-col-name-row');
+      expect(nameRow).toBeTruthy();
+
+      // Drag handle should be inside name-row
+      const dragHandle = nameRow?.querySelector('.dt-col-drag-handle');
+      expect(dragHandle).toBeTruthy();
+      expect(dragHandle?.tagName).toBe('BUTTON');
+      expect(dragHandle?.getAttribute('type')).toBe('button');
+      expect(dragHandle?.getAttribute('aria-label')).toBe('Drag to reorder test_column');
+      expect(dragHandle?.querySelector('svg')).toBeTruthy();
+
+      // Name should also be inside name-row
+      const name = nameRow?.querySelector('.dt-col-name');
+      expect(name).toBeTruthy();
+      expect(name?.textContent).toBe('test_column');
 
       header.destroy();
     });

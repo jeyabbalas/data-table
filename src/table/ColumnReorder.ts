@@ -136,22 +136,9 @@ export class ColumnReorder {
 
     const target = event.target as HTMLElement;
 
-    // Don't start drag if clicking on resize handle or sort button
-    if (
-      target.closest(`.${this.classPrefix}-col-resize-handle`) ||
-      target.closest(`.${this.classPrefix}-col-sort-btn`) ||
-      target.closest('button')
-    ) {
-      return;
-    }
-
-    // Don't start drag if clicking on visualization canvas
-    if (
-      target.tagName === 'CANVAS' ||
-      target.closest(`.${this.classPrefix}-col-viz`)
-    ) {
-      return;
-    }
+    // Only start drag if clicking on the drag handle
+    const dragHandle = target.closest(`.${this.classPrefix}-col-drag-handle`);
+    if (!dragHandle) return;
 
     // Find the column header
     const header = target.closest(`.${this.classPrefix}-col-header`) as HTMLElement;

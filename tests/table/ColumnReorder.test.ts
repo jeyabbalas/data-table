@@ -21,6 +21,13 @@ describe('ColumnReorder', () => {
     header.setAttribute('data-column', columnName);
     header.style.width = '150px';
 
+    // Add drag handle element (required for drag initiation)
+    const dragHandle = document.createElement('button');
+    dragHandle.className = 'dt-col-drag-handle';
+    dragHandle.setAttribute('type', 'button');
+    dragHandle.setAttribute('aria-label', `Drag to reorder ${columnName}`);
+    header.appendChild(dragHandle);
+
     // Add column name element
     const nameEl = document.createElement('div');
     nameEl.className = 'dt-col-name';
@@ -28,6 +35,13 @@ describe('ColumnReorder', () => {
     header.appendChild(nameEl);
 
     return header;
+  }
+
+  /**
+   * Helper to get the drag handle from a header
+   */
+  function getDragHandle(header: Element): Element {
+    return header.querySelector('.dt-col-drag-handle')!;
   }
 
   /**
@@ -211,9 +225,10 @@ describe('ColumnReorder', () => {
       reorder.refresh();
 
       const header = headerRow.querySelector('[data-column="col1"]')!;
+      const dragHandle = getDragHandle(header);
 
-      // Mousedown
-      header.dispatchEvent(
+      // Mousedown on drag handle
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75,
           clientY: 16,
@@ -291,6 +306,41 @@ describe('ColumnReorder', () => {
 
       reorder.destroy();
     });
+
+    it('does not start drag when clicking on column name (non-drag-handle area)', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+
+      const header = headerRow.querySelector('[data-column="col1"]')!;
+      const colName = header.querySelector('.dt-col-name')!;
+
+      // Click on column name (not the drag handle)
+      colName.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 75,
+          clientY: 16,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+
+      // Move past threshold
+      document.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 200, // +125 pixels
+          clientY: 16,
+          bubbles: true,
+        })
+      );
+
+      // Should NOT start drag (only drag handle triggers drag)
+      expect(reorder.isDraggingNow()).toBe(false);
+
+      // Clean up
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      reorder.destroy();
+    });
   });
 
   describe('drop and reorder', () => {
@@ -300,9 +350,10 @@ describe('ColumnReorder', () => {
       reorder.refresh();
 
       const header = headerRow.querySelector('[data-column="col1"]')!;
+      const dragHandle = getDragHandle(header);
 
-      // Start drag on col1 (at position 0)
-      header.dispatchEvent(
+      // Start drag on col1 (at position 0) via drag handle
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75, // center of col1
           clientY: 16,
@@ -389,9 +440,10 @@ describe('ColumnReorder', () => {
       reorder.refresh();
 
       const header = headerRow.querySelector('[data-column="col1"]')!;
+      const dragHandle = getDragHandle(header);
 
-      // Start and complete drag
-      header.dispatchEvent(
+      // Start and complete drag via drag handle
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75,
           clientY: 16,
@@ -425,9 +477,10 @@ describe('ColumnReorder', () => {
       reorder.refresh();
 
       const header = headerRow.querySelector('[data-column="col1"]')!;
+      const dragHandle = getDragHandle(header);
 
-      // Start drag
-      header.dispatchEvent(
+      // Start drag via drag handle
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75,
           clientY: 16,
@@ -460,9 +513,10 @@ describe('ColumnReorder', () => {
       reorder.refresh();
 
       const header = headerRow.querySelector('[data-column="col1"]')!;
+      const dragHandle = getDragHandle(header);
 
-      // Start drag
-      header.dispatchEvent(
+      // Start drag via drag handle
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75,
           clientY: 16,
@@ -526,9 +580,10 @@ describe('ColumnReorder', () => {
       const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
       reorder.refresh();
 
-      // Start a drag to create the indicator
+      // Start a drag to create the indicator via drag handle
       const header = headerRow.querySelector('[data-column="col1"]')!;
-      header.dispatchEvent(
+      const dragHandle = getDragHandle(header);
+      dragHandle.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 75,
           clientY: 16,

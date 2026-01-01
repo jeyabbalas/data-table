@@ -850,12 +850,14 @@ export class DateHistogram extends BaseVisualization {
     if (this.selectedBin !== null) {
       const bin = this.data.bins[this.selectedBin];
       if (bin) {
-        const rangeStr = formatDateRange(
-          bin.binStart,
-          bin.binEnd,
-          this.data.interval,
-          this.formatContext
-        );
+        const rangeStr = this.data.isNumericBinning
+          ? formatDateRangeForType(bin.binStart, bin.binEnd, this.column.type)
+          : formatDateRange(
+              bin.binStart,
+              bin.binEnd,
+              this.data.interval,
+              this.formatContext
+            );
         const count = formatCount(bin.count);
         const percent = formatPercent(bin.count / this.data.total);
         this.options.onStatsChange?.(

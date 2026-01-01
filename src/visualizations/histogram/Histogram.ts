@@ -888,8 +888,8 @@ export class Histogram extends BaseVisualization {
     if (this.selectedBin !== null) {
       const bin = this.data.bins[this.selectedBin];
       if (bin) {
-        // Show single value without range for single-value columns
-        const rangeStr = this.data.isSingleValue
+        // Show single value without range for single-value or discrete columns
+        const rangeStr = (this.data.isSingleValue || this.data.isDiscrete)
           ? formatAxisValue(bin.x0)
           : `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
         const count = formatCount(bin.count);

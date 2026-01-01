@@ -19,6 +19,7 @@ const mockContext = {
   quadraticCurveTo: vi.fn(),
   closePath: vi.fn(),
   fill: vi.fn(),
+  stroke: vi.fn(),
   setTransform: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
@@ -140,11 +141,11 @@ describe('Histogram', () => {
       // Wait for async fetchData
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // Default maxBins is 20
+      // Default maxBins is 15
       expect(fetchHistogramData).toHaveBeenCalledWith(
         'test_table',
         'test_column',
-        20,
+        15,
         [],
         options.bridge
       );

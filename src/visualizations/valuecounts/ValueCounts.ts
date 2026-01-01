@@ -133,6 +133,7 @@ interface RenderSegment {
   count: number;
   isOther: boolean;
   isNull: boolean;
+  isAllUnique?: boolean;
   otherCount?: number;
 }
 
@@ -368,8 +369,8 @@ export class ValueCounts extends BaseVisualization {
         } else {
           fillColor = COLORS.nullFill;
         }
-      } else if (segment.isOther) {
-        // "Other" segment - gray
+      } else if (segment.isOther || segment.isAllUnique) {
+        // "Other" or "All unique" segment - gray (indicates non-informative)
         if (isSelected) {
           fillColor = COLORS.otherHover;
         } else if (hasSelection && !isSelected) {
@@ -574,6 +575,7 @@ export class ValueCounts extends BaseVisualization {
       count: this.data.distinctCount,
       isOther: false,
       isNull: false,
+      isAllUnique: true,
     }];
 
     // Add null segment if present

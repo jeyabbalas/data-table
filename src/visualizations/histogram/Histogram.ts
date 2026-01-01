@@ -161,6 +161,10 @@ export class Histogram extends BaseVisualization {
   private selectedBin: number | null = null;
   private selectedNull: boolean = false;
 
+  // All-null state (when all data is null)
+  private isAllNullState = false;
+  private allNullHovered = false;
+
   // Flag to prevent handleClick from acting after handleMouseDown cleared something
   private clickConsumedByMouseDown = false;
 
@@ -249,7 +253,16 @@ export class Histogram extends BaseVisualization {
 
     this.clear();
 
-    // If no data, show empty state
+    // Check for all-null state (bins empty but nulls exist)
+    if (this.data && this.data.bins.length === 0 && this.data.nullCount > 0) {
+      this.isAllNullState = true;
+      this.drawAllNullState();
+      return;
+    }
+
+    this.isAllNullState = false;
+
+    // If no data at all, show empty state
     if (!this.data || this.data.bins.length === 0) {
       this.drawEmptyState();
       return;
@@ -326,6 +339,18 @@ export class Histogram extends BaseVisualization {
     const numBins = this.data.bins.length;
     if (numBins === 0) {
       this.barPositions = [];
+      return;
+    }
+
+    // Special case: single value - use 40% width centered bar
+    if (this.data.isSingleValue && numBins === 1) {
+      const singleBarWidth = Math.min(this.chartArea.width * 0.4, 60);
+      const barX = this.chartArea.x + (this.chartArea.width - singleBarWidth) / 2;
+      this.barPositions = [{
+        x: barX,
+        width: singleBarWidth,
+        binIndex: 0,
+      }];
       return;
     }
 
@@ -681,6 +706,42 @@ export class Histogram extends BaseVisualization {
     ctx.fillText('No data', this.width / 2, this.height / 2);
   }
 
+  /**
+   * Draw all-null state - full-width amber bar when all values are null
+   */
+  private drawAllNullState(): void {
+    if (!this.data) return;
+
+    const ctx = this.ctx;
+    const barX = PADDING.left;
+    const barY = PADDING.top;
+    const barWidth = this.width - PADDING.left - PADDING.right;
+    const barHeight = this.height - PADDING.top - PADDING.bottom;
+
+    // Determine color based on hover state
+    const fillColor = this.allNullHovered ? COLORS.nullHover : COLORS.nullFill;
+
+    // Draw full-width amber bar with rounded top corners
+    this.drawRoundedBar(ctx, barX, barY, barWidth, barHeight, LAYOUT.barRadius, fillColor);
+
+    // Draw axis line at bottom
+    const axisY = barY + barHeight;
+    ctx.strokeStyle = COLORS.axisLine;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(barX, axisY);
+    ctx.lineTo(barX + barWidth, axisY);
+    ctx.stroke();
+
+    // Draw centered ∅ label below bar
+    const labelY = this.height - 3;
+    ctx.fillStyle = COLORS.nullFill;
+    ctx.font = FONTS.axis;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('∅', this.width / 2, labelY);
+  }
+
   // =========================================
   // Mouse Interaction
   // =========================================
@@ -689,6 +750,34 @@ export class Histogram extends BaseVisualization {
    * Handle mouse movement - detect which bar is under cursor and update stats
    */
   protected handleMouseMove(x: number, y: number): void {
+    // Handle all-null state specially
+    if (this.isAllNullState && this.data) {
+      const barX = PADDING.left;
+      const barWidth = this.width - PADDING.left - PADDING.right;
+      const inBar = y >= PADDING.top && y <= this.height - PADDING.bottom &&
+                    x >= barX && x <= barX + barWidth;
+
+      const prevHovered = this.allNullHovered;
+      this.allNullHovered = inBar;
+      this.canvas.style.cursor = inBar ? 'pointer' : 'default';
+
+      if (this.allNullHovered !== prevHovered) {
+        this.render();
+        if (this.allNullHovered) {
+          const count = formatCount(this.data.nullCount);
+          const percent = formatPercent(this.data.nullCount / this.data.total);
+          this.options.onStatsChange?.(
+            `<span class="stats-label">Bin:</span><br>` +
+            `null<br>` +
+            `<span class="stats-label">Count:</span> ${count} (${percent})`
+          );
+        } else {
+          this.options.onStatsChange?.(null);
+        }
+      }
+      return;
+    }
+
     // If sliding a committed brush
     if (this.brushState.sliding) {
       this.slideBrush(x);
@@ -826,6 +915,24 @@ export class Histogram extends BaseVisualization {
 
     if (!this.data) return;
 
+    // Handle all-null state - clicking creates null filter
+    if (this.isAllNullState) {
+      const barX = PADDING.left;
+      const barWidth = this.width - PADDING.left - PADDING.right;
+      const inBar = y >= PADDING.top && y <= this.height - PADDING.bottom &&
+                    x >= barX && x <= barX + barWidth;
+
+      if (inBar) {
+        // Create null filter
+        this.options.onFilterChange?.({
+          column: this.column.name,
+          type: 'null',
+          value: null,
+        });
+      }
+      return;
+    }
+
     // If brush is active or committed, clicks are handled by mousedown/mouseup
     if (this.brushState.committed || this.brushState.active) return;
 
@@ -931,6 +1038,17 @@ export class Histogram extends BaseVisualization {
    */
   protected handleMouseLeave(): void {
     this.canvas.style.cursor = 'default';
+
+    // Handle all-null state
+    if (this.isAllNullState) {
+      if (this.allNullHovered) {
+        this.allNullHovered = false;
+        this.options.onStatsChange?.(null);
+        this.render();
+      }
+      return;
+    }
+
     // Restore default stats (unless brush is committed or bar is selected - keep showing stats)
     if (!this.brushState.committed && this.selectedBin === null && !this.selectedNull) {
       this.options.onStatsChange?.(null);

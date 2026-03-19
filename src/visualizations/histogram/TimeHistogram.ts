@@ -853,7 +853,7 @@ export class TimeHistogram extends BaseVisualization {
   /**
    * Handle click - select bar
    */
-  protected handleClick(x: number, y: number): void {
+  protected handleClick(x: number, y: number, _event?: MouseEvent): void {
     if (this.clickConsumedByMouseDown) {
       this.clickConsumedByMouseDown = false;
       return;

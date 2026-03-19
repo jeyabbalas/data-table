@@ -151,8 +151,15 @@ export class ValueCounts extends BaseVisualization {
   // Interaction state - index into renderSegments array
   private hoveredSegment: number | null = null;
 
-  // Selection state (single segment click-to-select)
-  private selectedSegment: number | null = null;
+  // Selection state (supports multi-select with Ctrl/Cmd+click)
+  private selectedSegments: Set<number> = new Set();
+
+  // Double-click detection for clearing selection
+  private lastClickTime = 0;
+  private lastClickX = 0;
+  private lastClickY = 0;
+  private readonly DOUBLE_CLICK_THRESHOLD = 300; // ms
+  private readonly DOUBLE_CLICK_DISTANCE = 10; // pixels
 
   // Computed layout (updated on render)
   private barArea = { x: 0, y: 0, width: 0, height: 0 };
@@ -186,7 +193,7 @@ export class ValueCounts extends BaseVisualization {
     if (this.destroyed) return;
 
     // Reset selection when fetching new data
-    this.selectedSegment = null;
+    this.selectedSegments.clear();
 
     this.data = await fetchValueCountsData(
       this.options.tableName,
@@ -345,14 +352,14 @@ export class ValueCounts extends BaseVisualization {
 
     const ctx = this.ctx;
     const hasHover = this.hoveredSegment !== null;
-    const hasSelection = this.selectedSegment !== null;
+    const hasSelection = this.selectedSegments.size > 0;
     const numSegments = this.renderSegments.length;
 
     for (let i = 0; i < this.segmentPositions.length; i++) {
       const pos = this.segmentPositions[i];
       const segment = this.renderSegments[i];
       const isHovered = this.hoveredSegment === i;
-      const isSelected = this.selectedSegment === i;
+      const isSelected = this.selectedSegments.has(i);
 
       // Determine fill color based on segment type and state
       let fillColor: string;
@@ -526,26 +533,29 @@ export class ValueCounts extends BaseVisualization {
    * Draw selection indicators below selected segments
    */
   private drawSelectionIndicators(): void {
-    if (!this.data || this.selectedSegment === null) return;
+    if (!this.data || this.selectedSegments.size === 0) return;
 
     const ctx = this.ctx;
     const indicatorY =
       this.barArea.y + this.barArea.height + LAYOUT.selectionIndicatorGap;
 
-    const pos = this.segmentPositions[this.selectedSegment];
-    if (!pos) return;
+    // Draw indicator for each selected segment
+    for (const selectedIdx of this.selectedSegments) {
+      const pos = this.segmentPositions[selectedIdx];
+      if (!pos) continue;
 
-    const segment = this.renderSegments[this.selectedSegment];
-    ctx.fillStyle = segment?.isNull
-      ? COLORS.nullSelectionIndicator
-      : COLORS.selectionIndicator;
+      const segment = this.renderSegments[selectedIdx];
+      ctx.fillStyle = segment?.isNull
+        ? COLORS.nullSelectionIndicator
+        : COLORS.selectionIndicator;
 
-    ctx.fillRect(
-      pos.x,
-      indicatorY,
-      pos.width,
-      LAYOUT.selectionIndicatorHeight
-    );
+      ctx.fillRect(
+        pos.x,
+        indicatorY,
+        pos.width,
+        LAYOUT.selectionIndicatorHeight
+      );
+    }
   }
 
   /**
@@ -610,8 +620,8 @@ export class ValueCounts extends BaseVisualization {
   protected handleMouseMove(x: number, y: number): void {
     if (!this.data) return;
 
-    // If a segment is selected, skip hover logic to preserve selected stats
-    if (this.selectedSegment !== null) {
+    // If any segment is selected, skip hover logic to preserve selected stats
+    if (this.selectedSegments.size > 0) {
       this.canvas.style.cursor = 'default';
       return;
     }
@@ -682,42 +692,107 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
-   * Handle click - select segment and create filter
+   * Handle click - select segment(s) and create filter
+   * Supports multi-select with Ctrl/Cmd+click for regular categories
    */
-  protected handleClick(x: number, y: number): void {
+  protected handleClick(x: number, y: number, event?: MouseEvent): void {
     if (!this.data) return;
 
-    // If something is already selected, any click clears it first
-    if (this.selectedSegment !== null) {
+    const now = Date.now();
+    const isMultiSelectKey = event?.metaKey || event?.ctrlKey;
+
+    // Check if click is in the bar area (vertically)
+    const inBarArea = y >= PADDING.top && y <= this.height - PADDING.bottom;
+
+    // Find clicked segment (null if click is outside all segments)
+    let clickedIndex: number | null = null;
+    if (inBarArea) {
+      for (const pos of this.segmentPositions) {
+        if (x >= pos.x && x <= pos.x + pos.width) {
+          clickedIndex = pos.index;
+          break;
+        }
+      }
+    }
+
+    // Check if clicked segment is currently selected
+    const clickedOnSelected = clickedIndex !== null && this.selectedSegments.has(clickedIndex);
+
+    // Detect double-click on selected segment
+    if (clickedOnSelected) {
+      const timeSinceLastClick = now - this.lastClickTime;
+      const distance = Math.hypot(x - this.lastClickX, y - this.lastClickY);
+
+      if (timeSinceLastClick < this.DOUBLE_CLICK_THRESHOLD && distance < this.DOUBLE_CLICK_DISTANCE) {
+        // Double-click on selected → clear all selection
+        this.clearSelection();
+        this.lastClickTime = 0; // Reset to prevent triple-click issues
+        return;
+      }
+    }
+
+    // Update click tracking
+    this.lastClickTime = now;
+    this.lastClickX = x;
+    this.lastClickY = y;
+
+    // If has selection and clicked outside all segments (but on canvas) → clear
+    if (this.selectedSegments.size > 0 && inBarArea && clickedIndex === null) {
       this.clearSelection();
       return;
     }
 
-    // Check if click is in the bar area
-    if (y < PADDING.top || y > this.height - PADDING.bottom) return;
-
-    // Check all segments
-    for (const pos of this.segmentPositions) {
-      if (x >= pos.x && x <= pos.x + pos.width) {
-        const segment = this.renderSegments[pos.index];
-        if (segment && segment.count > 0) {
-          // Visual selection
-          this.selectedSegment = pos.index;
-          this.hoveredSegment = null;
-          this.render();
-          this.updateSelectedStats();
-          this.options.onSelectionChange?.(this.column.name, true);
-
-          // Create filter for segment
-          this.createFilterForSegment(segment);
-        }
-        return;
-      }
+    // If has selection and clicked on a selected segment (single click without modifier) → clear
+    // (consistent with histogram behavior: any click when selected = clear)
+    if (this.selectedSegments.size > 0 && clickedOnSelected && !isMultiSelectKey) {
+      this.clearSelection();
+      return;
     }
+
+    // Nothing clicked
+    if (clickedIndex === null) return;
+
+    const segment = this.renderSegments[clickedIndex];
+    if (!segment || segment.count === 0) return;
+
+    // Check if segment supports multi-select (only regular categories)
+    const canMultiSelect = !segment.isNull && !segment.isOther && !segment.isAllUnique;
+
+    if (isMultiSelectKey && canMultiSelect) {
+      // Multi-select mode with Ctrl/Cmd
+      if (this.selectedSegments.has(clickedIndex)) {
+        // Ctrl+click on selected → remove from selection
+        this.selectedSegments.delete(clickedIndex);
+        if (this.selectedSegments.size === 0) {
+          this.clearSelection();
+          return;
+        }
+      } else {
+        // Ctrl+click on unselected → add to selection
+        // First clear any non-multi-selectable segments
+        for (const idx of [...this.selectedSegments]) {
+          const seg = this.renderSegments[idx];
+          if (seg?.isNull || seg?.isOther || seg?.isAllUnique) {
+            this.selectedSegments.delete(idx);
+          }
+        }
+        this.selectedSegments.add(clickedIndex);
+      }
+    } else {
+      // Single-select mode (no modifier, or clicked on non-multi-selectable)
+      this.selectedSegments.clear();
+      this.selectedSegments.add(clickedIndex);
+    }
+
+    this.hoveredSegment = null;
+    this.render();
+    this.updateSelectedStats();
+    this.createFilterForSelection();
+    this.options.onSelectionChange?.(this.column.name, true);
   }
 
   /**
-   * Create and emit filter for clicked segment
+   * Create and emit filter for clicked segment (single selection)
    */
   private createFilterForSegment(segment: RenderSegment): void {
     if (segment.isNull) {
@@ -745,33 +820,95 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
+   * Create and emit filter based on current selection (single or multi)
+   */
+  private createFilterForSelection(): void {
+    if (this.selectedSegments.size === 0) {
+      return;
+    }
+
+    if (this.selectedSegments.size === 1) {
+      // Single selection - use existing logic
+      const idx = [...this.selectedSegments][0];
+      const segment = this.renderSegments[idx];
+      if (segment) {
+        this.createFilterForSegment(segment);
+      }
+      return;
+    }
+
+    // Multiple selections - create set filter
+    const selectedValues: string[] = [];
+    for (const idx of this.selectedSegments) {
+      const segment = this.renderSegments[idx];
+      if (segment && !segment.isNull && !segment.isOther && !segment.isAllUnique) {
+        selectedValues.push(segment.value);
+      }
+    }
+
+    if (selectedValues.length > 0) {
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'set',
+        value: selectedValues,
+      });
+    }
+  }
+
+  /**
    * Update stats line to show selected segment info
    */
   private updateSelectedStats(): void {
-    if (!this.data || this.selectedSegment === null) return;
+    if (!this.data || this.selectedSegments.size === 0) return;
 
-    const segment = this.renderSegments[this.selectedSegment];
-    if (segment) {
-      const count = formatCount(segment.count);
-      const percent = formatPercent(segment.count / this.data.total);
+    // Single selection - use existing formatting
+    if (this.selectedSegments.size === 1) {
+      const idx = [...this.selectedSegments][0];
+      const segment = this.renderSegments[idx];
+      if (segment) {
+        const count = formatCount(segment.count);
+        const percent = formatPercent(segment.count / this.data.total);
 
-      let categoryLabel: string;
-      if (segment.isNull) {
-        categoryLabel = 'null';
-      } else if (segment.isOther) {
-        categoryLabel = `Other (${segment.otherCount} values)`;
-      } else {
-        categoryLabel = segment.value.length > 30
-          ? segment.value.substring(0, 27) + '...'
-          : segment.value;
+        let categoryLabel: string;
+        if (segment.isNull) {
+          categoryLabel = 'null';
+        } else if (segment.isOther) {
+          categoryLabel = `Other (${segment.otherCount} values)`;
+        } else {
+          categoryLabel = segment.value.length > 30
+            ? segment.value.substring(0, 27) + '...'
+            : segment.value;
+        }
+
+        this.options.onStatsChange?.(
+          `<span class="stats-label">Category:</span><br>` +
+          `${categoryLabel}<br>` +
+          `<span class="stats-label">Count:</span> ${count} (${percent})`
+        );
       }
-
-      this.options.onStatsChange?.(
-        `<span class="stats-label">Category:</span><br>` +
-        `${categoryLabel}<br>` +
-        `<span class="stats-label">Count:</span> ${count} (${percent})`
-      );
+      return;
     }
+
+    // Multi-select stats
+    const selectedSegmentsList = [...this.selectedSegments]
+      .map(idx => this.renderSegments[idx])
+      .filter(s => s && !s.isNull && !s.isOther && !s.isAllUnique);
+
+    const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
+    const percent = formatPercent(totalCount / this.data.total);
+
+    // Format value list (truncate if too long)
+    const values = selectedSegmentsList.map(s => s.value);
+    let valueListStr = values.join(', ');
+    if (valueListStr.length > 50) {
+      valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;
+    }
+
+    this.options.onStatsChange?.(
+      `<span class="stats-label">Selected:</span><br>` +
+      `${valueListStr}<br>` +
+      `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`
+    );
   }
 
   /**
@@ -781,7 +918,7 @@ export class ValueCounts extends BaseVisualization {
     this.canvas.style.cursor = 'default';
 
     // Restore default stats (unless segment is selected)
-    if (this.selectedSegment === null) {
+    if (this.selectedSegments.size === 0) {
       this.options.onStatsChange?.(null);
     }
 
@@ -826,19 +963,20 @@ export class ValueCounts extends BaseVisualization {
 
   /**
    * Get the current selection state for persistence
-   * Note: selectedSegment is index into renderSegments, not data.segments
+   * Returns array of selected segment indices
    */
   public getSelectionState(): {
-    selectedSegment: number | null;
+    selectedSegments: number[];
     selectedNull: boolean;
   } {
-    // Check if selected segment is the null segment
-    const isNullSelected = this.selectedSegment !== null &&
-      this.renderSegments[this.selectedSegment]?.isNull === true;
+    // Check if any selected segment is the null segment
+    const selectedNull = [...this.selectedSegments].some(
+      idx => this.renderSegments[idx]?.isNull === true
+    );
 
     return {
-      selectedSegment: this.selectedSegment,
-      selectedNull: isNullSelected,
+      selectedSegments: [...this.selectedSegments],
+      selectedNull,
     };
   }
 
@@ -847,9 +985,9 @@ export class ValueCounts extends BaseVisualization {
    * Call after data is loaded (fetchData completed)
    */
   public setSelectionState(state: {
-    selectedSegment: number | null;
+    selectedSegments: number[];
     selectedNull: boolean;
-  }): void {
+  } | null): void {
     if (!this.data) return;
 
     // Rebuild render segments if not already built
@@ -857,17 +995,19 @@ export class ValueCounts extends BaseVisualization {
       this.buildRenderSegments();
     }
 
-    // Validate selectedSegment is within bounds
-    if (
-      state.selectedSegment !== null &&
-      (state.selectedSegment < 0 || state.selectedSegment >= this.renderSegments.length)
-    ) {
-      return;
+    this.selectedSegments.clear();
+
+    if (state?.selectedSegments) {
+      for (const idx of state.selectedSegments) {
+        // Validate index is within bounds
+        if (idx >= 0 && idx < this.renderSegments.length) {
+          this.selectedSegments.add(idx);
+        }
+      }
     }
 
-    this.selectedSegment = state.selectedSegment;
     this.render();
-    if (this.selectedSegment !== null) {
+    if (this.selectedSegments.size > 0) {
       this.updateSelectedStats();
     }
   }
@@ -876,8 +1016,8 @@ export class ValueCounts extends BaseVisualization {
    * Clear segment selection (public method for external LIFO handling)
    */
   public clearSelection(): void {
-    const hadSelection = this.selectedSegment !== null;
-    this.selectedSegment = null;
+    const hadSelection = this.selectedSegments.size > 0;
+    this.selectedSegments.clear();
     this.options.onStatsChange?.(null);
     this.render();
     if (hadSelection) {

@@ -59,8 +59,8 @@ const brushStates = new Map<
 >();
 const selectionStates = new Map<
   string,
-  // Histogram/DateHistogram/TimeHistogram use selectedBin, ValueCounts uses selectedSegment
-  { selectedBin?: number | null; selectedSegment?: number | null; selectedNull: boolean }
+  // Histogram/DateHistogram/TimeHistogram use selectedBin, ValueCounts uses selectedSegments (array for multi-select)
+  { selectedBin?: number | null; selectedSegments?: number[]; selectedNull: boolean }
 >();
 
 // LIFO stack for interactions (brushes and selections)
@@ -131,9 +131,9 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
       }
     } else if (viz instanceof ValueCounts) {
       const selState = viz.getSelectionState();
-      if (selState.selectedSegment !== null || selState.selectedNull) {
+      if (selState.selectedSegments.length > 0 || selState.selectedNull) {
         selectionStates.set(column.name, {
-          selectedSegment: selState.selectedSegment,
+          selectedSegments: selState.selectedSegments,
           selectedNull: selState.selectedNull,
         });
       }
@@ -229,7 +229,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
           if (visualization instanceof ValueCounts) {
             const state = visualization.getSelectionState();
             selectionStates.set(colName, {
-              selectedSegment: state.selectedSegment,
+              selectedSegments: state.selectedSegments,
               selectedNull: state.selectedNull,
             });
           } else if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
@@ -280,12 +280,12 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
 
         // Restore selection state
         if (savedSelection) {
-          if (visualization instanceof ValueCounts && savedSelection.selectedSegment !== undefined) {
+          if (visualization instanceof ValueCounts && savedSelection.selectedSegments !== undefined) {
             visualization.setSelectionState({
-              selectedSegment: savedSelection.selectedSegment,
+              selectedSegments: savedSelection.selectedSegments,
               selectedNull: savedSelection.selectedNull,
             });
-            if (savedSelection.selectedSegment !== null || savedSelection.selectedNull) {
+            if (savedSelection.selectedSegments.length > 0 || savedSelection.selectedNull) {
               interactionStack.push({
                 type: 'selection',
                 columnName: column.name,

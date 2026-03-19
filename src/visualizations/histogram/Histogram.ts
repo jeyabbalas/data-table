@@ -906,7 +906,7 @@ export class Histogram extends BaseVisualization {
   /**
    * Handle click - select bar (freeze stats) instead of creating filter
    */
-  protected handleClick(x: number, y: number): void {
+  protected handleClick(x: number, y: number, _event?: MouseEvent): void {
     // If handleMouseDown already handled this click (cleared brush), skip
     if (this.clickConsumedByMouseDown) {
       this.clickConsumedByMouseDown = false;

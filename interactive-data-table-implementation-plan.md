@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a phased implementation plan for building a client-side JavaScript library for interactive, explorable data tables. The library uses DuckDB WASM for in-browser analytics, enabling complete privacy with no server-side processing.
+This document provides a phased implementation plan for developing a client-side TypeScript library that enables users to build browser-based interactive, explorable data tables within their own web applications. The library uses DuckDB WASM for in-browser analytics, enabling complete privacy with no server-side processing.
 
 **Estimated Total Effort:** 8 major phases, ~60-80 discrete tasks
 
@@ -29,8 +29,6 @@ Before starting any phase, ensure you understand:
 ## Phase 0: Project Setup & Foundation
 
 **Goal:** Establish project structure, tooling, and build configuration.
-
-**Duration:** 1-2 sessions
 
 ### Task 0.1: Initialize Project Structure
 ```
@@ -144,8 +142,6 @@ export class EventEmitter<Events extends Record<string, unknown>> {
 ## Phase 1: Core Data Infrastructure
 
 **Goal:** Establish DuckDB integration with Web Worker communication.
-
-**Duration:** 3-4 sessions
 
 ### Task 1.1: Create Web Worker Shell
 
@@ -342,8 +338,6 @@ export class DataLoader {
 
 **Goal:** Detect column types and establish reactive state system.
 
-**Duration:** 2-3 sessions
-
 ### Task 2.1: Basic Schema Detection
 
 Create `src/data/SchemaDetector.ts`:
@@ -513,8 +507,6 @@ export class StateActions {
 ## Phase 3: Basic Table Rendering
 
 **Goal:** Render a virtualized, interactive table.
-
-**Duration:** 3-4 sessions
 
 ### Task 3.1: Create Table Container Component
 
@@ -732,8 +724,6 @@ export class ColumnReorder {
 ## Phase 4: Column Visualizations
 
 **Goal:** Add interactive mini-visualizations to column headers.
-
-**Duration:** 4-5 sessions
 
 ### Task 4.1: Create Visualization Base Class
 
@@ -1024,8 +1014,6 @@ private updateVisualization(): void {
 
 **Goal:** Implement complete filtering with crossfilter behavior.
 
-**Duration:** 3-4 sessions
-
 ### Task 5.1: Create Filter Types
 
 Create `src/filters/FilterTypes.ts`:
@@ -1286,8 +1274,6 @@ private renderFilterBadge(): void {
 
 **Goal:** Add search, context menus, and statistics.
 
-**Duration:** 3-4 sessions
-
 ### Task 6.1: Implement Global Search
 
 Create `src/search/GlobalSearch.ts`:
@@ -1498,8 +1484,6 @@ export class ColumnVisibilityPanel {
 
 **Goal:** Enable data export and session persistence.
 
-**Duration:** 2-3 sessions
-
 ### Task 7.1: Implement CSV Export
 
 Create `src/export/CSVExporter.ts`:
@@ -1709,8 +1693,6 @@ export class SessionRestoreManager {
 ## Phase 8: Advanced Features
 
 **Goal:** Add undo/redo, presets, derived columns, and SQL editor.
-
-**Duration:** 4-5 sessions
 
 ### Task 8.1: Implement Undo/Redo Stack
 
@@ -1944,8 +1926,6 @@ export class QueryResults {
 ## Phase 9: Polish & Optimization
 
 **Goal:** Performance optimization, accessibility, and visual polish.
-
-**Duration:** 3-4 sessions
 
 ### Task 9.1: Implement Query Caching
 

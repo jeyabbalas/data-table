@@ -143,8 +143,9 @@ export abstract class BaseVisualization {
    * Handle click on the visualization.
    * @param x - X coordinate relative to canvas
    * @param y - Y coordinate relative to canvas
+   * @param event - Optional MouseEvent for detecting modifier keys
    */
-  protected abstract handleClick(x: number, y: number): void;
+  protected abstract handleClick(x: number, y: number, event?: MouseEvent): void;
 
   /**
    * Handle mouse leaving the visualization.
@@ -250,7 +251,7 @@ export abstract class BaseVisualization {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    this.handleClick(x, y);
+    this.handleClick(x, y, e);
   }
 
   /**

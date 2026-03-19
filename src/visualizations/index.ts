@@ -31,3 +31,8 @@ export type { TimeHistogramBin, TimeHistogramData } from './histogram';
 // Value counts visualization for categorical columns
 export { ValueCounts } from './valuecounts';
 export type { CategorySegment, ValueCountsData } from './valuecounts';
+
+// Visualization factory for centralized creation
+export { VisualizationFactory } from './VisualizationFactory';
+export type { VisualizationRegistration, VisualizationConstructor } from './VisualizationFactory';
+export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './VisualizationFactory';

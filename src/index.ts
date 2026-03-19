@@ -85,6 +85,11 @@ export type { TypeInferenceResult, TypeInferenceOptions } from './data/TypeInfer
 export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './data/PatternDetector';
 export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './data/PatternDetector';
 
+// Visualization factory
+export { VisualizationFactory } from './visualizations/VisualizationFactory';
+export type { VisualizationRegistration, VisualizationConstructor } from './visualizations/VisualizationFactory';
+export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './visualizations/VisualizationFactory';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

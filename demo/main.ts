@@ -1,15 +1,13 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.6: Testing Value Counts Visualization
+ * Phase 4, Task 4.8: Visualization Factory
  *
- * This demo tests:
+ * This demo uses VisualizationFactory for centralized visualization creation:
+ * - Histogram for numeric columns (integer, float, decimal)
+ * - DateHistogram for date/timestamp columns
+ * - TimeHistogram for time columns
  * - ValueCounts for categorical columns (string, boolean, uuid)
- * - Blue gradient segments with light borders
- * - Hover and click-to-select interactions
- * - All existing histogram visualizations
- *
- * Test with datasets containing string columns to see ValueCounts in action.
  */
 
 import {
@@ -21,7 +19,14 @@ import {
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
 import { ValueCounts } from '../src/visualizations/valuecounts';
-import type { DataType, ColumnSchema } from '../src/core/types';
+import {
+  VisualizationFactory,
+  isNumericType,
+  isDateType,
+  isTimeType,
+  isCategoricalType,
+} from '../src/visualizations/VisualizationFactory';
+import type { ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
 
 // Visualization type union for type safety
@@ -73,41 +78,6 @@ const interactionStack: ActiveInteraction[] = [];
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
-}
-
-/**
- * Check if a column type is numeric (suitable for numeric histogram)
- */
-function isNumericType(type: DataType): boolean {
-  return type === 'integer' || type === 'float' || type === 'decimal';
-}
-
-/**
- * Check if a column type is date/timestamp (suitable for date histogram)
- */
-function isDateType(type: DataType): boolean {
-  return type === 'date' || type === 'timestamp';
-}
-
-/**
- * Check if a column type is time (suitable for time histogram)
- */
-function isTimeType(type: DataType): boolean {
-  return type === 'time';
-}
-
-/**
- * Check if a column type is categorical (suitable for value counts)
- */
-function isCategoricalType(type: DataType): boolean {
-  return type === 'string' || type === 'boolean' || type === 'uuid';
-}
-
-/**
- * Check if a column type needs a visualization
- */
-function needsVisualization(type: DataType): boolean {
-  return isNumericType(type) || isDateType(type) || isTimeType(type) || isCategoricalType(type);
 }
 
 /**
@@ -163,8 +133,8 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
   for (const header of headers) {
     const column = header.getColumn();
 
-    // Skip columns that don't need visualization
-    if (!needsVisualization(column.type)) {
+    // Skip columns that don't have a registered visualization
+    if (!VisualizationFactory.isApplicable(column)) {
       continue;
     }
 
@@ -243,22 +213,12 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
       },
     };
 
-    // Create appropriate visualization based on column type
-    if (isTimeType(column.type)) {
-      visualization = new TimeHistogram(vizContainer, column, vizOptions);
-      console.log(`[Demo] Created TimeHistogram for "${column.name}" (${column.type})`);
-    } else if (isDateType(column.type)) {
-      visualization = new DateHistogram(vizContainer, column, vizOptions);
-      console.log(`[Demo] Created DateHistogram for "${column.name}" (${column.type})`);
-    } else if (isNumericType(column.type)) {
-      visualization = new Histogram(vizContainer, column, vizOptions);
-      console.log(`[Demo] Created Histogram for "${column.name}" (${column.type})`);
-    } else if (isCategoricalType(column.type)) {
-      visualization = new ValueCounts(vizContainer, column, vizOptions);
-      console.log(`[Demo] Created ValueCounts for "${column.name}" (${column.type})`);
-    } else {
-      continue;
-    }
+    // Create appropriate visualization via factory
+    const viz = VisualizationFactory.create(vizContainer, column, vizOptions);
+    if (!viz) continue;
+    visualization = viz as VisualizationType;
+    console.log(`[Demo] Created visualization for "${column.name}" (${column.type})`);
+
 
     activeVisualizations.push(visualization);
 

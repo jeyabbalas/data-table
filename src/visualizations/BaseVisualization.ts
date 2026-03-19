@@ -19,6 +19,56 @@ import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 
 /**
+ * Manages shared window-level event listeners for all BaseVisualization instances.
+ * Attaches exactly one mouseup and one keydown listener on window, dispatching
+ * to all registered instances. Removes listeners when the last instance is destroyed.
+ */
+class WindowListenerManager {
+  private static instances = new Set<BaseVisualization>();
+  private static listening = false;
+
+  private static onMouseUp = (e: MouseEvent): void => {
+    for (const instance of WindowListenerManager.instances) {
+      instance.dispatchWindowMouseUp(e);
+    }
+  };
+
+  private static onKeyDown = (e: KeyboardEvent): void => {
+    for (const instance of WindowListenerManager.instances) {
+      instance.dispatchWindowKeyDown(e);
+    }
+  };
+
+  static register(instance: BaseVisualization): void {
+    this.instances.add(instance);
+    if (!this.listening) {
+      window.addEventListener('mouseup', this.onMouseUp);
+      window.addEventListener('keydown', this.onKeyDown);
+      this.listening = true;
+    }
+  }
+
+  static unregister(instance: BaseVisualization): void {
+    this.instances.delete(instance);
+    if (this.instances.size === 0 && this.listening) {
+      window.removeEventListener('mouseup', this.onMouseUp);
+      window.removeEventListener('keydown', this.onKeyDown);
+      this.listening = false;
+    }
+  }
+
+  /** Exposed for testing: number of registered instances */
+  static get count(): number {
+    return this.instances.size;
+  }
+
+  /** Exposed for testing: whether window listeners are attached */
+  static get isListening(): boolean {
+    return this.listening;
+  }
+}
+
+/**
  * Options for creating a visualization
  */
 export interface VisualizationOptions {
@@ -71,8 +121,6 @@ export abstract class BaseVisualization {
   private boundMouseLeave: (e: MouseEvent) => void;
   private boundClick: (e: MouseEvent) => void;
   private boundMouseDown: (e: MouseEvent) => void;
-  private boundMouseUp: (e: MouseEvent) => void;
-  private boundKeyDown: (e: KeyboardEvent) => void;
   private resizeObserver: ResizeObserver;
 
   constructor(
@@ -104,12 +152,13 @@ export abstract class BaseVisualization {
     this.boundMouseLeave = this.onMouseLeave.bind(this);
     this.boundClick = this.onClick.bind(this);
     this.boundMouseDown = this.onMouseDown.bind(this);
-    this.boundMouseUp = this.onMouseUp.bind(this);
-    this.boundKeyDown = this.onKeyDown.bind(this);
 
     // Setup resize observer for responsive sizing
     this.resizeObserver = new ResizeObserver(this.handleResize.bind(this));
     this.resizeObserver.observe(container);
+
+    // Register with shared window listener manager
+    WindowListenerManager.register(this);
 
     // Initial size setup and interaction
     this.updateSize();
@@ -219,9 +268,6 @@ export abstract class BaseVisualization {
     this.canvas.addEventListener('mouseleave', this.boundMouseLeave);
     this.canvas.addEventListener('click', this.boundClick);
     this.canvas.addEventListener('mousedown', this.boundMouseDown);
-    // mouseup and keydown on window to catch events outside canvas
-    window.addEventListener('mouseup', this.boundMouseUp);
-    window.addEventListener('keydown', this.boundKeyDown);
   }
 
   /**
@@ -266,9 +312,10 @@ export abstract class BaseVisualization {
   }
 
   /**
-   * Translate mouseup event to canvas coordinates and forward to handler
+   * Called by WindowListenerManager to dispatch window mouseup events.
+   * Translates coordinates relative to this instance's canvas.
    */
-  private onMouseUp(e: MouseEvent): void {
+  dispatchWindowMouseUp(e: MouseEvent): void {
     if (this.destroyed) return;
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -277,9 +324,9 @@ export abstract class BaseVisualization {
   }
 
   /**
-   * Forward keydown event to handler
+   * Called by WindowListenerManager to dispatch window keydown events.
    */
-  private onKeyDown(e: KeyboardEvent): void {
+  dispatchWindowKeyDown(e: KeyboardEvent): void {
     if (this.destroyed) return;
     this.handleKeyDown(e.key);
   }
@@ -334,9 +381,8 @@ export abstract class BaseVisualization {
     this.canvas.removeEventListener('click', this.boundClick);
     this.canvas.removeEventListener('mousedown', this.boundMouseDown);
 
-    // Remove event listeners from window
-    window.removeEventListener('mouseup', this.boundMouseUp);
-    window.removeEventListener('keydown', this.boundKeyDown);
+    // Unregister from shared window listener manager
+    WindowListenerManager.unregister(this);
 
     // Stop observing resize (optional chaining in case constructor failed partially)
     this.resizeObserver?.disconnect();

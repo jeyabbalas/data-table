@@ -105,8 +105,6 @@ export class ColumnHeader {
         <circle cx="11" cy="12" r="1.5" />
       </svg>
     `;
-    nameRow.appendChild(dragHandle);
-
     // Column name (flex-grow to push sort button to the right)
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
@@ -133,6 +131,7 @@ export class ColumnHeader {
     sortBtn.appendChild(sortBadge);
 
     nameRow.appendChild(sortBtn);
+    nameRow.appendChild(dragHandle);
 
     el.appendChild(nameRow);
 

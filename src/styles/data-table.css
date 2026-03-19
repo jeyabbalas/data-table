@@ -213,7 +213,6 @@
   font-size: var(--dt-font-size-sm);
   color: var(--dt-text-secondary);
   margin-top: 0.125rem;
-  margin-left: calc(16px + 0.25rem); /* Align with name (drag handle width + gap) */
 }
 
 .dt-col-stats {

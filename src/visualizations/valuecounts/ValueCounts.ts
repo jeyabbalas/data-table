@@ -729,8 +729,8 @@ export class ValueCounts extends BaseVisualization {
     this.lastClickX = x;
     this.lastClickY = y;
 
-    // If has selection and clicked outside all segments (but on canvas) → clear
-    if (this.selectedSegments.size > 0 && inBarArea && clickedIndex === null) {
+    // If has selection and clicked outside all segments (anywhere on canvas) → clear
+    if (this.selectedSegments.size > 0 && clickedIndex === null) {
       this.clearSelection();
       return;
     }

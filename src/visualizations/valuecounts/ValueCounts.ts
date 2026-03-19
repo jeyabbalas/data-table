@@ -788,6 +788,10 @@ export class ValueCounts extends BaseVisualization {
    * Create and emit filter for clicked segment (single selection)
    */
   private createFilterForSegment(segment: RenderSegment): void {
+    if (segment.isAllUnique) {
+      // "All Unique" is a display-only segment, not a real filterable value
+      return;
+    }
     if (segment.isNull) {
       // Null filter
       this.options.onFilterChange?.({

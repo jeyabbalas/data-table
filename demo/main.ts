@@ -149,14 +149,14 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     const vizOptions = {
       tableName,
       bridge,
-      filters: tableState.filters.get(),
+      filters: [],  // No filtering in Phase 4 - crossfilter comes in Phase 5
       onFilterChange: (filter: import('../src/core/types').Filter | null) => {
         if (filter) {
           console.log('[Demo] Filter created:', filter);
-          actions.addFilter(filter);
+          // Phase 5 will implement: actions.addFilter(filter);
         } else {
           console.log('[Demo] Filter removal signal received');
-          // Phase 5 will implement actions.removeFilter()
+          // Phase 5 will implement: actions.removeFilter(column);
         }
       },
       onStatsChange: (stats: string | null) => {
@@ -317,6 +317,7 @@ async function loadData(source: File | string): Promise<void> {
 
   try {
     await actions.loadData(source, { tableName });
+    actions.clearFilters();
     updateTableInfo();
 
     // Attach visualizations after data loads

@@ -397,21 +397,19 @@ export class TimeHistogram extends BaseVisualization {
         heightRatio * this.chartArea.height
       );
 
-      // Determine color based on selection, hover, and brush state
+      // Determine color: hover > selected > brush inside > (selection|brush|hover) faded > normal
       const isThisHovered = this.hoveredBin === i;
       const isThisSelected = this.selectedBin === i;
       const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
 
       let fillColor: string;
-      if (isThisSelected) {
+      if (isThisHovered) {
         fillColor = COLORS.barHover;
-      } else if (hasSelection) {
-        fillColor = COLORS.barFaded;
-      } else if (isThisHovered) {
+      } else if (isThisSelected) {
         fillColor = COLORS.barHover;
-      } else if (hasBrush) {
-        fillColor = isInsideBrush ? COLORS.barHover : COLORS.barFaded;
-      } else if (isAnyHovered) {
+      } else if (hasBrush && isInsideBrush) {
+        fillColor = COLORS.barHover;
+      } else if (hasSelection || hasBrush || isAnyHovered) {
         fillColor = COLORS.barFaded;
       } else {
         fillColor = COLORS.barFill;
@@ -483,21 +481,17 @@ export class TimeHistogram extends BaseVisualization {
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
-    // Determine color
+    // Determine color: hover > selected > (selection|brush|hover) faded > normal
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
     const hasSelection = this.selectedBin !== null || this.selectedNull;
     const hasBrush = this.brushState.active || this.brushState.committed;
 
     let fillColor: string;
-    if (this.selectedNull) {
+    if (this.hoveredNull) {
       fillColor = COLORS.nullHover;
-    } else if (hasSelection) {
-      fillColor = COLORS.nullFaded;
-    } else if (this.hoveredNull) {
+    } else if (this.selectedNull) {
       fillColor = COLORS.nullHover;
-    } else if (hasBrush) {
-      fillColor = COLORS.nullFaded;
-    } else if (isAnyHovered) {
+    } else if (hasSelection || hasBrush || isAnyHovered) {
       fillColor = COLORS.nullFaded;
     } else {
       fillColor = COLORS.nullFill;
@@ -738,22 +732,18 @@ export class TimeHistogram extends BaseVisualization {
       if (this.brushState.active) return;
     }
 
-    // If brush is committed, skip hover logic
+    // Track whether we have a committed brush or selection (for stat restoration)
+    const hasBrushOrSelection = this.brushState.committed ||
+      this.selectedBin !== null || this.selectedNull;
+
+    // If brush is committed, set cursor based on position but still allow hover
     if (this.brushState.committed) {
       if (this.isInsideBrush(x, y)) {
         this.canvas.style.cursor = 'grab';
-      } else {
-        this.canvas.style.cursor = 'default';
       }
-      return;
     }
 
-    // If a bar is selected, skip hover logic
-    if (this.selectedBin !== null || this.selectedNull) {
-      this.canvas.style.cursor = 'default';
-      return;
-    }
-
+    // --- Hover detection (always runs, even during selection/brush) ---
     const prevHoveredBin = this.hoveredBin;
     const prevHoveredNull = this.hoveredNull;
 
@@ -781,9 +771,11 @@ export class TimeHistogram extends BaseVisualization {
       }
     }
 
-    // Update cursor
-    const isHoveringBar = this.hoveredBin !== null || this.hoveredNull;
-    this.canvas.style.cursor = isHoveringBar ? 'pointer' : 'default';
+    // Update cursor (unless brush committed already set it to 'grab')
+    if (!this.brushState.committed || !this.isInsideBrush(x, y)) {
+      const isHoveringBar = this.hoveredBin !== null || this.hoveredNull;
+      this.canvas.style.cursor = isHoveringBar ? 'pointer' : 'default';
+    }
 
     // Handle hover state changes
     const hoverChanged =
@@ -822,6 +814,12 @@ export class TimeHistogram extends BaseVisualization {
           `null<br>` +
           `<span class="stats-label">Count:</span> ${count} (${percent})`
         );
+      } else if (hasBrushOrSelection) {
+        if (this.brushState.committed) {
+          this.updateBrushStats();
+        } else {
+          this.updateSelectedStats();
+        }
       } else {
         this.options.onStatsChange?.(null);
       }
@@ -851,7 +849,7 @@ export class TimeHistogram extends BaseVisualization {
   }
 
   /**
-   * Handle click - select bar
+   * Handle click - create filter via one-bin brush or null selection
    */
   protected handleClick(x: number, y: number, _event?: MouseEvent): void {
     if (this.clickConsumedByMouseDown) {
@@ -869,7 +867,6 @@ export class TimeHistogram extends BaseVisualization {
                     x >= barX && x <= barX + barWidth;
 
       if (inBar) {
-        // Create null filter
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'null',
@@ -885,46 +882,60 @@ export class TimeHistogram extends BaseVisualization {
     // Skip if brush was just started
     if (this.brushState.startBinIndex !== -1) return;
 
-    // If something is already selected, clear it
-    if (this.selectedBin !== null || this.selectedNull) {
-      this.clearSelection();
-      return;
-    }
-
     // Check if click is in the chart area
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
 
-    // Check null bar
+    // Check null bar click
     if (
       this.data.nullCount > 0 &&
       x >= this.nullBarArea.x &&
       x <= this.nullBarArea.x + this.nullBarArea.width
     ) {
-      this.selectedBin = null;
-      this.selectedNull = true;
-      this.hoveredBin = null;
-      this.hoveredNull = false;
-      this.render();
-      this.updateSelectedStats();
-      this.options.onSelectionChange?.(this.column.name, true);
+      if (this.selectedNull) {
+        this.clearSelection();
+      } else {
+        this.selectedBin = null;
+        this.selectedNull = true;
+        this.hoveredBin = null;
+        this.hoveredNull = false;
+        this.render();
+        this.updateSelectedStats();
+        this.options.onSelectionChange?.(this.column.name, true);
+        this.options.onFilterChange?.({
+          column: this.column.name,
+          type: 'null',
+          value: null,
+        });
+      }
       return;
     }
 
-    // Check histogram bars
+    // Check histogram bars - click creates a one-bin brush with range filter
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
         const bin = this.data.bins[pos.binIndex];
         if (bin && bin.count > 0) {
-          this.selectedBin = pos.binIndex;
-          this.selectedNull = false;
+          if (this.selectedNull) {
+            this.clearSelection();
+          }
+          this.brushState.committed = true;
+          this.brushState.startBinIndex = pos.binIndex;
+          this.brushState.endBinIndex = pos.binIndex;
           this.hoveredBin = null;
           this.hoveredNull = false;
           this.render();
-          this.updateSelectedStats();
-          this.options.onSelectionChange?.(this.column.name, true);
+          this.canvas.style.cursor = 'grab';
+          this.updateBrushStats();
+          this.options.onBrushCommit?.(this.column.name);
+          this.emitBrushFilter();
         }
         return;
       }
+    }
+
+    // Clicked empty area in chart → clear any selection
+    if (this.selectedNull) {
+      this.clearSelection();
     }
   }
 
@@ -974,6 +985,7 @@ export class TimeHistogram extends BaseVisualization {
     this.render();
     if (hadSelection) {
       this.options.onSelectionChange?.(this.column.name, false);
+      this.options.onFilterChange?.(null);
     }
   }
 
@@ -993,12 +1005,19 @@ export class TimeHistogram extends BaseVisualization {
       return;
     }
 
-    if (!this.brushState.committed && this.selectedBin === null && !this.selectedNull) {
+    const hadHover = this.hoveredBin !== null || this.hoveredNull;
+    this.hoveredBin = null;
+    this.hoveredNull = false;
+
+    if (this.brushState.committed) {
+      this.updateBrushStats();
+    } else if (this.selectedBin !== null || this.selectedNull) {
+      this.updateSelectedStats();
+    } else {
       this.options.onStatsChange?.(null);
     }
-    if (this.hoveredBin !== null || this.hoveredNull) {
-      this.hoveredBin = null;
-      this.hoveredNull = false;
+
+    if (hadHover) {
       this.render();
     }
   }
@@ -1015,9 +1034,17 @@ export class TimeHistogram extends BaseVisualization {
 
     const now = Date.now();
 
-    // If a bar is selected, don't start a brush
-    if (this.selectedBin !== null || this.selectedNull) {
-      return;
+    // If null is selected, let handleClick handle toggle on null bar;
+    // for other areas, clear null selection so brush can start
+    if (this.selectedNull) {
+      const onNullBar = this.data.nullCount > 0 &&
+        x >= this.nullBarArea.x &&
+        x <= this.nullBarArea.x + this.nullBarArea.width &&
+        y >= PADDING.top && y <= this.height - PADDING.bottom;
+      if (onNullBar) {
+        return;
+      }
+      this.clearSelection();
     }
 
     // Check for double-click inside committed brush to clear it
@@ -1063,11 +1090,10 @@ export class TimeHistogram extends BaseVisualization {
     this.brushState.lastClickX = x;
     this.brushState.lastClickY = y;
 
-    // If clicking outside committed brush, clear it
+    // If clicking outside committed brush, clear it and let handleClick create new interaction
     if (this.brushState.committed) {
       this.resetBrush();
       this.render();
-      this.clickConsumedByMouseDown = true;
       return;
     }
 
@@ -1109,6 +1135,7 @@ export class TimeHistogram extends BaseVisualization {
       this.brushState.slideVisualOffset = 0;
       this.canvas.style.cursor = 'grab';
       this.render();
+      this.emitBrushFilter();
       return;
     }
 
@@ -1123,6 +1150,7 @@ export class TimeHistogram extends BaseVisualization {
         this.canvas.style.cursor = 'grab';
         this.updateBrushStats();
         this.options.onBrushCommit?.(this.column.name);
+        this.emitBrushFilter();
         return;
       } else {
         this.resetBrush();
@@ -1212,6 +1240,7 @@ export class TimeHistogram extends BaseVisualization {
 
     if (wasCommitted) {
       this.options.onBrushClear?.(this.column.name);
+      this.options.onFilterChange?.(null);
     }
   }
 
@@ -1315,6 +1344,35 @@ export class TimeHistogram extends BaseVisualization {
         `${rangeStr}<br>` +
         `<span class="stats-label">Count:</span> ${formatCount(rangeCount)} (${percent})`
       );
+    }
+  }
+
+  /**
+   * Emit a range filter based on current brush bin indices
+   */
+  private emitBrushFilter(): void {
+    if (!this.data) return;
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const startBin = this.data.bins[startIdx];
+    const endBin = this.data.bins[endIdx];
+
+    if (startBin && endBin) {
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'range',
+        value: {
+          min: secondsToTimeString(startBin.binStartSeconds),
+          max: secondsToTimeString(endBin.binEndSeconds),
+        },
+      });
     }
   }
 

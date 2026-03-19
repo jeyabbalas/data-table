@@ -78,8 +78,8 @@ export interface VisualizationOptions {
   bridge: WorkerBridge;
   /** Current active filters */
   filters: Filter[];
-  /** Callback when visualization creates a filter */
-  onFilterChange?: (filter: Filter) => void;
+  /** Callback when visualization creates/removes a filter (null = remove) */
+  onFilterChange?: (filter: Filter | null) => void;
   /** Callback to update stats line on hover (null restores default) */
   onStatsChange?: (stats: string | null) => void;
   /** Maximum number of histogram bins (default: 15) */

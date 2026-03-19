@@ -150,9 +150,14 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
       tableName,
       bridge,
       filters: tableState.filters.get(),
-      onFilterChange: (filter: import('../src/core/types').Filter) => {
-        console.log('[Demo] Filter created:', filter);
-        actions.addFilter(filter);
+      onFilterChange: (filter: import('../src/core/types').Filter | null) => {
+        if (filter) {
+          console.log('[Demo] Filter created:', filter);
+          actions.addFilter(filter);
+        } else {
+          console.log('[Demo] Filter removal signal received');
+          // Phase 5 will implement actions.removeFilter()
+        }
       },
       onStatsChange: (stats: string | null) => {
         if (stats) {

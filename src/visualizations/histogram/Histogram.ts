@@ -444,26 +444,21 @@ export class Histogram extends BaseVisualization {
         heightRatio * this.chartArea.height
       );
 
-      // Determine color based on selection, hover, and brush state
+      // Determine color based on hover, selection, and brush state
+      // Priority: hover > selected > brush inside > (selection|brush|hover) faded > normal
       const isThisHovered = this.hoveredBin === i;
       const isThisSelected = this.selectedBin === i;
       const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
 
       let fillColor: string;
-      if (isThisSelected) {
-        // Selected bar: dark color
+      if (isThisHovered) {
+        // Hover always gets highlight (even during selection/brush)
         fillColor = COLORS.barHover;
-      } else if (hasSelection) {
-        // Other bars when one is selected: faded
-        fillColor = COLORS.barFaded;
-      } else if (isThisHovered) {
-        // Hover takes precedence
+      } else if (isThisSelected) {
         fillColor = COLORS.barHover;
-      } else if (hasBrush) {
-        // Brush is active: inside = dark, outside = faded
-        fillColor = isInsideBrush ? COLORS.barHover : COLORS.barFaded;
-      } else if (isAnyHovered) {
-        // Regular hover behavior
+      } else if (hasBrush && isInsideBrush) {
+        fillColor = COLORS.barHover;
+      } else if (hasSelection || hasBrush || isAnyHovered) {
         fillColor = COLORS.barFaded;
       } else {
         fillColor = COLORS.barFill;
@@ -535,24 +530,18 @@ export class Histogram extends BaseVisualization {
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
-    // Determine color based on selection, hover, and brush state
+    // Determine color: hover > selected > (selection|brush|hover) faded > normal
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
     const hasSelection = this.selectedBin !== null || this.selectedNull;
     const hasBrush = this.brushState.active || this.brushState.committed;
 
     let fillColor: string;
-    if (this.selectedNull) {
-      // Null bar is selected: dark color
+    if (this.hoveredNull) {
+      // Hover always gets highlight (even during selection/brush)
       fillColor = COLORS.nullHover;
-    } else if (hasSelection) {
-      // Other bar is selected: faded
-      fillColor = COLORS.nullFaded;
-    } else if (this.hoveredNull) {
+    } else if (this.selectedNull) {
       fillColor = COLORS.nullHover;
-    } else if (hasBrush) {
-      // Null bar is always "outside" the brush (brush only covers histogram bins)
-      fillColor = COLORS.nullFaded;
-    } else if (isAnyHovered) {
+    } else if (hasSelection || hasBrush || isAnyHovered) {
       fillColor = COLORS.nullFaded;
     } else {
       fillColor = COLORS.nullFill;
@@ -791,23 +780,20 @@ export class Histogram extends BaseVisualization {
       if (this.brushState.active) return;
     }
 
-    // If brush is committed, skip hover logic to preserve brush stats
+    // Track whether we have a committed brush or selection (for stat restoration)
+    const hasBrushOrSelection = this.brushState.committed ||
+      this.selectedBin !== null || this.selectedNull;
+
+    // If brush is committed, set cursor based on position but still allow hover
     if (this.brushState.committed) {
+      // Cursor: grab inside brush, pointer on bars outside, default elsewhere
       if (this.isInsideBrush(x, y)) {
         this.canvas.style.cursor = 'grab';
-      } else {
-        this.canvas.style.cursor = 'default';
       }
-      // Skip all hover logic when brush is committed
-      return;
+      // Don't return - fall through to hover detection
     }
 
-    // If a bar is selected, skip hover logic to preserve selected bar stats
-    if (this.selectedBin !== null || this.selectedNull) {
-      this.canvas.style.cursor = 'default';
-      return;
-    }
-
+    // --- Hover detection (always runs, even during selection/brush) ---
     const prevHoveredBin = this.hoveredBin;
     const prevHoveredNull = this.hoveredNull;
 
@@ -835,9 +821,11 @@ export class Histogram extends BaseVisualization {
       }
     }
 
-    // Update cursor based on hover state
-    const isHoveringBar = this.hoveredBin !== null || this.hoveredNull;
-    this.canvas.style.cursor = isHoveringBar ? 'pointer' : 'default';
+    // Update cursor (unless brush committed already set it to 'grab')
+    if (!this.brushState.committed || !this.isInsideBrush(x, y)) {
+      const isHoveringBar = this.hoveredBin !== null || this.hoveredNull;
+      this.canvas.style.cursor = isHoveringBar ? 'pointer' : 'default';
+    }
 
     // Handle hover state changes
     const hoverChanged =
@@ -874,6 +862,13 @@ export class Histogram extends BaseVisualization {
           `null<br>` +
           `<span class="stats-label">Count:</span> ${count} (${percent})`
         );
+      } else if (hasBrushOrSelection) {
+        // Restore brush/selection stats when hover ends
+        if (this.brushState.committed) {
+          this.updateBrushStats();
+        } else {
+          this.updateSelectedStats();
+        }
       } else {
         // Restore default stats
         this.options.onStatsChange?.(null);
@@ -904,10 +899,14 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Handle click - select bar (freeze stats) instead of creating filter
+   * Handle click - create filter via one-bin brush or null selection
+   *
+   * Option A: A quick click on a histogram bar is treated as a one-bin brush,
+   * creating a range filter. The brush is the sole interaction for continuous data.
+   * Null bar click creates a null filter (separate from brush).
    */
   protected handleClick(x: number, y: number, _event?: MouseEvent): void {
-    // If handleMouseDown already handled this click (cleared brush), skip
+    // If handleMouseDown already handled this click (double-click clear), skip
     if (this.clickConsumedByMouseDown) {
       this.clickConsumedByMouseDown = false;
       return;
@@ -923,7 +922,6 @@ export class Histogram extends BaseVisualization {
                     x >= barX && x <= barX + barWidth;
 
       if (inBar) {
-        // Create null filter
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'null',
@@ -939,50 +937,65 @@ export class Histogram extends BaseVisualization {
     // Skip if brush was just started (will be handled by mouseup)
     if (this.brushState.startBinIndex !== -1) return;
 
-    // If something is already selected, any click clears it first
-    // (Cannot select a different bar while one is selected - must deselect first)
-    if (this.selectedBin !== null || this.selectedNull) {
-      this.clearSelection();
-      return;
-    }
-
     // Check if click is in the chart area
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
 
-    // Check null bar - select it
+    // Check null bar click
     if (
       this.data.nullCount > 0 &&
       x >= this.nullBarArea.x &&
       x <= this.nullBarArea.x + this.nullBarArea.width
     ) {
-      this.selectedBin = null;
-      this.selectedNull = true;
-      this.hoveredBin = null;
-      this.hoveredNull = false;
-      this.render();
-      this.updateSelectedStats();
-      // Notify callback that selection changed
-      this.options.onSelectionChange?.(this.column.name, true);
+      if (this.selectedNull) {
+        // Already selected → toggle off
+        this.clearSelection();
+      } else {
+        // Select null and create null filter
+        this.selectedBin = null;
+        this.selectedNull = true;
+        this.hoveredBin = null;
+        this.hoveredNull = false;
+        this.render();
+        this.updateSelectedStats();
+        this.options.onSelectionChange?.(this.column.name, true);
+        this.options.onFilterChange?.({
+          column: this.column.name,
+          type: 'null',
+          value: null,
+        });
+      }
       return;
     }
 
-    // Check histogram bars - select bar (only if it has data)
+    // Check histogram bars - click creates a one-bin brush with range filter
     for (const pos of this.barPositions) {
       if (x >= pos.x && x <= pos.x + pos.width) {
-        // Only allow selection if bar has data
         const bin = this.data.bins[pos.binIndex];
         if (bin && bin.count > 0) {
-          this.selectedBin = pos.binIndex;
-          this.selectedNull = false;
+          // Clear any null selection first
+          if (this.selectedNull) {
+            this.clearSelection();
+          }
+
+          // Create a committed one-bin brush
+          this.brushState.committed = true;
+          this.brushState.startBinIndex = pos.binIndex;
+          this.brushState.endBinIndex = pos.binIndex;
           this.hoveredBin = null;
           this.hoveredNull = false;
           this.render();
-          this.updateSelectedStats();
-          // Notify callback that selection changed
-          this.options.onSelectionChange?.(this.column.name, true);
+          this.canvas.style.cursor = 'grab';
+          this.updateBrushStats();
+          this.options.onBrushCommit?.(this.column.name);
+          this.emitBrushFilter();
         }
-        return; // Still return to prevent further processing
+        return;
       }
+    }
+
+    // Clicked empty area in chart → clear any selection
+    if (this.selectedNull) {
+      this.clearSelection();
     }
   }
 
@@ -1027,9 +1040,10 @@ export class Histogram extends BaseVisualization {
     this.selectedNull = false;
     this.options.onStatsChange?.(null);
     this.render();
-    // Notify callback if selection was cleared
     if (hadSelection) {
       this.options.onSelectionChange?.(this.column.name, false);
+      // Signal filter removal
+      this.options.onFilterChange?.(null);
     }
   }
 
@@ -1049,13 +1063,22 @@ export class Histogram extends BaseVisualization {
       return;
     }
 
-    // Restore default stats (unless brush is committed or bar is selected - keep showing stats)
-    if (!this.brushState.committed && this.selectedBin === null && !this.selectedNull) {
+    // Clear hover and restore appropriate stats
+    const hadHover = this.hoveredBin !== null || this.hoveredNull;
+    this.hoveredBin = null;
+    this.hoveredNull = false;
+
+    if (this.brushState.committed) {
+      // Restore brush stats
+      this.updateBrushStats();
+    } else if (this.selectedBin !== null || this.selectedNull) {
+      // Restore selection stats
+      this.updateSelectedStats();
+    } else {
       this.options.onStatsChange?.(null);
     }
-    if (this.hoveredBin !== null || this.hoveredNull) {
-      this.hoveredBin = null;
-      this.hoveredNull = false;
+
+    if (hadHover) {
       this.render();
     }
   }
@@ -1072,9 +1095,19 @@ export class Histogram extends BaseVisualization {
 
     const now = Date.now();
 
-    // If a bar is selected, don't start a brush - let handleClick handle toggle
-    if (this.selectedBin !== null || this.selectedNull) {
-      return;
+    // If null is selected, let handleClick handle toggle on null bar;
+    // for other areas, clear null selection so brush can start
+    if (this.selectedNull) {
+      const onNullBar = this.data.nullCount > 0 &&
+        x >= this.nullBarArea.x &&
+        x <= this.nullBarArea.x + this.nullBarArea.width &&
+        y >= PADDING.top && y <= this.height - PADDING.bottom;
+      if (onNullBar) {
+        // Let handleClick toggle null selection
+        return;
+      }
+      // Clear null selection to allow brush/new interaction
+      this.clearSelection();
     }
 
     // Check for double-click inside committed brush to clear it
@@ -1122,11 +1155,11 @@ export class Histogram extends BaseVisualization {
     this.brushState.lastClickX = x;
     this.brushState.lastClickY = y;
 
-    // If clicking outside committed brush, clear it (don't start a new brush on this click)
+    // If clicking outside committed brush, clear it and let handleClick create new interaction
     if (this.brushState.committed) {
       this.resetBrush();
       this.render();
-      this.clickConsumedByMouseDown = true; // Prevent handleClick from selecting a bar
+      // Don't consume click - let handleClick create a new one-bin brush or null selection
       return;
     }
 
@@ -1169,6 +1202,8 @@ export class Histogram extends BaseVisualization {
       this.brushState.slideVisualOffset = 0; // Reset visual offset to snap to bin
       this.canvas.style.cursor = 'grab';
       this.render(); // Re-render to show snapped position
+      // Emit updated range filter after slide completes
+      this.emitBrushFilter();
       return;
     }
 
@@ -1186,6 +1221,8 @@ export class Histogram extends BaseVisualization {
         this.updateBrushStats();
         // Notify callback that brush was committed
         this.options.onBrushCommit?.(this.column.name);
+        // Emit range filter for the brushed range
+        this.emitBrushFilter();
         return;
       } else {
         // No full bin selected - cancel the brush
@@ -1287,6 +1324,8 @@ export class Histogram extends BaseVisualization {
     // Notify callback if brush was committed (for state cleanup in demo)
     if (wasCommitted) {
       this.options.onBrushClear?.(this.column.name);
+      // Signal filter removal
+      this.options.onFilterChange?.(null);
     }
   }
 
@@ -1387,6 +1426,32 @@ export class Histogram extends BaseVisualization {
         `${rangeStr}<br>` +
         `<span class="stats-label">Count:</span> ${formatCount(rangeCount)} (${percent})`
       );
+    }
+  }
+
+  /**
+   * Emit a range filter based on current brush bin indices
+   */
+  private emitBrushFilter(): void {
+    if (!this.data) return;
+
+    const startIdx = Math.min(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const endIdx = Math.max(
+      this.brushState.startBinIndex,
+      this.brushState.endBinIndex
+    );
+    const startBin = this.data.bins[startIdx];
+    const endBin = this.data.bins[endIdx];
+
+    if (startBin && endBin) {
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'range',
+        value: { min: startBin.x0, max: endBin.x1 },
+      });
     }
   }
 

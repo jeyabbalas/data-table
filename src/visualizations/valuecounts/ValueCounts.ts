@@ -362,42 +362,34 @@ export class ValueCounts extends BaseVisualization {
       const isSelected = this.selectedSegments.has(i);
 
       // Determine fill color based on segment type and state
+      // Priority: hover > selected > (selection|hover) faded > normal
       let fillColor: string;
       if (segment.isNull) {
-        // Null segment - amber
-        if (isSelected) {
+        if (isHovered) {
           fillColor = COLORS.nullHover;
-        } else if (hasSelection && !isSelected) {
-          fillColor = COLORS.nullFaded;
-        } else if (isHovered) {
+        } else if (isSelected) {
           fillColor = COLORS.nullHover;
-        } else if (hasHover && !isHovered) {
+        } else if (hasSelection || hasHover) {
           fillColor = COLORS.nullFaded;
         } else {
           fillColor = COLORS.nullFill;
         }
       } else if (segment.isOther || segment.isAllUnique) {
-        // "Other" or "All unique" segment - gray (indicates non-informative)
-        if (isSelected) {
+        if (isHovered) {
           fillColor = COLORS.otherHover;
-        } else if (hasSelection && !isSelected) {
-          fillColor = COLORS.otherFaded;
-        } else if (isHovered) {
+        } else if (isSelected) {
           fillColor = COLORS.otherHover;
-        } else if (hasHover && !isHovered) {
+        } else if (hasSelection || hasHover) {
           fillColor = COLORS.otherFaded;
         } else {
           fillColor = COLORS.otherFill;
         }
       } else {
-        // Regular category - blue (consistent color, not gradient)
-        if (isSelected) {
+        if (isHovered) {
           fillColor = COLORS.barHover;
-        } else if (hasSelection && !isSelected) {
-          fillColor = COLORS.barFaded;
-        } else if (isHovered) {
+        } else if (isSelected) {
           fillColor = COLORS.barHover;
-        } else if (hasHover && !isHovered) {
+        } else if (hasSelection || hasHover) {
           fillColor = COLORS.barFaded;
         } else {
           fillColor = COLORS.barFill;
@@ -620,12 +612,7 @@ export class ValueCounts extends BaseVisualization {
   protected handleMouseMove(x: number, y: number): void {
     if (!this.data) return;
 
-    // If any segment is selected, skip hover logic to preserve selected stats
-    if (this.selectedSegments.size > 0) {
-      this.canvas.style.cursor = 'default';
-      return;
-    }
-
+    const hasSelection = this.selectedSegments.size > 0;
     const prevHoveredSegment = this.hoveredSegment;
 
     // Reset hover state
@@ -650,8 +637,14 @@ export class ValueCounts extends BaseVisualization {
       // Re-render for segment highlighting
       this.render();
 
-      // Update stats line with formatted HTML
-      this.updateHoverStats();
+      // Update stats: show hover stats, or restore selection stats when hover ends
+      if (this.hoveredSegment !== null) {
+        this.updateHoverStats();
+      } else if (hasSelection) {
+        this.updateSelectedStats();
+      } else {
+        this.options.onStatsChange?.(null);
+      }
     }
   }
 
@@ -917,13 +910,17 @@ export class ValueCounts extends BaseVisualization {
   protected handleMouseLeave(): void {
     this.canvas.style.cursor = 'default';
 
-    // Restore default stats (unless segment is selected)
-    if (this.selectedSegments.size === 0) {
+    const hadHover = this.hoveredSegment !== null;
+    this.hoveredSegment = null;
+
+    // Restore appropriate stats
+    if (this.selectedSegments.size > 0) {
+      this.updateSelectedStats();
+    } else {
       this.options.onStatsChange?.(null);
     }
 
-    if (this.hoveredSegment !== null) {
-      this.hoveredSegment = null;
+    if (hadHover) {
       this.render();
     }
   }
@@ -1022,6 +1019,8 @@ export class ValueCounts extends BaseVisualization {
     this.render();
     if (hadSelection) {
       this.options.onSelectionChange?.(this.column.name, false);
+      // Signal filter removal
+      this.options.onFilterChange?.(null);
     }
   }
 

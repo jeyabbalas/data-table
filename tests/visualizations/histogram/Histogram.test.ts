@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Mock canvas 2D context
 const mockContext = {
   fillRect: vi.fn(),
+  strokeRect: vi.fn(),
   clearRect: vi.fn(),
   fillText: vi.fn(),
   beginPath: vi.fn(),
@@ -27,6 +28,8 @@ const mockContext = {
   translate: vi.fn(),
   measureText: vi.fn().mockReturnValue({ width: 50 }),
   fillStyle: '',
+  strokeStyle: '',
+  lineWidth: 1,
   font: '',
   textAlign: 'left' as CanvasTextAlign,
   textBaseline: 'top' as CanvasTextBaseline,

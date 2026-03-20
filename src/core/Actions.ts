@@ -68,12 +68,12 @@ export class StateActions {
   /**
    * Add or update a filter
    *
-   * If a filter for the same column and type exists, it will be replaced.
+   * If a filter for the same column exists, it will be replaced.
    */
   addFilter(filter: Filter): void {
     const current = this.state.filters.get();
     const existingIndex = current.findIndex(
-      (f) => f.column === filter.column && f.type === filter.type
+      (f) => f.column === filter.column
     );
 
     if (existingIndex >= 0) {

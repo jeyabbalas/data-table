@@ -197,8 +197,8 @@ export class ValueCounts extends BaseVisualization {
 
   /**
    * Fetch value counts data from DuckDB.
-   * When crossfilter is active (own column has a filter), fetches both
-   * background (excluding own filter) and foreground (all filters) data.
+   * When crossfilter is active (any column has a filter), fetches both
+   * background (excluding own filter, or unfiltered) and foreground (all filters) data.
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
@@ -212,12 +212,15 @@ export class ValueCounts extends BaseVisualization {
     const hasOwnFilter = allFilters.some(
       (f) => f.column === this.column.name
     );
+    const hasAnyFilter = allFilters.length > 0;
 
-    if (hasOwnFilter) {
-      // Crossfilter dual-fetch: background excludes own filter, foreground includes all
-      const bgFilters = allFilters.filter(
-        (f) => f.column !== this.column.name
-      );
+    if (hasAnyFilter) {
+      // Crossfilter dual-fetch:
+      // - If column HAS own filter: background = other columns' filters (own-filter exclusion)
+      // - If column has NO own filter: background = no filters (total unfiltered reference)
+      const bgFilters = hasOwnFilter
+        ? allFilters.filter((f) => f.column !== this.column.name)
+        : [];
 
       const [bgData, fgData] = await Promise.all([
         fetchValueCountsData(
@@ -239,7 +242,7 @@ export class ValueCounts extends BaseVisualization {
       this.backgroundData = bgData;
       this.data = fgData;
     } else {
-      // No own filter: single fetch, no background needed
+      // No filters at all: single fetch, no background
       this.data = await fetchValueCountsData(
         this.options.tableName,
         this.column.name,

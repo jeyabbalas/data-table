@@ -13,6 +13,7 @@ import { filtersToWhereClause } from './histogram/HistogramData';
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;
+  private pendingSource: string | null = null;
 
   constructor(
     private state: TableState,
@@ -36,21 +37,26 @@ export class CrossfilterCoordinator {
   /** Route a visualization's onFilterChange to StateActions */
   handleFilterChange(columnName: string, filter: Filter | null): void {
     if (filter) {
+      // Adding/updating: the originating viz's brush/selection already
+      // represents this filter visually, so skip re-fetching it
+      this.pendingSource = columnName;
       this.actions.addFilter(filter);
+      this.pendingSource = null;
     } else {
+      // Removing: the originating viz cleared its brush/selection and
+      // needs updated data reflecting remaining filters
       this.actions.removeFilter(columnName);
     }
-    // The signal subscription triggers onFiltersChanged automatically
   }
 
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
-    // Update all visualizations in parallel
-    const promises = [...this.visualizations.values()]
-      .filter(viz => !viz.isDestroyed())
-      .map(viz => viz.updateFilters(filters));
+    const sourceToSkip = this.pendingSource;
+
+    const promises = [...this.visualizations.entries()]
+      .filter(([name, viz]) => name !== sourceToSkip && !viz.isDestroyed())
+      .map(([, viz]) => viz.updateFilters(filters));
     await Promise.all(promises);
 
-    // Update filtered row count
     await this.updateFilteredRowCount(filters);
   }
 

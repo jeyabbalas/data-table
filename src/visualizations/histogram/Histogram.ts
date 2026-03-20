@@ -239,12 +239,15 @@ export class Histogram extends BaseVisualization {
       const hasOwnFilter = allFilters.some(
         (f) => f.column === this.column.name
       );
+      const hasAnyFilter = allFilters.length > 0;
 
-      if (hasOwnFilter) {
-        // Crossfilter dual-fetch: background excludes own filter, foreground includes all
-        const bgFilters = allFilters.filter(
-          (f) => f.column !== this.column.name
-        );
+      if (hasAnyFilter) {
+        // Crossfilter dual-fetch:
+        // - If column HAS own filter: background = other columns' filters (own-filter exclusion)
+        // - If column has NO own filter: background = no filters (total unfiltered reference)
+        const bgFilters = hasOwnFilter
+          ? allFilters.filter((f) => f.column !== this.column.name)
+          : [];
         const { tableName, bridge } = this.options;
         const col = this.column.name;
 
@@ -338,7 +341,7 @@ export class Histogram extends BaseVisualization {
           }
         }
       } else {
-        // No own filter: single fetch, no background needed
+        // No filters at all: single fetch, no background
         this.data = await fetchHistogramData(
           this.options.tableName,
           this.column.name,
@@ -1626,11 +1629,33 @@ export class Histogram extends BaseVisualization {
     const endBin = this.data.bins[endIdx];
 
     if (startBin && endBin) {
-      this.options.onFilterChange?.({
-        column: this.column.name,
-        type: 'range',
-        value: { min: startBin.x0, max: endBin.x1 },
-      });
+      if (this.data.isDiscrete) {
+        // Discrete: use point/set filters for exact value matching
+        if (startIdx === endIdx) {
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'point',
+            value: startBin.x0,
+          });
+        } else {
+          const values = [];
+          for (let i = startIdx; i <= endIdx; i++) {
+            values.push(this.data.bins[i].x0);
+          }
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'set',
+            value: values,
+          });
+        }
+      } else {
+        // Continuous: use range filter (exclusive upper bound)
+        this.options.onFilterChange?.({
+          column: this.column.name,
+          type: 'range',
+          value: { min: startBin.x0, max: endBin.x1 },
+        });
+      }
     }
   }
 

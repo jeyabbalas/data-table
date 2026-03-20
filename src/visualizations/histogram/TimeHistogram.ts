@@ -202,12 +202,15 @@ export class TimeHistogram extends BaseVisualization {
       const hasOwnFilter = allFilters.some(
         (f) => f.column === this.column.name
       );
+      const hasAnyFilter = allFilters.length > 0;
 
-      if (hasOwnFilter) {
-        // Crossfilter dual-fetch: background excludes own filter, foreground includes all
-        const bgFilters = allFilters.filter(
-          (f) => f.column !== this.column.name
-        );
+      if (hasAnyFilter) {
+        // Crossfilter dual-fetch:
+        // - If column HAS own filter: background = other columns' filters (own-filter exclusion)
+        // - If column has NO own filter: background = no filters (total unfiltered reference)
+        const bgFilters = hasOwnFilter
+          ? allFilters.filter((f) => f.column !== this.column.name)
+          : [];
         const { tableName, bridge } = this.options;
         const col = this.column.name;
 
@@ -294,7 +297,7 @@ export class TimeHistogram extends BaseVisualization {
           }
         }
       } else {
-        // No own filter: single fetch, no background needed
+        // No filters at all: single fetch, no background
         this.data = await fetchTimeHistogramData(
           this.options.tableName,
           this.column.name,

@@ -17,6 +17,7 @@ import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
+import { formatCount, formatPercent } from '../utils';
 
 // =========================================
 // Constants
@@ -89,20 +90,6 @@ const MAX_CATEGORIES = 10;
 // =========================================
 
 /**
- * Format count with thousands separator
- */
-function formatCount(count: number): string {
-  return count.toLocaleString();
-}
-
-/**
- * Format percentage
- */
-function formatPercent(ratio: number): string {
-  return (ratio * 100).toFixed(1) + '%';
-}
-
-/**
  * Truncate text to fit within width, returns empty string if can't fit
  */
 function truncateText(
@@ -150,6 +137,9 @@ export class ValueCounts extends BaseVisualization {
   // Data
   private data: ValueCountsData | null = null;
   private backgroundData: ValueCountsData | null = null;
+
+  // Fetch sequence counter for stale result protection
+  private fetchSequence = 0;
 
   // Promise for initial data load (used by waitForData)
   private dataPromise: Promise<void>;
@@ -203,55 +193,42 @@ export class ValueCounts extends BaseVisualization {
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
 
+    const seq = ++this.fetchSequence;
+
     // Only reset selection on initial load, not on filter updates
     if (!this.isFilterUpdate) {
       this.selectedSegments.clear();
     }
 
     const allFilters = this.options.filters;
-    const hasOwnFilter = allFilters.some(
-      (f) => f.column === this.column.name
-    );
     const hasAnyFilter = allFilters.length > 0;
 
     if (hasAnyFilter) {
-      // Crossfilter dual-fetch:
-      // - If column HAS own filter: background = other columns' filters (own-filter exclusion)
-      // - If column has NO own filter: background = no filters (total unfiltered reference)
+      // Crossfilter: background = all filters except own column.
+      const hasOwnFilter = allFilters.some((f) => f.column === this.column.name);
       const bgFilters = hasOwnFilter
         ? allFilters.filter((f) => f.column !== this.column.name)
         : [];
 
-      // Sequential fetch: background first to determine category set, then aligned foreground
       const bgData = await fetchValueCountsData(
-        this.options.tableName,
-        this.column.name,
-        bgFilters,
-        this.options.bridge,
-        MAX_CATEGORIES
+        this.options.tableName, this.column.name, bgFilters, this.options.bridge, MAX_CATEGORIES
       );
+      if (seq !== this.fetchSequence || this.destroyed) return;
+
       const bgCategoryValues = bgData.segments.filter(s => !s.isOther).map(s => s.value);
       const hasOther = bgData.segments.some(s => s.isOther);
       const fgData = await fetchAlignedValueCountsData(
-        this.options.tableName,
-        this.column.name,
-        bgCategoryValues,
-        hasOther,
-        allFilters,
-        this.options.bridge
+        this.options.tableName, this.column.name, bgCategoryValues, hasOther, allFilters, this.options.bridge
       );
+      if (seq !== this.fetchSequence || this.destroyed) return;
 
       this.backgroundData = bgData;
       this.data = fgData;
     } else {
-      // No filters at all: single fetch, no background
       this.data = await fetchValueCountsData(
-        this.options.tableName,
-        this.column.name,
-        allFilters,
-        this.options.bridge,
-        MAX_CATEGORIES
+        this.options.tableName, this.column.name, allFilters, this.options.bridge, MAX_CATEGORIES
       );
+      if (seq !== this.fetchSequence || this.destroyed) return;
       this.backgroundData = null;
     }
 
@@ -745,6 +722,27 @@ export class ValueCounts extends BaseVisualization {
       });
     }
 
+    // Build background segments for crossfilter rendering
+    if (this.backgroundData) {
+      this.backgroundSegments = [{
+        value: `All unique (${formatCount(this.backgroundData.distinctCount)})`,
+        count: this.backgroundData.distinctCount,
+        isOther: false,
+        isNull: false,
+        isAllUnique: true,
+      }];
+      if (this.backgroundData.nullCount > 0) {
+        this.backgroundSegments.push({
+          value: '\u2205',
+          count: this.backgroundData.nullCount,
+          isOther: false,
+          isNull: true,
+        });
+      }
+    } else {
+      this.backgroundSegments = [];
+    }
+
     this.barArea = {
       x: PADDING.left,
       y: PADDING.top,
@@ -812,25 +810,32 @@ export class ValueCounts extends BaseVisualization {
     if (this.hoveredSegment !== null) {
       const segment = this.renderSegments[this.hoveredSegment];
       if (segment) {
-        const count = formatCount(segment.count);
-        const percent = formatPercent(segment.count / this.data.total);
-
         let categoryLabel: string;
         if (segment.isNull) {
           categoryLabel = 'null';
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
-          // Truncate long category names in stats
           categoryLabel = segment.value.length > 30
             ? segment.value.substring(0, 27) + '...'
             : segment.value;
         }
 
+        // Show crossfilter context when background data exists
+        const bgSegment = this.backgroundSegments[this.hoveredSegment];
+        let countLine: string;
+        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
+          const ratio = formatPercent(segment.count / bgSegment.count);
+          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
+        } else {
+          const percent = formatPercent(segment.count / this.data.total);
+          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
+        }
+
         this.options.onStatsChange?.(
           `<span class="stats-label">Category:</span><br>` +
           `${categoryLabel}<br>` +
-          `<span class="stats-label">Count:</span> ${count} (${percent})`
+          countLine
         );
       }
     } else {
@@ -1013,14 +1018,11 @@ export class ValueCounts extends BaseVisualization {
   private updateSelectedStats(): void {
     if (!this.data || this.selectedSegments.size === 0) return;
 
-    // Single selection - use existing formatting
+    // Single selection
     if (this.selectedSegments.size === 1) {
       const idx = [...this.selectedSegments][0];
       const segment = this.renderSegments[idx];
       if (segment) {
-        const count = formatCount(segment.count);
-        const percent = formatPercent(segment.count / this.data.total);
-
         let categoryLabel: string;
         if (segment.isNull) {
           categoryLabel = 'null';
@@ -1032,10 +1034,20 @@ export class ValueCounts extends BaseVisualization {
             : segment.value;
         }
 
+        const bgSegment = this.backgroundSegments[idx];
+        let countLine: string;
+        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
+          const ratio = formatPercent(segment.count / bgSegment.count);
+          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
+        } else {
+          const percent = formatPercent(segment.count / this.data.total);
+          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
+        }
+
         this.options.onStatsChange?.(
           `<span class="stats-label">Category:</span><br>` +
           `${categoryLabel}<br>` +
-          `<span class="stats-label">Count:</span> ${count} (${percent})`
+          countLine
         );
       }
       return;
@@ -1047,7 +1059,6 @@ export class ValueCounts extends BaseVisualization {
       .filter(s => s && !s.isNull && !s.isOther && !s.isAllUnique);
 
     const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
-    const percent = formatPercent(totalCount / this.data.total);
 
     // Format value list (truncate if too long)
     const values = selectedSegmentsList.map(s => s.value);
@@ -1056,10 +1067,29 @@ export class ValueCounts extends BaseVisualization {
       valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;
     }
 
+    // Calculate background total for multi-select crossfilter context
+    let countLine: string;
+    if (this.backgroundData) {
+      const bgTotal = [...this.selectedSegments]
+        .map(idx => this.backgroundSegments[idx])
+        .filter(s => s && !s.isNull && !s.isOther && !s.isAllUnique)
+        .reduce((sum, s) => sum + s.count, 0);
+      if (bgTotal > 0) {
+        const ratio = formatPercent(totalCount / bgTotal);
+        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} / ${formatCount(bgTotal)} (${ratio})`;
+      } else {
+        const percent = formatPercent(totalCount / this.data.total);
+        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
+      }
+    } else {
+      const percent = formatPercent(totalCount / this.data.total);
+      countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
+    }
+
     this.options.onStatsChange?.(
       `<span class="stats-label">Selected:</span><br>` +
       `${valueListStr}<br>` +
-      `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`
+      countLine
     );
   }
 

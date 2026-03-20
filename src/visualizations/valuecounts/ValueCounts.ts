@@ -15,7 +15,7 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
-import { fetchValueCountsData } from './ValueCountsData';
+import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 
 // =========================================
@@ -222,22 +222,24 @@ export class ValueCounts extends BaseVisualization {
         ? allFilters.filter((f) => f.column !== this.column.name)
         : [];
 
-      const [bgData, fgData] = await Promise.all([
-        fetchValueCountsData(
-          this.options.tableName,
-          this.column.name,
-          bgFilters,
-          this.options.bridge,
-          MAX_CATEGORIES
-        ),
-        fetchValueCountsData(
-          this.options.tableName,
-          this.column.name,
-          allFilters,
-          this.options.bridge,
-          MAX_CATEGORIES
-        ),
-      ]);
+      // Sequential fetch: background first to determine category set, then aligned foreground
+      const bgData = await fetchValueCountsData(
+        this.options.tableName,
+        this.column.name,
+        bgFilters,
+        this.options.bridge,
+        MAX_CATEGORIES
+      );
+      const bgCategoryValues = bgData.segments.filter(s => !s.isOther).map(s => s.value);
+      const hasOther = bgData.segments.some(s => s.isOther);
+      const fgData = await fetchAlignedValueCountsData(
+        this.options.tableName,
+        this.column.name,
+        bgCategoryValues,
+        hasOther,
+        allFilters,
+        this.options.bridge
+      );
 
       this.backgroundData = bgData;
       this.data = fgData;
@@ -272,14 +274,17 @@ export class ValueCounts extends BaseVisualization {
       return;
     }
 
+    // Use background data for rendering decisions in crossfilter mode
+    const referenceData = this.backgroundData ?? this.data;
+
     // Handle empty state
-    if (this.data.segments.length === 0 && this.data.nullCount === 0) {
+    if (referenceData.segments.length === 0 && referenceData.nullCount === 0) {
       this.drawEmptyState();
       return;
     }
 
     // Handle all unique values special case
-    if (this.data.isAllUnique && this.data.segments.length > 0) {
+    if (referenceData.isAllUnique && referenceData.segments.length > 0) {
       this.drawAllUniqueState();
       return;
     }
@@ -317,7 +322,9 @@ export class ValueCounts extends BaseVisualization {
     }));
 
     // Store top N category values (non-Other) for exclusion filter
-    this.topCategoryValues = this.data.segments
+    // Use background categories in crossfilter mode for consistent "Other" exclusion
+    const categorySource = this.backgroundData ?? this.data;
+    this.topCategoryValues = categorySource.segments
       .filter((seg) => !seg.isOther)
       .map((seg) => seg.value);
 
@@ -681,7 +688,10 @@ export class ValueCounts extends BaseVisualization {
       const pos = this.segmentPositions[selectedIdx];
       if (!pos) continue;
 
-      const segment = this.renderSegments[selectedIdx];
+      const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
+      const segment = layoutSegments[selectedIdx];
       ctx.fillStyle = segment?.isNull
         ? COLORS.nullSelectionIndicator
         : COLORS.selectionIndicator;

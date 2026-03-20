@@ -232,3 +232,126 @@ export async function fetchValueCountsData(
     );
   }
 }
+
+/**
+ * Fetch foreground value counts aligned to the background's category set.
+ *
+ * This ensures foreground segments match the background's categories in the same order,
+ * preventing category mismatch in crossfilter mode. Mirrors the pattern of fetchDiscreteBins
+ * in HistogramData.ts.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column to analyze
+ * @param backgroundCategories - Category values from the background data (non-Other segments)
+ * @param backgroundHasOther - Whether the background data has an "Other" segment
+ * @param filters - Active filters to apply (all filters including own)
+ * @param bridge - WorkerBridge for executing queries
+ * @returns ValueCountsData with segments aligned to background categories
+ */
+export async function fetchAlignedValueCountsData(
+  tableName: string,
+  column: string,
+  backgroundCategories: string[],
+  backgroundHasOther: boolean,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<ValueCountsData> {
+  try {
+    // Step 1: Fetch foreground column statistics
+    const stats = await fetchColumnStats(tableName, column, filters, bridge);
+
+    // Handle edge case: no non-null data
+    if (stats.nonNullCount === 0) {
+      // Return empty segments for each background category (count=0) to maintain alignment
+      const segments: CategorySegment[] = backgroundCategories.map((value) => ({
+        value,
+        count: 0,
+        isOther: false,
+      }));
+      if (backgroundHasOther) {
+        segments.push({
+          value: 'Other',
+          count: 0,
+          isOther: true,
+          otherCount: 0,
+        });
+      }
+      return {
+        segments,
+        nullCount: stats.nullCount,
+        distinctCount: 0,
+        total: stats.total,
+        isAllUnique: false,
+      };
+    }
+
+    // Step 2: Query counts for the background's categories only
+    let segments: CategorySegment[];
+    let topCategoriesTotal = 0;
+
+    if (backgroundCategories.length > 0) {
+      const whereClause = filtersToWhereClause(filters);
+      const inValues = backgroundCategories
+        .map((v) => formatSQLValue(v))
+        .join(', ');
+      const baseCondition = `CAST("${column}" AS VARCHAR) IN (${inValues})`;
+      const whereSQL = whereClause
+        ? `WHERE ${baseCondition} AND ${whereClause}`
+        : `WHERE ${baseCondition}`;
+
+      const sql = `
+        SELECT
+          CAST("${column}" AS VARCHAR) as value,
+          COUNT(*) as count
+        FROM "${tableName}"
+        ${whereSQL}
+        GROUP BY CAST("${column}" AS VARCHAR)
+      `;
+
+      const results = await bridge.query<CategoryResult>(sql);
+      const countByValue = new Map<string, number>();
+      for (const row of results) {
+        countByValue.set(row.value, Number(row.count));
+      }
+
+      // Build segments in same order as background, defaulting to count: 0
+      segments = backgroundCategories.map((value) => {
+        const count = countByValue.get(value) ?? 0;
+        topCategoriesTotal += count;
+        return {
+          value,
+          count,
+          isOther: false,
+        };
+      });
+    } else {
+      segments = [];
+    }
+
+    // Step 3: Compute foreground "Other" if background has Other
+    if (backgroundHasOther) {
+      const otherCount = stats.nonNullCount - topCategoriesTotal;
+      segments.push({
+        value: 'Other',
+        count: Math.max(otherCount, 0),
+        isOther: true,
+        otherCount: Math.max(stats.distinctCount - backgroundCategories.length, 0),
+      });
+    }
+
+    // Step 4: Determine if all values are unique
+    const isAllUnique = stats.distinctCount === stats.nonNullCount && stats.nonNullCount > 1;
+
+    return {
+      segments,
+      nullCount: stats.nullCount,
+      distinctCount: stats.distinctCount,
+      total: stats.total,
+      isAllUnique,
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to fetch aligned value counts for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}

@@ -957,14 +957,13 @@ export class ValueCounts extends BaseVisualization {
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'null',
-        value: null,
       });
     } else if (segment.isOther) {
       // Exclusion filter - NOT IN top N values
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'not-set',
-        value: this.topCategoryValues,
+        values: this.topCategoryValues,
       });
     } else {
       // Point filter for category value
@@ -1007,7 +1006,7 @@ export class ValueCounts extends BaseVisualization {
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'set',
-        value: selectedValues,
+        values: selectedValues,
       });
     }
   }

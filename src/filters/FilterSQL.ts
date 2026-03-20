@@ -45,9 +45,8 @@ function filterToSQL(filter: Filter): string {
 
   switch (filter.type) {
     case 'range': {
-      const range = filter.value as { min: number | Date; max: number | Date };
-      const minVal = formatSQLValue(range.min);
-      const maxVal = formatSQLValue(range.max);
+      const minVal = formatSQLValue(filter.min);
+      const maxVal = formatSQLValue(filter.max);
       return `(${column} >= ${minVal} AND ${column} < ${maxVal})`;
     }
 
@@ -57,20 +56,18 @@ function filterToSQL(filter: Filter): string {
     }
 
     case 'set': {
-      const values = filter.value as unknown[];
-      if (values.length === 0) {
+      if (filter.values.length === 0) {
         return 'FALSE'; // Empty set matches nothing
       }
-      const formattedValues = values.map(formatSQLValue).join(', ');
+      const formattedValues = filter.values.map(formatSQLValue).join(', ');
       return `${column} IN (${formattedValues})`;
     }
 
     case 'not-set': {
-      const values = filter.value as unknown[];
-      if (values.length === 0) {
+      if (filter.values.length === 0) {
         return 'TRUE'; // Empty exclusion matches everything
       }
-      const formattedValues = values.map(formatSQLValue).join(', ');
+      const formattedValues = filter.values.map(formatSQLValue).join(', ');
       return `${column} NOT IN (${formattedValues})`;
     }
 
@@ -83,10 +80,17 @@ function filterToSQL(filter: Filter): string {
     }
 
     case 'pattern': {
-      // Escape SQL LIKE special characters in pattern value
-      // But preserve % and _ as wildcards
-      const pattern = formatSQLValue(filter.value);
-      return `${column} LIKE ${pattern}`;
+      const escaped = filter.pattern.replace(/'/g, "''");
+      switch (filter.mode) {
+        case 'contains':
+          return `${column} LIKE '%${escaped}%'`;
+        case 'starts':
+          return `${column} LIKE '${escaped}%'`;
+        case 'ends':
+          return `${column} LIKE '%${escaped}'`;
+        case 'regex':
+          return `regexp_matches(${column}, '${escaped}')`;
+      }
     }
 
     default: {

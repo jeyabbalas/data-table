@@ -66,7 +66,7 @@ describe('filtersToWhereClause', () => {
 
   it('should generate range filter SQL', () => {
     const filters: Filter[] = [
-      { column: 'price', type: 'range', value: { min: 10, max: 100 } },
+      { column: 'price', type: 'range', min: 10, max: 100 },
     ];
     expect(filtersToWhereClause(filters)).toBe(
       '("price" >= 10 AND "price" < 100)'
@@ -82,7 +82,7 @@ describe('filtersToWhereClause', () => {
 
   it('should generate set filter SQL', () => {
     const filters: Filter[] = [
-      { column: 'category', type: 'set', value: ['A', 'B', 'C'] },
+      { column: 'category', type: 'set', values: ['A', 'B', 'C'] },
     ];
     expect(filtersToWhereClause(filters)).toBe(
       '"category" IN (\'A\', \'B\', \'C\')'
@@ -90,34 +90,55 @@ describe('filtersToWhereClause', () => {
   });
 
   it('should generate FALSE for empty set filter', () => {
-    const filters: Filter[] = [{ column: 'category', type: 'set', value: [] }];
+    const filters: Filter[] = [{ column: 'category', type: 'set', values: [] }];
     expect(filtersToWhereClause(filters)).toBe('FALSE');
   });
 
   it('should generate null filter SQL', () => {
     const filters: Filter[] = [
-      { column: 'description', type: 'null', value: null },
+      { column: 'description', type: 'null' },
     ];
     expect(filtersToWhereClause(filters)).toBe('"description" IS NULL');
   });
 
   it('should generate not-null filter SQL', () => {
     const filters: Filter[] = [
-      { column: 'description', type: 'not-null', value: null },
+      { column: 'description', type: 'not-null' },
     ];
     expect(filtersToWhereClause(filters)).toBe('"description" IS NOT NULL');
   });
 
-  it('should generate pattern filter SQL', () => {
+  it('should generate pattern filter SQL (contains mode)', () => {
     const filters: Filter[] = [
-      { column: 'name', type: 'pattern', value: '%test%' },
+      { column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' },
     ];
     expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'%test%\'');
   });
 
+  it('should generate pattern filter SQL (starts mode)', () => {
+    const filters: Filter[] = [
+      { column: 'name', type: 'pattern', pattern: 'test', mode: 'starts' },
+    ];
+    expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'test%\'');
+  });
+
+  it('should generate pattern filter SQL (ends mode)', () => {
+    const filters: Filter[] = [
+      { column: 'name', type: 'pattern', pattern: 'test', mode: 'ends' },
+    ];
+    expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'%test\'');
+  });
+
+  it('should generate pattern filter SQL (regex mode)', () => {
+    const filters: Filter[] = [
+      { column: 'name', type: 'pattern', pattern: '^test.*$', mode: 'regex' },
+    ];
+    expect(filtersToWhereClause(filters)).toBe('regexp_matches("name", \'^test.*$\')');
+  });
+
   it('should combine multiple filters with AND', () => {
     const filters: Filter[] = [
-      { column: 'price', type: 'range', value: { min: 10, max: 100 } },
+      { column: 'price', type: 'range', min: 10, max: 100 },
       { column: 'active', type: 'point', value: true },
     ];
     const result = filtersToWhereClause(filters);
@@ -128,8 +149,8 @@ describe('filtersToWhereClause', () => {
 
   it('should exclude specified column', () => {
     const filters: Filter[] = [
-      { column: 'price', type: 'range', value: { min: 10, max: 100 } },
-      { column: 'name', type: 'pattern', value: 'test%' },
+      { column: 'price', type: 'range', min: 10, max: 100 },
+      { column: 'name', type: 'pattern', pattern: 'test', mode: 'starts' },
     ];
     const result = filtersToWhereClause(filters, 'price');
     expect(result).not.toContain('price');
@@ -138,14 +159,14 @@ describe('filtersToWhereClause', () => {
 
   it('should return empty string when excluding the only filter', () => {
     const filters: Filter[] = [
-      { column: 'price', type: 'range', value: { min: 10, max: 100 } },
+      { column: 'price', type: 'range', min: 10, max: 100 },
     ];
     expect(filtersToWhereClause(filters, 'price')).toBe('');
   });
 
   it('should handle numeric set values', () => {
     const filters: Filter[] = [
-      { column: 'id', type: 'set', value: [1, 2, 3] },
+      { column: 'id', type: 'set', values: [1, 2, 3] },
     ];
     expect(filtersToWhereClause(filters)).toBe('"id" IN (1, 2, 3)');
   });

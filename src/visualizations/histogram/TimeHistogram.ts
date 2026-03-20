@@ -284,10 +284,8 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'range',
-        value: {
-          min: secondsToTimeString(startBin.binStartSeconds),
-          max: secondsToTimeString(endBin.binEndSeconds),
-        },
+        min: secondsToTimeString(startBin.binStartSeconds),
+        max: secondsToTimeString(endBin.binEndSeconds),
       });
     }
   }

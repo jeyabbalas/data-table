@@ -335,7 +335,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           this.options.onFilterChange?.({
             column: this.column.name,
             type: 'set',
-            value: values,
+            values: values,
           });
         }
       } else {
@@ -343,7 +343,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'range',
-          value: { min: startBin.x0, max: endBin.x1 },
+          min: startBin.x0,
+          max: endBin.x1,
         });
       }
     }

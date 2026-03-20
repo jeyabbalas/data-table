@@ -10,6 +10,16 @@ export const VERSION = '0.1.0';
 // Core types
 export * from './core/types';
 
+// Filter types (explicit re-exports for direct import)
+export type {
+  RangeFilter,
+  PointFilter,
+  SetFilter,
+  NotSetFilter,
+  NullFilter,
+  PatternFilter,
+} from './filters/FilterTypes';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

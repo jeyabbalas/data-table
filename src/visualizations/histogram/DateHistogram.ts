@@ -309,7 +309,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'range',
-        value: { min: startBin.binStart.toISOString(), max: endBin.binEnd.toISOString() },
+        min: startBin.binStart.toISOString(),
+        max: endBin.binEnd.toISOString(),
       });
     }
   }

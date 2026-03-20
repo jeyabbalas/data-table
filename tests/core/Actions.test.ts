@@ -39,7 +39,7 @@ describe('StateActions', () => {
 
   describe('Filter Actions', () => {
     it('addFilter() should add filter to empty list', () => {
-      const filter: Filter = { column: 'age', type: 'range', value: { min: 18, max: 65 } };
+      const filter: Filter = { column: 'age', type: 'range', min: 18, max: 65 };
 
       actions.addFilter(filter);
 
@@ -47,8 +47,8 @@ describe('StateActions', () => {
     });
 
     it('addFilter() should add multiple filters for different columns', () => {
-      const filter1: Filter = { column: 'age', type: 'range', value: { min: 18, max: 65 } };
-      const filter2: Filter = { column: 'name', type: 'pattern', value: 'John' };
+      const filter1: Filter = { column: 'age', type: 'range', min: 18, max: 65 };
+      const filter2: Filter = { column: 'name', type: 'pattern', pattern: 'John', mode: 'contains' };
 
       actions.addFilter(filter1);
       actions.addFilter(filter2);
@@ -57,8 +57,8 @@ describe('StateActions', () => {
     });
 
     it('addFilter() should replace existing filter for same column/type', () => {
-      const filter1: Filter = { column: 'age', type: 'range', value: { min: 18, max: 65 } };
-      const filter2: Filter = { column: 'age', type: 'range', value: { min: 21, max: 50 } };
+      const filter1: Filter = { column: 'age', type: 'range', min: 18, max: 65 };
+      const filter2: Filter = { column: 'age', type: 'range', min: 21, max: 50 };
 
       actions.addFilter(filter1);
       actions.addFilter(filter2);
@@ -66,42 +66,43 @@ describe('StateActions', () => {
       expect(state.filters.get()).toEqual([filter2]);
     });
 
-    it('addFilter() should allow different filter types for same column', () => {
-      const filter1: Filter = { column: 'age', type: 'range', value: { min: 18 } };
-      const filter2: Filter = { column: 'age', type: 'not-null', value: null };
+    it('addFilter() should replace filter for same column regardless of type', () => {
+      const filter1: Filter = { column: 'age', type: 'range', min: 18, max: 100 };
+      const filter2: Filter = { column: 'age', type: 'not-null' };
 
       actions.addFilter(filter1);
       actions.addFilter(filter2);
 
-      expect(state.filters.get()).toEqual([filter1, filter2]);
+      // addFilter replaces by column, so filter2 replaces filter1
+      expect(state.filters.get()).toEqual([filter2]);
     });
 
     it('removeFilter(column) should remove all filters for column', () => {
-      actions.addFilter({ column: 'age', type: 'range', value: {} });
-      actions.addFilter({ column: 'age', type: 'not-null', value: null });
-      actions.addFilter({ column: 'name', type: 'pattern', value: 'test' });
+      actions.addFilter({ column: 'age', type: 'range', min: 0, max: 100 });
+      actions.addFilter({ column: 'age', type: 'not-null' });
+      actions.addFilter({ column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' });
 
       actions.removeFilter('age');
 
       expect(state.filters.get()).toEqual([
-        { column: 'name', type: 'pattern', value: 'test' },
+        { column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' },
       ]);
     });
 
     it('removeFilter(column, type) should remove specific filter type', () => {
-      actions.addFilter({ column: 'age', type: 'range', value: {} });
-      actions.addFilter({ column: 'age', type: 'not-null', value: null });
+      actions.addFilter({ column: 'age', type: 'range', min: 0, max: 100 });
+      actions.addFilter({ column: 'age', type: 'not-null' });
 
       actions.removeFilter('age', 'range');
 
       expect(state.filters.get()).toEqual([
-        { column: 'age', type: 'not-null', value: null },
+        { column: 'age', type: 'not-null' },
       ]);
     });
 
     it('clearFilters() should remove all filters', () => {
-      actions.addFilter({ column: 'age', type: 'range', value: {} });
-      actions.addFilter({ column: 'name', type: 'pattern', value: 'test' });
+      actions.addFilter({ column: 'age', type: 'range', min: 0, max: 100 });
+      actions.addFilter({ column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' });
 
       actions.clearFilters();
 
@@ -416,7 +417,7 @@ describe('StateActions', () => {
       const callback = vi.fn();
       state.filters.subscribe(callback);
 
-      actions.addFilter({ column: 'age', type: 'range', value: {} });
+      actions.addFilter({ column: 'age', type: 'range', min: 0, max: 100 });
 
       expect(callback).toHaveBeenCalled();
     });

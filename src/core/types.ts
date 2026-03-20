@@ -23,14 +23,17 @@ export interface ColumnSchema {
   originalType: string; // Original DuckDB type
 }
 
-// Filter types
-export type FilterType = 'range' | 'point' | 'set' | 'not-set' | 'null' | 'not-null' | 'pattern';
-
-export interface Filter {
-  column: string;
-  type: FilterType;
-  value: unknown;
-}
+// Filter types (re-exported from FilterTypes for backward compatibility)
+export type {
+  Filter,
+  FilterType,
+  RangeFilter,
+  PointFilter,
+  SetFilter,
+  NotSetFilter,
+  NullFilter,
+  PatternFilter,
+} from '../filters/FilterTypes';
 
 // Sort direction
 export type SortDirection = 'asc' | 'desc';

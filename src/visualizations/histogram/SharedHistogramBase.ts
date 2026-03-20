@@ -895,7 +895,6 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'null',
-          value: null,
         });
       }
       return;
@@ -931,7 +930,6 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'null',
-          value: null,
         });
       }
       return;

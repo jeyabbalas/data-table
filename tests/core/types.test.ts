@@ -32,15 +32,16 @@ describe('Core Types', () => {
   });
 
   it('should allow valid FilterType values', () => {
-    const filterTypes: FilterType[] = ['range', 'point', 'set', 'null', 'not-null', 'pattern'];
-    expect(filterTypes).toHaveLength(6);
+    const filterTypes: FilterType[] = ['range', 'point', 'set', 'not-set', 'null', 'not-null', 'pattern'];
+    expect(filterTypes).toHaveLength(7);
   });
 
   it('should allow valid Filter', () => {
     const filter: Filter = {
       column: 'age',
       type: 'range',
-      value: { min: 18, max: 65 },
+      min: 18,
+      max: 65,
     };
     expect(filter.column).toBe('age');
     expect(filter.type).toBe('range');

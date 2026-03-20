@@ -18,8 +18,13 @@ export {
   // Types
   type HistogramBin,
   type HistogramData,
+  type ColumnStats,
   // Functions
   fetchHistogramData,
+  fetchHistogramBins,
+  fetchDiscreteBins,
+  fetchColumnStats,
+  fetchDiscreteValues,
   calculateOptimalBins,
   filtersToWhereClause,
   formatSQLValue,

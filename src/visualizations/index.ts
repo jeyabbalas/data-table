@@ -36,3 +36,6 @@ export type { CategorySegment, ValueCountsData } from './valuecounts';
 export { VisualizationFactory } from './VisualizationFactory';
 export type { VisualizationRegistration, VisualizationConstructor } from './VisualizationFactory';
 export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './VisualizationFactory';
+
+// Crossfilter coordinator
+export { CrossfilterCoordinator } from './CrossfilterCoordinator';

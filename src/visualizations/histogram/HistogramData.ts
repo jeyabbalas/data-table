@@ -50,9 +50,9 @@ export interface HistogramData {
 }
 
 /**
- * Statistics needed for optimal bin calculation (internal)
+ * Statistics needed for optimal bin calculation
  */
-interface ColumnStats {
+export interface ColumnStats {
   min: number | null;
   max: number | null;
   count: number;
@@ -280,7 +280,7 @@ function clampBins(numBins: number, maxBins: number = 100): number {
 /**
  * Fetch column statistics needed for histogram calculation
  */
-async function fetchColumnStats(
+export async function fetchColumnStats(
   tableName: string,
   column: string,
   filters: Filter[],
@@ -332,7 +332,7 @@ async function fetchColumnStats(
  * Fetch distinct values with counts for discrete binning
  * Used when a column has few unique values (≤ DISCRETE_BIN_THRESHOLD)
  */
-async function fetchDiscreteValues(
+export async function fetchDiscreteValues(
   tableName: string,
   column: string,
   filters: Filter[],
@@ -396,6 +396,86 @@ function buildHistogramSQL(
   `;
 
   return sql;
+}
+
+/**
+ * Fetch histogram bins using pre-computed bin parameters.
+ * Used for crossfilter alignment: both background and foreground use the
+ * same min/max/numBins so their bin edges match exactly.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column
+ * @param min - Pre-computed minimum value for bin range
+ * @param max - Pre-computed maximum value for bin range
+ * @param numBins - Number of bins to create
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of HistogramBin with aligned edges
+ */
+export async function fetchHistogramBins(
+  tableName: string,
+  column: string,
+  min: number,
+  max: number,
+  numBins: number,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<HistogramBin[]> {
+  const sql = buildHistogramSQL(tableName, column, numBins, min, max, filters);
+  const binResults = await bridge.query<BinResult>(sql);
+
+  const binWidth = (max - min) / numBins;
+  const bins: HistogramBin[] = [];
+
+  // Create all bins (even empty ones) for consistent visualization
+  for (let i = 0; i < numBins; i++) {
+    const x0 = min + i * binWidth;
+    const x1 = i === numBins - 1 ? max : min + (i + 1) * binWidth;
+    bins.push({ x0, x1, count: 0 });
+  }
+
+  // Fill in counts from query results
+  for (const result of binResults) {
+    const idx = Number(result.bin_idx);
+    if (idx >= 0 && idx < bins.length) {
+      bins[idx].count = Number(result.count);
+    }
+  }
+
+  return bins;
+}
+
+/**
+ * Fetch discrete bins for a column using a pre-determined set of discrete values.
+ * Used for crossfilter alignment: both background and foreground use the same
+ * discrete values so segments match exactly.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column
+ * @param discreteValues - The discrete values to count (from background stats)
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of HistogramBin with matching discrete values
+ */
+export async function fetchDiscreteBins(
+  tableName: string,
+  column: string,
+  discreteValues: number[],
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<HistogramBin[]> {
+  const rawResults = await fetchDiscreteValues(tableName, column, filters, bridge);
+  const countMap = new Map<number, number>();
+  for (const dv of rawResults) {
+    countMap.set(dv.value, Number(dv.count));
+  }
+
+  // Build bins matching the reference discrete values (from background)
+  return discreteValues.map((v) => ({
+    x0: v,
+    x1: v,
+    count: countMap.get(v) ?? 0,
+  }));
 }
 
 /**
@@ -484,35 +564,16 @@ export async function fetchHistogramData(
       };
     }
 
-    // Step 3: Fetch histogram bins
-    const sql = buildHistogramSQL(
+    // Step 3: Fetch histogram bins using shared helper
+    const bins = await fetchHistogramBins(
       tableName,
       column,
-      actualBins,
       stats.min,
       stats.max,
-      filters
+      actualBins,
+      filters,
+      bridge
     );
-    const binResults = await bridge.query<BinResult>(sql);
-
-    // Step 4: Convert results to HistogramBin format
-    const binWidth = (stats.max - stats.min) / actualBins;
-    const bins: HistogramBin[] = [];
-
-    // Create all bins (even empty ones) for consistent visualization
-    for (let i = 0; i < actualBins; i++) {
-      const x0 = stats.min + i * binWidth;
-      const x1 = i === actualBins - 1 ? stats.max : stats.min + (i + 1) * binWidth;
-      bins.push({ x0, x1, count: 0 });
-    }
-
-    // Fill in counts from query results
-    for (const result of binResults) {
-      const idx = Number(result.bin_idx);
-      if (idx >= 0 && idx < bins.length) {
-        bins[idx].count = Number(result.count);
-      }
-    }
 
     return {
       bins,

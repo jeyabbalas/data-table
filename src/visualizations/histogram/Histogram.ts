@@ -12,7 +12,14 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
-import { fetchHistogramData } from './HistogramData';
+import {
+  fetchHistogramData,
+  fetchColumnStats,
+  fetchHistogramBins,
+  fetchDiscreteValues,
+  fetchDiscreteBins,
+  calculateOptimalBins,
+} from './HistogramData';
 import type { HistogramData } from './HistogramData';
 
 // =========================================
@@ -48,6 +55,10 @@ const COLORS = {
   // Selection indicator
   selectionIndicator: '#2563eb', // Blue-600 (same as barHover)
   nullSelectionIndicator: '#d97706', // Amber-600 (same as nullHover)
+
+  // Crossfilter ghost bars (unfilled portion)
+  barFadedCrossfilter: 'rgba(59, 130, 246, 0.25)', // Blue-500 at 25%
+  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.25)', // Amber-500 at 25%
 };
 
 /** Typography settings */
@@ -148,7 +159,7 @@ function formatPercent(ratio: number): string {
 export class Histogram extends BaseVisualization {
   // Data
   private data: HistogramData | null = null;
-  // Note: backgroundData for crossfilter will be added in Phase 5
+  private backgroundData: HistogramData | null = null;
 
   // Promise for initial data load (used by waitForData)
   private dataPromise: Promise<void>;
@@ -207,29 +218,137 @@ export class Histogram extends BaseVisualization {
   // =========================================
 
   /**
-   * Fetch histogram data from DuckDB
+   * Fetch histogram data from DuckDB.
+   * When crossfilter is active (own column has a filter), fetches both
+   * background (excluding own filter) and foreground (all filters) data
+   * with aligned bin structure.
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
 
-    // Clear any existing brush/selection state before fetching new data
-    // This ensures stale brush indices don't point to wrong bins after data refresh
-    this.resetBrush();
-    this.selectedBin = null;
-    this.selectedNull = false;
+    // Only reset brush/selection on initial load, not on filter updates
+    if (!this.isFilterUpdate) {
+      this.resetBrush();
+      this.selectedBin = null;
+      this.selectedNull = false;
+    }
 
     try {
-      // Use configured maxBins (default 15) - algorithm calculates optimal
-      // bins using Freedman-Diaconis/Sturges and clamps to this max
       const maxBins = this.options.maxBins ?? 15;
-
-      this.data = await fetchHistogramData(
-        this.options.tableName,
-        this.column.name,
-        maxBins,
-        this.options.filters,
-        this.options.bridge
+      const allFilters = this.options.filters;
+      const hasOwnFilter = allFilters.some(
+        (f) => f.column === this.column.name
       );
+
+      if (hasOwnFilter) {
+        // Crossfilter dual-fetch: background excludes own filter, foreground includes all
+        const bgFilters = allFilters.filter(
+          (f) => f.column !== this.column.name
+        );
+        const { tableName, bridge } = this.options;
+        const col = this.column.name;
+
+        // Step 1: Fetch stats using background filters (the reference distribution)
+        const bgStats = await fetchColumnStats(tableName, col, bgFilters, bridge);
+
+        if (bgStats.count === 0 || bgStats.min === null || bgStats.max === null) {
+          // No background data — fall through to single fetch
+          this.data = await fetchHistogramData(tableName, col, maxBins, allFilters, bridge);
+          this.backgroundData = null;
+        } else if (bgStats.min === bgStats.max) {
+          // Single value — no need for dual-fetch
+          this.data = await fetchHistogramData(tableName, col, maxBins, allFilters, bridge);
+          this.backgroundData = null;
+        } else {
+          // Check for discrete binning
+          const DISCRETE_THRESHOLD = 5;
+          if (bgStats.distinctCount <= DISCRETE_THRESHOLD) {
+            // Discrete mode: use same discrete values for both
+            const bgDiscreteValues = await fetchDiscreteValues(tableName, col, bgFilters, bridge);
+            const discreteVals = bgDiscreteValues.map((dv) => dv.value);
+
+            const [fgDiscreteBins, fgStats] = await Promise.all([
+              fetchDiscreteBins(tableName, col, discreteVals, allFilters, bridge),
+              fetchColumnStats(tableName, col, allFilters, bridge),
+            ]);
+
+            const bgBins = bgDiscreteValues.map((dv) => ({
+              x0: dv.value,
+              x1: dv.value,
+              count: Number(dv.count),
+            }));
+
+            this.backgroundData = {
+              bins: bgBins,
+              nullCount: bgStats.nullCount,
+              min: bgStats.min,
+              max: bgStats.max,
+              total: bgStats.count + bgStats.nullCount,
+              isSingleValue: false,
+              isDiscrete: true,
+            };
+            this.data = {
+              bins: fgDiscreteBins,
+              nullCount: fgStats.nullCount,
+              min: bgStats.min,
+              max: bgStats.max,
+              total: fgStats.count + fgStats.nullCount,
+              isSingleValue: false,
+              isDiscrete: true,
+            };
+          } else {
+            // Continuous mode: compute bin structure from background stats
+            const iqr =
+              bgStats.q1 !== null && bgStats.q3 !== null
+                ? bgStats.q3 - bgStats.q1
+                : 0;
+            const numBins = calculateOptimalBins(
+              bgStats.min,
+              bgStats.max,
+              bgStats.count,
+              iqr,
+              maxBins
+            );
+
+            // Fetch both bin sets + foreground stats in parallel
+            const [bgBins, fgBins, fgStats] = await Promise.all([
+              fetchHistogramBins(tableName, col, bgStats.min, bgStats.max, numBins, bgFilters, bridge),
+              fetchHistogramBins(tableName, col, bgStats.min, bgStats.max, numBins, allFilters, bridge),
+              fetchColumnStats(tableName, col, allFilters, bridge),
+            ]);
+
+            this.backgroundData = {
+              bins: bgBins,
+              nullCount: bgStats.nullCount,
+              min: bgStats.min,
+              max: bgStats.max,
+              total: bgStats.count + bgStats.nullCount,
+              isSingleValue: false,
+              isDiscrete: false,
+            };
+            this.data = {
+              bins: fgBins,
+              nullCount: fgStats.nullCount,
+              min: bgStats.min,
+              max: bgStats.max,
+              total: fgStats.count + fgStats.nullCount,
+              isSingleValue: false,
+              isDiscrete: false,
+            };
+          }
+        }
+      } else {
+        // No own filter: single fetch, no background needed
+        this.data = await fetchHistogramData(
+          this.options.tableName,
+          this.column.name,
+          maxBins,
+          allFilters,
+          this.options.bridge
+        );
+        this.backgroundData = null;
+      }
+
       this.render();
     } catch (error) {
       console.error(
@@ -237,6 +356,7 @@ export class Histogram extends BaseVisualization {
         error
       );
       this.data = null;
+      this.backgroundData = null;
       this.render();
     }
   }
@@ -290,8 +410,10 @@ export class Histogram extends BaseVisualization {
   private calculateLayout(): void {
     if (!this.data) return;
 
-    const hasNulls = this.data.nullCount > 0;
-    const numBins = this.data.bins.length;
+    // Use background data for layout when available (it has the wider/equal distribution)
+    const layoutData = this.backgroundData ?? this.data;
+    const hasNulls = layoutData.nullCount > 0;
+    const numBins = layoutData.bins.length;
 
     // First, estimate bar width to size null bar appropriately
     // Initial estimate without null bar space
@@ -400,14 +522,18 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Draw histogram bars with rounded top corners
+   * Draw histogram bars with rounded top corners.
+   * When backgroundData is present, renders "glass partially full" effect:
+   * full bar in faded color (background), then overdraw bottom portion in bright color (foreground).
    */
   private drawBars(): void {
     if (!this.data || this.data.bins.length === 0) return;
 
     const ctx = this.ctx;
-    const maxCount = Math.max(...this.data.bins.map((b) => b.count), 1);
+    const layoutData = this.backgroundData ?? this.data;
+    const maxCount = Math.max(...layoutData.bins.map((b) => b.count), 1);
     const chartBottom = this.chartArea.y + this.chartArea.height;
+    const hasCrossfilter = this.backgroundData !== null;
 
     // Check if any bar is hovered
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
@@ -431,28 +557,20 @@ export class Histogram extends BaseVisualization {
       );
     }
 
-    for (let i = 0; i < this.data.bins.length; i++) {
-      const bin = this.data.bins[i];
+    for (let i = 0; i < layoutData.bins.length; i++) {
+      const bgBin = layoutData.bins[i];
+      const fgBin = this.data.bins[i];
       const pos = this.barPositions[i];
 
       if (!pos) continue;
 
-      // Calculate bar height
-      const heightRatio = bin.count / maxCount;
-      const barHeight = Math.max(
-        bin.count > 0 ? LAYOUT.minBarHeight : 0,
-        heightRatio * this.chartArea.height
-      );
-
       // Determine color based on hover, selection, and brush state
-      // Priority: hover > selected > brush inside > (selection|brush|hover) faded > normal
       const isThisHovered = this.hoveredBin === i;
       const isThisSelected = this.selectedBin === i;
       const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
 
       let fillColor: string;
       if (isThisHovered) {
-        // Hover always gets highlight (even during selection/brush)
         fillColor = COLORS.barHover;
       } else if (isThisSelected) {
         fillColor = COLORS.barHover;
@@ -464,16 +582,65 @@ export class Histogram extends BaseVisualization {
         fillColor = COLORS.barFill;
       }
 
-      // Draw bar with rounded top corners
-      this.drawRoundedBar(
-        ctx,
-        pos.x,
-        chartBottom - barHeight,
-        pos.width,
-        barHeight,
-        LAYOUT.barRadius,
-        fillColor
-      );
+      if (hasCrossfilter) {
+        // "Glass partially full" rendering
+        // 1. Draw FULL bar (background height) in faded crossfilter color
+        const bgHeightRatio = bgBin.count / maxCount;
+        const bgBarHeight = Math.max(
+          bgBin.count > 0 ? LAYOUT.minBarHeight : 0,
+          bgHeightRatio * this.chartArea.height
+        );
+
+        if (bgBarHeight > 0) {
+          this.drawRoundedBar(
+            ctx,
+            pos.x,
+            chartBottom - bgBarHeight,
+            pos.width,
+            bgBarHeight,
+            LAYOUT.barRadius,
+            COLORS.barFadedCrossfilter
+          );
+        }
+
+        // 2. Overdraw BOTTOM portion (foreground height) in bright color
+        const fgCount = fgBin ? fgBin.count : 0;
+        const fgHeightRatio = fgCount / maxCount;
+        const fgBarHeight = Math.max(
+          fgCount > 0 ? LAYOUT.minBarHeight : 0,
+          fgHeightRatio * this.chartArea.height
+        );
+
+        if (fgBarHeight > 0) {
+          this.drawRoundedBar(
+            ctx,
+            pos.x,
+            chartBottom - fgBarHeight,
+            pos.width,
+            fgBarHeight,
+            LAYOUT.barRadius,
+            fillColor
+          );
+        }
+      } else {
+        // Normal rendering (no crossfilter)
+        const fgCount = fgBin ? fgBin.count : 0;
+        const heightRatio = fgCount / maxCount;
+        const barHeight = Math.max(
+          fgCount > 0 ? LAYOUT.minBarHeight : 0,
+          heightRatio * this.chartArea.height
+        );
+
+        this.drawRoundedBar(
+          ctx,
+          pos.x,
+          chartBottom - barHeight,
+          pos.width,
+          barHeight,
+          LAYOUT.barRadius,
+          fillColor
+        );
+      }
     }
   }
 
@@ -512,21 +679,19 @@ export class Histogram extends BaseVisualization {
   }
 
   /**
-   * Draw the null bar (if nulls exist)
+   * Draw the null bar (if nulls exist).
+   * When backgroundData is present, renders "glass partially full" effect.
    */
   private drawNullBar(): void {
-    if (!this.data || this.data.nullCount === 0) return;
+    const layoutData = this.backgroundData ?? this.data;
+    if (!this.data || !layoutData || layoutData.nullCount === 0) return;
 
     const ctx = this.ctx;
+    const hasCrossfilter = this.backgroundData !== null;
     const maxCount = Math.max(
-      ...this.data.bins.map((b) => b.count),
-      this.data.nullCount,
+      ...layoutData.bins.map((b) => b.count),
+      layoutData.nullCount,
       1
-    );
-    const heightRatio = this.data.nullCount / maxCount;
-    const barHeight = Math.max(
-      LAYOUT.minBarHeight,
-      heightRatio * this.nullBarArea.height
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
@@ -537,7 +702,6 @@ export class Histogram extends BaseVisualization {
 
     let fillColor: string;
     if (this.hoveredNull) {
-      // Hover always gets highlight (even during selection/brush)
       fillColor = COLORS.nullHover;
     } else if (this.selectedNull) {
       fillColor = COLORS.nullHover;
@@ -547,16 +711,31 @@ export class Histogram extends BaseVisualization {
       fillColor = COLORS.nullFill;
     }
 
-    // Draw null bar with rounded top
-    this.drawRoundedBar(
-      ctx,
-      this.nullBarArea.x,
-      chartBottom - barHeight,
-      this.nullBarArea.width,
-      barHeight,
-      LAYOUT.barRadius,
-      fillColor
-    );
+    if (hasCrossfilter) {
+      // "Glass partially full" for null bar
+      const bgHeightRatio = layoutData.nullCount / maxCount;
+      const bgBarHeight = Math.max(LAYOUT.minBarHeight, bgHeightRatio * this.nullBarArea.height);
+
+      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - bgBarHeight,
+        this.nullBarArea.width, bgBarHeight, LAYOUT.barRadius, COLORS.nullFadedCrossfilter);
+
+      const fgHeightRatio = this.data.nullCount / maxCount;
+      const fgBarHeight = Math.max(
+        this.data.nullCount > 0 ? LAYOUT.minBarHeight : 0,
+        fgHeightRatio * this.nullBarArea.height
+      );
+
+      if (fgBarHeight > 0) {
+        this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - fgBarHeight,
+          this.nullBarArea.width, fgBarHeight, LAYOUT.barRadius, fillColor);
+      }
+    } else {
+      const heightRatio = this.data.nullCount / maxCount;
+      const barHeight = Math.max(LAYOUT.minBarHeight, heightRatio * this.nullBarArea.height);
+
+      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - barHeight,
+        this.nullBarArea.width, barHeight, LAYOUT.barRadius, fillColor);
+    }
   }
 
   /**

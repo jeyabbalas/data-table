@@ -115,6 +115,7 @@ export abstract class BaseVisualization {
   protected height: number = 0;
   protected dpr: number;
   protected destroyed = false;
+  protected isFilterUpdate = false;
 
   // Bound event handlers for proper cleanup
   private boundMouseMove: (e: MouseEvent) => void;
@@ -361,6 +362,22 @@ export abstract class BaseVisualization {
    */
   isDestroyed(): boolean {
     return this.destroyed;
+  }
+
+  /**
+   * Update filters on a live visualization and re-fetch data.
+   * Used by CrossfilterCoordinator to push new filter arrays
+   * without recreating the visualization.
+   */
+  public async updateFilters(filters: Filter[]): Promise<void> {
+    if (this.destroyed) return;
+    this.options = { ...this.options, filters };
+    this.isFilterUpdate = true;
+    try {
+      await this.fetchData();
+    } finally {
+      this.isFilterUpdate = false;
+    }
   }
 
   // =========================================

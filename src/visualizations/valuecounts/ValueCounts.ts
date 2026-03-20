@@ -39,6 +39,11 @@ const COLORS = {
   nullHover: '#d97706', // Amber-600
   nullFaded: '#fcd34d', // Amber-300
 
+  // Crossfilter ghost segments (unfilled portion)
+  barFadedCrossfilter: 'rgba(59, 130, 246, 0.25)',
+  otherFadedCrossfilter: 'rgba(148, 163, 184, 0.25)',
+  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.25)',
+
   // Segment borders for demarcation
   segmentBorder: '#e2e8f0', // Slate-200 (light border)
 
@@ -144,6 +149,7 @@ interface RenderSegment {
 export class ValueCounts extends BaseVisualization {
   // Data
   private data: ValueCountsData | null = null;
+  private backgroundData: ValueCountsData | null = null;
 
   // Promise for initial data load (used by waitForData)
   private dataPromise: Promise<void>;
@@ -168,6 +174,9 @@ export class ValueCounts extends BaseVisualization {
   // Combined segments including null for rendering
   private renderSegments: RenderSegment[] = [];
 
+  // Background segments for crossfilter rendering
+  private backgroundSegments: RenderSegment[] = [];
+
   // Top N category values for exclusion filter (used when clicking "Other")
   private topCategoryValues: string[] = [];
 
@@ -187,21 +196,59 @@ export class ValueCounts extends BaseVisualization {
   // =========================================
 
   /**
-   * Fetch value counts data from DuckDB
+   * Fetch value counts data from DuckDB.
+   * When crossfilter is active (own column has a filter), fetches both
+   * background (excluding own filter) and foreground (all filters) data.
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
 
-    // Reset selection when fetching new data
-    this.selectedSegments.clear();
+    // Only reset selection on initial load, not on filter updates
+    if (!this.isFilterUpdate) {
+      this.selectedSegments.clear();
+    }
 
-    this.data = await fetchValueCountsData(
-      this.options.tableName,
-      this.column.name,
-      this.options.filters,
-      this.options.bridge,
-      MAX_CATEGORIES
+    const allFilters = this.options.filters;
+    const hasOwnFilter = allFilters.some(
+      (f) => f.column === this.column.name
     );
+
+    if (hasOwnFilter) {
+      // Crossfilter dual-fetch: background excludes own filter, foreground includes all
+      const bgFilters = allFilters.filter(
+        (f) => f.column !== this.column.name
+      );
+
+      const [bgData, fgData] = await Promise.all([
+        fetchValueCountsData(
+          this.options.tableName,
+          this.column.name,
+          bgFilters,
+          this.options.bridge,
+          MAX_CATEGORIES
+        ),
+        fetchValueCountsData(
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          MAX_CATEGORIES
+        ),
+      ]);
+
+      this.backgroundData = bgData;
+      this.data = fgData;
+    } else {
+      // No own filter: single fetch, no background needed
+      this.data = await fetchValueCountsData(
+        this.options.tableName,
+        this.column.name,
+        allFilters,
+        this.options.bridge,
+        MAX_CATEGORIES
+      );
+      this.backgroundData = null;
+    }
 
     this.render();
   }
@@ -246,11 +293,13 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
-   * Build the render segments array combining categories and null
+   * Build the render segments array combining categories and null.
+   * Also builds backgroundSegments when backgroundData exists.
    */
   private buildRenderSegments(): void {
     if (!this.data) {
       this.renderSegments = [];
+      this.backgroundSegments = [];
       this.topCategoryValues = [];
       return;
     }
@@ -278,6 +327,28 @@ export class ValueCounts extends BaseVisualization {
         isNull: true,
       });
     }
+
+    // Build background segments when backgroundData exists
+    if (this.backgroundData) {
+      this.backgroundSegments = this.backgroundData.segments.map((seg) => ({
+        value: seg.value,
+        count: seg.count,
+        isOther: seg.isOther,
+        isNull: false,
+        otherCount: seg.otherCount,
+      }));
+
+      if (this.backgroundData.nullCount > 0) {
+        this.backgroundSegments.push({
+          value: '\u2205',
+          count: this.backgroundData.nullCount,
+          isOther: false,
+          isNull: true,
+        });
+      }
+    } else {
+      this.backgroundSegments = [];
+    }
   }
 
   /**
@@ -301,16 +372,23 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
-   * Calculate positions for each segment (including null)
+   * Calculate positions for each segment (including null).
+   * When backgroundData exists, uses backgroundSegments for total count
+   * and proportions (background determines segment widths).
    */
   private calculateSegmentPositions(): void {
-    if (this.renderSegments.length === 0) {
+    // Use background segments for layout when crossfilter is active
+    const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
+      ? this.backgroundSegments
+      : this.renderSegments;
+
+    if (layoutSegments.length === 0) {
       this.segmentPositions = [];
       return;
     }
 
     const positions: Array<{ x: number; width: number; index: number }> = [];
-    const totalCount = this.renderSegments.reduce((sum, seg) => sum + seg.count, 0);
+    const totalCount = layoutSegments.reduce((sum, seg) => sum + seg.count, 0);
 
     if (totalCount === 0) {
       this.segmentPositions = [];
@@ -318,12 +396,12 @@ export class ValueCounts extends BaseVisualization {
     }
 
     let currentX = this.barArea.x;
-    const numSegments = this.renderSegments.length;
+    const numSegments = layoutSegments.length;
     const totalBorderWidth = (numSegments - 1) * LAYOUT.segmentBorderWidth;
     const availableWidth = this.barArea.width - totalBorderWidth;
 
     for (let i = 0; i < numSegments; i++) {
-      const segment = this.renderSegments[i];
+      const segment = layoutSegments[i];
       const proportion = segment.count / totalCount;
       let width = Math.max(proportion * availableWidth, LAYOUT.minSegmentWidth);
 
@@ -345,7 +423,10 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
-   * Draw all segments including null
+   * Draw all segments including null.
+   * When backgroundData is present, renders "glass partially full" effect:
+   * full segment width from background, left portion filled bright (foreground),
+   * right remainder in faded crossfilter color.
    */
   private drawSegments(): void {
     if (!this.data) return;
@@ -353,18 +434,41 @@ export class ValueCounts extends BaseVisualization {
     const ctx = this.ctx;
     const hasHover = this.hoveredSegment !== null;
     const hasSelection = this.selectedSegments.size > 0;
-    const numSegments = this.renderSegments.length;
+    const hasCrossfilter = this.backgroundData !== null;
+
+    // When crossfilter is active, layout is based on backgroundSegments
+    const layoutSegments = hasCrossfilter && this.backgroundSegments.length > 0
+      ? this.backgroundSegments
+      : this.renderSegments;
+    const numSegments = layoutSegments.length;
+
+    // Build a lookup map from foreground segments by value for crossfilter matching
+    const fgByValue = new Map<string, RenderSegment>();
+    if (hasCrossfilter) {
+      for (const seg of this.renderSegments) {
+        fgByValue.set(seg.value, seg);
+      }
+    }
 
     for (let i = 0; i < this.segmentPositions.length; i++) {
       const pos = this.segmentPositions[i];
-      const segment = this.renderSegments[i];
+      const bgSegment = layoutSegments[i];
+      if (!bgSegment) continue;
+
+      // For crossfilter, find matching foreground segment by value
+      const fgSegment = hasCrossfilter ? fgByValue.get(bgSegment.value) : bgSegment;
+
+      // For hover/selection, use the layout segment index
       const isHovered = this.hoveredSegment === i;
       const isSelected = this.selectedSegments.has(i);
 
       // Determine fill color based on segment type and state
       // Priority: hover > selected > (selection|hover) faded > normal
       let fillColor: string;
-      if (segment.isNull) {
+      let fadedCrossfilterColor: string;
+
+      if (bgSegment.isNull) {
+        fadedCrossfilterColor = COLORS.nullFadedCrossfilter;
         if (isHovered) {
           fillColor = COLORS.nullHover;
         } else if (isSelected) {
@@ -374,7 +478,8 @@ export class ValueCounts extends BaseVisualization {
         } else {
           fillColor = COLORS.nullFill;
         }
-      } else if (segment.isOther || segment.isAllUnique) {
+      } else if (bgSegment.isOther || bgSegment.isAllUnique) {
+        fadedCrossfilterColor = COLORS.otherFadedCrossfilter;
         if (isHovered) {
           fillColor = COLORS.otherHover;
         } else if (isSelected) {
@@ -385,6 +490,7 @@ export class ValueCounts extends BaseVisualization {
           fillColor = COLORS.otherFill;
         }
       } else {
+        fadedCrossfilterColor = COLORS.barFadedCrossfilter;
         if (isHovered) {
           fillColor = COLORS.barHover;
         } else if (isSelected) {
@@ -400,15 +506,50 @@ export class ValueCounts extends BaseVisualization {
       const isFirst = i === 0;
       const isLast = i === numSegments - 1;
 
-      this.drawSegmentRect(
-        pos.x,
-        this.barArea.y,
-        pos.width,
-        this.barArea.height,
-        fillColor,
-        isFirst,
-        isLast
-      );
+      if (hasCrossfilter) {
+        // "Glass partially full" horizontal rendering
+        const bgCount = bgSegment.count;
+        const fgCount = fgSegment ? fgSegment.count : 0;
+        const fgProportion = bgCount > 0 ? Math.min(fgCount / bgCount, 1) : 0;
+
+        // 1. Draw full segment in faded crossfilter color
+        this.drawSegmentRect(
+          pos.x,
+          this.barArea.y,
+          pos.width,
+          this.barArea.height,
+          fadedCrossfilterColor,
+          isFirst,
+          isLast
+        );
+
+        // 2. Overdraw the LEFT portion in bright color (proportional to foreground count)
+        if (fgProportion > 0) {
+          const filledWidth = pos.width * fgProportion;
+          // When foreground fills the entire segment, use isLast for right rounding
+          const fillIsLast = fgProportion >= 1 && isLast;
+          this.drawSegmentRect(
+            pos.x,
+            this.barArea.y,
+            filledWidth,
+            this.barArea.height,
+            fillColor,
+            isFirst,
+            fillIsLast
+          );
+        }
+      } else {
+        // Normal rendering (no crossfilter)
+        this.drawSegmentRect(
+          pos.x,
+          this.barArea.y,
+          pos.width,
+          this.barArea.height,
+          fillColor,
+          isFirst,
+          isLast
+        );
+      }
 
       // Draw border on right edge (except for last segment)
       if (i < numSegments - 1) {
@@ -421,7 +562,8 @@ export class ValueCounts extends BaseVisualization {
       }
 
       // Draw label inside segment if wide enough
-      this.drawSegmentLabel(pos, segment);
+      // Use the background segment for label text in crossfilter mode
+      this.drawSegmentLabel(pos, bgSegment);
     }
   }
 

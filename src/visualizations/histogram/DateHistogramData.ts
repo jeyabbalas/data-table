@@ -92,7 +92,7 @@ const TIME_INTERVALS: TimeInterval[] = [
 /**
  * Estimate the number of bins for a given time interval
  */
-function estimateBinCount(min: Date, max: Date, interval: TimeInterval): number {
+export function estimateBinCount(min: Date, max: Date, interval: TimeInterval): number {
   const rangeMs = max.getTime() - min.getTime();
 
   switch (interval) {
@@ -123,7 +123,7 @@ function estimateBinCount(min: Date, max: Date, interval: TimeInterval): number 
  * Starts from the initial interval and coarsens it (e.g., day → week → month)
  * until the estimated bin count is within the limit.
  */
-function adjustIntervalForMaxBins(
+export function adjustIntervalForMaxBins(
   min: Date,
   max: Date,
   initialInterval: TimeInterval,
@@ -287,7 +287,7 @@ function parseDate(value: string | null): Date | null {
 /**
  * Fetch date column statistics (min, max, count, nulls)
  */
-async function fetchDateStats(
+export async function fetchDateStats(
   tableName: string,
   column: string,
   filters: Filter[],
@@ -457,6 +457,103 @@ async function fetchDateHistogramWithNumericBinning(
     isSingleValue: false,
     isNumericBinning: true,
   };
+}
+
+/**
+ * Fetch date histogram bins using DATE_TRUNC with a pre-determined interval.
+ * Used for crossfilter alignment: both background and foreground use the
+ * same interval so their bin edges match exactly.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column
+ * @param interval - Time interval to use for DATE_TRUNC binning
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of DateHistogramBin with aligned edges
+ */
+export async function fetchDateHistogramBins(
+  tableName: string,
+  column: string,
+  interval: TimeInterval,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<DateHistogramBin[]> {
+  const sql = buildDateHistogramSQL(tableName, column, interval, filters);
+  const binResults = await bridge.query<DateBinResult>(sql);
+
+  const bins: DateHistogramBin[] = [];
+  for (const result of binResults) {
+    const binStart = parseDate(result.bin_start);
+    if (binStart === null) continue;
+
+    const binEnd = computeBinEnd(binStart, interval);
+    bins.push({
+      binStart,
+      binEnd,
+      count: Number(result.count),
+    });
+  }
+
+  return bins;
+}
+
+/**
+ * Fetch date histogram bins using numeric (equal-width) binning.
+ * Used for crossfilter alignment when interval-based binning exceeds maxBins:
+ * both background and foreground use the same numBins/minMs/maxMs so their
+ * bin edges match exactly.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column
+ * @param numBins - Number of equal-width bins to create
+ * @param minMs - Minimum epoch milliseconds for bin range
+ * @param maxMs - Maximum epoch milliseconds for bin range
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of DateHistogramBin with aligned edges
+ */
+export async function fetchDateNumericBins(
+  tableName: string,
+  column: string,
+  numBins: number,
+  minMs: number,
+  maxMs: number,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<DateHistogramBin[]> {
+  const binWidth = (maxMs - minMs) / numBins;
+
+  const sql = buildNumericDateHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    minMs,
+    maxMs,
+    filters
+  );
+  const binResults = await bridge.query<NumericBinResult>(sql);
+
+  // Create all bins (even empty ones) for consistent visualization
+  const bins: DateHistogramBin[] = [];
+  for (let i = 0; i < numBins; i++) {
+    const binStartMs = minMs + i * binWidth;
+    const binEndMs = i === numBins - 1 ? maxMs : minMs + (i + 1) * binWidth;
+    bins.push({
+      binStart: new Date(binStartMs),
+      binEnd: new Date(binEndMs),
+      count: 0,
+    });
+  }
+
+  // Fill in counts from query results
+  for (const result of binResults) {
+    const idx = Number(result.bin_idx);
+    if (idx >= 0 && idx < bins.length) {
+      bins[idx].count = Number(result.count);
+    }
+  }
+
+  return bins;
 }
 
 /**

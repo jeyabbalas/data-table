@@ -162,7 +162,7 @@ const TIME_INTERVALS: TimeInterval[] = ['second', 'minute', 'hour'];
 /**
  * Estimate the number of bins for a given time interval
  */
-function estimateBinCountForTime(
+export function estimateBinCountForTime(
   minSec: number,
   maxSec: number,
   interval: TimeInterval
@@ -187,7 +187,7 @@ function estimateBinCountForTime(
  * Starts from the initial interval and coarsens it (e.g., second → minute → hour)
  * until the estimated bin count is within the limit.
  */
-function adjustIntervalForMaxBinsTime(
+export function adjustIntervalForMaxBinsTime(
   minSec: number,
   maxSec: number,
   initialInterval: TimeInterval,
@@ -263,7 +263,7 @@ function computeBinEnd(binStartSeconds: number, interval: TimeInterval): number 
 /**
  * Fetch time column statistics (min, max, count, nulls)
  */
-async function fetchTimeStats(
+export async function fetchTimeStats(
   tableName: string,
   column: string,
   filters: Filter[],
@@ -432,6 +432,100 @@ async function fetchTimeHistogramWithNumericBinning(
     isSingleValue: false,
     isNumericBinning: true,
   };
+}
+
+/**
+ * Fetch time histogram bins using interval-based binning.
+ * Used for crossfilter alignment: both background and foreground use the
+ * same interval so their bin edges match exactly.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the TIME column
+ * @param interval - Time interval to use for binning
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of TimeHistogramBin with aligned edges
+ */
+export async function fetchTimeHistogramBins(
+  tableName: string,
+  column: string,
+  interval: TimeInterval,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<TimeHistogramBin[]> {
+  const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
+  const binResults = await bridge.query<TimeBinResult>(sql);
+
+  const bins: TimeHistogramBin[] = [];
+  for (const result of binResults) {
+    const binStartSeconds = Number(result.bin_start);
+    const binEndSeconds = computeBinEnd(binStartSeconds, interval);
+    bins.push({
+      binStartSeconds,
+      binEndSeconds,
+      count: Number(result.count),
+    });
+  }
+
+  return bins;
+}
+
+/**
+ * Fetch time histogram bins using numeric (equal-width) binning.
+ * Used for crossfilter alignment when interval-based binning exceeds maxBins:
+ * both background and foreground use the same numBins/min/max so their bin edges match.
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the TIME column
+ * @param numBins - Number of equal-width bins
+ * @param minSec - Minimum seconds from midnight for bin range
+ * @param maxSec - Maximum seconds from midnight for bin range
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @returns Array of TimeHistogramBin with aligned edges
+ */
+export async function fetchTimeNumericBins(
+  tableName: string,
+  column: string,
+  numBins: number,
+  minSec: number,
+  maxSec: number,
+  filters: Filter[],
+  bridge: WorkerBridge
+): Promise<TimeHistogramBin[]> {
+  const binWidth = (maxSec - minSec) / numBins;
+
+  const sql = buildNumericTimeHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    minSec,
+    maxSec,
+    filters
+  );
+  const binResults = await bridge.query<NumericBinResult>(sql);
+
+  // Create all bins (even empty ones) for consistent visualization
+  const bins: TimeHistogramBin[] = [];
+  for (let i = 0; i < numBins; i++) {
+    const binStartSeconds = minSec + i * binWidth;
+    const binEndSeconds = i === numBins - 1 ? maxSec : minSec + (i + 1) * binWidth;
+    bins.push({
+      binStartSeconds,
+      binEndSeconds,
+      count: 0,
+    });
+  }
+
+  // Fill in counts from query results
+  for (const result of binResults) {
+    const idx = Number(result.bin_idx);
+    if (idx >= 0 && idx < bins.length) {
+      bins[idx].count = Number(result.count);
+    }
+  }
+
+  return bins;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a phased implementation plan for developing a client-side TypeScript library that enables users to build browser-based interactive, explorable data tables within their own web applications. The library uses DuckDB WASM for in-browser analytics, enabling complete privacy with no server-side processing.
+This document provides a phased implementation plan for developing a client-side TypeScript library that enables users to build browser-based interactive, explorable data tables embedded within their own web applications. The library uses DuckDB WASM for in-browser analytics, enabling complete privacy with no server-side processing.
 
 **Estimated Total Effort:** 8 major phases, ~60-80 discrete tasks
 
@@ -985,34 +985,56 @@ Fix: Use event delegation or a shared listener manager.
 - Correct visualization type selected per column type
 - Plugin registration works
 
-### Task 4.9: Integrate Visualizations with Headers
+### Task 4.9: Crossfilter Integration (6 sub-tasks)
 
-Update `ColumnHeader.ts`:
+Implements the own-filter exclusion crossfilter pattern across all visualizations.
 
-```typescript
-private visualization: BaseVisualization | null = null;
+#### Sub-task 4.9.1: Add `updateFilters()` to BaseVisualization ✅
+- Added `isFilterUpdate` flag and `updateFilters()` method
+- `isDestroyed()` accessor (already existed)
 
-private initializeVisualization(): void {
-  const viz = VisualizationFactory.create(this.column, this.vizContainer);
-  viz.fetchData();
-  this.visualization = viz;
-}
+#### Sub-task 4.9.2: Histogram dual-fetch + ghost bars ✅
+- Exported `fetchColumnStats()`, `fetchDiscreteValues()` from HistogramData.ts
+- Added `fetchHistogramBins()` and `fetchDiscreteBins()` for aligned bin queries
+- Histogram.ts: dual-fetch (background excludes own filter, foreground includes all)
+- "Glass partially full" rendering: faded background bars with bright foreground overdraw
 
-private updateVisualization(): void {
-  // Called when filters change
-  this.visualization?.fetchData();
-}
-```
+#### Sub-task 4.9.3: DateHistogram + TimeHistogram crossfilter ✅
+- Exported stats/interval functions from DateHistogramData.ts and TimeHistogramData.ts
+- Added `fetchDateHistogramBins()`, `fetchDateNumericBins()`, `fetchTimeHistogramBins()`, `fetchTimeNumericBins()`
+- Same dual-fetch + ghost bar pattern as Histogram
+
+#### Sub-task 4.9.4: ValueCounts ghost segments ✅
+- Horizontal "glass partially full": bright left portion (foreground), faded right remainder
+- Category matching by value name between background and foreground
+- Background determines segment widths; foreground determines fill proportion
+
+#### Sub-task 4.9.5: CrossfilterCoordinator ✅
+- New `src/visualizations/CrossfilterCoordinator.ts`
+- Subscribes to `state.filters`, calls `updateFilters()` on all registered visualizations
+- Routes `onFilterChange` callbacks through `StateActions`
+- Updates `filteredRows` count after each filter change
+
+#### Sub-task 4.9.6: Demo wiring + stats display ✅
+- Demo routes all `onFilterChange` through coordinator
+- Stats lines show "Filtered: X / Total: Y" when filters are active
+- Table info bar shows active filter count
+- Coordinator registered/unregistered on visualization create/destroy
 
 **Verification:**
-- Each column shows appropriate visualization
-- Visualizations update on filter change
+- Brush a numeric histogram → all other columns show ghost bars, stats show filtered count
+- Click a ValueCounts segment → all histograms show crossfilter ghost bars
+- Press Escape → filter removed, all visualizations revert, stats show total
+- Multiple filters on different columns → all visualizations reflect compound filter
+- Column reorder → crossfilter state preserved
 
 ---
 
 ## Phase 5: Filtering System
 
-**Goal:** Implement complete filtering with crossfilter behavior.
+**Goal:** Implement formal filter UI, filter panels, and connect filters to table body rows.
+**Note:** The crossfilter data flow, background rendering, and coordination are already in place from Task 4.9.
+Phase 5 should focus on: formal `src/filters/` module structure, filter chip UI, filter bar component, and connecting filters to the table body's row queries.
 
 ### Task 5.1: Create Filter Types
 

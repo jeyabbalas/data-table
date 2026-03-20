@@ -1,9 +1,10 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.8: Visualization Factory
+ * Phase 4, Task 4.9: Crossfilter Integration
  *
- * This demo uses VisualizationFactory for centralized visualization creation:
+ * This demo uses VisualizationFactory for centralized visualization creation
+ * and CrossfilterCoordinator for filter propagation across columns:
  * - Histogram for numeric columns (integer, float, decimal)
  * - DateHistogram for date/timestamp columns
  * - TimeHistogram for time columns
@@ -19,6 +20,7 @@ import {
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
 import { ValueCounts } from '../src/visualizations/valuecounts';
+import { CrossfilterCoordinator } from '../src/visualizations/CrossfilterCoordinator';
 import {
   VisualizationFactory,
   isNumericType,
@@ -56,6 +58,7 @@ let tableCounter = 0;
 let activeVisualizations: BaseVisualization[] = [];
 let visualizationsAttached = false;
 let reorderTimeout: ReturnType<typeof setTimeout> | null = null;
+let coordinator: CrossfilterCoordinator | null = null;
 
 // State persistence maps for brush and selection states
 const brushStates = new Map<
@@ -110,7 +113,13 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     }
   }
 
-  // Clean up previous visualizations
+  // Clean up previous visualizations and coordinator registrations
+  if (coordinator) {
+    for (const viz of activeVisualizations) {
+      const col = viz.getColumn();
+      coordinator.unregister(col.name);
+    }
+  }
   for (const viz of activeVisualizations) {
     viz.destroy();
   }
@@ -118,6 +127,12 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
 
   // Clear interaction stack entries for destroyed visualizations
   interactionStack.length = 0;
+
+  // Create or recreate coordinator for this table
+  if (coordinator) {
+    coordinator.destroy();
+  }
+  coordinator = new CrossfilterCoordinator(tableState, actions, bridge, tableName);
 
   // Get all column headers
   const headers = tableContainer.getColumnHeaders();
@@ -140,7 +155,16 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
 
     const vizContainer = header.getVizContainer();
     const statsEl = header.getStatsElement();
-    const defaultStats = `<span class="stats-label">Rows:</span> ${tableState.totalRows.get().toLocaleString()}`;
+
+    function getDefaultStats(): string {
+      const fr = tableState.filteredRows.get();
+      const tr = tableState.totalRows.get();
+      const af = tableState.filters.get();
+      return af.length > 0
+        ? `<span class="stats-label">Filtered:</span> ${fr.toLocaleString()} / ${tr.toLocaleString()}`
+        : `<span class="stats-label">Rows:</span> ${tr.toLocaleString()}`;
+    }
+    statsEl.innerHTML = getDefaultStats();
 
     // Declare visualization variable
     let visualization: VisualizationType;
@@ -149,21 +173,15 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     const vizOptions = {
       tableName,
       bridge,
-      filters: [],  // No filtering in Phase 4 - crossfilter comes in Phase 5
+      filters: tableState.filters.get(),
       onFilterChange: (filter: import('../src/core/types').Filter | null) => {
-        if (filter) {
-          console.log('[Demo] Filter created:', filter);
-          // Phase 5 will implement: actions.addFilter(filter);
-        } else {
-          console.log('[Demo] Filter removal signal received');
-          // Phase 5 will implement: actions.removeFilter(column);
-        }
+        coordinator!.handleFilterChange(column.name, filter);
       },
       onStatsChange: (stats: string | null) => {
         if (stats) {
           statsEl.innerHTML = stats;
         } else {
-          statsEl.innerHTML = defaultStats;
+          statsEl.innerHTML = getDefaultStats();
         }
       },
       onBrushCommit: (colName: string) => {
@@ -224,8 +242,8 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     visualization = viz as VisualizationType;
     console.log(`[Demo] Created visualization for "${column.name}" (${column.type})`);
 
-
     activeVisualizations.push(visualization);
+    coordinator!.register(column.name, visualization);
 
     // Restore brush/selection state if exists
     const savedBrush = brushStates.get(column.name);
@@ -278,11 +296,39 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
   visualizationsAttached = true;
 }
 
+/**
+ * Update all column stats lines to show filtered/total row counts
+ */
+function updateColumnStats(): void {
+  if (!tableContainer) return;
+
+  const filteredRows = tableState.filteredRows.get();
+  const totalRows = tableState.totalRows.get();
+  const filters = tableState.filters.get();
+  const headers = tableContainer.getColumnHeaders();
+
+  const defaultStats = filters.length > 0
+    ? `<span class="stats-label">Filtered:</span> ${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()}`
+    : `<span class="stats-label">Rows:</span> ${totalRows.toLocaleString()}`;
+
+  // Update stats for columns that don't have an active hover/selection showing custom stats
+  for (const header of headers) {
+    const statsEl = header.getStatsElement();
+    // Only update if showing default stats (not hover/selection stats)
+    const current = statsEl.innerHTML;
+    if (current.includes('stats-label">Rows:') || current.includes('stats-label">Filtered:')) {
+      statsEl.innerHTML = defaultStats;
+    }
+  }
+}
+
 function updateTableInfo(): void {
-  const rowCount = tableState.totalRows.get();
+  const totalRows = tableState.totalRows.get();
+  const filteredRows = tableState.filteredRows.get();
   const schema = tableState.schema.get();
   const colCount = schema.length;
   const tableName = tableState.tableName.get();
+  const filters = tableState.filters.get();
 
   if (!tableName) return;
 
@@ -292,7 +338,15 @@ function updateTableInfo(): void {
   const categoricalCols = schema.filter((col) => isCategoricalType(col.type)).length;
   const vizCount = activeVisualizations.length;
 
-  let info = `<strong>${rowCount.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
+  // Show filtered/total rows
+  let info: string;
+  if (filters.length > 0) {
+    info = `<strong>${filteredRows.toLocaleString()}</strong> / ${totalRows.toLocaleString()} rows, <strong>${colCount}</strong> columns`;
+    info += ` | <strong>${filters.length}</strong> filter${filters.length > 1 ? 's' : ''}`;
+  } else {
+    info = `<strong>${totalRows.toLocaleString()}</strong> rows, <strong>${colCount}</strong> columns`;
+  }
+
   info += ` | <strong>${vizCount}</strong> visualizations`;
   info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
 
@@ -353,6 +407,23 @@ bridge
     tableState.sortColumns.subscribe(() => {
       if (tableState.tableName.get()) {
         updateTableInfo();
+      }
+    });
+
+    // Subscribe to filter changes to update table info bar
+    tableState.filters.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+        // Update all column stats lines to show filtered/total
+        updateColumnStats();
+      }
+    });
+
+    // Subscribe to filtered row count changes to update display
+    tableState.filteredRows.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+        updateColumnStats();
       }
     });
 

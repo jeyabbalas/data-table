@@ -14,7 +14,16 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
-import { fetchTimeHistogramData, secondsToTimeString } from './TimeHistogramData';
+import {
+  fetchTimeHistogramData,
+  secondsToTimeString,
+  fetchTimeStats,
+  fetchTimeHistogramBins,
+  fetchTimeNumericBins,
+  detectTimeIntervalForTime,
+  adjustIntervalForMaxBinsTime,
+  estimateBinCountForTime,
+} from './TimeHistogramData';
 import type { TimeHistogramData } from './TimeHistogramData';
 import { formatTimeOnlyLabel, formatTimeOnlyLabelNumeric, formatTimeOnlyRange, formatTimeOnlyRangeNumeric } from './DateFormatters';
 
@@ -51,6 +60,10 @@ const COLORS = {
   // Selection indicator
   selectionIndicator: '#2563eb', // Blue-600 (same as barHover)
   nullSelectionIndicator: '#d97706', // Amber-600 (same as nullHover)
+
+  // Crossfilter ghost bars (unfilled portion)
+  barFadedCrossfilter: 'rgba(59, 130, 246, 0.25)', // Blue-500 at 25%
+  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.25)', // Amber-500 at 25%
 };
 
 /** Typography settings */
@@ -109,6 +122,7 @@ function formatPercent(ratio: number): string {
 export class TimeHistogram extends BaseVisualization {
   // Data
   private data: TimeHistogramData | null = null;
+  private backgroundData: TimeHistogramData | null = null;
 
   // Promise for initial data load (used by waitForData)
   private dataPromise: Promise<void>;
@@ -167,27 +181,129 @@ export class TimeHistogram extends BaseVisualization {
   // =========================================
 
   /**
-   * Fetch time histogram data from DuckDB
+   * Fetch time histogram data from DuckDB.
+   * When crossfilter is active (own column has a filter), fetches both
+   * background (excluding own filter) and foreground (all filters) data
+   * with aligned bin structure.
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
 
-    // Clear any existing brush/selection state before fetching new data
-    this.resetBrush();
-    this.selectedBin = null;
-    this.selectedNull = false;
+    // Only reset brush/selection on initial load, not on filter updates
+    if (!this.isFilterUpdate) {
+      this.resetBrush();
+      this.selectedBin = null;
+      this.selectedNull = false;
+    }
 
     try {
-      // Use configured maxBins (default 15) - interval will be coarsened if needed
       const maxBins = this.options.maxBins ?? 15;
-
-      this.data = await fetchTimeHistogramData(
-        this.options.tableName,
-        this.column.name,
-        this.options.filters,
-        this.options.bridge,
-        maxBins
+      const allFilters = this.options.filters;
+      const hasOwnFilter = allFilters.some(
+        (f) => f.column === this.column.name
       );
+
+      if (hasOwnFilter) {
+        // Crossfilter dual-fetch: background excludes own filter, foreground includes all
+        const bgFilters = allFilters.filter(
+          (f) => f.column !== this.column.name
+        );
+        const { tableName, bridge } = this.options;
+        const col = this.column.name;
+
+        // Step 1: Fetch stats using background filters (the reference distribution)
+        const bgStats = await fetchTimeStats(tableName, col, bgFilters, bridge);
+
+        if (bgStats.count === 0 || bgStats.minSeconds === null || bgStats.maxSeconds === null) {
+          // No background data — fall through to single fetch
+          this.data = await fetchTimeHistogramData(tableName, col, allFilters, bridge, maxBins);
+          this.backgroundData = null;
+        } else if (bgStats.minSeconds === bgStats.maxSeconds) {
+          // Single value — no need for dual-fetch
+          this.data = await fetchTimeHistogramData(tableName, col, allFilters, bridge, maxBins);
+          this.backgroundData = null;
+        } else {
+          // Step 2: Detect interval from background stats
+          const initialInterval = detectTimeIntervalForTime(bgStats.minSeconds, bgStats.maxSeconds);
+          const interval = adjustIntervalForMaxBinsTime(
+            bgStats.minSeconds,
+            bgStats.maxSeconds,
+            initialInterval,
+            maxBins
+          );
+
+          // Step 3: Check if even the adjusted interval exceeds maxBins
+          const estimatedBins = estimateBinCountForTime(bgStats.minSeconds, bgStats.maxSeconds, interval);
+
+          if (estimatedBins > maxBins) {
+            // Numeric binning fallback: both use same numBins/min/max
+            const [bgBins, fgBins, fgStats] = await Promise.all([
+              fetchTimeNumericBins(tableName, col, maxBins, bgStats.minSeconds, bgStats.maxSeconds, bgFilters, bridge),
+              fetchTimeNumericBins(tableName, col, maxBins, bgStats.minSeconds, bgStats.maxSeconds, allFilters, bridge),
+              fetchTimeStats(tableName, col, allFilters, bridge),
+            ]);
+
+            this.backgroundData = {
+              bins: bgBins,
+              nullCount: bgStats.nullCount,
+              minSeconds: bgStats.minSeconds,
+              maxSeconds: bgStats.maxSeconds,
+              total: bgStats.count + bgStats.nullCount,
+              interval: 'hour', // Placeholder — not used for numeric binning
+              isSingleValue: false,
+              isNumericBinning: true,
+            };
+            this.data = {
+              bins: fgBins,
+              nullCount: fgStats.nullCount,
+              minSeconds: bgStats.minSeconds,
+              maxSeconds: bgStats.maxSeconds,
+              total: fgStats.count + fgStats.nullCount,
+              interval: 'hour',
+              isSingleValue: false,
+              isNumericBinning: true,
+            };
+          } else {
+            // Interval-based binning: both use same interval
+            const [bgBins, fgBins, fgStats] = await Promise.all([
+              fetchTimeHistogramBins(tableName, col, interval, bgFilters, bridge),
+              fetchTimeHistogramBins(tableName, col, interval, allFilters, bridge),
+              fetchTimeStats(tableName, col, allFilters, bridge),
+            ]);
+
+            this.backgroundData = {
+              bins: bgBins,
+              nullCount: bgStats.nullCount,
+              minSeconds: bgStats.minSeconds,
+              maxSeconds: bgStats.maxSeconds,
+              total: bgStats.count + bgStats.nullCount,
+              interval,
+              isSingleValue: false,
+              isNumericBinning: false,
+            };
+            this.data = {
+              bins: fgBins,
+              nullCount: fgStats.nullCount,
+              minSeconds: bgStats.minSeconds,
+              maxSeconds: bgStats.maxSeconds,
+              total: fgStats.count + fgStats.nullCount,
+              interval,
+              isSingleValue: false,
+              isNumericBinning: false,
+            };
+          }
+        }
+      } else {
+        // No own filter: single fetch, no background needed
+        this.data = await fetchTimeHistogramData(
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          maxBins
+        );
+        this.backgroundData = null;
+      }
 
       this.render();
     } catch (error) {
@@ -196,6 +312,7 @@ export class TimeHistogram extends BaseVisualization {
         error
       );
       this.data = null;
+      this.backgroundData = null;
       this.render();
     }
   }
@@ -249,8 +366,10 @@ export class TimeHistogram extends BaseVisualization {
   private calculateLayout(): void {
     if (!this.data) return;
 
-    const hasNulls = this.data.nullCount > 0;
-    const numBins = this.data.bins.length;
+    // Use background data for layout when available (it has the wider/equal distribution)
+    const layoutData = this.backgroundData ?? this.data;
+    const hasNulls = layoutData.nullCount > 0;
+    const numBins = layoutData.bins.length;
 
     // First, estimate bar width to size null bar appropriately
     const estimatedChartWidth = this.width - PADDING.left - PADDING.right;
@@ -353,14 +472,18 @@ export class TimeHistogram extends BaseVisualization {
   }
 
   /**
-   * Draw histogram bars with rounded top corners
+   * Draw histogram bars with rounded top corners.
+   * When backgroundData is present, renders "glass partially full" effect:
+   * full bar in faded color (background), then overdraw bottom portion in bright color (foreground).
    */
   private drawBars(): void {
     if (!this.data || this.data.bins.length === 0) return;
 
     const ctx = this.ctx;
-    const maxCount = Math.max(...this.data.bins.map((b) => b.count), 1);
+    const layoutData = this.backgroundData ?? this.data;
+    const maxCount = Math.max(...layoutData.bins.map((b) => b.count), 1);
     const chartBottom = this.chartArea.y + this.chartArea.height;
+    const hasCrossfilter = this.backgroundData !== null;
 
     // Check if any bar is hovered
     const isAnyHovered = this.hoveredBin !== null || this.hoveredNull;
@@ -384,18 +507,12 @@ export class TimeHistogram extends BaseVisualization {
       );
     }
 
-    for (let i = 0; i < this.data.bins.length; i++) {
-      const bin = this.data.bins[i];
+    for (let i = 0; i < layoutData.bins.length; i++) {
+      const bgBin = layoutData.bins[i];
+      const fgBin = this.data.bins[i];
       const pos = this.barPositions[i];
 
       if (!pos) continue;
-
-      // Calculate bar height
-      const heightRatio = bin.count / maxCount;
-      const barHeight = Math.max(
-        bin.count > 0 ? LAYOUT.minBarHeight : 0,
-        heightRatio * this.chartArea.height
-      );
 
       // Determine color: hover > selected > brush inside > (selection|brush|hover) faded > normal
       const isThisHovered = this.hoveredBin === i;
@@ -415,16 +532,65 @@ export class TimeHistogram extends BaseVisualization {
         fillColor = COLORS.barFill;
       }
 
-      // Draw bar with rounded top corners
-      this.drawRoundedBar(
-        ctx,
-        pos.x,
-        chartBottom - barHeight,
-        pos.width,
-        barHeight,
-        LAYOUT.barRadius,
-        fillColor
-      );
+      if (hasCrossfilter) {
+        // "Glass partially full" rendering
+        // 1. Draw FULL bar (background height) in faded crossfilter color
+        const bgHeightRatio = bgBin.count / maxCount;
+        const bgBarHeight = Math.max(
+          bgBin.count > 0 ? LAYOUT.minBarHeight : 0,
+          bgHeightRatio * this.chartArea.height
+        );
+
+        if (bgBarHeight > 0) {
+          this.drawRoundedBar(
+            ctx,
+            pos.x,
+            chartBottom - bgBarHeight,
+            pos.width,
+            bgBarHeight,
+            LAYOUT.barRadius,
+            COLORS.barFadedCrossfilter
+          );
+        }
+
+        // 2. Overdraw BOTTOM portion (foreground height) in bright color
+        const fgCount = fgBin ? fgBin.count : 0;
+        const fgHeightRatio = fgCount / maxCount;
+        const fgBarHeight = Math.max(
+          fgCount > 0 ? LAYOUT.minBarHeight : 0,
+          fgHeightRatio * this.chartArea.height
+        );
+
+        if (fgBarHeight > 0) {
+          this.drawRoundedBar(
+            ctx,
+            pos.x,
+            chartBottom - fgBarHeight,
+            pos.width,
+            fgBarHeight,
+            LAYOUT.barRadius,
+            fillColor
+          );
+        }
+      } else {
+        // Normal rendering (no crossfilter)
+        const fgCount = fgBin ? fgBin.count : 0;
+        const heightRatio = fgCount / maxCount;
+        const barHeight = Math.max(
+          fgCount > 0 ? LAYOUT.minBarHeight : 0,
+          heightRatio * this.chartArea.height
+        );
+
+        this.drawRoundedBar(
+          ctx,
+          pos.x,
+          chartBottom - barHeight,
+          pos.width,
+          barHeight,
+          LAYOUT.barRadius,
+          fillColor
+        );
+      }
     }
   }
 
@@ -463,21 +629,19 @@ export class TimeHistogram extends BaseVisualization {
   }
 
   /**
-   * Draw the null bar (if nulls exist)
+   * Draw the null bar (if nulls exist).
+   * When backgroundData is present, renders "glass partially full" effect.
    */
   private drawNullBar(): void {
-    if (!this.data || this.data.nullCount === 0) return;
+    const layoutData = this.backgroundData ?? this.data;
+    if (!this.data || !layoutData || layoutData.nullCount === 0) return;
 
     const ctx = this.ctx;
+    const hasCrossfilter = this.backgroundData !== null;
     const maxCount = Math.max(
-      ...this.data.bins.map((b) => b.count),
-      this.data.nullCount,
+      ...layoutData.bins.map((b) => b.count),
+      layoutData.nullCount,
       1
-    );
-    const heightRatio = this.data.nullCount / maxCount;
-    const barHeight = Math.max(
-      LAYOUT.minBarHeight,
-      heightRatio * this.nullBarArea.height
     );
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
@@ -497,16 +661,31 @@ export class TimeHistogram extends BaseVisualization {
       fillColor = COLORS.nullFill;
     }
 
-    // Draw null bar with rounded top
-    this.drawRoundedBar(
-      ctx,
-      this.nullBarArea.x,
-      chartBottom - barHeight,
-      this.nullBarArea.width,
-      barHeight,
-      LAYOUT.barRadius,
-      fillColor
-    );
+    if (hasCrossfilter) {
+      // "Glass partially full" for null bar
+      const bgHeightRatio = layoutData.nullCount / maxCount;
+      const bgBarHeight = Math.max(LAYOUT.minBarHeight, bgHeightRatio * this.nullBarArea.height);
+
+      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - bgBarHeight,
+        this.nullBarArea.width, bgBarHeight, LAYOUT.barRadius, COLORS.nullFadedCrossfilter);
+
+      const fgHeightRatio = this.data.nullCount / maxCount;
+      const fgBarHeight = Math.max(
+        this.data.nullCount > 0 ? LAYOUT.minBarHeight : 0,
+        fgHeightRatio * this.nullBarArea.height
+      );
+
+      if (fgBarHeight > 0) {
+        this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - fgBarHeight,
+          this.nullBarArea.width, fgBarHeight, LAYOUT.barRadius, fillColor);
+      }
+    } else {
+      const heightRatio = this.data.nullCount / maxCount;
+      const barHeight = Math.max(LAYOUT.minBarHeight, heightRatio * this.nullBarArea.height);
+
+      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - barHeight,
+        this.nullBarArea.width, barHeight, LAYOUT.barRadius, fillColor);
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 4, Task 4.9: Crossfilter Integration
+ * Phase 5: Crossfilter & Filtering
  *
  * This demo uses VisualizationFactory for centralized visualization creation
  * and CrossfilterCoordinator for filter propagation across columns:
@@ -136,14 +136,6 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
 
   // Get all column headers
   const headers = tableContainer.getColumnHeaders();
-  const numericCount = schema.filter((col) => isNumericType(col.type)).length;
-  const dateCount = schema.filter((col) => isDateType(col.type)).length;
-  const timeCount = schema.filter((col) => isTimeType(col.type)).length;
-  const categoricalCount = schema.filter((col) => isCategoricalType(col.type)).length;
-
-  console.log(
-    `[Demo] Attaching visualizations: ${numericCount} numeric, ${dateCount} date, ${timeCount} time, ${categoricalCount} categorical out of ${headers.length} total`
-  );
 
   for (const header of headers) {
     const column = header.getColumn();
@@ -240,7 +232,6 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     const viz = VisualizationFactory.create(vizContainer, column, vizOptions);
     if (!viz) continue;
     visualization = viz as VisualizationType;
-    console.log(`[Demo] Created visualization for "${column.name}" (${column.type})`);
 
     activeVisualizations.push(visualization);
     coordinator!.register(column.name, visualization);

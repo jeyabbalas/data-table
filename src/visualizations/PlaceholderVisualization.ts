@@ -108,9 +108,7 @@ export class PlaceholderVisualization extends BaseVisualization {
     const barIndex = Math.floor(relX / (singleBarWidth + barGap));
 
     if (barIndex >= 0 && barIndex < numBars) {
-      console.log(
-        `[PlaceholderVisualization] Clicked bar ${barIndex} on column "${this.column.name}"`
-      );
+      // Click handling - no-op for placeholder
     }
   }
 

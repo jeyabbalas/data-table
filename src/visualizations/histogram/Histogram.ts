@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
+import { splitCrossfilterFilters } from '../../filters/CrossfilterQuery';
 import {
   fetchHistogramData,
   fetchColumnStats,
@@ -115,10 +116,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
       if (hasAnyFilter) {
         // Crossfilter: background = all filters except own column.
-        const hasOwnFilter = allFilters.some((f) => f.column === this.column.name);
-        const bgFilters = hasOwnFilter
-          ? allFilters.filter((f) => f.column !== this.column.name)
-          : [];
+        const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
         const { tableName, bridge } = this.options;
         const col = this.column.name;
 

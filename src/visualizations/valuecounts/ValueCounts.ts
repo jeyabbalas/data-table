@@ -15,6 +15,7 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
+import { splitCrossfilterFilters } from '../../filters/CrossfilterQuery';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 import { formatCount, formatPercent } from '../utils';
@@ -205,10 +206,7 @@ export class ValueCounts extends BaseVisualization {
 
     if (hasAnyFilter) {
       // Crossfilter: background = all filters except own column.
-      const hasOwnFilter = allFilters.some((f) => f.column === this.column.name);
-      const bgFilters = hasOwnFilter
-        ? allFilters.filter((f) => f.column !== this.column.name)
-        : [];
+      const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
 
       const bgData = await fetchValueCountsData(
         this.options.tableName, this.column.name, bgFilters, this.options.bridge, MAX_CATEGORIES

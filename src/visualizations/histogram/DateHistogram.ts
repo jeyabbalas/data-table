@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
+import { splitCrossfilterFilters } from '../../filters/CrossfilterQuery';
 import {
   fetchDateHistogramData,
   fetchDateStats,
@@ -79,10 +80,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const hasAnyFilter = allFilters.length > 0;
 
       if (hasAnyFilter) {
-        const hasOwnFilter = allFilters.some((f) => f.column === this.column.name);
-        const bgFilters = hasOwnFilter
-          ? allFilters.filter((f) => f.column !== this.column.name)
-          : [];
+        const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
         const { tableName, bridge } = this.options;
         const col = this.column.name;
 

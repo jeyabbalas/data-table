@@ -23,6 +23,10 @@ export type {
 // Filter SQL generation
 export { filterToSQL, filtersToWhereClause, formatSQLValue } from './filters/FilterSQL';
 
+// Crossfilter query utilities
+export { splitCrossfilterFilters } from './filters/CrossfilterQuery';
+export type { CrossfilterSplit } from './filters/CrossfilterQuery';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

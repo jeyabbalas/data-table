@@ -9,10 +9,10 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause, formatSQLValue } from '../histogram/HistogramData';
+import { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
 
 // Re-export SQL utilities for use by other modules
-export { filtersToWhereClause, formatSQLValue };
+export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
 
 /** Default number of top categories to show */
 const DEFAULT_MAX_CATEGORIES = 10;

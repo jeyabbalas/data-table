@@ -9,7 +9,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause, formatSQLValue } from './HistogramData';
+import { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
 // Re-export TimeInterval for convenience

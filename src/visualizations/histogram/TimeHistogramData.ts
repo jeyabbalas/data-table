@@ -13,7 +13,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause } from './HistogramData';
+import { filtersToWhereClause } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
 // Re-export TimeInterval for convenience

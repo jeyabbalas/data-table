@@ -39,3 +39,7 @@ export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualiz
 
 // Crossfilter coordinator
 export { CrossfilterCoordinator } from './CrossfilterCoordinator';
+
+// Interaction manager (LIFO Escape handling)
+export { InteractionManager } from './InteractionManager';
+export type { InteractiveVisualization } from './InteractionManager';

@@ -10,7 +10,8 @@ import { CellRenderer } from './Cell';
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import type { ColumnSchema, SortColumn } from '../core/types';
+import type { ColumnSchema, SortColumn, Filter } from '../core/types';
+import { filtersToWhereClause } from '../filters/FilterSQL';
 
 /**
  * Options for configuring the TableBody
@@ -95,9 +96,12 @@ export class TableBody {
   async initialize(): Promise<void> {
     if (this.destroyed) return;
 
-    // Set total rows
-    const totalRows = this.state.totalRows.get();
-    this.virtualScroller.setTotalRows(totalRows);
+    // Set total rows (use filteredRows when filters are active)
+    const filters = this.state.filters.get();
+    const effectiveTotal = filters.length > 0
+      ? this.state.filteredRows.get()
+      : this.state.totalRows.get();
+    this.virtualScroller.setTotalRows(effectiveTotal);
 
     // Subscribe to scroll events
     const unsubScroll = this.virtualScroller.onScroll((range) => {
@@ -109,7 +113,7 @@ export class TableBody {
     this.subscribeToState();
 
     // Perform initial render if we have data
-    if (totalRows > 0) {
+    if (effectiveTotal > 0) {
       const range = this.virtualScroller.getVisibleRange();
       await this.handleScroll(range);
     }
@@ -139,11 +143,31 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubSort);
 
-    // Update total rows when it changes
+    // Re-fetch and scroll to top when filters change
+    const unsubFilters = this.state.filters.subscribe(() => {
+      if (!this.destroyed) {
+        this.virtualScroller.scrollToRow(0, 'start');
+        this.invalidateCacheAndRefresh();
+      }
+    });
+    this.unsubscribes.push(unsubFilters);
+
+    // Update scroller total when filteredRows changes (only when filters active)
+    const unsubFilteredRows = this.state.filteredRows.subscribe((count) => {
+      if (!this.destroyed) {
+        if (this.state.filters.get().length > 0) {
+          this.virtualScroller.setTotalRows(count);
+        }
+      }
+    });
+    this.unsubscribes.push(unsubFilteredRows);
+
+    // Update total rows when it changes (only when no filters active)
     const unsubTotalRows = this.state.totalRows.subscribe((total) => {
       if (!this.destroyed) {
-        this.virtualScroller.setTotalRows(total);
-        // May need to refetch if rows changed
+        if (this.state.filters.get().length === 0) {
+          this.virtualScroller.setTotalRows(total);
+        }
         this.invalidateCacheAndRefresh();
       }
     });
@@ -271,11 +295,12 @@ export class TableBody {
 
     const visibleColumns = this.state.visibleColumns.get();
     const sortColumns = this.state.sortColumns.get();
+    const filters = this.state.filters.get();
 
     if (visibleColumns.length === 0) return;
 
     // Build SQL query
-    const sql = this.buildRowQuery(tableName, visibleColumns, sortColumns, start, end - start);
+    const sql = this.buildRowQuery(tableName, visibleColumns, sortColumns, filters, start, end - start);
 
     try {
       const rows = await this.bridge.query<RowData>(sql);
@@ -296,6 +321,7 @@ export class TableBody {
     tableName: string,
     columns: string[],
     sortColumns: SortColumn[],
+    filters: Filter[],
     offset: number,
     limit: number
   ): string {
@@ -303,6 +329,14 @@ export class TableBody {
     const columnList = columns.map((col) => `"${col}"`).join(', ');
 
     let sql = `SELECT ${columnList} FROM "${tableName}"`;
+
+    // Add WHERE clause if filters are active
+    if (filters.length > 0) {
+      const whereClause = filtersToWhereClause(filters);
+      if (whereClause) {
+        sql += ` WHERE ${whereClause}`;
+      }
+    }
 
     // Add ORDER BY if sorting is active
     if (sortColumns.length > 0) {

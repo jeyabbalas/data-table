@@ -26,6 +26,7 @@ describe('State', () => {
       expect(state.selectedRows).toBeDefined();
       expect(state.hoveredRow).toBeDefined();
       expect(state.hoveredColumn).toBeDefined();
+      expect(state.filtersByColumn).toBeDefined();
     });
 
     it('should initialize tableName to null', () => {
@@ -267,6 +268,7 @@ describe('State', () => {
       expect(state.selectedRows.get().size).toBe(0);
       expect(state.hoveredRow.get()).toBeNull();
       expect(state.hoveredColumn.get()).toBeNull();
+      expect(state.filtersByColumn.get().size).toBe(0);
     });
 
     it('should notify subscribers when resetting', () => {
@@ -411,6 +413,73 @@ describe('State', () => {
 
       expect(state1.tableName.get()).toBe('table1');
       expect(state2.tableName.get()).toBe('table2');
+    });
+  });
+
+  describe('filtersByColumn', () => {
+    it('should initialize to empty Map', () => {
+      const state = createTableState();
+      expect(state.filtersByColumn.get()).toBeInstanceOf(Map);
+      expect(state.filtersByColumn.get().size).toBe(0);
+    });
+
+    it('should group filters by column', () => {
+      const state = createTableState();
+      const filters: Filter[] = [
+        { column: 'age', type: 'range', min: 18, max: 65 },
+        { column: 'name', type: 'pattern', pattern: 'John', mode: 'contains' },
+        { column: 'age', type: 'not-null' },
+      ];
+      state.filters.set(filters);
+
+      const byColumn = state.filtersByColumn.get();
+      expect(byColumn.size).toBe(2);
+      expect(byColumn.get('age')).toHaveLength(2);
+      expect(byColumn.get('name')).toHaveLength(1);
+      expect(byColumn.get('age')![0].type).toBe('range');
+      expect(byColumn.get('age')![1].type).toBe('not-null');
+    });
+
+    it('should return empty Map when filters cleared', () => {
+      const state = createTableState();
+      state.filters.set([
+        { column: 'age', type: 'range', min: 0, max: 100 },
+      ]);
+      expect(state.filtersByColumn.get().size).toBe(1);
+
+      state.filters.set([]);
+      expect(state.filtersByColumn.get().size).toBe(0);
+    });
+
+    it('should notify subscribers on filter changes', () => {
+      const state = createTableState();
+      const callback = vi.fn();
+      state.filtersByColumn.subscribe(callback);
+
+      state.filters.set([
+        { column: 'price', type: 'range', min: 10, max: 50 },
+      ]);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      const map = callback.mock.calls[0][0] as Map<string, Filter[]>;
+      expect(map.get('price')).toHaveLength(1);
+    });
+
+    it('should update when a filter is replaced for the same column', () => {
+      const state = createTableState();
+      state.filters.set([
+        { column: 'age', type: 'range', min: 0, max: 50 },
+      ]);
+      expect(state.filtersByColumn.get().get('age')![0]).toEqual(
+        { column: 'age', type: 'range', min: 0, max: 50 }
+      );
+
+      state.filters.set([
+        { column: 'age', type: 'range', min: 20, max: 80 },
+      ]);
+      expect(state.filtersByColumn.get().get('age')![0]).toEqual(
+        { column: 'age', type: 'range', min: 20, max: 80 }
+      );
     });
   });
 });

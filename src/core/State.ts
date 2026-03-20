@@ -5,7 +5,7 @@
  * Provides type-safe state containers for all table data, UI state, and configuration.
  */
 
-import { createSignal, type Signal } from './Signal';
+import { createSignal, computed, type Signal, type Computed } from './Signal';
 import type { ColumnSchema, Filter, SortColumn } from './types';
 
 /**
@@ -25,6 +25,8 @@ export interface TableState {
   filters: Signal<Filter[]>;
   /** Number of rows matching current filters (updated after queries) */
   filteredRows: Signal<number>;
+  /** Filters grouped by column name (computed from filters signal) */
+  filtersByColumn: Computed<Map<string, Filter[]>>;
 
   // Sorting
   /** Columns to sort by, in order of priority */
@@ -67,6 +69,23 @@ export interface TableState {
  * ```
  */
 export function createTableState(): TableState {
+  const filters = createSignal<Filter[]>([]);
+  const filtersByColumn = computed(
+    () => {
+      const map = new Map<string, Filter[]>();
+      for (const f of filters.get()) {
+        const existing = map.get(f.column);
+        if (existing) {
+          existing.push(f);
+        } else {
+          map.set(f.column, [f]);
+        }
+      }
+      return map;
+    },
+    [filters]
+  );
+
   return {
     // Data
     tableName: createSignal<string | null>(null),
@@ -74,8 +93,9 @@ export function createTableState(): TableState {
     totalRows: createSignal<number>(0),
 
     // Filters
-    filters: createSignal<Filter[]>([]),
+    filters,
     filteredRows: createSignal<number>(0),
+    filtersByColumn,
 
     // Sorting
     sortColumns: createSignal<SortColumn[]>([]),

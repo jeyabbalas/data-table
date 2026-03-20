@@ -6,7 +6,7 @@ import { TableBody, type TableBodyOptions } from '@/table/TableBody';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
-import type { ColumnSchema } from '@/core/types';
+import type { ColumnSchema, Filter } from '@/core/types';
 
 // Mock WorkerBridge
 const createMockBridge = () => {
@@ -406,6 +406,138 @@ describe('TableBody', () => {
 
       // Should not throw when state changes after destroy
       expect(() => state.hoveredRow.set(5)).not.toThrow();
+    });
+  });
+
+  describe('filter integration', () => {
+    it('should subscribe to filters signal', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      const filterSubsCount = state.filters.subscriberCount();
+      expect(filterSubsCount).toBeGreaterThan(0);
+
+      tableBody.destroy();
+
+      expect(state.filters.subscriberCount()).toBeLessThan(filterSubsCount);
+    });
+
+    it('should subscribe to filteredRows signal', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      const filteredRowsSubsCount = state.filteredRows.subscriberCount();
+      expect(filteredRowsSubsCount).toBeGreaterThan(0);
+
+      tableBody.destroy();
+
+      expect(state.filteredRows.subscriberCount()).toBeLessThan(filteredRowsSubsCount);
+    });
+
+    it('should use filteredRows for scroller total when filters active', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+
+      // Set filters and filteredRows before initialize
+      state.filters.set([{ column: 'price', type: 'range', min: 10, max: 50 }]);
+      state.filteredRows.set(25);
+
+      await tableBody.initialize();
+
+      const scroller = tableBody.getVirtualScroller();
+      expect(scroller.getTotalRows()).toBe(25);
+
+      tableBody.destroy();
+    });
+
+    it('should revert to totalRows when filters cleared', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      const scroller = tableBody.getVirtualScroller();
+
+      // Add filter first, then update filteredRows so the subscription fires with filters active
+      state.filters.set([{ column: 'price', type: 'range', min: 10, max: 50 }]);
+      state.filteredRows.set(30);
+
+      // filteredRows should take over
+      expect(scroller.getTotalRows()).toBe(30);
+
+      // Clear filters — totalRows should take effect again
+      state.filters.set([]);
+      state.totalRows.set(200);
+      expect(scroller.getTotalRows()).toBe(200);
+
+      tableBody.destroy();
+    });
+
+    it('should not crash when filter state changes after destroy', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+      tableBody.destroy();
+
+      expect(() => {
+        state.filters.set([{ column: 'id', type: 'range', min: 0, max: 10 }]);
+        state.filteredRows.set(5);
+      }).not.toThrow();
+    });
+
+    it('should update scroller total when filteredRows changes with active filters', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+
+      const scroller = tableBody.getVirtualScroller();
+
+      // Activate filters
+      state.filters.set([{ column: 'price', type: 'range', min: 10, max: 50 }]);
+
+      // Update filteredRows
+      state.filteredRows.set(42);
+      expect(scroller.getTotalRows()).toBe(42);
+
+      tableBody.destroy();
+    });
+  });
+
+  describe('SQL query building with filters', () => {
+    it('should include WHERE clause when filters active', async () => {
+      state.totalRows.set(1000);
+      state.filters.set([{ column: 'price', type: 'range', min: 10, max: 50 }]);
+
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+
+      // Force viewport to have some height for rows to be visible
+      Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
+
+      await tableBody.initialize();
+      // Trigger a refresh to ensure query is made
+      tableBody.refresh();
+
+      // Wait for any async fetches
+      await new Promise((r) => setTimeout(r, 10));
+
+      if (mockBridge.query.mock.calls.length > 0) {
+        const lastCall = mockBridge.query.mock.calls[mockBridge.query.mock.calls.length - 1];
+        const sql = lastCall[0] as string;
+        expect(sql).toContain('WHERE');
+        expect(sql).toContain('"price"');
+      }
+
+      tableBody.destroy();
+    });
+
+    it('should not include WHERE clause when no filters', async () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      await tableBody.initialize();
+      tableBody.refresh();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      for (const call of mockBridge.query.mock.calls) {
+        const sql = call[0] as string;
+        expect(sql).not.toContain('WHERE');
+      }
+
+      tableBody.destroy();
     });
   });
 

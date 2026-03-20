@@ -8,12 +8,13 @@ import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { Filter } from '../core/types';
 import type { BaseVisualization } from './BaseVisualization';
-import { filtersToWhereClause } from './histogram/HistogramData';
+import { filtersToWhereClause } from '../filters/FilterSQL';
 
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;
   private pendingSource: string | null = null;
+  private filterSequence = 0;
 
   constructor(
     private state: TableState,
@@ -50,17 +51,18 @@ export class CrossfilterCoordinator {
   }
 
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
+    const seq = ++this.filterSequence;
     const sourceToSkip = this.pendingSource;
 
-    const promises = [...this.visualizations.entries()]
+    const vizPromises = [...this.visualizations.entries()]
       .filter(([name, viz]) => name !== sourceToSkip && !viz.isDestroyed())
       .map(([, viz]) => viz.updateFilters(filters));
-    await Promise.all(promises);
 
-    await this.updateFilteredRowCount(filters);
+    // Run visualization updates and filtered row count in parallel (independent queries)
+    await Promise.all([...vizPromises, this.updateFilteredRowCount(filters, seq)]);
   }
 
-  private async updateFilteredRowCount(filters: Filter[]): Promise<void> {
+  private async updateFilteredRowCount(filters: Filter[], seq: number): Promise<void> {
     if (filters.length === 0) {
       this.state.filteredRows.set(this.state.totalRows.get());
       return;
@@ -68,6 +70,8 @@ export class CrossfilterCoordinator {
     const where = filtersToWhereClause(filters);
     const sql = `SELECT COUNT(*) as cnt FROM "${this.tableName}" WHERE ${where}`;
     const result = await this.bridge.query<{ cnt: number }>(sql);
+    // Only apply if this is still the latest filter change
+    if (seq !== this.filterSequence) return;
     this.state.filteredRows.set(Number(result[0].cnt));
   }
 

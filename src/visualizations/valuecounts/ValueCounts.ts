@@ -42,9 +42,9 @@ const COLORS = {
   nullFaded: '#fcd34d', // Amber-300
 
   // Crossfilter ghost segments (unfilled portion)
-  barFadedCrossfilter: 'rgba(59, 130, 246, 0.25)',
-  otherFadedCrossfilter: 'rgba(148, 163, 184, 0.25)',
-  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.25)',
+  barFadedCrossfilter: 'rgba(59, 130, 246, 0.5)',
+  otherFadedCrossfilter: 'rgba(148, 163, 184, 0.5)',
+  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.5)',
 
   // Segment borders for demarcation
   segmentBorder: '#e2e8f0', // Slate-200 (light border)
@@ -85,6 +85,9 @@ const LAYOUT = {
 
 /** Maximum categories before "Other" aggregation */
 const MAX_CATEGORIES = 10;
+
+/** Stable value key for "All unique" segments (avoids count-dependent mismatch in crossfilter) */
+const ALL_UNIQUE_VALUE_KEY = 'All unique';
 
 // =========================================
 // Utility Functions
@@ -171,6 +174,11 @@ export class ValueCounts extends BaseVisualization {
   // Top N category values for exclusion filter (used when clicking "Other")
   private topCategoryValues: string[] = [];
 
+  // Cached initial (unfiltered) category order and counts for stable crossfilter rendering
+  private initialCategoryOrder: string[] | null = null;
+  private initialHasOther: boolean = false;
+  private initialSegmentCounts: Map<string, number> | null = null;
+
   constructor(
     container: HTMLElement,
     column: ColumnSchema,
@@ -201,32 +209,68 @@ export class ValueCounts extends BaseVisualization {
       this.selectedSegments.clear();
     }
 
-    const allFilters = this.options.filters;
-    const hasAnyFilter = allFilters.length > 0;
+    try {
+      const allFilters = this.options.filters;
+      const hasAnyFilter = allFilters.length > 0;
 
-    if (hasAnyFilter) {
-      // Crossfilter: background = all filters except own column.
-      const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
+      if (hasAnyFilter) {
+        // Crossfilter: background = all filters except own column.
+        const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
 
-      const bgData = await fetchValueCountsData(
-        this.options.tableName, this.column.name, bgFilters, this.options.bridge, MAX_CATEGORIES
-      );
-      if (seq !== this.fetchSequence || this.destroyed) return;
+        // Establish initial order from unfiltered data if not cached
+        if (this.initialCategoryOrder === null) {
+          const unfilteredData = await fetchValueCountsData(
+            this.options.tableName, this.column.name, [], this.options.bridge, MAX_CATEGORIES
+          );
+          if (seq !== this.fetchSequence || this.destroyed) return;
+          this.initialCategoryOrder = unfilteredData.segments.filter(s => !s.isOther).map(s => s.value);
+          this.initialHasOther = unfilteredData.segments.some(s => s.isOther);
+          this.initialSegmentCounts = new Map();
+          for (const seg of unfilteredData.segments) {
+            this.initialSegmentCounts.set(seg.isOther ? 'Other' : seg.value, seg.count);
+          }
+          if (unfilteredData.nullCount > 0) {
+            this.initialSegmentCounts.set('\u2205', unfilteredData.nullCount);
+          }
+        }
 
-      const bgCategoryValues = bgData.segments.filter(s => !s.isOther).map(s => s.value);
-      const hasOther = bgData.segments.some(s => s.isOther);
-      const fgData = await fetchAlignedValueCountsData(
-        this.options.tableName, this.column.name, bgCategoryValues, hasOther, allFilters, this.options.bridge
-      );
-      if (seq !== this.fetchSequence || this.destroyed) return;
+        // Parallel bg+fg fetches, both aligned to cached initial order
+        const [bgData, fgData] = await Promise.all([
+          fetchAlignedValueCountsData(
+            this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, bgFilters, this.options.bridge
+          ),
+          fetchAlignedValueCountsData(
+            this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, allFilters, this.options.bridge
+          ),
+        ]);
+        if (seq !== this.fetchSequence || this.destroyed) return;
 
-      this.backgroundData = bgData;
-      this.data = fgData;
-    } else {
-      this.data = await fetchValueCountsData(
-        this.options.tableName, this.column.name, allFilters, this.options.bridge, MAX_CATEGORIES
-      );
-      if (seq !== this.fetchSequence || this.destroyed) return;
+        this.backgroundData = bgData;
+        this.data = fgData;
+      } else {
+        this.data = await fetchValueCountsData(
+          this.options.tableName, this.column.name, allFilters, this.options.bridge, MAX_CATEGORIES
+        );
+        if (seq !== this.fetchSequence || this.destroyed) return;
+        this.backgroundData = null;
+
+        // Cache initial order and counts on first unfiltered fetch
+        if (this.initialCategoryOrder === null) {
+          this.initialCategoryOrder = this.data.segments.filter(s => !s.isOther).map(s => s.value);
+          this.initialHasOther = this.data.segments.some(s => s.isOther);
+          this.initialSegmentCounts = new Map();
+          for (const seg of this.data.segments) {
+            this.initialSegmentCounts.set(seg.isOther ? 'Other' : seg.value, seg.count);
+          }
+          if (this.data.nullCount > 0) {
+            this.initialSegmentCounts.set('\u2205', this.data.nullCount);
+          }
+        }
+      }
+    } catch (error) {
+      if (seq !== this.fetchSequence) return;
+      console.error(`[ValueCounts] Failed to fetch data for ${this.column.name}:`, error);
+      this.data = null;
       this.backgroundData = null;
     }
 
@@ -373,7 +417,18 @@ export class ValueCounts extends BaseVisualization {
     }
 
     const positions: Array<{ x: number; width: number; index: number }> = [];
-    const totalCount = layoutSegments.reduce((sum, seg) => sum + seg.count, 0);
+
+    // Use initial segment counts for stable widths when available
+    const useInitialCounts = this.initialSegmentCounts !== null;
+    const getCount = (seg: RenderSegment): number => {
+      if (useInitialCounts) {
+        const key = seg.isOther ? 'Other' : seg.value;
+        return this.initialSegmentCounts!.get(key) ?? seg.count;
+      }
+      return seg.count;
+    };
+
+    const totalCount = layoutSegments.reduce((sum, seg) => sum + getCount(seg), 0);
 
     if (totalCount === 0) {
       this.segmentPositions = [];
@@ -387,7 +442,7 @@ export class ValueCounts extends BaseVisualization {
 
     for (let i = 0; i < numSegments; i++) {
       const segment = layoutSegments[i];
-      const proportion = segment.count / totalCount;
+      const proportion = getCount(segment) / totalCount;
       let width = Math.max(proportion * availableWidth, LAYOUT.minSegmentWidth);
 
       // For last segment, ensure we fill to the end
@@ -492,12 +547,18 @@ export class ValueCounts extends BaseVisualization {
       const isLast = i === numSegments - 1;
 
       if (hasCrossfilter) {
-        // "Glass partially full" horizontal rendering
-        const bgCount = bgSegment.count;
+        // Two-level crossfilter rendering (matching Histogram pattern):
+        // 1. Faded color fills the FULL segment width (all initial samples)
+        // 2. Solid color overlays the left portion (fgCount/initialCount)
         const fgCount = fgSegment ? fgSegment.count : 0;
-        const fgProportion = bgCount > 0 ? Math.min(fgCount / bgCount, 1) : 0;
 
-        // 1. Draw full segment in faded crossfilter color
+        // Get initial count for this segment
+        const segKey = bgSegment.isOther ? 'Other' : bgSegment.value;
+        const initialCount = this.initialSegmentCounts?.get(segKey) ?? bgSegment.count;
+
+        const fgProportion = initialCount > 0 ? Math.min(fgCount / initialCount, 1) : 0;
+
+        // 1. Draw faded color at full segment width
         this.drawSegmentRect(
           pos.x,
           this.barArea.y,
@@ -508,10 +569,9 @@ export class ValueCounts extends BaseVisualization {
           isLast
         );
 
-        // 2. Overdraw the LEFT portion in bright color (proportional to foreground count)
+        // 2. Overdraw solid at fgProportion of segment width
         if (fgProportion > 0) {
           const filledWidth = pos.width * fgProportion;
-          // When foreground fills the entire segment, use isLast for right rounding
           const fillIsLast = fgProportion >= 1 && isLast;
           this.drawSegmentRect(
             pos.x,
@@ -626,6 +686,8 @@ export class ValueCounts extends BaseVisualization {
     let labelText: string;
     if (segment.isNull) {
       labelText = '\u2205'; // Empty set symbol for null
+    } else if (segment.isAllUnique) {
+      labelText = `All unique (${formatCount(segment.count)})`;
     } else if (segment.isOther) {
       labelText = 'Other';
     } else {
@@ -703,7 +765,7 @@ export class ValueCounts extends BaseVisualization {
 
     // Build render segments for all unique state
     this.renderSegments = [{
-      value: `All unique (${formatCount(this.data.distinctCount)})`,
+      value: ALL_UNIQUE_VALUE_KEY,
       count: this.data.distinctCount,
       isOther: false,
       isNull: false,
@@ -723,7 +785,7 @@ export class ValueCounts extends BaseVisualization {
     // Build background segments for crossfilter rendering
     if (this.backgroundData) {
       this.backgroundSegments = [{
-        value: `All unique (${formatCount(this.backgroundData.distinctCount)})`,
+        value: ALL_UNIQUE_VALUE_KEY,
         count: this.backgroundData.distinctCount,
         isOther: false,
         isNull: false,
@@ -811,6 +873,8 @@ export class ValueCounts extends BaseVisualization {
         let categoryLabel: string;
         if (segment.isNull) {
           categoryLabel = 'null';
+        } else if (segment.isAllUnique) {
+          categoryLabel = `All unique (${formatCount(segment.count)})`;
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
@@ -1023,6 +1087,8 @@ export class ValueCounts extends BaseVisualization {
         let categoryLabel: string;
         if (segment.isNull) {
           categoryLabel = 'null';
+        } else if (segment.isAllUnique) {
+          categoryLabel = `All unique (${formatCount(segment.count)})`;
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {

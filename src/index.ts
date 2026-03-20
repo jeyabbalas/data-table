@@ -20,6 +20,9 @@ export type {
   PatternFilter,
 } from './filters/FilterTypes';
 
+// Filter SQL generation
+export { filterToSQL, filtersToWhereClause, formatSQLValue } from './filters/FilterSQL';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

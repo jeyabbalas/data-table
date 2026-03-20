@@ -112,21 +112,21 @@ describe('filtersToWhereClause', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' },
     ];
-    expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'%test%\'');
+    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE '%test%' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (starts mode)', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'starts' },
     ];
-    expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'test%\'');
+    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE 'test%' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (ends mode)', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'ends' },
     ];
-    expect(filtersToWhereClause(filters)).toBe('"name" LIKE \'%test\'');
+    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE '%test' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (regex mode)', () => {
@@ -154,7 +154,7 @@ describe('filtersToWhereClause', () => {
     ];
     const result = filtersToWhereClause(filters, 'price');
     expect(result).not.toContain('price');
-    expect(result).toContain('"name" LIKE \'test%\'');
+    expect(result).toContain(`"name" LIKE 'test%' ESCAPE '\\'`);
   });
 
   it('should return empty string when excluding the only filter', () => {

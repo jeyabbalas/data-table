@@ -38,9 +38,20 @@ export function formatSQLValue(value: unknown): string {
 }
 
 /**
+ * Escape special LIKE characters (%, _, \) in a pattern string.
+ * Uses backslash as the escape character.
+ */
+function escapeLikePattern(pattern: string): string {
+  return pattern
+    .replace(/\\/g, '\\\\') // \ → \\  (must be first)
+    .replace(/%/g, '\\%')   // % → \%
+    .replace(/_/g, '\\_');   // _ → \_
+}
+
+/**
  * Convert a single filter to SQL WHERE clause fragment
  */
-function filterToSQL(filter: Filter): string {
+export function filterToSQL(filter: Filter): string {
   const column = `"${filter.column}"`;
 
   switch (filter.type) {
@@ -80,16 +91,16 @@ function filterToSQL(filter: Filter): string {
     }
 
     case 'pattern': {
-      const escaped = filter.pattern.replace(/'/g, "''");
+      const escaped = escapeLikePattern(filter.pattern).replace(/'/g, "''");
       switch (filter.mode) {
         case 'contains':
-          return `${column} LIKE '%${escaped}%'`;
+          return `${column} LIKE '%${escaped}%' ESCAPE '\\'`;
         case 'starts':
-          return `${column} LIKE '${escaped}%'`;
+          return `${column} LIKE '${escaped}%' ESCAPE '\\'`;
         case 'ends':
-          return `${column} LIKE '%${escaped}'`;
+          return `${column} LIKE '%${escaped}' ESCAPE '\\'`;
         case 'regex':
-          return `regexp_matches(${column}, '${escaped}')`;
+          return `regexp_matches(${column}, '${filter.pattern.replace(/'/g, "''")}')`;
       }
     }
 

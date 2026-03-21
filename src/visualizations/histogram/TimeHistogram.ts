@@ -34,6 +34,8 @@ import {
 export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: TimeHistogramData | null = null;
+  /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
+  private initialDataPromise: Promise<void> | null = null;
 
   constructor(
     container: HTMLElement,
@@ -49,15 +51,22 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
   /**
    * Ensure initialData is cached (unfiltered fetch).
+   * Deduplicates concurrent calls.
    */
   private async ensureInitialData(seq: number): Promise<boolean> {
     if (this.initialData) return true;
 
-    const maxBins = this.options.maxBins ?? 15;
-    const { tableName, bridge } = this.options;
-    const col = this.column.name;
+    if (!this.initialDataPromise) {
+      const maxBins = this.options.maxBins ?? 15;
+      const { tableName, bridge } = this.options;
+      const col = this.column.name;
 
-    this.initialData = await fetchTimeHistogramData(tableName, col, [], bridge, maxBins);
+      this.initialDataPromise = fetchTimeHistogramData(tableName, col, [], bridge, maxBins)
+        .then(data => { this.initialData = data; })
+        .finally(() => { this.initialDataPromise = null; });
+    }
+
+    await this.initialDataPromise;
     if (seq !== this.fetchSequence || this.destroyed) return false;
 
     return true;

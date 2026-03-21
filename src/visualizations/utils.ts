@@ -17,6 +17,19 @@ export function formatPercent(ratio: number): string {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS when interpolating
+ * user-derived strings (e.g. column values) into innerHTML.
+ */
+export function escapeHTML(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Truncate text to fit within maxWidth, appending ellipsis (…) if needed.
  * Returns empty string if nothing fits.
  */

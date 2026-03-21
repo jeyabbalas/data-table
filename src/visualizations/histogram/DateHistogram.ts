@@ -43,6 +43,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: DateHistogramData | null = null;
+  /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
+  private initialDataPromise: Promise<void> | null = null;
 
   constructor(
     container: HTMLElement,
@@ -58,15 +60,22 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
   /**
    * Ensure initialData is cached (unfiltered fetch).
+   * Deduplicates concurrent calls.
    */
   private async ensureInitialData(seq: number): Promise<boolean> {
     if (this.initialData) return true;
 
-    const maxBins = this.options.maxBins ?? 15;
-    const { tableName, bridge } = this.options;
-    const col = this.column.name;
+    if (!this.initialDataPromise) {
+      const maxBins = this.options.maxBins ?? 15;
+      const { tableName, bridge } = this.options;
+      const col = this.column.name;
 
-    this.initialData = await fetchDateHistogramData(tableName, col, [], bridge, maxBins);
+      this.initialDataPromise = fetchDateHistogramData(tableName, col, [], bridge, maxBins)
+        .then(data => { this.initialData = data; })
+        .finally(() => { this.initialDataPromise = null; });
+    }
+
+    await this.initialDataPromise;
     if (seq !== this.fetchSequence || this.destroyed) return false;
 
     return true;

@@ -78,6 +78,8 @@ function formatAxisValue(value: number): string {
 export class Histogram extends SharedHistogramBase<HistogramData> {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: HistogramData | null = null;
+  /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
+  private initialDataPromise: Promise<void> | null = null;
 
   constructor(
     container: HTMLElement,
@@ -93,16 +95,22 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
   /**
    * Ensure initialData is cached (unfiltered fetch).
-   * Returns immediately if already cached.
+   * Returns immediately if already cached. Deduplicates concurrent calls.
    */
   private async ensureInitialData(seq: number): Promise<boolean> {
     if (this.initialData) return true;
 
-    const maxBins = this.options.maxBins ?? 15;
-    const { tableName, bridge } = this.options;
-    const col = this.column.name;
+    if (!this.initialDataPromise) {
+      const maxBins = this.options.maxBins ?? 15;
+      const { tableName, bridge } = this.options;
+      const col = this.column.name;
 
-    this.initialData = await fetchHistogramData(tableName, col, maxBins, [], bridge);
+      this.initialDataPromise = fetchHistogramData(tableName, col, maxBins, [], bridge)
+        .then(data => { this.initialData = data; })
+        .finally(() => { this.initialDataPromise = null; });
+    }
+
+    await this.initialDataPromise;
     if (seq !== this.fetchSequence || this.destroyed) return false;
 
     return true;

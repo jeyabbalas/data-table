@@ -17,7 +17,7 @@ import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
-import { formatCount, formatPercent, truncateText } from '../utils';
+import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
 
 // =========================================
 // Constants
@@ -40,7 +40,8 @@ const COLORS = {
   nullHover: '#d97706', // Amber-600
   nullFaded: '#fcd34d', // Amber-300
 
-  // Crossfilter ghost segments (unfilled portion)
+  // Crossfilter ghost segments (unfilled portion).
+  // 50% opacity (vs 25% in Histogram) so white segment labels remain legible.
   barFadedCrossfilter: 'rgba(59, 130, 246, 0.5)',
   otherFadedCrossfilter: 'rgba(148, 163, 184, 0.5)',
   nullFadedCrossfilter: 'rgba(245, 158, 11, 0.5)',
@@ -176,10 +177,9 @@ export class ValueCounts extends BaseVisualization {
   /**
    * Fetch value counts data from DuckDB.
    *
-   * Three-branch crossfilter pattern:
+   * Two-branch crossfilter pattern:
    * A) No filters: simple fetch, cache as initialData
-   * B) Filters but NOT on this column: filtered data aligned to initial, no ghost
-   * C) This column has own filter: ghost = initialData, foreground = allFilters
+   * B) Any filter active: ghost = initialData, foreground = allFilters aligned to initial order
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
@@ -856,9 +856,10 @@ export class ValueCounts extends BaseVisualization {
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
-          categoryLabel = segment.value.length > 30
+          const raw = segment.value.length > 30
             ? segment.value.substring(0, 27) + '...'
             : segment.value;
+          categoryLabel = escapeHTML(raw);
         }
 
         // Show crossfilter context when background data exists
@@ -1073,9 +1074,10 @@ export class ValueCounts extends BaseVisualization {
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
-          categoryLabel = segment.value.length > 30
+          const raw = segment.value.length > 30
             ? segment.value.substring(0, 27) + '...'
             : segment.value;
+          categoryLabel = escapeHTML(raw);
         }
 
         const bgSegment = this.backgroundSegments[idx];
@@ -1105,7 +1107,7 @@ export class ValueCounts extends BaseVisualization {
     const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
 
     // Format value list (truncate if too long)
-    const values = selectedSegmentsList.map(s => s.value);
+    const values = selectedSegmentsList.map(s => escapeHTML(s.value));
     let valueListStr = values.join(', ');
     if (valueListStr.length > 50) {
       valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;

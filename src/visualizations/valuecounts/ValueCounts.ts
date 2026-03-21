@@ -15,7 +15,6 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
-import { splitCrossfilterFilters } from '../../filters/CrossfilterQuery';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 import { formatCount, formatPercent } from '../utils';
@@ -179,6 +178,9 @@ export class ValueCounts extends BaseVisualization {
   private initialHasOther: boolean = false;
   private initialSegmentCounts: Map<string, number> | null = null;
 
+  /** Cached initial (unfiltered) data for ghost background */
+  private initialData: ValueCountsData | null = null;
+
   constructor(
     container: HTMLElement,
     column: ColumnSchema,
@@ -196,8 +198,11 @@ export class ValueCounts extends BaseVisualization {
 
   /**
    * Fetch value counts data from DuckDB.
-   * When crossfilter is active (any column has a filter), fetches both
-   * background (excluding own filter, or unfiltered) and foreground (all filters) data.
+   *
+   * Three-branch crossfilter pattern:
+   * A) No filters: simple fetch, cache as initialData
+   * B) Filters but NOT on this column: filtered data aligned to initial, no ghost
+   * C) This column has own filter: ghost = initialData, foreground = allFilters
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
@@ -214,10 +219,7 @@ export class ValueCounts extends BaseVisualization {
       const hasAnyFilter = allFilters.length > 0;
 
       if (hasAnyFilter) {
-        // Crossfilter: background = all filters except own column.
-        const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
-
-        // Establish initial order from unfiltered data if not cached
+        // Ensure initial data is cached
         if (this.initialCategoryOrder === null) {
           const unfilteredData = await fetchValueCountsData(
             this.options.tableName, this.column.name, [], this.options.bridge, MAX_CATEGORIES
@@ -232,22 +234,20 @@ export class ValueCounts extends BaseVisualization {
           if (unfilteredData.nullCount > 0) {
             this.initialSegmentCounts.set('\u2205', unfilteredData.nullCount);
           }
+          this.initialData = unfilteredData;
         }
 
-        // Parallel bg+fg fetches, both aligned to cached initial order
-        const [bgData, fgData] = await Promise.all([
-          fetchAlignedValueCountsData(
-            this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, bgFilters, this.options.bridge
-          ),
-          fetchAlignedValueCountsData(
-            this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, allFilters, this.options.bridge
-          ),
-        ]);
+        // Fetch foreground aligned to initial order
+        const fgData = await fetchAlignedValueCountsData(
+          this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, allFilters, this.options.bridge
+        );
         if (seq !== this.fetchSequence || this.destroyed) return;
 
-        this.backgroundData = bgData;
         this.data = fgData;
+        // Any filter active → ghost = initial data
+        this.backgroundData = this.initialData;
       } else {
+        // Branch A: no filters → simple fetch, cache initial
         this.data = await fetchValueCountsData(
           this.options.tableName, this.column.name, allFilters, this.options.bridge, MAX_CATEGORIES
         );
@@ -266,6 +266,7 @@ export class ValueCounts extends BaseVisualization {
             this.initialSegmentCounts.set('\u2205', this.data.nullCount);
           }
         }
+        this.initialData = this.data;
       }
     } catch (error) {
       if (seq !== this.fetchSequence) return;

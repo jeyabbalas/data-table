@@ -9,16 +9,12 @@
  */
 
 import type { VisualizationOptions } from '../BaseVisualization';
-import type { ColumnSchema } from '../../core/types';
-import { splitCrossfilterFilters } from '../../filters/CrossfilterQuery';
+import type { ColumnSchema, Filter } from '../../core/types';
 import {
   fetchDateHistogramData,
   fetchDateStats,
   fetchDateHistogramBins,
   fetchDateNumericBins,
-  detectTimeInterval,
-  adjustIntervalForMaxBins,
-  estimateBinCount,
 } from './DateHistogramData';
 import type { DateHistogramData } from './DateHistogramData';
 import {
@@ -45,6 +41,9 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   /** Date format context computed from data range */
   private formatContext: DateFormatContext | null = null;
 
+  /** Cached initial (unfiltered) data for ghost background */
+  private initialData: DateHistogramData | null = null;
+
   constructor(
     container: HTMLElement,
     column: ColumnSchema,
@@ -58,10 +57,83 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   // =========================================
 
   /**
+   * Ensure initialData is cached (unfiltered fetch).
+   */
+  private async ensureInitialData(seq: number): Promise<boolean> {
+    if (this.initialData) return true;
+
+    const maxBins = this.options.maxBins ?? 15;
+    const { tableName, bridge } = this.options;
+    const col = this.column.name;
+
+    this.initialData = await fetchDateHistogramData(tableName, col, [], bridge, maxBins);
+    if (seq !== this.fetchSequence || this.destroyed) return false;
+
+    return true;
+  }
+
+  /**
+   * Fetch foreground data aligned to the cached initialData bin structure.
+   */
+  private async fetchAlignedForeground(
+    filters: Filter[],
+    seq: number
+  ): Promise<DateHistogramData | null> {
+    const initial = this.initialData!;
+    const { tableName, bridge } = this.options;
+    const col = this.column.name;
+
+    if (initial.bins.length === 0) {
+      const maxBins = this.options.maxBins ?? 15;
+      return fetchDateHistogramData(tableName, col, filters, bridge, maxBins);
+    }
+
+    if (initial.isNumericBinning && initial.min && initial.max) {
+      const minMs = initial.min.getTime();
+      const maxMs = initial.max.getTime();
+
+      const [fgBins, fgStats] = await Promise.all([
+        fetchDateNumericBins(tableName, col, initial.bins.length, minMs, maxMs, filters, bridge),
+        fetchDateStats(tableName, col, filters, bridge),
+      ]);
+      if (seq !== this.fetchSequence || this.destroyed) return null;
+
+      return {
+        bins: fgBins,
+        nullCount: fgStats.nullCount,
+        min: initial.min,
+        max: initial.max,
+        total: fgStats.count + fgStats.nullCount,
+        interval: initial.interval,
+        isSingleValue: initial.isSingleValue,
+        isNumericBinning: true,
+      };
+    } else {
+      const [fgBins, fgStats] = await Promise.all([
+        fetchDateHistogramBins(tableName, col, initial.interval, filters, bridge),
+        fetchDateStats(tableName, col, filters, bridge),
+      ]);
+      if (seq !== this.fetchSequence || this.destroyed) return null;
+
+      return {
+        bins: fgBins,
+        nullCount: fgStats.nullCount,
+        min: initial.min,
+        max: initial.max,
+        total: fgStats.count + fgStats.nullCount,
+        interval: initial.interval,
+        isSingleValue: initial.isSingleValue,
+        isNumericBinning: false,
+      };
+    }
+  }
+
+  /**
    * Fetch date histogram data from DuckDB.
-   * When crossfilter is active (own column has a filter), fetches both
-   * background (excluding own filter) and foreground (all filters) data
-   * with aligned bin structure.
+   *
+   * Two-branch crossfilter pattern:
+   * A) No filters: simple fetch, cache as initialData
+   * B) Any filter active: ghost = initialData, foreground = allFilters
    */
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
@@ -75,82 +147,27 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
     }
 
     try {
-      const maxBins = this.options.maxBins ?? 15;
       const allFilters = this.options.filters;
       const hasAnyFilter = allFilters.length > 0;
 
       if (hasAnyFilter) {
-        const { background: bgFilters } = splitCrossfilterFilters(allFilters, this.column.name);
-        const { tableName, bridge } = this.options;
-        const col = this.column.name;
+        // Any filter active → show ghost (initialData) behind filtered foreground
+        if (!(await this.ensureInitialData(seq))) return;
 
-        const bgStats = await fetchDateStats(tableName, col, bgFilters, bridge);
-        if (seq !== this.fetchSequence || this.destroyed) return;
+        const fgData = await this.fetchAlignedForeground(allFilters, seq);
+        if (!fgData) return;
 
-        if (bgStats.count === 0 || bgStats.min === null || bgStats.max === null) {
-          this.data = await fetchDateHistogramData(tableName, col, allFilters, bridge, maxBins);
-          if (seq !== this.fetchSequence || this.destroyed) return;
-          this.backgroundData = null;
-        } else if (bgStats.min.getTime() === bgStats.max.getTime()) {
-          this.data = await fetchDateHistogramData(tableName, col, allFilters, bridge, maxBins);
-          if (seq !== this.fetchSequence || this.destroyed) return;
-          this.backgroundData = null;
-        } else {
-          const initialInterval = detectTimeInterval(bgStats.min, bgStats.max);
-          const interval = adjustIntervalForMaxBins(bgStats.min, bgStats.max, initialInterval, maxBins);
-          const estimatedBins = estimateBinCount(bgStats.min, bgStats.max, interval);
-
-          if (estimatedBins > maxBins) {
-            const minMs = bgStats.min.getTime();
-            const maxMs = bgStats.max.getTime();
-
-            const [bgBins, fgBins, fgStats] = await Promise.all([
-              fetchDateNumericBins(tableName, col, maxBins, minMs, maxMs, bgFilters, bridge),
-              fetchDateNumericBins(tableName, col, maxBins, minMs, maxMs, allFilters, bridge),
-              fetchDateStats(tableName, col, allFilters, bridge),
-            ]);
-            if (seq !== this.fetchSequence || this.destroyed) return;
-
-            this.backgroundData = {
-              bins: bgBins, nullCount: bgStats.nullCount,
-              min: bgStats.min, max: bgStats.max,
-              total: bgStats.count + bgStats.nullCount,
-              interval: 'day', isSingleValue: false, isNumericBinning: true,
-            };
-            this.data = {
-              bins: fgBins, nullCount: fgStats.nullCount,
-              min: bgStats.min, max: bgStats.max,
-              total: fgStats.count + fgStats.nullCount,
-              interval: 'day', isSingleValue: false, isNumericBinning: true,
-            };
-          } else {
-            const [bgBins, fgBins, fgStats] = await Promise.all([
-              fetchDateHistogramBins(tableName, col, interval, bgFilters, bridge),
-              fetchDateHistogramBins(tableName, col, interval, allFilters, bridge),
-              fetchDateStats(tableName, col, allFilters, bridge),
-            ]);
-            if (seq !== this.fetchSequence || this.destroyed) return;
-
-            this.backgroundData = {
-              bins: bgBins, nullCount: bgStats.nullCount,
-              min: bgStats.min, max: bgStats.max,
-              total: bgStats.count + bgStats.nullCount,
-              interval, isSingleValue: false, isNumericBinning: false,
-            };
-            this.data = {
-              bins: fgBins, nullCount: fgStats.nullCount,
-              min: bgStats.min, max: bgStats.max,
-              total: fgStats.count + fgStats.nullCount,
-              interval, isSingleValue: false, isNumericBinning: false,
-            };
-          }
-        }
+        this.backgroundData = this.initialData;
+        this.data = fgData;
       } else {
+        // Branch A: no filters → simple fetch, cache initial
+        const maxBins = this.options.maxBins ?? 15;
         this.data = await fetchDateHistogramData(
           this.options.tableName, this.column.name, allFilters, this.options.bridge, maxBins
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
+        this.initialData = this.data;
       }
 
       const layoutData = this.backgroundData ?? this.data;

@@ -1277,18 +1277,34 @@ async fetchData(): Promise<void> {
 
 ### Task 5.8: Implement Filter Indicators on Headers
 
-Update `ColumnHeader.ts`:
+Add a subtle top accent bar to column headers that have active filters. Uses an inset
+`box-shadow` (no layout shift, no new DOM elements) to render a 3px blue line at the
+top of the header cell—visible at a glance without competing with the sort badge.
+
+Update `data-table.css` — add `box-shadow` to the `.dt-col-header` transition and a
+new `.dt-col-header--filtered` modifier:
+
+```css
+.dt-col-header--filtered {
+  box-shadow: inset 0 3px 0 0 var(--dt-primary);
+}
+```
+
+Update `ColumnHeader.ts` — subscribe to `state.filtersByColumn` and toggle the class:
 
 ```typescript
-private renderFilterBadge(): void {
+private updateFilterIndicator(): void {
   const hasFilter = this.state.filtersByColumn.get().has(this.column.name);
-  this.filterBadge.style.display = hasFilter ? 'block' : 'none';
+  this.element.classList.toggle(
+    `${this.classPrefix}-col-header--filtered`,
+    hasFilter
+  );
 }
 ```
 
 **Verification:**
-- Badge appears when column has filter
-- Badge disappears when filter removed
+- Blue accent bar appears at the top of a column header when it has an active filter
+- Accent bar disappears when filter is removed
 
 ---
 

@@ -279,6 +279,63 @@ describe('ColumnHeader', () => {
     });
   });
 
+  describe('filter indicator', () => {
+    it('should not have filtered class when column has no filters', () => {
+      const header = new ColumnHeader(column, state, actions);
+
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(false);
+
+      header.destroy();
+    });
+
+    it('should have filtered class when column has active filter', () => {
+      state.filters.set([{ type: 'range', column: 'test_column', min: 0, max: 100 }]);
+      const header = new ColumnHeader(column, state, actions);
+
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(true);
+
+      header.destroy();
+    });
+
+    it('should add filtered class when filter is added after creation', () => {
+      const header = new ColumnHeader(column, state, actions);
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(false);
+
+      state.filters.set([{ type: 'range', column: 'test_column', min: 0, max: 100 }]);
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(true);
+
+      header.destroy();
+    });
+
+    it('should remove filtered class when filter is removed', () => {
+      state.filters.set([{ type: 'range', column: 'test_column', min: 0, max: 100 }]);
+      const header = new ColumnHeader(column, state, actions);
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(true);
+
+      state.filters.set([]);
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(false);
+
+      header.destroy();
+    });
+
+    it('should not have filtered class when only other columns have filters', () => {
+      state.filters.set([{ type: 'range', column: 'other_column', min: 0, max: 100 }]);
+      const header = new ColumnHeader(column, state, actions);
+
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(false);
+
+      header.destroy();
+    });
+
+    it('should not update filter indicator after destroy', () => {
+      const header = new ColumnHeader(column, state, actions);
+      header.destroy();
+
+      state.filters.set([{ type: 'range', column: 'test_column', min: 0, max: 100 }]);
+      expect(header.getElement().classList.contains('dt-col-header--filtered')).toBe(false);
+    });
+  });
+
   describe('click handling', () => {
     it('should call toggleSort on sort button click', () => {
       const header = new ColumnHeader(column, state, actions);

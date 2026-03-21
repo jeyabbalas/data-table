@@ -210,8 +210,19 @@ export class ColumnHeader {
     });
     this.unsubscribes.push(unsubRows);
 
+    // Subscribe to filter changes for filter indicator
+    const unsubFilter = this.state.filtersByColumn.subscribe(() => {
+      if (!this.destroyed) {
+        this.updateFilterIndicator();
+      }
+    });
+    this.unsubscribes.push(unsubFilter);
+
     // Set initial stats value (subscription only fires on changes, not initial value)
     this.updateStatsLine(this.state.totalRows.get());
+
+    // Set initial filter indicator state
+    this.updateFilterIndicator();
   }
 
   /**
@@ -223,6 +234,17 @@ export class ColumnHeader {
     } else {
       this.statsEl.textContent = '';
     }
+  }
+
+  /**
+   * Update the filter indicator based on active filters for this column
+   */
+  private updateFilterIndicator(): void {
+    const hasFilter = this.state.filtersByColumn.get().has(this.column.name);
+    this.element.classList.toggle(
+      `${this.classPrefix}-col-header--filtered`,
+      hasFilter
+    );
   }
 
   /**

@@ -13,7 +13,7 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
-import { formatCount, formatPercent } from '../utils';
+import { formatCount, formatPercent, truncateText } from '../utils';
 
 // =========================================
 // Constants
@@ -632,6 +632,54 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('∅', centerX, labelY);
+  }
+
+  /**
+   * Draw min/max axis labels with overlap detection and truncation.
+   * If both labels fit, renders as-is; otherwise adaptively allocates
+   * space and truncates the longer label with ellipsis.
+   */
+  protected drawMinMaxLabels(minLabel: string, maxLabel: string, maxX: number): void {
+    const ctx = this.ctx;
+    const labelY = this.height - 3;
+    const MIN_GAP = 6;
+
+    ctx.font = FONTS.axis;
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = COLORS.axisText;
+
+    const minWidth = ctx.measureText(minLabel).width;
+    const maxWidth = ctx.measureText(maxLabel).width;
+    const availableWidth = maxX - PADDING.left;
+
+    if (minWidth + maxWidth + MIN_GAP <= availableWidth) {
+      // No overlap — render as-is
+      ctx.textAlign = 'left';
+      ctx.fillText(minLabel, PADDING.left, labelY);
+      ctx.textAlign = 'right';
+      ctx.fillText(maxLabel, maxX, labelY);
+    } else {
+      // Adaptive allocation: short label keeps its width, long one gets remainder
+      const totalBudget = availableWidth - MIN_GAP;
+      const halfBudget = totalBudget / 2;
+
+      let minBudget: number, maxBudget: number;
+      if (minWidth <= halfBudget) {
+        minBudget = minWidth;
+        maxBudget = totalBudget - minWidth;
+      } else if (maxWidth <= halfBudget) {
+        maxBudget = maxWidth;
+        minBudget = totalBudget - maxWidth;
+      } else {
+        minBudget = halfBudget;
+        maxBudget = halfBudget;
+      }
+
+      ctx.textAlign = 'left';
+      ctx.fillText(truncateText(ctx, minLabel, minBudget), PADDING.left, labelY);
+      ctx.textAlign = 'right';
+      ctx.fillText(truncateText(ctx, maxLabel, maxBudget), maxX, labelY);
+    }
   }
 
   /**

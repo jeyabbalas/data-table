@@ -17,7 +17,7 @@ import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
-import { formatCount, formatPercent } from '../utils';
+import { formatCount, formatPercent, truncateText } from '../utils';
 
 // =========================================
 // Constants
@@ -92,29 +92,6 @@ const ALL_UNIQUE_VALUE_KEY = 'All unique';
 // Utility Functions
 // =========================================
 
-/**
- * Truncate text to fit within width, returns empty string if can't fit
- */
-function truncateText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number
-): string {
-  if (maxWidth <= 0) return '';
-
-  if (ctx.measureText(text).width <= maxWidth) {
-    return text;
-  }
-
-  const ellipsis = '...';
-  let truncated = text;
-
-  while (truncated.length > 0 && ctx.measureText(truncated + ellipsis).width > maxWidth) {
-    truncated = truncated.slice(0, -1);
-  }
-
-  return truncated.length > 0 ? truncated + ellipsis : '';
-}
 
 // =========================================
 // Extended Segment Interface

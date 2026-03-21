@@ -198,15 +198,17 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   protected drawAxisLabels(): void {
     if (!this.data || !this.formatContext) return;
 
-    const ctx = this.ctx;
-    const labelY = this.height - 3;
-
-    ctx.font = FONTS.axis;
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = COLORS.axisText;
+    const maxX = this.data.nullCount > 0
+      ? this.nullBarArea.x - LAYOUT.nullBarGap
+      : this.width - PADDING.right;
 
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
+      const ctx = this.ctx;
+      const labelY = this.height - 3;
+      ctx.font = FONTS.axis;
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = COLORS.axisText;
       ctx.textAlign = 'center';
       const label = this.data.isNumericBinning && this.data.min
         ? formatDateForType(this.data.min, this.column.type)
@@ -218,11 +220,9 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0 && this.data.min && this.data.max) {
-      // Normal case: min on left, max on right
       const firstBin = this.data.bins[0];
       const lastBin = this.data.bins[this.data.bins.length - 1];
 
-      ctx.textAlign = 'left';
       const minLabel = this.data.isNumericBinning
         ? formatDateForType(this.data.min, this.column.type)
         : formatDateLabel(
@@ -230,9 +230,6 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
             this.data.interval,
             this.formatContext
           );
-      ctx.fillText(minLabel, PADDING.left, labelY);
-
-      ctx.textAlign = 'right';
       const maxLabel = this.data.isNumericBinning
         ? formatDateForType(this.data.max, this.column.type)
         : formatDateLabel(
@@ -240,10 +237,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
             this.data.interval,
             this.formatContext
           );
-      const maxX = this.data.nullCount > 0
-        ? this.nullBarArea.x - LAYOUT.nullBarGap
-        : this.width - PADDING.right;
-      ctx.fillText(maxLabel, maxX, labelY);
+      this.drawMinMaxLabels(minLabel, maxLabel, maxX);
     }
 
     // Draw null symbol if nulls exist

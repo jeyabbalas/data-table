@@ -224,15 +224,17 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   protected drawAxisLabels(): void {
     if (!this.data) return;
 
-    const ctx = this.ctx;
-    const labelY = this.height - 3; // Position near bottom
-
-    ctx.font = FONTS.axis;
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = COLORS.axisText;
+    const maxX = this.data.nullCount > 0
+      ? this.nullBarArea.x - LAYOUT.nullBarGap
+      : this.width - PADDING.right;
 
     // Handle single value case - show centered label instead of "X – X"
     if (this.data.isSingleValue) {
+      const ctx = this.ctx;
+      const labelY = this.height - 3;
+      ctx.font = FONTS.axis;
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = COLORS.axisText;
       ctx.textAlign = 'center';
       const label = formatAxisValue(this.data.min);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
@@ -242,28 +244,11 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     else if (this.data.isDiscrete && this.data.bins.length > 0) {
       const firstBin = this.data.bins[0];
       const lastBin = this.data.bins[this.data.bins.length - 1];
-
-      ctx.textAlign = 'left';
-      ctx.fillText(formatAxisValue(firstBin.x0), PADDING.left, labelY);
-
-      ctx.textAlign = 'right';
-      const maxX = this.data.nullCount > 0
-        ? this.nullBarArea.x - LAYOUT.nullBarGap
-        : this.width - PADDING.right;
-      ctx.fillText(formatAxisValue(lastBin.x0), maxX, labelY);
+      this.drawMinMaxLabels(formatAxisValue(firstBin.x0), formatAxisValue(lastBin.x0), maxX);
     }
     // Normal continuous case: min on left, max on right
     else {
-      ctx.textAlign = 'left';
-      const minLabel = formatAxisValue(this.data.min);
-      ctx.fillText(minLabel, PADDING.left, labelY);
-
-      ctx.textAlign = 'right';
-      const maxLabel = formatAxisValue(this.data.max);
-      const maxX = this.data.nullCount > 0
-        ? this.nullBarArea.x - LAYOUT.nullBarGap
-        : this.width - PADDING.right;
-      ctx.fillText(maxLabel, maxX, labelY);
+      this.drawMinMaxLabels(formatAxisValue(this.data.min), formatAxisValue(this.data.max), maxX);
     }
 
     // Draw null symbol if nulls exist

@@ -1,6 +1,6 @@
 /**
  * CrossfilterCoordinator - Watches state.filters and propagates filter changes
- * to all registered visualizations, implementing the own-filter exclusion crossfilter pattern.
+ * to all registered visualizations, including the source that emitted the filter.
  */
 
 import type { TableState } from '../core/State';
@@ -13,7 +13,6 @@ import { filtersToWhereClause } from '../filters/FilterSQL';
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;
-  private pendingSource: string | null = null;
   private filterSequence = 0;
 
   constructor(
@@ -38,24 +37,17 @@ export class CrossfilterCoordinator {
   /** Route a visualization's onFilterChange to StateActions */
   handleFilterChange(columnName: string, filter: Filter | null): void {
     if (filter) {
-      // Adding/updating: the originating viz's brush/selection already
-      // represents this filter visually, so skip re-fetching it
-      this.pendingSource = columnName;
       this.actions.addFilter(filter);
-      this.pendingSource = null;
     } else {
-      // Removing: the originating viz cleared its brush/selection and
-      // needs updated data reflecting remaining filters
       this.actions.removeFilter(columnName);
     }
   }
 
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
     const seq = ++this.filterSequence;
-    const sourceToSkip = this.pendingSource;
 
     const vizPromises = [...this.visualizations.entries()]
-      .filter(([name, viz]) => name !== sourceToSkip && !viz.isDestroyed())
+      .filter(([, viz]) => !viz.isDestroyed())
       .map(([, viz]) => viz.updateFilters(filters));
 
     // Run visualization updates and filtered row count in parallel (independent queries)

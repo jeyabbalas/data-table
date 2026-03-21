@@ -304,12 +304,12 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
 
-    it('should call addToSort on Shift+click sort button', () => {
+    it('should call addToSort on Cmd+click sort button', () => {
       const header = new ColumnHeader(column, state, actions);
       const addToSortSpy = vi.spyOn(actions, 'addToSort');
       const sortBtn = header.getElement().querySelector('.dt-col-sort-btn') as HTMLElement;
 
-      const event = new MouseEvent('click', { shiftKey: true, bubbles: true });
+      const event = new MouseEvent('click', { metaKey: true, bubbles: true });
       sortBtn.dispatchEvent(event);
 
       expect(addToSortSpy).toHaveBeenCalledWith('test_column');

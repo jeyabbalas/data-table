@@ -177,8 +177,8 @@ export class ColumnHeader {
     // Stop propagation to prevent any parent handlers
     event.stopPropagation();
 
-    if (event.shiftKey) {
-      // Shift+click: add to multi-sort
+    if (event.metaKey || event.ctrlKey) {
+      // Cmd+click (Mac) / Ctrl+click (Win/Linux): add to multi-sort
       this.actions.addToSort(this.column.name);
     } else {
       // Regular click: single column sort

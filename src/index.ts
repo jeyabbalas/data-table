@@ -27,6 +27,12 @@ export { filterToSQL, filtersToWhereClause, formatSQLValue } from './filters/Fil
 export { splitCrossfilterFilters } from './filters/CrossfilterQuery';
 export type { CrossfilterSplit } from './filters/CrossfilterQuery';
 
+// Filter UI components
+export { FilterChip, formatFilter, formatDisplayValue } from './filters/FilterChip';
+export type { FilterChipOptions } from './filters/FilterChip';
+export { FilterBar } from './filters/FilterBar';
+export type { FilterBarOptions } from './filters/FilterBar';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

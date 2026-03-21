@@ -13,6 +13,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { ColumnHeader } from './ColumnHeader';
 import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
+import { FilterBar } from '../filters/FilterBar';
 
 /**
  * Options for configuring the TableContainer
@@ -24,6 +25,10 @@ export interface TableContainerOptions {
   headerHeight?: number;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /** Show filter bar between header and body (default: true) */
+  showFilterBar?: boolean;
+  /** Called when a filter is removed via filter chip, for clearing visualization state */
+  onFilterRemove?: (column: string) => void;
 }
 
 /**
@@ -60,6 +65,7 @@ export class TableContainer {
   private columnHeaders: ColumnHeader[] = [];
   private tableBody: TableBody | null = null;
   private columnReorder: ColumnReorder | null = null;
+  private filterBar: FilterBar | null = null;
 
   // Scroll synchronization handlers
   private boundBodyScrollHandler: (() => void) | null = null;
@@ -80,6 +86,8 @@ export class TableContainer {
       rowHeight: 32,
       headerHeight: 120,
       classPrefix: 'dt',
+      showFilterBar: true,
+      onFilterRemove: undefined as unknown as (column: string) => void,
       ...options,
     };
 
@@ -100,6 +108,16 @@ export class TableContainer {
     this.headerArea.appendChild(this.scrollbarGutter);
     this.bodyScroll.appendChild(this.bodyContainer);
     this.element.appendChild(this.headerArea);
+
+    // Create filter bar between header and body
+    if (this.resolvedOptions.showFilterBar && this.actions) {
+      this.filterBar = new FilterBar(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+        onFilterRemove: this.resolvedOptions.onFilterRemove,
+      });
+      this.element.appendChild(this.filterBar.getElement());
+    }
+
     this.element.appendChild(this.bodyScroll);
     this.container.appendChild(this.element);
 
@@ -570,6 +588,13 @@ export class TableContainer {
   }
 
   /**
+   * Get the filter bar instance
+   */
+  getFilterBar(): FilterBar | null {
+    return this.filterBar;
+  }
+
+  /**
    * Destroy the table container and clean up resources
    */
   destroy(): void {
@@ -583,6 +608,12 @@ export class TableContainer {
     if (this.tableBody) {
       this.tableBody.destroy();
       this.tableBody = null;
+    }
+
+    // Destroy filter bar
+    if (this.filterBar) {
+      this.filterBar.destroy();
+      this.filterBar = null;
     }
 
     // Destroy column reorder handler

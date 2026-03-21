@@ -1,14 +1,16 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 5: Crossfilter & Filtering
+ * Phase 5: Filter UI Components
  *
- * This demo uses VisualizationFactory for centralized visualization creation
- * and CrossfilterCoordinator for filter propagation across columns:
+ * This demo uses VisualizationFactory for centralized visualization creation,
+ * CrossfilterCoordinator for filter propagation across columns, and FilterBar
+ * for displaying active filters as removable chips:
  * - Histogram for numeric columns (integer, float, decimal)
  * - DateHistogram for date/timestamp columns
  * - TimeHistogram for time columns
  * - ValueCounts for categorical columns (string, boolean, uuid)
+ * - FilterBar with FilterChips for filter visibility and removal
  */
 
 import {
@@ -386,12 +388,30 @@ bridge
   .then(() => {
     actions = new StateActions(tableState, bridge);
 
-    // Create TableContainer with bridge
+    // Create TableContainer with bridge and filter removal handler
     tableContainer = new TableContainer(
       tableContainerEl,
       tableState,
       actions,
-      bridge
+      bridge,
+      {
+        onFilterRemove: (column: string) => {
+          // Find and clear the visualization interaction for this column
+          const idx = interactionStack.findIndex((i) => i.columnName === column);
+          if (idx >= 0) {
+            const interaction = interactionStack[idx];
+            if (interaction.type === 'brush') {
+              interaction.visualization.clearBrush();
+            } else {
+              interaction.visualization.clearSelection();
+            }
+            // clearBrush/clearSelection callbacks handle interactionStack cleanup
+          }
+          // Clean up persisted state
+          brushStates.delete(column);
+          selectionStates.delete(column);
+        },
+      }
     );
 
     // Subscribe to state changes

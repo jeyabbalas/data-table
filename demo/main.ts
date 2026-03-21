@@ -32,6 +32,7 @@ import {
 } from '../src/visualizations/VisualizationFactory';
 import type { ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
+import { InteractionManager } from '../src/visualizations/InteractionManager';
 
 // Visualization type union for type safety
 type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
@@ -73,13 +74,8 @@ const selectionStates = new Map<
   { selectedBin?: number | null; selectedSegments?: number[]; selectedNull: boolean }
 >();
 
-// LIFO stack for interactions (brushes and selections)
-interface ActiveInteraction {
-  type: 'brush' | 'selection';
-  columnName: string;
-  visualization: VisualizationType;
-}
-const interactionStack: ActiveInteraction[] = [];
+// LIFO interaction manager for brush/selection Escape handling
+const interactionManager = new InteractionManager();
 
 function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
@@ -128,7 +124,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
   activeVisualizations = [];
 
   // Clear interaction stack entries for destroyed visualizations
-  interactionStack.length = 0;
+  interactionManager.clear();
 
   // Create or recreate coordinator for this table
   if (coordinator) {
@@ -179,39 +175,19 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
         }
       },
       onBrushCommit: (colName: string) => {
-        const idx = interactionStack.findIndex(
-          (i) => i.type === 'brush' && i.columnName === colName
-        );
-        if (idx >= 0) interactionStack.splice(idx, 1);
-        interactionStack.push({
-          type: 'brush',
-          columnName: colName,
-          visualization: visualization,
-        });
+        interactionManager.pushBrush(colName, visualization);
         if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
           const state = visualization.getBrushState();
           if (state) brushStates.set(colName, state);
         }
       },
       onBrushClear: (colName: string) => {
-        const idx = interactionStack.findIndex(
-          (i) => i.type === 'brush' && i.columnName === colName
-        );
-        if (idx >= 0) interactionStack.splice(idx, 1);
+        interactionManager.removeColumn(colName);
         brushStates.delete(colName);
       },
       onSelectionChange: (colName: string, hasSelection: boolean) => {
-        const idx = interactionStack.findIndex(
-          (i) => i.type === 'selection' && i.columnName === colName
-        );
         if (hasSelection) {
-          if (idx < 0) {
-            interactionStack.push({
-              type: 'selection',
-              columnName: colName,
-              visualization: visualization,
-            });
-          }
+          interactionManager.pushSelection(colName, visualization);
           // Save state based on visualization type
           if (visualization instanceof ValueCounts) {
             const state = visualization.getSelectionState();
@@ -224,7 +200,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
             selectionStates.set(colName, state);
           }
         } else {
-          if (idx >= 0) interactionStack.splice(idx, 1);
+          interactionManager.removeColumn(colName);
           selectionStates.delete(colName);
         }
       },
@@ -247,11 +223,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
         // Restore brush state (only for histograms)
         if (savedBrush && (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram)) {
           visualization.setBrushState(savedBrush);
-          interactionStack.push({
-            type: 'brush',
-            columnName: column.name,
-            visualization: visualization,
-          });
+          interactionManager.pushBrush(column.name, visualization);
         }
 
         // Restore selection state
@@ -262,11 +234,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
               selectedNull: savedSelection.selectedNull,
             });
             if (savedSelection.selectedSegments.length > 0 || savedSelection.selectedNull) {
-              interactionStack.push({
-                type: 'selection',
-                columnName: column.name,
-                visualization: visualization,
-              });
+              interactionManager.pushSelection(column.name, visualization);
             }
           } else if ((visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) && savedSelection.selectedBin !== undefined) {
             visualization.setSelectionState({
@@ -274,11 +242,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
               selectedNull: savedSelection.selectedNull,
             });
             if (savedSelection.selectedBin !== null || savedSelection.selectedNull) {
-              interactionStack.push({
-                type: 'selection',
-                columnName: column.name,
-                visualization: visualization,
-              });
+              interactionManager.pushSelection(column.name, visualization);
             }
           }
         }
@@ -396,17 +360,8 @@ bridge
       bridge,
       {
         onFilterRemove: (column: string) => {
-          // Find and clear the visualization interaction for this column
-          const idx = interactionStack.findIndex((i) => i.columnName === column);
-          if (idx >= 0) {
-            const interaction = interactionStack[idx];
-            if (interaction.type === 'brush') {
-              interaction.visualization.clearBrush();
-            } else {
-              interaction.visualization.clearSelection();
-            }
-            // clearBrush/clearSelection callbacks handle interactionStack cleanup
-          }
+          // Clear the visualization interaction and remove from stack
+          interactionManager.clearColumn(column);
           // Clean up persisted state
           brushStates.delete(column);
           selectionStates.delete(column);
@@ -459,19 +414,7 @@ bridge
       }, 100);
     });
 
-    // Global Esc handler for LIFO brush/selection clearing
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && interactionStack.length > 0) {
-        const last = interactionStack.pop()!;
-        if (last.type === 'brush') {
-          last.visualization.clearBrush();
-        } else {
-          last.visualization.clearSelection();
-        }
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    });
+    // Escape key handling is provided by InteractionManager (created above)
 
     // Update info with dimensions
     tableContainer.onResize((dims) => {

@@ -64,10 +64,30 @@ export class InteractionManager {
   }
 
   /**
-   * Remove all interactions for a given column.
+   * Remove all interactions for a given column (does not clear the visualizations).
    */
   removeColumn(columnName: string): void {
     this.stack = this.stack.filter((i) => i.columnName !== columnName);
+  }
+
+  /**
+   * Clear and remove all interactions for a given column.
+   * Unlike removeColumn(), this also calls clearBrush/clearSelection on the visualization.
+   */
+  clearColumn(columnName: string): void {
+    const remaining: ActiveInteraction[] = [];
+    for (const interaction of this.stack) {
+      if (interaction.columnName === columnName && !interaction.visualization.isDestroyed()) {
+        if (interaction.type === 'brush' && 'clearBrush' in interaction.visualization) {
+          interaction.visualization.clearBrush();
+        } else if ('clearSelection' in interaction.visualization) {
+          interaction.visualization.clearSelection();
+        }
+      } else if (interaction.columnName !== columnName) {
+        remaining.push(interaction);
+      }
+    }
+    this.stack = remaining;
   }
 
   /**

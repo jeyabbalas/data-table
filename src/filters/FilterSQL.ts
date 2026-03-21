@@ -52,7 +52,7 @@ function escapeLikePattern(pattern: string): string {
  * Convert a single filter to SQL WHERE clause fragment
  */
 export function filterToSQL(filter: Filter): string {
-  const column = `"${filter.column}"`;
+  const column = `"${filter.column.replace(/"/g, '""')}"`;
 
   switch (filter.type) {
     case 'range': {

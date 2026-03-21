@@ -1251,7 +1251,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
   /**
    * Handle keyboard events
-   * Note: Escape is handled globally in demo/main.ts for LIFO behavior across columns
+   * Note: Escape is handled by InteractionManager for LIFO behavior across columns
    */
   protected handleKeyDown(_key: string): void {
     // Escape handling moved to global handler for LIFO behavior

@@ -946,7 +946,10 @@ export class ValueCounts extends BaseVisualization {
     if (clickedIndex === null) return;
 
     const segment = this.renderSegments[clickedIndex];
-    if (!segment || segment.count === 0) return;
+    if (!segment) return;
+    // Allow clicking segments visible in background (ghost) even if foreground count is 0
+    const bgSegment = this.backgroundSegments[clickedIndex];
+    if (segment.count === 0 && !(bgSegment && bgSegment.count > 0)) return;
 
     // Check if segment supports multi-select (only regular categories)
     const canMultiSelect = !segment.isNull && !segment.isOther && !segment.isAllUnique;

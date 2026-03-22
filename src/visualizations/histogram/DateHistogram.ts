@@ -118,11 +118,22 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         isNumericBinning: true,
       };
     } else {
-      const [fgBins, fgStats] = await Promise.all([
+      const [rawFgBins, fgStats] = await Promise.all([
         fetchDateHistogramBins(tableName, col, initial.interval, filters, bridge),
         fetchDateStats(tableName, col, filters, bridge),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
+
+      // Align foreground bins to initial bin structure so indices match for ghost rendering
+      const fgBinMap = new Map<number, number>();
+      for (const bin of rawFgBins) {
+        fgBinMap.set(bin.binStart.getTime(), bin.count);
+      }
+      const fgBins = initial.bins.map(bgBin => ({
+        binStart: bgBin.binStart,
+        binEnd: bgBin.binEnd,
+        count: fgBinMap.get(bgBin.binStart.getTime()) ?? 0,
+      }));
 
       return {
         bins: fgBins,

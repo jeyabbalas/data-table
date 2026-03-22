@@ -282,16 +282,17 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
    * Uses adaptive spacing for histograms with few bins
    */
   private calculateBarPositions(): void {
-    if (!this.data) return;
+    const layoutData = this.backgroundData ?? this.data;
+    if (!layoutData) return;
 
-    const numBins = this.data.bins.length;
+    const numBins = layoutData.bins.length;
     if (numBins === 0) {
       this.barPositions = [];
       return;
     }
 
     // Special case: single value - use 40% width centered bar
-    if (this.data.isSingleValue && numBins === 1) {
+    if (layoutData.isSingleValue && numBins === 1) {
       const singleBarWidth = Math.min(this.chartArea.width * 0.4, 60);
       const barX = this.chartArea.x + (this.chartArea.width - singleBarWidth) / 2;
       this.barPositions = [{
@@ -312,7 +313,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         this.chartArea.width / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO);
       const gap = barWidth * FEW_BINS_GAP_RATIO;
 
-      this.barPositions = this.data.bins.map((_, index) => ({
+      this.barPositions = layoutData.bins.map((_, index) => ({
         x: this.chartArea.x + index * (barWidth + gap),
         width: barWidth,
         binIndex: index,
@@ -325,7 +326,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     const availableWidth = this.chartArea.width - totalGaps;
     const barWidth = Math.max(1, availableWidth / numBins);
 
-    this.barPositions = this.data.bins.map((_, index) => ({
+    this.barPositions = layoutData.bins.map((_, index) => ({
       x: this.chartArea.x + index * (barWidth + LAYOUT.barGap),
       width: barWidth,
       binIndex: index,

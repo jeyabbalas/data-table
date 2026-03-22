@@ -106,11 +106,22 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         isNumericBinning: true,
       };
     } else {
-      const [fgBins, fgStats] = await Promise.all([
+      const [rawFgBins, fgStats] = await Promise.all([
         fetchTimeHistogramBins(tableName, col, initial.interval, filters, bridge),
         fetchTimeStats(tableName, col, filters, bridge),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
+
+      // Align foreground bins to initial bin structure so indices match for ghost rendering
+      const fgBinMap = new Map<number, number>();
+      for (const bin of rawFgBins) {
+        fgBinMap.set(bin.binStartSeconds, bin.count);
+      }
+      const fgBins = initial.bins.map(bgBin => ({
+        binStartSeconds: bgBin.binStartSeconds,
+        binEndSeconds: bgBin.binEndSeconds,
+        count: fgBinMap.get(bgBin.binStartSeconds) ?? 0,
+      }));
 
       return {
         bins: fgBins,

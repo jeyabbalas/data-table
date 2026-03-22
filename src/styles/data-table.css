@@ -392,7 +392,7 @@
   align-items: center;
   justify-content: center;
   width: 16px;
-  height: 16px;
+  height: 18px;
   padding: 0;
   border: none;
   background: transparent;
@@ -419,8 +419,8 @@
 }
 
 .dt-col-drag-handle svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .dt-col-drag-handle circle {

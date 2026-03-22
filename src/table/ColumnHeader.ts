@@ -95,6 +95,7 @@ export class ColumnHeader {
     dragHandle.className = `${this.classPrefix}-col-drag-handle`;
     dragHandle.setAttribute('type', 'button');
     dragHandle.setAttribute('aria-label', `Drag to reorder ${this.column.name}`);
+    dragHandle.setAttribute('title', 'Reorder column');
     dragHandle.innerHTML = `
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="5" cy="4" r="1.5" />
@@ -117,6 +118,7 @@ export class ColumnHeader {
     sortBtn.className = `${this.classPrefix}-col-sort-btn`;
     sortBtn.setAttribute('type', 'button');
     sortBtn.setAttribute('aria-label', `Sort by ${this.column.name}`);
+    sortBtn.setAttribute('title', 'Sort ascending');
     sortBtn.innerHTML = `
       <svg viewBox="0 0 10 14" aria-hidden="true">
         <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
@@ -288,6 +290,7 @@ export class ColumnHeader {
       // Not sorted - hide badge
       this.sortBadge.style.display = 'none';
       this.element.setAttribute('aria-sort', 'none');
+      this.sortButton.setAttribute('title', 'Sort ascending');
     } else {
       const sortConfig = sortColumns[sortIndex];
       const isAsc = sortConfig.direction === 'asc';
@@ -306,6 +309,7 @@ export class ColumnHeader {
       }
 
       this.element.setAttribute('aria-sort', isAsc ? 'ascending' : 'descending');
+      this.sortButton.setAttribute('title', isAsc ? 'Sort descending' : 'Remove sort');
     }
   }
 

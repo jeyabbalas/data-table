@@ -310,11 +310,13 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
     const endBin = this.data.bins[endIdx];
 
     if (startBin && endBin) {
+      const isLastBin = endIdx === this.data.bins.length - 1;
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'range',
         min: secondsToTimeString(startBin.binStartSeconds),
         max: secondsToTimeString(endBin.binEndSeconds),
+        ...(isLastBin && this.data.isNumericBinning && { maxInclusive: true }),
       });
     }
   }

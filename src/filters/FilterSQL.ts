@@ -66,7 +66,8 @@ export function filterToSQL(filter: Filter): string {
     case 'range': {
       const minVal = formatSQLValue(filter.min);
       const maxVal = formatSQLValue(filter.max);
-      return `(${column} >= ${minVal} AND ${column} < ${maxVal})`;
+      const op = filter.maxInclusive ? '<=' : '<';
+      return `(${column} >= ${minVal} AND ${column} ${op} ${maxVal})`;
     }
 
     case 'point': {

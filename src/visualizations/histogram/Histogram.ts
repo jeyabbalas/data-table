@@ -340,12 +340,14 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           });
         }
       } else {
-        // Continuous: use range filter (exclusive upper bound)
+        // Continuous: use range filter
+        const isLastBin = endIdx === this.data.bins.length - 1;
         this.options.onFilterChange?.({
           column: this.column.name,
           type: 'range',
           min: startBin.x0,
           max: endBin.x1,
+          ...(isLastBin && { maxInclusive: true }),
         });
       }
     }

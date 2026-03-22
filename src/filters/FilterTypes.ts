@@ -10,6 +10,8 @@ export interface RangeFilter {
   column: string;
   min: number | string | Date;
   max: number | string | Date;
+  /** When true, upper bound uses <= instead of <. Used for last histogram bin. */
+  maxInclusive?: boolean;
 }
 
 export interface PointFilter {

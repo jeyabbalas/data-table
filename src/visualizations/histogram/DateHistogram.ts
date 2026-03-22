@@ -335,11 +335,13 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
     const endBin = this.data.bins[endIdx];
 
     if (startBin && endBin) {
+      const isLastBin = endIdx === this.data.bins.length - 1;
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'range',
         min: startBin.binStart.toISOString(),
         max: endBin.binEnd.toISOString(),
+        ...(isLastBin && this.data.isNumericBinning && { maxInclusive: true }),
       });
     }
   }

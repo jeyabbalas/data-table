@@ -13,6 +13,11 @@ describe('filterToSQL', () => {
       expect(filterToSQL(filter)).toBe('("price" >= 10 AND "price" < 100)');
     });
 
+    it('should use <= for maxInclusive range', () => {
+      const filter: Filter = { type: 'range', column: 'price', min: 10, max: 100, maxInclusive: true };
+      expect(filterToSQL(filter)).toBe('("price" >= 10 AND "price" <= 100)');
+    });
+
     it('should generate SQL for string (ISO date) range', () => {
       const filter: Filter = { type: 'range', column: 'date', min: '2024-01-01', max: '2024-12-31' };
       expect(filterToSQL(filter)).toBe("(\"date\" >= '2024-01-01' AND \"date\" < '2024-12-31')");

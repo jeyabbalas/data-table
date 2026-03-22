@@ -1252,7 +1252,7 @@ export class ValueCounts extends BaseVisualization {
     this.selectedSegments.clear();
     this.options.onStatsChange?.(null);
     this.render();
-    if (hadSelection) {
+    if (hadSelection && !this.destroyed) {
       this.options.onSelectionChange?.(this.column.name, false);
       // Signal filter removal
       this.options.onFilterChange?.(null);

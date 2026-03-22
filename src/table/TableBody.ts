@@ -11,7 +11,7 @@ import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnSchema, SortColumn, Filter } from '../core/types';
-import { filtersToWhereClause } from '../filters/FilterSQL';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 /**
  * Options for configuring the TableBody
@@ -329,9 +329,9 @@ export class TableBody {
     limit: number
   ): string {
     // Quote column names to handle special characters
-    const columnList = columns.map((col) => `"${col}"`).join(', ');
+    const columnList = columns.map(quoteIdentifier).join(', ');
 
-    let sql = `SELECT ${columnList} FROM "${tableName}"`;
+    let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
 
     // Add WHERE clause if filters are active
     if (filters.length > 0) {
@@ -344,7 +344,7 @@ export class TableBody {
     // Add ORDER BY if sorting is active
     if (sortColumns.length > 0) {
       const orderBy = sortColumns
-        .map((s) => `"${s.column}" ${s.direction.toUpperCase()}`)
+        .map((s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`)
         .join(', ');
       sql += ` ORDER BY ${orderBy}`;
     }

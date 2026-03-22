@@ -148,12 +148,12 @@ describe('filterToSQL', () => {
   });
 
   describe('unknown filter type', () => {
-    it('should return TRUE and warn', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('should return FALSE and log error (fail closed)', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const filter = { type: 'unknown', column: 'x' } as unknown as Filter;
-      expect(filterToSQL(filter)).toBe('TRUE');
-      expect(warnSpy).toHaveBeenCalledWith('Unknown filter type: unknown');
-      warnSpy.mockRestore();
+      expect(filterToSQL(filter)).toBe('FALSE');
+      expect(errorSpy).toHaveBeenCalledWith('Unknown filter type: unknown');
+      errorSpy.mockRestore();
     });
   });
 });

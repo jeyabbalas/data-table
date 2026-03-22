@@ -21,7 +21,7 @@ export type {
 } from './filters/FilterTypes';
 
 // Filter SQL generation
-export { filterToSQL, filtersToWhereClause, formatSQLValue } from './filters/FilterSQL';
+export { filterToSQL, filtersToWhereClause, formatSQLValue, quoteIdentifier } from './filters/FilterSQL';
 
 // Crossfilter query utilities
 export { splitCrossfilterFilters } from './filters/CrossfilterQuery';

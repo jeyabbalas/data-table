@@ -9,6 +9,14 @@
 import type { Filter } from '../core/types';
 
 /**
+ * Quote a SQL identifier (table/column name) with proper escaping.
+ * Wraps in double quotes and escapes embedded double quotes by doubling them.
+ */
+export function quoteIdentifier(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
  * Format a value for use in SQL queries
  * Handles proper escaping and quoting
  */
@@ -52,7 +60,7 @@ function escapeLikePattern(pattern: string): string {
  * Convert a single filter to SQL WHERE clause fragment
  */
 export function filterToSQL(filter: Filter): string {
-  const column = `"${filter.column.replace(/"/g, '""')}"`;
+  const column = quoteIdentifier(filter.column);
 
   switch (filter.type) {
     case 'range': {
@@ -105,9 +113,9 @@ export function filterToSQL(filter: Filter): string {
     }
 
     default: {
-      // Unknown filter type - return always true
-      console.warn(`Unknown filter type: ${(filter as Filter).type}`);
-      return 'TRUE';
+      // Unknown filter type - fail closed (match nothing) to avoid exposing unfiltered data
+      console.error(`Unknown filter type: ${(filter as Filter).type}`);
+      return 'FALSE';
     }
   }
 }

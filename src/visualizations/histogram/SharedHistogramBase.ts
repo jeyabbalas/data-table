@@ -1331,7 +1331,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     this.options.onStatsChange?.(null); // Restore default stats
 
     // Notify callback if brush was committed (for state cleanup in demo)
-    if (wasCommitted) {
+    if (wasCommitted && !this.destroyed) {
       this.options.onBrushClear?.(this.column.name);
       // Signal filter removal
       this.options.onFilterChange?.(null);

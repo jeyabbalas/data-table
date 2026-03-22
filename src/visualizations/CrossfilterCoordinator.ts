@@ -8,7 +8,7 @@ import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { Filter } from '../core/types';
 import type { BaseVisualization } from './BaseVisualization';
-import { filtersToWhereClause } from '../filters/FilterSQL';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
@@ -59,12 +59,16 @@ export class CrossfilterCoordinator {
       this.state.filteredRows.set(this.state.totalRows.get());
       return;
     }
-    const where = filtersToWhereClause(filters);
-    const sql = `SELECT COUNT(*) as cnt FROM "${this.tableName}" WHERE ${where}`;
-    const result = await this.bridge.query<{ cnt: number }>(sql);
-    // Only apply if this is still the latest filter change
-    if (seq !== this.filterSequence) return;
-    this.state.filteredRows.set(Number(result[0].cnt));
+    try {
+      const where = filtersToWhereClause(filters);
+      const sql = `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(this.tableName)} WHERE ${where}`;
+      const result = await this.bridge.query<{ cnt: number }>(sql);
+      // Only apply if this is still the latest filter change
+      if (seq !== this.filterSequence) return;
+      this.state.filteredRows.set(Number(result[0].cnt));
+    } catch (error) {
+      console.error('[CrossfilterCoordinator] Failed to update filtered row count:', error);
+    }
   }
 
   /** Clean up signal subscription and clear registrations */

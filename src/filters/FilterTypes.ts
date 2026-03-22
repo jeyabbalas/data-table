@@ -15,7 +15,7 @@ export interface RangeFilter {
 export interface PointFilter {
   type: 'point';
   column: string;
-  value: unknown;
+  value: string | number | boolean | Date | null;
 }
 
 export interface SetFilter {

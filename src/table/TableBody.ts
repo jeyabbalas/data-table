@@ -144,9 +144,12 @@ export class TableBody {
     this.unsubscribes.push(unsubSort);
 
     // Re-fetch and scroll to top when filters change
-    const unsubFilters = this.state.filters.subscribe(() => {
+    const unsubFilters = this.state.filters.subscribe((filters) => {
       if (!this.destroyed) {
         this.virtualScroller.scrollToRow(0, 'start');
+        if (filters.length === 0) {
+          this.virtualScroller.setTotalRows(this.state.totalRows.get());
+        }
         this.invalidateCacheAndRefresh();
       }
     });

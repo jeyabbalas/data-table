@@ -33,6 +33,11 @@ export type { FilterChipOptions } from './filters/FilterChip';
 export { FilterBar } from './filters/FilterBar';
 export type { FilterBarOptions } from './filters/FilterBar';
 
+export { FilterPanel } from './filters/FilterPanel';
+export type { FilterPanelOptions } from './filters/FilterPanel';
+export { FilterPanelField } from './filters/FilterPanelField';
+export type { FilterPanelFieldOptions } from './filters/FilterPanelField';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

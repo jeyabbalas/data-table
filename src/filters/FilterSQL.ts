@@ -64,10 +64,26 @@ export function filterToSQL(filter: Filter): string {
 
   switch (filter.type) {
     case 'range': {
+      const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
+      const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
+      const minOp = filter.minExclusive ? '>' : '>=';
+      const maxOp = filter.maxInclusive ? '<=' : '<';
+
+      if (minIsOpen && maxIsOpen) {
+        return 'TRUE'; // No bounds — matches everything
+      }
+      if (minIsOpen) {
+        // Open lower bound: only upper bound applies
+        return `${column} ${maxOp} ${formatSQLValue(filter.max)}`;
+      }
+      if (maxIsOpen) {
+        // Open upper bound: only lower bound applies
+        return `${column} ${minOp} ${formatSQLValue(filter.min)}`;
+      }
+      // Both bounds finite
       const minVal = formatSQLValue(filter.min);
       const maxVal = formatSQLValue(filter.max);
-      const op = filter.maxInclusive ? '<=' : '<';
-      return `(${column} >= ${minVal} AND ${column} ${op} ${maxVal})`;
+      return `(${column} ${minOp} ${minVal} AND ${column} ${maxOp} ${maxVal})`;
     }
 
     case 'point': {

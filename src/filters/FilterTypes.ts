@@ -12,6 +12,8 @@ export interface RangeFilter {
   max: number | string | Date;
   /** When true, upper bound uses <= instead of <. Used for last histogram bin. */
   maxInclusive?: boolean;
+  /** When true, lower bound uses > instead of >=. Used for strict greater-than filters. */
+  minExclusive?: boolean;
 }
 
 export interface PointFilter {

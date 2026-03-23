@@ -14,6 +14,7 @@ import { ColumnHeader } from './ColumnHeader';
 import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
 import { FilterBar } from '../filters/FilterBar';
+import { FilterPanel } from '../filters/FilterPanel';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 
 /**
@@ -67,6 +68,7 @@ export class TableContainer {
   private tableBody: TableBody | null = null;
   private columnReorder: ColumnReorder | null = null;
   private filterBar: FilterBar | null = null;
+  private filterPanel: FilterPanel | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
@@ -523,6 +525,12 @@ export class TableContainer {
     const tableName = this.state.tableName.get();
     const columnWidths = this.state.columnWidths.get();
 
+    // Destroy filter panel (will be recreated lazily on next filter click)
+    if (this.filterPanel) {
+      this.filterPanel.destroy();
+      this.filterPanel = null;
+    }
+
     // Clear existing column headers
     this.destroyColumnHeaders();
     this.headerRow.innerHTML = '';
@@ -552,7 +560,10 @@ export class TableContainer {
               colSchema,
               this.state,
               this.actions,
-              { classPrefix: this.resolvedOptions.classPrefix }
+              {
+                classPrefix: this.resolvedOptions.classPrefix,
+                onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
+              }
             );
             this.columnHeaders.push(columnHeader);
 
@@ -691,6 +702,24 @@ export class TableContainer {
   }
 
   /**
+   * Handle filter button click from a column header.
+   * Creates the FilterPanel lazily and toggles it for the clicked column.
+   */
+  private handleFilterClick(column: string, anchorElement: HTMLElement): void {
+    if (!this.actions) return;
+
+    // Create panel lazily on first click
+    if (!this.filterPanel) {
+      this.filterPanel = new FilterPanel(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+      });
+      this.element.appendChild(this.filterPanel.getElement());
+    }
+
+    this.filterPanel.toggle(column, anchorElement);
+  }
+
+  /**
    * Get the root element
    */
   getElement(): HTMLElement {
@@ -774,6 +803,13 @@ export class TableContainer {
   }
 
   /**
+   * Get the filter panel instance
+   */
+  getFilterPanel(): FilterPanel | null {
+    return this.filterPanel;
+  }
+
+  /**
    * Destroy the table container and clean up resources
    */
   destroy(): void {
@@ -793,6 +829,12 @@ export class TableContainer {
     if (this.filterBar) {
       this.filterBar.destroy();
       this.filterBar = null;
+    }
+
+    // Destroy filter panel
+    if (this.filterPanel) {
+      this.filterPanel.destroy();
+      this.filterPanel = null;
     }
 
     // Destroy hidden columns gutter

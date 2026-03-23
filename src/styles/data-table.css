@@ -899,6 +899,248 @@ body.dt-column-dragging * {
 }
 
 /* ===========================================
+   Filter Panel
+   =========================================== */
+
+.dt-filter-panel {
+  position: absolute;
+  z-index: 22;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size);
+}
+
+/* Panel header */
+.dt-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+  flex-shrink: 0;
+}
+
+.dt-filter-panel-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+}
+
+.dt-filter-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  color: var(--dt-text-secondary);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-panel-close:hover {
+  color: var(--dt-text);
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-filter-panel-close:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* Scrollable body */
+.dt-filter-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+/* Individual field row */
+.dt-filter-field {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border-light);
+  transition: background 0.5s ease;
+}
+
+.dt-filter-field:last-child {
+  border-bottom: none;
+}
+
+.dt-filter-field--highlighted {
+  background: var(--dt-primary-light);
+}
+
+/* Field header */
+.dt-filter-field-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.dt-filter-field-name {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-filter-field-type {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  background: var(--dt-bg-tertiary);
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--dt-radius-sm);
+  flex-shrink: 0;
+}
+
+.dt-filter-field-clear {
+  flex-shrink: 0;
+  padding: 0.125rem 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--dt-primary);
+  font-size: var(--dt-font-size-xs);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  border-radius: var(--dt-radius-sm);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-field-clear:hover {
+  color: var(--dt-primary-hover);
+  background: var(--dt-primary-light);
+}
+
+.dt-filter-field-clear--hidden {
+  display: none;
+}
+
+/* Controls area */
+.dt-filter-field-controls {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.dt-filter-field-label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  flex-shrink: 0;
+}
+
+/* Shared form input styles */
+.dt-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  transition: border-color var(--dt-transition);
+}
+
+.dt-filter-input:focus {
+  outline: none;
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.dt-filter-input::placeholder {
+  color: var(--dt-text-tertiary);
+}
+
+.dt-filter-select {
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--dt-transition);
+  flex-shrink: 0;
+}
+
+.dt-filter-select:focus {
+  outline: none;
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* Null toggle radio group */
+.dt-filter-field-null {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.375rem;
+}
+
+.dt-filter-null-option {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+
+.dt-filter-null-option input[type="radio"] {
+  margin: 0;
+  accent-color: var(--dt-primary);
+}
+
+/* Boolean checkboxes */
+.dt-filter-bool-group {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.dt-filter-bool-option {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  cursor: pointer;
+}
+
+.dt-filter-bool-option input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--dt-primary);
+}
+
+/* Dark mode adjustments for filter panel */
+@media (prefers-color-scheme: dark) {
+  .dt-filter-panel {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .dt-filter-input:focus,
+  .dt-filter-select:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+}
+
+/* ===========================================
    Placeholder States
    =========================================== */
 

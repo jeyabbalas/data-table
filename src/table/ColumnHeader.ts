@@ -22,6 +22,8 @@ import { ColumnResizer } from './ColumnResizer';
 export interface ColumnHeaderOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /** Called when the filter button is clicked, with column name and button element for positioning */
+  onFilterClick?: (column: string, buttonElement: HTMLElement) => void;
 }
 
 /**
@@ -42,12 +44,14 @@ export class ColumnHeader {
   private sortBadge: HTMLElement;
   private pinButton: HTMLElement;
   private hideButton: HTMLElement;
+  private filterButton: HTMLElement;
   private dragHandle: HTMLElement;
   private statsEl: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
   private readonly classPrefix: string;
+  private readonly options: ColumnHeaderOptions;
 
   constructor(
     private column: ColumnSchema,
@@ -55,12 +59,14 @@ export class ColumnHeader {
     private actions: StateActions,
     options: ColumnHeaderOptions = {}
   ) {
+    this.options = options;
     this.classPrefix = options.classPrefix ?? 'dt';
     this.element = this.createElement();
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
     this.pinButton = this.element.querySelector(`.${this.classPrefix}-col-pin-btn`)!;
     this.hideButton = this.element.querySelector(`.${this.classPrefix}-col-hide-btn`)!;
+    this.filterButton = this.element.querySelector(`.${this.classPrefix}-col-filter-btn`)!;
     this.dragHandle = this.element.querySelector(`.${this.classPrefix}-col-drag-handle`)!;
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
 
@@ -238,6 +244,9 @@ export class ColumnHeader {
 
     // Hide button
     this.hideButton.addEventListener('click', this.handleHideClick);
+
+    // Filter button
+    this.filterButton.addEventListener('click', this.handleFilterClick);
   }
 
   /**
@@ -274,6 +283,15 @@ export class ColumnHeader {
     if (this.destroyed) return;
     event.stopPropagation();
     this.actions.hideColumn(this.column.name);
+  };
+
+  /**
+   * Handle click events for filter button
+   */
+  private handleFilterClick = (event: MouseEvent): void => {
+    if (this.destroyed) return;
+    event.stopPropagation();
+    this.options.onFilterClick?.(this.column.name, this.filterButton);
   };
 
   // =========================================
@@ -355,6 +373,11 @@ export class ColumnHeader {
     const hasFilter = this.state.filtersByColumn.get().has(this.column.name);
     this.element.classList.toggle(
       `${this.classPrefix}-col-header--filtered`,
+      hasFilter
+    );
+    // Toggle active class on the filter button itself
+    this.filterButton.classList.toggle(
+      `${this.classPrefix}-col-action-btn--active`,
       hasFilter
     );
   }
@@ -516,6 +539,7 @@ export class ColumnHeader {
     this.sortButton.removeEventListener('click', this.handleSortClick);
     this.pinButton.removeEventListener('click', this.handlePinClick);
     this.hideButton.removeEventListener('click', this.handleHideClick);
+    this.filterButton.removeEventListener('click', this.handleFilterClick);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

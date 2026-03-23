@@ -41,6 +41,7 @@ export class ColumnHeader {
   private sortButton: HTMLElement;
   private sortBadge: HTMLElement;
   private pinButton: HTMLElement;
+  private dragHandle: HTMLElement;
   private statsEl: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
@@ -58,6 +59,7 @@ export class ColumnHeader {
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
     this.pinButton = this.element.querySelector(`.${this.classPrefix}-col-pin-btn`)!;
+    this.dragHandle = this.element.querySelector(`.${this.classPrefix}-col-drag-handle`)!;
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
 
     // Create resizer for column width adjustment
@@ -341,6 +343,13 @@ export class ColumnHeader {
       'aria-label',
       isPinned ? `Unpin ${this.column.name}` : `Pin ${this.column.name}`
     );
+
+    // Disable drag-to-reorder for pinned columns
+    this.dragHandle.classList.toggle(
+      `${this.classPrefix}-col-drag-handle--disabled`,
+      isPinned
+    );
+    this.dragHandle.setAttribute('aria-disabled', String(isPinned));
   }
 
   /**

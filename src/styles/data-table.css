@@ -433,6 +433,11 @@
   fill: var(--dt-text-secondary);
 }
 
+.dt-col-drag-handle--disabled {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Dark mode adjustments for drag handle */
 @media (prefers-color-scheme: dark) {
   .dt-col-drag-handle:hover {

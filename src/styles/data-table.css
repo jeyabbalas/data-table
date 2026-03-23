@@ -341,13 +341,17 @@
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-tertiary);
   margin-top: 0.25rem;
-  height: 5.2em; /* fixed 4 lines × 1.3 line-height — one extra row */
+  height: 3.9em; /* 3 lines × 1.3 line-height — 2 default lines + 1 buffer for hover stats */
   line-height: 1.3;
   overflow-y: auto;
 }
 
 .dt-col-stats .stats-label {
   font-weight: 600;
+}
+
+.dt-col-stats .dt-stats-line2 {
+  opacity: 0.8;
 }
 
 .dt-col-viz {

@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { TimeColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchTimeHistogramData,
   secondsToTimeString,
@@ -178,6 +179,9 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         this.initialData = this.data;
       }
 
+      // Emit column stats for default stats display
+      this.emitDefaultStats();
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence) return;
@@ -186,6 +190,25 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       this.backgroundData = null;
       this.render();
     }
+  }
+
+  /**
+   * Emit computed column stats via onDefaultStatsChange callback.
+   */
+  private emitDefaultStats(): void {
+    if (!this.data || !this.options.onDefaultStatsChange) return;
+
+    const bgTotal = this.backgroundData?.total ?? null;
+    const stats: TimeColumnStats = {
+      kind: 'time',
+      totalRows: bgTotal ?? this.data.total,
+      nonNullCount: this.data.total - this.data.nullCount,
+      nullCount: this.data.nullCount,
+      filteredTotalRows: bgTotal !== null ? this.data.total : null,
+      minSeconds: this.data.minSeconds,
+      maxSeconds: this.data.maxSeconds,
+    };
+    this.options.onDefaultStatsChange(stats);
   }
 
   // =========================================

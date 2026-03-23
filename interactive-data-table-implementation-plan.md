@@ -1308,213 +1308,167 @@ private updateFilterIndicator(): void {
 
 ---
 
-## Phase 6: Advanced Table Features
+## Phase 6: Column Stats Panel
 
-**Goal:** Add search, context menus, and statistics.
+**Goal:** Replace the simple "N rows" stats line in column headers with a rich two-line stats panel that answers three questions at a glance: How much data is there? What does it look like? Is there anything wrong with it?
 
-### Task 6.1: Implement Global Search
+**Architecture:** Stats flow through visualization callbacks, not independent queries. Each visualization already computes raw stats (min, max, count, nulls, etc.) during `fetchData()`. A new `onDefaultStatsChange` callback emits structured stats upward. This avoids duplicate queries and keeps stats synchronized with visualizations.
 
-Create `src/search/GlobalSearch.ts`:
+**Design:**
 
-```typescript
-export class GlobalSearch {
-  private searchInput: HTMLInputElement;
-  private debounceTimer: number | null = null;
-  
-  constructor(
-    private container: HTMLElement,
-    private state: TableState,
-    private bridge: WorkerBridge
-  ) {}
+Line 1 (universal — count + data quality):
+- No filter, no nulls: `1,234 rows`
+- No filter, has nulls: `1,234 rows · 5 null`
+- Filtered, no nulls: `892 / 1,234 rows`
+- Filtered, has nulls: `892 / 1,234 rows · 3 null`
+- All null: `1,234 rows · all null`
 
-  render(): HTMLElement;
-  
-  private async performSearch(query: string): Promise<SearchResult[]>;
-  private highlightMatches(results: SearchResult[]): void;
-}
-```
+Line 2 (type-specific — distribution summary):
+- integer/float/decimal: `min 0 · med 42 · max 1.2K`
+- string: `12 unique` or `all unique`
+- boolean: `67% true`
+- uuid: `1,234 unique (100%)` or `all unique`
+- date/timestamp: `2020-01-01 – 2024-12-31`
+- time: `08:00 – 23:45`
+- interval: `min 2h · med 8h · max 48h`
 
-**Verification:**
-- Search box renders
-- Typing triggers search (debounced)
-- Results show match count
+All stats reflect filtered data when filters are active. Existing hover behavior (temporarily replacing stats with bin/segment info) stays unchanged.
 
-### Task 6.2: Implement Search Result Highlighting
+### Task 6.1: Define Column Stats Type System
 
-Update table rendering:
+Create `src/statistics/ColumnStatsTypes.ts`:
 
 ```typescript
-// In TableBody
-private renderCell(value: unknown, searchMatches: Match[]): HTMLElement {
-  if (searchMatches.length > 0) {
-    return this.renderHighlightedCell(value, searchMatches);
-  }
-  return this.renderNormalCell(value);
-}
-```
-
-**Verification:**
-- Matching cells highlighted
-- Matching text portion emphasized
-
-### Task 6.3: Implement Context Menu System
-
-Create `src/ui/ContextMenu.ts`:
-
-```typescript
-export interface MenuItem {
-  label: string;
-  icon?: string;
-  action: () => void;
-  disabled?: boolean;
-  divider?: boolean;
-}
-
-export class ContextMenu {
-  private element: HTMLElement | null = null;
-
-  show(x: number, y: number, items: MenuItem[]): void;
-  hide(): void;
-}
-```
-
-**Verification:**
-- Menu appears at click position
-- Items render correctly
-- Click outside closes menu
-
-### Task 6.4: Implement Column Header Context Menu
-
-Create `src/table/ColumnContextMenu.ts`:
-
-```typescript
-export function getColumnContextMenuItems(
-  column: ColumnSchema,
-  state: TableState,
-  actions: StateActions
-): MenuItem[] {
-  return [
-    { label: 'Sort Ascending', action: () => actions.setSort([{ column: column.name, direction: 'asc' }]) },
-    { label: 'Sort Descending', action: () => actions.setSort([{ column: column.name, direction: 'desc' }]) },
-    { label: 'Clear Sort', action: () => actions.clearSort() },
-    { divider: true },
-    { label: 'Hide Column', action: () => actions.hideColumn(column.name) },
-    { label: state.pinnedColumns.get().includes(column.name) ? 'Unpin' : 'Pin', action: () => actions.togglePin(column.name) },
-    { divider: true },
-    { label: 'Filter to Non-Null', action: () => actions.addFilter({ type: 'not-null', column: column.name }) },
-    { label: 'Show Statistics', action: () => showStatisticsModal(column) },
-  ];
-}
-```
-
-**Verification:**
-- Right-click on header shows menu
-- All actions work
-
-### Task 6.5: Implement Cell Context Menu
-
-Create `src/table/CellContextMenu.ts`:
-
-```typescript
-export function getCellContextMenuItems(
-  row: number,
-  column: string,
-  value: unknown,
-  actions: StateActions
-): MenuItem[] {
-  return [
-    { label: 'Copy Value', action: () => navigator.clipboard.writeText(String(value)) },
-    { label: 'Filter to This Value', action: () => actions.addFilter({ type: 'point', column, value }) },
-    { label: 'Exclude This Value', action: () => actions.addFilter({ type: 'exclude', column, value }) },
-    { divider: true },
-    { label: 'Copy Row', action: () => copyRowToClipboard(row) },
-  ];
-}
-```
-
-**Verification:**
-- Right-click on cell shows menu
-- Copy works
-- Filter actions work
-
-### Task 6.6: Implement Statistics Panel
-
-Create `src/statistics/StatisticsPanel.ts`:
-
-```typescript
-export interface NumericStats {
-  count: number;
+export interface BaseColumnStats {
+  totalRows: number;
+  nonNullCount: number;
   nullCount: number;
-  min: number;
-  max: number;
-  mean: number;
-  median: number;
-  stdDev: number;
-  q1: number;
-  q3: number;
-  distinct: number;
+  filteredTotalRows: number | null; // null = no filter active
 }
 
-export async function fetchNumericStats(
-  tableName: string,
-  column: string,
-  bridge: WorkerBridge
-): Promise<NumericStats>;
-
-export class StatisticsPanel {
-  constructor(private column: ColumnSchema, private bridge: WorkerBridge) {}
-  
-  async render(): Promise<HTMLElement>;
+export interface NumericColumnStats extends BaseColumnStats {
+  kind: 'numeric';
+  min: number | null;
+  max: number | null;
+  median: number | null;
+  distinctCount: number;
 }
+
+export interface CategoricalColumnStats extends BaseColumnStats {
+  kind: 'categorical';
+  distinctCount: number;
+  trueCount?: number; // boolean only
+}
+
+export interface TemporalColumnStats extends BaseColumnStats {
+  kind: 'temporal';
+  min: string | null;
+  max: string | null;
+}
+
+export interface TimeColumnStats extends BaseColumnStats {
+  kind: 'time';
+  minSeconds: number | null;
+  maxSeconds: number | null;
+}
+
+export interface IntervalColumnStats extends BaseColumnStats {
+  kind: 'interval';
+  minDisplay: string | null;
+  maxDisplay: string | null;
+  medianDisplay: string | null;
+}
+
+export type ColumnStatsData =
+  | NumericColumnStats
+  | CategoricalColumnStats
+  | TemporalColumnStats
+  | TimeColumnStats
+  | IntervalColumnStats;
 ```
 
-**Verification:**
-- Stats calculated correctly
-- Panel displays all values
-- Works for numeric, categorical, temporal
+Also create `src/statistics/index.ts` re-exporting all types.
 
-### Task 6.7: Implement Stats Display in Header
+**Verification:** TypeScript compiles. Each interface maps to a Line 2 format.
 
-Update `ColumnHeader.ts`:
+### Task 6.2: Implement Stats Formatters
 
-```typescript
-private statsLine: HTMLElement;
+Create `src/statistics/StatsFormatters.ts` with:
 
-private updateStats(context?: 'default' | 'hover' | 'selection'): void {
-  // Default: "1,234 rows"
-  // Hover: "[45..67]: 234 rows (18.9%)"
-  // Selection: "Selected: 456 rows (37.0%)"
-}
-```
+`formatCompact(value: number): string` — compact number formatting:
+- Integers < 10,000: locale-formatted (`1,234`)
+- 10K–999K: `12.3K`
+- 1M+: `1.23M`
+- Floats: 2–3 significant digits
 
-**Verification:**
-- Stats line updates on hover
-- Stats line updates on selection
-- Formatting correct
+`formatDefaultStats(stats: ColumnStatsData, dataType: DataType): string` — returns full two-line HTML:
+- Line 1: universal count + null info
+- Line 2: type-specific distribution summary (switches on `stats.kind` and `dataType`)
+- Returns `<span class="dt-stats-line1">...</span><br><span class="dt-stats-line2">...</span>`
 
-### Task 6.8: Implement Column Visibility Panel
+Edge cases: all null → no line 2. Single value → `all values: 42`. 0 rows → no line 2. 1 row → `1 row` (singular).
 
-Create `src/table/ColumnVisibilityPanel.ts`:
+Write tests in `tests/statistics/StatsFormatters.test.ts`.
 
-```typescript
-export class ColumnVisibilityPanel {
-  constructor(
-    private state: TableState,
-    private actions: StateActions
-  ) {}
+**Verification:** All unit tests pass covering every type variant and edge case.
 
-  render(): HTMLElement {
-    // List all columns with checkboxes
-    // Drag to reorder
-    // "Reset" button
-  }
-}
-```
+### Task 6.3: Add Median to Numeric Stats Query
 
-**Verification:**
-- Can hide/show columns
-- Can reorder columns
-- Reset restores defaults
+Update `src/visualizations/histogram/HistogramData.ts`:
+1. Add `median: number | null` to `ColumnStats` and `StatsResult` interfaces
+2. Add `APPROX_QUANTILE("${column}", 0.5) as median` to the SELECT in `fetchColumnStats()`
+3. Add `median` to `HistogramData` interface
+4. Pass `median` through in `fetchHistogramData()` and `Histogram.fetchAlignedForeground()`
+
+Zero additional queries — one extra column in the existing SELECT that already computes Q1/Q3.
+
+**Verification:** Existing histogram tests pass. `fetchColumnStats` returns median.
+
+### Task 6.4: Add `onDefaultStatsChange` Callback and Emit Stats
+
+Update `src/visualizations/BaseVisualization.ts`:
+- Add `onDefaultStatsChange?: (stats: ColumnStatsData) => void` to `VisualizationOptions`
+
+Update each visualization to emit typed stats from `fetchData()`:
+- `Histogram.ts` → `NumericColumnStats` (min, max, median, distinctCount)
+- `DateHistogram.ts` → `TemporalColumnStats` (min, max as ISO strings)
+- `TimeHistogram.ts` → `TimeColumnStats` (minSeconds, maxSeconds)
+- `ValueCounts.ts` → `CategoricalColumnStats` (distinctCount, trueCount for booleans)
+
+Stats emit after data is set, before `render()`. Stats re-emit on filter updates via `updateFilters()` → `fetchData()`.
+
+**Verification:** Each visualization calls `onDefaultStatsChange` on initial load and after filter updates.
+
+### Task 6.5: Wire Stats into Demo
+
+Update `demo/main.ts`:
+1. Store `currentDefaultStats` HTML per column
+2. Add `onDefaultStatsChange` callback that formats stats via `formatDefaultStats()` and updates the stats element
+3. Update `onStatsChange` to track hover state, restoring `currentDefaultStats` on mouse leave
+4. Keep `getDefaultStats()` as fallback before first visualization data fetch
+
+**Verification:** Two-line stats appear in each column header. Filter → stats update. Hover → bin info. Mouse leave → rich stats restore.
+
+### Task 6.6: Standalone Stats for Interval Columns
+
+Create `src/statistics/StatsComputer.ts` with `fetchIntervalStats()` for columns without visualizations.
+
+Uses DuckDB `MIN`, `MAX`, `APPROX_QUANTILE` on INTERVAL type, cast to VARCHAR for display. Wire into demo for columns where `!VisualizationFactory.isApplicable(column)`.
+
+**Verification:** Interval columns show stats. Stats update on filter.
+
+### Task 6.7: CSS and Polish
+
+Update `src/styles/data-table.css`:
+- Adjust stats element height from `5.2em` to `3.9em` (2 lines default + 1 line buffer for hover)
+- Add `.dt-stats-line1`, `.dt-stats-line2` classes (line 2 in a more muted color)
+
+Polish formatters:
+- HTML-escape values containing `<`, `&`, `"`
+- Handle `NaN`, `Infinity` in numeric formatters
+- `1 row` singular vs `N rows` plural
+
+**Verification:** No layout shift on hover transitions. Visual review across all column types.
 
 ---
 

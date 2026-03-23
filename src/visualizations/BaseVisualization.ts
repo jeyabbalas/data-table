@@ -17,6 +17,7 @@
 
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
+import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
 
 /**
  * Manages shared window-level event listeners for all BaseVisualization instances.
@@ -82,6 +83,8 @@ export interface VisualizationOptions {
   onFilterChange?: (filter: Filter | null) => void;
   /** Callback to update stats line on hover (null restores default) */
   onStatsChange?: (stats: string | null) => void;
+  /** Callback providing computed column stats for default display (not hover) */
+  onDefaultStatsChange?: (stats: ColumnStatsData) => void;
   /** Maximum number of histogram bins (default: 15) */
   maxBins?: number;
   /** Callback when brush is committed (column name passed) */

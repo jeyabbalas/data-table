@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { NumericColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchHistogramData,
   fetchColumnStats,
@@ -149,6 +150,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         total: fgStats.count + fgStats.nullCount,
         isSingleValue: initial.isSingleValue,
         isDiscrete: true,
+        median: fgStats.median,
+        distinctCount: fgStats.distinctCount,
       };
     } else {
       const [fgBins, fgStats] = await Promise.all([
@@ -165,6 +168,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         total: fgStats.count + fgStats.nullCount,
         isSingleValue: initial.isSingleValue,
         isDiscrete: false,
+        median: fgStats.median,
+        distinctCount: fgStats.distinctCount,
       };
     }
   }
@@ -212,6 +217,9 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         this.initialData = this.data;
       }
 
+      // Emit column stats for default stats display
+      this.emitDefaultStats();
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence) return; // Stale error, discard
@@ -220,6 +228,28 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       this.backgroundData = null;
       this.render();
     }
+  }
+
+  /**
+   * Emit computed column stats via onDefaultStatsChange callback.
+   * Uses backgroundData (unfiltered) for totalRows when available.
+   */
+  private emitDefaultStats(): void {
+    if (!this.data || !this.options.onDefaultStatsChange) return;
+
+    const bgTotal = this.backgroundData?.total ?? null;
+    const stats: NumericColumnStats = {
+      kind: 'numeric',
+      totalRows: bgTotal ?? this.data.total,
+      nonNullCount: this.data.total - this.data.nullCount,
+      nullCount: this.data.nullCount,
+      filteredTotalRows: bgTotal !== null ? this.data.total : null,
+      min: isNaN(this.data.min) ? null : this.data.min,
+      max: isNaN(this.data.max) ? null : this.data.max,
+      median: this.data.median,
+      distinctCount: this.data.distinctCount,
+    };
+    this.options.onDefaultStatsChange(stats);
   }
 
   // =========================================

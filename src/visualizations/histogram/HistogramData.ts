@@ -51,6 +51,10 @@ export interface HistogramData {
   isSingleValue: boolean;
   /** True when using discrete binning (one bin per unique value, ≤ threshold) */
   isDiscrete: boolean;
+  /** Approximate median of non-null values */
+  median: number | null;
+  /** Count of distinct non-null values */
+  distinctCount: number;
 }
 
 /**
@@ -63,6 +67,7 @@ export interface ColumnStats {
   nullCount: number;
   q1: number | null;
   q3: number | null;
+  median: number | null;
   distinctCount: number;
 }
 
@@ -76,6 +81,7 @@ interface StatsResult {
   null_count: number;
   q1: number | null;
   q3: number | null;
+  median: number | null;
   distinct_count: number;
 }
 
@@ -181,6 +187,7 @@ export async function fetchColumnStats(
       COUNT("${column}") as count,
       COUNT(*) - COUNT("${column}") as null_count,
       APPROX_QUANTILE("${column}", 0.25) as q1,
+      APPROX_QUANTILE("${column}", 0.5) as median,
       APPROX_QUANTILE("${column}", 0.75) as q3,
       COUNT(DISTINCT "${column}") as distinct_count
     FROM "${tableName}"
@@ -197,6 +204,7 @@ export async function fetchColumnStats(
       nullCount: 0,
       q1: null,
       q3: null,
+      median: null,
       distinctCount: 0,
     };
   }
@@ -209,6 +217,7 @@ export async function fetchColumnStats(
     nullCount: Number(row.null_count),
     q1: row.q1,
     q3: row.q3,
+    median: row.median ?? null,
     distinctCount: Number(row.distinct_count),
   };
 }
@@ -394,6 +403,8 @@ export async function fetchHistogramData(
         total: stats.count + stats.nullCount,
         isSingleValue: false,
         isDiscrete: false,
+        median: null,
+        distinctCount: 0,
       };
     }
 
@@ -419,6 +430,8 @@ export async function fetchHistogramData(
         total: stats.count + stats.nullCount,
         isSingleValue: true,
         isDiscrete: true, // Single value is also discrete
+        median: stats.median,
+        distinctCount: stats.distinctCount,
       };
     }
 
@@ -446,6 +459,8 @@ export async function fetchHistogramData(
         total: stats.count + stats.nullCount,
         isSingleValue: false,
         isDiscrete: true,
+        median: stats.median,
+        distinctCount: stats.distinctCount,
       };
     }
 
@@ -468,6 +483,8 @@ export async function fetchHistogramData(
       total: stats.count + stats.nullCount,
       isSingleValue: false,
       isDiscrete: false,
+      median: stats.median,
+      distinctCount: stats.distinctCount,
     };
   } catch (error) {
     throw new Error(

@@ -33,6 +33,9 @@ import {
 import type { ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
 import { InteractionManager } from '../src/visualizations/InteractionManager';
+import { formatDefaultStats } from '../src/statistics/StatsFormatters';
+import { fetchIntervalStats } from '../src/statistics/StatsComputer';
+import type { ColumnStatsData } from '../src/statistics/ColumnStatsTypes';
 
 // Visualization type union for type safety
 type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
@@ -146,15 +149,19 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     const vizContainer = header.getVizContainer();
     const statsEl = header.getStatsElement();
 
-    function getDefaultStats(): string {
+    // Track current default stats (rich two-line version from visualization)
+    let currentDefaultStats: string | null = null;
+    let isShowingHoverStats = false;
+
+    function getFallbackStats(): string {
       const fr = tableState.filteredRows.get();
       const tr = tableState.totalRows.get();
       const af = tableState.filters.get();
       return af.length > 0
-        ? `<span class="stats-label">Filtered:</span> ${fr.toLocaleString()} / ${tr.toLocaleString()}`
-        : `<span class="stats-label">Rows:</span> ${tr.toLocaleString()}`;
+        ? `<span class="dt-stats-line1">${fr.toLocaleString()} / ${tr.toLocaleString()} rows</span>`
+        : `<span class="dt-stats-line1">${tr.toLocaleString()} rows</span>`;
     }
-    statsEl.innerHTML = getDefaultStats();
+    statsEl.innerHTML = getFallbackStats();
 
     // Declare visualization variable
     let visualization: VisualizationType;
@@ -167,11 +174,20 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
       onFilterChange: (filter: import('../src/core/types').Filter | null) => {
         coordinator!.handleFilterChange(column.name, filter);
       },
+      onDefaultStatsChange: (stats: ColumnStatsData) => {
+        const html = formatDefaultStats(stats, column.type);
+        currentDefaultStats = html;
+        if (!isShowingHoverStats) {
+          statsEl.innerHTML = html;
+        }
+      },
       onStatsChange: (stats: string | null) => {
         if (stats) {
+          isShowingHoverStats = true;
           statsEl.innerHTML = stats;
         } else {
-          statsEl.innerHTML = getDefaultStats();
+          isShowingHoverStats = false;
+          statsEl.innerHTML = currentDefaultStats ?? getFallbackStats();
         }
       },
       onBrushCommit: (colName: string) => {
@@ -250,30 +266,63 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     }
   }
 
+  // Fetch stats for columns without visualizations (e.g., interval)
+  for (const header of headers) {
+    const column = header.getColumn();
+    if (VisualizationFactory.isApplicable(column)) continue;
+
+    const statsEl = header.getStatsElement();
+    if (column.type === 'interval') {
+      fetchIntervalStats(
+        tableName,
+        column.name,
+        tableState.filters.get(),
+        bridge
+      ).then((stats) => {
+        statsEl.innerHTML = formatDefaultStats(stats, column.type);
+      });
+    }
+  }
+
   visualizationsAttached = true;
 }
 
 /**
- * Update all column stats lines to show filtered/total row counts
+ * Update stats for columns without visualizations (e.g., interval columns).
+ * Columns with visualizations update stats via onDefaultStatsChange callback.
  */
 function updateColumnStats(): void {
   if (!tableContainer) return;
 
-  const filteredRows = tableState.filteredRows.get();
   const totalRows = tableState.totalRows.get();
   const filters = tableState.filters.get();
   const headers = tableContainer.getColumnHeaders();
+  const currentTableName = tableState.tableName.get();
 
-  const defaultStats = filters.length > 0
-    ? `<span class="stats-label">Filtered:</span> ${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()}`
-    : `<span class="stats-label">Rows:</span> ${totalRows.toLocaleString()}`;
-
-  // Update stats for columns that don't have an active hover/selection showing custom stats
   for (const header of headers) {
+    const column = header.getColumn();
+    // Skip columns with visualizations — they manage their own stats
+    if (VisualizationFactory.isApplicable(column)) continue;
+
     const statsEl = header.getStatsElement();
-    // Only update if showing default stats (not hover/selection stats)
-    const current = statsEl.innerHTML;
-    if (current.includes('stats-label">Rows:') || current.includes('stats-label">Filtered:')) {
+
+    if (column.type === 'interval' && currentTableName) {
+      // Re-fetch full interval stats
+      fetchIntervalStats(
+        currentTableName,
+        column.name,
+        filters,
+        bridge,
+        filters.length > 0 ? totalRows : undefined
+      ).then((stats) => {
+        statsEl.innerHTML = formatDefaultStats(stats, column.type);
+      });
+    } else {
+      // Simple row count fallback for unknown non-visualized types
+      const filteredRows = tableState.filteredRows.get();
+      const defaultStats = filters.length > 0
+        ? `<span class="dt-stats-line1">${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()} rows</span>`
+        : `<span class="dt-stats-line1">${totalRows.toLocaleString()} rows</span>`;
       statsEl.innerHTML = defaultStats;
     }
   }

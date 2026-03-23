@@ -108,6 +108,20 @@ export type { TypeInferenceResult, TypeInferenceOptions } from './data/TypeInfer
 export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './data/PatternDetector';
 export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './data/PatternDetector';
 
+// Statistics
+export type {
+  ColumnStatsData,
+  NumericColumnStats,
+  CategoricalColumnStats,
+  TemporalColumnStats,
+  TimeColumnStats,
+  IntervalColumnStats,
+  BaseColumnStats,
+} from './statistics/ColumnStatsTypes';
+export { statsKindForDataType } from './statistics/ColumnStatsTypes';
+export { formatCompact, formatDefaultStats } from './statistics/StatsFormatters';
+export { fetchIntervalStats } from './statistics/StatsComputer';
+
 // Visualization factory
 export { VisualizationFactory } from './visualizations/VisualizationFactory';
 export type { VisualizationRegistration, VisualizationConstructor } from './visualizations/VisualizationFactory';

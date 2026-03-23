@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { TemporalColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchDateHistogramData,
   fetchDateStats,
@@ -197,6 +198,9 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         this.formatContext = null;
       }
 
+      // Emit column stats for default stats display
+      this.emitDefaultStats();
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence) return;
@@ -206,6 +210,25 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       this.formatContext = null;
       this.render();
     }
+  }
+
+  /**
+   * Emit computed column stats via onDefaultStatsChange callback.
+   */
+  private emitDefaultStats(): void {
+    if (!this.data || !this.options.onDefaultStatsChange) return;
+
+    const bgTotal = this.backgroundData?.total ?? null;
+    const stats: TemporalColumnStats = {
+      kind: 'temporal',
+      totalRows: bgTotal ?? this.data.total,
+      nonNullCount: this.data.total - this.data.nullCount,
+      nullCount: this.data.nullCount,
+      filteredTotalRows: bgTotal !== null ? this.data.total : null,
+      min: this.data.min ? this.data.min.toISOString() : null,
+      max: this.data.max ? this.data.max.toISOString() : null,
+    };
+    this.options.onDefaultStatsChange(stats);
   }
 
   // =========================================

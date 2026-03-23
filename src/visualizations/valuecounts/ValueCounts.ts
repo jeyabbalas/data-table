@@ -15,6 +15,7 @@
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
+import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
@@ -252,7 +253,40 @@ export class ValueCounts extends BaseVisualization {
       this.backgroundData = null;
     }
 
+    // Emit column stats for default stats display
+    this.emitDefaultStats();
+
     this.render();
+  }
+
+  /**
+   * Emit computed column stats via onDefaultStatsChange callback.
+   */
+  private emitDefaultStats(): void {
+    if (!this.data || !this.options.onDefaultStatsChange) return;
+
+    const bgTotal = this.backgroundData?.total ?? null;
+    const nonNullCount = this.data.total - this.data.nullCount;
+
+    // For boolean columns, extract true count from segments
+    let trueCount: number | undefined;
+    if (this.column.type === 'boolean') {
+      const trueSegment = this.data.segments.find(
+        (s) => s.value === 'true'
+      );
+      trueCount = trueSegment?.count ?? 0;
+    }
+
+    const stats: CategoricalColumnStats = {
+      kind: 'categorical',
+      totalRows: bgTotal ?? this.data.total,
+      nonNullCount,
+      nullCount: this.data.nullCount,
+      filteredTotalRows: bgTotal !== null ? this.data.total : null,
+      distinctCount: this.data.distinctCount,
+      trueCount,
+    };
+    this.options.onDefaultStatsChange(stats);
   }
 
   // =========================================

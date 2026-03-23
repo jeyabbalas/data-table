@@ -279,7 +279,10 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
         tableState.filters.get(),
         bridge
       ).then((stats) => {
-        statsEl.innerHTML = formatDefaultStats(stats, column.type);
+        // Guard against stale update if table was replaced while fetching
+        if (statsEl.isConnected) {
+          statsEl.innerHTML = formatDefaultStats(stats, column.type);
+        }
       });
     }
   }
@@ -315,7 +318,9 @@ function updateColumnStats(): void {
         bridge,
         filters.length > 0 ? totalRows : undefined
       ).then((stats) => {
-        statsEl.innerHTML = formatDefaultStats(stats, column.type);
+        if (statsEl.isConnected) {
+          statsEl.innerHTML = formatDefaultStats(stats, column.type);
+        }
       });
     } else {
       // Simple row count fallback for unknown non-visualized types

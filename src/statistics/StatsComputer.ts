@@ -9,7 +9,7 @@
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { IntervalColumnStats } from './ColumnStatsTypes';
-import { filtersToWhereClause } from '../filters/FilterSQL';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 /**
  * SQL query result for interval stats
@@ -38,22 +38,59 @@ export async function fetchIntervalStats(
 ): Promise<IntervalColumnStats> {
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const col = quoteIdentifier(column);
+  const table = quoteIdentifier(tableName);
 
   const sql = `
     SELECT
       COUNT(*) as total,
-      COUNT("${column}") as non_null,
-      COUNT(*) - COUNT("${column}") as null_count,
-      MIN("${column}")::VARCHAR as min_val,
-      MAX("${column}")::VARCHAR as max_val,
-      APPROX_QUANTILE("${column}", 0.5)::VARCHAR as median_val
-    FROM "${tableName}"
+      COUNT(${col}) as non_null,
+      COUNT(*) - COUNT(${col}) as null_count,
+      MIN(${col})::VARCHAR as min_val,
+      MAX(${col})::VARCHAR as max_val,
+      APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val
+    FROM ${table}
     ${whereSQL}
   `;
 
-  const results = await bridge.query<IntervalStatsResult>(sql);
+  try {
+    const results = await bridge.query<IntervalStatsResult>(sql);
 
-  if (results.length === 0) {
+    if (results.length === 0) {
+      return {
+        kind: 'interval',
+        totalRows: unfilteredTotal ?? 0,
+        nonNullCount: 0,
+        nullCount: 0,
+        filteredTotalRows: unfilteredTotal !== undefined ? 0 : null,
+        minDisplay: null,
+        maxDisplay: null,
+        medianDisplay: null,
+      };
+    }
+
+    const row = results[0];
+    const total = Number(row.total);
+    const nonNull = Number(row.non_null);
+    const nullCount = Number(row.null_count);
+
+    return {
+      kind: 'interval',
+      totalRows: unfilteredTotal ?? total,
+      nonNullCount: nonNull,
+      nullCount: nullCount,
+      filteredTotalRows: unfilteredTotal !== undefined ? total : null,
+      minDisplay: row.min_val ?? null,
+      maxDisplay: row.max_val ?? null,
+      medianDisplay: row.median_val ?? null,
+    };
+  } catch (error) {
+    console.error(
+      `[StatsComputer] Failed to fetch interval stats for column "${column}":`,
+      error instanceof Error ? error.message : String(error)
+    );
+
+    // Return safe fallback so the UI doesn't break
     return {
       kind: 'interval',
       totalRows: unfilteredTotal ?? 0,
@@ -65,20 +102,4 @@ export async function fetchIntervalStats(
       medianDisplay: null,
     };
   }
-
-  const row = results[0];
-  const total = Number(row.total);
-  const nonNull = Number(row.non_null);
-  const nullCount = Number(row.null_count);
-
-  return {
-    kind: 'interval',
-    totalRows: unfilteredTotal ?? total,
-    nonNullCount: nonNull,
-    nullCount: nullCount,
-    filteredTotalRows: unfilteredTotal !== undefined ? total : null,
-    minDisplay: row.min_val ?? null,
-    maxDisplay: row.max_val ?? null,
-    medianDisplay: row.median_val ?? null,
-  };
 }

@@ -25,22 +25,35 @@ import { secondsToTimeString } from '../visualizations/histogram/TimeHistogramDa
 export function formatCompact(value: number): string {
   if (!Number.isFinite(value)) {
     if (Number.isNaN(value)) return 'NaN';
-    return value > 0 ? '∞' : '-∞';
+    return value > 0 ? '\u221E' : '-\u221E';
   }
 
   if (value === 0) return '0';
 
   const abs = Math.abs(value);
 
-  // Large numbers: use compact notation
-  if (abs >= 1e9) {
-    return formatWithCompactNotation(value, 'B', 1e9, 2);
-  }
-  if (abs >= 1e6) {
-    return formatWithCompactNotation(value, 'M', 1e6, 2);
-  }
-  if (abs >= 1e4) {
-    return formatWithCompactNotation(value, 'K', 1e3, 1);
+  // Tier definitions: [threshold, suffix, divisor, decimals]
+  // Ordered largest-first so rounding promotion works naturally
+  const tiers: [number, string, number, number][] = [
+    [1e9, 'B', 1e9, 2],
+    [1e6, 'M', 1e6, 2],
+    [1e4, 'K', 1e3, 1],
+  ];
+
+  for (let i = 0; i < tiers.length; i++) {
+    const [threshold, suffix, divisor, decimals] = tiers[i];
+    if (abs >= threshold) {
+      const scaled = value / divisor;
+      const formatted = scaled.toFixed(decimals).replace(/\.?0+$/, '');
+      // If rounding pushed the value to 1000+, promote to next tier
+      // e.g., 999,999 / 1000 = 999.999 → toFixed(1) = "1000.0" → promote to M
+      if (Math.abs(Number(formatted)) >= 1000 && i > 0) {
+        const [, nextSuffix, nextDivisor, nextDecimals] = tiers[i - 1];
+        const nextScaled = value / nextDivisor;
+        return nextScaled.toFixed(nextDecimals).replace(/\.?0+$/, '') + nextSuffix;
+      }
+      return formatted + suffix;
+    }
   }
 
   // Integers below 10K: locale-formatted
@@ -50,21 +63,6 @@ export function formatCompact(value: number): string {
 
   // Floats: use significant digits
   return formatSignificantDigits(value, 3);
-}
-
-/**
- * Format a number using compact suffix notation (K, M, B).
- */
-function formatWithCompactNotation(
-  value: number,
-  suffix: string,
-  divisor: number,
-  decimals: number
-): string {
-  const scaled = value / divisor;
-  // Remove trailing zeros from decimal part
-  const formatted = scaled.toFixed(decimals).replace(/\.?0+$/, '');
-  return formatted + suffix;
 }
 
 /**
@@ -87,7 +85,7 @@ function formatSignificantDigits(value: number, sigDigits: number): string {
 /**
  * Escape a string for safe HTML insertion.
  */
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -233,8 +231,8 @@ function formatDateForStats(isoString: string): string {
   if (dateMatch) {
     return dateMatch[1];
   }
-  // Fallback: return as-is (shouldn't happen)
-  return isoString;
+  // Fallback: escape and return as-is (shouldn't happen with valid DuckDB output)
+  return escapeHtml(isoString);
 }
 
 /**

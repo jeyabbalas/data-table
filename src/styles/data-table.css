@@ -341,9 +341,9 @@
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-tertiary);
   margin-top: 0.25rem;
-  height: 3.9em; /* 3 lines × 1.3 line-height — 2 default lines + 1 buffer for hover stats */
+  height: 4.0em; /* ~3 lines × 1.3 line-height — 2 default lines + buffer for hover stats */
   line-height: 1.3;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .dt-col-stats .stats-label {

@@ -24,21 +24,31 @@ describe('formatCompact', () => {
 
   it('formats integers under 10K with locale separators', () => {
     const result = formatCompact(1234);
-    // Locale-dependent, but should contain separator
-    expect(result).toMatch(/1.?234/);
+    // Locale-dependent: could be "1,234" or "1.234" or "1 234"
+    // Verify the digits are present in the right order
+    expect(result.replace(/\D/g, '')).toBe('1234');
   });
 
   it('formats 10K+ with K suffix', () => {
     expect(formatCompact(10000)).toBe('10K');
     expect(formatCompact(12345)).toBe('12.3K');
     expect(formatCompact(100000)).toBe('100K');
-    expect(formatCompact(999999)).toBe('1000K');
+    expect(formatCompact(999949)).toBe('999.9K');
+  });
+
+  it('promotes K to M when rounding overflows', () => {
+    // 999,950+ / 1000 rounds to 1000.0 → promote to 1M
+    expect(formatCompact(999950)).toBe('1M');
+    expect(formatCompact(999999)).toBe('1M');
   });
 
   it('formats 1M+ with M suffix', () => {
     expect(formatCompact(1000000)).toBe('1M');
     expect(formatCompact(1234567)).toBe('1.23M');
-    expect(formatCompact(999999999)).toBe('1000M');
+  });
+
+  it('promotes M to B when rounding overflows', () => {
+    expect(formatCompact(999999999)).toBe('1B');
   });
 
   it('formats 1B+ with B suffix', () => {
@@ -298,6 +308,29 @@ describe('formatDefaultStats - Categorical Line 2', () => {
       'boolean'
     );
     expect(result).toContain('100% true');
+  });
+
+  it('rounds boolean percentage correctly at boundary', () => {
+    // 999/1000 = 99.9% → rounds to 100% (Math.round behavior)
+    const result = formatDefaultStats(
+      makeCategorical({ trueCount: 999, nonNullCount: 1000 }),
+      'boolean'
+    );
+    expect(result).toContain('100% true');
+
+    // 1/3 = 33.33% → rounds to 33%
+    const result2 = formatDefaultStats(
+      makeCategorical({ trueCount: 1, nonNullCount: 3 }),
+      'boolean'
+    );
+    expect(result2).toContain('33% true');
+
+    // 2/3 = 66.67% → rounds to 67%
+    const result3 = formatDefaultStats(
+      makeCategorical({ trueCount: 2, nonNullCount: 3 }),
+      'boolean'
+    );
+    expect(result3).toContain('67% true');
   });
 
   it('shows unique count with percentage for uuid', () => {

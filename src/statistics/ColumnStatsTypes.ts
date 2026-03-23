@@ -119,5 +119,9 @@ export function statsKindForDataType(
       return 'time';
     case 'interval':
       return 'interval';
+    default: {
+      const _exhaustive: never = dataType;
+      throw new Error(`Unknown DataType: ${_exhaustive}`);
+    }
   }
 }

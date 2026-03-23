@@ -92,6 +92,7 @@
    =========================================== */
 
 .dt-root {
+  position: relative; /* Containing block for pinned demarcation overlay */
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -436,6 +437,129 @@
 @media (prefers-color-scheme: dark) {
   .dt-col-drag-handle:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* ===========================================
+   Column Action Panel
+   =========================================== */
+
+.dt-col-action-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.25rem 0;
+  margin-top: 0.125rem;
+}
+
+.dt-col-action-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  color: var(--dt-arrow-default);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-col-action-btn:hover {
+  color: var(--dt-arrow-hover);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.dt-col-action-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-col-action-btn--active {
+  color: var(--dt-primary);
+}
+
+.dt-col-action-btn--active:hover {
+  color: var(--dt-primary-hover);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.dt-col-action-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Dark mode adjustments for action buttons */
+@media (prefers-color-scheme: dark) {
+  .dt-col-action-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .dt-col-action-btn--active:hover {
+    background: rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* ===========================================
+   Column Divider
+   =========================================== */
+
+.dt-col-divider {
+  height: 1px;
+  background: var(--dt-border);
+  margin: 0.25rem 0;
+  opacity: 0.6;
+}
+
+/* ===========================================
+   Pinned Columns (Freeze Panes)
+   =========================================== */
+
+.dt-col-header--pinned {
+  background: var(--dt-bg-secondary);
+}
+
+.dt-col-header--pinned:hover {
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-cell--pinned {
+  background: var(--dt-bg);
+}
+
+.dt-row:hover .dt-cell--pinned,
+.dt-row--hover .dt-cell--pinned {
+  background: var(--dt-bg-secondary);
+}
+
+.dt-row--selected .dt-cell--pinned {
+  background: var(--dt-primary-light);
+}
+
+.dt-row--selected:hover .dt-cell--pinned,
+.dt-row--selected.dt-row--hover .dt-cell--pinned {
+  background: var(--dt-primary-lighter);
+}
+
+/* Continuous vertical demarcation line for pinned column boundary */
+.dt-pinned-demarcation {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(37, 99, 235, 0.2);
+  z-index: 20;
+  pointer-events: none;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .dt-pinned-demarcation {
+    background: rgba(59, 130, 246, 0.3);
   }
 }
 

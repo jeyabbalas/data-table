@@ -40,6 +40,7 @@ export class ColumnHeader {
   private element: HTMLElement;
   private sortButton: HTMLElement;
   private sortBadge: HTMLElement;
+  private pinButton: HTMLElement;
   private statsEl: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
@@ -56,6 +57,7 @@ export class ColumnHeader {
     this.element = this.createElement();
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
+    this.pinButton = this.element.querySelector(`.${this.classPrefix}-col-pin-btn`)!;
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
 
     // Create resizer for column width adjustment
@@ -137,6 +139,59 @@ export class ColumnHeader {
 
     el.appendChild(nameRow);
 
+    // Action panel (pin, hide, filter buttons)
+    const actionPanel = document.createElement('div');
+    actionPanel.className = `${this.classPrefix}-col-action-panel`;
+
+    // Pin button (thumbtack icon)
+    const pinBtn = document.createElement('button');
+    pinBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-pin-btn`;
+    pinBtn.setAttribute('type', 'button');
+    pinBtn.setAttribute('aria-label', `Pin ${this.column.name}`);
+    pinBtn.setAttribute('title', 'Pin column');
+    pinBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="4.5" r="2.5" />
+        <rect x="7.25" y="6.5" width="1.5" height="7" rx="0.75" />
+      </svg>
+    `;
+
+    // Hide button (eye-slash icon — placeholder, no handler yet)
+    const hideBtn = document.createElement('button');
+    hideBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-hide-btn`;
+    hideBtn.setAttribute('type', 'button');
+    hideBtn.setAttribute('aria-label', `Hide ${this.column.name}`);
+    hideBtn.setAttribute('title', 'Hide column');
+    hideBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path fill-rule="evenodd" d="M8 3.5C4.5 3.5 2 8 2 8s2.5 4.5 6 4.5S14 8 14 8s-2.5-4.5-6-4.5zM8 4.5C5.2 4.5 3.2 7.2 2.9 8c.3.8 2.3 3.5 5.1 3.5s4.8-2.7 5.1-3.5c-.3-.8-2.3-3.5-5.1-3.5z" />
+        <circle cx="8" cy="8" r="2" />
+        <rect x="7.25" y="1" width="1.5" height="14" rx="0.75" transform="rotate(-45 8 8)" />
+      </svg>
+    `;
+
+    // Filter button (funnel icon — placeholder, no handler yet)
+    const filterBtn = document.createElement('button');
+    filterBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-filter-btn`;
+    filterBtn.setAttribute('type', 'button');
+    filterBtn.setAttribute('aria-label', `Filter ${this.column.name}`);
+    filterBtn.setAttribute('title', 'Filter column');
+    filterBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2 3h12L9.5 8.5v4L6.5 14V8.5L2 3z" />
+      </svg>
+    `;
+
+    actionPanel.appendChild(pinBtn);
+    actionPanel.appendChild(hideBtn);
+    actionPanel.appendChild(filterBtn);
+    el.appendChild(actionPanel);
+
+    // Divider — thin elegant horizontal bar separating controls from data display
+    const divider = document.createElement('div');
+    divider.className = `${this.classPrefix}-col-divider`;
+    el.appendChild(divider);
+
     // Type label
     const typeEl = document.createElement('div');
     typeEl.className = `${this.classPrefix}-col-type`;
@@ -168,6 +223,9 @@ export class ColumnHeader {
     // Only attach click to sort button, NOT the whole header
     // This prevents resize release from triggering sort
     this.sortButton.addEventListener('click', this.handleSortClick);
+
+    // Pin button
+    this.pinButton.addEventListener('click', this.handlePinClick);
   }
 
   /**
@@ -186,6 +244,15 @@ export class ColumnHeader {
       // Regular click: single column sort
       this.actions.toggleSort(this.column.name);
     }
+  };
+
+  /**
+   * Handle pin button click
+   */
+  private handlePinClick = (event: MouseEvent): void => {
+    if (this.destroyed) return;
+    event.stopPropagation();
+    this.actions.toggleColumnPin(this.column.name);
   };
 
   // =========================================
@@ -212,6 +279,14 @@ export class ColumnHeader {
     });
     this.unsubscribes.push(unsubRows);
 
+    // Subscribe to pinned columns for pin button state
+    const unsubPin = this.state.pinnedColumns.subscribe(() => {
+      if (!this.destroyed) {
+        this.updatePinState();
+      }
+    });
+    this.unsubscribes.push(unsubPin);
+
     // Subscribe to filter changes for filter indicator
     const unsubFilter = this.state.filtersByColumn.subscribe(() => {
       if (!this.destroyed) {
@@ -225,6 +300,9 @@ export class ColumnHeader {
 
     // Set initial filter indicator state
     this.updateFilterIndicator();
+
+    // Set initial pin state
+    this.updatePinState();
   }
 
   /**
@@ -246,6 +324,22 @@ export class ColumnHeader {
     this.element.classList.toggle(
       `${this.classPrefix}-col-header--filtered`,
       hasFilter
+    );
+  }
+
+  /**
+   * Update pin button active state based on pinned columns
+   */
+  private updatePinState(): void {
+    const isPinned = this.state.pinnedColumns.get().includes(this.column.name);
+    this.pinButton.classList.toggle(
+      `${this.classPrefix}-col-action-btn--active`,
+      isPinned
+    );
+    this.pinButton.setAttribute('title', isPinned ? 'Unpin column' : 'Pin column');
+    this.pinButton.setAttribute(
+      'aria-label',
+      isPinned ? `Unpin ${this.column.name}` : `Pin ${this.column.name}`
     );
   }
 
@@ -361,6 +455,7 @@ export class ColumnHeader {
 
     // Remove event listeners
     this.sortButton.removeEventListener('click', this.handleSortClick);
+    this.pinButton.removeEventListener('click', this.handlePinClick);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

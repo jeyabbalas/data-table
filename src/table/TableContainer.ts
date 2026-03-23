@@ -67,6 +67,12 @@ export class TableContainer {
   private columnReorder: ColumnReorder | null = null;
   private filterBar: FilterBar | null = null;
 
+  // FLIP animation: saved column positions before pin/unpin reorder
+  private savedColumnPositions: Map<string, DOMRect> | null = null;
+
+  // Continuous demarcation line for pinned column boundary
+  private pinnedDemarcation: HTMLElement | null = null;
+
   // Scroll synchronization handlers
   private boundBodyScrollHandler: (() => void) | null = null;
   private boundHeaderScrollHandler: (() => void) | null = null;
@@ -345,6 +351,26 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubSort);
+
+    // Subscribe to pinned columns for sticky positioning updates
+    // This fires before visibleColumns (which triggers render()),
+    // so we capture header positions here for FLIP animation.
+    const unsubPinned = this.state.pinnedColumns.subscribe(() => {
+      if (!this.destroyed) {
+        // Capture current header positions for FLIP animation
+        if (this.columnHeaders.length > 0) {
+          this.savedColumnPositions = new Map();
+          for (const header of this.columnHeaders) {
+            this.savedColumnPositions.set(
+              header.getColumn().name,
+              header.getElement().getBoundingClientRect()
+            );
+          }
+        }
+        this.updatePinnedColumnStyles();
+      }
+    });
+    this.unsubscribes.push(unsubPinned);
   }
 
   // =========================================
@@ -376,6 +402,89 @@ export class TableContainer {
       const col = header.getColumn();
       const width = columnWidths.get(col.name) ?? 150;
       header.getElement().style.width = `${width}px`;
+    }
+  }
+
+  /**
+   * Update sticky positioning for pinned columns (freeze pane effect)
+   *
+   * Applies position:sticky and computed left offsets to both header and body
+   * cells for pinned columns. Called after render and when pinned/width state changes.
+   */
+  private updatePinnedColumnStyles(): void {
+    const pinnedColumns = this.state.pinnedColumns.get();
+    const visibleColumns = this.state.visibleColumns.get();
+    const columnWidths = this.state.columnWidths.get();
+    const prefix = this.resolvedOptions.classPrefix;
+
+    // Compute cumulative left offsets for pinned columns
+    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
+    let cumulativeLeft = 0;
+
+    for (let i = 0; i < pinnedColumns.length; i++) {
+      const colName = pinnedColumns[i];
+      pinnedOffsets.set(colName, {
+        left: cumulativeLeft,
+        zIndex: 10 + pinnedColumns.length - i,
+      });
+      const width = columnWidths.get(colName) ?? 150;
+      cumulativeLeft += width;
+    }
+
+    // Apply to header elements
+    for (const header of this.columnHeaders) {
+      const colName = header.getColumn().name;
+      const el = header.getElement();
+      const offset = pinnedOffsets.get(colName);
+
+      if (offset) {
+        el.style.position = 'sticky';
+        el.style.left = `${offset.left}px`;
+        el.style.zIndex = String(offset.zIndex);
+        el.classList.add(`${prefix}-col-header--pinned`);
+      } else {
+        el.style.position = '';
+        el.style.left = '';
+        el.style.zIndex = '';
+        el.classList.remove(`${prefix}-col-header--pinned`);
+      }
+    }
+
+    // Apply to body cells
+    const bodyContainer = this.bodyContainer;
+    const rows = bodyContainer.querySelectorAll(`.${prefix}-row`);
+    for (const row of rows) {
+      const cells = row.children;
+      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
+        const colName = visibleColumns[i];
+        const cell = cells[i] as HTMLElement;
+        const offset = pinnedOffsets.get(colName);
+
+        if (offset) {
+          cell.style.position = 'sticky';
+          cell.style.left = `${offset.left}px`;
+          cell.style.zIndex = String(offset.zIndex);
+          cell.classList.add(`${prefix}-cell--pinned`);
+        } else {
+          cell.style.position = '';
+          cell.style.left = '';
+          cell.style.zIndex = '';
+          cell.classList.remove(`${prefix}-cell--pinned`);
+        }
+      }
+    }
+
+    // Manage the continuous demarcation line overlay
+    if (pinnedColumns.length > 0) {
+      if (!this.pinnedDemarcation) {
+        this.pinnedDemarcation = document.createElement('div');
+        this.pinnedDemarcation.className = `${prefix}-pinned-demarcation`;
+        this.element.appendChild(this.pinnedDemarcation);
+      }
+      this.pinnedDemarcation.style.left = `${cumulativeLeft}px`;
+      this.pinnedDemarcation.style.display = '';
+    } else if (this.pinnedDemarcation) {
+      this.pinnedDemarcation.style.display = 'none';
     }
   }
 
@@ -501,6 +610,42 @@ export class TableContainer {
       }
     }
 
+    // Apply pinned column styles after headers are created
+    this.updatePinnedColumnStyles();
+
+    // FLIP animation: if we have saved positions from a pin/unpin, animate columns
+    if (this.savedColumnPositions) {
+      const firstPositions = this.savedColumnPositions;
+      this.savedColumnPositions = null;
+
+      requestAnimationFrame(() => {
+        if (this.destroyed) return;
+
+        for (const header of this.columnHeaders) {
+          const col = header.getColumn().name;
+          const first = firstPositions.get(col);
+          if (!first) continue;
+
+          const last = header.getElement().getBoundingClientRect();
+          const deltaX = first.left - last.left;
+          if (Math.abs(deltaX) < 1) continue;
+
+          const el = header.getElement();
+          // Invert: snap to old position
+          el.style.transform = `translateX(${deltaX}px)`;
+          // Play: animate to new position in next frame
+          requestAnimationFrame(() => {
+            el.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            el.style.transform = '';
+            el.addEventListener('transitionend', function handler() {
+              el.style.transition = '';
+              el.removeEventListener('transitionend', handler);
+            });
+          });
+        }
+      });
+    }
+
     // Restore scroll positions after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
       if (!this.destroyed) {
@@ -620,6 +765,12 @@ export class TableContainer {
     if (this.columnReorder) {
       this.columnReorder.destroy();
       this.columnReorder = null;
+    }
+
+    // Remove pinned demarcation overlay
+    if (this.pinnedDemarcation) {
+      this.pinnedDemarcation.remove();
+      this.pinnedDemarcation = null;
     }
 
     // Disconnect resize observer

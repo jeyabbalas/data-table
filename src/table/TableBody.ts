@@ -176,6 +176,14 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubTotalRows);
 
+    // Re-render when pinned columns change (to update sticky styles)
+    const unsubPinned = this.state.pinnedColumns.subscribe(() => {
+      if (!this.destroyed) {
+        this.invalidateCacheAndRefresh();
+      }
+    });
+    this.unsubscribes.push(unsubPinned);
+
     // Update cell widths when column widths change
     const unsubWidths = this.state.columnWidths.subscribe(() => {
       if (!this.destroyed) {
@@ -561,6 +569,20 @@ export class TableBody {
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
 
     const columnWidths = this.state.columnWidths.get();
+    const pinnedColumns = this.state.pinnedColumns.get();
+
+    // Compute pinned offsets
+    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
+    let cumulativeLeft = 0;
+    for (let i = 0; i < pinnedColumns.length; i++) {
+      const pCol = pinnedColumns[i];
+      pinnedOffsets.set(pCol, {
+        left: cumulativeLeft,
+        zIndex: 10 + pinnedColumns.length - i,
+      });
+      cumulativeLeft += (columnWidths.get(pCol) ?? 150);
+    }
+
     const cells = rowEl.children;
     for (let i = 0; i < columns.length && i < cells.length; i++) {
       const colName = columns[i];
@@ -571,6 +593,20 @@ export class TableBody {
       // Apply dynamic width
       const width = columnWidths.get(colName) ?? 150;
       cellEl.style.width = `${width}px`;
+
+      // Apply pinned cell styles
+      const offset = pinnedOffsets.get(colName);
+      if (offset) {
+        cellEl.style.position = 'sticky';
+        cellEl.style.left = `${offset.left}px`;
+        cellEl.style.zIndex = String(offset.zIndex);
+        cellEl.classList.add(`${this.classPrefix}-cell--pinned`);
+      } else {
+        cellEl.style.position = '';
+        cellEl.style.left = '';
+        cellEl.style.zIndex = '';
+        cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
+      }
 
       this.cellRenderer.render(cellEl, value, colSchema);
     }

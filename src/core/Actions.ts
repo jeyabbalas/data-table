@@ -226,13 +226,36 @@ export class StateActions {
 
   /**
    * Toggle column pin status
+   *
+   * When pinning, moves the column to the end of the pinned group (leftmost columns).
+   * When unpinning, moves the column to the first unpinned position.
+   * Also updates columnOrder and visibleColumns to reflect the new position.
    */
   toggleColumnPin(column: string): void {
     const pinned = this.state.pinnedColumns.get();
-    if (pinned.includes(column)) {
-      this.state.pinnedColumns.set(pinned.filter((c) => c !== column));
+    const order = this.state.columnOrder.get();
+    const isPinned = pinned.includes(column);
+
+    if (isPinned) {
+      // Unpinning: remove from pinned, move to first unpinned position
+      const newPinned = pinned.filter((c) => c !== column);
+      this.state.pinnedColumns.set(newPinned);
+
+      // Reorder: place column immediately after the remaining pinned columns
+      const newOrder = order.filter((c) => c !== column);
+      const insertIndex = newPinned.length; // right after the last pinned column
+      newOrder.splice(insertIndex, 0, column);
+      this.setColumnOrder(newOrder);
     } else {
-      this.state.pinnedColumns.set([...pinned, column]);
+      // Pinning: add to pinned, move to end of pinned group
+      const newPinned = [...pinned, column];
+      this.state.pinnedColumns.set(newPinned);
+
+      // Reorder: place column after the previously-pinned columns (at end of pinned group)
+      const newOrder = order.filter((c) => c !== column);
+      const insertIndex = pinned.length; // after existing pinned columns
+      newOrder.splice(insertIndex, 0, column);
+      this.setColumnOrder(newOrder);
     }
   }
 

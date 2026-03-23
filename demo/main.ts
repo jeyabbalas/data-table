@@ -1,16 +1,13 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 5: Filter UI Components
+ * Phase 6: Column Header Actions & Pin Columns
  *
  * This demo uses VisualizationFactory for centralized visualization creation,
  * CrossfilterCoordinator for filter propagation across columns, and FilterBar
- * for displaying active filters as removable chips:
- * - Histogram for numeric columns (integer, float, decimal)
- * - DateHistogram for date/timestamp columns
- * - TimeHistogram for time columns
- * - ValueCounts for categorical columns (string, boolean, uuid)
- * - FilterBar with FilterChips for filter visibility and removal
+ * for displaying active filters as removable chips. Each column header now
+ * includes an action panel with pin, hide, and filter buttons. Pinned columns
+ * freeze in place during horizontal scroll (freeze panes).
  */
 
 import {
@@ -361,6 +358,12 @@ function updateTableInfo(): void {
   info += ` | <strong>${vizCount}</strong> visualizations`;
   info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
 
+  // Show pinned column info if any
+  const pinnedColumns = tableState.pinnedColumns.get();
+  if (pinnedColumns.length > 0) {
+    info += ` | <strong>${pinnedColumns.length}</strong> pinned`;
+  }
+
   // Show sort info if any
   const sortColumns = tableState.sortColumns.get();
   if (sortColumns.length > 0) {
@@ -425,6 +428,13 @@ bridge
 
     // Subscribe to state changes
     tableState.sortColumns.subscribe(() => {
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+      }
+    });
+
+    // Subscribe to pinned columns to update table info bar
+    tableState.pinnedColumns.subscribe(() => {
       if (tableState.tableName.get()) {
         updateTableInfo();
       }

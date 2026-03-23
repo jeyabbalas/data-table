@@ -119,7 +119,7 @@ export type {
   BaseColumnStats,
 } from './statistics/ColumnStatsTypes';
 export { statsKindForDataType } from './statistics/ColumnStatsTypes';
-export { formatCompact, formatDefaultStats } from './statistics/StatsFormatters';
+export { formatStatValue, formatCount, formatDefaultStats } from './statistics/StatsFormatters';
 export { fetchIntervalStats } from './statistics/StatsComputer';
 
 // Visualization factory

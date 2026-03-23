@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCompact, formatDefaultStats } from '../../src/statistics/StatsFormatters';
+import { formatStatValue, formatCount, formatDefaultStats } from '../../src/statistics/StatsFormatters';
 import type {
   NumericColumnStats,
   CategoricalColumnStats,
@@ -9,70 +9,98 @@ import type {
 } from '../../src/statistics/ColumnStatsTypes';
 
 // =========================================
-// formatCompact
+// formatStatValue — follows formatAxisValue rules
 // =========================================
 
-describe('formatCompact', () => {
+describe('formatStatValue', () => {
   it('formats zero', () => {
-    expect(formatCompact(0)).toBe('0');
+    expect(formatStatValue(0)).toBe('0');
   });
 
   it('formats small integers with locale separators', () => {
-    expect(formatCompact(42)).toBe('42');
-    expect(formatCompact(999)).toBe('999');
+    expect(formatStatValue(42)).toBe('42');
+    expect(formatStatValue(999)).toBe('999');
   });
 
-  it('formats integers under 10K with locale separators', () => {
-    const result = formatCompact(1234);
-    // Locale-dependent: could be "1,234" or "1.234" or "1 234"
-    // Verify the digits are present in the right order
+  it('formats mid-range integers with locale separators', () => {
+    const result = formatStatValue(1234);
     expect(result.replace(/\D/g, '')).toBe('1234');
+
+    const result2 = formatStatValue(999999);
+    expect(result2.replace(/\D/g, '')).toBe('999999');
   });
 
-  it('formats 10K+ with K suffix', () => {
-    expect(formatCompact(10000)).toBe('10K');
-    expect(formatCompact(12345)).toBe('12.3K');
-    expect(formatCompact(100000)).toBe('100K');
-    expect(formatCompact(999949)).toBe('999.9K');
+  it('uses scientific notation for |value| >= 1e6', () => {
+    expect(formatStatValue(1000000)).toBe('1.00e+6');
+    expect(formatStatValue(1234567)).toBe('1.23e+6');
+    expect(formatStatValue(1e9)).toBe('1.00e+9');
+    expect(formatStatValue(1e15)).toBe('1.00e+15');
+    expect(formatStatValue(6.02e23)).toBe('6.02e+23');
   });
 
-  it('promotes K to M when rounding overflows', () => {
-    // 999,950+ / 1000 rounds to 1000.0 → promote to 1M
-    expect(formatCompact(999950)).toBe('1M');
-    expect(formatCompact(999999)).toBe('1M');
+  it('uses scientific notation for |value| < 0.01', () => {
+    expect(formatStatValue(0.001)).toBe('1.00e-3');
+    expect(formatStatValue(0.00001)).toBe('1.00e-5');
+    expect(formatStatValue(0.000000001)).toBe('1.00e-9');
+    expect(formatStatValue(1.23e-10)).toBe('1.23e-10');
   });
 
-  it('formats 1M+ with M suffix', () => {
-    expect(formatCompact(1000000)).toBe('1M');
-    expect(formatCompact(1234567)).toBe('1.23M');
-  });
-
-  it('promotes M to B when rounding overflows', () => {
-    expect(formatCompact(999999999)).toBe('1B');
-  });
-
-  it('formats 1B+ with B suffix', () => {
-    expect(formatCompact(1000000000)).toBe('1B');
-    expect(formatCompact(2500000000)).toBe('2.5B');
+  it('formats normal-range floats with up to 2 decimal places', () => {
+    expect(formatStatValue(3.14)).toBe('3.14');
+    expect(formatStatValue(0.1)).toBe('0.1');
+    expect(formatStatValue(0.5)).toBe('0.5');
+    expect(formatStatValue(99.99)).toBe('99.99');
+    expect(formatStatValue(0.01)).toBe('0.01');
   });
 
   it('formats negative numbers', () => {
-    expect(formatCompact(-42)).toBe('-42');
-    expect(formatCompact(-12345)).toBe('-12.3K');
-    expect(formatCompact(-1234567)).toBe('-1.23M');
-  });
-
-  it('formats floats with significant digits', () => {
-    expect(formatCompact(3.14159)).toBe('3.14');
-    expect(formatCompact(0.123)).toBe('0.123');
-    expect(formatCompact(0.1)).toBe('0.1');
-    expect(formatCompact(42.0)).toBe('42');
+    expect(formatStatValue(-42)).toBe('-42');
+    expect(formatStatValue(-1234567)).toBe('-1.23e+6');
+    expect(formatStatValue(-0.001)).toBe('-1.00e-3');
+    expect(formatStatValue(-4.56e-8)).toBe('-4.56e-8');
   });
 
   it('handles NaN and Infinity', () => {
-    expect(formatCompact(NaN)).toBe('NaN');
-    expect(formatCompact(Infinity)).toBe('∞');
-    expect(formatCompact(-Infinity)).toBe('-∞');
+    expect(formatStatValue(NaN)).toBe('NaN');
+    expect(formatStatValue(Infinity)).toBe('\u221E');
+    expect(formatStatValue(-Infinity)).toBe('-\u221E');
+  });
+
+  // Values from numeric-stress-tests.json
+  it('handles extreme_large values from test fixture', () => {
+    expect(formatStatValue(1000000000)).toBe('1.00e+9');       // 1e9
+    expect(formatStatValue(100000000000000)).toBe('1.00e+14'); // 1e14
+    expect(formatStatValue(1000000000000000)).toBe('1.00e+15');// 1e15
+  });
+
+  it('handles tiny_values from test fixture', () => {
+    expect(formatStatValue(0.1)).toBe('0.1');       // normal range
+    expect(formatStatValue(0.05)).toBe('0.05');      // normal range
+    expect(formatStatValue(0.01)).toBe('0.01');      // boundary
+    expect(formatStatValue(0.005)).toBe('5.00e-3');  // scientific
+    expect(formatStatValue(0.00001)).toBe('1.00e-5');
+    expect(formatStatValue(0.0000000001)).toBe('1.00e-10');
+  });
+
+  it('handles scientific_notation values from test fixture', () => {
+    expect(formatStatValue(1.23e10)).toBe('1.23e+10');
+    expect(formatStatValue(-4.56e-8)).toBe('-4.56e-8');
+    expect(formatStatValue(9.87e15)).toBe('9.87e+15');
+    expect(formatStatValue(6.02e23)).toBe('6.02e+23');
+    expect(formatStatValue(1.38e-23)).toBe('1.38e-23');
+  });
+});
+
+// =========================================
+// formatCount
+// =========================================
+
+describe('formatCount', () => {
+  it('formats integers with locale separators', () => {
+    expect(formatCount(0)).toBe('0');
+    expect(formatCount(42)).toBe('42');
+    expect(formatCount(1234).replace(/\D/g, '')).toBe('1234');
+    expect(formatCount(1234567).replace(/\D/g, '')).toBe('1234567');
   });
 });
 
@@ -218,13 +246,14 @@ describe('formatDefaultStats - Numeric Line 2', () => {
     expect(result).toContain('all values: 42');
   });
 
-  it('uses compact notation for large values', () => {
+  it('uses scientific notation for large values', () => {
     const result = formatDefaultStats(
       makeNumeric({ min: 0, max: 1200000, median: 50000 }),
       'float'
     );
-    expect(result).toContain('1.2M');
-    expect(result).toContain('50K');
+    expect(result).toContain('1.20e+6');
+    // 50,000 is < 1e6, so locale-formatted as integer
+    expect(result).toContain('50,000');
   });
 
   it('omits line 2 when min/max are null', () => {

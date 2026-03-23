@@ -180,15 +180,17 @@ export async function fetchColumnStats(
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
+  // CAST to DOUBLE ensures consistent JavaScript number types regardless of
+  // source column type (DECIMAL, FLOAT, HUGEINT from parquet, etc.)
   const sql = `
     SELECT
-      MIN("${column}") as min,
-      MAX("${column}") as max,
+      CAST(MIN("${column}") AS DOUBLE) as min,
+      CAST(MAX("${column}") AS DOUBLE) as max,
       COUNT("${column}") as count,
       COUNT(*) - COUNT("${column}") as null_count,
-      APPROX_QUANTILE("${column}", 0.25) as q1,
-      APPROX_QUANTILE("${column}", 0.5) as median,
-      APPROX_QUANTILE("${column}", 0.75) as q3,
+      CAST(APPROX_QUANTILE("${column}", 0.25) AS DOUBLE) as q1,
+      CAST(APPROX_QUANTILE("${column}", 0.5) AS DOUBLE) as median,
+      CAST(APPROX_QUANTILE("${column}", 0.75) AS DOUBLE) as q3,
       COUNT(DISTINCT "${column}") as distinct_count
     FROM "${tableName}"
     ${whereSQL}

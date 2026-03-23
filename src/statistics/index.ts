@@ -14,6 +14,6 @@ export type {
 
 export { statsKindForDataType } from './ColumnStatsTypes';
 
-export { formatCompact, formatDefaultStats, escapeHtml } from './StatsFormatters';
+export { formatStatValue, formatCount, formatDefaultStats, escapeHtml } from './StatsFormatters';
 
 export { fetchIntervalStats } from './StatsComputer';

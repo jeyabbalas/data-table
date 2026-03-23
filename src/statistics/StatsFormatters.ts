@@ -2,7 +2,7 @@
  * StatsFormatters - Format column stats into two-line HTML for header display
  *
  * Line 1 (universal): count + data quality (e.g., "1,234 rows · 5 null")
- * Line 2 (type-specific): distribution summary (e.g., "min 0 · med 42 · max 1.2K")
+ * Line 2 (type-specific): distribution summary (e.g., "min 0 · med 42 · max 1.23e+6")
  */
 
 import type { DataType } from '../core/types';
@@ -14,15 +14,15 @@ import { secondsToTimeString } from '../visualizations/histogram/TimeHistogramDa
 // =========================================
 
 /**
- * Format a number compactly for display in stats.
+ * Format a data value for display in the stats panel.
  *
- * - Integers < 10,000: locale-formatted with separators (e.g., "1,234")
- * - 10K–999K: compact with one decimal (e.g., "12.3K")
- * - 1M+: compact with two decimals (e.g., "1.23M")
- * - Small floats (|value| < 1): up to 3 significant digits (e.g., "0.123")
- * - Regular floats: up to 3 significant digits, trailing zeros stripped
+ * Uses the same rules as the histogram axis labels (formatAxisValue):
+ * - |value| >= 1e6 → scientific notation (e.g., "1.23e+6")
+ * - |value| < 0.01 (except 0) → scientific notation (e.g., "1.00e-3")
+ * - Integer → locale-formatted with separators (e.g., "1,234")
+ * - Float → locale-formatted, up to 2 decimal places (e.g., "3.14")
  */
-export function formatCompact(value: number): string {
+export function formatStatValue(value: number): string {
   if (!Number.isFinite(value)) {
     if (Number.isNaN(value)) return 'NaN';
     return value > 0 ? '\u221E' : '-\u221E';
@@ -32,50 +32,34 @@ export function formatCompact(value: number): string {
 
   const abs = Math.abs(value);
 
-  // Tier definitions: [threshold, suffix, divisor, decimals]
-  // Ordered largest-first so rounding promotion works naturally
-  const tiers: [number, string, number, number][] = [
-    [1e9, 'B', 1e9, 2],
-    [1e6, 'M', 1e6, 2],
-    [1e4, 'K', 1e3, 1],
-  ];
-
-  for (let i = 0; i < tiers.length; i++) {
-    const [threshold, suffix, divisor, decimals] = tiers[i];
-    if (abs >= threshold) {
-      const scaled = value / divisor;
-      const formatted = scaled.toFixed(decimals).replace(/\.?0+$/, '');
-      // If rounding pushed the value to 1000+, promote to next tier
-      // e.g., 999,999 / 1000 = 999.999 → toFixed(1) = "1000.0" → promote to M
-      if (Math.abs(Number(formatted)) >= 1000 && i > 0) {
-        const [, nextSuffix, nextDivisor, nextDecimals] = tiers[i - 1];
-        const nextScaled = value / nextDivisor;
-        return nextScaled.toFixed(nextDecimals).replace(/\.?0+$/, '') + nextSuffix;
-      }
-      return formatted + suffix;
-    }
+  // Scientific notation for very large numbers
+  if (abs >= 1e6) {
+    return value.toExponential(2);
   }
 
-  // Integers below 10K: locale-formatted
+  // Scientific notation for very small numbers
+  if (abs < 0.01) {
+    return value.toExponential(2);
+  }
+
+  // Integer formatting with thousands separators
   if (Number.isInteger(value)) {
     return value.toLocaleString();
   }
 
-  // Floats: use significant digits
-  return formatSignificantDigits(value, 3);
+  // Decimal formatting: up to 2 decimal places
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 /**
- * Format a float with a maximum number of significant digits,
- * stripping trailing zeros.
+ * Format an integer count for display (rows, nulls, distinct values).
+ * Uses locale formatting with thousands separators.
  */
-function formatSignificantDigits(value: number, sigDigits: number): string {
-  const formatted = value.toPrecision(sigDigits);
-  // Strip trailing zeros after decimal point, and trailing decimal point
-  if (formatted.includes('.')) {
-    return formatted.replace(/0+$/, '').replace(/\.$/, '');
-  }
-  return formatted;
+export function formatCount(count: number): string {
+  return count.toLocaleString();
 }
 
 // =========================================
@@ -117,10 +101,10 @@ function formatLine1(stats: ColumnStatsData): string {
   if (isFiltered) {
     // "1 / 1,234 rows" — plural based on total, since it reads "1 of 1,234 rows"
     const rowWord = totalRows === 1 ? 'row' : 'rows';
-    line = `${formatCompact(filteredTotalRows)} / ${formatCompact(totalRows)} ${rowWord}`;
+    line = `${formatCount(filteredTotalRows)} / ${formatCount(totalRows)} ${rowWord}`;
   } else {
     const rowWord = totalRows === 1 ? 'row' : 'rows';
-    line = `${formatCompact(totalRows)} ${rowWord}`;
+    line = `${formatCount(totalRows)} ${rowWord}`;
   }
 
   // Null annotation
@@ -129,7 +113,7 @@ function formatLine1(stats: ColumnStatsData): string {
     if (nullCount === currentTotal) {
       line += ' \u00B7 all null';
     } else {
-      line += ` \u00B7 ${formatCompact(nullCount)} null`;
+      line += ` \u00B7 ${formatCount(nullCount)} null`;
     }
   }
 
@@ -142,24 +126,25 @@ function formatLine1(stats: ColumnStatsData): string {
 
 /**
  * Format Line 2 for numeric types (integer, float, decimal).
- * "min 0 · med 42 · max 1.2K"
+ * "min 0 · med 42 · max 1.23e+6"
  */
 function formatNumericLine2(
   stats: Extract<ColumnStatsData, { kind: 'numeric' }>
 ): string {
-  if (stats.min === null || stats.max === null) return '';
+  // Loose equality (==) catches both null and undefined as defense-in-depth
+  if (stats.min == null || stats.max == null) return '';
 
   // Single value case
   if (stats.min === stats.max) {
-    return `all values: ${formatCompact(stats.min)}`;
+    return `all values: ${formatStatValue(stats.min)}`;
   }
 
   const parts: string[] = [];
-  parts.push(`min ${formatCompact(stats.min)}`);
+  parts.push(`min ${formatStatValue(stats.min)}`);
   if (stats.median !== null) {
-    parts.push(`med ${formatCompact(stats.median)}`);
+    parts.push(`med ${formatStatValue(stats.median)}`);
   }
-  parts.push(`max ${formatCompact(stats.max)}`);
+  parts.push(`max ${formatStatValue(stats.max)}`);
 
   return parts.join(' \u00B7 ');
 }
@@ -191,13 +176,13 @@ function formatCategoricalLine2(
   if (dataType === 'uuid') {
     if (nonNullCount > 0) {
       const pct = Math.round((distinctCount / nonNullCount) * 100);
-      return `${formatCompact(distinctCount)} unique (${pct}%)`;
+      return `${formatCount(distinctCount)} unique (${pct}%)`;
     }
     return '';
   }
 
   // string
-  return `${formatCompact(distinctCount)} unique`;
+  return `${formatCount(distinctCount)} unique`;
 }
 
 /**
@@ -207,7 +192,8 @@ function formatCategoricalLine2(
 function formatTemporalLine2(
   stats: Extract<ColumnStatsData, { kind: 'temporal' }>
 ): string {
-  if (stats.min === null || stats.max === null) return '';
+  // Loose equality (==) catches both null and undefined as defense-in-depth
+  if (stats.min == null || stats.max == null) return '';
 
   const minDate = formatDateForStats(stats.min);
   const maxDate = formatDateForStats(stats.max);

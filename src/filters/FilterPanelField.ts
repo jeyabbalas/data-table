@@ -4,7 +4,8 @@
  * Renders type-specific filter controls for a single column.
  * Supports numeric, string, boolean, date, timestamp, time, uuid, and interval types.
  * Includes a null toggle (any / is null / is not null) for all types.
- * Filters apply immediately with 300ms debounce on text inputs.
+ * Filters are applied explicitly via an "Apply" button or Enter key.
+ * Boolean checkboxes and null radio apply immediately (single-click toggles).
  */
 
 import type { ColumnSchema } from '../core/types';
@@ -30,7 +31,6 @@ export class FilterPanelField {
   private clearButton: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Flag to prevent re-entrant sync when we apply our own filters
   isSelfUpdate = false;
@@ -85,7 +85,7 @@ export class FilterPanelField {
     clear.textContent = 'Clear';
     clear.addEventListener('click', () => {
       this.clearControls();
-      this.applyFilter();
+      this.removeFilter();
     });
 
     header.appendChild(name);
@@ -97,6 +97,16 @@ export class FilterPanelField {
     const controls = document.createElement('div');
     controls.className = `${this.prefix}-filter-field-controls`;
     el.appendChild(controls);
+
+    // Apply button (for non-boolean types; boolean uses immediate checkboxes)
+    if (this.column.type !== 'boolean') {
+      const applyBtn = document.createElement('button');
+      applyBtn.className = `${this.prefix}-filter-field-apply`;
+      applyBtn.type = 'button';
+      applyBtn.textContent = 'Apply';
+      applyBtn.addEventListener('click', () => this.applyFilter());
+      el.appendChild(applyBtn);
+    }
 
     // Null toggle radio group
     const nullGroup = document.createElement('div');
@@ -161,6 +171,18 @@ export class FilterPanelField {
     }
   }
 
+  /**
+   * Wire Enter key on an input to trigger applyFilter.
+   */
+  private wireEnterKey(input: HTMLInputElement): void {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.applyFilter();
+      }
+    });
+  }
+
   private createNumericControls(): void {
     const c = this.controlsContainer;
 
@@ -199,12 +221,9 @@ export class FilterPanelField {
     };
     updateLayout();
 
-    select.addEventListener('change', () => {
-      updateLayout();
-      this.applyFilter();
-    });
-    input1.addEventListener('input', () => this.scheduleApply());
-    input2.addEventListener('input', () => this.scheduleApply());
+    select.addEventListener('change', () => updateLayout());
+    this.wireEnterKey(input1);
+    this.wireEnterKey(input2);
   }
 
   private createStringControls(): void {
@@ -228,8 +247,7 @@ export class FilterPanelField {
     c.appendChild(select);
     c.appendChild(input);
 
-    select.addEventListener('change', () => this.applyFilter());
-    input.addEventListener('input', () => this.scheduleApply());
+    this.wireEnterKey(input);
   }
 
   private createBooleanControls(): void {
@@ -256,6 +274,7 @@ export class FilterPanelField {
       checkbox.value = opt.value;
       checkbox.checked = true; // All checked by default (no filter)
 
+      // Boolean checkboxes apply immediately (single-click toggles)
       checkbox.addEventListener('change', () => this.applyFilter());
 
       label.appendChild(checkbox);
@@ -297,12 +316,7 @@ export class FilterPanelField {
     };
     updateLayout();
 
-    select.addEventListener('change', () => {
-      updateLayout();
-      this.applyFilter();
-    });
-    input1.addEventListener('change', () => this.applyFilter());
-    input2.addEventListener('change', () => this.applyFilter());
+    select.addEventListener('change', () => updateLayout());
   }
 
   private createTimeControls(): void {
@@ -328,9 +342,6 @@ export class FilterPanelField {
     c.appendChild(input1);
     c.appendChild(label2);
     c.appendChild(input2);
-
-    input1.addEventListener('change', () => this.applyFilter());
-    input2.addEventListener('change', () => this.applyFilter());
   }
 
   private createUuidControls(): void {
@@ -351,8 +362,7 @@ export class FilterPanelField {
     c.appendChild(select);
     c.appendChild(input);
 
-    select.addEventListener('change', () => this.applyFilter());
-    input.addEventListener('input', () => this.scheduleApply());
+    this.wireEnterKey(input);
   }
 
   private createIntervalControls(): void {
@@ -365,22 +375,12 @@ export class FilterPanelField {
 
     c.appendChild(input);
 
-    input.addEventListener('input', () => this.scheduleApply());
+    this.wireEnterKey(input);
   }
 
   // =========================================
   // Filter Building & Application
   // =========================================
-
-  private scheduleApply(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.applyFilter();
-    }, 300);
-  }
 
   applyFilter(): void {
     if (this.destroyed) return;
@@ -473,6 +473,7 @@ export class FilterPanelField {
         if (!val2) return null;
         const num2 = parseFloat(val2);
         if (isNaN(num2)) return null;
+        // Allow min > max — DuckDB will correctly return 0 rows
         return { type: 'range', column: col, min: num1, max: num2 };
       }
       case 'eq':
@@ -929,11 +930,6 @@ export class FilterPanelField {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
 
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);

@@ -146,6 +146,9 @@ export class ValueCounts extends BaseVisualization {
   // Combined segments including null for rendering
   private renderSegments: RenderSegment[] = [];
 
+  // Flag: sync visual state from filter on next render (after buildRenderSegments)
+  private pendingFilterSync = false;
+
   // Background segments for crossfilter rendering
   private backgroundSegments: RenderSegment[] = [];
 
@@ -256,6 +259,10 @@ export class ValueCounts extends BaseVisualization {
     // Emit column stats for default stats display
     this.emitDefaultStats();
 
+    // Flag that the upcoming render should sync visual state from filter
+    // (must happen after buildRenderSegments() inside render)
+    this.pendingFilterSync = this.isFilterUpdate;
+
     this.render();
   }
 
@@ -323,6 +330,12 @@ export class ValueCounts extends BaseVisualization {
     // Build combined segments array including null
     this.buildRenderSegments();
 
+    // Sync visual state from filter after segments are built
+    if (this.pendingFilterSync) {
+      this.pendingFilterSync = false;
+      this.syncVisualStateFromFilter();
+    }
+
     // Calculate layout
     this.calculateLayout();
 
@@ -389,6 +402,83 @@ export class ValueCounts extends BaseVisualization {
       }
     } else {
       this.backgroundSegments = [];
+    }
+  }
+
+  /**
+   * Sync segment selection from the current column's filter.
+   *
+   * Maps PointFilter, SetFilter, PatternFilter, and NullFilter to
+   * highlighted segments so the visualization reflects panel-created filters.
+   */
+  private syncVisualStateFromFilter(): void {
+    const ownFilter = this.options.filters.find(f => f.column === this.column.name);
+
+    if (!ownFilter) {
+      this.selectedSegments.clear();
+      return;
+    }
+
+    this.selectedSegments.clear();
+
+    for (let i = 0; i < this.renderSegments.length; i++) {
+      const seg = this.renderSegments[i];
+
+      // Skip aggregate segments — they can't be directly matched
+      if (seg.isOther || seg.isAllUnique) continue;
+
+      switch (ownFilter.type) {
+        case 'point':
+          if (seg.isNull && ownFilter.value === null) {
+            this.selectedSegments.add(i);
+          } else if (!seg.isNull && seg.value === String(ownFilter.value)) {
+            this.selectedSegments.add(i);
+          }
+          break;
+
+        case 'set':
+          if (!seg.isNull && ownFilter.values.map(String).includes(seg.value)) {
+            this.selectedSegments.add(i);
+          }
+          break;
+
+        case 'pattern':
+          if (!seg.isNull && this.matchesPattern(seg.value, ownFilter.pattern, ownFilter.mode)) {
+            this.selectedSegments.add(i);
+          }
+          break;
+
+        case 'null':
+          if (seg.isNull) {
+            this.selectedSegments.add(i);
+          }
+          break;
+
+        case 'not-null':
+          // All non-null segments included — no visual selection needed
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  /**
+   * Test if a string value matches a pattern filter mode.
+   */
+  private matchesPattern(value: string, pattern: string, mode: string): boolean {
+    switch (mode) {
+      case 'contains':
+        return value.includes(pattern);
+      case 'starts':
+        return value.startsWith(pattern);
+      case 'ends':
+        return value.endsWith(pattern);
+      case 'regex':
+        try { return new RegExp(pattern).test(value); } catch { return false; }
+      default:
+        return false;
     }
   }
 

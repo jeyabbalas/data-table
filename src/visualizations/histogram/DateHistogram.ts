@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TemporalColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchDateHistogramData,
@@ -201,6 +202,11 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       // Emit column stats for default stats display
       this.emitDefaultStats();
 
+      // Sync visual state from filter (e.g., panel-created range → brush overlay)
+      if (this.isFilterUpdate) {
+        this.syncVisualStateFromFilter();
+      }
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence) return;
@@ -366,6 +372,98 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         max: endBin.binEnd.toISOString(),
         ...(isLastBin && this.data.isNumericBinning && { maxInclusive: true }),
       });
+    }
+  }
+
+  // =========================================
+  // Filter → Visual State Sync (Date-aware)
+  // =========================================
+
+  protected syncVisualStateFromFilter(): void {
+    const filters = this.options.filters;
+    const ownFilter = filters.find(f => f.column === this.column.name);
+    const data = this.backgroundData ?? this.data;
+
+    if (!ownFilter || !data || data.bins.length === 0) {
+      if (this.brushState.committed) {
+        this.resetBrush();
+      }
+      this.selectedBin = null;
+      this.selectedNull = false;
+      return;
+    }
+
+    switch (ownFilter.type) {
+      case 'range':
+        this.syncBrushFromDateRangeFilter(ownFilter as RangeFilter, data.bins);
+        break;
+      case 'point': {
+        const val = ownFilter.value;
+        const targetDate = val instanceof Date ? val : new Date(String(val));
+        if (this.brushState.committed) this.resetBrush();
+        this.selectedNull = false;
+        this.selectedBin = null;
+        for (let i = 0; i < data.bins.length; i++) {
+          const bin = data.bins[i];
+          if (targetDate >= bin.binStart && targetDate < bin.binEnd) {
+            this.selectedBin = i;
+            break;
+          }
+        }
+        break;
+      }
+      case 'null':
+        this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = true;
+        break;
+      default:
+        if (this.brushState.committed) this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = false;
+        break;
+    }
+  }
+
+  private syncBrushFromDateRangeFilter(
+    filter: RangeFilter,
+    bins: Array<{ binStart: Date; binEnd: Date }>
+  ): void {
+    // Parse filter bounds — can be Date, string, or number (Infinity for open-ended)
+    const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
+    const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
+
+    const filterMinMs = minIsOpen ? -Infinity
+      : (filter.min instanceof Date ? filter.min.getTime() : new Date(String(filter.min)).getTime());
+    const filterMaxMs = maxIsOpen ? Infinity
+      : (filter.max instanceof Date ? filter.max.getTime() : new Date(String(filter.max)).getTime());
+
+    let startIdx = -1;
+    let endIdx = -1;
+
+    for (let i = 0; i < bins.length; i++) {
+      const binStartMs = bins[i].binStart.getTime();
+      const binEndMs = bins[i].binEnd.getTime();
+
+      // Bin overlaps filter if: binEnd > filterMin AND binStart < filterMax
+      if (binEndMs > filterMinMs && binStartMs < filterMaxMs) {
+        if (startIdx === -1) startIdx = i;
+        endIdx = i;
+      }
+    }
+
+    if (startIdx >= 0 && endIdx >= 0) {
+      this.selectedBin = null;
+      this.selectedNull = false;
+      this.brushState.committed = true;
+      this.brushState.active = false;
+      this.brushState.sliding = false;
+      this.brushState.startBinIndex = startIdx;
+      this.brushState.endBinIndex = endIdx;
+    } else {
+      if (this.brushState.committed) this.resetBrush();
+      this.selectedBin = null;
+      this.selectedNull = false;
     }
   }
 }

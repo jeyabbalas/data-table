@@ -1128,6 +1128,33 @@ body.dt-column-dragging * {
   accent-color: var(--dt-primary);
 }
 
+/* Apply button */
+.dt-filter-field-apply {
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.75rem;
+  margin-top: 0.375rem;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: white;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-filter-field-apply:hover {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-filter-field-apply:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
 /* Dark mode adjustments for filter panel */
 @media (prefers-color-scheme: dark) {
   .dt-filter-panel {

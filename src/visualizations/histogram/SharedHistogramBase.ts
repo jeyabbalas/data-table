@@ -1601,6 +1601,74 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     }
   }
 
+  // =========================================
+  // Filter → Visual State Sync
+  // =========================================
+
+  /**
+   * Sync brush/selection visual state from the current column's filter.
+   *
+   * When a filter is created via the filter panel (or any external source),
+   * this method maps it to the appropriate visual indicator (brush overlay,
+   * selected bin, or selected null bar) so the histogram visually reflects
+   * the active filter.
+   *
+   * This is idempotent: when a brush creates a filter and the filter propagates
+   * back, re-syncing produces the same brush state.
+   *
+   * Subclasses (DateHistogram, TimeHistogram) override to handle their
+   * specific bin boundary types.
+   */
+  /**
+   * Base implementation handles null/default cases.
+   * Subclasses override for range/point with type-specific bin boundaries.
+   */
+  protected syncVisualStateFromFilter(): void {
+    const filters = this.options.filters;
+    const ownFilter = filters.find(f => f.column === this.column.name);
+    const data = this.backgroundData ?? this.data;
+
+    if (!ownFilter || !data || data.bins.length === 0) {
+      // No filter for this column — clear visual state
+      if (this.brushState.committed) {
+        this.resetBrush();
+      }
+      this.selectedBin = null;
+      this.selectedNull = false;
+      return;
+    }
+
+    switch (ownFilter.type) {
+      case 'null':
+        this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = true;
+        break;
+      default:
+        // Base class cannot handle range/point — subclasses override for those.
+        // For not-null, not-set, set, pattern — no direct histogram mapping.
+        if (this.brushState.committed) {
+          this.resetBrush();
+        }
+        this.selectedBin = null;
+        this.selectedNull = false;
+        break;
+    }
+  }
+
+  /**
+   * Helper: set brush state to span bins [startIdx, endIdx].
+   */
+  protected setBrushFromBinRange(startIdx: number, endIdx: number): void {
+    this.selectedBin = null;
+    this.selectedNull = false;
+    this.brushState.committed = true;
+    this.brushState.active = false;
+    this.brushState.sliding = false;
+    this.brushState.startBinIndex = startIdx;
+    this.brushState.endBinIndex = endIdx;
+  }
+
   /**
    * Clear the brush (public method for external LIFO handling)
    */

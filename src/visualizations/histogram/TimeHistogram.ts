@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TimeColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchTimeHistogramData,
@@ -181,6 +182,11 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
       // Emit column stats for default stats display
       this.emitDefaultStats();
+
+      // Sync visual state from filter (e.g., panel-created range → brush overlay)
+      if (this.isFilterUpdate) {
+        this.syncVisualStateFromFilter();
+      }
 
       this.render();
     } catch (error) {
@@ -359,5 +365,89 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       min: secondsToTimeString(this.data.minSeconds),
       max: secondsToTimeString(this.data.maxSeconds),
     };
+  }
+
+  // =========================================
+  // Filter → Visual State Sync (Time-aware)
+  // =========================================
+
+  protected syncVisualStateFromFilter(): void {
+    const filters = this.options.filters;
+    const ownFilter = filters.find(f => f.column === this.column.name);
+    const data = this.backgroundData ?? this.data;
+
+    if (!ownFilter || !data || data.bins.length === 0) {
+      if (this.brushState.committed) {
+        this.resetBrush();
+      }
+      this.selectedBin = null;
+      this.selectedNull = false;
+      return;
+    }
+
+    switch (ownFilter.type) {
+      case 'range':
+        this.syncBrushFromTimeRangeFilter(ownFilter as RangeFilter, data.bins);
+        break;
+      case 'null':
+        this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = true;
+        break;
+      default:
+        if (this.brushState.committed) this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = false;
+        break;
+    }
+  }
+
+  /**
+   * Parse a time string (HH:MM:SS or HH:MM) to seconds from midnight.
+   */
+  private parseTimeToSeconds(value: string | number | Date): number {
+    if (typeof value === 'number') return value;
+    const str = String(value);
+    const parts = str.split(':');
+    const hours = parseInt(parts[0] ?? '0', 10);
+    const minutes = parseInt(parts[1] ?? '0', 10);
+    const seconds = parseFloat(parts[2] ?? '0');
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  private syncBrushFromTimeRangeFilter(
+    filter: RangeFilter,
+    bins: Array<{ binStartSeconds: number; binEndSeconds: number }>
+  ): void {
+    const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
+    const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
+
+    const filterMinSec = minIsOpen ? -Infinity : this.parseTimeToSeconds(filter.min);
+    const filterMaxSec = maxIsOpen ? Infinity : this.parseTimeToSeconds(filter.max);
+
+    let startIdx = -1;
+    let endIdx = -1;
+
+    for (let i = 0; i < bins.length; i++) {
+      const bin = bins[i];
+      if (bin.binEndSeconds > filterMinSec && bin.binStartSeconds < filterMaxSec) {
+        if (startIdx === -1) startIdx = i;
+        endIdx = i;
+      }
+    }
+
+    if (startIdx >= 0 && endIdx >= 0) {
+      this.selectedBin = null;
+      this.selectedNull = false;
+      this.brushState.committed = true;
+      this.brushState.active = false;
+      this.brushState.sliding = false;
+      this.brushState.startBinIndex = startIdx;
+      this.brushState.endBinIndex = endIdx;
+    } else {
+      if (this.brushState.committed) this.resetBrush();
+      this.selectedBin = null;
+      this.selectedNull = false;
+    }
   }
 }

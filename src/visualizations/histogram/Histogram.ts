@@ -10,6 +10,7 @@
 
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { RangeFilter } from '../../filters/FilterTypes';
 import type { NumericColumnStats } from '../../statistics/ColumnStatsTypes';
 import {
   fetchHistogramData,
@@ -220,6 +221,11 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       // Emit column stats for default stats display
       this.emitDefaultStats();
 
+      // Sync visual state from filter (e.g., panel-created range → brush overlay)
+      if (this.isFilterUpdate) {
+        this.syncVisualStateFromFilter();
+      }
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence) return; // Stale error, discard
@@ -380,6 +386,86 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           ...(isLastBin && { maxInclusive: true }),
         });
       }
+    }
+  }
+
+  // =========================================
+  // Filter → Visual State Sync (Numeric)
+  // =========================================
+
+  protected syncVisualStateFromFilter(): void {
+    const filters = this.options.filters;
+    const ownFilter = filters.find(f => f.column === this.column.name);
+    const data = this.backgroundData ?? this.data;
+
+    if (!ownFilter || !data || data.bins.length === 0) {
+      if (this.brushState.committed) {
+        this.resetBrush();
+      }
+      this.selectedBin = null;
+      this.selectedNull = false;
+      return;
+    }
+
+    switch (ownFilter.type) {
+      case 'range':
+        this.syncBrushFromNumericRange(ownFilter as RangeFilter, data.bins);
+        break;
+      case 'point': {
+        const value = ownFilter.value;
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          if (this.brushState.committed) this.resetBrush();
+          this.selectedNull = false;
+          this.selectedBin = null;
+          for (let i = 0; i < data.bins.length; i++) {
+            const bin = data.bins[i];
+            const isLast = i === data.bins.length - 1;
+            if (value >= bin.x0 && (isLast ? value <= bin.x1 : value < bin.x1)) {
+              this.selectedBin = i;
+              break;
+            }
+          }
+        }
+        break;
+      }
+      case 'null':
+        this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = true;
+        break;
+      default:
+        if (this.brushState.committed) this.resetBrush();
+        this.selectedBin = null;
+        this.selectedNull = false;
+        break;
+    }
+  }
+
+  private syncBrushFromNumericRange(
+    filter: RangeFilter,
+    bins: Array<{ x0: number; x1: number }>
+  ): void {
+    const filterMin = typeof filter.min === 'number' && Number.isFinite(filter.min)
+      ? filter.min : -Infinity;
+    const filterMax = typeof filter.max === 'number' && Number.isFinite(filter.max)
+      ? filter.max : Infinity;
+
+    let startIdx = -1;
+    let endIdx = -1;
+
+    for (let i = 0; i < bins.length; i++) {
+      if (bins[i].x1 > filterMin && bins[i].x0 < filterMax) {
+        if (startIdx === -1) startIdx = i;
+        endIdx = i;
+      }
+    }
+
+    if (startIdx >= 0 && endIdx >= 0) {
+      this.setBrushFromBinRange(startIdx, endIdx);
+    } else {
+      if (this.brushState.committed) this.resetBrush();
+      this.selectedBin = null;
+      this.selectedNull = false;
     }
   }
 }

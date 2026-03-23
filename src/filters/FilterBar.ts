@@ -78,6 +78,11 @@ export class FilterBar {
       }
     });
 
+    const label = document.createElement('span');
+    label.className = `${this.prefix}-gutter-label`;
+    label.textContent = 'Active filters';
+
+    bar.appendChild(label);
     bar.appendChild(chips);
     bar.appendChild(clearAll);
 

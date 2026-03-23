@@ -80,6 +80,12 @@ describe('State', () => {
       expect(state.pinnedColumns.get()).toEqual([]);
     });
 
+    it('should initialize hiddenColumnInfo to empty Map', () => {
+      const state = createTableState();
+      expect(state.hiddenColumnInfo.get()).toBeInstanceOf(Map);
+      expect(state.hiddenColumnInfo.get().size).toBe(0);
+    });
+
     it('should initialize selectedRows to empty Set', () => {
       const state = createTableState();
       expect(state.selectedRows.get()).toBeInstanceOf(Set);
@@ -247,6 +253,7 @@ describe('State', () => {
       state.columnOrder.set(['c', 'b', 'a']);
       state.columnWidths.set(new Map([['a', 100]]));
       state.pinnedColumns.set(['a']);
+      state.hiddenColumnInfo.set(new Map([['b', { column: 'b', leftNeighbor: 'a', rightNeighbor: 'c' }]]));
       state.selectedRows.set(new Set([1, 2, 3]));
       state.hoveredRow.set(5);
       state.hoveredColumn.set('x');
@@ -265,6 +272,7 @@ describe('State', () => {
       expect(state.columnOrder.get()).toEqual([]);
       expect(state.columnWidths.get().size).toBe(0);
       expect(state.pinnedColumns.get()).toEqual([]);
+      expect(state.hiddenColumnInfo.get().size).toBe(0);
       expect(state.selectedRows.get().size).toBe(0);
       expect(state.hoveredRow.get()).toBeNull();
       expect(state.hoveredColumn.get()).toBeNull();

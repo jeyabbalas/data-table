@@ -223,6 +223,41 @@ describe('StateActions', () => {
       expect(state.visibleColumns.get()).toEqual(['id', 'age', 'email']);
     });
 
+    it('hideColumn() should record neighbor info in hiddenColumnInfo', () => {
+      actions.hideColumn('name');
+
+      const info = state.hiddenColumnInfo.get().get('name');
+      expect(info).toBeDefined();
+      expect(info!.column).toBe('name');
+      expect(info!.leftNeighbor).toBe('id');
+      expect(info!.rightNeighbor).toBe('age');
+    });
+
+    it('hideColumn() should record null left neighbor for first column', () => {
+      actions.hideColumn('id');
+
+      const info = state.hiddenColumnInfo.get().get('id');
+      expect(info!.leftNeighbor).toBeNull();
+      expect(info!.rightNeighbor).toBe('name');
+    });
+
+    it('hideColumn() should record null right neighbor for last column', () => {
+      actions.hideColumn('email');
+
+      const info = state.hiddenColumnInfo.get().get('email');
+      expect(info!.leftNeighbor).toBe('age');
+      expect(info!.rightNeighbor).toBeNull();
+    });
+
+    it('hideColumn() should not hide the last visible column', () => {
+      state.visibleColumns.set(['id']);
+
+      actions.hideColumn('id');
+
+      expect(state.visibleColumns.get()).toEqual(['id']);
+      expect(state.hiddenColumnInfo.get().size).toBe(0);
+    });
+
     it('hideColumn() should do nothing if column already hidden', () => {
       state.visibleColumns.set(['id', 'age']);
 
@@ -231,12 +266,71 @@ describe('StateActions', () => {
       expect(state.visibleColumns.get()).toEqual(['id', 'age']);
     });
 
-    it('showColumn() should add to visibleColumns at correct position', () => {
-      state.visibleColumns.set(['id', 'age', 'email']);
+    it('showColumn() should restore between adjacent neighbors', () => {
+      // Hide 'name' (between 'id' and 'age')
+      actions.hideColumn('name');
 
+      // Restore — id and age are still adjacent
       actions.showColumn('name');
 
       expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
+    });
+
+    it('showColumn() should restore next to closer neighbor when not adjacent', () => {
+      // Hide 'name' (between 'id' and 'age')
+      actions.hideColumn('name');
+
+      // Reorder so id and age are separated: email, age, name(hidden), id
+      state.visibleColumns.set(['email', 'age', 'id']);
+      state.columnOrder.set(['email', 'age', 'name', 'id']);
+
+      // Restore — both neighbors visible but not adjacent
+      // name is at index 2 in columnOrder, id at 3, age at 1
+      // leftNeighbor = 'id' (distance = |2-3| = 1), rightNeighbor = 'age' (distance = |2-1| = 1)
+      // Equal distance → picks left neighbor (id), inserts after id's position
+      actions.showColumn('name');
+
+      const visible = state.visibleColumns.get();
+      expect(visible).toContain('name');
+      // name should be next to one of its original neighbors
+      const nameIdx = visible.indexOf('name');
+      const idIdx = visible.indexOf('id');
+      const ageIdx = visible.indexOf('age');
+      expect(nameIdx === idIdx + 1 || nameIdx === idIdx - 1 ||
+             nameIdx === ageIdx + 1 || nameIdx === ageIdx - 1).toBe(true);
+    });
+
+    it('showColumn() should restore next to visible left neighbor when right is hidden', () => {
+      // columns: id, name, age, email
+      actions.hideColumn('age');   // neighbors: name, email
+      actions.hideColumn('name');  // neighbors: id, age (but age is hidden)
+
+      // Restore name — left neighbor 'id' is visible, right neighbor 'age' is hidden
+      actions.showColumn('name');
+
+      expect(state.visibleColumns.get()).toEqual(['id', 'name', 'email']);
+    });
+
+    it('showColumn() should restore next to visible right neighbor when left is hidden', () => {
+      // columns: id, name, age, email
+      actions.hideColumn('name');  // neighbors: id, age
+      actions.hideColumn('id');    // neighbors: null, name (but name is hidden)
+
+      // Restore id — left neighbor null, right neighbor 'name' is hidden
+      // Should walk outward to find age
+      actions.showColumn('id');
+
+      const visible = state.visibleColumns.get();
+      expect(visible).toContain('id');
+      expect(visible.indexOf('id')).toBeLessThan(visible.indexOf('age'));
+    });
+
+    it('showColumn() should remove entry from hiddenColumnInfo after restore', () => {
+      actions.hideColumn('name');
+      expect(state.hiddenColumnInfo.get().has('name')).toBe(true);
+
+      actions.showColumn('name');
+      expect(state.hiddenColumnInfo.get().has('name')).toBe(false);
     });
 
     it('showColumn() should do nothing if column already visible', () => {
@@ -246,6 +340,14 @@ describe('StateActions', () => {
       actions.showColumn('name');
 
       expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('showColumn() should fallback to columnOrder when no neighbor info', () => {
+      state.visibleColumns.set(['id', 'age', 'email']);
+
+      actions.showColumn('name');
+
+      expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
     });
 
     it('showColumn() should handle first position correctly', () => {
@@ -262,6 +364,25 @@ describe('StateActions', () => {
       actions.showColumn('email');
 
       expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
+    });
+
+    it('showAllColumns() should restore all columns in columnOrder', () => {
+      actions.hideColumn('name');
+      actions.hideColumn('age');
+
+      actions.showAllColumns();
+
+      expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
+    });
+
+    it('showAllColumns() should clear hiddenColumnInfo', () => {
+      actions.hideColumn('name');
+      actions.hideColumn('age');
+      expect(state.hiddenColumnInfo.get().size).toBe(2);
+
+      actions.showAllColumns();
+
+      expect(state.hiddenColumnInfo.get().size).toBe(0);
     });
 
     it('setColumnOrder() should update order', () => {
@@ -282,6 +403,27 @@ describe('StateActions', () => {
       actions.setColumnOrder(['email', 'age', 'name', 'id']);
 
       expect(state.visibleColumns.get()).toEqual(['age', 'id']);
+    });
+
+    it('setColumnOrder() should preserve hidden columns in columnOrder when called with only visible columns', () => {
+      // This simulates what happens when ColumnReorder drag-drops:
+      // it only knows about visible columns from DOM headers
+      actions.hideColumn('name');
+      expect(state.visibleColumns.get()).toEqual(['id', 'age', 'email']);
+
+      // Reorder with only visible columns (as ColumnReorder does)
+      actions.setColumnOrder(['age', 'id', 'email']);
+
+      // columnOrder should include the hidden column 'name' at a sensible position
+      const order = state.columnOrder.get();
+      expect(order).toContain('name');
+      expect(order).toContain('id');
+      expect(order).toContain('age');
+      expect(order).toContain('email');
+      expect(order.length).toBe(4);
+
+      // visibleColumns should reflect the new visible order
+      expect(state.visibleColumns.get()).toEqual(['age', 'id', 'email']);
     });
 
     it('toggleColumnPin() should pin unpinned column', () => {

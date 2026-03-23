@@ -41,6 +41,7 @@ export class ColumnHeader {
   private sortButton: HTMLElement;
   private sortBadge: HTMLElement;
   private pinButton: HTMLElement;
+  private hideButton: HTMLElement;
   private dragHandle: HTMLElement;
   private statsEl: HTMLElement;
   private resizer: ColumnResizer;
@@ -59,6 +60,7 @@ export class ColumnHeader {
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
     this.pinButton = this.element.querySelector(`.${this.classPrefix}-col-pin-btn`)!;
+    this.hideButton = this.element.querySelector(`.${this.classPrefix}-col-hide-btn`)!;
     this.dragHandle = this.element.querySelector(`.${this.classPrefix}-col-drag-handle`)!;
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
 
@@ -228,6 +230,9 @@ export class ColumnHeader {
 
     // Pin button
     this.pinButton.addEventListener('click', this.handlePinClick);
+
+    // Hide button
+    this.hideButton.addEventListener('click', this.handleHideClick);
   }
 
   /**
@@ -255,6 +260,15 @@ export class ColumnHeader {
     if (this.destroyed) return;
     event.stopPropagation();
     this.actions.toggleColumnPin(this.column.name);
+  };
+
+  /**
+   * Handle hide button click
+   */
+  private handleHideClick = (event: MouseEvent): void => {
+    if (this.destroyed) return;
+    event.stopPropagation();
+    this.actions.hideColumn(this.column.name);
   };
 
   // =========================================
@@ -300,11 +314,22 @@ export class ColumnHeader {
     // Set initial stats value (subscription only fires on changes, not initial value)
     this.updateStatsLine(this.state.totalRows.get());
 
+    // Subscribe to visible columns to disable hide button when only one column visible
+    const unsubVisible = this.state.visibleColumns.subscribe((visible) => {
+      if (!this.destroyed) {
+        this.updateHideButtonState(visible);
+      }
+    });
+    this.unsubscribes.push(unsubVisible);
+
     // Set initial filter indicator state
     this.updateFilterIndicator();
 
     // Set initial pin state
     this.updatePinState();
+
+    // Set initial hide button state
+    this.updateHideButtonState(this.state.visibleColumns.get());
   }
 
   /**
@@ -350,6 +375,26 @@ export class ColumnHeader {
       isPinned
     );
     this.dragHandle.setAttribute('aria-disabled', String(isPinned));
+  }
+
+  /**
+   * Update hide button disabled state when only one column is visible
+   */
+  private updateHideButtonState(visibleColumns: string[]): void {
+    const isLastColumn = visibleColumns.length <= 1;
+    if (isLastColumn) {
+      this.hideButton.setAttribute('disabled', '');
+      this.hideButton.setAttribute('title', 'Cannot hide the last visible column');
+      this.hideButton.classList.add(
+        `${this.classPrefix}-col-action-btn--disabled`
+      );
+    } else {
+      this.hideButton.removeAttribute('disabled');
+      this.hideButton.setAttribute('title', 'Hide column');
+      this.hideButton.classList.remove(
+        `${this.classPrefix}-col-action-btn--disabled`
+      );
+    }
   }
 
   /**
@@ -465,6 +510,7 @@ export class ColumnHeader {
     // Remove event listeners
     this.sortButton.removeEventListener('click', this.handleSortClick);
     this.pinButton.removeEventListener('click', this.handlePinClick);
+    this.hideButton.removeEventListener('click', this.handleHideClick);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

@@ -14,6 +14,7 @@ import { ColumnHeader } from './ColumnHeader';
 import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
 import { FilterBar } from '../filters/FilterBar';
+import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 
 /**
  * Options for configuring the TableContainer
@@ -66,9 +67,13 @@ export class TableContainer {
   private tableBody: TableBody | null = null;
   private columnReorder: ColumnReorder | null = null;
   private filterBar: FilterBar | null = null;
+  private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
+
+  // Track previous visible columns for restore-highlight detection
+  private previousVisibleColumns: Set<string> = new Set();
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -125,6 +130,15 @@ export class TableContainer {
     }
 
     this.element.appendChild(this.bodyScroll);
+
+    // Create hidden columns gutter after body
+    if (this.actions) {
+      this.hiddenColumnsGutter = new HiddenColumnsGutter(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+      });
+      this.element.appendChild(this.hiddenColumnsGutter.getElement());
+    }
+
     this.container.appendChild(this.element);
 
     // Set up resize observer
@@ -497,6 +511,8 @@ export class TableContainer {
   render(): void {
     if (this.destroyed) return;
 
+    const prevVisible = this.previousVisibleColumns;
+
     // Save scroll positions before re-rendering (both containers for robustness)
     const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
     const savedBodyScrollTop = this.bodyScroll.scrollTop;
@@ -646,6 +662,24 @@ export class TableContainer {
       });
     }
 
+    // Track visible columns and highlight newly restored ones
+    const newVisibleSet = new Set(visibleColumns);
+    if (prevVisible.size > 0) {
+      const prefix = this.resolvedOptions.classPrefix;
+      for (const header of this.columnHeaders) {
+        const col = header.getColumn().name;
+        if (!prevVisible.has(col)) {
+          const el = header.getElement();
+          el.classList.add(`${prefix}-col-header--restored`);
+          el.addEventListener('animationend', function handler() {
+            el.classList.remove(`${prefix}-col-header--restored`);
+            el.removeEventListener('animationend', handler);
+          });
+        }
+      }
+    }
+    this.previousVisibleColumns = newVisibleSet;
+
     // Restore scroll positions after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
       if (!this.destroyed) {
@@ -759,6 +793,12 @@ export class TableContainer {
     if (this.filterBar) {
       this.filterBar.destroy();
       this.filterBar = null;
+    }
+
+    // Destroy hidden columns gutter
+    if (this.hiddenColumnsGutter) {
+      this.hiddenColumnsGutter.destroy();
+      this.hiddenColumnsGutter = null;
     }
 
     // Destroy column reorder handler

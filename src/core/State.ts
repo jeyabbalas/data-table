@@ -8,6 +8,13 @@
 import { createSignal, computed, type Signal, type Computed } from './Signal';
 import type { ColumnSchema, Filter, SortColumn } from './types';
 
+/** Metadata for a hidden column — tracks neighbors at hide time for intelligent restore */
+export interface HiddenColumnInfo {
+  column: string;
+  leftNeighbor: string | null;
+  rightNeighbor: string | null;
+}
+
 /**
  * TableState interface - all reactive state for a data table instance
  */
@@ -41,6 +48,8 @@ export interface TableState {
   columnWidths: Signal<Map<string, number>>;
   /** Names of columns pinned to the left */
   pinnedColumns: Signal<string[]>;
+  /** Metadata for hidden columns — tracks neighbors at hide time for intelligent restore */
+  hiddenColumnInfo: Signal<Map<string, HiddenColumnInfo>>;
 
   // Selection
   /** Set of selected row indices */
@@ -105,6 +114,7 @@ export function createTableState(): TableState {
     columnOrder: createSignal<string[]>([]),
     columnWidths: createSignal<Map<string, number>>(new Map()),
     pinnedColumns: createSignal<string[]>([]),
+    hiddenColumnInfo: createSignal<Map<string, HiddenColumnInfo>>(new Map()),
 
     // Selection
     selectedRows: createSignal<Set<number>>(new Set()),
@@ -140,6 +150,7 @@ export function resetTableState(state: TableState): void {
   state.columnOrder.set([]);
   state.columnWidths.set(new Map());
   state.pinnedColumns.set([]);
+  state.hiddenColumnInfo.set(new Map());
   state.selectedRows.set(new Set());
   state.hoveredRow.set(null);
   state.hoveredColumn.set(null);
@@ -170,4 +181,5 @@ export function initializeColumnsFromSchema(
   state.columnOrder.set(columnNames);
   state.columnWidths.set(new Map());
   state.pinnedColumns.set([]);
+  state.hiddenColumnInfo.set(new Map());
 }

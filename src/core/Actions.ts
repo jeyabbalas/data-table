@@ -6,7 +6,7 @@
  * external code to interact with the table state.
  */
 
-import type { TableState } from './State';
+import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
 import type { Filter, FilterType, SortColumn } from './types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -178,49 +178,196 @@ export class StateActions {
   // =========================================
 
   /**
-   * Hide a column
+   * Hide a column, recording its neighbors for intelligent restore
    */
   hideColumn(column: string): void {
     const visible = this.state.visibleColumns.get();
-    if (visible.includes(column)) {
-      this.state.visibleColumns.set(visible.filter((c) => c !== column));
-    }
+    if (!visible.includes(column)) return;
+
+    // Don't allow hiding the last visible column
+    if (visible.length <= 1) return;
+
+    // Record neighbor info before hiding
+    const colIndex = visible.indexOf(column);
+    const leftNeighbor = colIndex > 0 ? visible[colIndex - 1] : null;
+    const rightNeighbor =
+      colIndex < visible.length - 1 ? visible[colIndex + 1] : null;
+
+    const info: HiddenColumnInfo = { column, leftNeighbor, rightNeighbor };
+    const hiddenMap = new Map(this.state.hiddenColumnInfo.get());
+    hiddenMap.set(column, info);
+    this.state.hiddenColumnInfo.set(hiddenMap);
+
+    // Remove from visible
+    this.state.visibleColumns.set(visible.filter((c) => c !== column));
   }
 
   /**
-   * Show a hidden column
-   *
-   * The column is inserted at its correct position based on columnOrder.
+   * Show a hidden column using neighbor-aware restore logic
    */
   showColumn(column: string): void {
     const visible = this.state.visibleColumns.get();
     const order = this.state.columnOrder.get();
 
-    if (!visible.includes(column) && order.includes(column)) {
-      // Insert at correct position based on columnOrder
-      const orderIndex = order.indexOf(column);
-      const newVisible = [...visible];
-      let insertIndex = 0;
-      for (let i = 0; i < orderIndex; i++) {
-        if (visible.includes(order[i])) {
-          insertIndex++;
+    if (visible.includes(column) || !order.includes(column)) return;
+
+    const hiddenMap = this.state.hiddenColumnInfo.get();
+    const info = hiddenMap.get(column);
+
+    let insertIndex: number;
+
+    if (info) {
+      insertIndex = this.computeRestoreIndex(visible, order, info);
+    } else {
+      // Fallback: use columnOrder-based positioning
+      insertIndex = this.computeOrderBasedIndex(visible, order, column);
+    }
+
+    const newVisible = [...visible];
+    newVisible.splice(insertIndex, 0, column);
+    this.state.visibleColumns.set(newVisible);
+
+    // Remove from hiddenColumnInfo
+    if (info) {
+      const updated = new Map(hiddenMap);
+      updated.delete(column);
+      this.state.hiddenColumnInfo.set(updated);
+    }
+  }
+
+  /**
+   * Show all hidden columns, restoring them in columnOrder
+   */
+  showAllColumns(): void {
+    const order = this.state.columnOrder.get();
+    this.state.visibleColumns.set([...order]);
+    this.state.hiddenColumnInfo.set(new Map());
+  }
+
+  /**
+   * Compute restore index using columnOrder-based positioning (fallback)
+   */
+  private computeOrderBasedIndex(
+    visible: string[],
+    order: string[],
+    column: string
+  ): number {
+    const orderIndex = order.indexOf(column);
+    let insertIndex = 0;
+    for (let i = 0; i < orderIndex; i++) {
+      if (visible.includes(order[i])) {
+        insertIndex++;
+      }
+    }
+    return insertIndex;
+  }
+
+  /**
+   * Compute restore index using neighbor-aware logic
+   */
+  private computeRestoreIndex(
+    visible: string[],
+    order: string[],
+    info: HiddenColumnInfo
+  ): number {
+    const { leftNeighbor, rightNeighbor } = info;
+    const leftIdx =
+      leftNeighbor !== null ? visible.indexOf(leftNeighbor) : -1;
+    const rightIdx =
+      rightNeighbor !== null ? visible.indexOf(rightNeighbor) : -1;
+    const leftVisible = leftIdx !== -1;
+    const rightVisible = rightIdx !== -1;
+
+    if (leftVisible && rightVisible) {
+      // Both neighbors visible
+      if (rightIdx === leftIdx + 1) {
+        // Still adjacent — insert between them
+        return rightIdx;
+      }
+      // Not adjacent — pick neighbor closest in columnOrder
+      const colOrderIdx = order.indexOf(info.column);
+      const leftOrderIdx = order.indexOf(leftNeighbor!);
+      const rightOrderIdx = order.indexOf(rightNeighbor!);
+      const leftDist = Math.abs(colOrderIdx - leftOrderIdx);
+      const rightDist = Math.abs(colOrderIdx - rightOrderIdx);
+      if (leftDist <= rightDist) {
+        return leftIdx + 1; // Insert after left neighbor
+      } else {
+        return rightIdx; // Insert before right neighbor
+      }
+    }
+
+    if (leftVisible) {
+      return leftIdx + 1; // Insert after left neighbor
+    }
+
+    if (rightVisible) {
+      return rightIdx; // Insert before right neighbor
+    }
+
+    // Both neighbors hidden — walk outward from columnOrder position
+    const colOrderIdx = order.indexOf(info.column);
+    for (let dist = 1; dist < order.length; dist++) {
+      // Check right
+      if (colOrderIdx + dist < order.length) {
+        const candidate = order[colOrderIdx + dist];
+        const candidateIdx = visible.indexOf(candidate);
+        if (candidateIdx !== -1) {
+          return candidateIdx; // Insert before this visible column
         }
       }
-      newVisible.splice(insertIndex, 0, column);
-      this.state.visibleColumns.set(newVisible);
+      // Check left
+      if (colOrderIdx - dist >= 0) {
+        const candidate = order[colOrderIdx - dist];
+        const candidateIdx = visible.indexOf(candidate);
+        if (candidateIdx !== -1) {
+          return candidateIdx + 1; // Insert after this visible column
+        }
+      }
     }
+
+    // Ultimate fallback: append at end
+    return visible.length;
   }
 
   /**
    * Set the column order
    *
    * Also reorders visible columns to match the new order.
+   * Preserves hidden columns in columnOrder at their relative positions.
    */
   setColumnOrder(columns: string[]): void {
-    this.state.columnOrder.set(columns);
-    // Also reorder visible columns to match
+    const currentOrder = this.state.columnOrder.get();
+    const columnsSet = new Set(columns);
+
+    // Find columns in currentOrder that are NOT in the incoming list (hidden columns)
+    const missingColumns = currentOrder.filter((c) => !columnsSet.has(c));
+
+    if (missingColumns.length > 0) {
+      // Merge hidden columns back at their relative positions
+      const fullOrder = [...columns];
+      for (const missing of missingColumns) {
+        const oldIndex = currentOrder.indexOf(missing);
+        // Find the nearest column to the right in currentOrder that is in fullOrder
+        let insertIndex = fullOrder.length; // default: append at end
+        for (let i = oldIndex + 1; i < currentOrder.length; i++) {
+          const idx = fullOrder.indexOf(currentOrder[i]);
+          if (idx !== -1) {
+            insertIndex = idx;
+            break;
+          }
+        }
+        fullOrder.splice(insertIndex, 0, missing);
+      }
+      this.state.columnOrder.set(fullOrder);
+    } else {
+      this.state.columnOrder.set(columns);
+    }
+
+    // Reorder visible columns to match
     const visible = this.state.visibleColumns.get();
-    const reorderedVisible = columns.filter((c) => visible.includes(c));
+    const newOrder = this.state.columnOrder.get();
+    const reorderedVisible = newOrder.filter((c) => visible.includes(c));
     this.state.visibleColumns.set(reorderedVisible);
   }
 

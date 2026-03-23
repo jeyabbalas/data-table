@@ -198,4 +198,15 @@ describe('FilterBar', () => {
 
     bar.destroy();
   });
+
+  it('should have "Active filters" gutter label', () => {
+    const bar = new FilterBar(state, actions);
+    const el = bar.getElement();
+
+    const label = el.querySelector('.dt-gutter-label');
+    expect(label).toBeTruthy();
+    expect(label!.textContent).toBe('Active filters');
+
+    bar.destroy();
+  });
 });

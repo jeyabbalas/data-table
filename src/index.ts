@@ -46,7 +46,7 @@ export {
   resetTableState,
   initializeColumnsFromSchema,
 } from './core/State';
-export type { TableState } from './core/State';
+export type { TableState, HiddenColumnInfo } from './core/State';
 
 // State actions
 export { StateActions } from './core/Actions';
@@ -75,6 +75,9 @@ export type { CellOptions } from './table/Cell';
 
 export { ColumnReorder } from './table/ColumnReorder';
 export type { ColumnReorderOptions, ReorderCallback } from './table/ColumnReorder';
+
+export { HiddenColumnsGutter } from './table/HiddenColumnsGutter';
+export type { HiddenColumnsGutterOptions } from './table/HiddenColumnsGutter';
 
 // Progress reporting
 export type {

@@ -542,4 +542,66 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
   });
+
+  describe('hide button', () => {
+    it('should have a hide button in the action panel', () => {
+      const header = new ColumnHeader(column, state, actions);
+      const el = header.getElement();
+
+      const hideBtn = el.querySelector('.dt-col-hide-btn');
+      expect(hideBtn).toBeTruthy();
+      expect(hideBtn?.tagName).toBe('BUTTON');
+
+      header.destroy();
+    });
+
+    it('should call actions.hideColumn when hide button is clicked', () => {
+      state.visibleColumns.set(['test_column', 'other_column']);
+      state.columnOrder.set(['test_column', 'other_column']);
+
+      const header = new ColumnHeader(column, state, actions);
+      const el = header.getElement();
+      const hideBtn = el.querySelector('.dt-col-hide-btn') as HTMLButtonElement;
+
+      const hideSpy = vi.spyOn(actions, 'hideColumn');
+      hideBtn.click();
+
+      expect(hideSpy).toHaveBeenCalledWith('test_column');
+
+      header.destroy();
+    });
+
+    it('should be disabled when only one column is visible', () => {
+      state.visibleColumns.set(['test_column']);
+      state.columnOrder.set(['test_column']);
+
+      const header = new ColumnHeader(column, state, actions);
+      const el = header.getElement();
+      const hideBtn = el.querySelector('.dt-col-hide-btn') as HTMLButtonElement;
+
+      expect(hideBtn.hasAttribute('disabled')).toBe(true);
+      expect(hideBtn.classList.contains('dt-col-action-btn--disabled')).toBe(true);
+
+      header.destroy();
+    });
+
+    it('should enable hide button when more columns become visible', () => {
+      state.visibleColumns.set(['test_column']);
+      state.columnOrder.set(['test_column', 'other_column']);
+
+      const header = new ColumnHeader(column, state, actions);
+      const el = header.getElement();
+      const hideBtn = el.querySelector('.dt-col-hide-btn') as HTMLButtonElement;
+
+      expect(hideBtn.hasAttribute('disabled')).toBe(true);
+
+      // Add another visible column
+      state.visibleColumns.set(['test_column', 'other_column']);
+
+      expect(hideBtn.hasAttribute('disabled')).toBe(false);
+      expect(hideBtn.classList.contains('dt-col-action-btn--disabled')).toBe(false);
+
+      header.destroy();
+    });
+  });
 });

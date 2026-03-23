@@ -262,6 +262,127 @@
 }
 
 /* ===========================================
+   Gutter Labels (shared by filter bar and hidden gutter)
+   =========================================== */
+
+.dt-gutter-label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ===========================================
+   Hidden Columns Gutter
+   =========================================== */
+
+.dt-hidden-gutter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+  background: var(--dt-bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
+  max-height: 200px;
+  transition: max-height 0.2s ease, padding 0.2s ease, border-top-color 0.2s ease;
+}
+
+.dt-hidden-gutter--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+}
+
+.dt-hidden-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  background: var(--dt-bg-tertiary);
+  border: 1px solid var(--dt-border);
+  border-radius: 999px;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  max-width: 280px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.dt-hidden-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-hidden-chip-restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--dt-text-secondary);
+  transition: background var(--dt-transition), color var(--dt-transition);
+  flex-shrink: 0;
+}
+
+.dt-hidden-chip-restore:hover {
+  background: var(--dt-text-secondary);
+  color: white;
+}
+
+.dt-hidden-chip-restore:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-hidden-chip-restore svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.dt-hidden-show-all {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  border-radius: var(--dt-radius-sm);
+  transition: color var(--dt-transition), background var(--dt-transition);
+  white-space: nowrap;
+}
+
+.dt-hidden-show-all:hover {
+  color: var(--dt-text);
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-hidden-show-all:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* ===========================================
    Body Area
    =========================================== */
 
@@ -295,6 +416,15 @@
 
 .dt-col-header:hover {
   background: var(--dt-bg-tertiary);
+}
+
+@keyframes dt-col-restore-flash {
+  0% { background-color: rgba(37, 99, 235, 0.12); }
+  100% { background-color: transparent; }
+}
+
+.dt-col-header--restored {
+  animation: dt-col-restore-flash 1.5s ease-out;
 }
 
 .dt-col-header:last-child {
@@ -507,6 +637,12 @@
   .dt-col-action-btn--active:hover {
     background: rgba(59, 130, 246, 0.15);
   }
+}
+
+.dt-col-action-btn--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* ===========================================

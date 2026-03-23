@@ -54,25 +54,40 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
 
-    it('should create drag handle inline with name in name-row', () => {
+    it('should create name-row with only column name', () => {
       const header = new ColumnHeader(column, state, actions);
 
       const el = header.getElement();
       const nameRow = el.querySelector('.dt-col-name-row');
       expect(nameRow).toBeTruthy();
 
-      // Drag handle should be inside name-row
-      const dragHandle = nameRow?.querySelector('.dt-col-drag-handle');
-      expect(dragHandle).toBeTruthy();
-      expect(dragHandle?.tagName).toBe('BUTTON');
-      expect(dragHandle?.getAttribute('type')).toBe('button');
-      expect(dragHandle?.getAttribute('aria-label')).toBe('Drag to reorder test_column');
-      expect(dragHandle?.querySelector('svg')).toBeTruthy();
-
-      // Name should also be inside name-row
+      // Name should be inside name-row
       const name = nameRow?.querySelector('.dt-col-name');
       expect(name).toBeTruthy();
       expect(name?.textContent).toBe('test_column');
+
+      // Drag handle and sort button should NOT be in name-row (moved to action panel)
+      expect(nameRow?.querySelector('.dt-col-drag-handle')).toBeNull();
+      expect(nameRow?.querySelector('.dt-col-sort-btn')).toBeNull();
+
+      header.destroy();
+    });
+
+    it('should have sort button and drag handle in action panel', () => {
+      const header = new ColumnHeader(column, state, actions);
+      const el = header.getElement();
+      const actionPanel = el.querySelector('.dt-col-action-panel');
+
+      expect(actionPanel?.querySelector('.dt-col-sort-btn')).toBeTruthy();
+      expect(actionPanel?.querySelector('.dt-col-drag-handle')).toBeTruthy();
+
+      // Verify action panel button order: pin, hide, filter, sort, drag
+      const children = Array.from(actionPanel!.children);
+      expect(children[0].classList.contains('dt-col-pin-btn')).toBe(true);
+      expect(children[1].classList.contains('dt-col-hide-btn')).toBe(true);
+      expect(children[2].classList.contains('dt-col-filter-btn')).toBe(true);
+      expect(children[3].classList.contains('dt-col-sort-btn')).toBe(true);
+      expect(children[4].classList.contains('dt-col-drag-handle')).toBe(true);
 
       header.destroy();
     });

@@ -92,11 +92,11 @@ export class ColumnHeader {
     el.setAttribute('aria-label', `${this.column.name}, ${this.column.type}`);
     el.setAttribute('data-column', this.column.name);
 
-    // Name row container (holds drag handle + name inline)
+    // Name row container
     const nameRow = document.createElement('div');
     nameRow.className = `${this.classPrefix}-col-name-row`;
 
-    // Drag handle (inline with name)
+    // Drag handle
     const dragHandle = document.createElement('button');
     dragHandle.className = `${this.classPrefix}-col-drag-handle`;
     dragHandle.setAttribute('type', 'button');
@@ -112,14 +112,14 @@ export class ColumnHeader {
         <circle cx="11" cy="12" r="1.5" />
       </svg>
     `;
-    // Column name (flex-grow to push sort button to the right)
+    // Column name
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
     nameEl.setAttribute('title', this.column.name); // Tooltip for truncated names
     nameRow.appendChild(nameEl);
 
-    // Sort button with SVG arrows (in name row, at right end)
+    // Sort button with SVG arrows
     const sortBtn = document.createElement('button');
     sortBtn.className = `${this.classPrefix}-col-sort-btn`;
     sortBtn.setAttribute('type', 'button');
@@ -138,12 +138,9 @@ export class ColumnHeader {
     sortBadge.style.display = 'none';
     sortBtn.appendChild(sortBadge);
 
-    nameRow.appendChild(sortBtn);
-    nameRow.appendChild(dragHandle);
-
     el.appendChild(nameRow);
 
-    // Action panel (pin, hide, filter buttons)
+    // Action panel (pin, hide, filter, sort, drag-to-reorder buttons)
     const actionPanel = document.createElement('div');
     actionPanel.className = `${this.classPrefix}-col-action-panel`;
 
@@ -186,21 +183,16 @@ export class ColumnHeader {
       </svg>
     `;
 
-    actionPanel.appendChild(pinBtn);
-    actionPanel.appendChild(hideBtn);
-    actionPanel.appendChild(filterBtn);
-    el.appendChild(actionPanel);
-
-    // Divider — thin elegant horizontal bar separating controls from data display
-    const divider = document.createElement('div');
-    divider.className = `${this.classPrefix}-col-divider`;
-    el.appendChild(divider);
-
     // Type label
     const typeEl = document.createElement('div');
     typeEl.className = `${this.classPrefix}-col-type`;
     typeEl.textContent = this.column.type;
     el.appendChild(typeEl);
+
+    // Divider — thin horizontal bar separating header info from data display
+    const divider1 = document.createElement('div');
+    divider1.className = `${this.classPrefix}-col-divider`;
+    el.appendChild(divider1);
 
     // Stats line (shows row count, updated via subscription)
     const statsEl = document.createElement('div');
@@ -208,10 +200,23 @@ export class ColumnHeader {
     // Initially empty - will be updated when subscribed to totalRows
     el.appendChild(statsEl);
 
-    // Visualization container (placeholder for Phase 4)
+    // Visualization container
     const vizEl = document.createElement('div');
     vizEl.className = `${this.classPrefix}-col-viz`;
     el.appendChild(vizEl);
+
+    // Divider — thin horizontal bar separating data display from actions
+    const divider2 = document.createElement('div');
+    divider2.className = `${this.classPrefix}-col-divider`;
+    el.appendChild(divider2);
+
+    // Action panel (pin, hide, filter, sort, drag-to-reorder buttons)
+    actionPanel.appendChild(pinBtn);
+    actionPanel.appendChild(hideBtn);
+    actionPanel.appendChild(filterBtn);
+    actionPanel.appendChild(sortBtn);
+    actionPanel.appendChild(dragHandle);
+    el.appendChild(actionPanel);
 
     return el;
   }

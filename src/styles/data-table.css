@@ -47,7 +47,7 @@
   /* Sizing */
   --dt-header-height: 120px;
   --dt-row-height: 32px;
-  --dt-col-width: 200px; /* Accommodate drag handle, name, and sort button */
+  --dt-col-width: 200px; /* Default column width */
   --dt-scrollbar-width: 17px;
 
   /* Misc */
@@ -148,6 +148,8 @@
    =========================================== */
 
 .dt-filter-bar {
+  position: relative;
+  z-index: 21;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -277,6 +279,8 @@
    =========================================== */
 
 .dt-hidden-gutter {
+  position: relative;
+  z-index: 21;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -452,7 +456,7 @@
 }
 
 .dt-col-name {
-  flex: 1; /* Grow to push sort button to the right */
+  flex: 1; /* Fill available width */
   min-width: 0; /* Allow text truncation in flex container */
   font-weight: 600;
   font-size: var(--dt-font-size);
@@ -518,17 +522,17 @@
 }
 
 /* ===========================================
-   Drag Handle
+   Drag Handle (in action panel)
    =========================================== */
 
 .dt-col-drag-handle {
-  /* Inline element within name-row flex container */
+  /* Element within action panel flex container */
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
   background: transparent;
@@ -555,8 +559,8 @@
 }
 
 .dt-col-drag-handle svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .dt-col-drag-handle circle {
@@ -582,9 +586,8 @@
 .dt-col-action-panel {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  justify-content: space-between;
   padding: 0.25rem 0;
-  margin-top: 0.125rem;
 }
 
 .dt-col-action-btn {
@@ -705,7 +708,7 @@
 }
 
 /* ===========================================
-   Sort Button (now in name row)
+   Sort Button (in action panel)
    =========================================== */
 
 .dt-col-sort-btn {
@@ -714,7 +717,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: none;
   background: transparent;
   border-radius: var(--dt-radius-sm);
@@ -732,8 +737,8 @@
 }
 
 .dt-col-sort-btn svg {
-  width: 10px;
-  height: 14px;
+  width: 12px;
+  height: 16px;
 }
 
 .dt-col-sort-btn .arrow-up,

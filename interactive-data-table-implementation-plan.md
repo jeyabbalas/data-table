@@ -1308,167 +1308,618 @@ private updateFilterIndicator(): void {
 
 ---
 
-## Phase 6: Column Stats Panel
+## Phase 6: Column Stats Panel and Column Header Actions
 
-**Goal:** Replace the simple "N rows" stats line in column headers with a rich two-line stats panel that answers three questions at a glance: How much data is there? What does it look like? Is there anything wrong with it?
+**Goal:** This phase covers two areas: (1) the already-completed column stats panel that shows rich data summaries in column headers, and (2) a new column header action panel providing pin, hide, sort, and filter controls directly in each column header.
 
-**Architecture:** Stats flow through visualization callbacks, not independent queries. Each visualization already computes raw stats (min, max, count, nulls, etc.) during `fetchData()`. A new `onDefaultStatsChange` callback emits structured stats upward. This avoids duplicate queries and keeps stats synchronized with visualizations.
+**Architecture overview:** Each column header (`src/table/ColumnHeader.ts`) renders a vertical stack of elements: name row, type label, stats, and visualization. This phase adds a new action panel row between the name row and the type label. The action panel contains four icon buttons (pin, hide, sort, filter) styled gray by default and blue when active — matching the existing sort button's color scheme (`--dt-arrow-default` for gray, `--dt-primary` for blue). The buttons are spaced generously (`gap: 0.5rem` minimum) so users do not accidentally click the wrong one.
 
-**Design:**
+---
 
-Line 1 (universal — count + data quality):
-- No filter, no nulls: `1,234 rows`
-- No filter, has nulls: `1,234 rows · 5 null`
-- Filtered, no nulls: `892 / 1,234 rows`
-- Filtered, has nulls: `892 / 1,234 rows · 3 null`
-- All null: `1,234 rows · all null`
+### Task 6.1: Column Stats Panel (Completed)
 
-Line 2 (type-specific — distribution summary):
-- integer/float/decimal: `min 0 · med 42 · max 1.2K`
-- string: `12 unique` or `all unique`
-- boolean: `67% true`
-- uuid: `1,234 unique (100%)` or `all unique`
-- date/timestamp: `2020-01-01 – 2024-12-31`
-- time: `08:00 – 23:45`
-- interval: `min 2h · med 8h · max 48h`
+**Status:** Fully implemented.
 
-All stats reflect filtered data when filters are active. Existing hover behavior (temporarily replacing stats with bin/segment info) stays unchanged.
+**Summary:** Replaced the simple "N rows" stats line with a rich two-line stats panel answering three questions at a glance: How much data is there? What does it look like? Is there anything wrong with it?
 
-### Task 6.1: Define Column Stats Type System
+Line 1 shows universal count and data quality (e.g., "892 / 1,234 rows · 3 null"). Line 2 shows type-specific distribution (e.g., "min 0 · med 42 · max 1.23e+6" for numerics, "12 unique" for strings, "67% true" for booleans, date ranges for temporals). Stats flow through visualization callbacks (`onDefaultStatsChange`) rather than independent queries, keeping them synchronized with visualizations and filter updates.
 
-Create `src/statistics/ColumnStatsTypes.ts`:
+Key files:
+- `src/statistics/ColumnStatsTypes.ts` — Discriminated union: `NumericColumnStats`, `CategoricalColumnStats`, `TemporalColumnStats`, `TimeColumnStats`, `IntervalColumnStats`
+- `src/statistics/StatsFormatters.ts` — `formatDefaultStats()` produces two-line HTML with compact number formatting
+- `src/statistics/StatsComputer.ts` — `fetchIntervalStats()` for columns without visualizations
+- `src/visualizations/BaseVisualization.ts` — `onDefaultStatsChange` callback option
+- Each visualization (`Histogram.ts`, `DateHistogram.ts`, `TimeHistogram.ts`, `ValueCounts.ts`) emits typed stats from `fetchData()`
+- `demo/main.ts` — Wires stats callbacks, stores `currentDefaultStats` per column, restores rich stats after hover
+- `src/styles/data-table.css` — `.dt-stats-line1`, `.dt-stats-line2` classes
 
-```typescript
-export interface BaseColumnStats {
-  totalRows: number;
-  nonNullCount: number;
-  nullCount: number;
-  filteredTotalRows: number | null; // null = no filter active
-}
+No action required. All files are in place and working.
 
-export interface NumericColumnStats extends BaseColumnStats {
-  kind: 'numeric';
-  min: number | null;
-  max: number | null;
-  median: number | null;
-  distinctCount: number;
-}
+---
 
-export interface CategoricalColumnStats extends BaseColumnStats {
-  kind: 'categorical';
-  distinctCount: number;
-  trueCount?: number; // boolean only
-}
+### Task 6.2: Column Header Action Panel and Pin Columns
 
-export interface TemporalColumnStats extends BaseColumnStats {
-  kind: 'temporal';
-  min: string | null;
-  max: string | null;
-}
+**Goal:** Add a row of action icon buttons to each column header and implement column pinning (freeze panes like Excel). This task introduces the action panel DOM structure with all four icon buttons, but only the pin button is wired up. The hide and filter buttons are DOM placeholders for Tasks 6.3 and 6.5. The sort button stays in the name row for now (Task 6.4 will relocate it).
 
-export interface TimeColumnStats extends BaseColumnStats {
-  kind: 'time';
-  minSeconds: number | null;
-  maxSeconds: number | null;
-}
+#### 6.2.1: Action Panel DOM and CSS
 
-export interface IntervalColumnStats extends BaseColumnStats {
-  kind: 'interval';
-  minDisplay: string | null;
-  maxDisplay: string | null;
-  medianDisplay: string | null;
-}
+**Files to modify:**
+- `src/table/ColumnHeader.ts` — Add action panel element creation in `createElement()` (currently lines 82–158)
+- `src/styles/data-table.css` — Add styles for the action panel and icon buttons
 
-export type ColumnStatsData =
-  | NumericColumnStats
-  | CategoricalColumnStats
-  | TemporalColumnStats
-  | TimeColumnStats
-  | IntervalColumnStats;
+**What to build:**
+
+In `ColumnHeader.createElement()`, after creating `nameRow` and before creating `typeEl`, create a new `div.dt-col-action-panel` containing three `button` elements. (The sort button stays in the name row until Task 6.4.)
+
+The resulting column header DOM structure becomes:
+```
+.dt-col-header
+├── .dt-col-name-row
+│   ├── .dt-col-name
+│   ├── .dt-col-sort-btn          ← stays here until Task 6.4
+│   └── .dt-col-drag-handle
+├── .dt-col-action-panel          ← NEW
+│   ├── .dt-col-action-btn.dt-col-pin-btn
+│   ├── .dt-col-action-btn.dt-col-hide-btn    (placeholder, no handler yet)
+│   └── .dt-col-action-btn.dt-col-filter-btn  (placeholder, no handler yet)
+├── .dt-col-type
+├── .dt-col-stats
+└── .dt-col-viz
 ```
 
-Also create `src/statistics/index.ts` re-exporting all types.
+**CSS for the action panel — follow existing sort button patterns:**
 
-**Verification:** TypeScript compiles. Each interface maps to a Line 2 format.
+The action panel is a flex row. Each button follows the same visual pattern as `.dt-col-sort-btn` and `.dt-col-drag-handle`: transparent background, subtle hover highlight, `border: none`, `cursor: pointer`. Key design requirement: **space the buttons generously** (`gap: 0.5rem` or more) so users do not accidentally click the wrong one.
 
-### Task 6.2: Implement Stats Formatters
+Color behavior (same as existing sort arrows):
+- Default: icon colored `var(--dt-arrow-default)` (gray, `#d1d5db`)
+- Hover: icon colored `var(--dt-arrow-hover)` (medium gray, `#9ca3af`)
+- Active state (e.g., column is pinned): icon colored `var(--dt-primary)` (blue, `#2563eb`)
 
-Create `src/statistics/StatsFormatters.ts` with:
+Use `fill: currentColor` or `stroke: currentColor` in the SVGs so the CSS `color` property controls icon color.
 
-`formatCompact(value: number): string` — compact number formatting:
-- Integers < 10,000: locale-formatted (`1,234`)
-- 10K–999K: `12.3K`
-- 1M+: `1.23M`
-- Floats: 2–3 significant digits
+**SVG icons** — use minimalistic, elegant designs at `viewBox="0 0 16 16"`:
+- **Pin (thumbtack):** A thumbtack shape — pin head as a small filled circle or rectangle at top, needle/shaft extending down. Should be recognizable at 14×14px.
+- **Hide (eye with slash):** An eye shape with a diagonal slash through it. Common "visibility off" icon pattern.
+- **Filter (cone/funnel):** A funnel/cone shape — wide at top, narrow at bottom. Standard filter iconography.
 
-`formatDefaultStats(stats: ColumnStatsData, dataType: DataType): string` — returns full two-line HTML:
-- Line 1: universal count + null info
-- Line 2: type-specific distribution summary (switches on `stats.kind` and `dataType`)
-- Returns `<span class="dt-stats-line1">...</span><br><span class="dt-stats-line2">...</span>`
+Keep strokes at 1.5–2px for consistency. All three icons should feel like they belong to the same icon family.
 
-Edge cases: all null → no line 2. Single value → `all values: 42`. 0 rows → no line 2. 1 row → `1 row` (singular).
+#### 6.2.2: Pin Button Behavior
 
-Write tests in `tests/statistics/StatsFormatters.test.ts`.
+**Files to modify:**
+- `src/table/ColumnHeader.ts` — Add click handler and state subscription for pin button
+- `src/core/Actions.ts` — Enhance `toggleColumnPin()` (currently line 230) to also reorder columns
 
-**Verification:** All unit tests pass covering every type variant and edge case.
+**Existing infrastructure:**
+- `state.pinnedColumns: Signal<string[]>` already exists in `src/core/State.ts` (line 43)
+- `actions.toggleColumnPin(column)` already exists in `src/core/Actions.ts` (line 230) — it adds/removes from the `pinnedColumns` array
 
-### Task 6.3: Add Median to Numeric Stats Query
+**What to build in ColumnHeader:**
+- Store a reference to the pin button element (similar to `this.sortButton`)
+- Add a click handler that calls `this.actions.toggleColumnPin(this.column.name)`
+- Subscribe to `state.pinnedColumns` and toggle a `dt-col-action-btn--active` class on the pin button based on whether this column is in the pinned set
+- Clean up the listener and subscription in `destroy()`
 
-Update `src/visualizations/histogram/HistogramData.ts`:
-1. Add `median: number | null` to `ColumnStats` and `StatsResult` interfaces
-2. Add `APPROX_QUANTILE("${column}", 0.5) as median` to the SELECT in `fetchColumnStats()`
-3. Add `median` to `HistogramData` interface
-4. Pass `median` through in `fetchHistogramData()` and `Histogram.fetchAlignedForeground()`
+**What to enhance in Actions.toggleColumnPin():**
 
-Zero additional queries — one extra column in the existing SELECT that already computes Q1/Q3.
+Currently `toggleColumnPin()` only adds/removes from the `pinnedColumns` array. Enhance it so that when a column is pinned, it also moves in `visibleColumns` (and `columnOrder`) to the end of the pinned group. When unpinned, it moves to the first position after the remaining pinned columns.
 
-**Verification:** Existing histogram tests pass. `fetchColumnStats` returns median.
+Logic:
+- **Pinning:** Remove the column from its current position in `visibleColumns`. Insert it after the last currently-pinned column. Update `columnOrder` similarly. The first pinned column becomes column 1, the second becomes column 2, etc.
+- **Unpinning:** Remove the column from the pinned group. Insert it as the first unpinned column (immediately after the last remaining pinned column). This is the most intuitive position — the user sees it slide just to the right of the frozen section.
 
-### Task 6.4: Add `onDefaultStatsChange` Callback and Emit Stats
+Call `setColumnOrder()` to persist the reordering (it also reorders `visibleColumns` to match).
 
-Update `src/visualizations/BaseVisualization.ts`:
-- Add `onDefaultStatsChange?: (stats: ColumnStatsData) => void` to `VisualizationOptions`
+#### 6.2.3: Sticky Positioning for Pinned Columns (Freeze Panes)
 
-Update each visualization to emit typed stats from `fetchData()`:
-- `Histogram.ts` → `NumericColumnStats` (min, max, median, distinctCount)
-- `DateHistogram.ts` → `TemporalColumnStats` (min, max as ISO strings)
-- `TimeHistogram.ts` → `TimeColumnStats` (minSeconds, maxSeconds)
-- `ValueCounts.ts` → `CategoricalColumnStats` (distinctCount, trueCount for booleans)
+**Files to modify:**
+- `src/table/TableContainer.ts` — Apply sticky positioning after render and on pin state changes
+- `src/table/TableBody.ts` — Apply sticky positioning to body cells in pinned columns
+- `src/styles/data-table.css` — Sticky column styles
 
-Stats emit after data is set, before `render()`. Stats re-emit on filter updates via `updateFilters()` → `fetchData()`.
+**What to build:**
 
-**Verification:** Each visualization calls `onDefaultStatsChange` on initial load and after filter updates.
+The freeze-pane effect requires `position: sticky` with computed `left` values on both header cells and body cells for pinned columns. This is what makes pinned columns stay in place while the user scrolls horizontally.
 
-### Task 6.5: Wire Stats into Demo
+**In TableContainer:**
+- Subscribe to `state.pinnedColumns` changes
+- After render (and in `updateColumnWidths()`), compute sticky styles for pinned columns:
+  - Iterate through pinned columns in order
+  - For each pinned column at index `i`, compute cumulative left offset = sum of widths of all preceding pinned columns
+  - Set on the header element: `position: sticky`, `left: {cumulativeLeft}px`, `z-index: {10 + pinnedCount - i}` (leftmost pinned column gets highest z-index so it visually overlaps rightward ones during scroll)
+  - For unpinned columns, clear these inline styles
 
-Update `demo/main.ts`:
-1. Store `currentDefaultStats` HTML per column
-2. Add `onDefaultStatsChange` callback that formats stats via `formatDefaultStats()` and updates the stats element
-3. Update `onStatsChange` to track hover state, restoring `currentDefaultStats` on mouse leave
-4. Keep `getDefaultStats()` as fallback before first visualization data fetch
+**In TableBody** (wherever cells are created in `updateRowContent()` or equivalent):
+- Apply the same sticky positioning logic to body cells for pinned columns
+- Body cells need opaque backgrounds (`var(--dt-bg)`) to prevent scrolling content from showing through
+- A helper method like `getPinnedColumnStyles()` could be shared between header and body
 
-**Verification:** Two-line stats appear in each column header. Filter → stats update. Hover → bin info. Mouse leave → rich stats restore.
+**CSS additions:**
+```css
+.dt-col-header--pinned,
+.dt-cell--pinned {
+  position: sticky;
+  z-index: 2; /* base z-index, overridden by inline style for stacking order */
+}
 
-### Task 6.6: Standalone Stats for Interval Columns
+/* Ensure opaque backgrounds so scrolling content doesn't show through */
+.dt-col-header--pinned {
+  background: var(--dt-bg-secondary);
+}
+.dt-cell--pinned {
+  background: var(--dt-bg);
+}
 
-Create `src/statistics/StatsComputer.ts` with `fetchIntervalStats()` for columns without visualizations.
+/* Shadow on the right edge of the last pinned column to indicate freeze boundary */
+.dt-col-header--pinned-last,
+.dt-cell--pinned-last {
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+}
+```
 
-Uses DuckDB `MIN`, `MAX`, `APPROX_QUANTILE` on INTERVAL type, cast to VARCHAR for display. Wire into demo for columns where `!VisualizationFactory.isApplicable(column)`.
+The `--pinned-last` class goes on the rightmost pinned column's header and cells. Update this class when the pinned set changes.
 
-**Verification:** Interval columns show stats. Stats update on filter.
+#### 6.2.4: Pin/Unpin Animation
 
-### Task 6.7: CSS and Polish
+When a column is pinned or unpinned, add a smooth CSS animation so the column visually slides to its new position rather than jumping. This makes it intuitive to the user what the pin button does.
 
-Update `src/styles/data-table.css`:
-- Adjust stats element height from `5.2em` to `3.9em` (2 lines default + 1 line buffer for hover)
-- Add `.dt-stats-line1`, `.dt-stats-line2` classes (line 2 in a more muted color)
+**Recommended approach — FLIP animation:**
+1. Before reordering, capture `getBoundingClientRect()` of all column headers (**F**irst position)
+2. Execute the reorder (which triggers re-render)
+3. After re-render, capture new positions (**L**ast position)
+4. Compute the delta and apply `transform: translateX(delta)` immediately (**I**nvert)
+5. In the next frame, remove the transform with a CSS transition to animate to the final position (**P**lay)
 
-Polish formatters:
-- HTML-escape values containing `<`, `&`, `"`
-- Handle `NaN`, `Infinity` in numeric formatters
-- `1 row` singular vs `N rows` plural
+This can be implemented in `TableContainer.render()` or as a separate utility. If the FLIP approach is too complex, a simpler alternative: apply `transition: transform 0.3s ease` to column headers and use `order` CSS property changes. The implementer should use their judgment — the functional behavior (columns reorder correctly, sticky positioning works) is more important than the animation. If animation complexity threatens the task, skip it and let columns reorder instantly.
 
-**Verification:** No layout shift on hover transitions. Visual review across all column types.
+**Verification:**
+- Action panel appears below the name row in every column header with three icon buttons (pin, hide, filter) plus the existing sort button in the name row
+- Pin button is gray by default, blue when the column is pinned
+- Clicking pin moves the column to the left of the table (after existing pinned columns)
+- Pinned columns stay fixed during horizontal scroll (freeze pane behavior)
+- Multiple columns can be pinned; they accumulate at the left in order
+- Unpinning moves the column to the first unpinned position
+- Body cells for pinned columns also stay fixed during horizontal scroll
+- The last pinned column has a subtle right shadow separating it from scrollable content
+- Hide and filter buttons appear in the panel but have no behavior yet
+- Dark mode: icon colors and shadow render correctly
+
+---
+
+### Task 6.3: Hide/Unhide Columns with Hidden Columns Gutter
+
+**Goal:** Activate the hide button in the action panel and add a "hidden columns" gutter at the bottom of the table for restoring hidden columns. Also add labels to distinguish the filter bar from the hidden columns gutter.
+
+**Existing infrastructure:**
+- `actions.hideColumn(column)` — `src/core/Actions.ts` line 183 — removes from `visibleColumns`
+- `actions.showColumn(column)` — `src/core/Actions.ts` line 195 — inserts back based on `columnOrder` position
+- `visibleColumns` signal changes trigger `TableContainer.render()` — column headers are recreated
+- FilterBar pattern (`src/filters/FilterBar.ts`) — collapse/expand gutter with chip elements — use as template
+
+#### 6.3.1: Hide Button Behavior
+
+**Files to modify:**
+- `src/table/ColumnHeader.ts` — Activate the `.dt-col-hide-btn` created in Task 6.2
+
+**What to build:**
+- Add a click handler on `.dt-col-hide-btn` that calls `this.actions.hideColumn(this.column.name)`
+- The column immediately disappears from `visibleColumns`, triggering a full re-render via the existing `TableContainer` subscription
+- **Edge case:** Do not allow hiding the last visible column. If `visibleColumns.length <= 1`, either disable the button (add `disabled` attribute, gray it out) or silently ignore the click.
+- No active/inactive toggle needed — hiding is a one-shot action; the button disappears with the column
+
+#### 6.3.2: Neighbor-Tracking Restore Logic
+
+**Files to modify:**
+- `src/core/Actions.ts` — Enhance `hideColumn()` and `showColumn()` with neighbor tracking
+- `src/core/State.ts` — Add a new signal to track hidden column metadata
+
+**What to build:**
+
+The current `showColumn()` inserts based on `columnOrder` position. This works well when columns haven't been reordered, but breaks down when the user has reordered columns after hiding. Replace it with neighbor-aware restore logic.
+
+**New state signal** — add to `TableState` in `src/core/State.ts`:
+```typescript
+/** Metadata for hidden columns — tracks neighbors at hide time for intelligent restore */
+hiddenColumnInfo: Signal<Map<string, HiddenColumnInfo>>;
+```
+
+Where:
+```typescript
+interface HiddenColumnInfo {
+  column: string;
+  leftNeighbor: string | null;   // visible column to the left at the moment of hiding
+  rightNeighbor: string | null;  // visible column to the right at the moment of hiding
+}
+```
+
+Initialize as `createSignal<Map<string, HiddenColumnInfo>>(new Map())` in `createTableState()`. Reset in `resetTableState()`.
+
+**Enhanced `hideColumn()`:**
+Before removing the column from `visibleColumns`, record its current left and right visible neighbors in the `hiddenColumnInfo` map.
+
+**Enhanced `showColumn()` restore logic:**
+1. Look up `HiddenColumnInfo` for the column
+2. Get current `visibleColumns` array
+3. Find the positions of `leftNeighbor` and `rightNeighbor` in `visibleColumns`
+4. **Both neighbors still adjacent:** Insert between them
+5. **Both neighbors visible but not adjacent** (columns have been reordered between them): Place next to whichever neighbor is closest to the column's original relative position. Use `columnOrder` as the reference for "original" position — check which neighbor the column was closer to in `columnOrder` and insert next to that one.
+6. **One neighbor visible, other hidden:** Insert next to the visible one (after the left neighbor, or before the right neighbor)
+7. **Both neighbors hidden:** Walk outward from the column's position in `columnOrder` to find the nearest visible column and insert next to it
+8. **Fallback** (extensive reordering makes all heuristics fail, or no neighbors recorded): Append at end of `visibleColumns`
+9. After restoring, remove the entry from `hiddenColumnInfo`
+
+This is essentially how the DOM works with `insertBefore` — you're restoring relative position, not absolute index.
+
+#### 6.3.3: Hidden Columns Gutter
+
+**Files to create:**
+- `src/table/HiddenColumnsGutter.ts` (new file)
+
+**Files to modify:**
+- `src/table/TableContainer.ts` — Instantiate and insert the gutter
+- `src/styles/data-table.css` — Gutter styles
+
+**What to build:**
+
+Create a `HiddenColumnsGutter` class following the exact same pattern as `FilterBar` (`src/filters/FilterBar.ts`):
+- Constructor takes `state`, `actions`, and options
+- Subscribes to hidden column changes (either subscribe to `hiddenColumnInfo` or compute hidden columns by diffing `columnOrder` vs `visibleColumns`)
+- Creates a DOM element: `div.dt-hidden-gutter`
+- Contains a label ("Hidden columns"), chip elements for each hidden column, and a "Show all" button (visible when 2+ columns hidden)
+- Each chip shows the column name and a restore icon button (an eye icon without the slash — the inverse of the hide icon — or a simple "+" icon)
+- Clicking a chip's restore button calls `this.actions.showColumn(columnName)`
+- "Show all" calls `showColumn()` for every hidden column
+- Uses `max-height: 0` with CSS transition to collapse when no columns are hidden (same expand/collapse pattern as `.dt-filter-bar--hidden`)
+- Has a `destroy()` method that unsubscribes and removes from DOM
+
+**DOM placement in TableContainer:**
+
+In `TableContainer`'s constructor, after appending `bodyScroll` to the root, append the hidden columns gutter. The final DOM structure:
+```
+.dt-root
+├── .dt-header-area         (existing)
+├── .dt-filter-bar           (existing, between header and body)
+├── .dt-body-scroll          (existing)
+└── .dt-hidden-gutter        (NEW, at very bottom)
+```
+
+**CSS — muted styling to be inconspicuous:**
+```css
+.dt-hidden-gutter {
+  /* Same collapse/expand pattern as .dt-filter-bar */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+  background: var(--dt-bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
+  max-height: 200px;
+  transition: max-height 0.2s ease, padding 0.2s ease, border-top-color 0.2s ease;
+}
+
+.dt-hidden-gutter--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+}
+
+/* Chips are more muted than filter chips — inconspicuous coloring */
+.dt-hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  background: var(--dt-bg-tertiary);   /* muted, unlike filter chips' --dt-primary-light */
+  border: 1px solid var(--dt-border);  /* muted, unlike filter chips' --dt-primary border */
+  border-radius: 999px;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+}
+```
+
+#### 6.3.4: Label Both Gutters
+
+**Files to modify:**
+- `src/filters/FilterBar.ts` — Add an "Active filters" label
+- `src/table/HiddenColumnsGutter.ts` — Include a "Hidden columns" label
+- `src/styles/data-table.css` — Label styling
+
+**What to build:**
+
+Add a small label element at the start of each gutter's content. In `FilterBar.createElement()`, insert a `span` with text "Active filters" before the chips container. Same for the hidden columns gutter with "Hidden columns".
+
+Style both labels:
+```css
+.dt-gutter-label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+```
+
+The labels help users distinguish the two gutters at a glance.
+
+**Verification:**
+- Clicking the eye-slash button on a column hides it from the table
+- A "Hidden columns" gutter appears at the bottom of the table with the hidden column as a chip
+- The filter bar (when visible) now shows an "Active filters" label at its start
+- Clicking a chip's restore button in the hidden gutter re-inserts the column at the correct position based on neighbor tracking
+- Test the restore logic: hide column B (between A and C), reorder so A and C are separated, restore B → it appears next to whichever neighbor is closest to its original relative position
+- Test: hide columns B and C (neighbors of each other), restore B → it walks outward to find a visible anchor
+- The gutter collapses smoothly when all columns are restored
+- Hiding is disabled/blocked for the last visible column
+- The hidden gutter's muted styling is visually distinct from the filter bar's blue-accented styling
+- Dark mode: both gutters render correctly
+
+---
+
+### Task 6.4: Move Sort Button to Action Panel
+
+**Goal:** Relocate the sort button from the name row into the action panel, freeing horizontal space for long column names.
+
+**Context for implementer:** The sort button is currently created in `ColumnHeader.createElement()` (around lines 116–136 of `src/table/ColumnHeader.ts`) as part of `nameRow`. It includes an SVG with `.arrow-up` and `.arrow-down` paths and a `.dt-col-sort-badge` span for multi-sort position indicators. The `handleSortClick` method (line 176) handles single-click (cycle asc→desc→none) and Cmd/Ctrl+click (multi-sort). The `update()` method (line 277) manages CSS classes `dt-col-sort-btn--asc` and `dt-col-sort-btn--desc`. Sort CSS is in `src/styles/data-table.css` (lines 446–513).
+
+**Files to modify:**
+- `src/table/ColumnHeader.ts` — Move sort button creation from `nameRow` section to `actionPanel` section
+- `src/styles/data-table.css` — Adjust sort button sizing if needed for visual consistency in the action panel
+
+**What to build:**
+
+In `createElement()`:
+1. **Remove** the sort button creation from the name row section. The sort button (`sortBtn`) and its badge (`sortBadge`) are currently appended to `nameRow`. Stop appending them there.
+2. **Add** the sort button to the `.dt-col-action-panel` div, between the hide button and the filter button.
+3. The sort button keeps its existing CSS class `.dt-col-sort-btn` (not `.dt-col-action-btn`) because it has specialized styling for the arrow SVG fill states. However, ensure it visually harmonizes with the other action panel buttons in terms of height and spacing.
+
+The updated action panel order:
+```
+.dt-col-action-panel
+├── .dt-col-action-btn.dt-col-pin-btn
+├── .dt-col-action-btn.dt-col-hide-btn
+├── .dt-col-sort-btn              ← MOVED here from name row
+│   └── .dt-col-sort-badge
+└── .dt-col-action-btn.dt-col-filter-btn
+```
+
+The name row simplifies to:
+```
+.dt-col-name-row
+├── .dt-col-name
+└── .dt-col-drag-handle
+```
+
+This gives the column name maximum horizontal space for display.
+
+**Nothing changes in behavior:**
+- Click to cycle sort (asc → desc → none)
+- Cmd/Ctrl+click for multi-sort
+- Sort badge shows position number during multi-sort
+- Arrow colors: gray default, blue when sorted
+- All existing CSS classes and state subscriptions work as before
+
+**CSS adjustments:**
+- Verify the sort button's `width`/`height` is consistent with the action panel button size (20×20px suggested in Task 6.2). Adjust `padding` if the arrow SVG looks too small or too large in the panel context.
+- Verify the `.dt-col-sort-badge` (positioned absolutely at `top: -6px; right: -6px`) still renders correctly in the action panel's flex context. Adjust position if it gets clipped.
+
+**Verification:**
+- Sort button appears in the action panel, between hide and filter buttons
+- Column name has noticeably more horizontal space (no sort button competing)
+- Click to sort still works (asc → desc → none cycle)
+- Cmd/Ctrl+click for multi-sort still works with correct badge numbers
+- Sort arrows are gray by default, blue when actively sorted
+- Sort badge renders correctly (not clipped by flex container)
+- Drag handle remains at the right end of the name row
+- No visual regression in any column header element
+
+---
+
+### Task 6.5: Manual Filter Creation Panel
+
+**Goal:** Activate the filter button in the action panel and implement an interactive panel for creating filters manually. This complements the existing visualization-based filtering (clicking histogram bars, brushing) by giving users explicit control over filter parameters.
+
+**Existing filter infrastructure:**
+- `src/filters/FilterTypes.ts` — Discriminated union: `RangeFilter`, `PointFilter`, `SetFilter`, `NotSetFilter`, `NullFilter`, `PatternFilter`
+- `src/core/Actions.ts` — `addFilter(filter)` adds/replaces a filter for a column; `removeFilter(column, type?)` removes it
+- `state.filters: Signal<Filter[]>` — all active filters
+- `state.filtersByColumn: Computed<Map<string, Filter[]>>` — filters grouped by column
+- `src/filters/FilterBar.ts` — Displays active filters as removable chips
+- `src/filters/FilterSQL.ts` — `filtersToWhereClause()` converts `Filter[]` to SQL WHERE clause
+- `CrossfilterCoordinator` — Coordinates visualization updates when filters change
+
+**Column types** (`src/core/types.ts`): `'integer' | 'float' | 'decimal' | 'string' | 'boolean' | 'uuid' | 'date' | 'timestamp' | 'time' | 'interval'`
+
+#### 6.5.1: Filter Panel Component
+
+**Files to create:**
+- `src/filters/FilterPanel.ts` — Main panel component
+- `src/filters/FilterPanelField.ts` — Per-column filter control row
+
+**Files to modify:**
+- `src/table/ColumnHeader.ts` — Activate filter button click handler
+- `src/table/TableContainer.ts` — Create and manage the FilterPanel instance
+- `src/styles/data-table.css` — Filter panel styles
+
+**What to build:**
+
+The filter panel is a floating panel (like a dropdown/popover) that appears when the user clicks a filter button on any column header. It shows filter controls for **all columns** (not just the clicked one), with the clicked column highlighted or scrolled into view at the top. This allows the user to configure multiple filters without repeatedly opening and closing the panel.
+
+**Panel lifecycle:**
+- Created lazily by `TableContainer` when the filter button is first clicked
+- One instance per table (not per column)
+- Toggle behavior: clicking the filter button on the same column closes the panel; clicking on a different column repositions it and scrolls to that column
+- Closes on: clicking outside the panel, pressing Escape, or clicking the panel's close button
+
+**Panel DOM structure:**
+```
+.dt-filter-panel (positioned absolutely, anchored below the clicked column header)
+├── .dt-filter-panel-header
+│   ├── span "Create filters"
+│   └── button.dt-filter-panel-close (× icon)
+├── .dt-filter-panel-body (scrollable, contains all column fields)
+│   ├── .dt-filter-panel-field (one per column from schema)
+│   │   ├── .dt-filter-panel-field-name (column name + type badge)
+│   │   └── .dt-filter-panel-field-controls (type-specific inputs)
+│   ├── .dt-filter-panel-field
+│   │   └── ...
+│   └── ...
+└── (no footer needed — filters apply immediately)
+```
+
+**Wiring in ColumnHeader:**
+- The filter button's click handler should emit a custom event or call a callback (passed via `ColumnHeaderOptions`) with the column name. This avoids tight coupling between `ColumnHeader` and `FilterPanel`.
+- Toggle the `dt-col-action-btn--active` class on the filter button when this column has active filters. Subscribe to `state.filtersByColumn` for this — the button is active whenever the column has filters, regardless of whether the panel is open.
+
+**Wiring in TableContainer:**
+- Create a `FilterPanel` instance (lazily, on first filter button click)
+- Position it below the clicked column header using `getBoundingClientRect()` of the header element
+- Append it to `.dt-root` with `position: absolute` (the root is already `position: relative` or can be made so)
+- Handle outside clicks and Escape to close
+
+#### 6.5.2: Type-Specific Filter Controls
+
+**File:** `src/filters/FilterPanelField.ts`
+
+Each column gets a `FilterPanelField` that renders controls appropriate for its data type. All controls create standard `Filter` objects from `src/filters/FilterTypes.ts` and call `actions.addFilter()` to apply.
+
+**Numeric columns** (integer, float, decimal):
+- A comparison mode dropdown: `between`, `=`, `!=`, `>`, `>=`, `<`, `<=`
+- "Between" mode: two number inputs (min and max) → creates `RangeFilter { type: 'range', column, min, max }`
+- Single-value modes: one number input → For `=` creates `PointFilter { type: 'point', column, value }`. For `>`, `>=`, `<`, `<=` creates `RangeFilter` with appropriate open bounds (check how `filtersToWhereClause()` in `src/filters/FilterSQL.ts` handles `Infinity`/`-Infinity` bounds; if it doesn't, add support)
+- For `!=` use `NotSetFilter { type: 'not-set', column, values: [value] }` or extend the filter types if needed
+
+**String columns:**
+- A text input field
+- A mode dropdown: "contains", "starts with", "ends with", "regex", "exact match"
+- "contains"/"starts with"/"ends with"/"regex" → `PatternFilter { type: 'pattern', column, pattern, mode }` — the `mode` field already supports `'contains' | 'starts' | 'ends' | 'regex'` (see `FilterTypes.ts` line 44)
+- "exact match" → `PointFilter { type: 'point', column, value }`
+
+**Boolean columns:**
+- Three checkboxes: true, false, null
+- When only one boolean value checked: `PointFilter` or `SetFilter`
+- When only null checked: `NullFilter { type: 'null' }`
+- When true + false checked (excluding null): `NullFilter { type: 'not-null' }` (i.e., "show non-null only")
+- All three checked or none checked: remove filter for this column
+
+**Date/timestamp columns:**
+- A comparison mode dropdown similar to numeric
+- "Between" mode: two date inputs (`<input type="date">`, or `<input type="datetime-local">` for timestamps) → `RangeFilter` with string date values
+- Single-value modes: one date input → appropriate `RangeFilter` or `PointFilter`
+
+**Time columns:**
+- Two time inputs (`<input type="time">`) for range
+- Creates `RangeFilter` with time string values
+
+**UUID columns:**
+- Text input for exact match or pattern matching
+- Dropdown: "exact match" or "contains"
+- Creates `PointFilter` or `PatternFilter`
+
+**Interval columns:**
+- Simple text input for pattern matching (intervals are complex to filter numerically)
+- Creates `PatternFilter` with `mode: 'contains'`
+
+**All types — null toggle:**
+- Every field includes an "is null" / "is not null" / "any" radio group or toggle at the bottom
+- "is null" → `NullFilter { type: 'null', column }`
+- "is not null" → `NullFilter { type: 'not-null', column }`
+- "any" (default) → no null filter (combine with other filter if present)
+
+**Filter application behavior:**
+- Filters apply immediately when the user finishes entering a value (no separate "Apply" button)
+- **Debounce** text inputs at 300ms to avoid excessive queries while typing
+- When the user clears all inputs for a column, call `actions.removeFilter(column)` to remove the filter
+- When the panel opens, **pre-populate controls** with existing filter values by reading `state.filtersByColumn` — if a column already has a filter (from visualization interaction or prior panel use), show its current values in the inputs
+
+#### 6.5.3: Integration with Existing Filter System
+
+**What to ensure:**
+- Filters from the panel use the exact same `Filter` types as visualization-created filters
+- They appear as chips in the existing `FilterBar` (automatic — `FilterBar` subscribes to `state.filters`)
+- They coordinate with `CrossfilterCoordinator` — when a panel filter is applied, visualizations update their ghost/foreground bars (automatic — crossfilter subscribes to `state.filters`)
+- **Removing a filter via FilterBar chip** also clears the corresponding panel controls: the panel should subscribe to `state.filtersByColumn` and update field states when filters are removed externally
+- **Visualization filter vs panel filter:** Since `addFilter()` replaces the existing filter for a column, a panel filter will replace a visualization-created filter and vice versa. This is acceptable behavior — document it if needed.
+
+#### 6.5.4: Filter Panel CSS
+
+**Add to `src/styles/data-table.css`:**
+
+```css
+.dt-filter-panel {
+  position: absolute;
+  z-index: 1000;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 320px;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+}
+
+.dt-filter-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.dt-filter-panel-field {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-filter-panel-field-name {
+  font-weight: 600;
+  font-size: var(--dt-font-size-sm);
+  margin-bottom: 0.25rem;
+}
+
+/* All form inputs inherit the library's design tokens */
+.dt-filter-panel input,
+.dt-filter-panel select {
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 0.25rem 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+}
+```
+
+Dark mode works automatically via the existing CSS custom property overrides in the `@media (prefers-color-scheme: dark)` block.
+
+**Verification:**
+- Filter button in the action panel turns blue when the column has an active filter
+- Clicking the filter button opens a floating panel below the column header
+- The panel lists all columns with type-appropriate controls
+- The clicked column is highlighted or scrolled into view at the top
+- Creating a filter immediately updates the table data (rows are filtered)
+- The filter appears as a chip in the FilterBar
+- Removing the FilterBar chip clears the corresponding panel control
+- Visualization ghost bars update when a panel filter is applied (crossfilter coordination)
+- Text inputs have debounce — typing doesn't trigger a query per keystroke
+- Panel closes on outside click, Escape key, or close button
+- Re-opening the panel shows pre-populated values for existing filters
+- Boolean, date, time, and string filter types all produce correct SQL (test via the table updating correctly)
+- Null/not-null toggle works for all column types
+- Panel renders correctly in dark mode
+- Panel positions correctly and doesn't overflow the viewport (adjust placement if near the edge)
 
 ---
 

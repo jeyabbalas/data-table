@@ -111,7 +111,8 @@ export function filterToSQL(filter: Filter): string {
 
     case 'not-set': {
       if (filter.values.length === 0) {
-        return filter.includeNull ? `${column} IS NULL` : 'TRUE';
+        // Nothing excluded → matches everything (with or without nulls)
+        return 'TRUE';
       }
       const formattedValues = filter.values.map(formatSQLValue).join(', ');
       const notIn = `${column} NOT IN (${formattedValues})`;

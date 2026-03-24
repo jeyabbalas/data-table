@@ -103,9 +103,9 @@ describe('filterToSQL', () => {
       expect(filterToSQL(filter)).toBe('("active" NOT IN (FALSE) OR "active" IS NULL)');
     });
 
-    it('should generate IS NULL for empty not-set with includeNull', () => {
+    it('should generate TRUE for empty not-set with includeNull (nothing excluded = everything)', () => {
       const filter: Filter = { type: 'not-set', column: 'x', values: [], includeNull: true };
-      expect(filterToSQL(filter)).toBe('"x" IS NULL');
+      expect(filterToSQL(filter)).toBe('TRUE');
     });
 
     it('should NOT add IS NULL when includeNull is absent', () => {

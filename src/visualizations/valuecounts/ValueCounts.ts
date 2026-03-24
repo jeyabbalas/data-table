@@ -615,6 +615,16 @@ export class ValueCounts extends BaseVisualization {
           }
           break;
 
+        case 'not-set':
+          // Regular category: selected if NOT in the exclusion values
+          if (!seg.isNull && !ownFilter.values.map(String).includes(seg.value)) {
+            this.selectedSegments.add(i);
+          }
+          if (seg.isNull && ownFilter.includeNull) {
+            this.selectedSegments.add(i);
+          }
+          break;
+
         case 'null':
           if (seg.isNull) {
             this.selectedSegments.add(i);
@@ -1285,8 +1295,8 @@ export class ValueCounts extends BaseVisualization {
     if (segment && segment.count === 0 && !(bgSegment && bgSegment.count > 0)) return;
     if (!segment && !(bgSegment && bgSegment.count > 0)) return;
 
-    // Check if segment supports multi-select (regular categories and null)
-    const canMultiSelect = !effectiveSegment.isOther && !effectiveSegment.isAllUnique;
+    // Check if segment supports multi-select (regular categories, null, and Other)
+    const canMultiSelect = !effectiveSegment.isAllUnique;
 
     if (isMultiSelectKey && canMultiSelect) {
       // Multi-select mode with Ctrl/Cmd
@@ -1299,10 +1309,10 @@ export class ValueCounts extends BaseVisualization {
         }
       } else {
         // Ctrl+click on unselected → add to selection
-        // First clear any non-multi-selectable segments (Other, AllUnique)
+        // First clear any non-multi-selectable segments (AllUnique)
         for (const idx of [...this.selectedSegments]) {
-          const seg = this.renderSegments[idx];
-          if (seg?.isOther || seg?.isAllUnique) {
+          const seg = this.renderSegments[idx] ?? this.backgroundSegments[idx];
+          if (seg?.isAllUnique) {
             this.selectedSegments.delete(idx);
           }
         }
@@ -1370,19 +1380,50 @@ export class ValueCounts extends BaseVisualization {
       return;
     }
 
-    // Multiple selections - create set filter, checking for null inclusion
+    // Multiple selections - categorize selected segments
     const selectedValues: string[] = [];
     let hasNull = false;
+    let hasOther = false;
     for (const idx of this.selectedSegments) {
       const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
       if (segment?.isNull) {
         hasNull = true;
-      } else if (segment && !segment.isOther && !segment.isAllUnique) {
+      } else if (segment?.isOther) {
+        hasOther = true;
+      } else if (segment && !segment.isAllUnique) {
         selectedValues.push(segment.value);
       }
     }
 
-    if (selectedValues.length > 0) {
+    if (hasOther) {
+      // Other selected: exclude non-selected regular categories
+      const nonSelectedValues = this.topCategoryValues.filter(v => !selectedValues.includes(v));
+
+      if (nonSelectedValues.length === 0) {
+        // All regular categories + Other selected
+        if (hasNull) {
+          // All segments selected → emit match-everything filter (keeps visual state)
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'not-set',
+            values: [],
+            includeNull: true,
+          });
+        } else {
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'not-null',
+          });
+        }
+      } else {
+        this.options.onFilterChange?.({
+          column: this.column.name,
+          type: 'not-set',
+          values: nonSelectedValues,
+          ...(hasNull && { includeNull: true }),
+        });
+      }
+    } else if (selectedValues.length > 0) {
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'set',

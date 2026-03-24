@@ -49,9 +49,9 @@ describe('filterToSQL', () => {
       expect(filterToSQL(filter)).toBe('"active" = TRUE');
     });
 
-    it('should generate SQL for null value', () => {
+    it('should generate IS NULL for null value', () => {
       const filter: Filter = { type: 'point', column: 'notes', value: null };
-      expect(filterToSQL(filter)).toBe('"notes" = NULL');
+      expect(filterToSQL(filter)).toBe('"notes" IS NULL');
     });
   });
 
@@ -70,6 +70,16 @@ describe('filterToSQL', () => {
       const filter: Filter = { type: 'set', column: 'category', values: ['X'] };
       expect(filterToSQL(filter)).toBe("\"category\" IN ('X')");
     });
+
+    it('should generate (IN OR IS NULL) when includeNull is true', () => {
+      const filter: Filter = { type: 'set', column: 'status', values: ['active'], includeNull: true };
+      expect(filterToSQL(filter)).toBe("(\"status\" IN ('active') OR \"status\" IS NULL)");
+    });
+
+    it('should generate IS NULL for empty set with includeNull', () => {
+      const filter: Filter = { type: 'set', column: 'x', values: [], includeNull: true };
+      expect(filterToSQL(filter)).toBe('"x" IS NULL');
+    });
   });
 
   describe('not-set filter', () => {
@@ -81,6 +91,21 @@ describe('filterToSQL', () => {
     it('should return TRUE for empty array', () => {
       const filter: Filter = { type: 'not-set', column: 'category', values: [] };
       expect(filterToSQL(filter)).toBe('TRUE');
+    });
+
+    it('should generate (NOT IN OR IS NULL) when includeNull is true', () => {
+      const filter: Filter = { type: 'not-set', column: 'active', values: [false], includeNull: true };
+      expect(filterToSQL(filter)).toBe('("active" NOT IN (FALSE) OR "active" IS NULL)');
+    });
+
+    it('should generate IS NULL for empty not-set with includeNull', () => {
+      const filter: Filter = { type: 'not-set', column: 'x', values: [], includeNull: true };
+      expect(filterToSQL(filter)).toBe('"x" IS NULL');
+    });
+
+    it('should NOT add IS NULL when includeNull is absent', () => {
+      const filter: Filter = { type: 'not-set', column: 'category', values: ['A'] };
+      expect(filterToSQL(filter)).toBe("\"category\" NOT IN ('A')");
     });
   });
 
@@ -101,53 +126,53 @@ describe('filterToSQL', () => {
   describe('pattern filter', () => {
     it('should generate LIKE for contains mode', () => {
       const filter: Filter = { type: 'pattern', column: 'name', pattern: 'test', mode: 'contains' };
-      expect(filterToSQL(filter)).toBe("\"name\" LIKE '%test%' ESCAPE '\\'");
+      expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE '%test%' ESCAPE '\\'");
     });
 
     it('should generate LIKE for starts mode', () => {
       const filter: Filter = { type: 'pattern', column: 'name', pattern: 'test', mode: 'starts' };
-      expect(filterToSQL(filter)).toBe("\"name\" LIKE 'test%' ESCAPE '\\'");
+      expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE 'test%' ESCAPE '\\'");
     });
 
     it('should generate LIKE for ends mode', () => {
       const filter: Filter = { type: 'pattern', column: 'name', pattern: 'test', mode: 'ends' };
-      expect(filterToSQL(filter)).toBe("\"name\" LIKE '%test' ESCAPE '\\'");
+      expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE '%test' ESCAPE '\\'");
     });
 
     it('should generate regexp_matches for regex mode', () => {
       const filter: Filter = { type: 'pattern', column: 'name', pattern: '^test.*$', mode: 'regex' };
-      expect(filterToSQL(filter)).toBe("regexp_matches(\"name\", '^test.*$')");
+      expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), '^test.*$')");
     });
 
     describe('LIKE wildcard escaping', () => {
       it('should escape % in pattern', () => {
         const filter: Filter = { type: 'pattern', column: 'name', pattern: '50%', mode: 'contains' };
-        expect(filterToSQL(filter)).toBe("\"name\" LIKE '%50\\%%' ESCAPE '\\'");
+        expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE '%50\\%%' ESCAPE '\\'");
       });
 
       it('should escape _ in pattern', () => {
         const filter: Filter = { type: 'pattern', column: 'name', pattern: 'foo_bar', mode: 'contains' };
-        expect(filterToSQL(filter)).toBe("\"name\" LIKE '%foo\\_bar%' ESCAPE '\\'");
+        expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE '%foo\\_bar%' ESCAPE '\\'");
       });
 
       it('should escape \\ in pattern', () => {
         const filter: Filter = { type: 'pattern', column: 'path', pattern: 'C:\\Users', mode: 'starts' };
-        expect(filterToSQL(filter)).toBe("\"path\" LIKE 'C:\\\\Users%' ESCAPE '\\'");
+        expect(filterToSQL(filter)).toBe("CAST(\"path\" AS VARCHAR) LIKE 'C:\\\\Users%' ESCAPE '\\'");
       });
 
       it('should escape single quotes in pattern', () => {
         const filter: Filter = { type: 'pattern', column: 'name', pattern: "O'Brien", mode: 'contains' };
-        expect(filterToSQL(filter)).toBe("\"name\" LIKE '%O''Brien%' ESCAPE '\\'");
+        expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) LIKE '%O''Brien%' ESCAPE '\\'");
       });
 
       it('should escape multiple special characters together', () => {
         const filter: Filter = { type: 'pattern', column: 'val', pattern: '50%_off\\', mode: 'ends' };
-        expect(filterToSQL(filter)).toBe("\"val\" LIKE '%50\\%\\_off\\\\' ESCAPE '\\'");
+        expect(filterToSQL(filter)).toBe("CAST(\"val\" AS VARCHAR) LIKE '%50\\%\\_off\\\\' ESCAPE '\\'");
       });
 
       it('should NOT escape LIKE characters in regex mode', () => {
         const filter: Filter = { type: 'pattern', column: 'name', pattern: '50%_test', mode: 'regex' };
-        expect(filterToSQL(filter)).toBe("regexp_matches(\"name\", '50%_test')");
+        expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), '50%_test')");
       });
     });
   });

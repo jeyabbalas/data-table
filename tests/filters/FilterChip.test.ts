@@ -88,6 +88,36 @@ describe('formatFilter', () => {
       expect(result.description).toBe('2024-01-05 \u2013 2024-03-22');
     });
 
+    it('should format open-ended range (greater than)', () => {
+      const filter: Filter = { type: 'range', column: 'age', min: 18, max: Infinity, minExclusive: true };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('> 18');
+    });
+
+    it('should format open-ended range (greater than or equal)', () => {
+      const filter: Filter = { type: 'range', column: 'age', min: 18, max: Infinity };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('\u2265 18');
+    });
+
+    it('should format open-ended range (less than)', () => {
+      const filter: Filter = { type: 'range', column: 'age', min: -Infinity, max: 100 };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('< 100');
+    });
+
+    it('should format open-ended range (less than or equal)', () => {
+      const filter: Filter = { type: 'range', column: 'age', min: -Infinity, max: 100, maxInclusive: true };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('\u2264 100');
+    });
+
+    it('should format fully open range', () => {
+      const filter: Filter = { type: 'range', column: 'age', min: -Infinity, max: Infinity };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('any value');
+    });
+
     it('should format range with Date objects', () => {
       // Use noon UTC to avoid timezone-related day shifts
       const filter: Filter = {
@@ -157,6 +187,12 @@ describe('formatFilter', () => {
       const filter: Filter = { type: 'set', column: 'color', values: ['red'] };
       const result = formatFilter(filter);
       expect(result.description).toBe('in {red}');
+    });
+
+    it('should format set with includeNull', () => {
+      const filter: Filter = { type: 'set', column: 'color', values: ['red', 'blue'], includeNull: true };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('in {red, blue} or null');
     });
   });
 

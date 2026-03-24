@@ -26,12 +26,16 @@ export interface SetFilter {
   type: 'set';
   column: string;
   values: unknown[];
+  /** When true, NULL rows are included (generates `col IN (...) OR col IS NULL`). */
+  includeNull?: boolean;
 }
 
 export interface NotSetFilter {
   type: 'not-set';
   column: string;
   values: unknown[];
+  /** When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`). */
+  includeNull?: boolean;
 }
 
 export interface NullFilter {

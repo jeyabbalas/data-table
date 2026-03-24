@@ -1644,9 +1644,16 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         this.selectedBin = null;
         this.selectedNull = true;
         break;
+      case 'not-null':
+        this.selectedNull = false;
+        this.selectedBin = null;
+        if (data.bins.length > 0) {
+          this.setBrushFromBinRange(0, data.bins.length - 1);
+        }
+        break;
       default:
         // Base class cannot handle range/point — subclasses override for those.
-        // For not-null, not-set, set, pattern — no direct histogram mapping.
+        // For not-set, set, pattern — no direct histogram mapping.
         if (this.brushState.committed) {
           this.resetBrush();
         }

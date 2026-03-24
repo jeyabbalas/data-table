@@ -52,6 +52,20 @@ export function formatDisplayValue(value: unknown): string {
 export function formatFilter(filter: Filter): { column: string; description: string } {
   switch (filter.type) {
     case 'range': {
+      const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
+      const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
+
+      if (minIsOpen && maxIsOpen) {
+        return { column: filter.column, description: 'any value' };
+      }
+      if (minIsOpen) {
+        const op = filter.maxInclusive ? '\u2264' : '<';
+        return { column: filter.column, description: `${op} ${formatDisplayValue(filter.max)}` };
+      }
+      if (maxIsOpen) {
+        const op = filter.minExclusive ? '>' : '\u2265';
+        return { column: filter.column, description: `${op} ${formatDisplayValue(filter.min)}` };
+      }
       const min = formatDisplayValue(filter.min);
       const max = formatDisplayValue(filter.max);
       return { column: filter.column, description: `${min} \u2013 ${max}` };
@@ -65,7 +79,8 @@ export function formatFilter(filter: Filter): { column: string; description: str
       const rest = filter.values.length - maxShow;
       const list =
         rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
-      return { column: filter.column, description: `in {${list}}` };
+      const nullSuffix = filter.includeNull ? ' or null' : '';
+      return { column: filter.column, description: `in {${list}}${nullSuffix}` };
     }
     case 'not-set': {
       const maxShow = 3;

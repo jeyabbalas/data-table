@@ -317,6 +317,8 @@ export class FilterPanelField {
     updateLayout();
 
     select.addEventListener('change', () => updateLayout());
+    this.wireEnterKey(input1);
+    this.wireEnterKey(input2);
   }
 
   private createTimeControls(): void {
@@ -342,6 +344,8 @@ export class FilterPanelField {
     c.appendChild(input1);
     c.appendChild(label2);
     c.appendChild(input2);
+    this.wireEnterKey(input1);
+    this.wireEnterKey(input2);
   }
 
   private createUuidControls(): void {
@@ -501,6 +505,18 @@ export class FilterPanelField {
 
     if (!value) return null;
 
+    // Validate regex before sending to DuckDB
+    if (mode === 'regex') {
+      try {
+        new RegExp(value);
+      } catch {
+        input.setCustomValidity('Invalid regular expression');
+        input.reportValidity();
+        return null;
+      }
+      input.setCustomValidity('');
+    }
+
     const col = this.column.name;
 
     if (mode === 'exact') {
@@ -545,12 +561,12 @@ export class FilterPanelField {
       return { type: 'not-null', column: col };
     }
     if (trueChecked && !falseChecked && nullChecked) {
-      // Exclude false
-      return { type: 'not-set', column: col, values: [false] };
+      // Exclude false, include nulls
+      return { type: 'not-set', column: col, values: [false], includeNull: true };
     }
     if (!trueChecked && falseChecked && nullChecked) {
-      // Exclude true
-      return { type: 'not-set', column: col, values: [true] };
+      // Exclude true, include nulls
+      return { type: 'not-set', column: col, values: [true], includeNull: true };
     }
 
     return null;
@@ -572,7 +588,7 @@ export class FilterPanelField {
     switch (mode) {
       case 'between': {
         if (!val2) return null;
-        return { type: 'range', column: col, min: val1, max: val2 };
+        return { type: 'range', column: col, min: val1, max: val2, maxInclusive: true };
       }
       case 'eq':
         return { type: 'point', column: col, value: val1 };

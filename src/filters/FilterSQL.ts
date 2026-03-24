@@ -87,24 +87,35 @@ export function filterToSQL(filter: Filter): string {
     }
 
     case 'point': {
+      if (filter.value === null || filter.value === undefined) {
+        return `${column} IS NULL`;
+      }
       const val = formatSQLValue(filter.value);
       return `${column} = ${val}`;
     }
 
     case 'set': {
       if (filter.values.length === 0) {
-        return 'FALSE'; // Empty set matches nothing
+        return filter.includeNull ? `${column} IS NULL` : 'FALSE';
       }
       const formattedValues = filter.values.map(formatSQLValue).join(', ');
-      return `${column} IN (${formattedValues})`;
+      const inClause = `${column} IN (${formattedValues})`;
+      if (filter.includeNull) {
+        return `(${inClause} OR ${column} IS NULL)`;
+      }
+      return inClause;
     }
 
     case 'not-set': {
       if (filter.values.length === 0) {
-        return 'TRUE'; // Empty exclusion matches everything
+        return filter.includeNull ? `${column} IS NULL` : 'TRUE';
       }
       const formattedValues = filter.values.map(formatSQLValue).join(', ');
-      return `${column} NOT IN (${formattedValues})`;
+      const notIn = `${column} NOT IN (${formattedValues})`;
+      if (filter.includeNull) {
+        return `(${notIn} OR ${column} IS NULL)`;
+      }
+      return notIn;
     }
 
     case 'null': {
@@ -116,16 +127,17 @@ export function filterToSQL(filter: Filter): string {
     }
 
     case 'pattern': {
+      const castCol = `CAST(${column} AS VARCHAR)`;
       const escaped = escapeLikePattern(filter.pattern).replace(/'/g, "''");
       switch (filter.mode) {
         case 'contains':
-          return `${column} LIKE '%${escaped}%' ESCAPE '\\'`;
+          return `${castCol} LIKE '%${escaped}%' ESCAPE '\\'`;
         case 'starts':
-          return `${column} LIKE '${escaped}%' ESCAPE '\\'`;
+          return `${castCol} LIKE '${escaped}%' ESCAPE '\\'`;
         case 'ends':
-          return `${column} LIKE '%${escaped}' ESCAPE '\\'`;
+          return `${castCol} LIKE '%${escaped}' ESCAPE '\\'`;
         case 'regex':
-          return `regexp_matches(${column}, '${filter.pattern.replace(/'/g, "''")}')`;
+          return `regexp_matches(${castCol}, '${filter.pattern.replace(/'/g, "''")}')`;
       }
     }
 

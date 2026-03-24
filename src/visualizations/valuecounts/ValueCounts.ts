@@ -424,7 +424,17 @@ export class ValueCounts extends BaseVisualization {
     for (let i = 0; i < this.renderSegments.length; i++) {
       const seg = this.renderSegments[i];
 
-      // Skip aggregate segments — they can't be directly matched
+      // Handle filter types that include the "Other" segment before the skip
+      if (ownFilter.type === 'not-null' && !seg.isNull && !seg.isAllUnique) {
+        this.selectedSegments.add(i);
+        continue;
+      }
+      if (ownFilter.type === 'not-set' && seg.isOther) {
+        this.selectedSegments.add(i);
+        continue;
+      }
+
+      // Skip aggregate segments for value-matching filter types
       if (seg.isOther || seg.isAllUnique) continue;
 
       switch (ownFilter.type) {
@@ -440,6 +450,9 @@ export class ValueCounts extends BaseVisualization {
           if (!seg.isNull && ownFilter.values.map(String).includes(seg.value)) {
             this.selectedSegments.add(i);
           }
+          if (seg.isNull && ownFilter.includeNull) {
+            this.selectedSegments.add(i);
+          }
           break;
 
         case 'pattern':
@@ -452,10 +465,6 @@ export class ValueCounts extends BaseVisualization {
           if (seg.isNull) {
             this.selectedSegments.add(i);
           }
-          break;
-
-        case 'not-null':
-          // All non-null segments included — no visual selection needed
           break;
 
         default:
@@ -1071,13 +1080,15 @@ export class ValueCounts extends BaseVisualization {
     if (clickedIndex === null) return;
 
     const segment = this.renderSegments[clickedIndex];
-    if (!segment) return;
-    // Allow clicking segments visible in background (ghost) even if foreground count is 0
     const bgSegment = this.backgroundSegments[clickedIndex];
-    if (segment.count === 0 && !(bgSegment && bgSegment.count > 0)) return;
+    const effectiveSegment = segment ?? bgSegment;
+    if (!effectiveSegment) return;
+    // Allow clicking ghost segments (visible in background even if foreground count is 0)
+    if (segment && segment.count === 0 && !(bgSegment && bgSegment.count > 0)) return;
+    if (!segment && !(bgSegment && bgSegment.count > 0)) return;
 
-    // Check if segment supports multi-select (only regular categories)
-    const canMultiSelect = !segment.isNull && !segment.isOther && !segment.isAllUnique;
+    // Check if segment supports multi-select (regular categories and null)
+    const canMultiSelect = !effectiveSegment.isOther && !effectiveSegment.isAllUnique;
 
     if (isMultiSelectKey && canMultiSelect) {
       // Multi-select mode with Ctrl/Cmd
@@ -1090,10 +1101,10 @@ export class ValueCounts extends BaseVisualization {
         }
       } else {
         // Ctrl+click on unselected → add to selection
-        // First clear any non-multi-selectable segments
+        // First clear any non-multi-selectable segments (Other, AllUnique)
         for (const idx of [...this.selectedSegments]) {
           const seg = this.renderSegments[idx];
-          if (seg?.isNull || seg?.isOther || seg?.isAllUnique) {
+          if (seg?.isOther || seg?.isAllUnique) {
             this.selectedSegments.delete(idx);
           }
         }
@@ -1161,11 +1172,14 @@ export class ValueCounts extends BaseVisualization {
       return;
     }
 
-    // Multiple selections - create set filter
+    // Multiple selections - create set filter, checking for null inclusion
     const selectedValues: string[] = [];
+    let hasNull = false;
     for (const idx of this.selectedSegments) {
-      const segment = this.renderSegments[idx];
-      if (segment && !segment.isNull && !segment.isOther && !segment.isAllUnique) {
+      const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
+      if (segment?.isNull) {
+        hasNull = true;
+      } else if (segment && !segment.isOther && !segment.isAllUnique) {
         selectedValues.push(segment.value);
       }
     }
@@ -1175,6 +1189,12 @@ export class ValueCounts extends BaseVisualization {
         column: this.column.name,
         type: 'set',
         values: selectedValues,
+        ...(hasNull && { includeNull: true }),
+      });
+    } else if (hasNull) {
+      this.options.onFilterChange?.({
+        column: this.column.name,
+        type: 'null',
       });
     }
   }

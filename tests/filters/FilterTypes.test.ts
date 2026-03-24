@@ -44,10 +44,22 @@ describe('FilterTypes', () => {
     expect(f.values).toEqual(['A', 'B']);
   });
 
+  it('should construct a SetFilter with includeNull', () => {
+    const f: SetFilter = { type: 'set', column: 'status', values: ['active'], includeNull: true };
+    expect(f.type).toBe('set');
+    expect(f.includeNull).toBe(true);
+  });
+
   it('should construct a NotSetFilter', () => {
     const f: NotSetFilter = { type: 'not-set', column: 'category', values: ['X'] };
     expect(f.type).toBe('not-set');
     expect(f.values).toEqual(['X']);
+  });
+
+  it('should construct a NotSetFilter with includeNull', () => {
+    const f: NotSetFilter = { type: 'not-set', column: 'active', values: [false], includeNull: true };
+    expect(f.type).toBe('not-set');
+    expect(f.includeNull).toBe(true);
   });
 
   it('should construct a NullFilter', () => {
@@ -128,13 +140,13 @@ describe('FilterSQL integration with discriminated unions', () => {
     const filters: Filter[] = [
       { type: 'pattern', column: 'name', pattern: 'test', mode: 'contains' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE '%test%' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) LIKE '%test%' ESCAPE '\\'`);
   });
 
   it('should generate SQL for PatternFilter regex', () => {
     const filters: Filter[] = [
       { type: 'pattern', column: 'name', pattern: '^abc$', mode: 'regex' },
     ];
-    expect(filtersToWhereClause(filters)).toBe("regexp_matches(\"name\", '^abc$')");
+    expect(filtersToWhereClause(filters)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), '^abc$')");
   });
 });

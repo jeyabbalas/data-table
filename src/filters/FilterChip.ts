@@ -29,12 +29,14 @@ export function formatDisplayValue(value: unknown): string {
     });
   }
   if (typeof value === 'number') {
-    if (Number.isInteger(value) && Math.abs(value) < 1e15) {
-      return value.toLocaleString();
-    }
-    // For floats, limit decimal places
-    if (Math.abs(value) >= 1e6 || (Math.abs(value) < 0.01 && value !== 0)) {
+    if (value === 0) return '0';
+    const abs = Math.abs(value);
+    // Scientific notation first (same thresholds as Cell.ts / StatsFormatters.ts / Histogram.ts)
+    if (abs >= 1e6 || abs < 0.01) {
       return value.toExponential(2);
+    }
+    if (Number.isInteger(value)) {
+      return value.toLocaleString();
     }
     return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
   }
@@ -75,7 +77,7 @@ export function formatFilter(filter: Filter): { column: string; description: str
     }
     case 'set': {
       const maxShow = 3;
-      const shown = filter.values.slice(0, maxShow).map((v) => String(v));
+      const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
       const list =
         rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
@@ -84,7 +86,7 @@ export function formatFilter(filter: Filter): { column: string; description: str
     }
     case 'not-set': {
       const maxShow = 3;
-      const shown = filter.values.slice(0, maxShow).map((v) => String(v));
+      const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
       const list =
         rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');

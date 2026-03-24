@@ -478,12 +478,12 @@ export class FilterPanelField {
         const num2 = parseFloat(val2);
         if (isNaN(num2)) return null;
         // Allow min > max — DuckDB will correctly return 0 rows
-        return { type: 'range', column: col, min: num1, max: num2 };
+        return { type: 'range', column: col, min: num1, max: num2, maxInclusive: true };
       }
       case 'eq':
         return { type: 'point', column: col, value: num1 };
       case 'neq':
-        return { type: 'not-set', column: col, values: [num1] };
+        return { type: 'not-set', column: col, values: [num1], includeNull: true };
       case 'gt':
         return { type: 'range', column: col, min: num1, max: Infinity, minExclusive: true };
       case 'gte':
@@ -617,13 +617,13 @@ export class FilterPanelField {
     const col = this.column.name;
 
     if (val1 && val2) {
-      return { type: 'range', column: col, min: val1, max: val2 };
+      return { type: 'range', column: col, min: val1, max: val2, maxInclusive: true };
     }
     if (val1 && !val2) {
       return { type: 'range', column: col, min: val1, max: Infinity };
     }
     // !val1 && val2
-    return { type: 'range', column: col, min: -Infinity, max: val2 };
+    return { type: 'range', column: col, min: -Infinity, max: val2, maxInclusive: true };
   }
 
   private buildUuidFilter(): Filter | null {
@@ -703,6 +703,21 @@ export class FilterPanelField {
     }
   }
 
+  /**
+   * Format a numeric value for display in an input field.
+   * Uses scientific notation for extreme values (same thresholds as Cell.ts / StatsFormatters.ts).
+   * Uses full-precision toExponential() (no truncation) to preserve exact round-trip fidelity.
+   */
+  private formatForInput(value: unknown): string {
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) {
+      const abs = Math.abs(value);
+      if (abs >= 1e6 || abs < 0.01) {
+        return value.toExponential();
+      }
+    }
+    return String(value ?? '');
+  }
+
   private setNullToggle(value: string): void {
     const radios = this.nullGroup.querySelectorAll('input[type="radio"]') as NodeListOf<HTMLInputElement>;
     for (const radio of radios) {
@@ -721,29 +736,29 @@ export class FilterPanelField {
 
       if (!minIsOpen && !maxIsOpen) {
         select.value = 'between';
-        inputs[0].value = String(filter.min);
-        inputs[1].value = String(filter.max);
+        inputs[0].value = this.formatForInput(filter.min);
+        inputs[1].value = this.formatForInput(filter.max);
         inputs[1].style.display = '';
         inputs[0].placeholder = 'min';
       } else if (maxIsOpen && !minIsOpen) {
         select.value = filter.minExclusive ? 'gt' : 'gte';
-        inputs[0].value = String(filter.min);
+        inputs[0].value = this.formatForInput(filter.min);
         inputs[1].style.display = 'none';
         inputs[0].placeholder = 'value';
       } else if (minIsOpen && !maxIsOpen) {
         select.value = filter.maxInclusive ? 'lte' : 'lt';
-        inputs[0].value = String(filter.max);
+        inputs[0].value = this.formatForInput(filter.max);
         inputs[1].style.display = 'none';
         inputs[0].placeholder = 'value';
       }
     } else if (filter.type === 'point') {
       select.value = 'eq';
-      inputs[0].value = String(filter.value);
+      inputs[0].value = this.formatForInput(filter.value);
       inputs[1].style.display = 'none';
       inputs[0].placeholder = 'value';
     } else if (filter.type === 'not-set' && filter.values.length === 1) {
       select.value = 'neq';
-      inputs[0].value = String(filter.values[0]);
+      inputs[0].value = this.formatForInput(filter.values[0]);
       inputs[1].style.display = 'none';
       inputs[0].placeholder = 'value';
     }
@@ -797,8 +812,7 @@ export class FilterPanelField {
       const excluded = new Set(filter.values.map(String));
       checkboxes[0].checked = !excluded.has('true');
       checkboxes[1].checked = !excluded.has('false');
-      // null is checked if it's not excluded via not-null
-      checkboxes[2].checked = true;
+      checkboxes[2].checked = filter.includeNull !== false;
     }
   }
 

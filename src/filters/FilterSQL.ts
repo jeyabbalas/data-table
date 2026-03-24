@@ -64,6 +64,9 @@ export function filterToSQL(filter: Filter): string {
 
   switch (filter.type) {
     case 'range': {
+      // Open-bound detection: Infinity/-Infinity are typeof 'number' and !isFinite,
+      // while date/time string values are typeof 'string'. This correctly distinguishes
+      // open bounds from actual values without needing a separate sentinel field.
       const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
       const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
       const minOp = filter.minExclusive ? '>' : '>=';
@@ -131,14 +134,15 @@ export function filterToSQL(filter: Filter): string {
       const escaped = escapeLikePattern(filter.pattern).replace(/'/g, "''");
       switch (filter.mode) {
         case 'contains':
-          return `${castCol} LIKE '%${escaped}%' ESCAPE '\\'`;
+          return `${castCol} ILIKE '%${escaped}%' ESCAPE '\\'`;
         case 'starts':
-          return `${castCol} LIKE '${escaped}%' ESCAPE '\\'`;
+          return `${castCol} ILIKE '${escaped}%' ESCAPE '\\'`;
         case 'ends':
-          return `${castCol} LIKE '%${escaped}' ESCAPE '\\'`;
+          return `${castCol} ILIKE '%${escaped}' ESCAPE '\\'`;
         case 'regex':
           return `regexp_matches(${castCol}, '${filter.pattern.replace(/'/g, "''")}')`;
       }
+      return 'FALSE';
     }
 
     default: {

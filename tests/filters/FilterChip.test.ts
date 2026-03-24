@@ -25,8 +25,21 @@ describe('formatDisplayValue', () => {
     expect(formatDisplayValue(-5)).toBe('-5');
   });
 
-  it('should format large numbers', () => {
-    expect(formatDisplayValue(1e7)).toBe('10,000,000');
+  it('should format large numbers with scientific notation', () => {
+    expect(formatDisplayValue(1e7)).toBe('1.00e+7');
+    expect(formatDisplayValue(1e15)).toBe('1.00e+15');
+    expect(formatDisplayValue(-5e8)).toBe('-5.00e+8');
+  });
+
+  it('should format scientific notation values consistently with stats/cells', () => {
+    expect(formatDisplayValue(1.23e-60)).toBe('1.23e-60');
+    expect(formatDisplayValue(9.87e60)).toBe('9.87e+60');
+    expect(formatDisplayValue(6.02e23)).toBe('6.02e+23');
+    expect(formatDisplayValue(1.38e-23)).toBe('1.38e-23');
+  });
+
+  it('should format zero as "0" not in scientific notation', () => {
+    expect(formatDisplayValue(0)).toBe('0');
   });
 
   it('should format very small numbers with exponential notation', () => {
@@ -80,6 +93,12 @@ describe('formatFilter', () => {
       const filter: Filter = { type: 'range', column: 'salary', min: 50000, max: 100000 };
       const result = formatFilter(filter);
       expect(result.description).toBe('50,000 \u2013 100,000');
+    });
+
+    it('should format range with very large numbers in scientific notation', () => {
+      const filter: Filter = { type: 'range', column: 'value', min: 1e10, max: 1e15 };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('1.00e+10 \u2013 1.00e+15');
     });
 
     it('should format range with string values (ISO dates)', () => {
@@ -201,6 +220,12 @@ describe('formatFilter', () => {
       const filter: Filter = { type: 'not-set', column: 'color', values: ['red', 'blue'] };
       const result = formatFilter(filter);
       expect(result.description).toBe('not in {red, blue}');
+    });
+
+    it('should format not-set numeric values with formatDisplayValue', () => {
+      const filter: Filter = { type: 'not-set', column: 'val', values: [1e7], includeNull: true };
+      const result = formatFilter(filter);
+      expect(result.description).toBe('not in {1.00e+7}');
     });
 
     it('should truncate not-set with many values', () => {

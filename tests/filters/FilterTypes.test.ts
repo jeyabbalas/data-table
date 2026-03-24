@@ -140,7 +140,7 @@ describe('FilterSQL integration with discriminated unions', () => {
     const filters: Filter[] = [
       { type: 'pattern', column: 'name', pattern: 'test', mode: 'contains' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) LIKE '%test%' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'`);
   });
 
   it('should generate SQL for PatternFilter regex', () => {

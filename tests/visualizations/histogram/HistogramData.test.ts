@@ -112,28 +112,28 @@ describe('filtersToWhereClause', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE '%test%' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (starts mode)', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'starts' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE 'test%' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE 'test%' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (ends mode)', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'ends' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`"name" LIKE '%test' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE '%test' ESCAPE '\\'`);
   });
 
   it('should generate pattern filter SQL (regex mode)', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: '^test.*$', mode: 'regex' },
     ];
-    expect(filtersToWhereClause(filters)).toBe('regexp_matches("name", \'^test.*$\')');
+    expect(filtersToWhereClause(filters)).toBe('regexp_matches(CAST("name" AS VARCHAR), \'^test.*$\')');
   });
 
   it('should combine multiple filters with AND', () => {
@@ -154,7 +154,7 @@ describe('filtersToWhereClause', () => {
     ];
     const result = filtersToWhereClause(filters, 'price');
     expect(result).not.toContain('price');
-    expect(result).toContain(`"name" LIKE 'test%' ESCAPE '\\'`);
+    expect(result).toContain(`CAST("name" AS VARCHAR) ILIKE 'test%' ESCAPE '\\'`);
   });
 
   it('should return empty string when excluding the only filter', () => {

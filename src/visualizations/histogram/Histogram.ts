@@ -400,7 +400,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
     if (!ownFilter || !data || data.bins.length === 0) {
       if (this.brushState.committed) {
-        this.resetBrush();
+        this.clearBrushStateOnly();
       }
       this.selectedBin = null;
       this.selectedNull = false;
@@ -414,22 +414,61 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       case 'point': {
         const value = ownFilter.value;
         if (typeof value === 'number' && Number.isFinite(value)) {
-          if (this.brushState.committed) this.resetBrush();
           this.selectedNull = false;
-          this.selectedBin = null;
+          let found = false;
           for (let i = 0; i < data.bins.length; i++) {
             const bin = data.bins[i];
-            const isLast = i === data.bins.length - 1;
-            if (value >= bin.x0 && (isLast ? value <= bin.x1 : value < bin.x1)) {
-              this.selectedBin = i;
-              break;
+            if (bin.x0 === bin.x1) {
+              // Discrete bin: exact match
+              if (value === bin.x0) {
+                this.setBrushFromBinRange(i, i);
+                found = true;
+                break;
+              }
+            } else {
+              // Continuous bin: range match (last bin is inclusive on both ends)
+              const isLast = i === data.bins.length - 1;
+              if (value >= bin.x0 && (isLast ? value <= bin.x1 : value < bin.x1)) {
+                this.setBrushFromBinRange(i, i);
+                found = true;
+                break;
+              }
             }
+          }
+          if (!found) {
+            if (this.brushState.committed) this.clearBrushStateOnly();
+            this.selectedBin = null;
+          }
+        }
+        break;
+      }
+      case 'set': {
+        // Discrete histograms emit set filters for multi-bin brush selections
+        const values = ownFilter.values as number[];
+        if (values && values.length > 0) {
+          let minIdx = Infinity;
+          let maxIdx = -Infinity;
+          for (const val of values) {
+            for (let i = 0; i < data.bins.length; i++) {
+              if (data.bins[i].x0 === val) {
+                minIdx = Math.min(minIdx, i);
+                maxIdx = Math.max(maxIdx, i);
+                break;
+              }
+            }
+          }
+          if (minIdx <= maxIdx && minIdx !== Infinity) {
+            this.setBrushFromBinRange(minIdx, maxIdx);
+          } else {
+            if (this.brushState.committed) this.clearBrushStateOnly();
+            this.selectedBin = null;
+            this.selectedNull = false;
           }
         }
         break;
       }
       case 'null':
-        this.resetBrush();
+        this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = true;
         break;
@@ -441,7 +480,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         }
         break;
       default:
-        if (this.brushState.committed) this.resetBrush();
+        if (this.brushState.committed) this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = false;
         break;
@@ -470,7 +509,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     if (startIdx >= 0 && endIdx >= 0) {
       this.setBrushFromBinRange(startIdx, endIdx);
     } else {
-      if (this.brushState.committed) this.resetBrush();
+      if (this.brushState.committed) this.clearBrushStateOnly();
       this.selectedBin = null;
       this.selectedNull = false;
     }

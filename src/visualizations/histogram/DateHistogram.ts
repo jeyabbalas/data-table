@@ -386,7 +386,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
     if (!ownFilter || !data || data.bins.length === 0) {
       if (this.brushState.committed) {
-        this.resetBrush();
+        this.clearBrushStateOnly();
       }
       this.selectedBin = null;
       this.selectedNull = false;
@@ -400,7 +400,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       case 'point': {
         const val = ownFilter.value;
         const targetDate = val instanceof Date ? val : new Date(String(val));
-        if (this.brushState.committed) this.resetBrush();
+        if (this.brushState.committed) this.clearBrushStateOnly();
         this.selectedNull = false;
         this.selectedBin = null;
         for (let i = 0; i < data.bins.length; i++) {
@@ -413,7 +413,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         break;
       }
       case 'null':
-        this.resetBrush();
+        this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = true;
         break;
@@ -425,7 +425,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         }
         break;
       default:
-        if (this.brushState.committed) this.resetBrush();
+        if (this.brushState.committed) this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = false;
         break;
@@ -468,7 +468,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       this.brushState.startBinIndex = startIdx;
       this.brushState.endBinIndex = endIdx;
     } else {
-      if (this.brushState.committed) this.resetBrush();
+      if (this.brushState.committed) this.clearBrushStateOnly();
       this.selectedBin = null;
       this.selectedNull = false;
     }

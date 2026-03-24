@@ -378,7 +378,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
     if (!ownFilter || !data || data.bins.length === 0) {
       if (this.brushState.committed) {
-        this.resetBrush();
+        this.clearBrushStateOnly();
       }
       this.selectedBin = null;
       this.selectedNull = false;
@@ -390,7 +390,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         this.syncBrushFromTimeRangeFilter(ownFilter as RangeFilter, data.bins);
         break;
       case 'null':
-        this.resetBrush();
+        this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = true;
         break;
@@ -402,7 +402,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         }
         break;
       default:
-        if (this.brushState.committed) this.resetBrush();
+        if (this.brushState.committed) this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = false;
         break;
@@ -452,7 +452,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       this.brushState.startBinIndex = startIdx;
       this.brushState.endBinIndex = endIdx;
     } else {
-      if (this.brushState.committed) this.resetBrush();
+      if (this.brushState.committed) this.clearBrushStateOnly();
       this.selectedBin = null;
       this.selectedNull = false;
     }

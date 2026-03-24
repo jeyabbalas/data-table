@@ -1340,6 +1340,32 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
   }
 
   /**
+   * Clear brush visual state without triggering filter removal.
+   * Used by syncVisualStateFromFilter() when transitioning from a brush
+   * to a non-brush visual state (e.g., point/set filter → selectedBin).
+   * Unlike resetBrush(), this does NOT call onFilterChange(null) or onBrushClear.
+   */
+  protected clearBrushStateOnly(): void {
+    this.brushState = {
+      active: false,
+      committed: false,
+      sliding: false,
+      slideStartX: 0,
+      slideVisualOffset: 0,
+      slideClickOffset: 0,
+      startX: 0,
+      currentX: 0,
+      startBinIndex: -1,
+      endBinIndex: -1,
+      lastClickTime: 0,
+      lastClickX: 0,
+      lastClickY: 0,
+    };
+    this.canvas.style.cursor = 'default';
+    this.options.onStatsChange?.(null);
+  }
+
+  /**
    * Slide the brush horizontally
    */
   private slideBrush(x: number): void {
@@ -1631,7 +1657,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (!ownFilter || !data || data.bins.length === 0) {
       // No filter for this column — clear visual state
       if (this.brushState.committed) {
-        this.resetBrush();
+        this.clearBrushStateOnly();
       }
       this.selectedBin = null;
       this.selectedNull = false;
@@ -1640,7 +1666,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     switch (ownFilter.type) {
       case 'null':
-        this.resetBrush();
+        this.clearBrushStateOnly();
         this.selectedBin = null;
         this.selectedNull = true;
         break;
@@ -1655,7 +1681,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         // Base class cannot handle range/point — subclasses override for those.
         // For not-set, set, pattern — no direct histogram mapping.
         if (this.brushState.committed) {
-          this.resetBrush();
+          this.clearBrushStateOnly();
         }
         this.selectedBin = null;
         this.selectedNull = false;

@@ -50,7 +50,7 @@ export class FilterPanel {
 
     // Subscribe to filter changes for external sync
     this.unsubscribe = this.state.filtersByColumn.subscribe(() => {
-      if (!this.destroyed && this.currentField && !this.currentField.isSelfUpdate) {
+      if (!this.destroyed && this.isOpen && this.currentField && !this.currentField.isSelfUpdate) {
         this.currentField.syncFromState();
       }
     });
@@ -190,7 +190,6 @@ export class FilterPanel {
     if (!this.isOpen) return;
 
     this.isOpen = false;
-    this.currentColumn = null;
     this.element.style.display = 'none';
 
     this.unregisterCloseHandlers();
@@ -258,7 +257,7 @@ export class FilterPanel {
    * Get the currently focused column (if panel is open)
    */
   getCurrentColumn(): string | null {
-    return this.currentColumn;
+    return this.isOpen ? this.currentColumn : null;
   }
 
   /**

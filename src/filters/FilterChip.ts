@@ -90,7 +90,8 @@ export function formatFilter(filter: Filter): { column: string; description: str
       const rest = filter.values.length - maxShow;
       const list =
         rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
-      return { column: filter.column, description: `not in {${list}}` };
+      const nullSuffix = filter.includeNull ? ' or null' : '';
+      return { column: filter.column, description: `not in {${list}}${nullSuffix}` };
     }
     case 'null': {
       return { column: filter.column, description: 'is null' };

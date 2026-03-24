@@ -537,6 +537,12 @@ export class FilterPanelField {
         input.reportValidity();
         return null;
       }
+      // Block RE2-unsupported features (DuckDB uses RE2, not JavaScript RegExp)
+      if (/\(\?[=!<]|\\[1-9]/.test(value)) {
+        input.setCustomValidity('Lookahead, lookbehind, and backreferences are not supported');
+        input.reportValidity();
+        return null;
+      }
       try {
         new RegExp(value);
       } catch {
@@ -621,6 +627,10 @@ export class FilterPanelField {
         return { type: 'range', column: col, min: val1, max: val2, maxInclusive: true };
       }
       case 'eq':
+        if (this.column.type === 'timestamp') {
+          // datetime-local gives minute precision; expand to full minute range
+          return { type: 'range', column: col, min: val1, max: val1 + ':59.999999', maxInclusive: true };
+        }
         return { type: 'point', column: col, value: val1 };
       case 'before':
         return { type: 'range', column: col, min: -Infinity, max: val1 };
@@ -667,6 +677,13 @@ export class FilterPanelField {
     const col = this.column.name;
 
     if (mode === 'exact') {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(value)) {
+        input.setCustomValidity('Invalid UUID format');
+        input.reportValidity();
+        return null;
+      }
+      input.setCustomValidity('');
       return { type: 'point', column: col, value };
     }
     return { type: 'pattern', column: col, pattern: value, mode: 'contains' };

@@ -225,6 +225,12 @@ describe('formatFilter', () => {
     it('should format not-set numeric values with formatDisplayValue', () => {
       const filter: Filter = { type: 'not-set', column: 'val', values: [1e7], includeNull: true };
       const result = formatFilter(filter);
+      expect(result.description).toBe('not in {1.00e+7} or null');
+    });
+
+    it('should format not-set without includeNull (no suffix)', () => {
+      const filter: Filter = { type: 'not-set', column: 'val', values: [1e7] };
+      const result = formatFilter(filter);
       expect(result.description).toBe('not in {1.00e+7}');
     });
 

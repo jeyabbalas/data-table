@@ -296,6 +296,57 @@ describe('FilterPanelField', () => {
       field.destroy();
     });
 
+    it('should reject RE2-unsupported lookahead patterns', () => {
+      const field = createField(strColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'regex';
+      input.value = '(?<=test)foo';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(0);
+
+      field.destroy();
+    });
+
+    it('should reject RE2-unsupported backreference patterns', () => {
+      const field = createField(strColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'regex';
+      input.value = '(foo)\\1';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(0);
+
+      field.destroy();
+    });
+
+    it('should accept valid RE2-compatible regex patterns', () => {
+      const field = createField(strColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'regex';
+      input.value = '^test[0-9]+$';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(1);
+      expect(state.filters.get()[0]).toEqual({
+        type: 'pattern', column: 'name', pattern: '^test[0-9]+$', mode: 'regex',
+      });
+
+      field.destroy();
+    });
+
     it('should build point filter for "exact" mode', () => {
       const field = createField(strColumn, state, actions);
       const el = field.getElement();
@@ -563,6 +614,61 @@ describe('FilterPanelField', () => {
   });
 
   // =========================================
+  // Timestamp Filters
+  // =========================================
+
+  describe('timestamp filters', () => {
+    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+
+    it('should expand "=" mode to a 1-minute range for timestamp columns', () => {
+      const field = createField(tsColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      select.value = 'eq';
+      inputs[0].value = '2024-06-15T10:30';
+
+      field.applyFilter();
+
+      const filters = state.filters.get();
+      expect(filters).toHaveLength(1);
+      expect(filters[0]).toEqual({
+        type: 'range',
+        column: 'created_at',
+        min: '2024-06-15T10:30',
+        max: '2024-06-15T10:30:59.999999',
+        maxInclusive: true,
+      });
+
+      field.destroy();
+    });
+
+    it('should use point filter for "=" mode on date (not timestamp) columns', () => {
+      const dateCol: ColumnSchema = { name: 'birthday', type: 'date', nullable: true, originalType: 'DATE' };
+      const field = createField(dateCol, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const inputs = el.querySelectorAll('input[type="date"]') as NodeListOf<HTMLInputElement>;
+      select.value = 'eq';
+      inputs[0].value = '2024-06-15';
+
+      field.applyFilter();
+
+      const filters = state.filters.get();
+      expect(filters).toHaveLength(1);
+      expect(filters[0]).toEqual({
+        type: 'point',
+        column: 'birthday',
+        value: '2024-06-15',
+      });
+
+      field.destroy();
+    });
+  });
+
+  // =========================================
   // Time Filters
   // =========================================
 
@@ -654,7 +760,7 @@ describe('FilterPanelField', () => {
       field.destroy();
     });
 
-    it('should build point filter for "exact" mode', () => {
+    it('should build point filter for "exact" mode with valid UUID', () => {
       const field = createField(uuidColumn, state, actions);
       const el = field.getElement();
 
@@ -667,6 +773,57 @@ describe('FilterPanelField', () => {
 
       expect(state.filters.get()[0]).toEqual({
         type: 'point', column: 'id', value: '550e8400-e29b-41d4-a716-446655440000',
+      });
+
+      field.destroy();
+    });
+
+    it('should reject invalid UUID format in "exact" mode', () => {
+      const field = createField(uuidColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'exact';
+      input.value = 'not-a-uuid';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(0);
+
+      field.destroy();
+    });
+
+    it('should reject UUID with wrong segment lengths in "exact" mode', () => {
+      const field = createField(uuidColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'exact';
+      input.value = '550e8400-e29b-41d4-a716';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(0);
+
+      field.destroy();
+    });
+
+    it('should allow partial UUID in "contains" mode without validation', () => {
+      const field = createField(uuidColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      select.value = 'contains';
+      input.value = '550e';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toHaveLength(1);
+      expect(state.filters.get()[0]).toEqual({
+        type: 'pattern', column: 'id', pattern: '550e', mode: 'contains',
       });
 
       field.destroy();

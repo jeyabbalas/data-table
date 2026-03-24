@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { filterToSQL, filtersToWhereClause, formatSQLValue } from '@/filters/FilterSQL';
+import { filterToSQL, filtersToWhereClause, formatSQLValue, quoteIdentifier } from '@/filters/FilterSQL';
 import type { Filter } from '@/filters/FilterTypes';
 
 // =========================================
@@ -252,5 +252,131 @@ describe('filtersToWhereClause', () => {
   it('should return empty string when excluding the only filter', () => {
     const filters: Filter[] = [{ type: 'range', column: 'price', min: 10, max: 100 }];
     expect(filtersToWhereClause(filters, 'price')).toBe('');
+  });
+});
+
+// =========================================
+// quoteIdentifier Tests
+// =========================================
+
+describe('quoteIdentifier', () => {
+  it('should wrap name in double quotes', () => {
+    expect(quoteIdentifier('price')).toBe('"price"');
+  });
+
+  it('should escape embedded double quotes by doubling them', () => {
+    expect(quoteIdentifier('col"name')).toBe('"col""name"');
+  });
+
+  it('should handle multiple embedded double quotes', () => {
+    expect(quoteIdentifier('a"b"c')).toBe('"a""b""c"');
+  });
+
+  it('should handle name that is just a double quote', () => {
+    expect(quoteIdentifier('"')).toBe('""""');
+  });
+});
+
+// =========================================
+// formatSQLValue Edge Cases
+// =========================================
+
+describe('formatSQLValue', () => {
+  it('should return NULL for Infinity', () => {
+    expect(formatSQLValue(Infinity)).toBe('NULL');
+  });
+
+  it('should return NULL for -Infinity', () => {
+    expect(formatSQLValue(-Infinity)).toBe('NULL');
+  });
+
+  it('should return NULL for NaN', () => {
+    expect(formatSQLValue(NaN)).toBe('NULL');
+  });
+
+  it('should return NULL for null', () => {
+    expect(formatSQLValue(null)).toBe('NULL');
+  });
+
+  it('should return NULL for undefined', () => {
+    expect(formatSQLValue(undefined)).toBe('NULL');
+  });
+
+  it('should format finite numbers normally', () => {
+    expect(formatSQLValue(42)).toBe('42');
+    expect(formatSQLValue(3.14)).toBe('3.14');
+    expect(formatSQLValue(0)).toBe('0');
+    expect(formatSQLValue(-7)).toBe('-7');
+  });
+
+  it('should escape single quotes in strings', () => {
+    expect(formatSQLValue("O'Brien")).toBe("'O''Brien'");
+  });
+
+  it('should format booleans', () => {
+    expect(formatSQLValue(true)).toBe('TRUE');
+    expect(formatSQLValue(false)).toBe('FALSE');
+  });
+
+  it('should format Date objects as ISO strings', () => {
+    const d = new Date('2024-06-15T12:00:00.000Z');
+    expect(formatSQLValue(d)).toBe("'2024-06-15T12:00:00.000Z'");
+  });
+});
+
+// =========================================
+// filterToSQL Edge Cases
+// =========================================
+
+describe('filterToSQL edge cases', () => {
+  describe('open-bound range filters', () => {
+    it('should generate upper-bound only for open lower bound', () => {
+      const filter: Filter = { type: 'range', column: 'x', min: -Infinity, max: 50 };
+      expect(filterToSQL(filter)).toBe('"x" < 50');
+    });
+
+    it('should generate upper-bound with <= for maxInclusive', () => {
+      const filter: Filter = { type: 'range', column: 'x', min: -Infinity, max: 50, maxInclusive: true };
+      expect(filterToSQL(filter)).toBe('"x" <= 50');
+    });
+
+    it('should generate lower-bound only for open upper bound', () => {
+      const filter: Filter = { type: 'range', column: 'x', min: 10, max: Infinity };
+      expect(filterToSQL(filter)).toBe('"x" >= 10');
+    });
+
+    it('should generate > for minExclusive with open upper bound', () => {
+      const filter: Filter = { type: 'range', column: 'x', min: 10, max: Infinity, minExclusive: true };
+      expect(filterToSQL(filter)).toBe('"x" > 10');
+    });
+
+    it('should generate TRUE for fully open range', () => {
+      const filter: Filter = { type: 'range', column: 'x', min: -Infinity, max: Infinity };
+      expect(filterToSQL(filter)).toBe('TRUE');
+    });
+  });
+
+  describe('regex with special characters', () => {
+    it('should escape single quotes in regex pattern', () => {
+      const filter: Filter = { type: 'pattern', column: 'name', pattern: "O'Brien", mode: 'regex' };
+      expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), 'O''Brien')");
+    });
+
+    it('should handle regex with multiple single quotes', () => {
+      const filter: Filter = { type: 'pattern', column: 'x', pattern: "it's a 'test'", mode: 'regex' };
+      expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"x\" AS VARCHAR), 'it''s a ''test''')");
+    });
+  });
+
+  describe('not-set edge cases', () => {
+    it('should return TRUE for empty not-set without includeNull', () => {
+      const filter: Filter = { type: 'not-set', column: 'x', values: [] };
+      expect(filterToSQL(filter)).toBe('TRUE');
+    });
+
+    it('should return TRUE for empty not-set with includeNull explicitly false', () => {
+      const filter: Filter = { type: 'not-set', column: 'x', values: [], includeNull: false };
+      expect(filterToSQL(filter)).toBe('TRUE');
+    });
   });
 });

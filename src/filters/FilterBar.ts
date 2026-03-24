@@ -90,6 +90,10 @@ export class FilterBar {
   }
 
   private update(filters: Filter[]): void {
+    // Recreates all chips from scratch. This is O(n) DOM operations but acceptable
+    // because n is bounded by the number of table columns (typically < 50) and
+    // filter changes are infrequent (user-initiated).
+
     // Destroy old chips
     for (const chip of this.chips) {
       chip.destroy();

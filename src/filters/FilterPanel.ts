@@ -180,6 +180,11 @@ export class FilterPanel {
 
   /**
    * Close the panel
+   *
+   * Note: close() does NOT destroy currentField. This is intentional:
+   * it preserves user input so re-opening the same column shows previous values.
+   * The field is destroyed when switching columns (open with different column)
+   * or when the panel itself is destroyed.
    */
   close(): void {
     if (!this.isOpen) return;

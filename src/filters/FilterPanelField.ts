@@ -31,8 +31,12 @@ export class FilterPanelField {
   private clearButton: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
+  private applyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Flag to prevent re-entrant sync when we apply our own filters
+  // Flag to prevent re-entrant sync when we apply our own filters.
+  // This is safe because Signal.notify() is synchronous: the subscriber in
+  // FilterPanel sees isSelfUpdate === true during the addFilter() call.
+  // The queueMicrotask reset runs after all synchronous subscriber callbacks.
   isSelfUpdate = false;
 
   constructor(
@@ -83,6 +87,7 @@ export class FilterPanelField {
     clear.className = `${this.prefix}-filter-field-clear ${this.prefix}-filter-field-clear--hidden`;
     clear.type = 'button';
     clear.textContent = 'Clear';
+    clear.setAttribute('aria-label', `Clear filter for ${this.column.name}`);
     clear.addEventListener('click', () => {
       this.clearControls();
       this.removeFilter();
@@ -111,6 +116,8 @@ export class FilterPanelField {
     // Null toggle radio group
     const nullGroup = document.createElement('div');
     nullGroup.className = `${this.prefix}-filter-field-null`;
+    nullGroup.setAttribute('role', 'radiogroup');
+    nullGroup.setAttribute('aria-label', `Null filter for ${this.column.name}`);
 
     const radioName = `null-${this.column.name}-${Math.random().toString(36).slice(2, 8)}`;
     const nullOptions: Array<{ value: string; label: string }> = [
@@ -131,7 +138,8 @@ export class FilterPanelField {
 
       radio.addEventListener('change', () => {
         if (radio.checked) {
-          this.applyFilter();
+          if (this.applyDebounceTimer) clearTimeout(this.applyDebounceTimer);
+          this.applyDebounceTimer = setTimeout(() => this.applyFilter(), 150);
         }
       });
 
@@ -188,6 +196,7 @@ export class FilterPanelField {
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
+    select.setAttribute('aria-label', `Filter mode for ${this.column.name}`);
     select.innerHTML = `
       <option value="between">between</option>
       <option value="eq">=</option>
@@ -203,12 +212,14 @@ export class FilterPanelField {
     input1.className = `${this.prefix}-filter-input`;
     input1.placeholder = 'min';
     input1.setAttribute('step', 'any');
+    input1.setAttribute('aria-label', `Minimum value for ${this.column.name}`);
 
     const input2 = document.createElement('input');
     input2.type = 'number';
     input2.className = `${this.prefix}-filter-input`;
     input2.placeholder = 'max';
     input2.setAttribute('step', 'any');
+    input2.setAttribute('aria-label', `Maximum value for ${this.column.name}`);
 
     c.appendChild(select);
     c.appendChild(input1);
@@ -231,6 +242,7 @@ export class FilterPanelField {
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
+    select.setAttribute('aria-label', `Filter mode for ${this.column.name}`);
     select.innerHTML = `
       <option value="contains">contains</option>
       <option value="starts">starts with</option>
@@ -243,6 +255,7 @@ export class FilterPanelField {
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
     input.placeholder = 'Filter value...';
+    input.setAttribute('aria-label', `Filter value for ${this.column.name}`);
 
     c.appendChild(select);
     c.appendChild(input);
@@ -274,8 +287,11 @@ export class FilterPanelField {
       checkbox.value = opt.value;
       checkbox.checked = true; // All checked by default (no filter)
 
-      // Boolean checkboxes apply immediately (single-click toggles)
-      checkbox.addEventListener('change', () => this.applyFilter());
+      // Boolean checkboxes apply immediately (debounced to coalesce rapid toggles)
+      checkbox.addEventListener('change', () => {
+        if (this.applyDebounceTimer) clearTimeout(this.applyDebounceTimer);
+        this.applyDebounceTimer = setTimeout(() => this.applyFilter(), 150);
+      });
 
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(opt.label));
@@ -290,6 +306,7 @@ export class FilterPanelField {
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
+    select.setAttribute('aria-label', `Date filter mode for ${this.column.name}`);
     select.innerHTML = `
       <option value="between">between</option>
       <option value="eq">=</option>
@@ -302,10 +319,12 @@ export class FilterPanelField {
     const input1 = document.createElement('input');
     input1.type = inputType;
     input1.className = `${this.prefix}-filter-input`;
+    input1.setAttribute('aria-label', `Start date for ${this.column.name}`);
 
     const input2 = document.createElement('input');
     input2.type = inputType;
     input2.className = `${this.prefix}-filter-input`;
+    input2.setAttribute('aria-label', `End date for ${this.column.name}`);
 
     c.appendChild(select);
     c.appendChild(input1);
@@ -331,6 +350,7 @@ export class FilterPanelField {
     const input1 = document.createElement('input');
     input1.type = 'time';
     input1.className = `${this.prefix}-filter-input`;
+    input1.setAttribute('aria-label', `From time for ${this.column.name}`);
 
     const label2 = document.createElement('span');
     label2.className = `${this.prefix}-filter-field-label`;
@@ -339,6 +359,7 @@ export class FilterPanelField {
     const input2 = document.createElement('input');
     input2.type = 'time';
     input2.className = `${this.prefix}-filter-input`;
+    input2.setAttribute('aria-label', `To time for ${this.column.name}`);
 
     c.appendChild(label1);
     c.appendChild(input1);
@@ -353,6 +374,7 @@ export class FilterPanelField {
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
+    select.setAttribute('aria-label', `UUID filter mode for ${this.column.name}`);
     select.innerHTML = `
       <option value="contains">contains</option>
       <option value="exact">exact match</option>
@@ -362,6 +384,7 @@ export class FilterPanelField {
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
     input.placeholder = 'UUID value...';
+    input.setAttribute('aria-label', `UUID value for ${this.column.name}`);
 
     c.appendChild(select);
     c.appendChild(input);
@@ -376,6 +399,7 @@ export class FilterPanelField {
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
     input.placeholder = 'Contains...';
+    input.setAttribute('aria-label', `Interval filter for ${this.column.name}`);
 
     c.appendChild(input);
 
@@ -501,12 +525,18 @@ export class FilterPanelField {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
     const input = this.controlsContainer.querySelector('input[type="text"]') as HTMLInputElement;
     const mode = select.value;
-    const value = input.value;
+    const value = input.value.trim();
 
     if (!value) return null;
 
     // Validate regex before sending to DuckDB
     if (mode === 'regex') {
+      // Defense-in-depth: cap regex length to prevent expensive compilation
+      if (value.length > 1000) {
+        input.setCustomValidity('Regular expression is too long (max 1000 characters)');
+        input.reportValidity();
+        return null;
+      }
       try {
         new RegExp(value);
       } catch {
@@ -630,7 +660,7 @@ export class FilterPanelField {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
     const input = this.controlsContainer.querySelector('input[type="text"]') as HTMLInputElement;
     const mode = select.value;
-    const value = input.value;
+    const value = input.value.trim();
 
     if (!value) return null;
 
@@ -644,7 +674,7 @@ export class FilterPanelField {
 
   private buildIntervalFilter(): Filter | null {
     const input = this.controlsContainer.querySelector('input[type="text"]') as HTMLInputElement;
-    const value = input.value;
+    const value = input.value.trim();
 
     if (!value) return null;
 
@@ -960,6 +990,11 @@ export class FilterPanelField {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    if (this.applyDebounceTimer) {
+      clearTimeout(this.applyDebounceTimer);
+      this.applyDebounceTimer = null;
+    }
 
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);

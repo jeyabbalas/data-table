@@ -170,10 +170,10 @@ export class ColumnHeader {
     hideBtn.setAttribute('aria-label', `Hide ${this.column.name}`);
     hideBtn.setAttribute('title', 'Hide column');
     hideBtn.innerHTML = `
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path fill-rule="evenodd" d="M8 3.5C4.5 3.5 2 8 2 8s2.5 4.5 6 4.5S14 8 14 8s-2.5-4.5-6-4.5zM8 4.5C5.2 4.5 3.2 7.2 2.9 8c.3.8 2.3 3.5 5.1 3.5s4.8-2.7 5.1-3.5c-.3-.8-2.3-3.5-5.1-3.5z" />
-        <circle cx="8" cy="8" r="2" />
-        <rect x="7.25" y="1" width="1.5" height="14" rx="0.75" transform="rotate(-45 8 8)" />
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">
+        <path d="M2 8s2.5-4.5 6-4.5S14 8 14 8s-2.5 4.5-6 4.5S2 8 2 8z" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+        <line x1="3.5" y1="12.5" x2="12.5" y2="3.5" fill="none" stroke-width="1.5" stroke-linecap="round" />
       </svg>
     `;
 

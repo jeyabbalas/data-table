@@ -920,7 +920,7 @@ body.dt-column-dragging * {
 .dt-filter-panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--dt-border);
   flex-shrink: 0;
@@ -932,12 +932,44 @@ body.dt-column-dragging * {
   color: var(--dt-text);
 }
 
+.dt-filter-panel-type {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  background: var(--dt-bg-tertiary);
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--dt-radius-sm);
+  flex-shrink: 0;
+}
+
+.dt-filter-panel-clear {
+  flex-shrink: 0;
+  padding: 0.125rem 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--dt-primary);
+  font-size: var(--dt-font-size-xs);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  border-radius: var(--dt-radius-sm);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-panel-clear:hover {
+  color: var(--dt-primary-hover);
+  background: var(--dt-primary-light);
+}
+
+.dt-filter-panel-clear--hidden {
+  display: none;
+}
+
 .dt-filter-panel-close {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
+  margin-left: auto;
   padding: 0;
   border: none;
   background: transparent;
@@ -979,56 +1011,6 @@ body.dt-column-dragging * {
   background: var(--dt-primary-light);
 }
 
-/* Field header */
-.dt-filter-field-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.375rem;
-}
-
-.dt-filter-field-name {
-  font-weight: 600;
-  font-size: var(--dt-font-size);
-  color: var(--dt-text);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dt-filter-field-type {
-  font-size: var(--dt-font-size-xs);
-  color: var(--dt-text-tertiary);
-  background: var(--dt-bg-tertiary);
-  padding: 0.0625rem 0.375rem;
-  border-radius: var(--dt-radius-sm);
-  flex-shrink: 0;
-}
-
-.dt-filter-field-clear {
-  flex-shrink: 0;
-  padding: 0.125rem 0.375rem;
-  border: none;
-  background: transparent;
-  color: var(--dt-primary);
-  font-size: var(--dt-font-size-xs);
-  font-family: var(--dt-font-family);
-  cursor: pointer;
-  border-radius: var(--dt-radius-sm);
-  transition: color var(--dt-transition), background var(--dt-transition);
-}
-
-.dt-filter-field-clear:hover {
-  color: var(--dt-primary-hover);
-  background: var(--dt-primary-light);
-}
-
-.dt-filter-field-clear--hidden {
-  display: none;
-}
-
 /* Controls area */
 .dt-filter-field-controls {
   display: flex;
@@ -1066,6 +1048,14 @@ body.dt-column-dragging * {
 
 .dt-filter-input::placeholder {
   color: var(--dt-text-tertiary);
+}
+
+.dt-filter-input[type="date"] {
+  min-width: 130px;
+}
+
+.dt-filter-input[type="datetime-local"] {
+  min-width: 11rem;
 }
 
 .dt-filter-select {

@@ -28,7 +28,6 @@ export class FilterPanelField {
   private element: HTMLElement;
   private controlsContainer: HTMLElement;
   private nullGroup: HTMLElement;
-  private clearButton: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
   private applyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -53,9 +52,6 @@ export class FilterPanelField {
     this.nullGroup = this.element.querySelector(
       `.${this.prefix}-filter-field-null`
     )!;
-    this.clearButton = this.element.querySelector(
-      `.${this.prefix}-filter-field-clear`
-    )!;
 
     this.createControls();
     this.syncFromState();
@@ -69,34 +65,6 @@ export class FilterPanelField {
     const el = document.createElement('div');
     el.className = `${this.prefix}-filter-field`;
     el.setAttribute('data-column', this.column.name);
-
-    // Header row: name + type badge + clear button
-    const header = document.createElement('div');
-    header.className = `${this.prefix}-filter-field-header`;
-
-    const name = document.createElement('span');
-    name.className = `${this.prefix}-filter-field-name`;
-    name.textContent = this.column.name;
-    name.setAttribute('title', this.column.name);
-
-    const type = document.createElement('span');
-    type.className = `${this.prefix}-filter-field-type`;
-    type.textContent = this.column.type;
-
-    const clear = document.createElement('button');
-    clear.className = `${this.prefix}-filter-field-clear ${this.prefix}-filter-field-clear--hidden`;
-    clear.type = 'button';
-    clear.textContent = 'Clear';
-    clear.setAttribute('aria-label', `Clear filter for ${this.column.name}`);
-    clear.addEventListener('click', () => {
-      this.clearControls();
-      this.removeFilter();
-    });
-
-    header.appendChild(name);
-    header.appendChild(type);
-    header.appendChild(clear);
-    el.appendChild(header);
 
     // Controls container (type-specific inputs go here)
     const controls = document.createElement('div');
@@ -437,21 +405,12 @@ export class FilterPanelField {
     this.isSelfUpdate = true;
     this.actions.addFilter(filter);
     queueMicrotask(() => { this.isSelfUpdate = false; });
-    this.updateClearButton(true);
   }
 
   private removeFilter(): void {
     this.isSelfUpdate = true;
     this.actions.removeFilter(this.column.name);
     queueMicrotask(() => { this.isSelfUpdate = false; });
-    this.updateClearButton(false);
-  }
-
-  private updateClearButton(hasFilter: boolean): void {
-    this.clearButton.classList.toggle(
-      `${this.prefix}-filter-field-clear--hidden`,
-      !hasFilter
-    );
   }
 
   private getNullToggleValue(): string {
@@ -710,13 +669,11 @@ export class FilterPanelField {
     const filters = this.state.filtersByColumn.get().get(this.column.name);
     if (!filters || filters.length === 0) {
       this.clearControls();
-      this.updateClearButton(false);
       return;
     }
 
     const filter = filters[0]; // One filter per column
     this.populateFromFilter(filter);
-    this.updateClearButton(true);
   }
 
   private populateFromFilter(filter: Filter): void {
@@ -976,6 +933,14 @@ export class FilterPanelField {
   // =========================================
   // Public API
   // =========================================
+
+  /**
+   * Clear the filter: reset controls and remove from state.
+   */
+  clear(): void {
+    this.clearControls();
+    this.removeFilter();
+  }
 
   /**
    * Highlight this field (scroll into view + flash)

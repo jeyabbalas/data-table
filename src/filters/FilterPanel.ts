@@ -25,6 +25,8 @@ export class FilterPanel {
   private element: HTMLElement;
   private body: HTMLElement;
   private titleEl: HTMLElement;
+  private typeBadgeEl: HTMLElement;
+  private clearBtn: HTMLElement;
   private currentField: FilterPanelField | null = null;
   private currentColumn: string | null = null;
   private isOpen = false;
@@ -47,11 +49,20 @@ export class FilterPanel {
     this.element = this.createElement();
     this.body = this.element.querySelector(`.${this.prefix}-filter-panel-body`)!;
     this.titleEl = this.element.querySelector(`.${this.prefix}-filter-panel-title`)!;
+    this.typeBadgeEl = this.element.querySelector(`.${this.prefix}-filter-panel-type`)!;
+    this.clearBtn = this.element.querySelector(`.${this.prefix}-filter-panel-clear`)!;
 
     // Subscribe to filter changes for external sync
     this.unsubscribe = this.state.filtersByColumn.subscribe(() => {
-      if (!this.destroyed && this.isOpen && this.currentField && !this.currentField.isSelfUpdate) {
-        this.currentField.syncFromState();
+      if (!this.destroyed && this.isOpen) {
+        if (this.currentField && !this.currentField.isSelfUpdate) {
+          this.currentField.syncFromState();
+        }
+        // Update clear button visibility
+        const hasFilter = this.currentColumn
+          ? this.state.filtersByColumn.get().has(this.currentColumn)
+          : false;
+        this.updatePanelClearButton(hasFilter);
       }
     });
   }
@@ -73,6 +84,18 @@ export class FilterPanel {
     title.className = `${this.prefix}-filter-panel-title`;
     title.textContent = 'Filter';
 
+    const typeBadge = document.createElement('span');
+    typeBadge.className = `${this.prefix}-filter-panel-type`;
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = `${this.prefix}-filter-panel-clear ${this.prefix}-filter-panel-clear--hidden`;
+    clearBtn.type = 'button';
+    clearBtn.textContent = 'Clear';
+    clearBtn.addEventListener('click', () => {
+      this.currentField?.clear();
+      this.updatePanelClearButton(false);
+    });
+
     const closeBtn = document.createElement('button');
     closeBtn.className = `${this.prefix}-filter-panel-close`;
     closeBtn.type = 'button';
@@ -85,6 +108,8 @@ export class FilterPanel {
     closeBtn.addEventListener('click', () => this.close());
 
     header.appendChild(title);
+    header.appendChild(typeBadge);
+    header.appendChild(clearBtn);
     header.appendChild(closeBtn);
     el.appendChild(header);
 
@@ -166,8 +191,11 @@ export class FilterPanel {
     this.isOpen = true;
     this.element.style.display = '';
 
-    // Update title to show column name
+    // Update header: title, type badge, clear button
     this.titleEl.textContent = `Filter: ${column}`;
+    this.typeBadgeEl.textContent = colSchema.type;
+    const hasFilter = this.state.filtersByColumn.get().has(column);
+    this.updatePanelClearButton(hasFilter);
 
     // Position below the anchor
     this.position(anchorElement);
@@ -233,6 +261,17 @@ export class FilterPanel {
       document.removeEventListener('keydown', this.escapeHandler);
       this.escapeHandler = null;
     }
+  }
+
+  // =========================================
+  // Clear Button
+  // =========================================
+
+  private updatePanelClearButton(hasFilter: boolean): void {
+    this.clearBtn.classList.toggle(
+      `${this.prefix}-filter-panel-clear--hidden`,
+      !hasFilter
+    );
   }
 
   // =========================================

@@ -915,39 +915,13 @@ describe('FilterPanelField', () => {
   });
 
   // =========================================
-  // Clear Button
+  // clear() public method
   // =========================================
 
-  describe('clear button', () => {
+  describe('clear()', () => {
     const intColumn: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
 
-    it('should be hidden initially', () => {
-      const field = createField(intColumn, state, actions);
-      const clearBtn = field.getElement().querySelector('.dt-filter-field-clear') as HTMLElement;
-
-      expect(clearBtn.classList.contains('dt-filter-field-clear--hidden')).toBe(true);
-
-      field.destroy();
-    });
-
-    it('should become visible after applying a filter', () => {
-      const field = createField(intColumn, state, actions);
-      const el = field.getElement();
-
-      const select = el.querySelector('select') as HTMLSelectElement;
-      const inputs = el.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
-      select.value = 'eq';
-      inputs[0].value = '42';
-
-      field.applyFilter();
-
-      const clearBtn = el.querySelector('.dt-filter-field-clear') as HTMLElement;
-      expect(clearBtn.classList.contains('dt-filter-field-clear--hidden')).toBe(false);
-
-      field.destroy();
-    });
-
-    it('should remove filter and reset controls when clicked', () => {
+    it('should remove filter and reset controls', () => {
       const field = createField(intColumn, state, actions);
       const el = field.getElement();
 
@@ -959,13 +933,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
       expect(state.filters.get()).toHaveLength(1);
 
-      // Click clear
-      const clearBtn = el.querySelector('.dt-filter-field-clear') as HTMLButtonElement;
-      clearBtn.click();
+      // Call clear
+      field.clear();
 
       expect(state.filters.get()).toHaveLength(0);
       expect(inputs[0].value).toBe('');
-      expect(clearBtn.classList.contains('dt-filter-field-clear--hidden')).toBe(true);
 
       field.destroy();
     });

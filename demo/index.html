@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactive Data Table - Visualization Test</title>
+  <title>Interactive Data Table - Demo</title>
   <link rel="stylesheet" href="../src/styles/data-table.css">
   <link rel="stylesheet" href="./demo.css">
 </head>
 <body>
-  <h1>Phase 6: Column Header Actions &amp; Pin Columns</h1>
+  <h1>Interactive Data Table</h1>
 
   <div class="card">
     <div class="status-bar">
@@ -16,12 +16,17 @@
       <span id="init-status" class="init-status">Initializing...</span>
     </div>
     <p class="test-info">
-      <strong>Testing:</strong> Column header action panel with pin, hide, and filter buttons.
-      Each column header shows three action buttons below the name row, separated from the
-      type/stats/visualization area by a thin divider.
-      Click the <strong>pin</strong> button (thumbtack) to freeze a column to the left &mdash;
-      pinned columns stay fixed during horizontal scroll. Click again to unpin.
-      Hide and filter buttons are placeholders for future tasks.
+      Explore tabular data entirely in the browser &mdash; no server required.
+      Load a CSV, JSON, or Parquet file to get started. All processing happens locally
+      via DuckDB WASM for complete data privacy. Column headers show interactive
+      visualizations: continuous variables show <strong>histograms</strong> (click-select
+      a bin or brush-select a range to filter), and categorical variables show
+      <strong>value counts</strong> plots (click to select, <strong>Cmd/Ctrl+click</strong>
+      for multi-category selection). Use the <strong>filter button</strong> (funnel icon) for manual
+      filters with type-specific controls. <strong>Pin</strong>, <strong>hide</strong>,
+      <strong>sort</strong>, <strong>reorder</strong>, and <strong>resize</strong> columns
+      freely. Try <strong>Cmd/Ctrl+click</strong> a sort button for multi-sort, or
+      <strong>double-click</strong> a column border to auto-fit its width.
     </p>
   </div>
 

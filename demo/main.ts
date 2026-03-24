@@ -1,15 +1,9 @@
 /**
  * Interactive Data Table - Demo Application
  *
- * Phase 6: Column Header Actions, Pin Columns & Manual Filter Panel
- *
- * This demo uses VisualizationFactory for centralized visualization creation,
- * CrossfilterCoordinator for filter propagation across columns, and FilterBar
- * for displaying active filters as removable chips. Each column header now
- * includes an action panel with pin, hide, and filter buttons. Pinned columns
- * freeze in place during horizontal scroll (freeze panes). The filter button
- * opens a floating panel with type-specific controls for creating filters
- * manually on any column.
+ * Demo app for beta testers to explore the data table library's features:
+ * file loading, type detection, column visualizations, crossfilter
+ * coordination, pin/hide/sort/reorder/resize columns, and manual filters.
  */
 
 import {

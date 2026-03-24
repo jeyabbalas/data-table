@@ -163,6 +163,9 @@ export class ValueCounts extends BaseVisualization {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: ValueCountsData | null = null;
 
+  // Folded count overrides for Other segment after render-time category folding
+  private foldedCountOverrides: Map<string, number> | null = null;
+
   constructor(
     container: HTMLElement,
     column: ColumnSchema,
@@ -372,8 +375,10 @@ export class ValueCounts extends BaseVisualization {
       .filter((seg) => !seg.isOther)
       .map((seg) => seg.value);
 
-    // Add null segment at the end if there are nulls
-    if (this.data.nullCount > 0) {
+    // Add null segment at the end if there are nulls (or if background has nulls,
+    // to keep renderSegments aligned with backgroundSegments for index-based lookups)
+    const hasNullInBackground = this.backgroundData && this.backgroundData.nullCount > 0;
+    if (this.data.nullCount > 0 || hasNullInBackground) {
       this.renderSegments.push({
         value: '\u2205', // Empty set symbol
         count: this.data.nullCount,
@@ -402,6 +407,155 @@ export class ValueCounts extends BaseVisualization {
       }
     } else {
       this.backgroundSegments = [];
+    }
+
+    // Adaptively fold small categories into "Other" based on available width
+    this.foldExcessCategories();
+  }
+
+  /**
+   * Fold the smallest regular categories into "Other" until all remaining
+   * regular categories have proportional widths >= minSegmentWidth.
+   * This adapts the display to available column width, ensuring proportions
+   * are visually accurate rather than distorted by minimum-width inflation.
+   */
+  private foldExcessCategories(): void {
+    // Use layout segments for folding decisions (background in crossfilter mode)
+    const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
+      ? this.backgroundSegments
+      : this.renderSegments;
+
+    // Need at least 2 regular categories to consider folding
+    const regularCount = layoutSegments.filter(
+      s => !s.isOther && !s.isNull && !s.isAllUnique
+    ).length;
+    if (regularCount <= 1) {
+      this.foldedCountOverrides = null;
+      return;
+    }
+
+    const chartWidth = this.width - PADDING.left - PADDING.right;
+    if (chartWidth <= 0) {
+      this.foldedCountOverrides = null;
+      return;
+    }
+
+    let folded = false;
+
+    // Iteratively fold the smallest regular category that doesn't fit.
+    // Uses seg.count directly (not initialSegmentCounts) because:
+    // - background segments already have initial counts
+    // - folding updates Other's count, keeping total correct across iterations
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const numSegments = this.renderSegments.length;
+      const totalBorderWidth = (numSegments - 1) * LAYOUT.segmentBorderWidth;
+      const availableWidth = chartWidth - totalBorderWidth;
+
+      // Use layout segments to compute total count
+      const currentLayout = this.backgroundData !== null && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
+      const totalCount = currentLayout.reduce((sum, seg) => sum + seg.count, 0);
+      if (totalCount === 0) break;
+
+      // Find the smallest regular category whose proportional width < minSegmentWidth
+      let smallestIdx = -1;
+      let smallestCount = Infinity;
+      let regularRemaining = 0;
+
+      for (let i = 0; i < currentLayout.length; i++) {
+        const seg = currentLayout[i];
+        if (seg.isOther || seg.isNull || seg.isAllUnique) continue;
+        regularRemaining++;
+
+        const proportion = seg.count / totalCount;
+        const width = proportion * availableWidth;
+        if (width < LAYOUT.minSegmentWidth && seg.count < smallestCount) {
+          smallestCount = seg.count;
+          smallestIdx = i;
+        }
+      }
+
+      // Stop if all regular categories fit, or only 1 would remain
+      if (smallestIdx === -1 || regularRemaining <= 1) break;
+
+      // Fold this category into "Other" in renderSegments
+      const foldValue = this.renderSegments[smallestIdx]?.value;
+      if (!foldValue) break;
+
+      this.foldCategoryIntoOther(this.renderSegments, smallestIdx);
+
+      // Apply identical folding to backgroundSegments if present
+      if (this.backgroundSegments.length > 0) {
+        const bgIdx = this.backgroundSegments.findIndex(
+          s => !s.isOther && !s.isNull && s.value === foldValue
+        );
+        if (bgIdx >= 0) {
+          this.foldCategoryIntoOther(this.backgroundSegments, bgIdx);
+        }
+      }
+
+      folded = true;
+    }
+
+    if (folded) {
+      // Update topCategoryValues to reflect only displayed regular categories
+      this.topCategoryValues = this.renderSegments
+        .filter(seg => !seg.isOther && !seg.isNull && !seg.isAllUnique)
+        .map(seg => seg.value);
+
+      // Store folded Other count so calculateSegmentPositions uses correct counts.
+      // Must use layout segments (background in crossfilter mode) — foreground Other
+      // may have count=0 when a filter is active, which would collapse its width.
+      const layoutSource = this.backgroundData !== null && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
+      const otherSeg = layoutSource.find(s => s.isOther);
+      if (otherSeg) {
+        this.foldedCountOverrides = new Map();
+        this.foldedCountOverrides.set('Other', otherSeg.count);
+      }
+
+      // Prune selection indices that are now out of bounds
+      for (const idx of [...this.selectedSegments]) {
+        if (idx >= this.renderSegments.length) {
+          this.selectedSegments.delete(idx);
+        }
+      }
+    } else {
+      this.foldedCountOverrides = null;
+    }
+  }
+
+  /**
+   * Remove the segment at `index` from `segments` and merge its count into "Other".
+   * Creates an "Other" segment if one doesn't exist (positioned before null).
+   */
+  private foldCategoryIntoOther(segments: RenderSegment[], index: number): void {
+    const removed = segments.splice(index, 1)[0];
+    if (!removed) return;
+
+    const otherIdx = segments.findIndex(s => s.isOther);
+    if (otherIdx >= 0) {
+      // Merge into existing Other
+      segments[otherIdx].count += removed.count;
+      segments[otherIdx].otherCount = (segments[otherIdx].otherCount ?? 0) + 1;
+    } else {
+      // Create new Other segment, insert before null (or at end)
+      const nullIdx = segments.findIndex(s => s.isNull);
+      const newOther: RenderSegment = {
+        value: 'Other',
+        count: removed.count,
+        isOther: true,
+        isNull: false,
+        otherCount: 1,
+      };
+      if (nullIdx >= 0) {
+        segments.splice(nullIdx, 0, newOther);
+      } else {
+        segments.push(newOther);
+      }
     }
   }
 
@@ -527,13 +681,16 @@ export class ValueCounts extends BaseVisualization {
       return;
     }
 
-    const positions: Array<{ x: number; width: number; index: number }> = [];
-
-    // Use initial segment counts for stable widths when available
+    // Use initial segment counts for stable widths when available,
+    // with folded count overrides taking priority (for merged Other)
     const useInitialCounts = this.initialSegmentCounts !== null;
     const getCount = (seg: RenderSegment): number => {
+      const key = seg.isOther ? 'Other' : seg.value;
+      if (this.foldedCountOverrides) {
+        const override = this.foldedCountOverrides.get(key);
+        if (override !== undefined) return override;
+      }
       if (useInitialCounts) {
-        const key = seg.isOther ? 'Other' : seg.value;
         return this.initialSegmentCounts!.get(key) ?? seg.count;
       }
       return seg.count;
@@ -546,27 +703,68 @@ export class ValueCounts extends BaseVisualization {
       return;
     }
 
-    let currentX = this.barArea.x;
     const numSegments = layoutSegments.length;
     const totalBorderWidth = (numSegments - 1) * LAYOUT.segmentBorderWidth;
     const availableWidth = this.barArea.width - totalBorderWidth;
 
+    // --- Pass 1: Compute ideal proportional widths, identify sub-minimum ---
+    const idealWidths: number[] = [];
+    const isSubMinimum: boolean[] = [];
+    let subMinCount = 0;
+
     for (let i = 0; i < numSegments; i++) {
-      const segment = layoutSegments[i];
-      const proportion = getCount(segment) / totalCount;
-      let width = Math.max(proportion * availableWidth, LAYOUT.minSegmentWidth);
+      const proportion = getCount(layoutSegments[i]) / totalCount;
+      const ideal = proportion * availableWidth;
+      idealWidths.push(ideal);
+      const sub = ideal < LAYOUT.minSegmentWidth;
+      isSubMinimum.push(sub);
+      if (sub) subMinCount++;
+    }
 
-      // For last segment, ensure we fill to the end
-      if (i === numSegments - 1) {
-        width = this.barArea.x + this.barArea.width - currentX;
+    // --- Pass 2: Assign final widths with proper compensation ---
+    const finalWidths: number[] = new Array(numSegments);
+
+    if (subMinCount === 0) {
+      // All segments fit proportionally
+      for (let i = 0; i < numSegments; i++) {
+        finalWidths[i] = idealWidths[i];
       }
+    } else if (subMinCount === numSegments) {
+      // All segments are sub-minimum — divide equally
+      const equalWidth = availableWidth / numSegments;
+      for (let i = 0; i < numSegments; i++) {
+        finalWidths[i] = equalWidth;
+      }
+    } else {
+      // Mixed: inflate sub-minimum to minSegmentWidth, scale the rest proportionally
+      const totalMinInflation = subMinCount * LAYOUT.minSegmentWidth;
+      const remainingWidth = availableWidth - totalMinInflation;
+      const aboveMinTotal = idealWidths.reduce(
+        (sum, w, i) => sum + (isSubMinimum[i] ? 0 : w), 0
+      );
 
-      positions.push({
-        x: currentX,
-        width,
-        index: i,
-      });
+      for (let i = 0; i < numSegments; i++) {
+        if (isSubMinimum[i]) {
+          finalWidths[i] = LAYOUT.minSegmentWidth;
+        } else {
+          finalWidths[i] = aboveMinTotal > 0
+            ? (idealWidths[i] / aboveMinTotal) * remainingWidth
+            : remainingWidth / (numSegments - subMinCount);
+        }
+      }
+    }
 
+    // --- Build positions from widths ---
+    const positions: Array<{ x: number; width: number; index: number }> = [];
+    let currentX = this.barArea.x;
+
+    for (let i = 0; i < numSegments; i++) {
+      // Last segment snaps to edge to avoid floating-point gaps
+      const width = i === numSegments - 1
+        ? this.barArea.x + this.barArea.width - currentX
+        : finalWidths[i];
+
+      positions.push({ x: currentX, width, index: i });
       currentX += width + LAYOUT.segmentBorderWidth;
     }
 
@@ -979,7 +1177,7 @@ export class ValueCounts extends BaseVisualization {
     if (!this.data) return;
 
     if (this.hoveredSegment !== null) {
-      const segment = this.renderSegments[this.hoveredSegment];
+      const segment = this.renderSegments[this.hoveredSegment] ?? this.backgroundSegments[this.hoveredSegment];
       if (segment) {
         let categoryLabel: string;
         if (segment.isNull) {
@@ -1165,7 +1363,7 @@ export class ValueCounts extends BaseVisualization {
     if (this.selectedSegments.size === 1) {
       // Single selection - use existing logic
       const idx = [...this.selectedSegments][0];
-      const segment = this.renderSegments[idx];
+      const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
       if (segment) {
         this.createFilterForSegment(segment);
       }
@@ -1208,7 +1406,7 @@ export class ValueCounts extends BaseVisualization {
     // Single selection
     if (this.selectedSegments.size === 1) {
       const idx = [...this.selectedSegments][0];
-      const segment = this.renderSegments[idx];
+      const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
       if (segment) {
         let categoryLabel: string;
         if (segment.isNull) {

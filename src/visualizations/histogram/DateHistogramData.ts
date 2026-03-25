@@ -9,7 +9,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
+import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
 // Re-export TimeInterval for convenience
@@ -298,16 +298,18 @@ export async function fetchDateStats(
   count: number;
   nullCount: number;
 }> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
   const sql = `
     SELECT
-      MIN("${column}")::VARCHAR as min_date,
-      MAX("${column}")::VARCHAR as max_date,
-      COUNT("${column}") as count,
-      COUNT(*) - COUNT("${column}") as null_count
-    FROM "${tableName}"
+      MIN(${col})::VARCHAR as min_date,
+      MAX(${col})::VARCHAR as max_date,
+      COUNT(${col}) as count,
+      COUNT(*) - COUNT(${col}) as null_count
+    FROM ${tbl}
     ${whereSQL}
   `;
 
@@ -335,8 +337,10 @@ function buildDateHistogramSQL(
   interval: TimeInterval,
   filters: Filter[]
 ): string {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -347,9 +351,9 @@ function buildDateHistogramSQL(
   // Cast to VARCHAR for consistent string output
   return `
     SELECT
-      DATE_TRUNC('${truncPart}', "${column}")::VARCHAR as bin_start,
+      DATE_TRUNC('${truncPart}', ${col})::VARCHAR as bin_start,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
     GROUP BY 1
     ORDER BY 1
@@ -378,8 +382,10 @@ function buildNumericDateHistogramSQL(
   maxMs: number,
   filters: Filter[]
 ): string {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -389,9 +395,9 @@ function buildNumericDateHistogramSQL(
   // Use EPOCH to convert timestamp to seconds, then multiply by 1000 for milliseconds
   return `
     SELECT
-      LEAST(FLOOR((EXTRACT(EPOCH FROM "${column}") * 1000 - ${minMs}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      LEAST(FLOOR((EXTRACT(EPOCH FROM ${col}) * 1000 - ${minMs}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
     GROUP BY bin_idx
     HAVING bin_idx >= 0 AND bin_idx < ${numBins}

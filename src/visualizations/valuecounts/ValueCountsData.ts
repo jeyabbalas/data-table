@@ -9,7 +9,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
+import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
 
 // Re-export SQL utilities for use by other modules
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -82,16 +82,18 @@ async function fetchColumnStats(
   filters: Filter[],
   bridge: WorkerBridge
 ): Promise<{ total: number; nonNullCount: number; nullCount: number; distinctCount: number }> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
   const sql = `
     SELECT
       COUNT(*) as total,
-      COUNT("${column}") as non_null_count,
-      COUNT(*) - COUNT("${column}") as null_count,
-      COUNT(DISTINCT "${column}") as distinct_count
-    FROM "${tableName}"
+      COUNT(${col}) as non_null_count,
+      COUNT(*) - COUNT(${col}) as null_count,
+      COUNT(DISTINCT ${col}) as distinct_count
+    FROM ${tbl}
     ${whereSQL}
   `;
 
@@ -125,19 +127,21 @@ async function fetchTopCategories(
   bridge: WorkerBridge,
   limit: number
 ): Promise<CategoryResult[]> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
 
   const sql = `
     SELECT
-      CAST("${column}" AS VARCHAR) as value,
+      CAST(${col} AS VARCHAR) as value,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
-    GROUP BY "${column}"
+    GROUP BY ${col}
     ORDER BY count DESC, value ASC
     LIMIT ${limit}
   `;
@@ -290,22 +294,24 @@ export async function fetchAlignedValueCountsData(
     let topCategoriesTotal = 0;
 
     if (backgroundCategories.length > 0) {
+      const col = quoteIdentifier(column);
+      const tbl = quoteIdentifier(tableName);
       const whereClause = filtersToWhereClause(filters);
       const inValues = backgroundCategories
         .map((v) => formatSQLValue(v))
         .join(', ');
-      const baseCondition = `CAST("${column}" AS VARCHAR) IN (${inValues})`;
+      const baseCondition = `CAST(${col} AS VARCHAR) IN (${inValues})`;
       const whereSQL = whereClause
         ? `WHERE ${baseCondition} AND ${whereClause}`
         : `WHERE ${baseCondition}`;
 
       const sql = `
         SELECT
-          CAST("${column}" AS VARCHAR) as value,
+          CAST(${col} AS VARCHAR) as value,
           COUNT(*) as count
-        FROM "${tableName}"
+        FROM ${tbl}
         ${whereSQL}
-        GROUP BY CAST("${column}" AS VARCHAR)
+        GROUP BY CAST(${col} AS VARCHAR)
       `;
 
       const results = await bridge.query<CategoryResult>(sql);

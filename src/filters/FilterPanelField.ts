@@ -587,8 +587,9 @@ export class FilterPanelField {
       }
       case 'eq':
         if (this.column.type === 'timestamp') {
-          // datetime-local gives minute precision; expand to full minute range
-          return { type: 'range', column: col, min: val1, max: val1 + ':59.999999', maxInclusive: true };
+          // datetime-local may include seconds in some browsers; truncate to minute
+          const base = val1.length <= 16 ? val1 : val1.slice(0, 16); // YYYY-MM-DDTHH:MM
+          return { type: 'range', column: col, min: base + ':00', max: base + ':59.999999', maxInclusive: true };
         }
         return { type: 'point', column: col, value: val1 };
       case 'before':
@@ -832,10 +833,20 @@ export class FilterPanelField {
       const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max as number);
 
       if (!minIsOpen && !maxIsOpen) {
-        select.value = 'between';
-        inputs[0].value = String(filter.min);
-        inputs[1].value = String(filter.max);
-        inputs[1].style.display = '';
+        // Detect timestamp equality pattern: same base minute with :59.999999 suffix
+        const minStr = String(filter.min);
+        const maxStr = String(filter.max);
+        if (this.column.type === 'timestamp' && maxStr.endsWith(':59.999999')
+            && minStr.slice(0, 16) === maxStr.slice(0, 16)) {
+          select.value = 'eq';
+          inputs[0].value = minStr.slice(0, 16); // Show the base minute
+          inputs[1].style.display = 'none';
+        } else {
+          select.value = 'between';
+          inputs[0].value = minStr;
+          inputs[1].value = maxStr;
+          inputs[1].style.display = '';
+        }
       } else if (maxIsOpen && !minIsOpen) {
         select.value = filter.minExclusive ? 'after' : 'on-or-after';
         inputs[0].value = String(filter.min);
@@ -902,6 +913,8 @@ export class FilterPanelField {
         input.checked = true; // Boolean: all checked = no filter
       } else {
         input.value = '';
+        // Clear any stale custom validity (e.g., from regex/UUID validation errors)
+        input.setCustomValidity('');
       }
     }
 

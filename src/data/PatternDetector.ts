@@ -5,6 +5,7 @@
  */
 
 import type { WorkerBridge } from './WorkerBridge';
+import { quoteIdentifier } from '../filters/FilterSQL';
 
 /**
  * Detected pattern types
@@ -167,10 +168,11 @@ export async function detectColumnPattern(
   const { sampleSize = 1000, minConfidence = 0.90 } = options;
 
   // Sample distinct non-null values from the column
+  const quotedCol = quoteIdentifier(columnName);
   const sampleQuery = `
-    SELECT DISTINCT "${columnName}" as value
-    FROM "${tableName}"
-    WHERE "${columnName}" IS NOT NULL
+    SELECT DISTINCT ${quotedCol} as value
+    FROM ${quoteIdentifier(tableName)}
+    WHERE ${quotedCol} IS NOT NULL
     LIMIT ${sampleSize}
   `;
 
@@ -215,7 +217,7 @@ export async function detectAllColumnPatterns(
   options: PatternDetectionOptions = {}
 ): Promise<Map<string, PatternDetectionResult>> {
   // Get schema to find string columns
-  const schemaQuery = `DESCRIBE "${tableName}"`;
+  const schemaQuery = `DESCRIBE ${quoteIdentifier(tableName)}`;
   const schema = await bridge.query<{
     column_name: string;
     column_type: string;

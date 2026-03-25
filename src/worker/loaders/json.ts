@@ -5,7 +5,7 @@
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, JSONLoadOptions } from './types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
-import { enhanceSchemaTypes } from './common';
+import { enhanceSchemaTypes, quoteIdentifier } from './common';
 
 let tableCounter = 0;
 
@@ -54,6 +54,9 @@ export async function loadJSON(
 
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
   const timezone = options.timezone ?? 'UTC';
+  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
+    throw new Error(`Invalid timezone: ${timezone}`);
+  }
   await conn.query(`SET TimeZone = '${timezone}'`);
 
   // Convert ArrayBuffer to string if needed
@@ -85,26 +88,35 @@ export async function loadJSON(
     jsonOptions.push('auto_detect = true');
 
     if (options.sampleSize) {
-      jsonOptions.push(`sample_size = ${options.sampleSize}`);
+      const n = Number(options.sampleSize);
+      if (!Number.isInteger(n) || n <= 0) {
+        throw new Error('JSON sampleSize must be a positive integer');
+      }
+      jsonOptions.push(`sample_size = ${n}`);
     }
 
     if (options.maxDepth) {
-      jsonOptions.push(`maximum_depth = ${options.maxDepth}`);
+      const n = Number(options.maxDepth);
+      if (!Number.isInteger(n) || n <= 0) {
+        throw new Error('JSON maxDepth must be a positive integer');
+      }
+      jsonOptions.push(`maximum_depth = ${n}`);
     }
 
     // Create table from JSON using read_json_auto
     const optionsStr = `, ${jsonOptions.join(', ')}`;
-    const createSql = `CREATE TABLE "${tableName}" AS SELECT * FROM read_json_auto('${fileName}'${optionsStr})`;
+    const tbl = quoteIdentifier(tableName);
+    const createSql = `CREATE TABLE ${tbl} AS SELECT * FROM read_json_auto('${fileName}'${optionsStr})`;
     await conn.query(createSql);
 
     // Get row count
     const countResult = await conn.query(
-      `SELECT COUNT(*) as count FROM "${tableName}"`
+      `SELECT COUNT(*) as count FROM ${tbl}`
     );
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
     // Get full schema info from DESCRIBE
-    const describeResult = await conn.query(`DESCRIBE "${tableName}"`);
+    const describeResult = await conn.query(`DESCRIBE ${tbl}`);
     let describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     // Enhance schema by detecting and converting string columns to appropriate types

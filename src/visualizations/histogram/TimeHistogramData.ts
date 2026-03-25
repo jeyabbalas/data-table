@@ -13,7 +13,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause } from '../../filters/FilterSQL';
+import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
 // Re-export TimeInterval for convenience
@@ -274,17 +274,19 @@ export async function fetchTimeStats(
   count: number;
   nullCount: number;
 }> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
   // Cast TIME to VARCHAR for consistent string output
   const sql = `
     SELECT
-      MIN("${column}")::VARCHAR as min_time,
-      MAX("${column}")::VARCHAR as max_time,
-      COUNT("${column}") as count,
-      COUNT(*) - COUNT("${column}") as null_count
-    FROM "${tableName}"
+      MIN(${col})::VARCHAR as min_time,
+      MAX(${col})::VARCHAR as max_time,
+      COUNT(${col}) as count,
+      COUNT(*) - COUNT(${col}) as null_count
+    FROM ${tbl}
     ${whereSQL}
   `;
 
@@ -312,8 +314,10 @@ function buildTimeHistogramSQL(
   interval: TimeInterval,
   filters: Filter[]
 ): string {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -324,9 +328,9 @@ function buildTimeHistogramSQL(
   // EXTRACT(EPOCH FROM time_column) returns seconds from midnight for TIME type
   return `
     SELECT
-      FLOOR(EXTRACT(EPOCH FROM "${column}") / ${binSizeSeconds}) * ${binSizeSeconds} as bin_start,
+      FLOOR(EXTRACT(EPOCH FROM ${col}) / ${binSizeSeconds}) * ${binSizeSeconds} as bin_start,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
     GROUP BY 1
     ORDER BY 1
@@ -355,8 +359,10 @@ function buildNumericTimeHistogramSQL(
   maxSec: number,
   filters: Filter[]
 ): string {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -366,9 +372,9 @@ function buildNumericTimeHistogramSQL(
   // Use EPOCH to convert TIME to seconds from midnight
   return `
     SELECT
-      LEAST(FLOOR((EXTRACT(EPOCH FROM "${column}") - ${minSec}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      LEAST(FLOOR((EXTRACT(EPOCH FROM ${col}) - ${minSec}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
     GROUP BY bin_idx
     HAVING bin_idx >= 0 AND bin_idx < ${numBins}

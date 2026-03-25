@@ -9,7 +9,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause } from '../../filters/FilterSQL';
+import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
 
 // Re-export for backward compatibility
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -177,6 +177,8 @@ export async function fetchColumnStats(
   filters: Filter[],
   bridge: WorkerBridge
 ): Promise<ColumnStats> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
@@ -184,15 +186,15 @@ export async function fetchColumnStats(
   // source column type (DECIMAL, FLOAT, HUGEINT from parquet, etc.)
   const sql = `
     SELECT
-      CAST(MIN("${column}") AS DOUBLE) as min,
-      CAST(MAX("${column}") AS DOUBLE) as max,
-      COUNT("${column}") as count,
-      COUNT(*) - COUNT("${column}") as null_count,
-      CAST(APPROX_QUANTILE("${column}", 0.25) AS DOUBLE) as q1,
-      CAST(APPROX_QUANTILE("${column}", 0.5) AS DOUBLE) as median,
-      CAST(APPROX_QUANTILE("${column}", 0.75) AS DOUBLE) as q3,
-      COUNT(DISTINCT "${column}") as distinct_count
-    FROM "${tableName}"
+      CAST(MIN(${col}) AS DOUBLE) as min,
+      CAST(MAX(${col}) AS DOUBLE) as max,
+      COUNT(${col}) as count,
+      COUNT(*) - COUNT(${col}) as null_count,
+      CAST(APPROX_QUANTILE(${col}, 0.25) AS DOUBLE) as q1,
+      CAST(APPROX_QUANTILE(${col}, 0.5) AS DOUBLE) as median,
+      CAST(APPROX_QUANTILE(${col}, 0.75) AS DOUBLE) as q3,
+      COUNT(DISTINCT ${col}) as distinct_count
+    FROM ${tbl}
     ${whereSQL}
   `;
 
@@ -234,18 +236,20 @@ export async function fetchDiscreteValues(
   filters: Filter[],
   bridge: WorkerBridge
 ): Promise<DiscreteResult[]> {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
 
   const sql = `
-    SELECT "${column}" as value, COUNT(*) as count
-    FROM "${tableName}"
+    SELECT ${col} as value, COUNT(*) as count
+    FROM ${tbl}
     ${whereSQL}
-    GROUP BY "${column}"
-    ORDER BY "${column}"
+    GROUP BY ${col}
+    ORDER BY ${col}
   `;
 
   return bridge.query<DiscreteResult>(sql);
@@ -266,13 +270,15 @@ function buildHistogramSQL(
   max: number,
   filters: Filter[]
 ): string {
+  const col = quoteIdentifier(column);
+  const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
 
   // Calculate bin width
   const binWidth = (max - min) / numBins;
 
   // Build WHERE clause - always exclude nulls, add user filters if present
-  const baseCondition = `"${column}" IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -282,9 +288,9 @@ function buildHistogramSQL(
   // This handles the edge case where value == max
   const sql = `
     SELECT
-      LEAST(FLOOR(("${column}" - ${min}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      LEAST(FLOOR((${col} - ${min}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
       COUNT(*) as count
-    FROM "${tableName}"
+    FROM ${tbl}
     ${whereSQL}
     GROUP BY bin_idx
     HAVING bin_idx >= 0 AND bin_idx < ${numBins}

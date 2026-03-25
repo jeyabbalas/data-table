@@ -5,6 +5,7 @@
 
 import type { ColumnSchema, DataType } from '../core/types';
 import type { WorkerBridge } from './WorkerBridge';
+import { quoteIdentifier } from '../filters/FilterSQL';
 
 /**
  * Result from DuckDB DESCRIBE query
@@ -138,7 +139,7 @@ export async function detectSchema(
 ): Promise<ColumnSchema[]> {
   // Query column information using DESCRIBE
   const describeResults = await bridge.query<DescribeResult>(
-    `DESCRIBE "${tableName}"`
+    `DESCRIBE ${quoteIdentifier(tableName)}`
   );
 
   return describeResults.map((row) => ({

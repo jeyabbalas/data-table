@@ -8,6 +8,14 @@
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 
 /**
+ * Quote a SQL identifier (table/column name) with proper escaping.
+ * Wraps in double quotes and escapes embedded double quotes by doubling them.
+ */
+export function quoteIdentifier(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
  * ISO timestamp pattern
  * Matches formats:
  * - YYYY-MM-DDTHH:MM:SS
@@ -107,10 +115,11 @@ export async function detectTimestampColumns(
   for (const column of stringColumns) {
     try {
       // Sample distinct non-null values
+      const quotedCol = quoteIdentifier(column);
       const sampleQuery = `
-        SELECT DISTINCT "${column}" as value
-        FROM "${tableName}"
-        WHERE "${column}" IS NOT NULL
+        SELECT DISTINCT ${quotedCol} as value
+        FROM ${quoteIdentifier(tableName)}
+        WHERE ${quotedCol} IS NOT NULL
         LIMIT ${sampleSize}
       `;
       const samples = await conn.query(sampleQuery);
@@ -157,10 +166,11 @@ export async function detectDateColumns(
 
   for (const column of stringColumns) {
     try {
+      const quotedCol = quoteIdentifier(column);
       const sampleQuery = `
-        SELECT DISTINCT "${column}" as value
-        FROM "${tableName}"
-        WHERE "${column}" IS NOT NULL
+        SELECT DISTINCT ${quotedCol} as value
+        FROM ${quoteIdentifier(tableName)}
+        WHERE ${quotedCol} IS NOT NULL
         LIMIT ${sampleSize}
       `;
       const samples = await conn.query(sampleQuery);
@@ -203,10 +213,11 @@ export async function detectTimeColumns(
 
   for (const column of stringColumns) {
     try {
+      const quotedCol = quoteIdentifier(column);
       const sampleQuery = `
-        SELECT DISTINCT "${column}" as value
-        FROM "${tableName}"
-        WHERE "${column}" IS NOT NULL
+        SELECT DISTINCT ${quotedCol} as value
+        FROM ${quoteIdentifier(tableName)}
+        WHERE ${quotedCol} IS NOT NULL
         LIMIT ${sampleSize}
       `;
       const samples = await conn.query(sampleQuery);
@@ -252,33 +263,36 @@ export async function convertColumnsToTimestamp(
 
   // Build SELECT with CAST for timestamp columns, preserving original order
   const selectClauses = allColumns.map((col) => {
+    const quotedCol = quoteIdentifier(col);
     if (columnsToConvert.has(col)) {
       // Convert VARCHAR to TIMESTAMP, using TRY_CAST to handle invalid values gracefully
-      return `TRY_CAST("${col}" AS TIMESTAMP) AS "${col}"`;
+      return `TRY_CAST(${quotedCol} AS TIMESTAMP) AS ${quotedCol}`;
     }
     // Keep other columns unchanged
-    return `"${col}"`;
+    return quotedCol;
   });
 
   const tempTable = `__temp_${tableName}_${Date.now()}`;
+  const quotedTemp = quoteIdentifier(tempTable);
+  const quotedTable = quoteIdentifier(tableName);
 
   try {
     // Create new table with correct types and preserved column order
     await conn.query(`
-      CREATE TABLE "${tempTable}" AS
+      CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM "${tableName}"
+      FROM ${quotedTable}
     `);
 
     // Drop original table
-    await conn.query(`DROP TABLE "${tableName}"`);
+    await conn.query(`DROP TABLE ${quotedTable}`);
 
     // Rename temp table to original name
-    await conn.query(`ALTER TABLE "${tempTable}" RENAME TO "${tableName}"`);
+    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
   } catch {
     // If conversion fails, try to clean up temp table
     try {
-      await conn.query(`DROP TABLE IF EXISTS "${tempTable}"`);
+      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
@@ -305,26 +319,29 @@ export async function convertColumnsToDate(
   const columnsToConvert = new Set(columns);
 
   const selectClauses = allColumns.map((col) => {
+    const quotedCol = quoteIdentifier(col);
     if (columnsToConvert.has(col)) {
-      return `TRY_CAST("${col}" AS DATE) AS "${col}"`;
+      return `TRY_CAST(${quotedCol} AS DATE) AS ${quotedCol}`;
     }
-    return `"${col}"`;
+    return quotedCol;
   });
 
   const tempTable = `__temp_${tableName}_${Date.now()}`;
+  const quotedTemp = quoteIdentifier(tempTable);
+  const quotedTable = quoteIdentifier(tableName);
 
   try {
     await conn.query(`
-      CREATE TABLE "${tempTable}" AS
+      CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM "${tableName}"
+      FROM ${quotedTable}
     `);
 
-    await conn.query(`DROP TABLE "${tableName}"`);
-    await conn.query(`ALTER TABLE "${tempTable}" RENAME TO "${tableName}"`);
+    await conn.query(`DROP TABLE ${quotedTable}`);
+    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
   } catch {
     try {
-      await conn.query(`DROP TABLE IF EXISTS "${tempTable}"`);
+      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
@@ -351,26 +368,29 @@ export async function convertColumnsToTime(
   const columnsToConvert = new Set(columns);
 
   const selectClauses = allColumns.map((col) => {
+    const quotedCol = quoteIdentifier(col);
     if (columnsToConvert.has(col)) {
-      return `TRY_CAST("${col}" AS TIME) AS "${col}"`;
+      return `TRY_CAST(${quotedCol} AS TIME) AS ${quotedCol}`;
     }
-    return `"${col}"`;
+    return quotedCol;
   });
 
   const tempTable = `__temp_${tableName}_${Date.now()}`;
+  const quotedTemp = quoteIdentifier(tempTable);
+  const quotedTable = quoteIdentifier(tableName);
 
   try {
     await conn.query(`
-      CREATE TABLE "${tempTable}" AS
+      CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM "${tableName}"
+      FROM ${quotedTable}
     `);
 
-    await conn.query(`DROP TABLE "${tableName}"`);
-    await conn.query(`ALTER TABLE "${tempTable}" RENAME TO "${tableName}"`);
+    await conn.query(`DROP TABLE ${quotedTable}`);
+    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
   } catch {
     try {
-      await conn.query(`DROP TABLE IF EXISTS "${tempTable}"`);
+      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
@@ -430,7 +450,7 @@ export async function enhanceSchemaTypes(
   if (remainingStringColumns.length > 0) {
     // Refresh allColumns if we modified the table
     if (needsRefresh) {
-      const newDescribe = await conn.query(`DESCRIBE "${tableName}"`);
+      const newDescribe = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
       allColumns = newDescribe.toArray().map((row) => String(row.toJSON().column_name));
     }
 
@@ -449,7 +469,7 @@ export async function enhanceSchemaTypes(
   if (remainingStringColumns.length > 0) {
     // Refresh allColumns if we modified the table
     if (needsRefresh) {
-      const newDescribe = await conn.query(`DESCRIBE "${tableName}"`);
+      const newDescribe = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
       allColumns = newDescribe.toArray().map((row) => String(row.toJSON().column_name));
     }
 
@@ -463,7 +483,7 @@ export async function enhanceSchemaTypes(
 
   // Re-fetch final schema if any conversions happened
   if (needsRefresh) {
-    const finalDescribeResult = await conn.query(`DESCRIBE "${tableName}"`);
+    const finalDescribeResult = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
     return finalDescribeResult.toArray().map((row) => row.toJSON());
   }
 

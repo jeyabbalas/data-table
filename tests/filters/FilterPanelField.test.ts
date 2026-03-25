@@ -636,7 +636,7 @@ describe('FilterPanelField', () => {
       expect(filters[0]).toEqual({
         type: 'range',
         column: 'created_at',
-        min: '2024-06-15T10:30',
+        min: '2024-06-15T10:30:00',
         max: '2024-06-15T10:30:59.999999',
         maxInclusive: true,
       });
@@ -1105,6 +1105,170 @@ describe('FilterPanelField', () => {
 
       const applyBtn = field.getElement().querySelector('.dt-filter-field-apply');
       expect(applyBtn).toBeFalsy();
+
+      field.destroy();
+    });
+  });
+
+  // =========================================
+  // Bug Fix: Timestamp equality with seconds in input
+  // =========================================
+
+  describe('timestamp equality with seconds in input', () => {
+    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+
+    it('should truncate to minute when browser provides seconds', () => {
+      const field = createField(tsColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      select.value = 'eq';
+      // Some browsers return seconds in datetime-local value
+      inputs[0].value = '2024-06-15T10:30:00';
+
+      field.applyFilter();
+
+      const filters = state.filters.get();
+      expect(filters).toHaveLength(1);
+      expect(filters[0]).toEqual({
+        type: 'range',
+        column: 'created_at',
+        min: '2024-06-15T10:30:00',
+        max: '2024-06-15T10:30:59.999999',
+        maxInclusive: true,
+      });
+
+      field.destroy();
+    });
+
+    it('should handle datetime-local with fractional seconds', () => {
+      const field = createField(tsColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      select.value = 'eq';
+      inputs[0].value = '2024-06-15T10:30:45.123';
+
+      field.applyFilter();
+
+      const filters = state.filters.get();
+      // Should still truncate to minute level
+      expect(filters[0]).toEqual({
+        type: 'range',
+        column: 'created_at',
+        min: '2024-06-15T10:30:00',
+        max: '2024-06-15T10:30:59.999999',
+        maxInclusive: true,
+      });
+
+      field.destroy();
+    });
+  });
+
+  // =========================================
+  // Bug Fix: Timestamp "=" round-trip via populateDateFromFilter
+  // =========================================
+
+  describe('timestamp equality round-trip', () => {
+    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+
+    it('should restore "eq" mode when syncing a minute-range timestamp filter', () => {
+      const field = createField(tsColumn, state, actions);
+
+      // Simulate an externally applied timestamp equality filter (as produced by buildDateFilter)
+      actions.addFilter({
+        type: 'range',
+        column: 'created_at',
+        min: '2024-06-15T10:30:00',
+        max: '2024-06-15T10:30:59.999999',
+        maxInclusive: true,
+      });
+      field.syncFromState();
+
+      const el = field.getElement();
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+
+      expect(select.value).toBe('eq');
+      expect(inputs[0].value).toBe('2024-06-15T10:30');
+      expect(inputs[1].style.display).toBe('none');
+
+      field.destroy();
+    });
+
+    it('should show "between" for a genuine two-bound timestamp range', () => {
+      const field = createField(tsColumn, state, actions);
+
+      actions.addFilter({
+        type: 'range',
+        column: 'created_at',
+        min: '2024-01-01T00:00',
+        max: '2024-12-31T23:59',
+        maxInclusive: true,
+      });
+      field.syncFromState();
+
+      const el = field.getElement();
+      const select = el.querySelector('select') as HTMLSelectElement;
+
+      expect(select.value).toBe('between');
+
+      field.destroy();
+    });
+  });
+
+  // =========================================
+  // Bug Fix: clearControls() resets custom validity
+  // =========================================
+
+  describe('clearControls resets custom validity', () => {
+    it('should clear custom validity on text inputs after regex validation failure', () => {
+      const col: ColumnSchema = { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' };
+      const field = createField(col, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+
+      // Trigger a regex validation error
+      select.value = 'regex';
+      input.value = '(invalid[';
+      field.applyFilter();
+
+      // Custom validity should be set (validation error)
+      expect(input.validity.valid).toBe(false);
+
+      // Now clear
+      field.clear();
+
+      // Custom validity should be cleared
+      expect(input.validationMessage).toBe('');
+      expect(input.validity.valid).toBe(true);
+
+      field.destroy();
+    });
+
+    it('should clear custom validity on UUID validation failure', () => {
+      const col: ColumnSchema = { name: 'id', type: 'uuid', nullable: true, originalType: 'UUID' };
+      const field = createField(col, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+
+      // Trigger UUID validation error
+      select.value = 'exact';
+      input.value = 'not-a-uuid';
+      field.applyFilter();
+
+      expect(input.validity.valid).toBe(false);
+
+      field.clear();
+
+      expect(input.validationMessage).toBe('');
+      expect(input.validity.valid).toBe(true);
 
       field.destroy();
     });

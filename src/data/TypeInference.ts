@@ -7,6 +7,7 @@
 
 import type { DataType } from '../core/types';
 import type { WorkerBridge } from './WorkerBridge';
+import { quoteIdentifier } from '../filters/FilterSQL';
 
 /**
  * Result of type inference on a string column
@@ -353,10 +354,11 @@ export async function inferStringColumnType(
   const { sampleSize = 1000, minConfidence = 0.95 } = options;
 
   // Sample distinct non-null values from the column
+  const quotedCol = quoteIdentifier(columnName);
   const sampleQuery = `
-    SELECT DISTINCT "${columnName}" as value
-    FROM "${tableName}"
-    WHERE "${columnName}" IS NOT NULL
+    SELECT DISTINCT ${quotedCol} as value
+    FROM ${quoteIdentifier(tableName)}
+    WHERE ${quotedCol} IS NOT NULL
     LIMIT ${sampleSize}
   `;
 
@@ -411,7 +413,7 @@ export async function inferAllStringColumnTypes(
   options: TypeInferenceOptions = {}
 ): Promise<Map<string, TypeInferenceResult>> {
   // Get schema to find string columns
-  const schemaQuery = `DESCRIBE "${tableName}"`;
+  const schemaQuery = `DESCRIBE ${quoteIdentifier(tableName)}`;
   const schema = await bridge.query<{
     column_name: string;
     column_type: string;

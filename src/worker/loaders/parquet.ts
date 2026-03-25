@@ -5,7 +5,7 @@
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, ParquetLoadOptions } from './types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
-import { enhanceSchemaTypes } from './common';
+import { enhanceSchemaTypes, quoteIdentifier } from './common';
 
 let tableCounter = 0;
 
@@ -33,6 +33,9 @@ export async function loadParquet(
 
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
   const timezone = options.timezone ?? 'UTC';
+  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
+    throw new Error(`Invalid timezone: ${timezone}`);
+  }
   await conn.query(`SET TimeZone = '${timezone}'`);
 
   // Convert to Uint8Array for DuckDB's file system
@@ -45,21 +48,22 @@ export async function loadParquet(
   try {
     // Build column selection
     const columnSelect = options.columns?.length
-      ? options.columns.map((c) => `"${c}"`).join(', ')
+      ? options.columns.map((c) => quoteIdentifier(c)).join(', ')
       : '*';
 
     // Create table from Parquet using read_parquet
-    const createSql = `CREATE TABLE "${tableName}" AS SELECT ${columnSelect} FROM read_parquet('${fileName}')`;
+    const tbl = quoteIdentifier(tableName);
+    const createSql = `CREATE TABLE ${tbl} AS SELECT ${columnSelect} FROM read_parquet('${fileName}')`;
     await conn.query(createSql);
 
     // Get row count
     const countResult = await conn.query(
-      `SELECT COUNT(*) as count FROM "${tableName}"`
+      `SELECT COUNT(*) as count FROM ${tbl}`
     );
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
     // Get full schema info from DESCRIBE
-    const describeResult = await conn.query(`DESCRIBE "${tableName}"`);
+    const describeResult = await conn.query(`DESCRIBE ${tbl}`);
     let describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     // Enhance schema by detecting and converting string columns to appropriate types

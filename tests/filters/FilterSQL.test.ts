@@ -379,4 +379,31 @@ describe('filterToSQL edge cases', () => {
       expect(filterToSQL(filter)).toBe('TRUE');
     });
   });
+
+  describe('column names with special characters', () => {
+    it('should safely handle column names with double quotes', () => {
+      const filter: Filter = { type: 'point', column: 'col"name', value: 42 };
+      expect(filterToSQL(filter)).toBe('"col""name" = 42');
+    });
+
+    it('should safely handle column names with double quotes in range filter', () => {
+      const filter: Filter = { type: 'range', column: 'a"b', min: 1, max: 10 };
+      expect(filterToSQL(filter)).toBe('("a""b" >= 1 AND "a""b" < 10)');
+    });
+
+    it('should safely handle column names with double quotes in set filter', () => {
+      const filter: Filter = { type: 'set', column: 'col"', values: ['x'] };
+      expect(filterToSQL(filter)).toBe('"col""" IN (\'x\')');
+    });
+
+    it('should safely handle column names with double quotes in pattern filter', () => {
+      const filter: Filter = { type: 'pattern', column: 'col"name', pattern: 'test', mode: 'contains' };
+      expect(filterToSQL(filter)).toBe("CAST(\"col\"\"name\" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'");
+    });
+
+    it('should safely handle column names with double quotes in null filter', () => {
+      const filter: Filter = { type: 'null', column: 'col"name' };
+      expect(filterToSQL(filter)).toBe('"col""name" IS NULL');
+    });
+  });
 });

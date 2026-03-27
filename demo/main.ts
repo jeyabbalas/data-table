@@ -29,6 +29,7 @@ import { InteractionManager } from '../src/visualizations/InteractionManager';
 import { formatDefaultStats } from '../src/statistics/StatsFormatters';
 import { fetchIntervalStats } from '../src/statistics/StatsComputer';
 import type { ColumnStatsData } from '../src/statistics/ColumnStatsTypes';
+import { ExportDialog } from '../src/export/ExportDialog';
 
 // Visualization type union for type safety
 type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
@@ -42,6 +43,7 @@ const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
 const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
+const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 
 // Display version
 versionEl.textContent = VERSION;
@@ -51,6 +53,7 @@ const bridge = new WorkerBridge();
 const tableState = createTableState();
 let actions: StateActions;
 let tableContainer: TableContainer | null = null;
+let exportDialog: ExportDialog | null = null;
 let tableCounter = 0;
 
 // Keep track of active visualizations for cleanup
@@ -384,6 +387,14 @@ async function loadData(source: File | string): Promise<void> {
     actions.clearFilters();
     updateTableInfo();
 
+    // Set export filename based on source
+    if (exportDialog) {
+      const name = source instanceof File
+        ? source.name
+        : source.substring(source.lastIndexOf('/') + 1) || tableName;
+      exportDialog.setSourceName(name);
+    }
+
     // Attach visualizations after data loads
     const schema = tableState.schema.get();
     const currentTableName = tableState.tableName.get();
@@ -481,6 +492,14 @@ bridge
       if (!tableState.tableName.get()) {
         updateInfo(`Ready - Container: ${dims.width.toFixed(0)} x ${dims.height.toFixed(0)}px`);
       }
+    });
+
+    // Export dialog
+    exportDialog = new ExportDialog(tableState, bridge);
+    document.body.appendChild(exportDialog.getElement());
+    exportBtn.addEventListener('click', () => exportDialog!.open());
+    tableState.tableName.subscribe((name) => {
+      exportBtn.disabled = !name;
     });
 
     initStatusEl.textContent = 'DuckDB Ready';

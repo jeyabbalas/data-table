@@ -146,8 +146,14 @@ async function exportArray(
     (rows) => {
       for (const row of rows) {
         const formatted = formatRowForJSON(row, columns);
-        const json = JSON.stringify(formatted);
-        rowStrings.push(opts.pretty ? `${indent}${json}` : json);
+        if (opts.pretty) {
+          // Pretty-print each object with indentation, then indent the whole block
+          const json = JSON.stringify(formatted, null, 2);
+          const indented = json.replace(/\n/g, `\n${indent}`);
+          rowStrings.push(`${indent}${indented}`);
+        } else {
+          rowStrings.push(JSON.stringify(formatted));
+        }
       }
     },
     signal

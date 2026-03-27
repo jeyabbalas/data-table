@@ -149,6 +149,10 @@ export type { JSONExportOptions } from './export/JSONExport';
 export { exportToParquet, exportParquetFromState } from './export/ParquetExport';
 export type { ParquetExportOptions } from './export/ParquetExport';
 
+// Export - Dialog UI
+export { ExportDialog } from './export/ExportDialog';
+export type { ExportDialogOptions } from './export/ExportDialog';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

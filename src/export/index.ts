@@ -28,3 +28,7 @@ export {
   buildParquetQuery,
 } from './ParquetExport';
 export type { ParquetExportOptions } from './ParquetExport';
+
+// Export dialog UI
+export { ExportDialog } from './ExportDialog';
+export type { ExportDialogOptions } from './ExportDialog';

@@ -11,6 +11,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { exportFromState } from './CSVExport';
 import { exportJSONFromState } from './JSONExport';
 import { exportParquetFromState } from './ParquetExport';
+import { copyToClipboard } from './Clipboard';
 
 export type ExportFormat = 'csv' | 'json' | 'parquet';
 export type ExportScope = 'all' | 'filtered' | 'selected';
@@ -634,7 +635,7 @@ export class ExportDialog {
         }, signal);
       }
 
-      await navigator.clipboard.writeText(result);
+      await copyToClipboard(result, 'text');
       this.showCopiedFeedback();
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {

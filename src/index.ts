@@ -149,6 +149,9 @@ export type { JSONExportOptions } from './export/JSONExport';
 export { exportToParquet, exportParquetFromState } from './export/ParquetExport';
 export type { ParquetExportOptions } from './export/ParquetExport';
 
+// Export - Clipboard
+export { copyToClipboard, copyRowsToClipboard } from './export/Clipboard';
+
 // Export - Dialog UI
 export { ExportDialog } from './export/ExportDialog';
 export type { ExportDialogOptions } from './export/ExportDialog';

@@ -16,6 +16,7 @@ import { TableBody } from './TableBody';
 import { FilterBar } from '../filters/FilterBar';
 import { FilterPanel } from '../filters/FilterPanel';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
+import { copyRowsToClipboard } from '../export/Clipboard';
 
 /**
  * Options for configuring the TableContainer
@@ -79,6 +80,9 @@ export class TableContainer {
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
+
+  // Keyboard shortcut handler
+  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Scroll synchronization handlers
   private boundBodyScrollHandler: (() => void) | null = null;
@@ -161,6 +165,9 @@ export class TableContainer {
     // Set up scroll synchronization between header and body
     this.setupScrollSync();
 
+    // Set up keyboard shortcuts (Ctrl+C to copy selected rows)
+    this.setupKeyboardShortcuts();
+
     // Initial render
     this.render();
   }
@@ -177,6 +184,7 @@ export class TableContainer {
     el.className = `${this.resolvedOptions.classPrefix}-root`;
     el.setAttribute('role', 'table');
     el.setAttribute('aria-label', 'Data table');
+    el.setAttribute('tabindex', '0');
     return el;
   }
 
@@ -322,6 +330,53 @@ export class TableContainer {
 
     this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
     this.headerScroll.addEventListener('scroll', this.boundHeaderScrollHandler, { passive: true });
+  }
+
+  // =========================================
+  // Keyboard Shortcuts
+  // =========================================
+
+  /**
+   * Set up keyboard shortcuts on the root element.
+   * Currently handles Ctrl+C / Cmd+C to copy selected rows as TSV.
+   */
+  private setupKeyboardShortcuts(): void {
+    this.keydownHandler = (e: KeyboardEvent) => {
+      this.handleKeyDown(e);
+    };
+    this.element.addEventListener('keydown', this.keydownHandler);
+  }
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    // Ctrl+C (Windows/Linux) or Cmd+C (Mac)
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+      const selectedRows = this.state.selectedRows.get();
+      if (selectedRows.size === 0) return;
+
+      // Preserve native text copy when user has selected text
+      const textSelection = window.getSelection();
+      if (textSelection && textSelection.toString().length > 0) return;
+
+      e.preventDefault();
+      this.copySelectedRows();
+    }
+  }
+
+  private async copySelectedRows(): Promise<void> {
+    if (!this.bridge) return;
+
+    const selectedRows = this.state.selectedRows.get();
+    if (selectedRows.size === 0) return;
+
+    try {
+      await copyRowsToClipboard(
+        Array.from(selectedRows),
+        this.state,
+        this.bridge
+      );
+    } catch {
+      // Silently fail for keyboard shortcuts
+    }
   }
 
   // =========================================
@@ -860,6 +915,12 @@ export class TableContainer {
 
     // Clear resize callbacks
     this.resizeCallbacks.clear();
+
+    // Clean up keyboard handler
+    if (this.keydownHandler) {
+      this.element.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
+    }
 
     // Clean up scroll sync listeners
     if (this.boundBodyScrollHandler) {

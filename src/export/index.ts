@@ -29,6 +29,9 @@ export {
 } from './ParquetExport';
 export type { ParquetExportOptions } from './ParquetExport';
 
+// Clipboard utilities
+export { copyToClipboard, copyRowsToClipboard } from './Clipboard';
+
 // Export dialog UI
 export { ExportDialog } from './ExportDialog';
 export type { ExportDialogOptions } from './ExportDialog';

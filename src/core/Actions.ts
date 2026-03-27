@@ -445,8 +445,14 @@ export class StateActions {
 
     switch (mode) {
       case 'replace':
-        this.state.selectedRows.set(new Set([index]));
-        this.lastSelectedIndex = index;
+        if (current.size === 1 && current.has(index)) {
+          // Clicking the only selected row deselects it
+          this.state.selectedRows.set(new Set());
+          this.lastSelectedIndex = null;
+        } else {
+          this.state.selectedRows.set(new Set([index]));
+          this.lastSelectedIndex = index;
+        }
         break;
 
       case 'toggle': {

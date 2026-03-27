@@ -135,6 +135,16 @@ export { VisualizationFactory } from './visualizations/VisualizationFactory';
 export type { VisualizationRegistration, VisualizationConstructor } from './visualizations/VisualizationFactory';
 export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './visualizations/VisualizationFactory';
 
+// Export
+// Export - CSV
+export { exportToCSV, exportFromState } from './export/CSVExport';
+export type { ExportOptions } from './export/CSVExport';
+export type { ExportContext } from './export/ExportQuery';
+
+// Export - JSON
+export { exportToJSON, exportJSONFromState } from './export/JSONExport';
+export type { JSONExportOptions } from './export/JSONExport';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

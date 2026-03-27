@@ -145,6 +145,10 @@ export type { ExportContext } from './export/ExportQuery';
 export { exportToJSON, exportJSONFromState } from './export/JSONExport';
 export type { JSONExportOptions } from './export/JSONExport';
 
+// Export - Parquet
+export { exportToParquet, exportParquetFromState } from './export/ParquetExport';
+export type { ParquetExportOptions } from './export/ParquetExport';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

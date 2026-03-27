@@ -3,7 +3,7 @@
  */
 
 // Message types from main thread to worker
-export type WorkerMessageType = 'init' | 'query' | 'load' | 'cancel';
+export type WorkerMessageType = 'init' | 'query' | 'load' | 'export' | 'cancel';
 
 export interface WorkerMessage {
   id: string;
@@ -33,6 +33,11 @@ export interface LoadPayload {
   data: ArrayBuffer | string;
   format: 'csv' | 'json' | 'parquet';
   tableName?: string;
+}
+
+export interface ExportPayload {
+  sql: string;
+  format: 'parquet';
 }
 
 export interface CancelPayload {

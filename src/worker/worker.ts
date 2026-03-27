@@ -9,10 +9,13 @@ import type {
   WorkerResponseType,
   QueryPayload,
   LoadPayload,
+  ExportPayload,
 } from './types';
 import {
   initializeDuckDB,
   executeQuery,
+  getConnection,
+  getDatabase,
   isInitialized,
 } from './duckdb';
 import { loadCSV } from './loaders/csv';
@@ -130,6 +133,41 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
           respond(id, 'error', {
             message:
               error instanceof Error ? error.message : 'Failed to load data',
+          });
+        }
+        break;
+      }
+
+      case 'export': {
+        if (!isInitialized()) {
+          respond(id, 'error', { message: 'DuckDB not initialized' });
+          break;
+        }
+
+        const { sql: exportSql, format: exportFormat } = payload as ExportPayload;
+        const exportFileName = `__export_${id}.${exportFormat}`;
+
+        try {
+          const exportConn = getConnection();
+          const exportDb = getDatabase();
+
+          await exportConn.query(
+            `COPY (${exportSql}) TO '${exportFileName}' (FORMAT ${exportFormat.toUpperCase()})`
+          );
+
+          const fileBuffer = await exportDb.copyFileToBuffer(exportFileName);
+          await exportDb.dropFile(exportFileName);
+
+          respond(id, 'result', { buffer: fileBuffer.buffer });
+        } catch (error) {
+          // Clean up file on error
+          try {
+            await getDatabase().dropFile(exportFileName);
+          } catch {
+            // Ignore cleanup errors
+          }
+          respond(id, 'error', {
+            message: error instanceof Error ? error.message : 'Export failed',
           });
         }
         break;

@@ -82,6 +82,30 @@ export function buildOrderByClause(sortColumns: SortColumn[]): string {
   return ` ORDER BY ${parts.join(', ')}`;
 }
 
+/**
+ * Build a SELECT query without LIMIT/OFFSET.
+ * Used by Parquet export where DuckDB handles the entire result set via COPY.
+ */
+export function buildSelectQuery(
+  tableName: string,
+  columns: string[],
+  filters: Filter[],
+  sortColumns: SortColumn[]
+): string {
+  const columnList = columns.map(quoteIdentifier).join(', ');
+  let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
+
+  if (filters.length > 0) {
+    const where = filtersToWhereClause(filters);
+    if (where) {
+      sql += ` WHERE ${where}`;
+    }
+  }
+
+  sql += buildOrderByClause(sortColumns);
+  return sql;
+}
+
 export function buildBaseQuery(
   tableName: string,
   columns: string[],

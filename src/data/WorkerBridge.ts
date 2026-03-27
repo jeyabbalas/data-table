@@ -8,6 +8,7 @@ import type {
   WorkerMessageType,
   QueryPayload,
   LoadPayload,
+  ExportPayload,
 } from '../worker/types';
 import type { ProgressInfo, ProgressCallback } from '../core/Progress';
 import type { ColumnSchema } from '../core/types';
@@ -124,6 +125,24 @@ export class WorkerBridge {
       columns: result.columns,
       schema: result.schema,
     };
+  }
+
+  /**
+   * Export data to a binary file format via DuckDB COPY TO.
+   *
+   * The SQL query is wrapped in COPY (...) TO on the worker side.
+   * Returns the file contents as a Uint8Array.
+   */
+  async exportToBuffer(
+    sql: string,
+    format: 'parquet',
+    signal?: AbortSignal
+  ): Promise<Uint8Array> {
+    this.ensureInitialized();
+
+    const payload: ExportPayload = { sql, format };
+    const result = await this.sendMessage('export', payload, undefined, signal);
+    return new Uint8Array((result as { buffer: ArrayBuffer }).buffer);
   }
 
   /**

@@ -178,6 +178,25 @@ export async function exportToJSON(
 - JSON array format works
 - NDJSON format works
 
+### Task 7.2b: Implement Parquet Export (Completed)
+
+Parquet export leverages DuckDB's native `COPY (query) TO 'file.parquet' (FORMAT PARQUET)` command running entirely in the Web Worker. Unlike CSV/JSON (which build text strings on the main thread), Parquet is a binary columnar format that DuckDB writes to its virtual filesystem, then the buffer is read back and transferred to the main thread.
+
+**Architecture:** ParquetExport builds a SELECT query → sends via `WorkerBridge.exportToBuffer()` → worker wraps in `COPY ... TO`, writes to virtual FS, reads buffer back via `db.copyFileToBuffer()`, cleans up with `db.dropFile()` → returns `Uint8Array` to main thread.
+
+**Key files:**
+- `src/export/ParquetExport.ts` — `exportToParquet()` (returns `Uint8Array`), `exportParquetFromState()`, `buildParquetQuery()`. Supports scope (all/filtered/selected), column selection. No batching needed — DuckDB handles the entire export.
+- `src/export/ExportQuery.ts` — Shared query infrastructure. Added `buildSelectQuery()` (SELECT without LIMIT/OFFSET for COPY wrapping). Also contains `buildBaseQuery`, `buildSelectedRowsQuery`, `fetchAllRows`, `resolveColumns`, `isContiguousRange` shared across all exporters.
+- `src/worker/types.ts` — Added `'export'` to `WorkerMessageType`, `ExportPayload` interface
+- `src/worker/worker.ts` — Added `'export'` handler: COPY TO → copyFileToBuffer → dropFile → respond with buffer
+- `src/data/WorkerBridge.ts` — Added `exportToBuffer(sql, format, signal?)` method
+
+**Verification:**
+- Parquet export produces valid Uint8Array
+- Scope all/filtered/selected work correctly
+- Column selection works
+- AbortSignal cancellation works
+
 ### Task 7.3: Implement Export UI
 
 Create `src/export/ExportDialog.ts`:

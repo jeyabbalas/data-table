@@ -20,3 +20,11 @@ export {
   formatRowForJSON,
 } from './JSONExport';
 export type { JSONExportOptions } from './JSONExport';
+
+// Parquet export
+export {
+  exportToParquet,
+  exportParquetFromState,
+  buildParquetQuery,
+} from './ParquetExport';
+export type { ParquetExportOptions } from './ParquetExport';

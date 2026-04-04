@@ -596,6 +596,10 @@ export class TableContainer {
     const savedBodyScrollTop = this.bodyScroll.scrollTop;
     const savedHeaderScrollLeft = this.headerScroll.scrollLeft;
 
+    // Track whether focus is within the table before render destroys DOM elements.
+    // Actions like pin/hide remove the focused button, causing focus to fall to document.body.
+    const hadFocus = this.element.contains(document.activeElement);
+
     const schema = this.state.schema.get();
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
@@ -767,12 +771,19 @@ export class TableContainer {
     }
     this.previousVisibleColumns = newVisibleSet;
 
-    // Restore scroll positions after DOM updates (both containers for robustness)
+    // Restore scroll positions and focus after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
       if (!this.destroyed) {
         this.bodyScroll.scrollLeft = savedBodyScrollLeft;
         this.bodyScroll.scrollTop = savedBodyScrollTop;
         this.headerScroll.scrollLeft = savedHeaderScrollLeft;
+
+        // Restore focus if it was lost due to DOM element removal during render.
+        // This ensures keyboard shortcuts (Cmd+Z) continue working after
+        // actions like pin/hide that destroy the focused button element.
+        if (hadFocus && !this.element.contains(document.activeElement)) {
+          this.element.focus({ preventScroll: true });
+        }
       }
     });
   }

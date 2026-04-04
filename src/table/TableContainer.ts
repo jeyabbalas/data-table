@@ -348,6 +348,27 @@ export class TableContainer {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    // Ctrl+Z / Cmd+Z → undo
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      this.actions?.undo();
+      return;
+    }
+
+    // Ctrl+Shift+Z / Cmd+Shift+Z → redo
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      this.actions?.redo();
+      return;
+    }
+
+    // Ctrl+Y → redo (Windows convention)
+    if (e.key === 'y' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      this.actions?.redo();
+      return;
+    }
+
     // Ctrl+C (Windows/Linux) or Cmd+C (Mac)
     if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       const selectedRows = this.state.selectedRows.get();

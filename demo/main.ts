@@ -635,24 +635,6 @@ bridge
       redoBtn.disabled = !canRedo;
     });
 
-    // Undo/redo keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        actions.undo();
-      } else if (
-        (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')
-      ) {
-        e.preventDefault();
-        actions.redo();
-      } else if (e.ctrlKey && !e.shiftKey && e.key === 'y') {
-        e.preventDefault();
-        actions.redo();
-      }
-    });
-
     // Open session store for persistence
     sessionStore.open();
 

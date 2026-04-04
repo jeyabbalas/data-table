@@ -54,7 +54,7 @@ Schema detection maps DuckDB native types to simplified `DataType`. Smart type i
 Virtualized table with column headers, body rows, sorting, column resizing, and drag-and-drop column reordering. Header and body scroll are synchronized horizontally.
 
 **Key files:**
-- `src/table/TableContainer.ts` — Main container. DOM: `.dt-root > .dt-header-area > (.dt-header-scroll > .dt-header-row) + .dt-scrollbar-gutter`, then `.dt-filter-bar`, then `.dt-body-scroll > .dt-body`. Manages column headers, filter bar, table body, column reorder, scroll sync, resize observer. Subscribes to `schema`, `visibleColumns`, `columnWidths`, `sortColumns`.
+- `src/table/TableContainer.ts` — Main container. DOM: `.dt-root > .dt-header-area > (.dt-header-scroll > .dt-header-row) + .dt-scrollbar-gutter`, then `.dt-filter-bar`, then `.dt-body-scroll > .dt-body`. Manages column headers, filter bar, table body, column reorder, scroll sync, resize observer. Subscribes to `schema`, `columnWidths`, `sortColumns`.
 - `src/table/ColumnHeader.ts` — Per-column header component. DOM: `.dt-col-header > .dt-col-name-row (name + sort button + drag handle) + .dt-col-type + .dt-col-stats + .dt-col-viz`. Handles sort click (regular = cycle, Cmd/Ctrl = multi-sort), subscribes to `sortColumns` and `filtersByColumn`.
 - `src/table/VirtualScroller.ts` — Fixed-row-height virtual scrolling with buffer rows
 - `src/table/TableBody.ts` — Fetches visible rows from DuckDB via `buildRowQuery()` (SELECT with WHERE/ORDER BY/LIMIT/OFFSET), renders cells. Subscribes to sort, filter, and visible column changes.
@@ -185,7 +185,7 @@ Parquet export leverages DuckDB's native `COPY (query) TO 'file.parquet' (FORMAT
 **Architecture:** ParquetExport builds a SELECT query → sends via `WorkerBridge.exportToBuffer()` → worker wraps in `COPY ... TO`, writes to virtual FS, reads buffer back via `db.copyFileToBuffer()`, cleans up with `db.dropFile()` → returns `Uint8Array` to main thread.
 
 **Key files:**
-- `src/export/ParquetExport.ts` — `exportToParquet()` (returns `Uint8Array`), `exportParquetFromState()`, `buildParquetQuery()`. Supports scope (all/filtered/selected), column selection. No batching needed — DuckDB handles the entire export.
+- `src/export/ParquetExport.ts` — `exportToParquet()` (returns `Uint8Array`), `exportParquetFromState()`, `buildParquetQuery()`. Supports scope (all/filtered/selected). No batching needed — DuckDB handles the entire export.
 - `src/export/ExportQuery.ts` — Shared query infrastructure. Added `buildSelectQuery()` (SELECT without LIMIT/OFFSET for COPY wrapping). Also contains `buildBaseQuery`, `buildSelectedRowsQuery`, `fetchAllRows`, `resolveColumns`, `isContiguousRange` shared across all exporters.
 - `src/worker/types.ts` — Added `'export'` to `WorkerMessageType`, `ExportPayload` interface
 - `src/worker/worker.ts` — Added `'export'` handler: COPY TO → copyFileToBuffer → dropFile → respond with buffer
@@ -194,7 +194,6 @@ Parquet export leverages DuckDB's native `COPY (query) TO 'file.parquet' (FORMAT
 **Verification:**
 - Parquet export produces valid Uint8Array
 - Scope all/filtered/selected work correctly
-- Column selection works
 - AbortSignal cancellation works
 
 ### Task 7.3: Implement Export UI

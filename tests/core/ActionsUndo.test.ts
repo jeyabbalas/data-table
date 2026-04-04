@@ -466,4 +466,66 @@ describe('StateActions — Undo/Redo Integration', () => {
       expect(state.pinnedColumns.get()).toContain('id');
     });
   });
+
+  // =========================================
+  // Filter undo should not trigger column signals
+  // =========================================
+
+  describe('Filter undo — no spurious column signal notifications', () => {
+    it('undoing filters should not notify column-related signals', () => {
+      // Add two filters sequentially
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      actions.addFilter({ column: 'name', type: 'pattern', pattern: 'Alice', mode: 'contains' });
+
+      // Subscribe to column-related signals AFTER filters are applied
+      const cbVisible = vi.fn();
+      const cbOrder = vi.fn();
+      const cbWidths = vi.fn();
+      const cbPinned = vi.fn();
+      const cbFilters = vi.fn();
+      state.visibleColumns.subscribe(cbVisible);
+      state.columnOrder.subscribe(cbOrder);
+      state.columnWidths.subscribe(cbWidths);
+      state.pinnedColumns.subscribe(cbPinned);
+      state.filters.subscribe(cbFilters);
+
+      // Undo second filter
+      actions.undo();
+      expect(state.filters.get()).toHaveLength(1);
+      expect(cbFilters).toHaveBeenCalledTimes(1);
+      expect(cbVisible).not.toHaveBeenCalled();
+      expect(cbOrder).not.toHaveBeenCalled();
+      expect(cbWidths).not.toHaveBeenCalled();
+      expect(cbPinned).not.toHaveBeenCalled();
+
+      cbFilters.mockClear();
+
+      // Undo first filter
+      actions.undo();
+      expect(state.filters.get()).toHaveLength(0);
+      expect(cbFilters).toHaveBeenCalledTimes(1);
+      expect(cbVisible).not.toHaveBeenCalled();
+      expect(cbOrder).not.toHaveBeenCalled();
+      expect(cbWidths).not.toHaveBeenCalled();
+      expect(cbPinned).not.toHaveBeenCalled();
+    });
+
+    it('redoing filters should not notify column-related signals', () => {
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      actions.undo();
+
+      const cbVisible = vi.fn();
+      const cbPinned = vi.fn();
+      const cbFilters = vi.fn();
+      state.visibleColumns.subscribe(cbVisible);
+      state.pinnedColumns.subscribe(cbPinned);
+      state.filters.subscribe(cbFilters);
+
+      actions.redo();
+      expect(state.filters.get()).toHaveLength(1);
+      expect(cbFilters).toHaveBeenCalledTimes(1);
+      expect(cbVisible).not.toHaveBeenCalled();
+      expect(cbPinned).not.toHaveBeenCalled();
+    });
+  });
 });

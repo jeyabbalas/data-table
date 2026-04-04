@@ -607,3 +607,185 @@ describe('captureSnapshot / applySnapshot round-trip', () => {
     expect(state.hiddenColumnInfo.get().get('name')!.rightNeighbor).toBe('age');
   });
 });
+
+// --- Equality-guarded applySnapshot tests ---
+
+describe('applySnapshot — equality-guarded signal updates', () => {
+  it('should not notify any signal when snapshot matches current state', () => {
+    const state = setupState();
+    state.filters.set([{ type: 'range', column: 'age', min: 10, max: 50 }]);
+    state.sortColumns.set([{ column: 'age', direction: 'asc' }]);
+    state.pinnedColumns.set(['id']);
+    state.columnWidths.set(new Map([['id', 80]]));
+
+    const snapshot = captureSnapshot(state);
+
+    // Subscribe to all signals AFTER capture
+    const callbacks = {
+      filters: vi.fn(),
+      sortColumns: vi.fn(),
+      visibleColumns: vi.fn(),
+      columnOrder: vi.fn(),
+      columnWidths: vi.fn(),
+      pinnedColumns: vi.fn(),
+      hiddenColumnInfo: vi.fn(),
+    };
+    state.filters.subscribe(callbacks.filters);
+    state.sortColumns.subscribe(callbacks.sortColumns);
+    state.visibleColumns.subscribe(callbacks.visibleColumns);
+    state.columnOrder.subscribe(callbacks.columnOrder);
+    state.columnWidths.subscribe(callbacks.columnWidths);
+    state.pinnedColumns.subscribe(callbacks.pinnedColumns);
+    state.hiddenColumnInfo.subscribe(callbacks.hiddenColumnInfo);
+
+    // Apply same state back
+    applySnapshot(state, snapshot);
+
+    // No signal should have been notified
+    expect(callbacks.filters).not.toHaveBeenCalled();
+    expect(callbacks.sortColumns).not.toHaveBeenCalled();
+    expect(callbacks.visibleColumns).not.toHaveBeenCalled();
+    expect(callbacks.columnOrder).not.toHaveBeenCalled();
+    expect(callbacks.columnWidths).not.toHaveBeenCalled();
+    expect(callbacks.pinnedColumns).not.toHaveBeenCalled();
+    expect(callbacks.hiddenColumnInfo).not.toHaveBeenCalled();
+  });
+
+  it('should only notify filters signal when only filters changed', () => {
+    const state = setupState();
+    state.pinnedColumns.set(['id']);
+    state.columnWidths.set(new Map([['id', 80]]));
+    const snapshot = captureSnapshot(state);
+
+    // Now change only filters
+    state.filters.set([{ type: 'range', column: 'age', min: 10, max: 50 }]);
+
+    const callbacks = {
+      filters: vi.fn(),
+      visibleColumns: vi.fn(),
+      columnOrder: vi.fn(),
+      columnWidths: vi.fn(),
+      pinnedColumns: vi.fn(),
+      hiddenColumnInfo: vi.fn(),
+    };
+    state.filters.subscribe(callbacks.filters);
+    state.visibleColumns.subscribe(callbacks.visibleColumns);
+    state.columnOrder.subscribe(callbacks.columnOrder);
+    state.columnWidths.subscribe(callbacks.columnWidths);
+    state.pinnedColumns.subscribe(callbacks.pinnedColumns);
+    state.hiddenColumnInfo.subscribe(callbacks.hiddenColumnInfo);
+
+    applySnapshot(state, snapshot);
+
+    // Only filters should fire
+    expect(callbacks.filters).toHaveBeenCalledTimes(1);
+    expect(callbacks.visibleColumns).not.toHaveBeenCalled();
+    expect(callbacks.columnOrder).not.toHaveBeenCalled();
+    expect(callbacks.columnWidths).not.toHaveBeenCalled();
+    expect(callbacks.pinnedColumns).not.toHaveBeenCalled();
+    expect(callbacks.hiddenColumnInfo).not.toHaveBeenCalled();
+  });
+
+  it('should detect Date equality in range filters', () => {
+    const state = setupState();
+    const d1 = new Date('2020-01-01T00:00:00Z');
+    const d2 = new Date('2024-12-31T00:00:00Z');
+    state.filters.set([{ type: 'range', column: 'age', min: d1, max: d2 }]);
+
+    const snapshot = captureSnapshot(state);
+
+    // Replace with new Date objects that have the same timestamp
+    state.filters.set([{
+      type: 'range', column: 'age',
+      min: new Date(d1.getTime()),
+      max: new Date(d2.getTime()),
+    }]);
+
+    const cb = vi.fn();
+    state.filters.subscribe(cb);
+
+    applySnapshot(state, snapshot);
+
+    // Dates are structurally equal → no notification
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('should detect changes in set filter values', () => {
+    const state = setupState();
+    state.filters.set([{ type: 'set', column: 'name', values: ['Alice', 'Bob'] }]);
+
+    const snapshot = captureSnapshot(state);
+
+    // Change values
+    state.filters.set([{ type: 'set', column: 'name', values: ['Alice', 'Charlie'] }]);
+
+    const cb = vi.fn();
+    state.filters.subscribe(cb);
+
+    applySnapshot(state, snapshot);
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('should detect change when optional filter booleans differ', () => {
+    const state = setupState();
+    state.filters.set([{ type: 'range', column: 'age', min: 0, max: 100, maxInclusive: true }]);
+
+    const snapshot = captureSnapshot(state);
+
+    // Remove the optional flag
+    state.filters.set([{ type: 'range', column: 'age', min: 0, max: 100 }]);
+
+    const cb = vi.fn();
+    state.filters.subscribe(cb);
+
+    applySnapshot(state, snapshot);
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('should detect changes in each signal type independently', () => {
+    const state = setupState();
+    const snapshot = captureSnapshot(state);
+
+    // Change only pinnedColumns
+    state.pinnedColumns.set(['id']);
+
+    const cbPinned = vi.fn();
+    const cbVisible = vi.fn();
+    state.pinnedColumns.subscribe(cbPinned);
+    state.visibleColumns.subscribe(cbVisible);
+
+    applySnapshot(state, snapshot);
+
+    expect(cbPinned).toHaveBeenCalledTimes(1);
+    expect(cbVisible).not.toHaveBeenCalled();
+  });
+
+  it('should handle empty arrays and maps correctly', () => {
+    const state = setupState();
+    // State already has empty filters, sortColumns, pinnedColumns, columnWidths, hiddenColumnInfo
+    const snapshot = captureSnapshot(state);
+
+    const callbacks = {
+      filters: vi.fn(),
+      sortColumns: vi.fn(),
+      pinnedColumns: vi.fn(),
+      columnWidths: vi.fn(),
+      hiddenColumnInfo: vi.fn(),
+    };
+    state.filters.subscribe(callbacks.filters);
+    state.sortColumns.subscribe(callbacks.sortColumns);
+    state.pinnedColumns.subscribe(callbacks.pinnedColumns);
+    state.columnWidths.subscribe(callbacks.columnWidths);
+    state.hiddenColumnInfo.subscribe(callbacks.hiddenColumnInfo);
+
+    applySnapshot(state, snapshot);
+
+    expect(callbacks.filters).not.toHaveBeenCalled();
+    expect(callbacks.sortColumns).not.toHaveBeenCalled();
+    expect(callbacks.pinnedColumns).not.toHaveBeenCalled();
+    expect(callbacks.columnWidths).not.toHaveBeenCalled();
+    expect(callbacks.hiddenColumnInfo).not.toHaveBeenCalled();
+  });
+});

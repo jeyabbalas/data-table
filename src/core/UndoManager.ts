@@ -35,6 +35,98 @@ export interface StateSnapshot {
 
 const DEFAULT_MAX_DEPTH = 50;
 
+// ── Structural equality helpers (module-private) ─────────────────────
+
+function valueEqual(a: unknown, b: unknown): boolean {
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  return a === b;
+}
+
+function stringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function sortColumnsEqual(a: SortColumn[], b: SortColumn[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].column !== b[i].column || a[i].direction !== b[i].direction) return false;
+  }
+  return true;
+}
+
+function filterEqual(a: Filter, b: Filter): boolean {
+  if (a.type !== b.type || a.column !== b.column) return false;
+  switch (a.type) {
+    case 'range': {
+      const br = b as typeof a;
+      return valueEqual(a.min, br.min)
+        && valueEqual(a.max, br.max)
+        && (a.maxInclusive ?? false) === (br.maxInclusive ?? false)
+        && (a.minExclusive ?? false) === (br.minExclusive ?? false);
+    }
+    case 'point':
+      return valueEqual(a.value, (b as typeof a).value);
+    case 'set':
+    case 'not-set': {
+      const bs = b as typeof a;
+      if ((a.includeNull ?? false) !== (bs.includeNull ?? false)) return false;
+      if (a.values.length !== bs.values.length) return false;
+      for (let i = 0; i < a.values.length; i++) {
+        if (!valueEqual(a.values[i], bs.values[i])) return false;
+      }
+      return true;
+    }
+    case 'null':
+    case 'not-null':
+      return true;
+    case 'pattern': {
+      const bp = b as typeof a;
+      return a.pattern === bp.pattern && a.mode === bp.mode;
+    }
+    default:
+      return false;
+  }
+}
+
+function filtersEqual(a: Filter[], b: Filter[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!filterEqual(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function numberMapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, val] of a) {
+    if (b.get(key) !== val) return false;
+  }
+  return true;
+}
+
+function hiddenInfoMapsEqual(
+  a: Map<string, HiddenColumnInfo>,
+  b: Map<string, HiddenColumnInfo>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, infoA] of a) {
+    const infoB = b.get(key);
+    if (!infoB) return false;
+    if (
+      infoA.column !== infoB.column
+      || infoA.leftNeighbor !== infoB.leftNeighbor
+      || infoA.rightNeighbor !== infoB.rightNeighbor
+    ) return false;
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+
 /**
  * Capture the current TableState as a StateSnapshot.
  *
@@ -66,19 +158,33 @@ export function captureSnapshot(state: TableState): StateSnapshot {
  */
 export function applySnapshot(state: TableState, snapshot: StateSnapshot): void {
   batch(() => {
-    state.filters.set(snapshot.filters.map(f => ({ ...f })));
-    state.sortColumns.set(snapshot.sortColumns.map(s => ({ ...s })));
-    state.visibleColumns.set([...snapshot.visibleColumns]);
-    state.columnOrder.set([...snapshot.columnOrder]);
-    state.columnWidths.set(new Map(snapshot.columnWidths));
-    state.pinnedColumns.set([...snapshot.pinnedColumns]);
-    state.hiddenColumnInfo.set(
-      new Map(
-        Array.from(snapshot.hiddenColumnInfo.entries()).map(
-          ([k, v]) => [k, { ...v }] as [string, HiddenColumnInfo],
+    if (!filtersEqual(state.filters.get(), snapshot.filters)) {
+      state.filters.set(snapshot.filters.map(f => ({ ...f })));
+    }
+    if (!sortColumnsEqual(state.sortColumns.get(), snapshot.sortColumns)) {
+      state.sortColumns.set(snapshot.sortColumns.map(s => ({ ...s })));
+    }
+    if (!stringArraysEqual(state.visibleColumns.get(), snapshot.visibleColumns)) {
+      state.visibleColumns.set([...snapshot.visibleColumns]);
+    }
+    if (!stringArraysEqual(state.columnOrder.get(), snapshot.columnOrder)) {
+      state.columnOrder.set([...snapshot.columnOrder]);
+    }
+    if (!numberMapsEqual(state.columnWidths.get(), snapshot.columnWidths)) {
+      state.columnWidths.set(new Map(snapshot.columnWidths));
+    }
+    if (!stringArraysEqual(state.pinnedColumns.get(), snapshot.pinnedColumns)) {
+      state.pinnedColumns.set([...snapshot.pinnedColumns]);
+    }
+    if (!hiddenInfoMapsEqual(state.hiddenColumnInfo.get(), snapshot.hiddenColumnInfo)) {
+      state.hiddenColumnInfo.set(
+        new Map(
+          Array.from(snapshot.hiddenColumnInfo.entries()).map(
+            ([k, v]) => [k, { ...v }] as [string, HiddenColumnInfo],
+          ),
         ),
-      ),
-    );
+      );
+    }
   });
 }
 

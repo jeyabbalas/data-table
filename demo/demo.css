@@ -158,6 +158,12 @@ button:disabled {
   background: #4b5563;
 }
 
+.btn-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 /* ===========================================
    Status Bar
    =========================================== */

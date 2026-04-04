@@ -30,6 +30,9 @@ import { formatDefaultStats } from '../src/statistics/StatsFormatters';
 import { fetchIntervalStats } from '../src/statistics/StatsComputer';
 import type { ColumnStatsData } from '../src/statistics/ColumnStatsTypes';
 import { ExportDialog } from '../src/export/ExportDialog';
+import { SessionStore } from '../src/persistence/SessionStore';
+import { AutoSave } from '../src/persistence/AutoSave';
+import { quoteIdentifier } from '../src/filters/FilterSQL';
 
 // Visualization type union for type safety
 type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
@@ -44,6 +47,7 @@ const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
 const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
+const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 
 // Display version
 versionEl.textContent = VERSION;
@@ -55,6 +59,78 @@ let actions: StateActions;
 let tableContainer: TableContainer | null = null;
 let exportDialog: ExportDialog | null = null;
 let tableCounter = 0;
+const sessionStore = new SessionStore();
+let autoSave: AutoSave | null = null;
+
+// Last-session tracking for auto-restore on page refresh
+const LAST_SESSION_KEY = 'dt-last-session';
+interface LastSession {
+  type: 'url' | 'file';
+  source: string; // URL string or filename (for display only)
+  tableName: string;
+}
+
+// --- Data cache (Parquet buffer in IndexedDB) for auto-restore on refresh ---
+
+const DATA_CACHE_DB = 'dt-data-cache';
+const DATA_CACHE_STORE = 'data';
+const DATA_CACHE_VERSION = 1;
+
+function openDataCache(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') { resolve(null); return; }
+    try {
+      const req = indexedDB.open(DATA_CACHE_DB, DATA_CACHE_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DATA_CACHE_STORE)) {
+          db.createObjectStore(DATA_CACHE_STORE, { keyPath: 'tableName' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+
+async function cacheTableData(tableName: string, buffer: Uint8Array, sourceName: string): Promise<void> {
+  const db = await openDataCache();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(DATA_CACHE_STORE, 'readwrite');
+      tx.objectStore(DATA_CACHE_STORE).put({ tableName, buffer, sourceName });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    } catch { db.close(); resolve(); }
+  });
+}
+
+async function loadCachedData(tableName: string): Promise<{ buffer: Uint8Array; sourceName: string } | null> {
+  const db = await openDataCache();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(DATA_CACHE_STORE, 'readonly');
+      const req = tx.objectStore(DATA_CACHE_STORE).get(tableName);
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+      req.onerror = () => { db.close(); resolve(null); };
+    } catch { db.close(); resolve(null); }
+  });
+}
+
+async function clearCachedData(tableName: string): Promise<void> {
+  const db = await openDataCache();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(DATA_CACHE_STORE, 'readwrite');
+      tx.objectStore(DATA_CACHE_STORE).delete(tableName);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    } catch { db.close(); resolve(); }
+  });
+}
 
 // Keep track of active visualizations for cleanup
 let activeVisualizations: BaseVisualization[] = [];
@@ -378,22 +454,44 @@ function updateTableInfo(): void {
   updateInfo(info);
 }
 
-async function loadData(source: File | string): Promise<void> {
-  const tableName = `table_${++tableCounter}`;
+async function loadData(source: File | string, overrideTableName?: string): Promise<void> {
+  const tableName = overrideTableName || `table_${++tableCounter}`;
+
+  // Keep tableCounter in sync so subsequent loads don't collide
+  if (overrideTableName) {
+    const match = overrideTableName.match(/^table_(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num >= tableCounter) tableCounter = num;
+    }
+  }
+
   updateInfo('Loading data...');
 
+  // Disable auto-save during load to avoid saving intermediate states
+  if (autoSave) {
+    autoSave.disable();
+  }
+
   try {
-    await actions.loadData(source, { tableName });
-    actions.clearFilters();
+    await actions.loadData(source, { tableName, sessionStore });
     updateTableInfo();
 
     // Set export filename based on source
+    const sourceName = source instanceof File
+      ? source.name
+      : source.substring(source.lastIndexOf('/') + 1) || tableName;
     if (exportDialog) {
-      const name = source instanceof File
-        ? source.name
-        : source.substring(source.lastIndexOf('/') + 1) || tableName;
-      exportDialog.setSourceName(name);
+      exportDialog.setSourceName(sourceName);
     }
+
+    // Persist last session info for auto-restore on page refresh
+    try {
+      const session: LastSession = source instanceof File
+        ? { type: 'file', source: source.name, tableName }
+        : { type: 'url', source: source as string, tableName };
+      localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session));
+    } catch { /* localStorage may be unavailable */ }
 
     // Attach visualizations after data loads
     const schema = tableState.schema.get();
@@ -403,6 +501,19 @@ async function loadData(source: File | string): Promise<void> {
       setTimeout(() => {
         attachVisualizations(currentTableName, schema);
         updateTableInfo();
+
+        // Enable auto-save after visualizations are attached
+        if (!autoSave) {
+          autoSave = new AutoSave(tableState, sessionStore);
+        }
+        autoSave.enable();
+
+        // Cache data as Parquet in IndexedDB for auto-restore on page refresh
+        bridge.exportToBuffer(
+          `SELECT * FROM ${quoteIdentifier(currentTableName)}`, 'parquet'
+        )
+          .then(buffer => cacheTableData(currentTableName, buffer, sourceName))
+          .catch(() => { /* caching is best-effort */ });
       }, 100);
     }
   } catch (error) {
@@ -500,12 +611,61 @@ bridge
     exportBtn.addEventListener('click', () => exportDialog!.open());
     tableState.tableName.subscribe((name) => {
       exportBtn.disabled = !name;
+      clearSessionBtn.disabled = !name;
+    });
+
+    // Open session store for persistence
+    sessionStore.open();
+
+    // Clear session button — deletes saved state, data cache, and localStorage
+    clearSessionBtn.addEventListener('click', async () => {
+      const tableName = tableState.tableName.get();
+      if (tableName) {
+        await sessionStore.delete(tableName);
+        await clearCachedData(tableName);
+        try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+        updateInfo('Session cleared. Reload the page to start fresh.');
+      }
     });
 
     initStatusEl.textContent = 'DuckDB Ready';
     initStatusEl.classList.add('init-status--success');
     loadFileBtn.disabled = false;
     loadUrlBtn.disabled = false;
+
+    // Auto-restore last session on page refresh
+    (async () => {
+      try {
+        const raw = localStorage.getItem(LAST_SESSION_KEY);
+        if (!raw) return;
+
+        const session: LastSession = JSON.parse(raw);
+
+        // Try loading from data cache first (works for both files and URLs)
+        const cached = await loadCachedData(session.tableName);
+        if (cached) {
+          updateInfo(`Restoring session: <strong>${cached.sourceName}</strong>...`);
+          const file = new File([cached.buffer], cached.sourceName + '.parquet');
+          loadData(file, session.tableName);
+        } else if (session.type === 'url') {
+          // Fallback: re-fetch URL if cache is missing
+          urlInput.value = session.source;
+          loadData(session.source, session.tableName);
+        } else {
+          // File with no cache — prompt user
+          updateInfo(
+            `Previous session: <strong>${session.source}</strong> — ` +
+            `load the same file to restore your state, or ` +
+            `<a href="#" id="dismiss-session">dismiss</a>.`
+          );
+          document.getElementById('dismiss-session')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+            updateInfo('Load a file or URL to get started.');
+          });
+        }
+      } catch { /* localStorage unavailable */ }
+    })();
   })
   .catch((error) => {
     initStatusEl.textContent = `Error: ${error.message}`;

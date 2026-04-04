@@ -11,11 +11,16 @@ import { resetTableState, initializeColumnsFromSchema } from './State';
 import type { Filter, FilterType, SortColumn } from './types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
+import type { SessionStore } from '../persistence/SessionStore';
+import { restoreStateFromSnapshot } from '../persistence/serialization';
 
 /**
  * Options for loading data
  */
-export interface LoadDataOptions extends DataLoaderOptions {}
+export interface LoadDataOptions extends DataLoaderOptions {
+  /** If provided, restores saved session state after loading */
+  sessionStore?: SessionStore;
+}
 
 /**
  * StateActions class provides methods to manipulate TableState
@@ -59,6 +64,14 @@ export class StateActions {
     this.state.totalRows.set(result.rowCount);
     this.state.filteredRows.set(result.rowCount);
     initializeColumnsFromSchema(this.state, result.schema);
+
+    // Restore session if a store is provided and a snapshot exists
+    if (options.sessionStore) {
+      const snapshot = await options.sessionStore.load(result.tableName);
+      if (snapshot) {
+        restoreStateFromSnapshot(this.state, snapshot);
+      }
+    }
   }
 
   // =========================================

@@ -156,6 +156,25 @@ export { copyToClipboard, copyRowsToClipboard } from './export/Clipboard';
 export { ExportDialog } from './export/ExportDialog';
 export type { ExportDialogOptions } from './export/ExportDialog';
 
+// Persistence
+export { SessionStore } from './persistence/SessionStore';
+export {
+  serializeFilter,
+  deserializeFilter,
+  isDateWrapper,
+  serializeValue,
+  deserializeValue,
+} from './persistence/SessionStore';
+export type {
+  SessionSnapshot,
+  SerializedFilter,
+  DateWrapper,
+  DerivedColumnDef,
+} from './persistence/types';
+export { SNAPSHOT_VERSION } from './persistence/types';
+export { snapshotFromState, restoreStateFromSnapshot } from './persistence/serialization';
+export { AutoSave } from './persistence/AutoSave';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

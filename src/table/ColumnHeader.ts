@@ -76,7 +76,11 @@ export class ColumnHeader {
       (width) => this.actions.setColumnWidth(this.column.name, width),
       () => this.actions.resetColumnWidth(this.column.name),
       () => this.getColumnCells(),
-      { classPrefix: this.classPrefix }
+      {
+        classPrefix: this.classPrefix,
+        onDragStart: () => this.actions.beginColumnWidthChange(),
+        onDragEnd: () => this.actions.endColumnWidthChange(),
+      }
     );
 
     this.attachEventListeners();

@@ -11,6 +11,7 @@ import {
   createTableState,
   StateActions,
   TableContainer,
+  UndoManager,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
@@ -48,6 +49,8 @@ const tableContainerEl = document.getElementById('table-container')!;
 const tableInfoEl = document.getElementById('table-info')!;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
+const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
+const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 
 // Display version
 versionEl.textContent = VERSION;
@@ -55,6 +58,7 @@ versionEl.textContent = VERSION;
 // Initialize bridge and state
 const bridge = new WorkerBridge();
 const tableState = createTableState();
+const undoManager = new UndoManager();
 let actions: StateActions;
 let tableContainer: TableContainer | null = null;
 let exportDialog: ExportDialog | null = null;
@@ -525,7 +529,14 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
 bridge
   .initialize()
   .then(() => {
-    actions = new StateActions(tableState, bridge);
+    actions = new StateActions(tableState, bridge, undoManager);
+
+    // Clean up visualization state when undo/redo removes filters
+    actions.setOnFilterRemove((column: string) => {
+      interactionManager.clearColumn(column);
+      brushStates.delete(column);
+      selectionStates.delete(column);
+    });
 
     // Create TableContainer with bridge and filter removal handler
     tableContainer = new TableContainer(
@@ -612,6 +623,34 @@ bridge
     tableState.tableName.subscribe((name) => {
       exportBtn.disabled = !name;
       clearSessionBtn.disabled = !name;
+    });
+
+    // Undo/redo buttons
+    undoBtn.addEventListener('click', () => actions.undo());
+    redoBtn.addEventListener('click', () => actions.redo());
+    undoManager.canUndoSignal.subscribe((canUndo) => {
+      undoBtn.disabled = !canUndo;
+    });
+    undoManager.canRedoSignal.subscribe((canRedo) => {
+      redoBtn.disabled = !canRedo;
+    });
+
+    // Undo/redo keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        actions.undo();
+      } else if (
+        (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')
+      ) {
+        e.preventDefault();
+        actions.redo();
+      } else if (e.ctrlKey && !e.shiftKey && e.key === 'y') {
+        e.preventDefault();
+        actions.redo();
+      }
     });
 
     // Open session store for persistence

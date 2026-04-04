@@ -13,6 +13,8 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import type { SessionStore } from '../persistence/SessionStore';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
+import { UndoManager, captureSnapshot, applySnapshot } from './UndoManager';
+import type { StateSnapshot } from './UndoManager';
 
 /**
  * Options for loading data
@@ -28,12 +30,110 @@ export interface LoadDataOptions extends DataLoaderOptions {
 export class StateActions {
   private loader: DataLoader;
   private lastSelectedIndex: number | null = null;
+  private undoManager: UndoManager | undefined;
+  private suppressUndoCapture = false;
+  private widthDragSnapshot: StateSnapshot | null = null;
+  private onFilterRemoveCallback?: (column: string) => void;
 
   constructor(
     private state: TableState,
-    bridge: WorkerBridge
+    bridge: WorkerBridge,
+    undoManager?: UndoManager
   ) {
     this.loader = new DataLoader(bridge);
+    this.undoManager = undoManager;
+  }
+
+  // =========================================
+  // Undo/Redo
+  // =========================================
+
+  /** Capture state snapshot before a mutation, if undo is enabled */
+  private captureForUndo(): void {
+    if (!this.undoManager || this.suppressUndoCapture) return;
+    this.undoManager.push(captureSnapshot(this.state));
+  }
+
+  /**
+   * Set a callback invoked for each column whose filter is removed by undo/redo.
+   * Use this to clear visualization interaction state (brush, selection) that
+   * lives outside the signal-driven state.
+   */
+  setOnFilterRemove(callback: (column: string) => void): void {
+    this.onFilterRemoveCallback = callback;
+  }
+
+  /** Notify callback for each column that lost its filter between two states */
+  private notifyRemovedFilters(before: Filter[], after: Filter[]): void {
+    if (!this.onFilterRemoveCallback) return;
+    const afterColumns = new Set(after.map(f => f.column));
+    for (const f of before) {
+      if (!afterColumns.has(f.column)) {
+        this.onFilterRemoveCallback(f.column);
+      }
+    }
+  }
+
+  /** Undo the last undoable action. Returns true if state was restored. */
+  undo(): boolean {
+    if (!this.undoManager?.canUndo) return false;
+    this.suppressUndoCapture = true;
+    try {
+      const prevFilters = this.state.filters.get();
+      const current = captureSnapshot(this.state);
+      const snapshot = this.undoManager.undo(current);
+      if (snapshot) {
+        applySnapshot(this.state, snapshot);
+        this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+        return true;
+      }
+      return false;
+    } finally {
+      this.suppressUndoCapture = false;
+    }
+  }
+
+  /** Redo the last undone action. Returns true if state was restored. */
+  redo(): boolean {
+    if (!this.undoManager?.canRedo) return false;
+    this.suppressUndoCapture = true;
+    try {
+      const prevFilters = this.state.filters.get();
+      const current = captureSnapshot(this.state);
+      const snapshot = this.undoManager.redo(current);
+      if (snapshot) {
+        applySnapshot(this.state, snapshot);
+        this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+        return true;
+      }
+      return false;
+    } finally {
+      this.suppressUndoCapture = false;
+    }
+  }
+
+  /**
+   * Begin a column width drag sequence.
+   * Captures state once at drag start for undo.
+   */
+  beginColumnWidthChange(): void {
+    if (!this.undoManager) return;
+    this.widthDragSnapshot = captureSnapshot(this.state);
+  }
+
+  /**
+   * End a column width drag sequence.
+   * Pushes the pre-drag snapshot to the undo stack.
+   */
+  endColumnWidthChange(): void {
+    if (!this.undoManager || !this.widthDragSnapshot) return;
+    this.undoManager.push(this.widthDragSnapshot);
+    this.widthDragSnapshot = null;
+  }
+
+  /** Get the UndoManager instance, if one was provided */
+  getUndoManager(): UndoManager | undefined {
+    return this.undoManager;
   }
 
   // =========================================
@@ -55,6 +155,7 @@ export class StateActions {
   ): Promise<void> {
     // Reset state for new data
     resetTableState(this.state);
+    this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
     const result = await this.loader.load(source, options);
@@ -84,6 +185,7 @@ export class StateActions {
    * If a filter for the same column exists, it will be replaced.
    */
   addFilter(filter: Filter): void {
+    this.captureForUndo();
     const current = this.state.filters.get();
     const existingIndex = current.findIndex(
       (f) => f.column === filter.column
@@ -106,6 +208,7 @@ export class StateActions {
    * @param type - Optional filter type to remove (if not specified, removes all filters for column)
    */
   removeFilter(column: string, type?: FilterType): void {
+    this.captureForUndo();
     const current = this.state.filters.get();
     const updated = current.filter((f) =>
       type ? !(f.column === column && f.type === type) : f.column !== column
@@ -117,6 +220,7 @@ export class StateActions {
    * Clear all filters
    */
   clearFilters(): void {
+    this.captureForUndo();
     this.state.filters.set([]);
     this.state.filteredRows.set(this.state.totalRows.get());
   }
@@ -129,6 +233,7 @@ export class StateActions {
    * Set sort columns directly
    */
   setSort(columns: SortColumn[]): void {
+    this.captureForUndo();
     this.state.sortColumns.set(columns);
   }
 
@@ -138,6 +243,7 @@ export class StateActions {
    * Replaces any existing sort with the new column.
    */
   toggleSort(column: string): void {
+    this.captureForUndo();
     const current = this.state.sortColumns.get();
     const existing = current.find((s) => s.column === column);
 
@@ -159,6 +265,7 @@ export class StateActions {
    * If column is already in sort, toggles its direction or removes it.
    */
   addToSort(column: string): void {
+    this.captureForUndo();
     const current = this.state.sortColumns.get();
     const existingIndex = current.findIndex((s) => s.column === column);
 
@@ -183,6 +290,7 @@ export class StateActions {
    * Clear all sorting
    */
   clearSort(): void {
+    this.captureForUndo();
     this.state.sortColumns.set([]);
   }
 
@@ -199,6 +307,8 @@ export class StateActions {
 
     // Don't allow hiding the last visible column
     if (visible.length <= 1) return;
+
+    this.captureForUndo();
 
     // Record neighbor info before hiding
     const colIndex = visible.indexOf(column);
@@ -223,6 +333,8 @@ export class StateActions {
     const order = this.state.columnOrder.get();
 
     if (visible.includes(column) || !order.includes(column)) return;
+
+    this.captureForUndo();
 
     const hiddenMap = this.state.hiddenColumnInfo.get();
     const info = hiddenMap.get(column);
@@ -252,6 +364,7 @@ export class StateActions {
    * Show all hidden columns, restoring them in columnOrder
    */
   showAllColumns(): void {
+    this.captureForUndo();
     const order = this.state.columnOrder.get();
     this.state.visibleColumns.set([...order]);
     this.state.hiddenColumnInfo.set(new Map());
@@ -350,6 +463,7 @@ export class StateActions {
    * Preserves hidden columns in columnOrder at their relative positions.
    */
   setColumnOrder(columns: string[]): void {
+    this.captureForUndo();
     const currentOrder = this.state.columnOrder.get();
     const columnsSet = new Set(columns);
 
@@ -392,30 +506,37 @@ export class StateActions {
    * Also updates columnOrder and visibleColumns to reflect the new position.
    */
   toggleColumnPin(column: string): void {
+    this.captureForUndo();
     const pinned = this.state.pinnedColumns.get();
     const order = this.state.columnOrder.get();
     const isPinned = pinned.includes(column);
 
-    if (isPinned) {
-      // Unpinning: remove from pinned, move to first unpinned position
-      const newPinned = pinned.filter((c) => c !== column);
-      this.state.pinnedColumns.set(newPinned);
+    // Suppress undo capture for the internal setColumnOrder call
+    this.suppressUndoCapture = true;
+    try {
+      if (isPinned) {
+        // Unpinning: remove from pinned, move to first unpinned position
+        const newPinned = pinned.filter((c) => c !== column);
+        this.state.pinnedColumns.set(newPinned);
 
-      // Reorder: place column immediately after the remaining pinned columns
-      const newOrder = order.filter((c) => c !== column);
-      const insertIndex = newPinned.length; // right after the last pinned column
-      newOrder.splice(insertIndex, 0, column);
-      this.setColumnOrder(newOrder);
-    } else {
-      // Pinning: add to pinned, move to end of pinned group
-      const newPinned = [...pinned, column];
-      this.state.pinnedColumns.set(newPinned);
+        // Reorder: place column immediately after the remaining pinned columns
+        const newOrder = order.filter((c) => c !== column);
+        const insertIndex = newPinned.length; // right after the last pinned column
+        newOrder.splice(insertIndex, 0, column);
+        this.setColumnOrder(newOrder);
+      } else {
+        // Pinning: add to pinned, move to end of pinned group
+        const newPinned = [...pinned, column];
+        this.state.pinnedColumns.set(newPinned);
 
-      // Reorder: place column after the previously-pinned columns (at end of pinned group)
-      const newOrder = order.filter((c) => c !== column);
-      const insertIndex = pinned.length; // after existing pinned columns
-      newOrder.splice(insertIndex, 0, column);
-      this.setColumnOrder(newOrder);
+        // Reorder: place column after the previously-pinned columns (at end of pinned group)
+        const newOrder = order.filter((c) => c !== column);
+        const insertIndex = pinned.length; // after existing pinned columns
+        newOrder.splice(insertIndex, 0, column);
+        this.setColumnOrder(newOrder);
+      }
+    } finally {
+      this.suppressUndoCapture = false;
     }
   }
 
@@ -432,6 +553,7 @@ export class StateActions {
    * Reset column width to default
    */
   resetColumnWidth(column: string): void {
+    this.captureForUndo();
     const widths = new Map(this.state.columnWidths.get());
     widths.delete(column);
     this.state.columnWidths.set(widths);

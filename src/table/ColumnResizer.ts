@@ -21,6 +21,10 @@ export interface ColumnResizerOptions {
   maxWidth?: number;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /** Called when a resize drag begins (mousedown on handle) */
+  onDragStart?: () => void;
+  /** Called when a resize drag ends (mouseup after drag) */
+  onDragEnd?: () => void;
 }
 
 /**
@@ -53,6 +57,8 @@ export class ColumnResizer {
   private readonly minWidth: number;
   private readonly maxWidth: number;
   private readonly classPrefix: string;
+  private readonly onDragStart?: () => void;
+  private readonly onDragEnd?: () => void;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseDown: (e: MouseEvent) => void;
@@ -70,6 +76,8 @@ export class ColumnResizer {
     this.minWidth = options.minWidth ?? 50;
     this.maxWidth = options.maxWidth ?? 500;
     this.classPrefix = options.classPrefix ?? 'dt';
+    this.onDragStart = options.onDragStart;
+    this.onDragEnd = options.onDragEnd;
 
     // Bind event handlers
     this.boundMouseDown = this.handleMouseDown.bind(this);
@@ -147,6 +155,7 @@ export class ColumnResizer {
 
     // Start dragging
     this.isDragging = true;
+    this.onDragStart?.();
     this.startX = event.clientX;
     this.startWidth = this.header.offsetWidth;
 
@@ -202,6 +211,7 @@ export class ColumnResizer {
    */
   private endDrag(): void {
     this.isDragging = false;
+    this.onDragEnd?.();
 
     // Remove active class from handle
     if (this.handle) {

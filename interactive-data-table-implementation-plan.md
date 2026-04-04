@@ -250,515 +250,519 @@ export async function copyRowsToClipboard(
 - Copy works in supported browsers
 - TSV format correct
 
-### Task 7.5: Implement IndexedDB Storage
+### Task 7.5: IndexedDB Storage Layer
 
-Create `src/persistence/Storage.ts`:
+Create `src/persistence/SessionStore.ts` and `src/persistence/types.ts`.
 
-```typescript
-export class StorageManager {
-  private db: IDBDatabase | null = null;
-  private dbName = 'datatable-sessions';
-
-  async initialize(): Promise<void>;
-  
-  async saveSession(key: string, state: SerializedState): Promise<void>;
-  async loadSession(key: string): Promise<SerializedState | null>;
-  async deleteSession(key: string): Promise<void>;
-  async listSessions(): Promise<SessionInfo[]>;
-}
-```
-
-**Verification:**
-- Can save state
-- Can load state
-- Can delete state
-
-### Task 7.6: Implement State Serialization
-
-Create `src/persistence/Serialization.ts`:
+`SessionSnapshot` interface (in `types.ts`):
 
 ```typescript
-export interface SerializedState {
+export interface SessionSnapshot {
   version: number;
-  schema: ColumnSchema[];
-  filters: Filter[];
-  sort: SortColumn[];
+  timestamp: number;
+  tableName: string | null;
+  filters: SerializedFilter[];
+  sortColumns: SortColumn[];
+  visibleColumns: string[];
   columnOrder: string[];
   columnWidths: Record<string, number>;
-  hiddenColumns: string[];
   pinnedColumns: string[];
-  presets: SavedPreset[];
-  derivedColumns: DerivedColumn[];
-  timestamp: number;
-}
-
-export function serializeState(state: TableState): SerializedState;
-export function deserializeState(data: SerializedState): Partial<TableState>;
-```
-
-**Verification:**
-- Serialization round-trips correctly
-- Version migration works
-
-### Task 7.7: Implement Auto-Save
-
-Create `src/persistence/AutoSave.ts`:
-
-```typescript
-export class AutoSaveManager {
-  private saveTimer: number | null = null;
-  private isDirty = false;
-
-  constructor(
-    private state: TableState,
-    private storage: StorageManager,
-    private options: { interval: number; key: string }
-  ) {
-    this.subscribeToChanges();
-  }
-
-  private subscribeToChanges(): void;
-  private scheduleSave(): void;
-  async saveNow(): Promise<void>;
+  hiddenColumnInfo: Record<string, HiddenColumnInfo>;
+  derivedColumns: DerivedColumnDef[];  // future-proof, starts as []
 }
 ```
 
-**Verification:**
-- Changes trigger dirty flag
-- Save occurs after interval
-- Manual save works
+`SessionStore` class:
+- `open()` — opens IndexedDB `'dt-sessions'` with object store keyed on `tableName`
+- `save(snapshot)`, `load(tableName)`, `delete(tableName)`, `list()`
+- `close()` — cleanup
+- Graceful fallback: returns null if IndexedDB unavailable
 
-### Task 7.8: Implement Session Restore
-
-Create `src/persistence/SessionRestore.ts`:
-
-```typescript
-export class SessionRestoreManager {
-  constructor(
-    private storage: StorageManager,
-    private actions: StateActions
-  ) {}
-
-  async checkForSession(key: string): Promise<boolean>;
-  async restoreSession(key: string): Promise<void>;
-  showRestorePrompt(): Promise<'restore' | 'discard'>;
-}
-```
+Date serialization: Wrap Date instances as `{ __date__: isoString }` for round-trip fidelity in filter values.
 
 **Verification:**
-- Detects previous session
-- Restore works correctly
-- User can choose to discard
+- Unit tests for save/load round-trip, Date serialization, missing key → null, list/delete
+
+### Task 7.6: State Serialization/Deserialization
+
+Create `src/persistence/serialization.ts`.
+
+- `snapshotFromState(state: TableState): SessionSnapshot` — reads signals, converts Maps to plain objects
+- `restoreStateFromSnapshot(state: TableState, snapshot: SessionSnapshot): void` — sets signals, validates against current schema (skips columns that no longer exist, drops stale filter references)
+
+**Verification:**
+- Round-trip every filter type including Date ranges
+- Schema mismatch handling (extra/missing columns)
+
+### Task 7.7: Auto-Save
+
+Create `src/persistence/AutoSave.ts`.
+
+- Subscribes to all relevant state signals (filters, sort, columns, widths, pins, hidden info)
+- Debounces saves (default 1000ms) to prevent rapid writes during drag operations
+- `enable()` / `disable()` / `destroy()` lifecycle
+
+**Verification:**
+- Rapid signal changes → single debounced save
+
+### Task 7.8: Session Restore on Load
+
+Modify `src/core/Actions.ts` — add optional `restoreSession(store)` method.
+
+- After `loadData()`, check `store.load(tableName)`
+- If snapshot exists and schema is compatible, restore state
+- Filters referencing removed columns are dropped silently
+- Expose as optional: `actions.loadData(source, { sessionStore })`
+
+**Verification:**
+- Save state → reset → reload same data → verify state restored
+- Stale column handling
+
+**Public API additions for Phase 7:** Export `SessionStore`, `SessionSnapshot`, `AutoSave`, `snapshotFromState`, `restoreStateFromSnapshot` from `src/index.ts`.
 
 ---
 
 ## Phase 8: Advanced Features
 
-**Goal:** Add undo/redo, presets, derived columns, and SQL editor.
+**Goal:** Add undo/redo, derived columns (virtual layer), raw SQL filter API, and filter presets with JSON export. No SQL editor — out of scope for a read-only EDA/DQ library.
 
-### Task 8.1: Implement Undo/Redo Stack
+### Task 8.1: Undo/Redo — State History Stack
 
-Create `src/history/UndoStack.ts`:
+Create `src/core/UndoManager.ts`.
 
 ```typescript
-export interface HistoryEntry {
-  type: string;
-  description: string;
-  undo: () => void;
-  redo: () => void;
-  timestamp: number;
-}
+export class UndoManager {
+  private undoStack: StateSnapshot[] = [];
+  private redoStack: StateSnapshot[] = [];
+  private maxDepth: number;  // default 50
 
-export class UndoStack {
-  private undoStack: HistoryEntry[] = [];
-  private redoStack: HistoryEntry[] = [];
-  private maxSize: number;
-
-  push(entry: HistoryEntry): void;
-  undo(): HistoryEntry | null;
-  redo(): HistoryEntry | null;
-  canUndo(): boolean;
-  canRedo(): boolean;
+  push(snapshot: StateSnapshot): void;   // captures state before mutation, clears redo
+  undo(): StateSnapshot | null;          // pops undo, pushes current to redo
+  redo(): StateSnapshot | null;          // pops redo, pushes current to undo
+  get canUndo(): boolean;
+  get canRedo(): boolean;
   clear(): void;
 }
 ```
 
-**Verification:**
-- Push/undo/redo work
-- Max size limits stack
-- Clear empties both stacks
-
-### Task 8.2: Integrate Undo/Redo with Actions
-
-Update `StateActions.ts`:
-
-```typescript
-addFilter(filter: Filter): void {
-  const previous = this.state.filters.get();
-  this.state.filters.set([...previous, filter]);
-  
-  this.history.push({
-    type: 'filter:add',
-    description: `Added filter on ${filter.column}`,
-    undo: () => this.state.filters.set(previous),
-    redo: () => this.state.filters.set([...previous, filter]),
-    timestamp: Date.now()
-  });
-}
-```
+`StateSnapshot` is a lightweight subset of `SessionSnapshot`: filters, sort, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo. Does NOT include data/schema. Snapshots are cheap — just reading signal values.
 
 **Verification:**
-- Filter add is undoable
-- Sort change is undoable
-- Column operations undoable
+- Push/undo/redo cycle works
+- Redo cleared on new push
+- Stack depth limit enforced
+- Empty stack returns null
 
-### Task 8.3: Implement Undo/Redo UI
+### Task 8.2: Undo/Redo — Action Integration
 
-Create `src/history/HistoryUI.ts`:
+Modify `src/core/Actions.ts`.
 
-```typescript
-export class HistoryUI {
-  constructor(
-    private container: HTMLElement,
-    private history: UndoStack
-  ) {}
-
-  renderButtons(): HTMLElement;
-  renderHistoryPanel(): HTMLElement;
-}
-```
-
-Add keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z).
+- Add optional `UndoManager` to constructor
+- Private `captureForUndo()` helper snapshots current state before mutation
+- Wrap these methods with undo capture: `addFilter`, `removeFilter`, `clearFilters`, `toggleSort`, `addToSort`, `setSort`, `clearSort`, `hideColumn`, `showColumn`, `showAllColumns`, `setColumnOrder`, `toggleColumnPin`
+- Add `undo()` / `redo()` methods to `StateActions`
+- `isUndoRedoOperation` flag prevents undo/redo itself from creating new undo points
+- Column width changes: capture only on first call of a drag sequence (not every pixel)
+- Future-proof: derived column and raw SQL filter operations will also be wrapped
 
 **Verification:**
-- Buttons work
-- Keyboard shortcuts work
-- History panel shows entries
+- Add filter → undo → filter removed. Redo → filter restored
+- Multiple ops → undo twice → redo once
+- New action after undo clears redo stack
 
-### Task 8.4: Implement Filter Presets
+### Task 8.3: Undo/Redo — Keyboard Shortcuts
 
-Create `src/presets/PresetManager.ts`:
+Modify `src/table/TableContainer.ts`.
+
+- `Ctrl+Z` / `Cmd+Z` → `actions.undo()`
+- `Ctrl+Shift+Z` / `Cmd+Shift+Z` / `Ctrl+Y` → `actions.redo()`
+- Only fires when focus is within table container
+
+**Verification:**
+- Simulate keydown events, verify undo/redo called
+
+### Task 8.4: Derived Columns — Type System and State
+
+Derived columns are a **virtual layer** over immutable source data. They enable computed expressions for EDA/DQ without modifying the original dataset.
+
+Modify `src/core/types.ts` — extend `ColumnSchema`:
 
 ```typescript
-export interface Preset {
-  id: string;
+export interface ColumnSchema {
   name: string;
-  filters: Filter[];
-  sort: SortColumn[];
-  createdAt: number;
-}
-
-export class PresetManager {
-  constructor(private state: TableState) {}
-
-  save(name: string): Preset;
-  load(id: string): void;
-  delete(id: string): void;
-  list(): Preset[];
-  export(): string;
-  import(data: string): void;
+  type: DataType;
+  nullable: boolean;
+  originalType: string;
+  isDerived?: boolean;      // true for computed columns
+  expression?: string;      // SQL expression (only for derived)
 }
 ```
 
-**Verification:**
-- Save/load/delete work
-- Export/import work
-
-### Task 8.5: Implement Preset UI
-
-Create `src/presets/PresetUI.ts`:
-
-```typescript
-export class PresetUI {
-  constructor(
-    private container: HTMLElement,
-    private presetManager: PresetManager
-  ) {}
-
-  renderPresetList(): HTMLElement;
-  renderSaveDialog(): HTMLElement;
-}
-```
-
-**Verification:**
-- Preset list displays
-- Save dialog works
-- Quick-apply works
-
-### Task 8.6: Implement Derived Columns
-
-Create `src/derived/DerivedColumn.ts`:
+Create `src/derived/types.ts`:
 
 ```typescript
 export interface DerivedColumnDef {
-  name: string;
-  expression: string;
-  type: DataType; // Inferred or specified
+  name: string;           // column alias
+  expression: string;     // DuckDB SQL expression
+  type?: DataType;        // detected after creation
+  originalType?: string;  // DuckDB type string
 }
+```
 
+Modify `src/core/State.ts` — add to `TableState`:
+- `derivedColumns: Signal<DerivedColumnDef[]>` (starts as `[]`)
+- `baseTableName: Signal<string | null>` (stores original table name when a view is active)
+
+**Verification:**
+- Unit tests for state creation with new signals
+
+### Task 8.5: Derived Columns — DuckDB Integration and CRUD
+
+Create `src/derived/DerivedColumnManager.ts`.
+
+**Core approach:** When derived columns exist, create a DuckDB VIEW (`__dt_view__`) that includes all base columns plus derived expressions. Switch `state.tableName` to the view name. All existing query code (`TableBody`, `ExportQuery`, visualization data fetchers, stats) already uses `state.tableName.get()` and will automatically query the view — **no changes needed in those files**.
+
+```typescript
 export class DerivedColumnManager {
-  constructor(private bridge: WorkerBridge) {}
+  constructor(bridge: WorkerBridge, baseTableName: string);
 
-  async validate(expression: string): Promise<{ valid: boolean; error?: string; type?: DataType }>;
-  async add(def: DerivedColumnDef): Promise<void>;
-  remove(name: string): void;
-  list(): DerivedColumnDef[];
+  // Validate → detect type → recreate view → return ColumnSchema with isDerived: true
+  async addColumn(def: DerivedColumnDef): Promise<ColumnSchema>;
+
+  // Validate → recreate view with updated expression
+  async updateColumn(oldName: string, def: DerivedColumnDef): Promise<ColumnSchema>;
+
+  // Recreate view without column (or drop view if last derived column)
+  async removeColumn(name: string): Promise<void>;
+
+  // Returns view name if derived columns exist, base table otherwise
+  getEffectiveTableName(): string;
 }
 ```
 
+Validation uses DuckDB: `SELECT (expression) AS "name" FROM base_table LIMIT 0`.
+Type detection: `SELECT typeof((expression)) AS t FROM base_table LIMIT 1`.
+View creation: `CREATE OR REPLACE VIEW __dt_view__ AS SELECT *, (expr1) AS "col1", (expr2) AS "col2" FROM base_table`.
+
+Modify `src/core/Actions.ts` — add:
+- `async addDerivedColumn(name, expression): Promise<{ success: boolean; error?: string }>` — validates name uniqueness against `state.schema.get()`, delegates to manager, updates `derivedColumns` signal, appends to schema/visibleColumns/columnOrder, switches `tableName` to view
+- `async updateDerivedColumn(oldName, name, expression): Promise<{ success: boolean; error?: string }>` — validates, recreates view, updates schema
+- `async removeDerivedColumn(name): Promise<void>` — with undo capture, removes from all state signals, reverts `tableName` to `baseTableName` if last derived column
+
 **Verification:**
-- Expression validation works
-- Column type inferred
-- Invalid expressions rejected
+- Add column → view SQL correct, schema updated, tableName switched
+- Expression validation errors returned
+- Rename without name conflicts
+- Delete last derived column → tableName reverts to base table
+- Existing queries use view transparently
 
-### Task 8.7: Implement Derived Column UI
+### Task 8.6: Derived Columns — UI (Visual Differentiation and Controls)
 
-Create `src/derived/DerivedColumnUI.ts`:
+Derived columns have a distinct visual identity: italic names, formula icon, and a subtle tint on the entire column to signal the virtual layer.
+
+Modify `src/table/ColumnHeader.ts`:
+- Check `column.isDerived` during render → add `.dt-col-header--derived` class
+- **Column name**: Render in italics with a small `f(x)` formula SVG icon prefix
+- **Action panel for derived columns**: Replace "hide" button with "delete" button (trash icon, red on hover). Add "edit" button (pencil icon). Keep pin, sort, filter.
+- Source columns: cannot be deleted, only hidden (existing behavior unchanged)
+- Delete button triggers confirmation modal before calling `actions.removeDerivedColumn()`
+
+Modify `src/table/TableBody.ts`:
+- Check `isDerived` per column during cell render → apply `.dt-cell--derived` class
+
+Create `src/derived/DerivedColumnModal.ts`:
+- Modal dialog for creating/editing derived columns
+- Fields: Name (text input), Expression (monospace textarea)
+- "Validate" button: calls DuckDB validation, shows inferred type or error message
+- "Save" button: calls `actions.addDerivedColumn()` or `actions.updateDerivedColumn()`
+- Name conflict validation with real-time feedback
+- Opened from: (1) column header edit button for existing, (2) a "+" button or menu action for new
+
+Modify `src/styles/data-table.css`:
+
+```css
+.dt-col-header--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
+}
+.dt-col-header--derived .dt-col-name {
+  font-style: italic;
+}
+.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 15%, var(--dt-bg));
+}
+/* Dark mode handled automatically via CSS custom properties */
+```
+
+**Verification:**
+- Derived columns show italic name, formula icon, subtle tint
+- Edit modal validates and saves correctly
+- Delete shows confirmation modal
+- Source columns cannot be deleted
+
+### Task 8.7: Derived Columns — Integration Verification
+
+Verify (and fix if needed) that derived columns work with all existing features:
+
+- **Visualizations**: Derived numeric columns get histograms, derived strings get value counts. `VisualizationFactory.isApplicable()` checks `column.type` — works automatically since derived `ColumnSchema` has a detected type.
+- **Crossfilter**: Filters on derived columns use `quoteIdentifier(name)` against the view — works unchanged.
+- **Export**: `ExportQuery.buildSelectQuery()` queries the view, includes derived columns in `visibleColumns` — works unchanged.
+- **Stats**: Stats queries run against view — works unchanged.
+- **Expression edit**: When expression changes, trigger schema update → `TableContainer` re-renders → visualizations re-attach.
+- **Persistence**: Add derived column definitions to `SessionSnapshot`. On restore, recreate view before restoring other state.
+- **Demo integration**: Update `demo/main.ts` with a "New Column" button that opens `DerivedColumnModal`.
+
+**Key files to verify:** `CrossfilterCoordinator.ts`, `VisualizationFactory.ts`, `ExportQuery.ts`, `StatsComputer.ts`, `demo/main.ts`.
+
+**Verification:**
+- Add derived column (e.g., `price * quantity AS total`) → histogram renders, filter works, export includes it
+- Edit expression → visualization updates
+- Persistence round-trip with derived columns
+
+### Task 8.8: Raw SQL Filter API
+
+A **programmatic API** (not a UI feature) for specifying complex SQL WHERE clauses that the filter panel cannot express (OR clauses, cross-column conditions). This is an escape hatch for rare complex filters, useful for downstream DQ rules validation.
+
+**Example use case:** "If the individual is nulliparous, then age at first full-term pregnancy should be 888" → `(nulliparous = TRUE AND age_first_pregnancy != 888) OR (nulliparous = FALSE AND age_first_pregnancy = 888)` — an OR clause across columns that the current UI cannot construct.
+
+Modify `src/filters/FilterTypes.ts` — add to the `Filter` discriminated union:
 
 ```typescript
-export class DerivedColumnDialog {
-  constructor(private manager: DerivedColumnManager) {}
-
-  show(): void {
-    // Expression editor
-    // Validation feedback
-    // Preview of values
-    // Save/cancel
-  }
+export interface RawSQLFilter {
+  type: 'raw-sql';
+  column: string;     // Synthetic key: '__raw_sql_0__', '__raw_sql_1__', etc.
+  sql: string;        // WHERE clause fragment (no WHERE keyword)
+  label?: string;     // Human-readable label for filter chip
+  id: string;         // Unique identifier
 }
+
+export type Filter = RangeFilter | PointFilter | SetFilter | NotSetFilter
+  | NullFilter | PatternFilter | RawSQLFilter;
 ```
 
-**Verification:**
-- Editor with syntax highlighting
-- Live validation
-- Preview shows computed values
+Why synthetic `column` keys: Current architecture keys filters by `column` (one per column via `addFilter`). Raw SQL filters are cross-column, so they use unique synthetic keys (`__raw_sql_${id}__`) to avoid collisions with real columns and to allow multiple raw SQL filters to coexist.
 
-### Task 8.8: Implement SQL Editor (Optional Feature)
+Modify `src/filters/FilterSQL.ts`:
+- `filterToSQL()`: add `case 'raw-sql': return '(' + filter.sql + ')';`
+- `filtersToWhereClause()`: raw SQL filters are **never excluded** by `excludeColumn` (they are global conditions):
+  ```typescript
+  const applicableFilters = excludeColumn
+    ? filters.filter(f => f.type === 'raw-sql' || f.column !== excludeColumn)
+    : filters;
+  ```
 
-Create `src/sql-editor/SQLEditor.ts`:
+Modify `src/filters/CrossfilterQuery.ts`:
+- `splitCrossfilterFilters()`: raw SQL filters appear in both background and foreground arrays (global conditions)
+
+Modify `src/filters/FilterChip.ts`:
+- Add chip rendering for `raw-sql` type: shows label or truncated SQL
+
+Modify `src/core/Actions.ts` — add:
 
 ```typescript
-export class SQLEditor {
-  private editor: CodeMirror.Editor;
-  
-  constructor(
-    private container: HTMLElement,
-    private bridge: WorkerBridge,
-    private schema: ColumnSchema[]
-  ) {}
+async addRawSQLFilter(
+  sql: string,
+  label?: string
+): Promise<{ success: boolean; error?: string; filterId?: string }> {
+  // 1. Validate: bridge.query(`EXPLAIN SELECT * FROM ${tableName} WHERE (${sql})`)
+  // 2. If valid: create RawSQLFilter with unique id, add to filters
+  // 3. Return validation result with filterId
+}
 
-  initialize(): void {
-    // CodeMirror setup
-    // Auto-completion
-    // Syntax highlighting
-  }
-
-  async execute(): Promise<QueryResult>;
-  getSQL(): string;
-  setSQL(sql: string): void;
+removeRawSQLFilter(id: string): void {
+  // Remove filter matching synthetic column key __raw_sql_${id}__
 }
 ```
 
+Modify `src/core/types.ts` — re-export `RawSQLFilter`.
+
 **Verification:**
-- Editor renders
-- Syntax highlighting works
-- Auto-completion works
+- Valid SQL → success with filterId
+- Invalid SQL → error message returned
+- Applied raw SQL filter → WHERE clause includes it
+- Crossfilter: raw SQL filter not excluded when computing per-column background data
+- Multiple raw SQL filters coexist
+- Chip renders label or truncated SQL
+- Removal by id works
+- Export respects raw SQL filters
 
-### Task 8.9: Implement Query Results Display
+### Task 8.9: Filter Presets — Core Logic
 
-Create `src/sql-editor/QueryResults.ts`:
+Filter presets allow saving named sets of filters for reuse. The JSON export format serves as the **handoff format** for the downstream DQ rules application.
+
+Create `src/filters/FilterPresetTypes.ts`:
 
 ```typescript
-export class QueryResults {
-  constructor(private container: HTMLElement) {}
+export interface FilterPreset {
+  id: string;
+  name: string;
+  description?: string;
+  filters: SerializedFilter[];   // same serialization as persistence
+  sortColumns?: SortColumn[];    // optionally capture sort state
+  createdAt: number;
+  updatedAt: number;
+}
 
-  show(results: QueryResult): void;
-  showError(error: Error): void;
-  clear(): void;
+export interface FilterPresetCollection {
+  version: number;
+  presets: FilterPreset[];
 }
 ```
 
+Create `src/filters/FilterPresets.ts` — `FilterPresetManager` class:
+
+```typescript
+export class FilterPresetManager {
+  presets: Signal<FilterPreset[]>;
+
+  save(name: string, filters: Filter[], description?: string): FilterPreset;
+  load(id: string, actions: StateActions): void;   // clears then applies
+  delete(id: string): void;
+  rename(id: string, newName: string): void;
+  exportToJSON(): string;                           // FilterPresetCollection JSON
+  importFromJSON(json: string): { imported: number; errors: string[] };
+  getPresets(): FilterPreset[];
+}
+```
+
+Raw SQL filters, structured filters (range, set, pattern, etc.) — all serialized with full type information. Date serialization uses the same `{ __date__: isoString }` wrapper as persistence.
+
 **Verification:**
-- Results display in table
-- Errors display clearly
-- Can export results
+- Save → load round-trip (filters correctly applied)
+- JSON export/import round-trip
+- Import with invalid JSON → error handling
+- Preset containing raw SQL filters exports correctly
+
+### Task 8.10: Filter Presets — UI
+
+Create `src/filters/FilterPresetPanel.ts`.
+
+Modify `src/filters/FilterBar.ts` — add "Presets" button (bookmark icon) next to "Clear all".
+
+`FilterPresetPanel` (dropdown panel, same pattern as `FilterPanel`):
+- **Save section**: name input + "Save current filters" button (disabled when no active filters)
+- **Preset list**: scrollable list with name, filter count badge, "Load" / "Delete" buttons
+- **Import/Export**: "Export all" button (downloads `.json` file), "Import" button (file input)
+- Closes on outside click / Escape
+
+Modify `src/styles/data-table.css` — preset panel styles following existing `.dt-filter-panel` patterns.
+
+**Verification:**
+- Panel opens/closes correctly
+- Save disabled with no active filters
+- Save → preset appears in list
+- Load → filters applied
+- Delete with confirmation
+- Export downloads JSON file
+- Import adds presets
 
 ---
 
 ## Phase 9: Polish & Optimization
 
-**Goal:** Performance optimization, accessibility, and visual polish.
+**Goal:** Performance optimization, accessibility, and keyboard navigation.
 
-### Task 9.1: Implement Query Caching
+### Task 9.1: Query Caching
 
-Create `src/performance/QueryCache.ts`:
+Create `src/data/QueryCache.ts`.
 
-```typescript
-export class QueryCache {
-  private cache = new Map<string, CacheEntry>();
-  private maxSize: number;
-  private ttl: number;
+LRU cache with configurable max entries (default 100) and TTL (default 30s). Integrate into `WorkerBridge.query()` — check cache before sending to worker.
 
-  get(sql: string): unknown[] | null;
-  set(sql: string, results: unknown[]): void;
-  invalidate(pattern?: string): void;
-  clear(): void;
-}
-```
+Invalidation triggers: filter change, sort change, new data load, derived column add/edit/remove.
 
 **Verification:**
-- Cache hits return quickly
-- TTL expiration works
+- Cache hit returns fast
+- TTL expiry works
 - LRU eviction works
+- Invalidation clears entries
 
-### Task 9.2: Implement Query Batching
+### Task 9.2: Keyboard Navigation
 
-Create `src/performance/QueryBatcher.ts`:
+Modify `src/table/TableContainer.ts` and `src/table/TableBody.ts`.
 
-```typescript
-export class QueryBatcher {
-  private pending: PendingQuery[] = [];
-  private batchTimer: number | null = null;
-  private batchWindow: number;
-
-  queue<T>(sql: string): Promise<T[]>;
-  private flush(): void;
-}
-```
+Track focused cell `{ row, col }`. Arrow keys move focus. Tab moves to next cell. Home/End for first/last column. Ctrl+Home/End for first/last row. PageUp/PageDown scroll by viewport height. Scroll to row when focus leaves viewport. `.dt-cell--focused` with blue outline.
 
 **Verification:**
-- Multiple queries batched
-- Results returned correctly
+- Arrow key navigation works
+- Scroll-into-view on focus move
 
-### Task 9.3: Implement Keyboard Navigation
+### Task 9.3: ARIA Labels and Accessibility
 
-Create `src/accessibility/KeyboardNav.ts`:
-
-```typescript
-export class KeyboardNavigation {
-  private focusedCell: { row: number; col: number } | null = null;
-
-  constructor(private table: TableContainer) {
-    this.attachListeners();
-  }
-
-  private attachListeners(): void;
-  private handleKeyDown(event: KeyboardEvent): void;
-  private moveFocus(direction: 'up' | 'down' | 'left' | 'right'): void;
-}
-```
+Modify table components for screen reader support:
+- Table: `aria-rowcount`, `aria-colcount`
+- Headers: `aria-colindex`, improved `aria-label` with sort/filter state
+- Rows: `aria-rowindex` (absolute index)
+- Cells: `aria-colindex`
+- Selected rows: `aria-selected="true"`
+- Add `aria-live="polite"` region announcing filter changes (e.g., "3 filters active, showing 1,234 of 5,000 rows")
 
 **Verification:**
-- Arrow keys navigate cells
-- Home/End work
-- Enter activates
+- Lighthouse accessibility audit
+- Screen reader testing
 
-### Task 9.4: Implement ARIA Labels
+### Task 9.4: Responsive Behavior (Nice-to-have)
 
-Update all components:
-
-```typescript
-// Example in ColumnHeader
-render(): HTMLElement {
-  const el = document.createElement('div');
-  el.setAttribute('role', 'columnheader');
-  el.setAttribute('aria-label', `${this.column.name}, ${this.column.type}`);
-  el.setAttribute('aria-sort', this.getSortState());
-  // ...
-}
-```
+CSS `@container` queries or `ResizeObserver` for narrow widths. Reduce column widths, collapse chip descriptions, hide secondary action buttons at small sizes.
 
 **Verification:**
-- Screen reader announces correctly
-- All interactive elements labeled
+- Visual testing at various widths
 
-### Task 9.5: Implement Dark Mode
+### Task 9.5: Performance Testing
 
-Create `src/themes/DarkMode.ts`:
-
-```typescript
-export const lightTheme = {
-  primary: '#2563eb',
-  primaryHover: '#60a5fa',
-  secondary: '#f59e0b',
-  background: '#ffffff',
-  text: '#111827',
-  // ...
-};
-
-export const darkTheme = {
-  primary: '#60a5fa',
-  primaryHover: '#93c5fd',
-  secondary: '#fbbf24',
-  background: '#1f2937',
-  text: '#f9fafb',
-  // ...
-};
-
-export function applyTheme(theme: 'light' | 'dark' | 'auto'): void;
-```
-
-**Verification:**
-- Light mode looks correct
-- Dark mode looks correct
-- Auto detects system preference
-
-### Task 9.6: Implement Responsive Behavior
-
-Create `src/responsive/Responsive.ts`:
-
-```typescript
-export class ResponsiveManager {
-  private breakpoint: 'mobile' | 'tablet' | 'desktop';
-
-  constructor(private table: TableContainer) {
-    this.observeSize();
-  }
-
-  private observeSize(): void;
-  private adaptLayout(): void;
-}
-```
-
-**Verification:**
-- Table adapts to narrow screens
-- Touch targets appropriate size
-- Visualizations simplify on mobile
-
-### Task 9.7: Performance Testing & Optimization
-
-Create performance test suite:
-
-```typescript
-// tests/performance/
-describe('Performance', () => {
-  test('loads 100MB CSV in under 30s', async () => { ... });
-  test('filters 1M rows in under 500ms', async () => { ... });
-  test('scroll maintains 60fps', async () => { ... });
-  test('memory stays under 500MB for 1M rows', async () => { ... });
-});
-```
+Manual benchmarks: 1M row load, scroll FPS, filter apply latency, export speed, 50-column visualization render. Identify and fix bottlenecks. Target: <100ms filter apply, 60fps scroll, <2s for 1M row load.
 
 **Verification:**
 - All performance targets met
 - No memory leaks detected
 
-### Task 9.8: Final Integration Testing
+---
 
-Create integration test suite:
+## Task Dependency Graph
 
-```typescript
-// tests/integration/
-describe('Full Workflow', () => {
-  test('load → filter → export', async () => { ... });
-  test('save → reload → restore session', async () => { ... });
-  test('derived column → filter → undo', async () => { ... });
-});
+```
+Phase 7 (Persistence):
+  7.5 SessionStore → 7.6 Serialization → 7.7 AutoSave
+                                        → 7.8 Session Restore
+
+Phase 8 (Advanced):
+  8.1 UndoManager → 8.2 Action Integration → 8.3 Keyboard Shortcuts
+  8.4 Derived Types → 8.5 DuckDB Integration → 8.6 Derived UI → 8.7 Integration
+  8.8 Raw SQL Filter API → 8.9 Filter Presets → 8.10 Preset UI
+
+Phase 9 (Polish):
+  9.1 Query Caching    (independent)
+  9.2 Keyboard Nav     (independent)
+  9.3 ARIA             (after 9.2)
+  9.4 Responsive       (independent, nice-to-have)
+  9.5 Performance      (after all features)
 ```
 
-**Verification:**
-- All workflows complete successfully
-- No regressions
+**Recommended execution order:**
+1. **7.5 → 7.6 → 7.7 → 7.8** (Persistence foundation — auto-save captures all future state additions)
+2. **8.1 → 8.2 → 8.3** (Undo/redo — all subsequent features are undoable from the start)
+3. **8.4 → 8.5 → 8.6 → 8.7** (Derived columns — full virtual layer)
+4. **8.8** (Raw SQL Filter API — enables complex filters before presets)
+5. **8.9 → 8.10** (Filter presets — can serialize all filter types including raw SQL)
+6. **9.1 → 9.2 → 9.3 → 9.4 → 9.5** (Polish)
+
+---
+
+## What Changed from Original Plan
+
+| Original Task | Status | Rationale |
+|---|---|---|
+| 8.1–8.3 Undo/Redo | **Kept** | Essential for EDA workflow |
+| 8.4–8.5 Filter Presets | **Kept, moved to 8.9–8.10** | Reordered after raw SQL filters so presets can serialize them |
+| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with visual differentiation, edit/rename/delete |
+| 8.8–8.9 SQL Editor | **Removed** | Out of scope for read-only EDA tool |
+| **New: Raw SQL Filter API** | **Added as 8.8** | Programmatic escape hatch for complex cross-column filters (OR clauses) |
+| 9.1 Query Caching | **Kept** | |
+| 9.2 Query Batching | **Removed** | Over-engineering; DuckDB handles query execution efficiently |
+| 9.3 Keyboard Nav | **Kept as 9.2** | |
+| 9.4 ARIA Labels | **Kept as 9.3** | |
+| 9.5 Dark Mode | **Removed** | Already implemented via CSS `@media (prefers-color-scheme: dark)` |
+| 9.6 Responsive | **Kept as 9.4, downgraded** | Nice-to-have |
+| 9.7 Performance Testing | **Kept as 9.5** | |
+| 9.8 Integration Testing | **Merged into 9.5** | Combined with performance testing |
 
 ---
 
@@ -770,8 +774,10 @@ describe('Full Workflow', () => {
 |--------|-----------------|
 | Core (types, events, signals) | 95% |
 | Data (loaders, schema) | 90% |
-| Filters | 95% |
+| Filters (incl. raw SQL) | 95% |
 | SQL Generation | 95% |
+| Persistence | 90% |
+| Derived Columns | 90% |
 | Visualizations | 80% |
 | UI Components | 70% |
 
@@ -783,14 +789,24 @@ tests/
 │   ├── core/
 │   │   ├── EventEmitter.test.ts
 │   │   ├── Signal.test.ts
-│   │   └── State.test.ts
+│   │   ├── State.test.ts
+│   │   └── UndoManager.test.ts
 │   ├── data/
 │   │   ├── SchemaDetector.test.ts
 │   │   ├── TypeInference.test.ts
+│   │   ├── QueryCache.test.ts
 │   │   └── loaders/
 │   ├── filters/
 │   │   ├── FilterSQL.test.ts
-│   │   └── FilterTypes.test.ts
+│   │   ├── FilterTypes.test.ts
+│   │   ├── RawSQLFilter.test.ts
+│   │   └── FilterPresets.test.ts
+│   ├── derived/
+│   │   ├── DerivedColumnManager.test.ts
+│   │   └── DerivedColumnTypes.test.ts
+│   ├── persistence/
+│   │   ├── SessionStore.test.ts
+│   │   └── serialization.test.ts
 │   └── visualizations/
 │       ├── HistogramData.test.ts
 │       └── ValueCountsData.test.ts
@@ -848,6 +864,14 @@ Each task is complete when:
    - Risk: Web Worker, IndexedDB variations
    - Mitigation: Feature detection, fallbacks
 
+5. **Raw SQL Filter Injection**
+   - Risk: Malicious or malformed SQL in raw filters
+   - Mitigation: DuckDB validation (EXPLAIN) before application; runs entirely client-side (no server exposure); wrap in parentheses
+
+6. **Derived Column View Consistency**
+   - Risk: View becomes stale or references invalid expressions
+   - Mitigation: Recreate view on every change; validate expressions before adding
+
 ### Fallback Strategies
 
 - If DuckDB WASM fails: Fall back to in-memory JavaScript processing for small files
@@ -869,9 +893,6 @@ Each task is complete when:
     "typescript": "^5.3.0",
     "vite": "^5.0.0",
     "vitest": "^1.0.0"
-  },
-  "optionalDependencies": {
-    "codemirror": "^6.0.0"
   }
 }
 ```
@@ -899,6 +920,14 @@ LIMIT 10;
 -- Null count
 SELECT COUNT(*) FILTER (WHERE column IS NULL) as null_count
 FROM table;
+
+-- Derived column view
+CREATE OR REPLACE VIEW __dt_view__ AS
+SELECT *, (expr1) AS "derived_col1", (expr2) AS "derived_col2"
+FROM base_table;
+
+-- Raw SQL filter validation
+EXPLAIN SELECT * FROM table WHERE (user_provided_sql);
 ```
 
 ### Event Reference
@@ -919,21 +948,23 @@ FROM table;
 // Columns
 'column:hide' | 'column:show' | 'column:reorder' | 'column:resize'
 
+// Derived columns
+'derived:add' | 'derived:update' | 'derived:remove'
+
 // State
 'state:save' | 'state:restore' | 'undo' | 'redo'
 ```
 
 ---
 
-## Getting Started
+## Getting Started (Current)
 
-To begin implementation:
+To continue implementation from Task 7.5:
 
-1. Complete Phase 0 (Project Setup)
-2. Run `npm test` to verify setup
-3. Proceed to Phase 1, Task 1.1
-4. Complete each task in order
-5. Commit after each successful task
-6. If stuck, break down the task further
+1. Ensure all existing tests pass: `npm test`
+2. Proceed to Task 7.5 (IndexedDB Storage Layer)
+3. Complete each task in order per the dependency graph
+4. Commit after each successful task
+5. If stuck, break down the task further
 
 **Remember:** Each task should be independently verifiable. Don't move to the next task until the current one is complete and tested.

@@ -15,8 +15,6 @@ import { copyToClipboard } from './Clipboard';
 
 export type ExportFormat = 'csv' | 'json' | 'parquet';
 export type ExportScope = 'all' | 'filtered' | 'selected';
-export type ExportColumns = 'all' | 'visible';
-
 export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
@@ -125,7 +123,6 @@ export class ExportDialog {
 
     body.appendChild(this.createFormatSection());
     body.appendChild(this.createScopeSection());
-    body.appendChild(this.createColumnsSection());
     body.appendChild(this.createCSVOptions());
     body.appendChild(this.createJSONOptions());
 
@@ -245,38 +242,6 @@ export class ExportDialog {
     this.selectedOption.appendChild(document.createTextNode(' Selected rows '));
     this.selectedOption.appendChild(this.selectedCountEl);
     fieldset.appendChild(this.selectedOption);
-
-    return fieldset;
-  }
-
-  private createColumnsSection(): HTMLFieldSetElement {
-    const p = this.prefix;
-    const fieldset = document.createElement('fieldset');
-    fieldset.className = `${p}-export-section`;
-
-    const legend = document.createElement('legend');
-    legend.textContent = 'Columns';
-    fieldset.appendChild(legend);
-
-    const options: { value: ExportColumns; label: string }[] = [
-      { value: 'visible', label: 'Visible columns' },
-      { value: 'all', label: 'All columns' },
-    ];
-
-    for (const opt of options) {
-      const label = document.createElement('label');
-      label.className = `${p}-export-option`;
-
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = `${p}-export-columns`;
-      radio.value = opt.value;
-      if (opt.value === 'visible') radio.checked = true;
-
-      label.appendChild(radio);
-      label.appendChild(document.createTextNode(` ${opt.label}`));
-      fieldset.appendChild(label);
-    }
 
     return fieldset;
   }
@@ -520,13 +485,6 @@ export class ExportDialog {
     return (checked?.value as ExportScope) ?? 'all';
   }
 
-  private getColumns(): ExportColumns {
-    const checked = this.element.querySelector(
-      `input[name="${this.prefix}-export-columns"]:checked`
-    ) as HTMLInputElement | null;
-    return (checked?.value as ExportColumns) ?? 'visible';
-  }
-
   // =========================================
   // Export Execution
   // =========================================
@@ -543,7 +501,6 @@ export class ExportDialog {
 
     const format = this.getFormat();
     const scope = this.getScope();
-    const columns = this.getColumns();
 
     this.abortController = new AbortController();
     this.setExportingState(true);
@@ -554,7 +511,7 @@ export class ExportDialog {
       if (format === 'csv') {
         const result = await exportFromState(this.state, this.bridge, {
           scope,
-          columns,
+          columns: 'all',
           delimiter: this.delimiterSelect.value,
           includeHeaders: this.headersCheckbox.checked,
           nullValue: this.nullValueInput.value,
@@ -566,7 +523,7 @@ export class ExportDialog {
         const jsonFormat = this.jsonFormatSelect.value as 'array' | 'ndjson';
         const result = await exportJSONFromState(this.state, this.bridge, {
           scope,
-          columns,
+          columns: 'all',
           format: jsonFormat,
           pretty: this.jsonPrettyCheckbox.checked,
         }, signal);
@@ -578,7 +535,7 @@ export class ExportDialog {
       } else {
         const result = await exportParquetFromState(this.state, this.bridge, {
           scope,
-          columns,
+          columns: 'all',
         }, signal);
 
         const blob = new Blob([result.buffer as ArrayBuffer], { type: 'application/octet-stream' });
@@ -609,7 +566,6 @@ export class ExportDialog {
     if (format === 'parquet') return;
 
     const scope = this.getScope();
-    const columns = this.getColumns();
 
     this.abortController = new AbortController();
     this.setExportingState(true);
@@ -621,7 +577,7 @@ export class ExportDialog {
       if (format === 'csv') {
         result = await exportFromState(this.state, this.bridge, {
           scope,
-          columns,
+          columns: 'all',
           delimiter: this.delimiterSelect.value,
           includeHeaders: this.headersCheckbox.checked,
           nullValue: this.nullValueInput.value,
@@ -629,7 +585,7 @@ export class ExportDialog {
       } else {
         result = await exportJSONFromState(this.state, this.bridge, {
           scope,
-          columns,
+          columns: 'all',
           format: this.jsonFormatSelect.value as 'array' | 'ndjson',
           pretty: this.jsonPrettyCheckbox.checked,
         }, signal);

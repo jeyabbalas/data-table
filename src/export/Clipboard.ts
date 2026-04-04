@@ -65,14 +65,13 @@ export async function copyRowsToClipboard(
     filters: state.filters.get(),
     sortColumns: state.sortColumns.get(),
     selectedRows: new Set(rows),
-    visibleColumns: state.visibleColumns.get(),
     columnOrder: state.columnOrder.get(),
     schema: state.schema.get(),
   };
 
   const tsv = await exportToCSV(tableName, {
     scope: 'selected',
-    columns: 'visible',
+    columns: 'all',
     includeHeaders: true,
     delimiter: '\t',
     nullValue: '',

@@ -134,7 +134,7 @@ Create `src/export/CSVExporter.ts`:
 ```typescript
 export interface ExportOptions {
   scope: 'all' | 'filtered' | 'selected';
-  columns: 'all' | 'visible' | string[];
+  columns: 'all' | string[];
   includeHeaders: boolean;
   delimiter: string;
   nullValue: string;
@@ -211,7 +211,6 @@ export class ExportDialog {
   show(): void {
     // Format selection
     // Scope selection
-    // Column selection
     // Options (delimiter, etc.)
     // Export/Download buttons
   }
@@ -505,7 +504,7 @@ Verify (and fix if needed) that derived columns work with all existing features:
 
 - **Visualizations**: Derived numeric columns get histograms, derived strings get value counts. `VisualizationFactory.isApplicable()` checks `column.type` — works automatically since derived `ColumnSchema` has a detected type.
 - **Crossfilter**: Filters on derived columns use `quoteIdentifier(name)` against the view — works unchanged.
-- **Export**: `ExportQuery.buildSelectQuery()` queries the view, includes derived columns in `visibleColumns` — works unchanged.
+- **Export**: `ExportQuery.buildSelectQuery()` queries the view, includes derived columns in `columnOrder` — works unchanged.
 - **Stats**: Stats queries run against view — works unchanged.
 - **Expression edit**: When expression changes, trigger schema update → `TableContainer` re-renders → visualizations re-attach.
 - **Persistence**: Add derived column definitions to `SessionSnapshot`. On restore, recreate view before restoring other state.

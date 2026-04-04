@@ -15,7 +15,6 @@ export interface ExportContext {
   filters: Filter[];
   sortColumns: SortColumn[];
   selectedRows: Set<number>;
-  visibleColumns: string[];
   columnOrder: string[];
   schema: ColumnSchema[];
 }
@@ -38,12 +37,9 @@ type RowData = Record<string, unknown>;
  * Returns column names in the appropriate order, validated against the schema.
  */
 export function resolveColumns(
-  option: 'all' | 'visible' | string[],
-  context: Pick<ExportContext, 'visibleColumns' | 'columnOrder' | 'schema'>
+  option: 'all' | string[],
+  context: Pick<ExportContext, 'columnOrder' | 'schema'>
 ): string[] {
-  if (option === 'visible') {
-    return context.visibleColumns;
-  }
   if (option === 'all') {
     return context.columnOrder;
   }

@@ -123,20 +123,16 @@ describe('copyRowsToClipboard', () => {
     expect(lines[2]).toBe('2\tBob\t19.99');
   });
 
-  it('should use visible columns only', async () => {
-    // Hide the price column
-    state.visibleColumns.set(['id', 'name']);
-
+  it('should use all columns', async () => {
     mockBridge.query.mockResolvedValueOnce([
-      { id: 1, name: 'Alice' },
+      { id: 1, name: 'Alice', price: 9.99 },
     ]);
 
     await copyRowsToClipboard([0], state, mockBridge);
 
     const tsv = mockWriteText.mock.calls[0][0] as string;
     const header = tsv.split('\n')[0];
-    expect(header).toBe('id\tname');
-    expect(header).not.toContain('price');
+    expect(header).toBe('id\tname\tprice');
   });
 
   it('should handle null values as empty strings', async () => {

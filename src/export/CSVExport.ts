@@ -20,7 +20,7 @@ export interface ExportOptions {
   /** Which rows to export */
   scope: 'all' | 'filtered' | 'selected';
   /** Which columns to include */
-  columns: 'all' | 'visible' | string[];
+  columns: 'all' | string[];
   /** Whether to include a header row */
   includeHeaders: boolean;
   /** Field delimiter character */
@@ -31,7 +31,7 @@ export interface ExportOptions {
 
 const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   scope: 'all',
-  columns: 'visible',
+  columns: 'all',
   includeHeaders: true,
   delimiter: ',',
   nullValue: '',
@@ -180,7 +180,6 @@ export async function exportFromState(
     filters: state.filters.get(),
     sortColumns: state.sortColumns.get(),
     selectedRows: state.selectedRows.get(),
-    visibleColumns: state.visibleColumns.get(),
     columnOrder: state.columnOrder.get(),
     schema: state.schema.get(),
   };

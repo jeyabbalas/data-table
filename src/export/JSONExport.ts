@@ -21,7 +21,7 @@ export interface JSONExportOptions {
   /** Which rows to export */
   scope: 'all' | 'filtered' | 'selected';
   /** Which columns to include */
-  columns: 'all' | 'visible' | string[];
+  columns: 'all' | string[];
   /** Output format: JSON array or newline-delimited JSON */
   format: 'array' | 'ndjson';
   /** Pretty-print the output (array format only) */
@@ -30,7 +30,7 @@ export interface JSONExportOptions {
 
 const DEFAULT_JSON_OPTIONS: JSONExportOptions = {
   scope: 'all',
-  columns: 'visible',
+  columns: 'all',
   format: 'array',
   pretty: false,
 };
@@ -215,7 +215,6 @@ export async function exportJSONFromState(
     filters: state.filters.get(),
     sortColumns: state.sortColumns.get(),
     selectedRows: state.selectedRows.get(),
-    visibleColumns: state.visibleColumns.get(),
     columnOrder: state.columnOrder.get(),
     schema: state.schema.get(),
   };

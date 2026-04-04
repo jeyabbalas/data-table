@@ -124,7 +124,6 @@ describe('exportToJSON', () => {
       filters: [],
       sortColumns: [],
       selectedRows: new Set(),
-      visibleColumns: ['id', 'name', 'active'],
       columnOrder: ['id', 'name', 'active'],
       schema,
     };
@@ -199,8 +198,7 @@ describe('exportToJSON', () => {
     });
 
     it('should return [] for no columns', async () => {
-      const context = { ...baseContext, visibleColumns: [] };
-      const json = await exportToJSON('test', { format: 'array' }, context);
+      const json = await exportToJSON('test', { format: 'array', columns: [] }, baseContext);
       expect(json).toBe('[]');
     });
   });
@@ -228,8 +226,7 @@ describe('exportToJSON', () => {
     });
 
     it('should return empty string for no columns', async () => {
-      const context = { ...baseContext, visibleColumns: [] };
-      const ndjson = await exportToJSON('test', { format: 'ndjson' }, context);
+      const ndjson = await exportToJSON('test', { format: 'ndjson', columns: [] }, baseContext);
       expect(ndjson).toBe('');
     });
   });
@@ -294,14 +291,13 @@ describe('exportToJSON', () => {
   });
 
   describe('column selection', () => {
-    it('should export visible columns by default', async () => {
-      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice' }]);
+    it('should export all columns by default', async () => {
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', active: true }]);
 
-      const context = { ...baseContext, visibleColumns: ['id', 'name'] };
-      const json = await exportToJSON('test', { format: 'array' }, context);
+      const json = await exportToJSON('test', { format: 'array' }, baseContext);
       const parsed = JSON.parse(json);
 
-      expect(Object.keys(parsed[0])).toEqual(['id', 'name']);
+      expect(Object.keys(parsed[0])).toEqual(['id', 'name', 'active']);
     });
 
     it('should export all columns when columns is "all"', async () => {
@@ -384,7 +380,6 @@ describe('exportJSONFromState', () => {
       filters: { get: () => [] },
       sortColumns: { get: () => [] },
       selectedRows: { get: () => new Set<number>() },
-      visibleColumns: { get: () => ['id', 'name'] },
       columnOrder: { get: () => ['id', 'name'] },
       schema: {
         get: () => [

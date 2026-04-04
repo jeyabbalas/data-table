@@ -129,14 +129,9 @@ describe('resolveColumns', () => {
   ];
 
   const context = {
-    visibleColumns: ['id', 'name', 'price'],
     columnOrder: ['id', 'name', 'price', 'date'],
     schema,
   };
-
-  it('should return visible columns for "visible"', () => {
-    expect(resolveColumns('visible', context)).toEqual(['id', 'name', 'price']);
-  });
 
   it('should return all columns in order for "all"', () => {
     expect(resolveColumns('all', context)).toEqual(['id', 'name', 'price', 'date']);
@@ -152,10 +147,6 @@ describe('resolveColumns', () => {
 
   it('should return empty array for all-invalid explicit list', () => {
     expect(resolveColumns(['nope', 'nada'], context)).toEqual([]);
-  });
-
-  it('should return empty array when visible columns is empty', () => {
-    expect(resolveColumns('visible', { ...context, visibleColumns: [] })).toEqual([]);
   });
 });
 
@@ -243,7 +234,6 @@ describe('exportToCSV', () => {
       filters: [],
       sortColumns: [],
       selectedRows: new Set(),
-      visibleColumns: ['id', 'name', 'price'],
       columnOrder: ['id', 'name', 'price'],
       schema,
     };
@@ -525,19 +515,14 @@ describe('exportToCSV', () => {
   });
 
   describe('column selection', () => {
-    it('should export only visible columns by default', async () => {
+    it('should export all columns by default', async () => {
       mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice' },
+        { id: 1, name: 'Alice', price: 10 },
       ]);
 
-      const context = {
-        ...baseContext,
-        visibleColumns: ['id', 'name'],
-      };
+      const csv = await exportToCSV('test_table', {}, baseContext);
 
-      const csv = await exportToCSV('test_table', {}, context);
-
-      expect(csv).toBe('id,name\n1,Alice');
+      expect(csv).toBe('id,name,price\n1,Alice,10');
     });
 
     it('should export all columns when columns is "all"', async () => {
@@ -641,7 +626,6 @@ describe('exportToCSV', () => {
       const context = {
         ...baseContext,
         schema: schemaWithSpecialNames,
-        visibleColumns: ['col,1', 'col"2'],
         columnOrder: ['col,1', 'col"2'],
       };
 
@@ -680,7 +664,6 @@ describe('exportFromState', () => {
       filters: { get: () => [] },
       sortColumns: { get: () => [] },
       selectedRows: { get: () => new Set<number>() },
-      visibleColumns: { get: () => ['id', 'name'] },
       columnOrder: { get: () => ['id', 'name'] },
       schema: {
         get: () => [

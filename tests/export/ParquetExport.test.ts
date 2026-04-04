@@ -26,7 +26,6 @@ describe('buildParquetQuery', () => {
       filters: [],
       sortColumns: [],
       selectedRows: new Set(),
-      visibleColumns: ['id', 'name', 'price'],
       columnOrder: ['id', 'name', 'price'],
       schema,
     };
@@ -36,7 +35,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name', 'price'],
-      { scope: 'all', columns: 'visible' },
+      { scope: 'all', columns: 'all' },
       baseContext
     );
 
@@ -54,7 +53,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'all', columns: 'visible' },
+      { scope: 'all', columns: 'all' },
       context
     );
 
@@ -70,7 +69,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name', 'price'],
-      { scope: 'filtered', columns: 'visible' },
+      { scope: 'filtered', columns: 'all' },
       context
     );
 
@@ -88,7 +87,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'all', columns: 'visible' },
+      { scope: 'all', columns: 'all' },
       context
     );
 
@@ -99,7 +98,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'selected', columns: 'visible' },
+      { scope: 'selected', columns: 'all' },
       baseContext
     );
 
@@ -115,7 +114,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'selected', columns: 'visible' },
+      { scope: 'selected', columns: 'all' },
       context
     );
 
@@ -132,7 +131,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'selected', columns: 'visible' },
+      { scope: 'selected', columns: 'all' },
       context
     );
 
@@ -151,7 +150,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'selected', columns: 'visible' },
+      { scope: 'selected', columns: 'all' },
       context
     );
 
@@ -168,7 +167,7 @@ describe('buildParquetQuery', () => {
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
-      { scope: 'selected', columns: 'visible' },
+      { scope: 'selected', columns: 'all' },
       context
     );
 
@@ -202,7 +201,6 @@ describe('exportToParquet', () => {
       filters: [],
       sortColumns: [],
       selectedRows: new Set(),
-      visibleColumns: ['id', 'name'],
       columnOrder: ['id', 'name'],
       schema,
     };
@@ -213,8 +211,7 @@ describe('exportToParquet', () => {
   });
 
   it('should return empty Uint8Array for no columns', async () => {
-    const context = { ...baseContext, visibleColumns: [] as string[] };
-    const result = await exportToParquet('test', {}, context);
+    const result = await exportToParquet('test', { columns: [] }, baseContext);
     expect(result).toEqual(new Uint8Array(0));
     expect(mockBridge.exportToBuffer).not.toHaveBeenCalled();
   });
@@ -330,7 +327,6 @@ describe('exportParquetFromState', () => {
       filters: { get: () => [] },
       sortColumns: { get: () => [] },
       selectedRows: { get: () => new Set<number>() },
-      visibleColumns: { get: () => ['id', 'name'] },
       columnOrder: { get: () => ['id', 'name'] },
       schema: {
         get: () => [

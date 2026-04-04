@@ -158,11 +158,6 @@ describe('ExportDialog', () => {
       expect(radios.length).toBe(3);
     });
 
-    it('should have column radio buttons', () => {
-      const radios = dialog.getElement().querySelectorAll('input[name="dt-export-columns"]');
-      expect(radios.length).toBe(2);
-    });
-
     it('should have Download and Copy buttons', () => {
       const downloadBtn = dialog.getElement().querySelector('.dt-export-btn');
       const copyBtn = dialog.getElement().querySelector('.dt-export-copy-btn');
@@ -376,7 +371,7 @@ describe('ExportDialog', () => {
         mockBridge,
         expect.objectContaining({
           scope: 'all',
-          columns: 'visible',
+          columns: 'all',
           delimiter: ',',
           includeHeaders: true,
           nullValue: '',
@@ -405,7 +400,7 @@ describe('ExportDialog', () => {
         mockBridge,
         expect.objectContaining({
           scope: 'all',
-          columns: 'visible',
+          columns: 'all',
           format: 'array',
           pretty: false,
         }),
@@ -441,16 +436,12 @@ describe('ExportDialog', () => {
       expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
     });
 
-    it('should pass scope and column options correctly', async () => {
+    it('should pass scope option correctly', async () => {
       dialog.open();
 
       // Select filtered scope
       const filteredRadio = dialog.getElement().querySelector('input[value="filtered"]') as HTMLInputElement;
       filteredRadio.checked = true;
-
-      // Select all columns
-      const allColumnsRadio = dialog.getElement().querySelector('input[name="dt-export-columns"][value="all"]') as HTMLInputElement;
-      allColumnsRadio.checked = true;
 
       const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
       downloadBtn.click();

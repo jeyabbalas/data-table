@@ -57,6 +57,10 @@ export type { TableState, HiddenColumnInfo } from './core/State';
 export { StateActions } from './core/Actions';
 export type { LoadDataOptions } from './core/Actions';
 
+// Undo/Redo
+export { UndoManager, captureSnapshot, applySnapshot } from './core/UndoManager';
+export type { StateSnapshot } from './core/UndoManager';
+
 // Table components
 export { TableContainer } from './table/TableContainer';
 export type { TableContainerOptions, ResizeCallback } from './table/TableContainer';

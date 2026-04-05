@@ -195,6 +195,25 @@ export class SessionStore {
     });
   }
 
+  /**
+   * Synchronous save — enqueues an IDB put without yielding to the microtask
+   * queue. Use this in page lifecycle handlers (beforeunload, visibilitychange)
+   * where an async await could be skipped by the browser during page teardown.
+   *
+   * No-op if the database hasn't been opened yet or tableName is null.
+   */
+  saveSync(snapshot: SessionSnapshot): void {
+    if (snapshot.tableName == null) return;
+    if (!this.db) return;
+
+    try {
+      const tx = this.db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(snapshot);
+    } catch {
+      // Silently ignore — best-effort during page teardown
+    }
+  }
+
   /** Load a snapshot by table name. Returns null if not found or db unavailable. */
   async load(tableName: string): Promise<SessionSnapshot | null> {
     if (!(await this.ensureOpen())) return null;

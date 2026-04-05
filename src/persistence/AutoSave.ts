@@ -70,8 +70,15 @@ export class AutoSave {
       );
     }
 
+    // If the undo/redo stacks already have entries (e.g., restored from a
+    // previous session), schedule an immediate save so the stacks are
+    // re-persisted even if the user refreshes without making any new changes.
+    if (this.undoManager && (this.undoManager.canUndo || this.undoManager.canRedo)) {
+      this.scheduleSave();
+    }
+
     // Flush pending saves on page hide / unload so refreshes don't lose state.
-    // The IDB transaction is enqueued synchronously inside save(); browsers
+    // The IDB transaction is enqueued synchronously inside saveSync(); browsers
     // preserve in-flight IDB transactions across lifecycle events.
     this.boundOnVisibilityChange = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -106,11 +113,16 @@ export class AutoSave {
     this.boundOnBeforeUnload = null;
   }
 
-  /** If a debounced save is pending, execute it immediately. */
+  /**
+   * If a debounced save is pending, execute it immediately and synchronously.
+   * Uses SessionStore.saveSync() to enqueue the IDB write without yielding
+   * to the microtask queue — critical during beforeunload/visibilitychange
+   * where an async await may be skipped by the browser during page teardown.
+   */
   flushPendingSave(): void {
     if (this.timer !== null) {
       this.clearTimer();
-      this.save();
+      this.saveSync();
     }
   }
 
@@ -141,5 +153,17 @@ export class AutoSave {
 
     const snapshot = snapshotFromState(this.state, this.undoManager);
     this.store.save(snapshot);
+  }
+
+  /**
+   * Synchronous save for page lifecycle handlers.
+   * Uses SessionStore.saveSync() to avoid async yield during page teardown.
+   */
+  private saveSync(): void {
+    if (this.destroyed) return;
+    if (this.state.tableName.get() == null) return;
+
+    const snapshot = snapshotFromState(this.state, this.undoManager);
+    this.store.saveSync(snapshot);
   }
 }

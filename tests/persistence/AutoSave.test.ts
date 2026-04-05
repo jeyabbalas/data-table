@@ -25,6 +25,7 @@ function createMockStore(): SessionStore {
   return {
     open: vi.fn().mockResolvedValue(true),
     save: vi.fn().mockResolvedValue(undefined),
+    saveSync: vi.fn(),
     load: vi.fn().mockResolvedValue(null),
     delete: vi.fn().mockResolvedValue(undefined),
     list: vi.fn().mockResolvedValue([]),
@@ -264,20 +265,20 @@ describe('AutoSave', () => {
   // --- Flush ---
 
   describe('flushPendingSave', () => {
-    it('executes pending save immediately', () => {
+    it('executes pending save immediately via synchronous saveSync', () => {
       const autoSave = new AutoSave(state, store);
       autoSave.enable();
 
       state.filters.set([{ type: 'null', column: 'name' }]);
       // Timer is pending but hasn't fired
-      expect(store.save).not.toHaveBeenCalled();
+      expect(store.saveSync).not.toHaveBeenCalled();
 
       autoSave.flushPendingSave();
-      expect(store.save).toHaveBeenCalledTimes(1);
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
 
       // Original timer should be cleared — advancing time should not produce another save
       vi.advanceTimersByTime(2000);
-      expect(store.save).toHaveBeenCalledTimes(1);
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
 
       autoSave.destroy();
     });
@@ -287,7 +288,7 @@ describe('AutoSave', () => {
       autoSave.enable();
 
       autoSave.flushPendingSave();
-      expect(store.save).not.toHaveBeenCalled();
+      expect(store.saveSync).not.toHaveBeenCalled();
 
       autoSave.destroy();
     });
@@ -301,7 +302,8 @@ describe('AutoSave', () => {
       expect(store.save).toHaveBeenCalledTimes(1);
 
       autoSave.flushPendingSave();
-      expect(store.save).toHaveBeenCalledTimes(1);
+      // saveSync should not be called — the async save already handled it
+      expect(store.saveSync).not.toHaveBeenCalled();
 
       autoSave.destroy();
     });

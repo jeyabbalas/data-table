@@ -501,6 +501,14 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
       localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session));
     } catch { /* localStorage may be unavailable */ }
 
+    // Enable auto-save immediately after data load (before visualization delay)
+    // so lifecycle handlers (beforeunload, visibilitychange) are registered.
+    // AutoSave only needs signals, not DOM — visualizations need the delay.
+    if (!autoSave) {
+      autoSave = new AutoSave(tableState, sessionStore, { undoManager });
+    }
+    autoSave.enable();
+
     // Attach visualizations after data loads
     const schema = tableState.schema.get();
     const currentTableName = tableState.tableName.get();
@@ -509,12 +517,6 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
       setTimeout(() => {
         attachVisualizations(currentTableName, schema);
         updateTableInfo();
-
-        // Enable auto-save after visualizations are attached
-        if (!autoSave) {
-          autoSave = new AutoSave(tableState, sessionStore, { undoManager });
-        }
-        autoSave.enable();
 
         // Cache data as Parquet in IndexedDB for auto-restore on page refresh
         bridge.exportToBuffer(

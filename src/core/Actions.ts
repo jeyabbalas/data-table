@@ -34,6 +34,7 @@ export class StateActions {
   private suppressUndoCapture = false;
   private widthDragSnapshot: StateSnapshot | null = null;
   private onFilterRemoveCallback?: (column: string) => void;
+  private initialSnapshot: StateSnapshot | null = null;
 
   constructor(
     private state: TableState,
@@ -136,6 +137,25 @@ export class StateActions {
     return this.undoManager;
   }
 
+  /**
+   * Reset to the original state captured at data-load time.
+   * Clears all filters, sorts, column customizations, and the undo/redo stacks.
+   * Returns true if state was restored.
+   */
+  resetToInitial(): boolean {
+    if (!this.initialSnapshot) return false;
+    this.suppressUndoCapture = true;
+    try {
+      const prevFilters = this.state.filters.get();
+      applySnapshot(this.state, this.initialSnapshot);
+      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+      this.undoManager?.clear();
+      return true;
+    } finally {
+      this.suppressUndoCapture = false;
+    }
+  }
+
   // =========================================
   // Data Loading
   // =========================================
@@ -165,6 +185,9 @@ export class StateActions {
     this.state.totalRows.set(result.rowCount);
     this.state.filteredRows.set(result.rowCount);
     initializeColumnsFromSchema(this.state, result.schema);
+
+    // Capture the clean initial state before any session restore
+    this.initialSnapshot = captureSnapshot(this.state);
 
     // Restore session if a store is provided and a snapshot exists
     if (options.sessionStore) {

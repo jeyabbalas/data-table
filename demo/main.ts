@@ -51,6 +51,7 @@ const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
+const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
 
 // Display version
 versionEl.textContent = VERSION;
@@ -628,11 +629,18 @@ bridge
       clearSessionBtn.disabled = !name;
     });
 
-    // Undo/redo buttons
+    // Undo/redo/reset buttons
     undoBtn.addEventListener('click', () => actions.undo());
     redoBtn.addEventListener('click', () => actions.redo());
+    resetBtn.addEventListener('click', () => {
+      actions.resetToInitial();
+      interactionManager.clear();
+      brushStates.clear();
+      selectionStates.clear();
+    });
     undoManager.canUndoSignal.subscribe((canUndo) => {
       undoBtn.disabled = !canUndo;
+      resetBtn.disabled = !canUndo;
     });
     undoManager.canRedoSignal.subscribe((canRedo) => {
       redoBtn.disabled = !canRedo;

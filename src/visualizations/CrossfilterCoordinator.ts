@@ -34,6 +34,16 @@ export class CrossfilterCoordinator {
     this.visualizations.delete(columnName);
   }
 
+  /** Sync filtered row count with current filter state.
+   * Call after registering all visualizations when filters may have been
+   * restored from persistence before the coordinator was created. */
+  syncExistingFilters(): void {
+    const filters = this.state.filters.get();
+    if (filters.length > 0) {
+      this.updateFilteredRowCount(filters, ++this.filterSequence);
+    }
+  }
+
   /** Route a visualization's onFilterChange to StateActions */
   handleFilterChange(columnName: string, filter: Filter | null): void {
     if (filter) {

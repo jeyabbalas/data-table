@@ -342,6 +342,9 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
     }
   }
 
+  // Sync filtered row count for filters restored from persistence
+  coordinator!.syncExistingFilters();
+
   // Fetch stats for columns without visualizations (e.g., interval)
   for (const header of headers) {
     const column = header.getColumn();

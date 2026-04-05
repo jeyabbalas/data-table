@@ -222,7 +222,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       this.emitDefaultStats();
 
       // Sync visual state from filter (e.g., panel-created range → brush overlay)
-      if (this.isFilterUpdate) {
+      if (this.isFilterUpdate || hasAnyFilter) {
         this.syncVisualStateFromFilter();
       }
 

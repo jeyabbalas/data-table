@@ -264,7 +264,7 @@ export class ValueCounts extends BaseVisualization {
 
     // Flag that the upcoming render should sync visual state from filter
     // (must happen after buildRenderSegments() inside render)
-    this.pendingFilterSync = this.isFilterUpdate;
+    this.pendingFilterSync = this.isFilterUpdate || this.options.filters.length > 0;
 
     this.render();
   }

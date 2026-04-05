@@ -26,6 +26,8 @@ export class AutoSave {
   private destroyed = false;
   private debounceMs: number;
   private undoManager: UndoManager | undefined;
+  private boundOnVisibilityChange: (() => void) | null = null;
+  private boundOnBeforeUnload: (() => void) | null = null;
 
   constructor(
     private state: TableState,
@@ -67,6 +69,23 @@ export class AutoSave {
         this.undoManager.canRedoSignal.subscribe(() => this.scheduleSave()),
       );
     }
+
+    // Flush pending saves on page hide / unload so refreshes don't lose state.
+    // The IDB transaction is enqueued synchronously inside save(); browsers
+    // preserve in-flight IDB transactions across lifecycle events.
+    this.boundOnVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        this.flushPendingSave();
+      }
+    };
+    this.boundOnBeforeUnload = () => this.flushPendingSave();
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.boundOnVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', this.boundOnBeforeUnload);
+    }
   }
 
   /** Unsubscribe from all signals and cancel any pending save. */
@@ -76,6 +95,23 @@ export class AutoSave {
     }
     this.unsubscribes = [];
     this.clearTimer();
+
+    if (this.boundOnVisibilityChange && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
+    }
+    if (this.boundOnBeforeUnload && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.boundOnBeforeUnload);
+    }
+    this.boundOnVisibilityChange = null;
+    this.boundOnBeforeUnload = null;
+  }
+
+  /** If a debounced save is pending, execute it immediately. */
+  flushPendingSave(): void {
+    if (this.timer !== null) {
+      this.clearTimer();
+      this.save();
+    }
   }
 
   /** Permanently disable auto-save and clean up. */

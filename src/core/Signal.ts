@@ -33,6 +33,11 @@ export interface Computed<T> {
   dispose(): void;
 }
 
+// ── Batching infrastructure ─────────────────────────────────────────
+
+let batchDepth = 0;
+const pendingSignals = new Set<SignalImpl<unknown>>();
+
 /**
  * Internal Signal implementation
  */
@@ -52,7 +57,13 @@ class SignalImpl<T> implements Signal<T> {
     // Only notify if value changed (shallow comparison)
     if (this.value !== newValue) {
       this.value = newValue;
-      this.notify();
+      if (batchDepth > 0) {
+        // Defer notification — value is updated immediately so get() returns
+        // the new value, but subscribers are notified after the batch ends.
+        pendingSignals.add(this as unknown as SignalImpl<unknown>);
+      } else {
+        this.notify();
+      }
     }
   }
 
@@ -67,7 +78,8 @@ class SignalImpl<T> implements Signal<T> {
     return this.subscribers.size;
   }
 
-  private notify(): void {
+  /** Notify subscribers of the current value. Also used by batch flush. */
+  notify(): void {
     for (const callback of this.subscribers) {
       callback(this.value);
     }
@@ -198,6 +210,19 @@ export function computed<T>(fn: () => T, deps: Signal<unknown>[]): Computed<T> {
  * ```
  */
 export function batch(fn: () => void): void {
-  // For future optimization - currently runs synchronously
-  fn();
+  batchDepth++;
+  try {
+    fn();
+  } finally {
+    batchDepth--;
+    if (batchDepth === 0 && pendingSignals.size > 0) {
+      // Flush: notify each signal once with its final value.
+      // Copy and clear first — notifications may trigger further sets.
+      const signals = [...pendingSignals];
+      pendingSignals.clear();
+      for (const signal of signals) {
+        signal.notify();
+      }
+    }
+  }
 }

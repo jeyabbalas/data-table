@@ -260,4 +260,50 @@ describe('AutoSave', () => {
       autoSave.destroy();
     });
   });
+
+  // --- Flush ---
+
+  describe('flushPendingSave', () => {
+    it('executes pending save immediately', () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      state.filters.set([{ type: 'null', column: 'name' }]);
+      // Timer is pending but hasn't fired
+      expect(store.save).not.toHaveBeenCalled();
+
+      autoSave.flushPendingSave();
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      // Original timer should be cleared — advancing time should not produce another save
+      vi.advanceTimersByTime(2000);
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      autoSave.destroy();
+    });
+
+    it('is a no-op when no save is pending', () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      autoSave.flushPendingSave();
+      expect(store.save).not.toHaveBeenCalled();
+
+      autoSave.destroy();
+    });
+
+    it('is a no-op after save has already fired', () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      state.filters.set([{ type: 'null', column: 'name' }]);
+      vi.advanceTimersByTime(1000);
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      autoSave.flushPendingSave();
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      autoSave.destroy();
+    });
+  });
 });

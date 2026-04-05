@@ -3,24 +3,38 @@
  *
  * Subscribes to all persistent state signals and debounces writes
  * to a SessionStore, preventing rapid saves during drag operations.
+ *
+ * When an UndoManager is provided, its undo/redo stacks are serialized
+ * and persisted alongside the table state so they survive browser refreshes.
  */
 
 import type { TableState } from '../core/State';
+import type { UndoManager } from '../core/UndoManager';
 import type { SessionStore } from './SessionStore';
 import { snapshotFromState } from './serialization';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
+export interface AutoSaveOptions {
+  debounceMs?: number;
+  undoManager?: UndoManager;
+}
+
 export class AutoSave {
   private unsubscribes: (() => void)[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  private debounceMs: number;
+  private undoManager: UndoManager | undefined;
 
   constructor(
     private state: TableState,
     private store: SessionStore,
-    private debounceMs: number = DEFAULT_DEBOUNCE_MS,
-  ) {}
+    options: AutoSaveOptions = {},
+  ) {
+    this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
+    this.undoManager = options.undoManager;
+  }
 
   /** Subscribe to all persistent state signals and begin auto-saving. */
   enable(): void {
@@ -40,6 +54,18 @@ export class AutoSave {
 
     for (const signal of signals) {
       this.unsubscribes.push(signal.subscribe(() => this.scheduleSave()));
+    }
+
+    // Subscribe to undo/redo stack changes so stacks are saved even when
+    // an undo/redo happens to produce the same state (equality guards skip
+    // signal notifications, but the stacks themselves have changed).
+    if (this.undoManager) {
+      this.unsubscribes.push(
+        this.undoManager.canUndoSignal.subscribe(() => this.scheduleSave()),
+      );
+      this.unsubscribes.push(
+        this.undoManager.canRedoSignal.subscribe(() => this.scheduleSave()),
+      );
     }
   }
 
@@ -77,7 +103,7 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state);
+    const snapshot = snapshotFromState(this.state, this.undoManager);
     this.store.save(snapshot);
   }
 }

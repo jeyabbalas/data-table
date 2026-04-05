@@ -170,7 +170,7 @@ export class StateActions {
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
       if (snapshot) {
-        restoreStateFromSnapshot(this.state, snapshot);
+        restoreStateFromSnapshot(this.state, snapshot, this.undoManager);
       }
     }
   }

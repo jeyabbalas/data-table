@@ -62,6 +62,22 @@ export interface DerivedColumnDef {
   expression: string;
 }
 
+/**
+ * A serialized StateSnapshot (undo/redo stack entry).
+ *
+ * Same fields as StateSnapshot but with JSON-safe types:
+ * Map → Record, Date → DateWrapper (via SerializedFilter).
+ */
+export interface SerializedStateSnapshot {
+  filters: SerializedFilter[];
+  sortColumns: SortColumn[];
+  visibleColumns: string[];
+  columnOrder: string[];
+  columnWidths: Record<string, number>;
+  pinnedColumns: string[];
+  hiddenColumnInfo: Record<string, HiddenColumnInfo>;
+}
+
 /** A serialized snapshot of table state, keyed by tableName in IndexedDB */
 export interface SessionSnapshot {
   version: number;
@@ -75,4 +91,8 @@ export interface SessionSnapshot {
   pinnedColumns: string[];
   hiddenColumnInfo: Record<string, HiddenColumnInfo>;
   derivedColumns: DerivedColumnDef[];
+  /** Persisted undo stack (oldest → newest). Absent in pre-v1 snapshots. */
+  undoStack?: SerializedStateSnapshot[];
+  /** Persisted redo stack (oldest → newest). Absent in pre-v1 snapshots. */
+  redoStack?: SerializedStateSnapshot[];
 }

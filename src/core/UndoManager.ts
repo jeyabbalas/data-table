@@ -277,6 +277,23 @@ export class UndoManager {
     this.updateSignals();
   }
 
+  /** Return shallow copies of both stacks (for serialization). */
+  getStacks(): { undoStack: StateSnapshot[]; redoStack: StateSnapshot[] } {
+    return {
+      undoStack: [...this.undoStack],
+      redoStack: [...this.redoStack],
+    };
+  }
+
+  /** Replace both stacks with deserialized data. Enforces maxDepth. */
+  loadStacks(undoStack: StateSnapshot[], redoStack: StateSnapshot[]): void {
+    this.undoStack = undoStack.length > this.maxDepth
+      ? undoStack.slice(undoStack.length - this.maxDepth)
+      : [...undoStack];
+    this.redoStack = [...redoStack];
+    this.updateSignals();
+  }
+
   private updateSignals(): void {
     this.canUndoSignal.set(this.undoStack.length > 0);
     this.canRedoSignal.set(this.redoStack.length > 0);

@@ -6,19 +6,88 @@
  */
 
 import type { TableState, HiddenColumnInfo } from '../core/State';
-import type { SessionSnapshot } from './types';
+import type { SessionSnapshot, SerializedStateSnapshot } from './types';
 import { SNAPSHOT_VERSION } from './types';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import { batch } from '../core/Signal';
+import type { UndoManager, StateSnapshot } from '../core/UndoManager';
+
+// ── StateSnapshot serialization (undo/redo stacks) ────────────────────
+
+/** Convert a runtime StateSnapshot to a JSON-safe SerializedStateSnapshot. */
+export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnapshot {
+  return {
+    filters: snap.filters.map(serializeFilter),
+    sortColumns: snap.sortColumns.map(s => ({ ...s })),
+    visibleColumns: [...snap.visibleColumns],
+    columnOrder: [...snap.columnOrder],
+    columnWidths: Object.fromEntries(snap.columnWidths),
+    pinnedColumns: [...snap.pinnedColumns],
+    hiddenColumnInfo: Object.fromEntries(
+      Array.from(snap.hiddenColumnInfo.entries()).map(
+        ([k, v]) => [k, { ...v }],
+      ),
+    ),
+  };
+}
+
+/**
+ * Convert a SerializedStateSnapshot back to a runtime StateSnapshot.
+ *
+ * Validates all fields against validColumns — stale column references
+ * are silently dropped, matching restoreStateFromSnapshot behavior.
+ */
+export function deserializeStateSnapshot(
+  s: SerializedStateSnapshot,
+  validColumns: Set<string>,
+): StateSnapshot {
+  const filters = s.filters
+    .map(deserializeFilter)
+    .filter(f => validColumns.has(f.column));
+
+  const sortColumns = s.sortColumns.filter(sc => validColumns.has(sc.column));
+
+  let visibleColumns = s.visibleColumns.filter(c => validColumns.has(c));
+  if (visibleColumns.length === 0) {
+    visibleColumns = [...validColumns];
+  }
+
+  const columnOrder = s.columnOrder.filter(c => validColumns.has(c));
+
+  const columnWidths = new Map<string, number>();
+  for (const [col, width] of Object.entries(s.columnWidths)) {
+    if (validColumns.has(col)) columnWidths.set(col, width);
+  }
+
+  const pinnedColumns = s.pinnedColumns.filter(c => validColumns.has(c));
+
+  const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();
+  for (const [col, info] of Object.entries(s.hiddenColumnInfo)) {
+    if (validColumns.has(col)) {
+      hiddenColumnInfo.set(col, {
+        column: info.column,
+        leftNeighbor: info.leftNeighbor && validColumns.has(info.leftNeighbor) ? info.leftNeighbor : null,
+        rightNeighbor: info.rightNeighbor && validColumns.has(info.rightNeighbor) ? info.rightNeighbor : null,
+      });
+    }
+  }
+
+  return { filters, sortColumns, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo };
+}
+
+// ── Session snapshot (full table state + optional undo stacks) ────────
 
 /**
  * Capture the current TableState as a serializable SessionSnapshot.
  *
  * Reads all relevant signals, converts Maps to Records, and serializes
  * filters (wrapping Date objects as DateWrapper markers).
+ *
+ * If an UndoManager is provided, its undo/redo stacks are serialized
+ * and included in the snapshot for persistence across refreshes.
  */
-export function snapshotFromState(state: TableState): SessionSnapshot {
-  return {
+export function snapshotFromState(state: TableState, undoManager?: UndoManager): SessionSnapshot {
+  const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
     tableName: state.tableName.get(),
@@ -31,6 +100,14 @@ export function snapshotFromState(state: TableState): SessionSnapshot {
     hiddenColumnInfo: Object.fromEntries(state.hiddenColumnInfo.get()),
     derivedColumns: [],
   };
+
+  if (undoManager) {
+    const { undoStack, redoStack } = undoManager.getStacks();
+    snapshot.undoStack = undoStack.map(serializeStateSnapshot);
+    snapshot.redoStack = redoStack.map(serializeStateSnapshot);
+  }
+
+  return snapshot;
 }
 
 /**
@@ -45,6 +122,7 @@ export function snapshotFromState(state: TableState): SessionSnapshot {
 export function restoreStateFromSnapshot(
   state: TableState,
   snapshot: SessionSnapshot,
+  undoManager?: UndoManager,
 ): void {
   const schemaColumns = state.schema.get();
   if (schemaColumns.length === 0) return;
@@ -122,4 +200,13 @@ export function restoreStateFromSnapshot(
     state.pinnedColumns.set(pinnedColumns);
     state.hiddenColumnInfo.set(hiddenColumnInfo);
   });
+
+  // Restore undo/redo stacks if present
+  if (undoManager && snapshot.undoStack) {
+    const deserialized = {
+      undoStack: snapshot.undoStack.map(s => deserializeStateSnapshot(s, validColumns)),
+      redoStack: (snapshot.redoStack ?? []).map(s => deserializeStateSnapshot(s, validColumns)),
+    };
+    undoManager.loadStacks(deserialized.undoStack, deserialized.redoStack);
+  }
 }

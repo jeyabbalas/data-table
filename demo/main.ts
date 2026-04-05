@@ -511,7 +511,7 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
 
         // Enable auto-save after visualizations are attached
         if (!autoSave) {
-          autoSave = new AutoSave(tableState, sessionStore);
+          autoSave = new AutoSave(tableState, sessionStore, { undoManager });
         }
         autoSave.enable();
 

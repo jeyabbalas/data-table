@@ -172,12 +172,19 @@ export {
 export type {
   SessionSnapshot,
   SerializedFilter,
+  SerializedStateSnapshot,
   DateWrapper,
   DerivedColumnDef,
 } from './persistence/types';
 export { SNAPSHOT_VERSION } from './persistence/types';
-export { snapshotFromState, restoreStateFromSnapshot } from './persistence/serialization';
+export {
+  snapshotFromState,
+  restoreStateFromSnapshot,
+  serializeStateSnapshot,
+  deserializeStateSnapshot,
+} from './persistence/serialization';
 export { AutoSave } from './persistence/AutoSave';
+export type { AutoSaveOptions } from './persistence/AutoSave';
 
 // Worker types (for advanced usage)
 export type {

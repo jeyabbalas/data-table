@@ -102,7 +102,7 @@ describe('AutoSave', () => {
     });
 
     it('uses custom debounceMs', () => {
-      const autoSave = new AutoSave(state, store, 500);
+      const autoSave = new AutoSave(state, store, { debounceMs: 500 });
       autoSave.enable();
 
       state.filters.set([{ type: 'null', column: 'name' }]);

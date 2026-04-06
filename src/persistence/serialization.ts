@@ -90,7 +90,7 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager):
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
-    tableName: state.tableName.get(),
+    tableName: state.baseTableName.get() ?? state.tableName.get(),
     filters: state.filters.get().map(serializeFilter),
     sortColumns: [...state.sortColumns.get()],
     visibleColumns: [...state.visibleColumns.get()],
@@ -98,7 +98,10 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager):
     columnWidths: Object.fromEntries(state.columnWidths.get()),
     pinnedColumns: [...state.pinnedColumns.get()],
     hiddenColumnInfo: Object.fromEntries(state.hiddenColumnInfo.get()),
-    derivedColumns: [],
+    derivedColumns: state.derivedColumns.get().map(d => {
+      if (d.kind === 'expression') return { ...d };
+      return { ...d, values: d.values.slice() } as typeof d;
+    }),
   };
 
   if (undoManager) {
@@ -200,6 +203,18 @@ export function restoreStateFromSnapshot(
     state.pinnedColumns.set(pinnedColumns);
     state.hiddenColumnInfo.set(hiddenColumnInfo);
   });
+
+  // Restore derivedColumns signal if present in snapshot.
+  // NOTE: This only sets the signal. The caller (loadData) must recreate
+  // the DuckDB VIEW and helper tables via DerivedColumnManager.restoreColumns().
+  if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
+    state.derivedColumns.set(
+      snapshot.derivedColumns.map(d => {
+        if (d.kind === 'expression') return { ...d };
+        return { ...d, values: d.values.slice() } as typeof d;
+      })
+    );
+  }
 
   // Restore undo/redo stacks if present
   if (undoManager && snapshot.undoStack) {

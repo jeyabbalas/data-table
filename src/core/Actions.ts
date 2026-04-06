@@ -219,16 +219,58 @@ export class StateActions {
     this.state.baseTableName.set(result.tableName);
     this.state.derivedColumns.set([]);
 
-    // Capture the clean initial state before any session restore
-    this.initialSnapshot = captureSnapshot(this.state);
-
     // Restore session if a store is provided and a snapshot exists
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
       if (snapshot) {
         restoreStateFromSnapshot(this.state, snapshot, this.undoManager);
+
+        // Recreate derived columns (VIEW + helper tables) if snapshot has them
+        if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
+          try {
+            const manager = this.ensureDerivedManager();
+            const restoredSchemas = await manager.restoreColumns(
+              this.state.derivedColumns.get()
+            );
+
+            if (restoredSchemas.length > 0) {
+              // Update schema with restored derived entries
+              const baseSchema = this.state.schema.get().filter(c => !c.isDerived);
+              this.state.schema.set([...baseSchema, ...restoredSchemas]);
+
+              // Switch tableName to VIEW
+              this.state.tableName.set(manager.getEffectiveTableName());
+
+              // Reconcile derivedColumns signal: drop any that failed to restore
+              const restoredNames = new Set(restoredSchemas.map(s => s.name));
+              this.state.derivedColumns.set(
+                this.state.derivedColumns.get().filter(d => restoredNames.has(d.name))
+              );
+
+              // Re-add derived columns to visibility/order arrays
+              // (restoreStateFromSnapshot drops them since they aren't in base schema)
+              const order = this.state.columnOrder.get();
+              const visible = this.state.visibleColumns.get();
+              const orderSet = new Set(order);
+              const visibleSet = new Set(visible);
+              for (const s of restoredSchemas) {
+                if (!orderSet.has(s.name)) order.push(s.name);
+                if (!visibleSet.has(s.name)) visible.push(s.name);
+              }
+              this.state.columnOrder.set([...order]);
+              this.state.visibleColumns.set([...visible]);
+            }
+          } catch (err) {
+            console.warn('Failed to restore derived columns:', err);
+            this.state.derivedColumns.set([]);
+          }
+        }
       }
     }
+
+    // Capture initial state AFTER session restore (including derived columns)
+    // so that resetToInitial restores to the fully loaded state
+    this.initialSnapshot = captureSnapshot(this.state);
   }
 
   // =========================================
@@ -646,8 +688,6 @@ export class StateActions {
       return { success: false, error: 'Column name cannot be empty' };
     }
 
-    this.captureForUndo();
-
     try {
       const manager = this.ensureDerivedManager();
       const info = await manager.addColumn(def);
@@ -711,8 +751,6 @@ export class StateActions {
     if (!def.name.trim()) {
       return { success: false, error: 'Column name cannot be empty' };
     }
-
-    this.captureForUndo();
 
     try {
       const manager = this.ensureDerivedManager();
@@ -827,8 +865,6 @@ export class StateActions {
     if (!entry?.isDerived) {
       throw new Error(`Column "${name}" is not a derived column`);
     }
-
-    this.captureForUndo();
 
     const manager = this.ensureDerivedManager();
     await manager.removeColumn(name);

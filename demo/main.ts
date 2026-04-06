@@ -681,7 +681,7 @@ bridge
 
     // Clear session button — deletes saved state, data cache, and localStorage
     clearSessionBtn.addEventListener('click', async () => {
-      const tableName = tableState.tableName.get();
+      const tableName = tableState.baseTableName.get() ?? tableState.tableName.get();
       if (tableName) {
         await sessionStore.delete(tableName);
         await clearCachedData(tableName);

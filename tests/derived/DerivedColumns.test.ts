@@ -71,6 +71,8 @@ describe('Derived Columns — Actions Integration', () => {
     { name: 'quantity', type: 'integer', nullable: true, originalType: 'INTEGER' },
   ];
 
+  let undoManager: UndoManager;
+
   beforeEach(() => {
     state = createTableState();
     mockBridge = createMockBridge({
@@ -78,7 +80,8 @@ describe('Derived Columns — Actions Integration', () => {
       'UPPER(name)': 'VARCHAR',
       'quantity + 1': 'BIGINT',
     });
-    actions = new StateActions(state, mockBridge as any);
+    undoManager = new UndoManager();
+    actions = new StateActions(state, mockBridge as any, undoManager);
 
     // Simulate loaded data state
     initializeColumnsFromSchema(state, sampleSchema);
@@ -718,6 +721,54 @@ describe('Derived Columns — Actions Integration', () => {
       expect(lastView).toContain('"total"');
       expect(lastView).toContain('LEFT JOIN');
       expect(lastView).toContain('__dt_vec_scores__');
+    });
+  });
+
+  // =========================================
+  // Derived column operations do NOT create undo points
+  // =========================================
+
+  describe('undo — derived column operations are non-undoable', () => {
+    it('addDerivedColumn does not push to undo stack', async () => {
+      expect(undoManager.canUndo).toBe(false);
+
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+
+      expect(undoManager.canUndo).toBe(false);
+    });
+
+    it('updateDerivedColumn does not push to undo stack', async () => {
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+
+      expect(undoManager.canUndo).toBe(false);
+
+      await actions.updateDerivedColumn('total', {
+        kind: 'expression',
+        name: 'grand_total',
+        expression: 'price * quantity * 1.1',
+      });
+
+      expect(undoManager.canUndo).toBe(false);
+    });
+
+    it('removeDerivedColumn does not push to undo stack', async () => {
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+
+      await actions.removeDerivedColumn('total');
+
+      expect(undoManager.canUndo).toBe(false);
     });
   });
 });

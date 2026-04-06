@@ -133,6 +133,24 @@ describe('AutoSave', () => {
     });
   });
 
+  // --- derivedColumns signal ---
+
+  describe('derivedColumns signal', () => {
+    it('triggers save when derivedColumns changes', () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      state.derivedColumns.set([
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ]);
+
+      vi.advanceTimersByTime(1000);
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      autoSave.destroy();
+    });
+  });
+
   // --- Lifecycle ---
 
   describe('enable / disable', () => {

@@ -127,10 +127,61 @@ describe('snapshotFromState', () => {
     expect(snapshot.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
   });
 
-  it('sets derivedColumns to empty array', () => {
+  it('serializes empty derivedColumns when none exist', () => {
     const state = setupState();
     const snapshot = snapshotFromState(state);
     expect(snapshot.derivedColumns).toEqual([]);
+  });
+
+  it('serializes expression derived columns from state', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'expression', name: 'total', expression: 'price * quantity' },
+    ]);
+
+    const snapshot = snapshotFromState(state);
+    expect(snapshot.derivedColumns).toHaveLength(1);
+    expect(snapshot.derivedColumns[0]).toEqual({
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
+    });
+  });
+
+  it('deep-copies vector derived column values', () => {
+    const state = setupState();
+    const values = [1, 2, 3];
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'scores', vectorType: 'float', values },
+    ]);
+
+    const snapshot = snapshotFromState(state);
+    expect(snapshot.derivedColumns).toHaveLength(1);
+
+    const vec = snapshot.derivedColumns[0];
+    expect(vec.kind).toBe('vector');
+    if (vec.kind === 'vector') {
+      expect(vec.values).toEqual([1, 2, 3]);
+      // Must be a deep copy — mutating original should not affect snapshot
+      values.push(4);
+      expect(vec.values).toHaveLength(3);
+    }
+  });
+
+  it('uses baseTableName for tableName when available', () => {
+    const state = setupState();
+    state.baseTableName.set('base_table');
+    state.tableName.set('__dt_view_base_table__');
+
+    const snapshot = snapshotFromState(state);
+    expect(snapshot.tableName).toBe('base_table');
+  });
+
+  it('falls back to tableName when baseTableName is null', () => {
+    const state = setupState();
+    // baseTableName defaults to null
+    const snapshot = snapshotFromState(state);
+    expect(snapshot.tableName).toBe('test_table');
   });
 });
 
@@ -462,5 +513,64 @@ describe('restoreStateFromSnapshot — edge cases', () => {
     expect(filter.values[1]).toBe('text');
     expect(filter.values[2]).toBe(42);
     expect(filter.includeNull).toBe(true);
+  });
+});
+
+// =========================================
+// restoreStateFromSnapshot — derivedColumns
+// =========================================
+
+describe('restoreStateFromSnapshot — derivedColumns', () => {
+  it('restores expression derived columns to state signal', () => {
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+    const derived = state.derivedColumns.get();
+    expect(derived).toHaveLength(1);
+    expect(derived[0]).toEqual({
+      kind: 'expression',
+      name: 'total',
+      expression: 'id * 2',
+    });
+  });
+
+  it('restores vector derived columns with deep-copied values', () => {
+    const values = [10, 20, 30];
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      derivedColumns: [
+        { kind: 'vector', name: 'scores', vectorType: 'float', values },
+      ],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+    const derived = state.derivedColumns.get();
+    expect(derived).toHaveLength(1);
+    if (derived[0].kind === 'vector') {
+      expect(derived[0].values).toEqual([10, 20, 30]);
+      // Must be a deep copy
+      values.push(40);
+      expect(derived[0].values).toHaveLength(3);
+    }
+  });
+
+  it('leaves derivedColumns empty when snapshot has none', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'expression', name: 'old', expression: 'id + 1' },
+    ]);
+
+    const snapshot = createTestSnapshot({ derivedColumns: [] });
+    restoreStateFromSnapshot(state, snapshot);
+
+    // derivedColumns should NOT be cleared — empty array means "no derived columns in snapshot"
+    // but the signal is only set when snapshot has entries
+    // This verifies the guard: if (snapshot.derivedColumns.length > 0)
+    expect(state.derivedColumns.get()).toHaveLength(1);
   });
 });

@@ -11,7 +11,7 @@ import type { NullFilter, PatternFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef } from '../derived/types';
 
 /** Current snapshot schema version — bump when the shape changes */
-export const SNAPSHOT_VERSION = 1;
+export const SNAPSHOT_VERSION = 2;
 
 /** Marker object for serialized Date instances */
 export interface DateWrapper {

@@ -143,7 +143,20 @@ export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]
       if ((a[i] as ExpressionColumnDef).expression !== (b[i] as ExpressionColumnDef).expression) return false;
     }
     if (a[i].kind === 'vector' && b[i].kind === 'vector') {
-      if ((a[i] as VectorColumnDef).values.length !== (b[i] as VectorColumnDef).values.length) return false;
+      const av = a[i] as VectorColumnDef;
+      const bv = b[i] as VectorColumnDef;
+      if (av.vectorType !== bv.vectorType) return false;
+      if (av.values.length !== bv.values.length) return false;
+      // Fast fingerprint: first, last, and middle values catch most real changes
+      if (av.values.length > 0) {
+        if (av.values[0] !== bv.values[0]) return false;
+        const last = av.values.length - 1;
+        if (av.values[last] !== bv.values[last]) return false;
+        if (av.values.length > 2) {
+          const mid = Math.floor(av.values.length / 2);
+          if (av.values[mid] !== bv.values[mid]) return false;
+        }
+      }
     }
   }
   return true;

@@ -203,25 +203,75 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       const prevFilters = this.state.filters.get();
-      applySnapshot(this.state, this.initialSnapshot);
-      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
-      this.undoManager?.clear();
 
-      // Destroy derived columns: drop VIEW + helper tables, reset signals
+      // Destroy derived columns BEFORE batch (async DuckDB operation)
       if (this.derivedManager) {
-        await this.derivedManager.destroy();
+        try { await this.derivedManager.destroy(); } catch { /* best-effort cleanup */ }
         this.derivedManager = null;
       }
-      const baseTableName = this.state.baseTableName.get();
-      this.state.derivedColumns.set([]);
-      // Restore schema to base columns only (remove derived entries)
-      this.state.schema.set(
-        this.state.schema.get().filter(c => !c.isDerived)
+
+      // Collect derived column names from snapshot to strip after restore.
+      // The initial snapshot may include derived columns from session restore.
+      const derivedNames = new Set(
+        this.initialSnapshot.derivedColumns.map(d => d.name)
       );
-      // Revert tableName to the base table
-      if (baseTableName) {
-        this.state.tableName.set(baseTableName);
-      }
+
+      // Apply snapshot + clean up derived refs + reset tableName atomically
+      batch(() => {
+        applySnapshot(this.state, this.initialSnapshot!);
+
+        this.state.derivedColumns.set([]);
+        this.state.schema.set(
+          this.state.schema.get().filter(c => !c.isDerived)
+        );
+
+        const baseTableName = this.state.baseTableName.get();
+        if (baseTableName) {
+          this.state.tableName.set(baseTableName);
+        }
+
+        // Strip derived column names from all column arrays restored by applySnapshot
+        if (derivedNames.size > 0) {
+          this.state.visibleColumns.set(
+            this.state.visibleColumns.get().filter(c => !derivedNames.has(c))
+          );
+          this.state.columnOrder.set(
+            this.state.columnOrder.get().filter(c => !derivedNames.has(c))
+          );
+          this.state.pinnedColumns.set(
+            this.state.pinnedColumns.get().filter(c => !derivedNames.has(c))
+          );
+          const hiddenInfo = new Map(this.state.hiddenColumnInfo.get());
+          for (const name of derivedNames) hiddenInfo.delete(name);
+          for (const [key, info] of hiddenInfo) {
+            if (derivedNames.has(info.leftNeighbor ?? '') || derivedNames.has(info.rightNeighbor ?? '')) {
+              hiddenInfo.set(key, {
+                ...info,
+                leftNeighbor: derivedNames.has(info.leftNeighbor ?? '') ? null : info.leftNeighbor,
+                rightNeighbor: derivedNames.has(info.rightNeighbor ?? '') ? null : info.rightNeighbor,
+              });
+            }
+          }
+          this.state.hiddenColumnInfo.set(hiddenInfo);
+          this.state.filters.set(
+            this.state.filters.get().filter(f => !derivedNames.has(f.column))
+          );
+          this.state.sortColumns.set(
+            this.state.sortColumns.get().filter(s => !derivedNames.has(s.column))
+          );
+          const widths = new Map(this.state.columnWidths.get());
+          for (const name of derivedNames) widths.delete(name);
+          this.state.columnWidths.set(widths);
+        }
+
+        // Reset filteredRows when initial state has no filters
+        if (this.initialSnapshot!.filters.length === 0) {
+          this.state.filteredRows.set(this.state.totalRows.get());
+        }
+      });
+
+      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+      this.undoManager?.clear();
 
       return true;
     } finally {

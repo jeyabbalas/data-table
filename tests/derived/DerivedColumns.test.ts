@@ -655,37 +655,168 @@ describe('Derived Columns — Actions Integration', () => {
   // =========================================
 
   describe('resetToInitial with derived columns', () => {
-    it('removes all derived columns and reverts tableName', async () => {
-      // Set up undo manager for resetToInitial to work
-      const undoManager = new UndoManager();
-      const actionsWithUndo = new StateActions(state, mockBridge as any, undoManager);
-
-      // Simulate loadData state (capture initial snapshot)
-      // resetToInitial needs initialSnapshot, so we simulate via a filter add+undo
-      // Actually, we need to trigger resetToInitial properly. Let's manually set up.
-      // The initialSnapshot is set in loadData(). Since we can't call loadData with a mock,
-      // we need to add a filter first to enable undo, then call resetToInitial.
-
-      // Add a derived column
-      await actionsWithUndo.addDerivedColumn({
-        kind: 'expression',
-        name: 'total',
-        expression: 'price * quantity',
+    // To test resetToInitial, we must go through loadData() which sets
+    // initialSnapshot (a private field). We use a mock bridge that handles
+    // both DataLoader and DerivedColumnManager SQL patterns.
+    function createLoadableBridge() {
+      return createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'UPPER(name)': 'VARCHAR',
       });
+    }
+
+    function createMockStore(
+      snapshot: import('../../src/persistence/types').SessionSnapshot | null = null,
+    ) {
+      return {
+        open: vi.fn().mockResolvedValue(true),
+        save: vi.fn().mockResolvedValue(undefined),
+        load: vi.fn().mockResolvedValue(snapshot),
+        delete: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([]),
+        close: vi.fn(),
+        saveSync: vi.fn(),
+      };
+    }
+
+    it('strips derived column names from visibleColumns and columnOrder', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+
+      // Load data with a session that has a derived column
+      const sessionSnapshot = {
+        version: 2, timestamp: Date.now(), tableName: 'test_table',
+        filters: [], sortColumns: [],
+        visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
+        columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
+        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
+        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+      };
+      const store = createMockStore(sessionSnapshot as any);
+      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+
+      // Verify initial state includes derived column
+      expect(state.visibleColumns.get()).toContain('total');
+      expect(state.columnOrder.get()).toContain('total');
       expect(state.derivedColumns.get()).toHaveLength(1);
-      expect(state.tableName.get()).toBe('__dt_view_test_table__');
 
-      // Add a filter to make undo stack non-empty (proves reset clears it)
-      actionsWithUndo.addFilter({ column: 'price', type: 'range', min: 0, max: 50 });
-      expect(undoManager.canUndo).toBe(true);
+      // Make a change so reset has something to undo
+      act.addFilter({ column: 'price', type: 'range', min: 0, max: 50 });
 
-      // Call resetToInitial — this requires initialSnapshot to exist
-      // Since we didn't call loadData, initialSnapshot is null; resetToInitial returns false
-      const result = await actionsWithUndo.resetToInitial();
+      // Reset
+      const result = await act.resetToInitial();
+      expect(result).toBe(true);
 
-      // Without loadData, there's no initial snapshot, so it returns false
-      // This is expected — the real test is via integration below
-      expect(result).toBe(false);
+      // Derived columns should be fully cleaned up
+      expect(state.derivedColumns.get()).toHaveLength(0);
+      expect(state.tableName.get()).toBe('test_table');
+      expect(state.visibleColumns.get()).not.toContain('total');
+      expect(state.columnOrder.get()).not.toContain('total');
+      expect(state.schema.get().every(c => !c.isDerived)).toBe(true);
+    });
+
+    it('strips derived column names from pinnedColumns', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+
+      // Load with a session that has a derived column (but not pinned — pins
+      // for derived cols are dropped by restoreStateFromSnapshot because
+      // derived cols aren't in the base schema yet at restore time).
+      const sessionSnapshot = {
+        version: 2, timestamp: Date.now(), tableName: 'test_table',
+        filters: [], sortColumns: [],
+        visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
+        columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
+        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
+        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+      };
+      const store = createMockStore(sessionSnapshot as any);
+      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+
+      // Pin the derived column AFTER load (simulates user interaction)
+      act.toggleColumnPin('total');
+      expect(state.pinnedColumns.get()).toContain('total');
+
+      await act.resetToInitial();
+
+      // Derived column pin should be stripped
+      expect(state.pinnedColumns.get()).not.toContain('total');
+      expect(state.derivedColumns.get()).toHaveLength(0);
+    });
+
+    it('resets filteredRows to totalRows when initial state has no filters', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table' });
+
+      // Simulate stale filteredRows (e.g., from a filter that was applied)
+      act.addFilter({ column: 'price', type: 'range', min: 0, max: 50 });
+      state.filteredRows.set(42);
+
+      await act.resetToInitial();
+
+      expect(state.filteredRows.get()).toBe(100);
+    });
+
+    it('succeeds even when derivedManager.destroy() throws', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+
+      const sessionSnapshot = {
+        version: 2, timestamp: Date.now(), tableName: 'test_table',
+        filters: [], sortColumns: [],
+        visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
+        columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
+        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
+        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+      };
+      const store = createMockStore(sessionSnapshot as any);
+      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+
+      // Make destroy throw by making DROP VIEW fail
+      let dropCount = 0;
+      bridge.query.mockImplementation(async (sql: string) => {
+        if (/^DROP/i.test(sql.trim())) {
+          dropCount++;
+          // Let the first drop calls from loadData succeed, but fail on reset
+          if (dropCount > 5) throw new Error('Simulated DuckDB error');
+        }
+        if (sql.includes('typeof(')) return [{ t: 'DOUBLE' }];
+        if (sql.includes('LIMIT 0')) return [];
+        return [];
+      });
+
+      act.addFilter({ column: 'price', type: 'range', min: 0, max: 50 });
+
+      // Should not throw
+      const result = await act.resetToInitial();
+      expect(result).toBe(true);
+      expect(state.derivedColumns.get()).toHaveLength(0);
+      expect(state.tableName.get()).toBe('test_table');
     });
   });
 

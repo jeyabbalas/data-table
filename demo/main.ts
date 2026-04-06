@@ -609,19 +609,21 @@ bridge
 
     // Subscribe to column reorder to re-attach visualizations
     tableState.visibleColumns.subscribe(() => {
-      const tableName = tableState.tableName.get();
-
       // Only re-attach if visualizations were already attached initially
-      if (!tableName || !visualizationsAttached) return;
+      if (!tableState.tableName.get() || !visualizationsAttached) return;
 
       // Clear any pending reorder timeout
       if (reorderTimeout) {
         clearTimeout(reorderTimeout);
       }
 
-      // Debounce re-attachment
+      // Debounce re-attachment. Read tableName inside the callback so it
+      // reflects the settled value (not a stale capture from when the
+      // subscriber fired, which may precede a tableName update).
       reorderTimeout = setTimeout(() => {
         reorderTimeout = null;
+        const tableName = tableState.tableName.get();
+        if (!tableName) return;
         const schema = tableState.schema.get();
         attachVisualizations(tableName, schema);
         updateTableInfo();

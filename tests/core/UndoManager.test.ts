@@ -828,16 +828,46 @@ describe('derivedColumnsEqual', () => {
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
-  it('returns true for vector columns with same length', () => {
+  it('returns true for vector columns with identical values', () => {
     const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [4, 5, 6] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
     expect(derivedColumnsEqual(a, b)).toBe(true);
+  });
+
+  it('returns false for vector columns with different first values', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [4, 2, 3] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns false for vector columns with different last values', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns false for vector columns with different middle values', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3, 4, 5] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9, 4, 5] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns false for vector columns with different lengths', () => {
     const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2] }];
     const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
     expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns false for vector columns with different vectorType', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'integer', values: [1, 2, 3] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns true for empty vector columns with same type', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [] }];
+    expect(derivedColumnsEqual(a, b)).toBe(true);
   });
 
   it('handles multiple columns in order', () => {
@@ -847,9 +877,21 @@ describe('derivedColumnsEqual', () => {
     ];
     const b: DerivedColumnDef[] = [
       { kind: 'expression', name: 'x', expression: '1' },
-      { kind: 'vector', name: 'y', vectorType: 'integer', values: [3, 4] },
+      { kind: 'vector', name: 'y', vectorType: 'integer', values: [1, 2] },
     ];
     expect(derivedColumnsEqual(a, b)).toBe(true);
+  });
+
+  it('handles multiple columns with differing vector values', () => {
+    const a: DerivedColumnDef[] = [
+      { kind: 'expression', name: 'x', expression: '1' },
+      { kind: 'vector', name: 'y', vectorType: 'integer', values: [1, 2] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'expression', name: 'x', expression: '1' },
+      { kind: 'vector', name: 'y', vectorType: 'integer', values: [3, 4] },
+    ];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 });
 

@@ -379,11 +379,193 @@ Modify `src/table/TableContainer.ts`.
 **Verification:**
 - Simulate keydown events, verify undo/redo called
 
-### Task 8.4: Derived Columns — Type System and State
+### Task 8.4: Derived Columns — Types, State, DuckDB Manager, and Actions
 
-Derived columns are a **virtual layer** over immutable source data. They enable computed expressions for EDA/DQ without modifying the original dataset.
+Derived columns are a **virtual, mutable layer** over the immutable source data table for EDA/DQ. Two modes of derived column creation are supported:
 
-Modify `src/core/types.ts` — extend `ColumnSchema`:
+1. **SQL expression columns**: A DuckDB SQL expression referencing existing columns (e.g., `price * quantity`). DuckDB evaluates the expression.
+2. **Pre-computed vector columns**: JavaScript provides a typed array of values (e.g., `[0.1, 0.5, 0.3, ...]`). Values are stored in a DuckDB helper table.
+
+Both modes ultimately live in a single DuckDB VIEW that all existing query paths read transparently.
+
+**Core mechanism:** When derived columns exist, `DerivedColumnManager` creates a DuckDB VIEW (`__dt_view_<baseTableName>__`) that includes all base columns plus derived columns. `state.tableName` is switched to the VIEW name. All existing query code (`TableBody.buildRowQuery()`, `ExportQuery.buildSelectQuery()`, visualization data fetchers in `HistogramData.ts`/`ValueCounts.ts`, stats queries) already reads `state.tableName.get()` and passes it through `quoteIdentifier()` — they will automatically query the VIEW with **no changes needed** in those files.
+
+#### Files to Create
+
+**`src/derived/types.ts`**:
+
+```typescript
+import type { DataType } from '../core/types';
+
+/** Discriminant for derived column kind */
+export type DerivedColumnKind = 'expression' | 'vector';
+
+/** Supported types for pre-computed vector data */
+export type VectorDataType = 'integer' | 'float' | 'string' | 'boolean';
+
+/** SQL expression column — DuckDB evaluates the expression */
+export interface ExpressionColumnDef {
+  kind: 'expression';
+  name: string;           // column alias (must be unique across all columns)
+  expression: string;     // DuckDB SQL expression, e.g. "price * quantity"
+}
+
+/** Pre-computed vector column — values provided by JavaScript */
+export interface VectorColumnDef {
+  kind: 'vector';
+  name: string;           // column alias (must be unique across all columns)
+  vectorType: VectorDataType;
+  values: number[] | string[] | boolean[];
+}
+
+/** Union of both derived column kinds */
+export type DerivedColumnDef = ExpressionColumnDef | VectorColumnDef;
+
+/** Runtime metadata after adding a column — extends the def with detected DuckDB info */
+export interface DerivedColumnInfo {
+  def: DerivedColumnDef;
+  detectedType: DataType;
+  detectedOriginalType: string; // DuckDB type string, e.g. "DOUBLE", "VARCHAR"
+}
+
+/**
+ * Completion context exposed for expression editor autocompletion.
+ * Downstream apps can use this with CodeMirror or similar editors.
+ */
+export interface CompletionContext {
+  columns: Array<{ name: string; type: string; isDerived: boolean }>;
+  /** DuckDB function names (optional, can be populated lazily) */
+  functions?: string[];
+}
+```
+
+**`src/derived/DerivedColumnManager.ts`** — handles all DuckDB operations for derived columns:
+
+```typescript
+import type { WorkerBridge } from '../data/WorkerBridge';
+import type { ColumnSchema, DataType } from '../core/types';
+import type { DerivedColumnDef, DerivedColumnInfo, VectorColumnDef, CompletionContext } from './types';
+import { quoteIdentifier } from '../filters/FilterSQL';
+import { mapDuckDBType } from '../data/SchemaDetector';
+
+export class DerivedColumnManager {
+  /** Current derived columns in order */
+  private columns: DerivedColumnInfo[] = [];
+  /** VIEW name used when derived columns exist */
+  private readonly viewName: string;
+
+  constructor(
+    private bridge: WorkerBridge,
+    private baseTableName: string
+  ) {
+    this.viewName = `__dt_view_${baseTableName}__`;
+  }
+
+  // --- Public API ---
+
+  /** Returns VIEW name if derived columns exist, base table name otherwise */
+  getEffectiveTableName(): string;
+
+  /** Returns current derived column info list */
+  getColumns(): DerivedColumnInfo[];
+
+  /**
+   * Add a derived column. Validates expression (or creates helper table for vectors),
+   * detects type via DuckDB, recreates VIEW, returns ColumnSchema with isDerived: true.
+   */
+  async addColumn(def: DerivedColumnDef): Promise<ColumnSchema>;
+
+  /**
+   * Update a derived column's expression/name/values.
+   * Validates, recreates VIEW (and helper table if vector). Returns updated ColumnSchema.
+   */
+  async updateColumn(oldName: string, def: DerivedColumnDef): Promise<ColumnSchema>;
+
+  /**
+   * Remove a derived column. Drops helper table if vector.
+   * Recreates VIEW without column, or drops VIEW entirely if last derived column.
+   */
+  async removeColumn(name: string): Promise<void>;
+
+  /**
+   * Validate an expression without adding it. For UI preview/validation button.
+   * Returns { valid, type?, originalType?, error? }
+   */
+  async validateExpression(expression: string, alias?: string): Promise<{
+    valid: boolean;
+    type?: DataType;
+    originalType?: string;
+    error?: string;
+  }>;
+
+  /**
+   * Build completion context for editor autocompletion.
+   * Lists all base + derived column names with types.
+   */
+  getCompletionContext(baseSchema: ColumnSchema[]): CompletionContext;
+
+  /**
+   * Recreate all derived columns from saved definitions (for session restore / undo).
+   * Creates helper tables for vectors, then creates VIEW. Returns ColumnSchema[] in order.
+   * Throws on first failure.
+   */
+  async restoreColumns(defs: DerivedColumnDef[]): Promise<ColumnSchema[]>;
+
+  /** Clean up: drop VIEW, drop all helper tables */
+  async destroy(): Promise<void>;
+
+  // --- Private implementation ---
+
+  /** Validate expression: SELECT (<expr>) AS "<alias>" FROM "<base>" LIMIT 0 */
+  private async validateExpressionSQL(expression: string, alias: string): Promise<void>;
+
+  /** Detect type: SELECT typeof((<expr>)) AS t FROM "<base>" LIMIT 1, then mapDuckDBType() */
+  private async detectType(expression: string): Promise<{ type: DataType; originalType: string }>;
+
+  /** Create helper table __dt_vec_<name>__ with (__rowid__ BIGINT, "<col>" <TYPE>) and INSERT values in batches of 1000 */
+  private async createVectorHelperTable(def: VectorColumnDef): Promise<void>;
+
+  /** DROP TABLE IF EXISTS for a vector column's helper table */
+  private async dropVectorHelperTable(name: string): Promise<void>;
+
+  /** Helper table name for a given column: __dt_vec_<sanitizedName>__ */
+  private helperTableName(columnName: string): string;
+
+  /** Map VectorDataType to DuckDB type string */
+  private vectorTypeToDuckDBType(vt: VectorDataType): string;
+
+  /**
+   * Recreate the VIEW from current columns list.
+   * Expression columns contribute `(<expr>) AS "<name>"` in the SELECT list.
+   * Vector columns contribute a LEFT JOIN with the helper table and `h<n>."<name>"` in the SELECT list.
+   */
+  private async recreateView(): Promise<void>;
+
+  /** DROP VIEW IF EXISTS */
+  private async dropView(): Promise<void>;
+}
+```
+
+**VIEW SQL pattern** — the `recreateView()` method builds SQL like:
+
+```sql
+CREATE OR REPLACE VIEW "__dt_view_table_1__" AS
+  SELECT t.*,
+    (price * quantity) AS "total",         -- expression column (inline in SELECT)
+    h1."score"                             -- vector column (from helper table JOIN)
+  FROM "table_1" t
+    LEFT JOIN "__dt_vec_score__" h1 ON t.rowid = h1.__rowid__
+```
+
+**Vector helper tables**: Each vector column gets its own helper table `__dt_vec_<sanitizedName>__` with columns `(__rowid__ BIGINT, "<colName>" <TYPE>)`. The `createVectorHelperTable()` method: (1) drops existing table, (2) creates table with schema, (3) inserts values in batches of 1000 rows using `INSERT INTO ... VALUES (0, val0), (1, val1), ...`. String values must be SQL-escaped. The VIEW JOINs on DuckDB's implicit `rowid` pseudo-column for positional alignment — this is safe because the source data table is immutable.
+
+**Validation**: `SELECT (<expr>) AS "__test__" FROM "<baseTable>" LIMIT 0` — if DuckDB throws, the error message is returned to the UI.
+
+**Type detection**: `SELECT typeof((<expr>)) AS t FROM "<baseTable>" LIMIT 1` — result mapped through `mapDuckDBType()` from `src/data/SchemaDetector.ts`.
+
+#### Files to Modify
+
+**`src/core/types.ts`** — extend `ColumnSchema`:
 
 ```typescript
 export interface ColumnSchema {
@@ -391,130 +573,549 @@ export interface ColumnSchema {
   type: DataType;
   nullable: boolean;
   originalType: string;
-  isDerived?: boolean;      // true for computed columns
-  expression?: string;      // SQL expression (only for derived)
+  isDerived?: boolean;      // true for derived columns (expression or vector)
+  expression?: string;      // SQL expression (expression columns only, not set for vectors)
 }
 ```
 
-Create `src/derived/types.ts`:
+**`src/core/State.ts`** — add two signals to `TableState` interface:
 
 ```typescript
-export interface DerivedColumnDef {
-  name: string;           // column alias
-  expression: string;     // DuckDB SQL expression
-  type?: DataType;        // detected after creation
-  originalType?: string;  // DuckDB type string
-}
+/** Derived column definitions (expression + vector), ordered */
+derivedColumns: Signal<DerivedColumnDef[]>;
+/** Original table name before VIEW was created (null when no derived columns exist yet) */
+baseTableName: Signal<string | null>;
 ```
 
-Modify `src/core/State.ts` — add to `TableState`:
-- `derivedColumns: Signal<DerivedColumnDef[]>` (starts as `[]`)
-- `baseTableName: Signal<string | null>` (stores original table name when a view is active)
+Add to `createTableState()`: `derivedColumns: createSignal<DerivedColumnDef[]>([])` and `baseTableName: createSignal<string | null>(null)`.
 
-**Verification:**
-- Unit tests for state creation with new signals
+Add to `resetTableState()`: `state.derivedColumns.set([])` and `state.baseTableName.set(null)`.
 
-### Task 8.5: Derived Columns — DuckDB Integration and CRUD
+**`src/core/Actions.ts`** — store `bridge` as a property (currently only passed to `new DataLoader(bridge)`, but derived column operations need direct access). Add `private derivedManager: DerivedColumnManager | null = null`.
 
-Create `src/derived/DerivedColumnManager.ts`.
-
-**Core approach:** When derived columns exist, create a DuckDB VIEW (`__dt_view__`) that includes all base columns plus derived expressions. Switch `state.tableName` to the view name. All existing query code (`TableBody`, `ExportQuery`, visualization data fetchers, stats) already uses `state.tableName.get()` and will automatically query the view — **no changes needed in those files**.
+Add these public methods:
 
 ```typescript
-export class DerivedColumnManager {
-  constructor(bridge: WorkerBridge, baseTableName: string);
+/**
+ * Add a derived column (expression or vector).
+ * 1. Validates name uniqueness against state.schema.get()
+ * 2. Delegates to DerivedColumnManager (validates expression / creates helper table, recreates VIEW)
+ * 3. Updates state signals: derivedColumns, schema (append), visibleColumns (append), columnOrder (append), columnWidths (set default)
+ * 4. Switches state.tableName to VIEW name
+ * Calls captureForUndo() before mutating state.
+ */
+async addDerivedColumn(def: DerivedColumnDef): Promise<{ success: boolean; error?: string }>;
 
-  // Validate → detect type → recreate view → return ColumnSchema with isDerived: true
-  async addColumn(def: DerivedColumnDef): Promise<ColumnSchema>;
+/**
+ * Update a derived column's expression, name, or values.
+ * 1. Validates new name uniqueness (excluding self if renaming)
+ * 2. Delegates to DerivedColumnManager
+ * 3. If renamed: updates all references in filters, sortColumns, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo
+ * 4. If type changed: removes stale filters for that column and triggers onFilterRemoveCallback
+ * 5. Updates schema and derivedColumns signals
+ * Calls captureForUndo() before mutating state.
+ */
+async updateDerivedColumn(
+  oldName: string,
+  def: DerivedColumnDef
+): Promise<{ success: boolean; error?: string }>;
 
-  // Validate → recreate view with updated expression
-  async updateColumn(oldName: string, def: DerivedColumnDef): Promise<ColumnSchema>;
+/**
+ * Remove a derived column.
+ * 1. Cleans up: removes filters referencing this column, removes from sortColumns,
+ *    removes from pinnedColumns, removes from hiddenColumnInfo
+ * 2. Removes from derivedColumns, schema, visibleColumns, columnOrder, columnWidths
+ * 3. Delegates to DerivedColumnManager (drops helper table if vector, recreates/drops VIEW)
+ * 4. If last derived column: reverts state.tableName to state.baseTableName
+ * Calls captureForUndo() before mutating state. Triggers onFilterRemoveCallback if filters were removed.
+ */
+async removeDerivedColumn(name: string): Promise<void>;
 
-  // Recreate view without column (or drop view if last derived column)
-  async removeColumn(name: string): Promise<void>;
+/**
+ * Validate an expression without adding it. For UI preview.
+ * Returns { valid, type?, originalType?, error? }
+ */
+async validateExpression(expression: string): Promise<{
+  valid: boolean;
+  type?: DataType;
+  originalType?: string;
+  error?: string;
+}>;
 
-  // Returns view name if derived columns exist, base table otherwise
-  getEffectiveTableName(): string;
+/**
+ * Get completion context for expression editor autocompletion.
+ * Returns column names with types and isDerived flag.
+ */
+getCompletionContext(): CompletionContext;
+```
+
+Modify `loadData()` — after loading data, initialize derived column state:
+- `this.state.baseTableName.set(result.tableName)` — store original table name
+- `this.state.derivedColumns.set([])` — reset derived columns
+- `this.derivedManager = null` — reset manager for new data
+
+The `ensureDerivedManager()` private method lazily creates `new DerivedColumnManager(this.bridge, baseTableName)`.
+
+**Verification:**
+- Add expression column → VIEW SQL correct, schema updated, tableName switched to VIEW
+- Add vector column → helper table created with correct values, VIEW JOINs correctly
+- Query through VIEW returns correct results for both column types
+- Validation errors returned for bad SQL expressions
+- Name conflict rejected (against both source and existing derived columns)
+- Rename updates all state references (filters, sorts, pins, etc.)
+- Delete cleans up filters/sorts/pins for deleted column
+- Delete last derived column → VIEW dropped, tableName reverts to base table
+- Type change on edit → stale filters removed for that column
+
+### Task 8.5: Derived Columns — Undo/Redo and Persistence
+
+Extends the undo/redo system to support derived column operations and updates persistence to include derived column definitions (including vector values).
+
+**Background context:** The current undo system is **synchronous**. `StateSnapshot` (in `src/core/UndoManager.ts`) captures signal values. `captureSnapshot()` and `applySnapshot()` are sync functions. `StateActions.undo()` returns `boolean`. But derived column operations require async DuckDB VIEW recreation when restoring a snapshot with different derived columns. This task makes undo/redo **partially async**.
+
+**Design strategy:** Keep `applySnapshot()` synchronous for signal-level state (fast UI update). Add an async `reconcileDerivedColumns()` step that the caller (`undo()`/`redo()` in Actions) invokes after `applySnapshot()` when derived columns differ from the pre-undo state.
+
+#### Files to Modify
+
+**`src/core/UndoManager.ts`** — extend `StateSnapshot`:
+
+```typescript
+export interface StateSnapshot {
+  filters: Filter[];
+  sortColumns: SortColumn[];
+  visibleColumns: string[];
+  columnOrder: string[];
+  columnWidths: Map<string, number>;
+  pinnedColumns: string[];
+  hiddenColumnInfo: Map<string, HiddenColumnInfo>;
+  derivedColumns: DerivedColumnDef[];    // NEW — deep copy of definitions
+  baseTableName: string | null;          // NEW — original table name
 }
 ```
 
-Validation uses DuckDB: `SELECT (expression) AS "name" FROM base_table LIMIT 0`.
-Type detection: `SELECT typeof((expression)) AS t FROM base_table LIMIT 1`.
-View creation: `CREATE OR REPLACE VIEW __dt_view__ AS SELECT *, (expr1) AS "col1", (expr2) AS "col2" FROM base_table`.
+Update `captureSnapshot()` to deep-copy `derivedColumns` (including vector `values` arrays):
+```typescript
+derivedColumns: state.derivedColumns.get().map(d => {
+  if (d.kind === 'vector') return { ...d, values: [...d.values] };
+  return { ...d };
+}),
+baseTableName: state.baseTableName.get(),
+```
 
-Modify `src/core/Actions.ts` — add:
-- `async addDerivedColumn(name, expression): Promise<{ success: boolean; error?: string }>` — validates name uniqueness against `state.schema.get()`, delegates to manager, updates `derivedColumns` signal, appends to schema/visibleColumns/columnOrder, switches `tableName` to view
-- `async updateDerivedColumn(oldName, name, expression): Promise<{ success: boolean; error?: string }>` — validates, recreates view, updates schema
-- `async removeDerivedColumn(name): Promise<void>` — with undo capture, removes from all state signals, reverts `tableName` to `baseTableName` if last derived column
+Update `applySnapshot()` to restore `derivedColumns` and `baseTableName` signals synchronously. **Important:** `applySnapshot()` does NOT set `state.tableName` — that is set by the caller after async VIEW reconciliation. This prevents queries from firing against a non-existent VIEW.
+
+Add a helper function:
+```typescript
+/** Shallow equality check for derived column lists (by name, kind, expression/values.length) */
+export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]): boolean;
+```
+
+**`src/core/Actions.ts`** — change `undo()` and `redo()` from sync to async:
+
+```typescript
+async undo(): Promise<boolean> {
+  if (!this.undoManager?.canUndo) return false;
+  this.suppressUndoCapture = true;
+  try {
+    const prevDerived = this.state.derivedColumns.get();
+    const current = captureSnapshot(this.state);
+    const snapshot = this.undoManager.undo(current);
+    if (!snapshot) return false;
+
+    applySnapshot(this.state, snapshot);  // sync: signals updated immediately
+    // ... notify removed filters ...
+
+    if (!derivedColumnsEqual(prevDerived, snapshot.derivedColumns)) {
+      await this.reconcileDerivedColumns(snapshot);  // async: DuckDB VIEW recreation
+    } else {
+      // tableName unchanged, set it based on current derived state
+      this.state.tableName.set(
+        snapshot.derivedColumns.length > 0
+          ? this.ensureDerivedManager().getEffectiveTableName()
+          : snapshot.baseTableName
+      );
+    }
+    return true;
+  } finally {
+    this.suppressUndoCapture = false;
+  }
+}
+// redo() follows the same pattern
+```
+
+Add private `reconcileDerivedColumns()`:
+```typescript
+/**
+ * Reconcile DuckDB VIEW state after undo/redo changes derived columns.
+ * 1. Destroys existing DerivedColumnManager (drops VIEW + helper tables)
+ * 2. If snapshot has no derived columns: reverts tableName to baseTableName
+ * 3. Otherwise: creates new manager, calls restoreColumns(), updates schema, sets tableName to VIEW
+ */
+private async reconcileDerivedColumns(snapshot: StateSnapshot): Promise<void>;
+```
+
+**Backward compatibility:** Existing callers of `undo()` and `redo()` — the keyboard handler in `TableContainer.ts` and button handler in `demo/main.ts` — do not use the return value, so changing from `boolean` to `Promise<boolean>` is safe (returning a Promise where the caller expects void is a no-op).
+
+**`src/persistence/types.ts`**:
+- Replace the stub `DerivedColumnDef` with a re-export: `export type { DerivedColumnDef } from '../derived/types';`
+- Also export `ExpressionColumnDef`, `VectorColumnDef` from `../derived/types`
+- Add `derivedColumns` and `baseTableName` fields to `SerializedStateSnapshot`
+- Bump `SNAPSHOT_VERSION` to `2`
+
+**`src/persistence/serialization.ts`**:
+- Update `snapshotFromState()` to include `derivedColumns` with full vector values (the user confirmed vectors should be persisted)
+- Update `serializeStateSnapshot()` / `deserializeStateSnapshot()` to handle `derivedColumns` and `baseTableName`
+- Update `restoreStateFromSnapshot()` to set `derivedColumns` and `baseTableName` signals
+
+**`src/core/Actions.ts`** — update `loadData()` session restore flow:
+
+After `restoreStateFromSnapshot()`, if `snapshot.derivedColumns.length > 0`:
+1. Create `DerivedColumnManager` via `ensureDerivedManager()`
+2. Call `manager.restoreColumns(this.state.derivedColumns.get())` to recreate VIEW + helper tables
+3. Append restored `ColumnSchema[]` (with `isDerived: true`) to `state.schema`
+4. Switch `state.tableName` to `manager.getEffectiveTableName()`
+5. On failure: log error, clear `derivedColumns`, stay on base table (graceful degradation)
+
+**`src/persistence/AutoSave.ts`**:
+- Add `this.state.derivedColumns` to the list of signals that trigger auto-save
 
 **Verification:**
-- Add column → view SQL correct, schema updated, tableName switched
-- Expression validation errors returned
-- Rename without name conflicts
-- Delete last derived column → tableName reverts to base table
-- Existing queries use view transparently
+- Undo/redo with no derived columns remains fast (no DuckDB call — `derivedColumnsEqual` short-circuits)
+- Add expression column → undo → column removed, VIEW dropped, tableName reverts to base
+- Add expression column → undo → redo → column re-added, VIEW recreated
+- Add vector column → undo → helper table dropped → redo → helper table recreated
+- Sequence: add col A, add col B, undo twice, redo once → correct intermediate states
+- Session persistence round-trip with expression column: expression restored, VIEW recreated on reload
+- Session persistence round-trip with vector column: values array stored in IndexedDB and restored
+- Undo stack itself persists: page reload → undo/redo history includes derived column operations
 
-### Task 8.6: Derived Columns — UI (Visual Differentiation and Controls)
+### Task 8.6: Derived Columns — UI, Editor Extension Point, and Modal
 
-Derived columns have a distinct visual identity: italic names, formula icon, and a subtle tint on the entire column to signal the virtual layer.
+Visual differentiation for derived columns in the table. Expression editor modal with a default textarea and an extension point for downstream CodeMirror integration. "New Column" toolbar button.
 
-Modify `src/table/ColumnHeader.ts`:
-- Check `column.isDerived` during render → add `.dt-col-header--derived` class
-- **Column name**: Render in italics with a small `f(x)` formula SVG icon prefix
-- **Action panel for derived columns**: Replace "hide" button with "delete" button (trash icon, red on hover). Add "edit" button (pencil icon). Keep pin, sort, filter.
-- Source columns: cannot be deleted, only hidden (existing behavior unchanged)
-- Delete button triggers confirmation modal before calling `actions.removeDerivedColumn()`
+**Background context:** The codebase uses vanilla DOM (no framework). UI components follow a `constructor → createElement() → attachEventListeners → subscribeToState → destroy()` lifecycle. The `ExportDialog` in `src/export/ExportDialog.ts` provides the reference modal pattern (backdrop div + dialog div, Escape to close, `open()`/`close()` methods, body scroll lock). CSS classes use the `dt-` prefix (configurable via `classPrefix`). State changes use signals from `src/core/Signal.ts`.
 
-Modify `src/table/TableBody.ts`:
-- Check `isDerived` per column during cell render → apply `.dt-cell--derived` class
+#### Files to Create
 
-Create `src/derived/DerivedColumnModal.ts`:
-- Modal dialog for creating/editing derived columns
-- Fields: Name (text input), Expression (monospace textarea)
-- "Validate" button: calls DuckDB validation, shows inferred type or error message
-- "Save" button: calls `actions.addDerivedColumn()` or `actions.updateDerivedColumn()`
-- Name conflict validation with real-time feedback
-- Opened from: (1) column header edit button for existing, (2) a "+" button or menu action for new
+**`src/derived/ExpressionEditorTypes.ts`** — extension point for downstream editors:
 
-Modify `src/styles/data-table.css`:
+```typescript
+import type { CompletionContext } from './types';
+
+/**
+ * Interface that custom expression editors must implement.
+ * The library provides a default textarea editor (DefaultExpressionEditor).
+ * Downstream apps can replace it with CodeMirror, Monaco, etc.
+ *
+ * The CompletionContext provides column names/types for autocompletion support.
+ */
+export interface ExpressionEditor {
+  /** The root DOM element to mount in the modal */
+  readonly element: HTMLElement;
+  /** Get current editor content */
+  getValue(): string;
+  /** Set editor content (for editing existing columns) */
+  setValue(value: string): void;
+  /** Focus the editor */
+  focus(): void;
+  /** Display an error message inline (null clears the error) */
+  setError(error: string | null): void;
+  /** Update completion context when schema changes */
+  updateCompletionContext(context: CompletionContext): void;
+  /** Clean up resources */
+  destroy(): void;
+}
+
+/**
+ * Factory function for creating expression editors.
+ * Downstream apps provide this to use CodeMirror or similar.
+ * If not provided, DerivedColumnModal uses DefaultExpressionEditor.
+ */
+export type ExpressionEditorFactory = (
+  container: HTMLElement,
+  context: CompletionContext
+) => ExpressionEditor;
+```
+
+**`src/derived/DefaultExpressionEditor.ts`** — built-in textarea editor implementing `ExpressionEditor`:
+
+- Monospace `<textarea>` with placeholder text ("Enter SQL expression, e.g. price * quantity")
+- Error display area (`<div>` below textarea, red text, hidden when no error)
+- Column hints line (`<div>` showing "Available columns: col1 (integer), col2 (string), ...")
+- `setError()` toggles a `.dt-expr-editor-input--error` class on the textarea (red border)
+- `updateCompletionContext()` refreshes the column hints display
+- CSS: `font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px;`
+
+**`src/derived/DerivedColumnModal.ts`** — modal dialog following the `ExportDialog` pattern:
+
+```typescript
+import type { TableState } from '../core/State';
+import type { StateActions } from '../core/Actions';
+import type { ExpressionEditorFactory } from './ExpressionEditorTypes';
+
+export interface DerivedColumnModalOptions {
+  classPrefix?: string;
+  /** Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEditor. */
+  editorFactory?: ExpressionEditorFactory;
+}
+
+export class DerivedColumnModal {
+  constructor(
+    private state: TableState,
+    private actions: StateActions,
+    options?: DerivedColumnModalOptions
+  );
+
+  /** Open for creating a new column */
+  openNew(): void;
+
+  /** Open for editing an existing derived column (pre-populates name + expression/values) */
+  openEdit(columnName: string): void;
+
+  /** Close the modal */
+  close(): void;
+
+  /** Get the root DOM element (backdrop + dialog) for mounting */
+  getElement(): HTMLElement;
+
+  /** Clean up resources */
+  destroy(): void;
+}
+```
+
+Modal layout:
+- **Header**: "New Derived Column" (create mode) or "Edit: \<name\>" (edit mode)
+- **Name input**: Text input with real-time name uniqueness validation (checks against `state.schema.get()`, excluding self when editing). Error text below input.
+- **Mode toggle**: "Expression" | "Vector" radio/buttons. Hidden when editing (mode locked to existing column's kind).
+- **Expression mode**: Editor container (created by `editorFactory` or `DefaultExpressionEditor`) + "Validate" button + type preview area (shows "Type: float" or error message after validation)
+- **Vector mode**: Type selector dropdown (`integer`, `float`, `string`, `boolean`) + `<textarea>` for values (one value per line, monospace) + row count validation (must match `state.totalRows.get()` exactly, show error if mismatched)
+- **Footer**: "Cancel" + "Save" buttons. Save is disabled until name is non-empty and validation passes.
+
+Behavior:
+- "Validate" button calls `actions.validateExpression(expression)`, shows inferred type on success or error message on failure
+- "Save" calls `actions.addDerivedColumn(def)` (create mode) or `actions.updateDerivedColumn(oldName, def)` (edit mode), closes modal on success
+- Backdrop click or Escape closes modal
+- Body scroll locked while open (`document.body.style.overflow = 'hidden'`)
+
+#### Files to Modify
+
+**`src/table/ColumnHeader.ts`** — changes for derived column visual identity and actions:
+
+Add new callback options to the existing `ColumnHeaderOptions` interface (or equivalent constructor params):
+```typescript
+onDerivedEdit?: (columnName: string) => void;   // called when edit button clicked
+onDerivedDelete?: (columnName: string) => void;  // called when delete confirmed
+```
+
+In `createElement()` / `render()`:
+- If `this.column.isDerived` is true:
+  - Add `.dt-col-header--derived` class to the header element
+  - Prepend an `f(x)` SVG icon before the column name: `<span class="dt-derived-icon"><svg viewBox="0 0 16 16" width="12" height="12"><text x="1" y="13" font-size="13" font-style="italic" font-family="serif">f</text><text x="8" y="10" font-size="8" font-family="serif">(x)</text></svg></span>`
+  - Render column name in italics (`nameEl.style.fontStyle = 'italic'`)
+  - **Action panel**: Replace the "hide" button with a "delete" button (trash SVG icon, `.dt-col-delete-btn` class, red on hover). Add an "edit" button (pencil SVG icon) before the filter button. Keep pin, sort, filter buttons.
+  - **Delete confirmation**: Use inline confirmation (no separate modal). On click, button text/icon changes to "Confirm?" for 3 seconds. Clicking again during that window calls `onDerivedDelete(columnName)`. After 3 seconds, reverts to trash icon. This prevents accidental deletion without modal fatigue.
+- If `this.column.isDerived` is false: existing behavior unchanged (hide button, no edit/delete)
+
+**`src/table/TableBody.ts`** — add derived cell styling:
+
+In the cell rendering logic, check the column's `isDerived` flag:
+- If true: add `.dt-cell--derived` class to the cell element
+- If false: remove it (or don't add it)
+
+The schema is available via `state.schema.get()` — look up by column name to check `isDerived`.
+
+**`src/table/TableContainer.ts`** — manage modal and toolbar button:
+
+Add to `TableContainerOptions` (or create if it doesn't exist as a separate interface):
+```typescript
+/** Custom expression editor factory for derived column modal */
+editorFactory?: ExpressionEditorFactory;
+/** Show "New Column" toolbar button (default: true when actions are provided) */
+showNewColumnButton?: boolean;
+```
+
+In constructor, after creating the header area:
+- If `showNewColumnButton` is true (or defaulted), create a `<button>` with `+` SVG icon, class `.dt-new-column-btn`, `aria-label="Add derived column"`, `title="Add derived column"`. Append it to the header area (after the scrollbar gutter). On click, open the derived column modal in "new" mode.
+
+Add private property `derivedModal: DerivedColumnModal | null = null`. Lazily create it in `ensureDerivedModal()`, passing `editorFactory` from options.
+
+Wire ColumnHeader callbacks:
+- `onDerivedEdit: (name) => this.ensureDerivedModal().openEdit(name)`
+- `onDerivedDelete: (name) => this.actions?.removeDerivedColumn(name)`
+
+Clean up modal in `destroy()`.
+
+**`src/styles/data-table.css`** — add derived column styles:
 
 ```css
+/* Derived column header — subtle tinted background */
 .dt-col-header--derived {
   background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
 }
 .dt-col-header--derived .dt-col-name {
   font-style: italic;
 }
+.dt-derived-icon {
+  margin-right: 4px;
+  opacity: 0.7;
+  vertical-align: middle;
+}
+
+/* Derived column cells — very subtle tint */
 .dt-cell--derived {
   background: color-mix(in srgb, var(--dt-primary-light) 15%, var(--dt-bg));
+}
+
+/* Delete button for derived columns — red on hover */
+.dt-col-delete-btn:hover {
+  color: var(--dt-danger, #ef4444);
+}
+
+/* New column button in toolbar */
+.dt-new-column-btn {
+  border: 1px dashed var(--dt-border);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dt-new-column-btn:hover {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+}
+
+/* Expression editor */
+.dt-expr-editor-input {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--dt-border);
+  border-radius: 4px;
+  padding: 8px;
+}
+.dt-expr-editor-input--error {
+  border-color: var(--dt-danger, #ef4444);
+}
+.dt-expr-editor-error {
+  color: var(--dt-danger, #ef4444);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.dt-expr-editor-context {
+  color: var(--dt-text-secondary);
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+/* Derived column modal — follows ExportDialog backdrop/dialog pattern */
+.dt-derived-modal-backdrop {
+  /* Same pattern as .dt-export-backdrop */
+}
+.dt-derived-modal {
+  /* Same pattern as .dt-export-dialog */
 }
 /* Dark mode handled automatically via CSS custom properties */
 ```
 
 **Verification:**
-- Derived columns show italic name, formula icon, subtle tint
-- Edit modal validates and saves correctly
-- Delete shows confirmation modal
-- Source columns cannot be deleted
+- Derived column headers show italic name, f(x) icon, tinted background
+- Derived cells show subtle tint distinguishing them from source cells
+- "New Column" button visible in toolbar, opens modal
+- Expression mode: validate shows inferred type or DuckDB error, save creates column
+- Vector mode: validates value count matches totalRows, save creates column
+- Edit button on derived column opens modal pre-populated with existing name + expression/values
+- Delete button shows inline "Confirm?" for 3 seconds, second click deletes
+- Source columns show hide button (not delete/edit) — existing behavior unchanged
+- Custom `editorFactory` (e.g., CodeMirror) works when provided via options
+- `CompletionContext` correctly lists all columns for editor autocompletion
 
-### Task 8.7: Derived Columns — Integration Verification
+### Task 8.7: Derived Columns — Integration Fixes and Verification
 
-Verify (and fix if needed) that derived columns work with all existing features:
+Fix integration issues with existing features and verify end-to-end functionality. This task addresses specific bugs that arise from the derived columns implementation in Tasks 8.4-8.6.
 
-- **Visualizations**: Derived numeric columns get histograms, derived strings get value counts. `VisualizationFactory.isApplicable()` checks `column.type` — works automatically since derived `ColumnSchema` has a detected type.
-- **Crossfilter**: Filters on derived columns use `quoteIdentifier(name)` against the view — works unchanged.
-- **Export**: `ExportQuery.buildSelectQuery()` queries the view, includes derived columns in `columnOrder` — works unchanged.
-- **Stats**: Stats queries run against view — works unchanged.
-- **Expression edit**: When expression changes, trigger schema update → `TableContainer` re-renders → visualizations re-attach.
-- **Persistence**: Add derived column definitions to `SessionSnapshot`. On restore, recreate view before restoring other state.
-- **Demo integration**: Update `demo/main.ts` with a "New Column" button that opens `DerivedColumnModal`.
+**Background context:** Several existing components need fixes to work correctly with derived columns. The issues were identified during architectural review and must be addressed before considering derived columns complete.
 
-**Key files to verify:** `CrossfilterCoordinator.ts`, `VisualizationFactory.ts`, `ExportQuery.ts`, `StatsComputer.ts`, `demo/main.ts`.
+#### Fix 1: CrossfilterCoordinator stale tableName
 
-**Verification:**
-- Add derived column (e.g., `price * quantity AS total`) → histogram renders, filter works, export includes it
-- Edit expression → visualization updates
-- Persistence round-trip with derived columns
+**Problem:** `src/visualizations/CrossfilterCoordinator.ts` receives `tableName: string` as a constructor parameter (line 22: `private tableName: string`) and caches it. When derived columns switch `state.tableName` from the base table to a VIEW name, the coordinator's cached `this.tableName` is stale — its `updateFilteredRowCount()` queries the base table instead of the VIEW, so filters on derived columns fail.
+
+**Fix:** Remove the `tableName` constructor parameter entirely. Instead, read `this.state.tableName.get()` dynamically in `updateFilteredRowCount()`:
+
+```typescript
+// Change constructor signature from:
+constructor(private state: TableState, private actions: StateActions, private bridge: WorkerBridge, private tableName: string)
+// To:
+constructor(private state: TableState, private actions: StateActions, private bridge: WorkerBridge)
+
+// In updateFilteredRowCount(), replace `this.tableName` with:
+const tableName = this.state.tableName.get();
+if (!tableName) return;
+```
+
+**Update callers:** `demo/main.ts` creates the coordinator — remove the `tableName` argument from the constructor call (search for `new CrossfilterCoordinator`).
+
+#### Fix 2: Dynamic visualization lifecycle
+
+**Problem:** Visualizations are created once in `demo/main.ts` after data load via `attachVisualizations()`. When a derived column is added, there's no visualization for it. When removed, its visualization is orphaned.
+
+**Fix:** The existing `visibleColumns.subscribe()` handler in `demo/main.ts` already debounces and calls `attachVisualizations()`, which destroys all visualizations and recreates them. This will handle derived column add/remove since those operations update `visibleColumns`.
+
+**Additional subscription needed:** Subscribe to `state.tableName` changes to trigger visualization reattachment. This handles the case where tableName switches from base to VIEW (or back) without `visibleColumns` changing. In `demo/main.ts`:
+
+```typescript
+tableState.tableName.subscribe((newName) => {
+  if (newName && visualizationsAttached) {
+    // Reattach with debounce (same pattern as visibleColumns subscriber)
+    scheduleReattach();
+  }
+});
+```
+
+**Update `attachVisualizations()`:** Currently receives `tableName` as a parameter. Change it to read `tableState.tableName.get()` at call time, so it always uses the current effective name (VIEW when derived columns exist).
+
+#### Fix 3: Demo integration
+
+Update `demo/main.ts`:
+- Remove `tableName` from `CrossfilterCoordinator` constructor call
+- Update `attachVisualizations()` to read tableName from state
+- Add `tableName` subscription for visualization reattachment
+- Add derived column count to the `updateTableInfo()` display: show "N derived" next to existing column/row counts when derived columns exist
+
+#### Fix 4: Library exports
+
+Update `src/index.ts` to export all new public types and classes:
+- From `src/derived/types.ts`: `DerivedColumnDef`, `ExpressionColumnDef`, `VectorColumnDef`, `DerivedColumnKind`, `VectorDataType`, `CompletionContext`, `DerivedColumnInfo`
+- From `src/derived/ExpressionEditorTypes.ts`: `ExpressionEditor`, `ExpressionEditorFactory`
+- From `src/derived/DerivedColumnModal.ts`: `DerivedColumnModal`, `DerivedColumnModalOptions`
+- From `src/derived/DerivedColumnManager.ts`: `DerivedColumnManager`
+
+#### Fix 5: Snapshot version bump
+
+In `src/persistence/types.ts`, change `SNAPSHOT_VERSION` from `1` to `2` to indicate the new schema with derived column support. Update `restoreStateFromSnapshot()` in `src/persistence/serialization.ts` to handle version 1 snapshots gracefully (treat missing `derivedColumns` as `[]`).
+
+#### Verification Checklist
+
+Run through each scenario manually in the demo app:
+
+1. **Expression column basics**: Add `price * quantity AS total` → histogram renders for the new column, filter brush works, export (CSV/JSON/Parquet) includes the column
+2. **Vector column (numeric)**: Add a numeric vector column → histogram renders
+3. **Vector column (string)**: Add a string vector column → value counts bar renders
+4. **Edit expression**: Change expression → visualization updates with new data, table body refreshes
+5. **Delete derived column**: Delete → filters/sorts for that column cleaned up, visualization removed, table body correct, no console errors
+6. **Undo add**: Add column → undo → column disappears, VIEW dropped, tableName reverts to base
+7. **Redo add**: After undo → redo → column reappears, VIEW recreated, visualization works
+8. **Crossfilter**: Filter on a derived column → other columns show ghost bars correctly. Filter on a source column → derived column visualization updates
+9. **Export**: All three formats (CSV, JSON, Parquet) include derived columns with correct values
+10. **Persistence**: Add derived columns → reload page → columns restored with visualizations and correct data
+11. **Error handling**: Enter invalid SQL expression in modal → DuckDB error displayed, no crash, no column created
+12. **Name conflict**: Try to create column with name matching an existing column → prevented with real-time validation error
+13. **Vector length mismatch**: Enter fewer/more values than totalRows → error displayed in modal
+14. **Mixed undo**: Add derived column, apply filter, sort, undo three times → each step correctly reverses
 
 ### Task 8.8: Raw SQL Filter API
 
@@ -723,7 +1324,9 @@ Phase 7 (Persistence):
 
 Phase 8 (Advanced):
   8.1 UndoManager → 8.2 Action Integration → 8.3 Keyboard Shortcuts
-  8.4 Derived Types → 8.5 DuckDB Integration → 8.6 Derived UI → 8.7 Integration
+  8.4 Types/State/Manager → 8.5 Undo/Persistence (parallel with 8.6)
+                           → 8.6 UI/Editor/Modal  (parallel with 8.5)
+                                                   → 8.7 Integration Fixes
   8.8 Raw SQL Filter API → 8.9 Filter Presets → 8.10 Preset UI
 
 Phase 9 (Polish):
@@ -737,7 +1340,7 @@ Phase 9 (Polish):
 **Recommended execution order:**
 1. **7.5 → 7.6 → 7.7 → 7.8** (Persistence foundation — auto-save captures all future state additions)
 2. **8.1 → 8.2 → 8.3** (Undo/redo — all subsequent features are undoable from the start)
-3. **8.4 → 8.5 → 8.6 → 8.7** (Derived columns — full virtual layer)
+3. **8.4 → (8.5 + 8.6 in parallel) → 8.7** (Derived columns — full virtual layer with expression + vector modes, undo/redo, editor extension point)
 4. **8.8** (Raw SQL Filter API — enables complex filters before presets)
 5. **8.9 → 8.10** (Filter presets — can serialize all filter types including raw SQL)
 6. **9.1 → 9.2 → 9.3 → 9.4 → 9.5** (Polish)
@@ -750,7 +1353,7 @@ Phase 9 (Polish):
 |---|---|---|
 | 8.1–8.3 Undo/Redo | **Kept** | Essential for EDA workflow |
 | 8.4–8.5 Filter Presets | **Kept, moved to 8.9–8.10** | Reordered after raw SQL filters so presets can serialize them |
-| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with visual differentiation, edit/rename/delete |
+| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with two modes (SQL expression + pre-computed vector), DuckDB VIEW mechanism, editor extension point for CodeMirror, async undo/redo, visual differentiation, edit/rename/delete |
 | 8.8–8.9 SQL Editor | **Removed** | Out of scope for read-only EDA tool |
 | **New: Raw SQL Filter API** | **Added as 8.8** | Programmatic escape hatch for complex cross-column filters (OR clauses) |
 | 9.1 Query Caching | **Kept** | |

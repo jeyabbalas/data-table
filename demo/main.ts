@@ -53,6 +53,15 @@ const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
 
+// Derived columns UI elements
+const derivedColumnsCard = document.getElementById('derived-columns-card')!;
+const derivedNameInput = document.getElementById('derived-name-input') as HTMLInputElement;
+const derivedExprInput = document.getElementById('derived-expr-input') as HTMLInputElement;
+const validateExprBtn = document.getElementById('validate-expr-btn') as HTMLButtonElement;
+const addDerivedBtn = document.getElementById('add-derived-btn') as HTMLButtonElement;
+const derivedValidationMsg = document.getElementById('derived-validation-msg')!;
+const derivedColumnsList = document.getElementById('derived-columns-list')!;
+
 // Display version
 versionEl.textContent = VERSION;
 
@@ -441,6 +450,12 @@ function updateTableInfo(): void {
   info += ` | <strong>${vizCount}</strong> visualizations`;
   info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
 
+  // Show derived column info if any
+  const derivedCols = tableState.derivedColumns.get();
+  if (derivedCols.length > 0) {
+    info += ` | <strong>${derivedCols.length}</strong> derived`;
+  }
+
   // Show pinned column info if any
   const pinnedColumns = tableState.pinnedColumns.get();
   if (pinnedColumns.length > 0) {
@@ -613,6 +628,19 @@ bridge
       }, 100);
     });
 
+    // Subscribe to derived columns changes
+    tableState.derivedColumns.subscribe(() => {
+      updateDerivedColumnsList();
+      if (tableState.tableName.get()) {
+        updateTableInfo();
+      }
+    });
+
+    // Show/hide derived columns card based on table load state
+    tableState.tableName.subscribe((name) => {
+      derivedColumnsCard.style.display = name ? '' : 'none';
+    });
+
     // Escape key handling is provided by InteractionManager (created above)
 
     // Update info with dimensions
@@ -705,6 +733,135 @@ bridge
     initStatusEl.textContent = `Error: ${error.message}`;
     initStatusEl.classList.add('init-status--error');
   });
+
+// =========================================
+// Derived Columns UI
+// =========================================
+
+function updateDerivedColumnsList(): void {
+  const derived = tableState.derivedColumns.get();
+  derivedColumnsList.innerHTML = '';
+
+  if (derived.length === 0) {
+    derivedColumnsList.innerHTML = '<div style="color: #999; font-size: 13px;">No derived columns yet</div>';
+    return;
+  }
+
+  for (const col of derived) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #eee;';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = 'font-weight: 600; min-width: 120px; font-style: italic;';
+    nameSpan.textContent = col.name;
+
+    const exprSpan = document.createElement('span');
+    exprSpan.style.cssText = 'flex: 1; font-family: monospace; font-size: 13px; color: #666;';
+    exprSpan.textContent = col.kind === 'expression' ? col.expression : `[vector: ${col.vectorType}]`;
+
+    // Show type from schema
+    const schema = tableState.schema.get();
+    const schemaEntry = schema.find(c => c.name === col.name);
+    const typeSpan = document.createElement('span');
+    typeSpan.style.cssText = 'font-size: 12px; color: #888; min-width: 60px;';
+    typeSpan.textContent = schemaEntry ? schemaEntry.type : '';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn--secondary';
+    removeBtn.style.cssText = 'padding: 2px 8px; font-size: 12px; color: #ef4444;';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', async () => {
+      removeBtn.textContent = 'Removing...';
+      removeBtn.disabled = true;
+      try {
+        await actions.removeDerivedColumn(col.name);
+      } catch (err) {
+        console.error('Failed to remove derived column:', err);
+        removeBtn.textContent = 'Remove';
+        removeBtn.disabled = false;
+      }
+    });
+
+    row.appendChild(nameSpan);
+    row.appendChild(exprSpan);
+    row.appendChild(typeSpan);
+    row.appendChild(removeBtn);
+    derivedColumnsList.appendChild(row);
+  }
+}
+
+function updateDerivedInputState(): void {
+  const hasName = derivedNameInput.value.trim().length > 0;
+  const hasExpr = derivedExprInput.value.trim().length > 0;
+  validateExprBtn.disabled = !hasExpr;
+  addDerivedBtn.disabled = !hasName || !hasExpr;
+}
+
+derivedNameInput.addEventListener('input', updateDerivedInputState);
+derivedExprInput.addEventListener('input', () => {
+  updateDerivedInputState();
+  derivedValidationMsg.textContent = '';
+});
+
+validateExprBtn.addEventListener('click', async () => {
+  const expr = derivedExprInput.value.trim();
+  if (!expr) return;
+
+  validateExprBtn.disabled = true;
+  validateExprBtn.textContent = 'Validating...';
+
+  try {
+    const result = await actions.validateExpression(expr);
+    if (result.valid) {
+      derivedValidationMsg.innerHTML = `<span style="color: #22c55e;">Valid expression &mdash; result type: <strong>${result.type}</strong> (${result.originalType})</span>`;
+    } else {
+      derivedValidationMsg.innerHTML = `<span style="color: #ef4444;">Error: ${result.error}</span>`;
+    }
+  } catch (err) {
+    derivedValidationMsg.innerHTML = `<span style="color: #ef4444;">Error: ${err instanceof Error ? err.message : err}</span>`;
+  } finally {
+    validateExprBtn.disabled = false;
+    validateExprBtn.textContent = 'Validate';
+  }
+});
+
+addDerivedBtn.addEventListener('click', async () => {
+  const name = derivedNameInput.value.trim();
+  const expr = derivedExprInput.value.trim();
+  if (!name || !expr) return;
+
+  addDerivedBtn.disabled = true;
+  addDerivedBtn.textContent = 'Adding...';
+
+  try {
+    const result = await actions.addDerivedColumn({
+      kind: 'expression',
+      name,
+      expression: expr,
+    });
+
+    if (result.success) {
+      derivedNameInput.value = '';
+      derivedExprInput.value = '';
+      derivedValidationMsg.textContent = '';
+      updateDerivedInputState();
+    } else {
+      derivedValidationMsg.innerHTML = `<span style="color: #ef4444;">Error: ${result.error}</span>`;
+    }
+  } catch (err) {
+    derivedValidationMsg.innerHTML = `<span style="color: #ef4444;">Error: ${err instanceof Error ? err.message : err}</span>`;
+  } finally {
+    addDerivedBtn.disabled = false;
+    addDerivedBtn.textContent = 'Add Column';
+    updateDerivedInputState();
+  }
+});
+
+derivedExprInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !addDerivedBtn.disabled) {
+    addDerivedBtn.click();
+  }
+});
 
 // Event handlers
 loadFileBtn.addEventListener('click', () => {

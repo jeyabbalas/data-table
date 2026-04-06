@@ -8,6 +8,7 @@
 import type { SortColumn } from '../core/types';
 import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter } from '../filters/FilterTypes';
+import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef } from '../derived/types';
 
 /** Current snapshot schema version — bump when the shape changes */
 export const SNAPSHOT_VERSION = 1;
@@ -56,11 +57,10 @@ export type SerializedFilter =
   | NullFilter
   | PatternFilter;
 
-/** Placeholder for future derived column support (Task 8.4) */
-export interface DerivedColumnDef {
-  name: string;
-  expression: string;
-}
+// Re-export derived column types from their canonical location
+export type DerivedColumnDef = _DerivedColumnDef;
+export type ExpressionColumnDef = _ExpressionColumnDef;
+export type VectorColumnDef = _VectorColumnDef;
 
 /**
  * A serialized StateSnapshot (undo/redo stack entry).

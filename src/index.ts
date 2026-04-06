@@ -174,7 +174,6 @@ export type {
   SerializedFilter,
   SerializedStateSnapshot,
   DateWrapper,
-  DerivedColumnDef,
 } from './persistence/types';
 export { SNAPSHOT_VERSION } from './persistence/types';
 export {
@@ -185,6 +184,18 @@ export {
 } from './persistence/serialization';
 export { AutoSave } from './persistence/AutoSave';
 export type { AutoSaveOptions } from './persistence/AutoSave';
+
+// Derived columns
+export type {
+  DerivedColumnKind,
+  VectorDataType,
+  ExpressionColumnDef,
+  VectorColumnDef,
+  DerivedColumnDef,
+  DerivedColumnInfo,
+  CompletionContext,
+} from './derived/types';
+export { DerivedColumnManager } from './derived/DerivedColumnManager';
 
 // Worker types (for advanced usage)
 export type {

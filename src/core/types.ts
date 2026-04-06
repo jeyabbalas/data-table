@@ -21,6 +21,8 @@ export interface ColumnSchema {
   type: DataType;
   nullable: boolean;
   originalType: string; // Original DuckDB type
+  isDerived?: boolean;  // true for derived columns (expression or vector)
+  expression?: string;  // SQL expression (expression columns only)
 }
 
 // Filter types (re-exported from FilterTypes for backward compatibility)

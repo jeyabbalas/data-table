@@ -7,6 +7,7 @@
 
 import { createSignal, computed, type Signal, type Computed } from './Signal';
 import type { ColumnSchema, Filter, SortColumn } from './types';
+import type { DerivedColumnDef } from '../derived/types';
 
 /** Metadata for a hidden column — tracks neighbors at hide time for intelligent restore */
 export interface HiddenColumnInfo {
@@ -26,6 +27,10 @@ export interface TableState {
   schema: Signal<ColumnSchema[]>;
   /** Total number of rows in the table */
   totalRows: Signal<number>;
+  /** Original table name before any VIEW was created */
+  baseTableName: Signal<string | null>;
+  /** Ordered list of derived column definitions */
+  derivedColumns: Signal<DerivedColumnDef[]>;
 
   // Filters
   /** Active filters applied to the data */
@@ -100,6 +105,8 @@ export function createTableState(): TableState {
     tableName: createSignal<string | null>(null),
     schema: createSignal<ColumnSchema[]>([]),
     totalRows: createSignal<number>(0),
+    baseTableName: createSignal<string | null>(null),
+    derivedColumns: createSignal<DerivedColumnDef[]>([]),
 
     // Filters
     filters,
@@ -143,6 +150,8 @@ export function resetTableState(state: TableState): void {
   state.tableName.set(null);
   state.schema.set([]);
   state.totalRows.set(0);
+  state.baseTableName.set(null);
+  state.derivedColumns.set([]);
   state.filters.set([]);
   state.filteredRows.set(0);
   state.sortColumns.set([]);

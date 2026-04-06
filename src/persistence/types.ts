@@ -76,6 +76,8 @@ export interface SerializedStateSnapshot {
   columnWidths: Record<string, number>;
   pinnedColumns: string[];
   hiddenColumnInfo: Record<string, HiddenColumnInfo>;
+  /** Derived column definitions. Optional for backward compat with pre-existing entries. */
+  derivedColumns?: DerivedColumnDef[];
 }
 
 /** A serialized snapshot of table state, keyed by tableName in IndexedDB */

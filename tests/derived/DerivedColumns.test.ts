@@ -725,11 +725,11 @@ describe('Derived Columns — Actions Integration', () => {
   });
 
   // =========================================
-  // Derived column operations do NOT create undo points
+  // Derived column operations create undo points
   // =========================================
 
-  describe('undo — derived column operations are non-undoable', () => {
-    it('addDerivedColumn does not push to undo stack', async () => {
+  describe('undo — derived column operations are undoable', () => {
+    it('addDerivedColumn pushes to undo stack', async () => {
       expect(undoManager.canUndo).toBe(false);
 
       await actions.addDerivedColumn({
@@ -738,17 +738,18 @@ describe('Derived Columns — Actions Integration', () => {
         expression: 'price * quantity',
       });
 
-      expect(undoManager.canUndo).toBe(false);
+      expect(undoManager.canUndo).toBe(true);
+      expect(undoManager.undoDepth).toBe(1);
     });
 
-    it('updateDerivedColumn does not push to undo stack', async () => {
+    it('updateDerivedColumn pushes to undo stack', async () => {
       await actions.addDerivedColumn({
         kind: 'expression',
         name: 'total',
         expression: 'price * quantity',
       });
 
-      expect(undoManager.canUndo).toBe(false);
+      expect(undoManager.undoDepth).toBe(1);
 
       await actions.updateDerivedColumn('total', {
         kind: 'expression',
@@ -756,10 +757,10 @@ describe('Derived Columns — Actions Integration', () => {
         expression: 'price * quantity * 1.1',
       });
 
-      expect(undoManager.canUndo).toBe(false);
+      expect(undoManager.undoDepth).toBe(2);
     });
 
-    it('removeDerivedColumn does not push to undo stack', async () => {
+    it('removeDerivedColumn pushes to undo stack', async () => {
       await actions.addDerivedColumn({
         kind: 'expression',
         name: 'total',
@@ -768,7 +769,7 @@ describe('Derived Columns — Actions Integration', () => {
 
       await actions.removeDerivedColumn('total');
 
-      expect(undoManager.canUndo).toBe(false);
+      expect(undoManager.undoDepth).toBe(2); // add + remove
     });
   });
 });

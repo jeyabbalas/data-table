@@ -28,6 +28,11 @@ export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnap
         ([k, v]) => [k, { ...v }],
       ),
     ),
+    // Deep copy for IndexedDB independence (vector values need their own array)
+    derivedColumns: snap.derivedColumns.map(d => {
+      if (d.kind === 'expression') return { ...d };
+      return { ...d, values: (d as import('../derived/types').VectorColumnDef).values.slice() } as typeof d;
+    }),
   };
 }
 
@@ -36,43 +41,59 @@ export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnap
  *
  * Validates all fields against validColumns — stale column references
  * are silently dropped, matching restoreStateFromSnapshot behavior.
+ * Derived column names from the entry itself are added to the valid set
+ * so that references to derived columns aren't stripped as stale.
  */
 export function deserializeStateSnapshot(
   s: SerializedStateSnapshot,
   validColumns: Set<string>,
 ): StateSnapshot {
-  const filters = s.filters
-    .map(deserializeFilter)
-    .filter(f => validColumns.has(f.column));
-
-  const sortColumns = s.sortColumns.filter(sc => validColumns.has(sc.column));
-
-  let visibleColumns = s.visibleColumns.filter(c => validColumns.has(c));
-  if (visibleColumns.length === 0) {
-    visibleColumns = [...validColumns];
+  // Expand valid set with derived column names from this snapshot entry
+  const effectiveValid = new Set(validColumns);
+  if (s.derivedColumns) {
+    for (const d of s.derivedColumns) effectiveValid.add(d.name);
   }
 
-  const columnOrder = s.columnOrder.filter(c => validColumns.has(c));
+  const filters = s.filters
+    .map(deserializeFilter)
+    .filter(f => effectiveValid.has(f.column));
+
+  const sortColumns = s.sortColumns.filter(sc => effectiveValid.has(sc.column));
+
+  let visibleColumns = s.visibleColumns.filter(c => effectiveValid.has(c));
+  if (visibleColumns.length === 0) {
+    visibleColumns = [...effectiveValid];
+  }
+
+  const columnOrder = s.columnOrder.filter(c => effectiveValid.has(c));
 
   const columnWidths = new Map<string, number>();
   for (const [col, width] of Object.entries(s.columnWidths)) {
-    if (validColumns.has(col)) columnWidths.set(col, width);
+    if (effectiveValid.has(col)) columnWidths.set(col, width);
   }
 
-  const pinnedColumns = s.pinnedColumns.filter(c => validColumns.has(c));
+  const pinnedColumns = s.pinnedColumns.filter(c => effectiveValid.has(c));
 
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();
   for (const [col, info] of Object.entries(s.hiddenColumnInfo)) {
-    if (validColumns.has(col)) {
+    if (effectiveValid.has(col)) {
       hiddenColumnInfo.set(col, {
         column: info.column,
-        leftNeighbor: info.leftNeighbor && validColumns.has(info.leftNeighbor) ? info.leftNeighbor : null,
-        rightNeighbor: info.rightNeighbor && validColumns.has(info.rightNeighbor) ? info.rightNeighbor : null,
+        leftNeighbor: info.leftNeighbor && effectiveValid.has(info.leftNeighbor) ? info.leftNeighbor : null,
+        rightNeighbor: info.rightNeighbor && effectiveValid.has(info.rightNeighbor) ? info.rightNeighbor : null,
       });
     }
   }
 
-  return { filters, sortColumns, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo };
+  // Restore derived columns (deep copy vector values for independence)
+  const derivedColumns = s.derivedColumns
+    ? s.derivedColumns.map(d => {
+        if (d.kind === 'expression') return { ...d };
+        return { ...d, values: (d as import('../derived/types').VectorColumnDef).values.slice() } as typeof d;
+      })
+    : [];
+
+  return { filters, sortColumns, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo, derivedColumns };
 }
 
 // ── Session snapshot (full table state + optional undo stacks) ────────

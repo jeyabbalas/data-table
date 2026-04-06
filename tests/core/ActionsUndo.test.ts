@@ -4,6 +4,7 @@ import { UndoManager } from '@/core/UndoManager';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { Filter, ColumnSchema } from '@/core/types';
+import type { DerivedColumnDef } from '@/derived/types';
 
 // Mock WorkerBridge
 const createMockBridge = () => ({
@@ -375,14 +376,14 @@ describe('StateActions — Undo/Redo Integration', () => {
       noUndoActions.endColumnWidthChange();
     });
 
-    it('undo/redo return false without UndoManager', () => {
+    it('undo/redo return false without UndoManager', async () => {
       const noUndoActions = new StateActions(
         state,
         createMockBridge() as any
       );
 
-      expect(noUndoActions.undo()).toBe(false);
-      expect(noUndoActions.redo()).toBe(false);
+      expect(await noUndoActions.undo()).toBe(false);
+      expect(await noUndoActions.redo()).toBe(false);
     });
 
     it('getUndoManager returns undefined without UndoManager', () => {
@@ -400,12 +401,12 @@ describe('StateActions — Undo/Redo Integration', () => {
   // =========================================
 
   describe('Edge cases', () => {
-    it('undo on empty stack returns false', () => {
-      expect(actions.undo()).toBe(false);
+    it('undo on empty stack returns false', async () => {
+      expect(await actions.undo()).toBe(false);
     });
 
-    it('redo on empty stack returns false', () => {
-      expect(actions.redo()).toBe(false);
+    it('redo on empty stack returns false', async () => {
+      expect(await actions.redo()).toBe(false);
     });
 
     it('hideColumn on last visible column creates no undo point', () => {
@@ -527,5 +528,228 @@ describe('StateActions — Undo/Redo Integration', () => {
       expect(cbVisible).not.toHaveBeenCalled();
       expect(cbPinned).not.toHaveBeenCalled();
     });
+  });
+});
+
+// =========================================
+// Derived Column Undo/Redo Integration
+// =========================================
+
+/**
+ * Create a mock WorkerBridge that handles derived column SQL patterns.
+ */
+function createDerivedMockBridge(typeMap: Record<string, string> = {}) {
+  const defaultType = 'DOUBLE';
+  return {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockImplementation(async (sql: string) => {
+      if (sql.includes('typeof(')) {
+        const match = sql.match(/typeof\(\((.+?)\)\)/);
+        const expr = match?.[1] ?? '';
+        return [{ t: typeMap[expr] ?? defaultType }];
+      }
+      if (sql.includes('LIMIT 0')) return [];
+      if (/^(CREATE|DROP|INSERT)/i.test(sql.trim())) return [];
+      return [];
+    }),
+    loadData: vi.fn().mockResolvedValue(undefined),
+    exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
+    terminate: vi.fn(),
+    isInitialized: vi.fn().mockReturnValue(true),
+  };
+}
+
+describe('StateActions — Derived Column Undo/Redo', () => {
+  let state: TableState;
+  let undoManager: UndoManager;
+  let actions: StateActions;
+  let mockBridge: ReturnType<typeof createDerivedMockBridge>;
+
+  const sampleSchema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
+    { name: 'price', type: 'float', nullable: true, originalType: 'DOUBLE' },
+    { name: 'quantity', type: 'integer', nullable: true, originalType: 'INTEGER' },
+  ];
+
+  beforeEach(() => {
+    state = createTableState();
+    mockBridge = createDerivedMockBridge({
+      'price * quantity': 'DOUBLE',
+      'UPPER(name)': 'VARCHAR',
+      'quantity + 1': 'BIGINT',
+    });
+    undoManager = new UndoManager();
+    actions = new StateActions(state, mockBridge as any, undoManager);
+    initializeColumnsFromSchema(state, sampleSchema);
+    state.tableName.set('test_table');
+    state.baseTableName.set('test_table');
+    state.totalRows.set(100);
+    state.filteredRows.set(100);
+  });
+
+  it('addDerivedColumn creates an undo point', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+    expect(undoManager.undoDepth).toBe(1);
+  });
+
+  it('failed addDerivedColumn does NOT push to undo stack', async () => {
+    // Empty name → validation failure
+    const result = await actions.addDerivedColumn({
+      kind: 'expression', name: '', expression: 'price * quantity',
+    });
+    expect(result.success).toBe(false);
+    expect(undoManager.undoDepth).toBe(0);
+  });
+
+  it('duplicate name failure does NOT push to undo stack', async () => {
+    const result = await actions.addDerivedColumn({
+      kind: 'expression', name: 'id', expression: 'price * quantity',
+    });
+    expect(result.success).toBe(false);
+    expect(undoManager.undoDepth).toBe(0);
+  });
+
+  it('addDerivedColumn → undo → column removed, tableName reverts', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+    expect(state.derivedColumns.get()).toHaveLength(1);
+    expect(state.tableName.get()).toContain('__dt_view_');
+    expect(state.visibleColumns.get()).toContain('total');
+
+    await actions.undo();
+
+    expect(state.derivedColumns.get()).toHaveLength(0);
+    expect(state.tableName.get()).toBe('test_table');
+    expect(state.visibleColumns.get()).not.toContain('total');
+    expect(state.schema.get().find(c => c.name === 'total')).toBeUndefined();
+  });
+
+  it('addDerivedColumn → undo → redo → column re-added', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+
+    await actions.undo();
+    expect(state.derivedColumns.get()).toHaveLength(0);
+
+    await actions.redo();
+    expect(state.derivedColumns.get()).toHaveLength(1);
+    expect(state.tableName.get()).toContain('__dt_view_');
+    expect(state.visibleColumns.get()).toContain('total');
+    expect(state.schema.get().find(c => c.name === 'total')?.isDerived).toBe(true);
+  });
+
+  it('removeDerivedColumn creates an undo point', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+    const depthBefore = undoManager.undoDepth;
+
+    await actions.removeDerivedColumn('total');
+    expect(undoManager.undoDepth).toBe(depthBefore + 1);
+  });
+
+  it('removeDerivedColumn → undo → column restored', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+
+    await actions.removeDerivedColumn('total');
+    expect(state.derivedColumns.get()).toHaveLength(0);
+    expect(state.tableName.get()).toBe('test_table');
+
+    await actions.undo();
+    expect(state.derivedColumns.get()).toHaveLength(1);
+    expect(state.tableName.get()).toContain('__dt_view_');
+    expect(state.visibleColumns.get()).toContain('total');
+  });
+
+  it('add col A, add col B, undo twice, redo once → correct states', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'colA', expression: 'price * quantity',
+    });
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'colB', expression: 'UPPER(name)',
+    });
+    expect(state.derivedColumns.get()).toHaveLength(2);
+
+    // Undo colB
+    await actions.undo();
+    expect(state.derivedColumns.get()).toHaveLength(1);
+    expect(state.derivedColumns.get()[0].name).toBe('colA');
+
+    // Undo colA
+    await actions.undo();
+    expect(state.derivedColumns.get()).toHaveLength(0);
+    expect(state.tableName.get()).toBe('test_table');
+
+    // Redo colA
+    await actions.redo();
+    expect(state.derivedColumns.get()).toHaveLength(1);
+    expect(state.derivedColumns.get()[0].name).toBe('colA');
+    expect(state.tableName.get()).toContain('__dt_view_');
+  });
+
+  it('updateDerivedColumn creates an undo point', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+    const depthBefore = undoManager.undoDepth;
+
+    await actions.updateDerivedColumn('total', {
+      kind: 'expression', name: 'total', expression: 'quantity + 1',
+    });
+    expect(undoManager.undoDepth).toBe(depthBefore + 1);
+  });
+
+  it('mixed undo: add derived col, add filter, undo twice → both reversed', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+    actions.addFilter({ column: 'price', type: 'range', min: 0, max: 100 });
+
+    expect(state.filters.get()).toHaveLength(1);
+    expect(state.derivedColumns.get()).toHaveLength(1);
+
+    // Undo filter
+    await actions.undo();
+    expect(state.filters.get()).toHaveLength(0);
+    expect(state.derivedColumns.get()).toHaveLength(1);
+
+    // Undo derived column
+    await actions.undo();
+    expect(state.derivedColumns.get()).toHaveLength(0);
+    expect(state.tableName.get()).toBe('test_table');
+  });
+
+  it('undoRedoInProgress guard prevents re-entrant calls', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression', name: 'total', expression: 'price * quantity',
+    });
+
+    // Start first undo (creates a promise but we don't await yet)
+    const p1 = actions.undo();
+    // Second call should return false immediately
+    const p2 = actions.undo();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toBe(true);
+    expect(r2).toBe(false);
+  });
+
+  it('undo without derived columns is still fast (no async DuckDB calls)', async () => {
+    actions.addFilter({ column: 'price', type: 'range', min: 0, max: 100 });
+
+    // Clear call count to track what happens during undo
+    mockBridge.query.mockClear();
+
+    await actions.undo();
+    expect(state.filters.get()).toHaveLength(0);
+    // No DuckDB calls should have been made (no derived column reconciliation)
+    expect(mockBridge.query).not.toHaveBeenCalled();
   });
 });

@@ -9,9 +9,12 @@ import type { RangeFilter, SetFilter } from '@/filters/FilterTypes';
 import {
   snapshotFromState,
   restoreStateFromSnapshot,
+  serializeStateSnapshot,
+  deserializeStateSnapshot,
 } from '@/persistence/serialization';
 import { SNAPSHOT_VERSION } from '@/persistence/types';
-import type { SessionSnapshot } from '@/persistence/types';
+import type { SessionSnapshot, SerializedStateSnapshot } from '@/persistence/types';
+import type { StateSnapshot } from '@/core/UndoManager';
 
 // --- Test helpers ---
 
@@ -572,5 +575,159 @@ describe('restoreStateFromSnapshot — derivedColumns', () => {
     // but the signal is only set when snapshot has entries
     // This verifies the guard: if (snapshot.derivedColumns.length > 0)
     expect(state.derivedColumns.get()).toHaveLength(1);
+  });
+});
+
+// =========================================
+// serializeStateSnapshot / deserializeStateSnapshot — derivedColumns
+// =========================================
+
+describe('serializeStateSnapshot — derivedColumns', () => {
+  function createRuntimeSnapshot(overrides?: Partial<StateSnapshot>): StateSnapshot {
+    return {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'name'],
+      columnOrder: ['id', 'name'],
+      columnWidths: new Map(),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [],
+      ...overrides,
+    };
+  }
+
+  it('serializes empty derivedColumns', () => {
+    const snap = createRuntimeSnapshot();
+    const serialized = serializeStateSnapshot(snap);
+    expect(serialized.derivedColumns).toEqual([]);
+  });
+
+  it('serializes expression derived columns', () => {
+    const snap = createRuntimeSnapshot({
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'a * b' },
+      ],
+    });
+    const serialized = serializeStateSnapshot(snap);
+    expect(serialized.derivedColumns).toHaveLength(1);
+    expect(serialized.derivedColumns![0]).toEqual({
+      kind: 'expression', name: 'total', expression: 'a * b',
+    });
+  });
+
+  it('deep-copies vector values for IndexedDB independence', () => {
+    const values = [1, 2, 3];
+    const snap = createRuntimeSnapshot({
+      derivedColumns: [
+        { kind: 'vector', name: 'v', vectorType: 'float', values },
+      ],
+    });
+    const serialized = serializeStateSnapshot(snap);
+    // Mutating original should not affect serialized
+    values.push(4);
+    expect(serialized.derivedColumns![0].kind).toBe('vector');
+    if (serialized.derivedColumns![0].kind === 'vector') {
+      expect(serialized.derivedColumns![0].values).toEqual([1, 2, 3]);
+    }
+  });
+});
+
+describe('deserializeStateSnapshot — derivedColumns', () => {
+  it('restores derivedColumns from serialized entry', () => {
+    const serialized: SerializedStateSnapshot = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'name', 'total'],
+      columnOrder: ['id', 'name', 'total'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    };
+    const validColumns = new Set(['id', 'name']);
+    const result = deserializeStateSnapshot(serialized, validColumns);
+
+    expect(result.derivedColumns).toHaveLength(1);
+    expect(result.derivedColumns[0]).toEqual({
+      kind: 'expression', name: 'total', expression: 'id * 2',
+    });
+  });
+
+  it('expands validColumns with derived column names', () => {
+    const serialized: SerializedStateSnapshot = {
+      filters: [{ type: 'range', column: 'total', min: 0, max: 100 }],
+      sortColumns: [{ column: 'total', direction: 'asc' }],
+      visibleColumns: ['id', 'total'],
+      columnOrder: ['id', 'total'],
+      columnWidths: { total: 200 },
+      pinnedColumns: ['total'],
+      hiddenColumnInfo: {},
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    };
+    const validColumns = new Set(['id', 'name']);
+    const result = deserializeStateSnapshot(serialized, validColumns);
+
+    // 'total' is a derived column — it should NOT be stripped as stale
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].column).toBe('total');
+    expect(result.sortColumns).toEqual([{ column: 'total', direction: 'asc' }]);
+    expect(result.visibleColumns).toContain('total');
+    expect(result.columnOrder).toContain('total');
+    expect(result.columnWidths.get('total')).toBe(200);
+    expect(result.pinnedColumns).toContain('total');
+  });
+
+  it('defaults to empty array when derivedColumns is absent', () => {
+    const serialized: SerializedStateSnapshot = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'name'],
+      columnOrder: ['id', 'name'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      // No derivedColumns field — simulates pre-feature data
+    };
+    const validColumns = new Set(['id', 'name']);
+    const result = deserializeStateSnapshot(serialized, validColumns);
+
+    expect(result.derivedColumns).toEqual([]);
+  });
+
+  it('round-trips derivedColumns through serialize/deserialize', () => {
+    const original: StateSnapshot = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'name', 'total'],
+      columnOrder: ['id', 'name', 'total'],
+      columnWidths: new Map([['total', 150]]),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+        { kind: 'vector', name: 'scores', vectorType: 'float', values: [1.0, 2.0, 3.0] },
+      ],
+    };
+
+    const serialized = serializeStateSnapshot(original);
+    const validColumns = new Set(['id', 'name']);
+    const deserialized = deserializeStateSnapshot(serialized, validColumns);
+
+    expect(deserialized.derivedColumns).toHaveLength(2);
+    expect(deserialized.derivedColumns[0]).toEqual({
+      kind: 'expression', name: 'total', expression: 'id * 2',
+    });
+    expect(deserialized.derivedColumns[1].kind).toBe('vector');
+    if (deserialized.derivedColumns[1].kind === 'vector') {
+      expect(deserialized.derivedColumns[1].values).toEqual([1.0, 2.0, 3.0]);
+    }
+    // Derived column references preserved in other fields
+    expect(deserialized.visibleColumns).toContain('total');
+    expect(deserialized.columnWidths.get('total')).toBe(150);
   });
 });

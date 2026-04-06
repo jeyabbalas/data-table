@@ -13,7 +13,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import type { SessionStore } from '../persistence/SessionStore';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
-import { UndoManager, captureSnapshot, applySnapshot } from './UndoManager';
+import { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from './UndoManager';
 import type { StateSnapshot } from './UndoManager';
 import { batch } from './Signal';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
@@ -36,6 +36,7 @@ export class StateActions {
   private lastSelectedIndex: number | null = null;
   private undoManager: UndoManager | undefined;
   private suppressUndoCapture = false;
+  private undoRedoInProgress = false;
   private widthDragSnapshot: StateSnapshot | null = null;
   private onFilterRemoveCallback?: (column: string) => void;
   private initialSnapshot: StateSnapshot | null = null;
@@ -81,41 +82,90 @@ export class StateActions {
     }
   }
 
-  /** Undo the last undoable action. Returns true if state was restored. */
-  undo(): boolean {
+  /**
+   * Undo the last undoable action. Returns true if state was restored.
+   * Async because derived column changes require DuckDB VIEW reconciliation.
+   */
+  async undo(): Promise<boolean> {
+    if (this.undoRedoInProgress) return false;
     if (!this.undoManager?.canUndo) return false;
+    this.undoRedoInProgress = true;
     this.suppressUndoCapture = true;
     try {
+      const prevDerived = this.state.derivedColumns.get();
       const prevFilters = this.state.filters.get();
       const current = captureSnapshot(this.state);
       const snapshot = this.undoManager.undo(current);
-      if (snapshot) {
-        applySnapshot(this.state, snapshot);
-        this.notifyRemovedFilters(prevFilters, this.state.filters.get());
-        return true;
+      if (!snapshot) return false;
+
+      const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
+
+      // Reconcile DuckDB state BEFORE applying snapshot signals.
+      // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
+      if (derivedChanged) {
+        await this.reconcileDerivedColumns(snapshot);
       }
-      return false;
+
+      // Apply view-state signals + tableName atomically in a single batch
+      batch(() => {
+        applySnapshot(this.state, snapshot);
+        if (derivedChanged) {
+          const baseTable = this.state.baseTableName.get();
+          this.state.tableName.set(
+            snapshot.derivedColumns.length > 0
+              ? this.derivedManager!.getEffectiveTableName()
+              : baseTable!
+          );
+        }
+      });
+
+      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+      return true;
     } finally {
       this.suppressUndoCapture = false;
+      this.undoRedoInProgress = false;
     }
   }
 
-  /** Redo the last undone action. Returns true if state was restored. */
-  redo(): boolean {
+  /**
+   * Redo the last undone action. Returns true if state was restored.
+   * Async because derived column changes require DuckDB VIEW reconciliation.
+   */
+  async redo(): Promise<boolean> {
+    if (this.undoRedoInProgress) return false;
     if (!this.undoManager?.canRedo) return false;
+    this.undoRedoInProgress = true;
     this.suppressUndoCapture = true;
     try {
+      const prevDerived = this.state.derivedColumns.get();
       const prevFilters = this.state.filters.get();
       const current = captureSnapshot(this.state);
       const snapshot = this.undoManager.redo(current);
-      if (snapshot) {
-        applySnapshot(this.state, snapshot);
-        this.notifyRemovedFilters(prevFilters, this.state.filters.get());
-        return true;
+      if (!snapshot) return false;
+
+      const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
+
+      if (derivedChanged) {
+        await this.reconcileDerivedColumns(snapshot);
       }
-      return false;
+
+      batch(() => {
+        applySnapshot(this.state, snapshot);
+        if (derivedChanged) {
+          const baseTable = this.state.baseTableName.get();
+          this.state.tableName.set(
+            snapshot.derivedColumns.length > 0
+              ? this.derivedManager!.getEffectiveTableName()
+              : baseTable!
+          );
+        }
+      });
+
+      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
+      return true;
     } finally {
       this.suppressUndoCapture = false;
+      this.undoRedoInProgress = false;
     }
   }
 
@@ -674,6 +724,40 @@ export class StateActions {
   }
 
   /**
+   * Reconcile DuckDB VIEW state after undo/redo changes derived columns.
+   * Destroys the existing manager and either recreates with the snapshot's
+   * derived columns, or leaves the table in base-table mode.
+   */
+  private async reconcileDerivedColumns(snapshot: StateSnapshot): Promise<void> {
+    // 1. Destroy existing manager (drops VIEW + helper tables)
+    if (this.derivedManager) {
+      await this.derivedManager.destroy();
+      this.derivedManager = null;
+    }
+
+    // 2. Update schema: remove old derived entries
+    const baseSchema = this.state.schema.get().filter(c => !c.isDerived);
+
+    if (snapshot.derivedColumns.length > 0) {
+      // 3. Create new manager, restore columns
+      const manager = this.ensureDerivedManager();
+      const restoredSchemas = await manager.restoreColumns(snapshot.derivedColumns);
+
+      // 4. Update schema with restored derived entries
+      this.state.schema.set([...baseSchema, ...restoredSchemas]);
+
+      // 5. Update derivedColumns signal (filtered to only successfully restored)
+      const restoredNames = new Set(restoredSchemas.map(s => s.name));
+      this.state.derivedColumns.set(
+        snapshot.derivedColumns.filter(d => restoredNames.has(d.name))
+      );
+    } else {
+      this.state.schema.set(baseSchema);
+      this.state.derivedColumns.set([]);
+    }
+  }
+
+  /**
    * Add a derived column (expression or vector).
    * Validates name uniqueness, creates VIEW, updates state.
    */
@@ -688,9 +772,18 @@ export class StateActions {
       return { success: false, error: 'Column name cannot be empty' };
     }
 
+    // Capture undo snapshot locally — only push after success
+    const preSnapshot = this.undoManager && !this.suppressUndoCapture
+      ? captureSnapshot(this.state) : null;
+
     try {
       const manager = this.ensureDerivedManager();
       const info = await manager.addColumn(def);
+
+      // Push to undo stack AFTER DuckDB success, BEFORE state mutation
+      if (preSnapshot && this.undoManager) {
+        this.undoManager.push(preSnapshot);
+      }
 
       batch(() => {
         // Switch tableName to the VIEW
@@ -752,9 +845,18 @@ export class StateActions {
       return { success: false, error: 'Column name cannot be empty' };
     }
 
+    // Capture undo snapshot locally — only push after success
+    const preSnapshot = this.undoManager && !this.suppressUndoCapture
+      ? captureSnapshot(this.state) : null;
+
     try {
       const manager = this.ensureDerivedManager();
       const info = await manager.updateColumn(oldName, def);
+
+      // Push to undo stack AFTER DuckDB success, BEFORE state mutation
+      if (preSnapshot && this.undoManager) {
+        this.undoManager.push(preSnapshot);
+      }
 
       const typeChanged = oldEntry.type !== info.detectedType;
 
@@ -866,8 +968,17 @@ export class StateActions {
       throw new Error(`Column "${name}" is not a derived column`);
     }
 
+    // Capture undo snapshot locally — only push after success
+    const preSnapshot = this.undoManager && !this.suppressUndoCapture
+      ? captureSnapshot(this.state) : null;
+
     const manager = this.ensureDerivedManager();
     await manager.removeColumn(name);
+
+    // Push to undo stack AFTER DuckDB success, BEFORE state mutation
+    if (preSnapshot && this.undoManager) {
+      this.undoManager.push(preSnapshot);
+    }
 
     batch(() => {
       // Remove from derivedColumns

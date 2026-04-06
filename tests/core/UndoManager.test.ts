@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { UndoManager, captureSnapshot, applySnapshot } from '@/core/UndoManager';
+import { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from '@/core/UndoManager';
 import type { StateSnapshot } from '@/core/UndoManager';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
+import type { DerivedColumnDef, ExpressionColumnDef, VectorColumnDef } from '@/derived/types';
 
 // --- Test helpers ---
 
@@ -16,6 +17,7 @@ function createTestSnapshot(overrides?: Partial<StateSnapshot>): StateSnapshot {
     columnWidths: new Map(),
     pinnedColumns: [],
     hiddenColumnInfo: new Map(),
+    derivedColumns: [],
     ...overrides,
   };
 }
@@ -787,5 +789,110 @@ describe('applySnapshot — equality-guarded signal updates', () => {
     expect(callbacks.pinnedColumns).not.toHaveBeenCalled();
     expect(callbacks.columnWidths).not.toHaveBeenCalled();
     expect(callbacks.hiddenColumnInfo).not.toHaveBeenCalled();
+  });
+});
+
+// --- derivedColumnsEqual tests ---
+
+describe('derivedColumnsEqual', () => {
+  it('returns true for two empty arrays', () => {
+    expect(derivedColumnsEqual([], [])).toBe(true);
+  });
+
+  it('returns false for different lengths', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'x', expression: '1+1' }];
+    expect(derivedColumnsEqual(a, [])).toBe(false);
+  });
+
+  it('returns true for identical expression columns', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'total', expression: 'a * b' }];
+    const b: DerivedColumnDef[] = [{ kind: 'expression', name: 'total', expression: 'a * b' }];
+    expect(derivedColumnsEqual(a, b)).toBe(true);
+  });
+
+  it('returns false when names differ', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'total', expression: 'a * b' }];
+    const b: DerivedColumnDef[] = [{ kind: 'expression', name: 'sum', expression: 'a * b' }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns false when expressions differ', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'x', expression: 'a + b' }];
+    const b: DerivedColumnDef[] = [{ kind: 'expression', name: 'x', expression: 'a - b' }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns false when kinds differ', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'x', expression: '1' }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'x', vectorType: 'integer', values: [1] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('returns true for vector columns with same length', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [4, 5, 6] }];
+    expect(derivedColumnsEqual(a, b)).toBe(true);
+  });
+
+  it('returns false for vector columns with different lengths', () => {
+    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2] }];
+    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    expect(derivedColumnsEqual(a, b)).toBe(false);
+  });
+
+  it('handles multiple columns in order', () => {
+    const a: DerivedColumnDef[] = [
+      { kind: 'expression', name: 'x', expression: '1' },
+      { kind: 'vector', name: 'y', vectorType: 'integer', values: [1, 2] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'expression', name: 'x', expression: '1' },
+      { kind: 'vector', name: 'y', vectorType: 'integer', values: [3, 4] },
+    ];
+    expect(derivedColumnsEqual(a, b)).toBe(true);
+  });
+});
+
+// --- captureSnapshot with derivedColumns ---
+
+describe('captureSnapshot — derivedColumns', () => {
+  it('captures empty derivedColumns by default', () => {
+    const state = setupState();
+    const snapshot = captureSnapshot(state);
+    expect(snapshot.derivedColumns).toEqual([]);
+  });
+
+  it('captures expression derived columns', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'expression', name: 'total', expression: 'id * 2' },
+    ]);
+    const snapshot = captureSnapshot(state);
+    expect(snapshot.derivedColumns).toHaveLength(1);
+    expect(snapshot.derivedColumns[0]).toEqual({
+      kind: 'expression', name: 'total', expression: 'id * 2',
+    });
+  });
+
+  it('captures vector derived columns', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'scores', vectorType: 'float', values: [1, 2, 3] },
+    ]);
+    const snapshot = captureSnapshot(state);
+    expect(snapshot.derivedColumns).toHaveLength(1);
+    expect(snapshot.derivedColumns[0].kind).toBe('vector');
+  });
+
+  it('creates independent copies of derived column defs', () => {
+    const state = setupState();
+    const exprDef: ExpressionColumnDef = { kind: 'expression', name: 'x', expression: 'a+b' };
+    state.derivedColumns.set([exprDef]);
+
+    const snapshot = captureSnapshot(state);
+
+    // Different object reference
+    expect(snapshot.derivedColumns[0]).not.toBe(exprDef);
+    expect(snapshot.derivedColumns[0]).toEqual(exprDef);
   });
 });

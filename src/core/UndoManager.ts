@@ -13,6 +13,7 @@
 import { createSignal, batch, type Signal } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import type { Filter, SortColumn } from './types';
+import type { DerivedColumnDef, ExpressionColumnDef, VectorColumnDef } from '../derived/types';
 
 /**
  * A lightweight snapshot of user-manipulable table view state.
@@ -31,6 +32,7 @@ export interface StateSnapshot {
   columnWidths: Map<string, number>;
   pinnedColumns: string[];
   hiddenColumnInfo: Map<string, HiddenColumnInfo>;
+  derivedColumns: DerivedColumnDef[];
 }
 
 const DEFAULT_MAX_DEPTH = 50;
@@ -125,6 +127,28 @@ function hiddenInfoMapsEqual(
   return true;
 }
 
+// ── Derived column equality (exported for Actions.ts) ───────────────
+
+/**
+ * Shallow equality check for derived column lists.
+ * Compares by name, kind, expression (for expression cols), and
+ * values.length (for vector cols). Does not deep-compare vector values
+ * since the full reconciliation handles that.
+ */
+export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].name !== b[i].name || a[i].kind !== b[i].kind) return false;
+    if (a[i].kind === 'expression' && b[i].kind === 'expression') {
+      if ((a[i] as ExpressionColumnDef).expression !== (b[i] as ExpressionColumnDef).expression) return false;
+    }
+    if (a[i].kind === 'vector' && b[i].kind === 'vector') {
+      if ((a[i] as VectorColumnDef).values.length !== (b[i] as VectorColumnDef).values.length) return false;
+    }
+  }
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -146,6 +170,12 @@ export function captureSnapshot(state: TableState): StateSnapshot {
         ([k, v]) => [k, { ...v }] as [string, HiddenColumnInfo],
       ),
     ),
+    // Shallow-copy defs. Vector values arrays are never mutated in place
+    // (signal is always set to a new array), so reference sharing is safe.
+    derivedColumns: state.derivedColumns.get().map(d => {
+      if (d.kind === 'expression') return { ...d };
+      return { ...d } as typeof d;
+    }),
   };
 }
 

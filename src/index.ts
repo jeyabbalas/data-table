@@ -58,7 +58,7 @@ export { StateActions } from './core/Actions';
 export type { LoadDataOptions } from './core/Actions';
 
 // Undo/Redo
-export { UndoManager, captureSnapshot, applySnapshot } from './core/UndoManager';
+export { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from './core/UndoManager';
 export type { StateSnapshot } from './core/UndoManager';
 
 // Table components

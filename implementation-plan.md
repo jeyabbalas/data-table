@@ -1121,7 +1121,7 @@ Run through each scenario manually in the demo app:
 
 A **programmatic API** (not a UI feature) for specifying complex SQL WHERE clauses that the filter panel cannot express (OR clauses, cross-column conditions). This is an escape hatch for rare complex filters, useful for downstream DQ rules validation.
 
-**Example use case:** "If the individual is nulliparous, then age at first full-term pregnancy should be 888" → `(nulliparous = TRUE AND age_first_pregnancy != 888) OR (nulliparous = FALSE AND age_first_pregnancy = 888)` — an OR clause across columns that the current UI cannot construct.
+**Use case:** A downstream data quality check app allows users to specify complex SQL conditions (filters) to design data quality check rules. For example, `(sex = 'male' OR age <= 18) AND (parous = TRUE)`, `(height IS NULL) OR (height < 140)`.  
 
 Modify `src/filters/FilterTypes.ts` — add to the `Filter` discriminated union:
 

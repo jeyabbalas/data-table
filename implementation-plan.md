@@ -789,15 +789,163 @@ After `restoreStateFromSnapshot()`, if `snapshot.derivedColumns.length > 0`:
 - Session persistence round-trip with vector column: values array stored in IndexedDB and restored
 - Undo stack itself persists: page reload → undo/redo history includes derived column operations
 
-### Task 8.6: Derived Columns — UI, Editor Extension Point, and Modal
+### Task 8.6: Derived Columns — UI
 
-Visual differentiation for derived columns in the table. Expression editor modal with a default textarea and an extension point for downstream CodeMirror integration. "New Column" toolbar button.
+Visual differentiation and interactive management for derived columns, split into four incremental subtasks. **Design principles:** (1) The action panel (pin, hide, filter, sort, drag-handle) is **identical** for all columns — derived columns can be hidden, pinned, filtered, and sorted just like source columns. (2) A clickable **f(x) icon** before the column name opens a floating edit panel for modifying existing derived columns. (3) A full-height **"+" button strip** at the table's right edge opens a modal for creating new derived columns. (4) **Cell tinting** covers the entire cell including padding.
 
-**Background context:** The codebase uses vanilla DOM (no framework). UI components follow a `constructor → createElement() → attachEventListeners → subscribeToState → destroy()` lifecycle. The `ExportDialog` in `src/export/ExportDialog.ts` provides the reference modal pattern (backdrop div + dialog div, Escape to close, `open()`/`close()` methods, body scroll lock). CSS classes use the `dt-` prefix (configurable via `classPrefix`). State changes use signals from `src/core/Signal.ts`.
+Dependency chain: **8.6.1 → 8.6.2 → 8.6.3 → 8.6.4**. Each subtask produces independently testable results.
 
-#### Files to Create
+#### Subtask 8.6.1: Visual Markers and Cell Tinting
 
-**`src/derived/ExpressionEditorTypes.ts`** — extension point for downstream editors:
+CSS and minimal DOM changes to make derived columns visually distinct. No new interactions. Produces immediate testable results.
+
+**Background context:** The codebase uses vanilla DOM (no framework). UI components follow a `constructor → createElement() → attachEventListeners → subscribeToState → destroy()` lifecycle. CSS classes use the `dt-` prefix (configurable via `classPrefix`). State changes use signals from `src/core/Signal.ts`. The `ColumnSchema` interface (in `src/core/types.ts`) has `isDerived?: boolean` set to `true` for derived columns (added in Task 8.4). Cell rendering happens in `TableBody.updateRowContent()` which iterates over columns and applies styles per cell.
+
+**Files to modify:**
+
+**`src/table/ColumnHeader.ts`** — add derived column visual markers:
+
+In `createElement()` (lines 99-232), after creating `nameRow` and `nameEl` (around line 126-130), check `this.column.isDerived`:
+- If true:
+  - Add `${this.classPrefix}-col-header--derived` class to the root `el` element
+  - Create a `<button>` element with class `${prefix}-derived-icon-btn`, containing an f(x) SVG inside a circle. Insert it into `nameRow` **BEFORE** `nameEl`.
+  - Set `nameEl.style.fontStyle = 'italic'`
+  - Store reference as `this.derivedIconBtn: HTMLElement | null` as a class property (the click handler will be added in Subtask 8.6.2)
+- If false: no changes (existing behavior)
+
+The f(x) icon SVG:
+```html
+<button class="${prefix}-derived-icon-btn" type="button" aria-label="Edit derived column" title="Edit derived column">
+  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+    <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="4" y="16.5" font-size="12" font-style="italic" font-family="Georgia, serif" fill="currentColor">f</text>
+    <text x="11" y="14" font-size="8" font-family="Georgia, serif" fill="currentColor">(x)</text>
+  </svg>
+</button>
+```
+
+The button is **non-interactive in this subtask** — no click handler yet. It will be wired in Subtask 8.6.2.
+
+**The action panel is NOT modified.** Pin, hide, filter, sort, and drag-handle buttons remain identical for all columns including derived ones.
+
+**`src/table/TableBody.ts`** — add derived cell tinting:
+
+In `updateRowContent()` (around line 569-621), **after** the pinned cell styling logic (after line ~617) and before `this.cellRenderer.render()`, check the column's `isDerived` flag:
+
+```typescript
+// Apply derived cell styling (after pinned logic so both classes can coexist)
+if (colSchema?.isDerived) {
+  cellEl.classList.add(`${this.classPrefix}-cell--derived`);
+} else {
+  cellEl.classList.remove(`${this.classPrefix}-cell--derived`);
+}
+```
+
+The `colSchema` is already available from `schemaMap.get(colName)` on line ~597.
+
+**`src/styles/data-table.css`** — add derived column visual styles after the column action panel section (after ~line 649):
+
+```css
+/* === Derived Column Visual Identity === */
+
+/* Header tint */
+.dt-col-header--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 40%, var(--dt-bg-secondary));
+}
+
+/* f(x) icon button in column name row */
+.dt-derived-icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--dt-primary);
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+.dt-derived-icon-btn:hover {
+  background: var(--dt-primary-light);
+  color: var(--dt-primary-hover);
+}
+
+/* Derived column cell tinting — background-color on the cell element
+   covers the entire cell including 0.75rem padding, since CSS padding
+   is inside the element's background painting area. */
+.dt-cell--derived {
+  background-color: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+}
+/* Hover state */
+.dt-row:hover .dt-cell--derived,
+.dt-row--hover .dt-cell--derived {
+  background-color: color-mix(in srgb, var(--dt-primary-light) 15%, var(--dt-bg-secondary));
+}
+/* Selected state */
+.dt-row--selected .dt-cell--derived {
+  background-color: color-mix(in srgb, var(--dt-primary-light) 50%, var(--dt-primary-light));
+}
+.dt-row--selected:hover .dt-cell--derived,
+.dt-row--selected.dt-row--hover .dt-cell--derived {
+  background-color: var(--dt-primary-lighter);
+}
+/* Derived + pinned combined */
+.dt-cell--derived.dt-cell--pinned {
+  background-color: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+}
+.dt-row:hover .dt-cell--derived.dt-cell--pinned,
+.dt-row--hover .dt-cell--derived.dt-cell--pinned {
+  background-color: color-mix(in srgb, var(--dt-primary-light) 15%, var(--dt-bg-secondary));
+}
+```
+
+Note: `color-mix()` with existing CSS custom properties (`--dt-primary-light` is `#eff6ff` in light mode, `#1e3a5f` in dark mode) handles dark mode tints automatically without separate `@media (prefers-color-scheme: dark)` rules.
+
+**Unit tests** (create `tests/derived/DerivedColumnVisuals.test.ts`):
+- ColumnHeader with `isDerived: true` in schema adds `.dt-col-header--derived` class to root element
+- ColumnHeader with `isDerived: true` creates a `.dt-derived-icon-btn` element in the name row, before the column name
+- ColumnHeader with `isDerived: true` sets `fontStyle: 'italic'` on the column name element
+- ColumnHeader with `isDerived: false` does NOT add `.dt-col-header--derived` or `.dt-derived-icon-btn`
+- Action panel contains identical buttons (pin, hide, filter, sort, drag) for both `isDerived: true` and `isDerived: false` columns
+- TableBody `updateRowContent()` adds `.dt-cell--derived` class to cells of columns with `isDerived: true`
+- TableBody `updateRowContent()` does NOT add `.dt-cell--derived` to cells of non-derived columns
+- `.dt-cell--derived` and `.dt-cell--pinned` can coexist on the same cell element
+
+**Manual UI tests** (demo at `http://localhost:4173/data-table/`):
+- Load a CSV file, add a derived expression column via the demo sidebar form (e.g., name: "total", expression: "price * quantity")
+- Verify derived column header has a subtle blue tint background, italic column name, and f(x) icon before the name
+- Verify body cells in the derived column have a subtle blue tint covering the FULL cell width (no white strips at the left/right padding edges)
+- Verify the action panel on the derived column shows pin, hide, filter, sort, drag-handle — identical to source columns
+- Pin the derived column → tint persists on the sticky header and sticky body cells
+- Hover over rows → derived cells show appropriate hover tint (slightly different from non-derived hover)
+- Select rows → derived cells show appropriate selection tint
+- Switch to dark mode (macOS System Settings → Appearance → Dark) → verify tints adapt to the dark palette
+- Hide the derived column → chip appears in hidden gutter; restore it → f(x) icon, italic name, and tints return
+
+#### Subtask 8.6.2: ExpressionEditor Extension Point and Derived Column Edit Panel
+
+Create the editor extension point interface, default textarea editor, and a floating edit panel for modifying existing derived columns. Wire the f(x) icon click to open the panel.
+
+**Background context:** The `FilterPanel` in `src/filters/FilterPanel.ts` is the reference pattern for the floating edit panel. It uses absolute positioning below an anchor element (4px gap), 320px fixed width, lazy creation (one instance per table managed by `TableContainer`), and close handlers for outside click (mousedown), Escape key, and close button. Fields are preserved on close for quick re-open but destroyed when switching columns. The derived edit panel follows this same pattern but at 360px width.
+
+The `ExpressionEditor` interface allows downstream apps to plug in CodeMirror, Monaco, or other editors instead of the built-in textarea. The factory pattern means `TableContainer` passes an optional `editorFactory` to the edit panel (and later the create modal), which falls back to `DefaultExpressionEditor` when not provided.
+
+**Existing API** (implemented in Task 8.4, `src/core/Actions.ts`):
+- `actions.validateExpression(expr)` → `Promise<{ valid: boolean; type?: DataType; originalType?: string; error?: string }>`
+- `actions.updateDerivedColumn(oldName, def)` → `Promise<{ success: boolean; error?: string }>`
+- `actions.removeDerivedColumn(name)` → `Promise<void>`
+- `actions.getCompletionContext(schema)` → `CompletionContext` (column names, types, isDerived flags)
+- `state.derivedColumns: Signal<DerivedColumnDef[]>` — current derived column definitions
+- `state.schema: Signal<ColumnSchema[]>` — full schema including `isDerived?: boolean` and `expression?: string` fields
+
+**Files to create:**
+
+**`src/derived/ExpressionEditorTypes.ts`** — extension point interface for downstream editors:
 
 ```typescript
 import type { CompletionContext } from './types';
@@ -806,11 +954,9 @@ import type { CompletionContext } from './types';
  * Interface that custom expression editors must implement.
  * The library provides a default textarea editor (DefaultExpressionEditor).
  * Downstream apps can replace it with CodeMirror, Monaco, etc.
- *
- * The CompletionContext provides column names/types for autocompletion support.
  */
 export interface ExpressionEditor {
-  /** The root DOM element to mount in the modal */
+  /** The root DOM element to mount in the panel/modal */
   readonly element: HTMLElement;
   /** Get current editor content */
   getValue(): string;
@@ -829,7 +975,7 @@ export interface ExpressionEditor {
 /**
  * Factory function for creating expression editors.
  * Downstream apps provide this to use CodeMirror or similar.
- * If not provided, DerivedColumnModal uses DefaultExpressionEditor.
+ * If not provided, DefaultExpressionEditor is used.
  */
 export type ExpressionEditorFactory = (
   container: HTMLElement,
@@ -839,14 +985,390 @@ export type ExpressionEditorFactory = (
 
 **`src/derived/DefaultExpressionEditor.ts`** — built-in textarea editor implementing `ExpressionEditor`:
 
-- Monospace `<textarea>` with placeholder text ("Enter SQL expression, e.g. price * quantity")
-- Error display area (`<div>` below textarea, red text, hidden when no error)
-- Column hints line (`<div>` showing "Available columns: col1 (integer), col2 (string), ...")
-- `setError()` toggles a `.dt-expr-editor-input--error` class on the textarea (red border)
-- `updateCompletionContext()` refreshes the column hints display
-- CSS: `font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px;`
+- Root element: a `<div>` containing the textarea, error div, and hints div
+- Monospace `<textarea>` with class `${prefix}-expr-editor-input`, placeholder "Enter SQL expression, e.g. price * quantity", 4 rows height
+- Error display `<div>` below textarea with class `${prefix}-expr-editor-error` (red text, hidden when no error via `display: none`)
+- Column hints `<div>` with class `${prefix}-expr-editor-context` showing "Available columns: col1 (integer), col2 (string), ..."
+- `getValue()`: returns `textarea.value`
+- `setValue(value)`: sets `textarea.value = value`
+- `focus()`: calls `textarea.focus()`
+- `setError(msg)`: if msg is non-null, add `${prefix}-expr-editor-input--error` class to textarea and show error div with text; if null, remove class and hide error div
+- `updateCompletionContext(ctx)`: rebuild the hints div text from `ctx.columns`
+- `destroy()`: remove root element from parent if attached
+- CSS font: `font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px;`
 
-**`src/derived/DerivedColumnModal.ts`** — modal dialog following the `ExportDialog` pattern:
+**`src/derived/DerivedColumnEditPanel.ts`** — floating panel for editing existing derived columns:
+
+```typescript
+import type { TableState } from '../core/State';
+import type { StateActions } from '../core/Actions';
+import type { ExpressionEditorFactory } from './ExpressionEditorTypes';
+
+export interface DerivedColumnEditPanelOptions {
+  classPrefix?: string;
+  /** Custom editor factory. If omitted, uses DefaultExpressionEditor. */
+  editorFactory?: ExpressionEditorFactory;
+}
+
+export class DerivedColumnEditPanel {
+  constructor(
+    private state: TableState,
+    private actions: StateActions,
+    options?: DerivedColumnEditPanelOptions
+  );
+
+  /** Open the panel for a specific column, positioned below the anchor element */
+  open(columnName: string, anchorElement: HTMLElement): void;
+
+  /** Close the panel */
+  close(): void;
+
+  /** Toggle: open if closed or showing different column; close if showing same column */
+  toggle(columnName: string, anchorElement: HTMLElement): void;
+
+  /** Get the root DOM element for mounting into the table's root container */
+  getElement(): HTMLElement;
+
+  /** Whether the panel is currently visible */
+  getIsOpen(): boolean;
+
+  /** The column currently being edited, or null */
+  getCurrentColumn(): string | null;
+
+  /** Clean up resources */
+  destroy(): void;
+}
+```
+
+Panel DOM structure:
+```
+.dt-derived-edit-panel (position: absolute, z-index: 22, width: 360px, display: none)
+  .dt-derived-edit-header
+    .dt-derived-edit-title ("Edit: <columnName>")
+    button.dt-derived-edit-close (X icon, same pattern as .dt-filter-panel-close)
+  .dt-derived-edit-body
+    .dt-derived-edit-section  — Name
+      label "Column name"
+      input.dt-filter-input (reuse existing input style class)
+      .dt-derived-edit-name-error (red text, hidden by default)
+    .dt-derived-edit-section  — Expression (only shown for expression columns)
+      label "SQL Expression"
+      [ExpressionEditor element — created by editorFactory or DefaultExpressionEditor]
+    .dt-derived-edit-section  — Vector info (only shown for vector columns)
+      <read-only text: "Vector column (float), 1000 values">
+    .dt-derived-edit-actions
+      button.dt-derived-edit-validate "Validate" (only for expression columns)
+      .dt-derived-edit-type-preview ("Type: float" or error message, hidden until validated)
+      button.dt-derived-edit-update "Update" (disabled until valid)
+    .dt-derived-edit-divider (thin hr)
+    .dt-derived-edit-danger-zone
+      button.dt-derived-edit-delete "Delete Column"
+      .dt-derived-edit-delete-confirm (hidden by default):
+        span "Are you sure?"
+        button "Confirm" (red/danger style)
+        button "Cancel"
+```
+
+Positioning logic (same as `FilterPanel.position()` in `src/filters/FilterPanel.ts`):
+- Get the root table element's `getBoundingClientRect()`
+- Get the anchor element's (f(x) button) `getBoundingClientRect()`
+- Position the panel with `left` relative to root, `top` = anchor bottom - root top + 4px gap
+- Clamp right edge to prevent overflow beyond the root element's width
+
+Behavior:
+- `open()`: Find the column's `DerivedColumnDef` from `state.derivedColumns.get()` and `ColumnSchema` from `state.schema.get()`. Pre-populate name input and expression editor (or show read-only vector info). Position below anchor. Show panel (`display: block`). Register close handlers.
+- Name input validates uniqueness in real-time: check `state.schema.get()` for any column with the same name, excluding the currently-edited column. Show/hide `name-error` div accordingly.
+- "Validate" button calls `actions.validateExpression(expression)`. On success, show "Type: \<type\>" in the preview area. On failure, show the DuckDB error message (and call `editor.setError(msg)`).
+- "Update" button is **disabled** until all conditions met: (a) name is non-empty, (b) name is unique (no validation error), (c) for expression columns, the expression has been validated successfully since the last edit to the expression. Any input/keystroke in the expression editor resets the "validated" flag, requiring re-validation before update.
+- "Update" click: calls `actions.updateDerivedColumn(oldName, { kind: 'expression', name, expression })`. On success, close panel. On failure, show error in the type preview area.
+- "Delete Column" click: hides the delete button and shows `delete-confirm` div with "Are you sure?" text plus [Confirm] and [Cancel] buttons.
+  - "Confirm" calls `actions.removeDerivedColumn(name)`, closes panel.
+  - "Cancel" hides the confirm div and re-shows the delete button.
+- **Vector columns**: The expression editor section is hidden. The vector info section shows read-only text like "Vector column (float), 1000 values". Only rename and delete are available. The "Validate" button is hidden. The "Update" button enables when name is valid (for rename-only updates).
+- Close handlers: outside click (mousedown on document, checking if target is outside panel), Escape key, close button click. Same pattern as `FilterPanel` (lines 230-264 in `src/filters/FilterPanel.ts`).
+- When switching to a different column: destroy the current expression editor, recreate for the new column.
+
+**Files to modify:**
+
+**`src/table/ColumnHeader.ts`** — wire f(x) icon click:
+
+Add to `ColumnHeaderOptions` interface:
+```typescript
+onDerivedIconClick?: (columnName: string, buttonElement: HTMLElement) => void;
+```
+
+In `attachEventListeners()` (around line 241), add: if `this.derivedIconBtn` exists (set in Subtask 8.6.1), add a click listener that calls `this.options.onDerivedIconClick?.(this.column.name, this.derivedIconBtn!)`.
+
+**`src/table/TableContainer.ts`** — manage the edit panel:
+
+Add to `TableContainerOptions`:
+```typescript
+/** Custom expression editor factory for derived column panel/modal */
+editorFactory?: ExpressionEditorFactory;
+```
+
+Add private property `derivedEditPanel: DerivedColumnEditPanel | null = null`.
+
+Add private method `ensureDerivedEditPanel()` that lazily creates the panel (passing `editorFactory` from options), appends its element to `this.element` (the `.dt-root`), and returns it.
+
+Add private method `handleDerivedIconClick(columnName: string, anchorEl: HTMLElement)` that:
+1. If `this.filterPanel` is open, close it (mutual exclusion — only one floating panel at a time)
+2. Call `this.ensureDerivedEditPanel().toggle(columnName, anchorEl)`
+
+In the existing `handleFilterClick()` method (around line 795-807): add a check — if `this.derivedEditPanel?.getIsOpen()`, close it before opening/toggling the filter panel.
+
+When creating `ColumnHeader` instances in `render()` (around line 634-657), pass the new callback:
+```typescript
+onDerivedIconClick: (name, el) => this.handleDerivedIconClick(name, el),
+```
+
+Destroy the panel in `destroy()`.
+
+**`src/styles/data-table.css`** — add edit panel and expression editor styles:
+
+```css
+/* === Derived Column Edit Panel === */
+
+/* Panel container (same visual pattern as .dt-filter-panel) */
+.dt-derived-edit-panel {
+  display: none;
+  position: absolute;
+  z-index: 22;
+  width: 360px;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  flex-direction: column;
+}
+
+/* Header (same pattern as .dt-filter-panel-header) */
+.dt-derived-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+.dt-derived-edit-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dt-derived-edit-close {
+  /* Same pattern as .dt-filter-panel-close */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+.dt-derived-edit-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dt-text);
+}
+
+/* Body */
+.dt-derived-edit-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.dt-derived-edit-section label {
+  display: block;
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-bottom: 0.25rem;
+}
+.dt-derived-edit-name-error {
+  color: #ef4444;
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+
+/* Actions row */
+.dt-derived-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.dt-derived-edit-validate {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  cursor: pointer;
+}
+.dt-derived-edit-validate:hover {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+}
+.dt-derived-edit-type-preview {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+}
+.dt-derived-edit-update {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: #fff;
+  cursor: pointer;
+  margin-left: auto;
+}
+.dt-derived-edit-update:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Danger zone */
+.dt-derived-edit-divider {
+  border: none;
+  border-top: 1px solid var(--dt-border);
+  margin: 0;
+}
+.dt-derived-edit-delete {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+.dt-derived-edit-delete:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+.dt-derived-edit-delete-confirm {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--dt-font-size-sm);
+}
+.dt-derived-edit-delete-confirm span {
+  color: var(--dt-text-secondary);
+}
+.dt-derived-edit-delete-confirm-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: var(--dt-font-size-xs);
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  border: 1px solid;
+}
+
+/* Expression editor */
+.dt-expr-editor-input {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+}
+.dt-expr-editor-input--error {
+  border-color: #ef4444;
+}
+.dt-expr-editor-error {
+  color: #ef4444;
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+.dt-expr-editor-context {
+  color: var(--dt-text-secondary);
+  font-size: 11px;
+  margin-top: 0.5rem;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .dt-derived-edit-panel {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .dt-derived-edit-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+```
+
+**Unit tests:**
+
+`tests/derived/DefaultExpressionEditor.test.ts`:
+- Creates a root element containing a textarea
+- `getValue()` / `setValue()` round-trip correctly
+- `setError(msg)` adds error class to textarea and shows error div; `setError(null)` removes them
+- `updateCompletionContext()` updates the hints text with column names and types
+- `focus()` focuses the textarea element
+- `destroy()` removes the element from its parent
+
+`tests/derived/DerivedColumnEditPanel.test.ts`:
+- Panel starts with `getIsOpen() === false` and `display: none`
+- `open(columnName, anchor)` makes panel visible and positions it below anchor
+- `toggle()` opens if closed, closes if same column, switches if different column
+- Pre-populates name input with existing column name
+- Pre-populates expression editor with existing expression (for expression columns)
+- Shows read-only info for vector columns (no expression editor)
+- Name validation: entering a name that matches another column shows error, clears on unique name
+- Validate button calls `actions.validateExpression()` and displays result
+- Update button disabled until name valid + expression validated
+- Update button calls `actions.updateDerivedColumn()` with correct arguments
+- Delete button click shows inline confirmation ("Are you sure?" + Confirm + Cancel)
+- Confirm calls `actions.removeDerivedColumn()` and closes panel
+- Cancel hides confirmation and re-shows delete button
+- Close on Escape key
+- Close on outside click (mousedown)
+- Close button click closes panel
+
+**Manual UI tests** (demo at `http://localhost:4173/data-table/`):
+- Click the f(x) icon on a derived expression column → edit panel opens below it
+- Panel shows the current column name and SQL expression pre-populated
+- Edit the expression text, click "Validate" → see inferred type (e.g., "Type: float") or DuckDB error message
+- Click "Update" → column updates with new expression, panel closes, table body shows new data
+- Click "Delete Column" → "Are you sure?" appears with Confirm and Cancel buttons
+- Click "Confirm" → column is removed from the table
+- Click "Delete Column" then "Cancel" → confirmation hides, nothing happens
+- Open the filter panel on any column, then click f(x) on a derived column → filter panel closes, edit panel opens
+- Open the edit panel, click the filter button on another column → edit panel closes, filter panel opens
+- Open the edit panel, press Escape → panel closes
+- Open the edit panel, click anywhere outside the panel → panel closes
+
+#### Subtask 8.6.3: New Column Modal and "+" Add Column Button
+
+Create a modal dialog for creating new derived columns and a full-height "+" button strip at the table's right edge.
+
+**Background context:** The `ExportDialog` in `src/export/ExportDialog.ts` is the reference modal pattern. It uses a fixed backdrop (`position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.4)`) with a centered dialog inside. Backdrop click (but not dialog click) closes the modal. Escape key closes. Body scroll is locked while open (`document.body.style.overflow = 'hidden'`). The dialog has `role="dialog"` and `aria-modal="true"`.
+
+The "+" button is positioned absolutely within `.dt-root` (which already has `position: relative` as the table's positioning context). It sits at `right: var(--dt-scrollbar-width)` — just to the left of the body's vertical scrollbar — spanning the full height of the table from header through body.
+
+**Existing API** (implemented in Task 8.4):
+- `actions.addDerivedColumn(def)` → `Promise<{ success: boolean; error?: string }>` — creates a new derived column, updates schema, VIEW, and state signals
+- `actions.validateExpression(expr)` → validation result
+- `state.totalRows.get()` → row count (needed for vector value count validation)
+- `state.schema.get()` → column list (needed for name uniqueness check)
+
+**Files to create:**
+
+**`src/derived/DerivedColumnModal.ts`** — modal dialog for creating new derived columns:
 
 ```typescript
 import type { TableState } from '../core/State';
@@ -866,173 +1388,384 @@ export class DerivedColumnModal {
     options?: DerivedColumnModalOptions
   );
 
-  /** Open for creating a new column */
-  openNew(): void;
+  /** Open the modal for creating a new column (always create mode, never edit) */
+  open(): void;
 
-  /** Open for editing an existing derived column (pre-populates name + expression/values) */
-  openEdit(columnName: string): void;
-
-  /** Close the modal */
+  /** Close the modal and reset form state */
   close(): void;
 
   /** Get the root DOM element (backdrop + dialog) for mounting */
   getElement(): HTMLElement;
+
+  /** Whether the modal is currently visible */
+  getIsOpen(): boolean;
 
   /** Clean up resources */
   destroy(): void;
 }
 ```
 
-Modal layout:
-- **Header**: "New Derived Column" (create mode) or "Edit: \<name\>" (edit mode)
-- **Name input**: Text input with real-time name uniqueness validation (checks against `state.schema.get()`, excluding self when editing). Error text below input.
-- **Mode toggle**: "Expression" | "Vector" radio/buttons. Hidden when editing (mode locked to existing column's kind).
-- **Expression mode**: Editor container (created by `editorFactory` or `DefaultExpressionEditor`) + "Validate" button + type preview area (shows "Type: float" or error message after validation)
-- **Vector mode**: Type selector dropdown (`integer`, `float`, `string`, `boolean`) + `<textarea>` for values (one value per line, monospace) + row count validation (must match `state.totalRows.get()` exactly, show error if mismatched)
-- **Footer**: "Cancel" + "Save" buttons. Save is disabled until name is non-empty and validation passes.
+Modal DOM structure:
+```
+.dt-derived-modal-backdrop (fixed, inset 0, z-index 1000, display: none)
+  .dt-derived-modal (centered, 480px wide, role="dialog", aria-modal="true")
+    .dt-derived-modal-header
+      span "New Derived Column"
+      button (close X, same pattern as ExportDialog close)
+    .dt-derived-modal-body
+      .dt-derived-modal-section  — Name
+        label "Column name"
+        input.dt-filter-input
+        .dt-derived-modal-name-error (red, hidden)
+      .dt-derived-modal-section  — Mode
+        fieldset with two radio buttons: "Expression" (default) / "Vector"
+      .dt-derived-modal-section  — Expression (shown when mode=expression)
+        label "SQL Expression"
+        [ExpressionEditor element — created by editorFactory or DefaultExpressionEditor]
+        div: button "Validate" + .dt-derived-modal-type-preview (type or error)
+      .dt-derived-modal-section  — Vector (shown when mode=vector, hidden by default)
+        label "Type"
+        select: integer, float, string, boolean
+        label "Values (one per line)"
+        textarea (monospace, 8 rows)
+        .dt-derived-modal-vector-info ("Expected: <totalRows> values, one per line")
+        .dt-derived-modal-vector-error (count mismatch error, hidden)
+    .dt-derived-modal-footer
+      button "Cancel" (secondary style, like .dt-export-copy-btn)
+      button "Create" (primary style, like .dt-export-btn, disabled until valid)
+```
 
 Behavior:
-- "Validate" button calls `actions.validateExpression(expression)`, shows inferred type on success or error message on failure
-- "Save" calls `actions.addDerivedColumn(def)` (create mode) or `actions.updateDerivedColumn(oldName, def)` (edit mode), closes modal on success
-- Backdrop click or Escape closes modal
-- Body scroll locked while open (`document.body.style.overflow = 'hidden'`)
+- `open()`: show backdrop with `--open` class (`display: flex; align-items: center; justify-content: center`), lock `document.body.style.overflow = 'hidden'`, reset form fields, focus name input.
+- `close()`: hide backdrop (remove `--open` class), restore body overflow, destroy expression editor if created, reset all fields and validation state.
+- Backdrop click (check `event.target === backdrop`, not dialog) closes modal.
+- Escape key closes modal.
+- Name uniqueness validated in real-time against `state.schema.get()`.
+- **Expression mode:**
+  - "Validate" calls `actions.validateExpression(expression)`. On success, show "Type: \<type\>" in preview area (green text). On failure, show error (red text) and call `editor.setError(msg)`.
+  - "Create" disabled until: name is non-empty AND name is unique AND expression has been validated successfully since last keystroke.
+- **Vector mode:**
+  - Type selector: `integer`, `float`, `string`, `boolean` dropdown.
+  - Textarea for values, one per line. Info text shows "Expected: N values" from `state.totalRows.get()`.
+  - Validates value count matches `state.totalRows.get()` on every textarea input. Shows error if mismatched.
+  - "Create" disabled until: name is non-empty AND name is unique AND value count matches.
+- "Create" click: builds `DerivedColumnDef` from form state, calls `actions.addDerivedColumn(def)`. On success, closes modal. On failure, shows error message in the modal body.
+- Mode radio buttons toggle visibility of expression vs. vector sections. Expression is the default.
 
-#### Files to Modify
+**`src/derived/AddColumnButton.ts`** — the thin vertical "+" button strip:
 
-**`src/table/ColumnHeader.ts`** — changes for derived column visual identity and actions:
-
-Add new callback options to the existing `ColumnHeaderOptions` interface (or equivalent constructor params):
 ```typescript
-onDerivedEdit?: (columnName: string) => void;   // called when edit button clicked
-onDerivedDelete?: (columnName: string) => void;  // called when delete confirmed
+export interface AddColumnButtonOptions {
+  classPrefix?: string;
+  onClick?: () => void;
+}
+
+export class AddColumnButton {
+  constructor(options?: AddColumnButtonOptions);
+
+  /** Get the button element for mounting */
+  getElement(): HTMLElement;
+
+  /** Clean up */
+  destroy(): void;
+}
 ```
 
-In `createElement()` / `render()`:
-- If `this.column.isDerived` is true:
-  - Add `.dt-col-header--derived` class to the header element
-  - Prepend an `f(x)` SVG icon before the column name: `<span class="dt-derived-icon"><svg viewBox="0 0 16 16" width="12" height="12"><text x="1" y="13" font-size="13" font-style="italic" font-family="serif">f</text><text x="8" y="10" font-size="8" font-family="serif">(x)</text></svg></span>`
-  - Render column name in italics (`nameEl.style.fontStyle = 'italic'`)
-  - **Action panel**: Replace the "hide" button with a "delete" button (trash SVG icon, `.dt-col-delete-btn` class, red on hover). Add an "edit" button (pencil SVG icon) before the filter button. Keep pin, sort, filter buttons.
-  - **Delete confirmation**: Use inline confirmation (no separate modal). On click, button text/icon changes to "Confirm?" for 3 seconds. Clicking again during that window calls `onDerivedDelete(columnName)`. After 3 seconds, reverts to trash icon. This prevents accidental deletion without modal fatigue.
-- If `this.column.isDerived` is false: existing behavior unchanged (hide button, no edit/delete)
-
-**`src/table/TableBody.ts`** — add derived cell styling:
-
-In the cell rendering logic, check the column's `isDerived` flag:
-- If true: add `.dt-cell--derived` class to the cell element
-- If false: remove it (or don't add it)
-
-The schema is available via `state.schema.get()` — look up by column name to check `isDerived`.
-
-**`src/table/TableContainer.ts`** — manage modal and toolbar button:
-
-Add to `TableContainerOptions` (or create if it doesn't exist as a separate interface):
-```typescript
-/** Custom expression editor factory for derived column modal */
-editorFactory?: ExpressionEditorFactory;
-/** Show "New Column" toolbar button (default: true when actions are provided) */
-showNewColumnButton?: boolean;
+DOM: A single `<button>` element:
+```html
+<button class="${prefix}-add-column-btn" type="button" aria-label="Add derived column" title="Add derived column">
+  <span class="${prefix}-add-column-icon">+</span>
+</button>
 ```
 
-In constructor, after creating the header area:
-- If `showNewColumnButton` is true (or defaulted), create a `<button>` with `+` SVG icon, class `.dt-new-column-btn`, `aria-label="Add derived column"`, `title="Add derived column"`. Append it to the header area (after the scrollbar gutter). On click, open the derived column modal in "new" mode.
+On click: calls `options.onClick?.()`.
 
-Add private property `derivedModal: DerivedColumnModal | null = null`. Lazily create it in `ensureDerivedModal()`, passing `editorFactory` from options.
+**Files to modify:**
 
-Wire ColumnHeader callbacks:
-- `onDerivedEdit: (name) => this.ensureDerivedModal().openEdit(name)`
-- `onDerivedDelete: (name) => this.actions?.removeDerivedColumn(name)`
+**`src/table/TableContainer.ts`** — add the "+" button and modal:
 
-Clean up modal in `destroy()`.
+Add to `TableContainerOptions`:
+```typescript
+/** Show "+" add column button at right edge (default: true) */
+showAddColumnButton?: boolean;
+```
 
-**`src/styles/data-table.css`** — add derived column styles:
+Add private properties:
+```typescript
+private derivedModal: DerivedColumnModal | null = null;
+private addColumnButton: AddColumnButton | null = null;
+```
+
+In constructor, after assembling the DOM (after `this.element.appendChild(this.bodyScroll)` on line ~138):
+- If `showAddColumnButton !== false` (default true): create `new AddColumnButton({ classPrefix, onClick: () => this.openDerivedModal() })`, append its element to `this.element` (`.dt-root`).
+
+Add private method `openDerivedModal()`:
+- Lazily create `DerivedColumnModal` (pass `state`, `actions`, `{ classPrefix, editorFactory }` from options), append its element to `document.body` (not `.dt-root` — fixed-position modals should be body children to avoid stacking context issues).
+- Call `modal.open()`.
+
+Destroy modal and button in `destroy()`.
+
+**`src/styles/data-table.css`** — add "+" button and modal styles:
 
 ```css
-/* Derived column header — subtle tinted background */
-.dt-col-header--derived {
-  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
-}
-.dt-col-header--derived .dt-col-name {
-  font-style: italic;
-}
-.dt-derived-icon {
-  margin-right: 4px;
-  opacity: 0.7;
-  vertical-align: middle;
-}
+/* === Add Column Button (+) === */
 
-/* Derived column cells — very subtle tint */
-.dt-cell--derived {
-  background: color-mix(in srgb, var(--dt-primary-light) 15%, var(--dt-bg));
-}
-
-/* Delete button for derived columns — red on hover */
-.dt-col-delete-btn:hover {
-  color: var(--dt-danger, #ef4444);
-}
-
-/* New column button in toolbar */
-.dt-new-column-btn {
-  border: 1px dashed var(--dt-border);
-  background: transparent;
-  color: var(--dt-text-secondary);
-  cursor: pointer;
-  border-radius: 4px;
-  padding: 4px 8px;
+.dt-add-column-btn {
+  position: absolute;
+  top: 0;
+  right: var(--dt-scrollbar-width);
+  bottom: 0;
+  width: 28px;
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  border: none;
+  border-left: 1px dashed var(--dt-border);
+  background: transparent;
+  color: var(--dt-text-tertiary);
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition), border-color var(--dt-transition);
 }
-.dt-new-column-btn:hover {
-  border-color: var(--dt-primary);
+.dt-add-column-btn:hover {
+  background: var(--dt-bg-secondary);
   color: var(--dt-primary);
+  border-left-color: var(--dt-primary);
+}
+.dt-add-column-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
+}
+.dt-add-column-icon {
+  font-size: 1.25rem;
+  font-weight: 300;
+  line-height: 1;
 }
 
-/* Expression editor */
-.dt-expr-editor-input {
+/* === Derived Column Modal === */
+
+/* Backdrop (same pattern as .dt-export-backdrop) */
+.dt-derived-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+}
+.dt-derived-modal-backdrop--open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dialog (same pattern as .dt-export-dialog) */
+.dt-derived-modal {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+.dt-derived-modal-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+.dt-derived-modal-header span {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  flex: 1;
+}
+.dt-derived-modal-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.dt-derived-modal-section label {
+  display: block;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  margin-bottom: 0.25rem;
+}
+.dt-derived-modal-name-error,
+.dt-derived-modal-vector-error {
+  color: #ef4444;
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+.dt-derived-modal-vector-info {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-top: 0.25rem;
+}
+.dt-derived-modal-type-preview {
+  font-size: var(--dt-font-size-sm);
+  margin-top: 0.25rem;
+}
+.dt-derived-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--dt-border);
+}
+
+/* Mode toggle radio buttons */
+.dt-derived-modal-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+.dt-derived-modal-mode-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+}
+
+/* Vector values textarea */
+.dt-derived-modal-vector-textarea {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
   width: 100%;
   resize: vertical;
   border: 1px solid var(--dt-border);
-  border-radius: 4px;
-  padding: 8px;
-}
-.dt-expr-editor-input--error {
-  border-color: var(--dt-danger, #ef4444);
-}
-.dt-expr-editor-error {
-  color: var(--dt-danger, #ef4444);
-  font-size: 12px;
-  margin-top: 4px;
-}
-.dt-expr-editor-context {
-  color: var(--dt-text-secondary);
-  font-size: 11px;
-  margin-top: 8px;
+  border-radius: var(--dt-radius-sm);
+  padding: 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
 }
 
-/* Derived column modal — follows ExportDialog backdrop/dialog pattern */
-.dt-derived-modal-backdrop {
-  /* Same pattern as .dt-export-backdrop */
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .dt-derived-modal-backdrop {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .dt-derived-modal {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
 }
-.dt-derived-modal {
-  /* Same pattern as .dt-export-dialog */
-}
-/* Dark mode handled automatically via CSS custom properties */
 ```
 
-**Verification:**
-- Derived column headers show italic name, f(x) icon, tinted background
-- Derived cells show subtle tint distinguishing them from source cells
-- "New Column" button visible in toolbar, opens modal
-- Expression mode: validate shows inferred type or DuckDB error, save creates column
-- Vector mode: validates value count matches totalRows, save creates column
-- Edit button on derived column opens modal pre-populated with existing name + expression/values
-- Delete button shows inline "Confirm?" for 3 seconds, second click deletes
-- Source columns show hide button (not delete/edit) — existing behavior unchanged
-- Custom `editorFactory` (e.g., CodeMirror) works when provided via options
-- `CompletionContext` correctly lists all columns for editor autocompletion
+**Unit tests:**
+
+`tests/derived/DerivedColumnModal.test.ts`:
+- Modal starts hidden (`getIsOpen() === false`, backdrop display: none)
+- `open()` shows backdrop with `--open` class and locks body scroll
+- `close()` hides backdrop and restores body scroll
+- Escape key closes modal
+- Backdrop click closes modal (but clicking the dialog itself does not)
+- Name validation: entering a duplicate name shows error, Create button stays disabled
+- Expression mode: Validate calls `actions.validateExpression()` and shows type or error
+- Expression mode: Create disabled until name valid + expression validated
+- Expression mode: typing in expression after validation resets validated flag, disables Create
+- Vector mode: count mismatch shows error
+- Vector mode: correct count enables Create
+- Create calls `actions.addDerivedColumn()` with correct `DerivedColumnDef`
+- Create shows error inline if `addDerivedColumn()` returns `{ success: false, error: '...' }`
+- Create closes modal on success
+- Mode toggle switches between expression and vector sections
+
+`tests/derived/AddColumnButton.test.ts`:
+- Creates a button element with class `.dt-add-column-btn`
+- Click fires the `onClick` callback
+- Has `aria-label="Add derived column"`
+
+**Manual UI tests** (demo at `http://localhost:4173/data-table/`):
+- Verify the "+" button strip is visible at the right edge of the table, left of the scrollbar, spanning from header through body height
+- Hover the "+" button → dashed border turns blue, background subtly tints
+- Click "+" → modal opens centered with "New Derived Column" title
+- Enter a column name and SQL expression (e.g., name: "total", expression: "price * quantity"), click Validate → see "Type: float"
+- Click Create → new column appears with f(x) icon, italic name, tinted header and cells
+- Try creating with a duplicate name → error appears, Create button disabled
+- Switch mode to "Vector" → expression section replaced with type selector and textarea
+- Enter wrong number of values → error "Expected N values, got M"
+- Enter correct number of values → Create enabled
+- Press Escape or click backdrop → modal closes without creating
+- Dark mode: modal and "+" button render correctly
+
+#### Subtask 8.6.4: Library Exports, Demo Cleanup, and Edge Cases
+
+Export all new public types and classes, remove the demo sidebar derived columns card (all management now happens via the table's "+" button and f(x) edit panel), and handle edge cases.
+
+**Background context:** The demo app at `demo/main.ts` currently has a sidebar card (`id="derived-columns-card"` in `demo/index.html`, lines 67-82) with text inputs for column name and expression, validate/add buttons, and a rendered list of existing derived columns. This was a temporary development UI that is now superseded by the in-table "+" button (Subtask 8.6.3) and f(x) edit panel (Subtask 8.6.2). The card and all its associated JavaScript should be removed.
+
+**Files to modify:**
+
+**`src/index.ts`** — add exports for all new derived column UI types and classes:
+```typescript
+// Derived column UI — ExpressionEditor extension point
+export type { ExpressionEditor, ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+export { DefaultExpressionEditor } from './derived/DefaultExpressionEditor';
+
+// Derived column UI — Edit panel
+export { DerivedColumnEditPanel } from './derived/DerivedColumnEditPanel';
+export type { DerivedColumnEditPanelOptions } from './derived/DerivedColumnEditPanel';
+
+// Derived column UI — Create modal
+export { DerivedColumnModal } from './derived/DerivedColumnModal';
+export type { DerivedColumnModalOptions } from './derived/DerivedColumnModal';
+
+// Derived column UI — Add column button
+export { AddColumnButton } from './derived/AddColumnButton';
+export type { AddColumnButtonOptions } from './derived/AddColumnButton';
+```
+
+**`demo/index.html`** — remove the entire `derived-columns-card` div (lines 67-82, from `<div class="card" id="derived-columns-card"` through the closing `</div>`).
+
+**`demo/main.ts`** — remove all derived column sidebar code:
+- Remove DOM element references: `derivedColumnsCard`, `derivedNameInput`, `derivedExprInput`, `validateExprBtn`, `addDerivedBtn`, `derivedValidationMsg`, `derivedColumnsList` (around lines 56-63)
+- Remove `updateDerivedColumnsList()` function and all calls to it
+- Remove `updateDerivedInputState()` function and all calls to it
+- Remove `validateExprBtn` click handler (around line 809)
+- Remove `addDerivedBtn` click handler (around line 830)
+- Remove `tableState.derivedColumns.subscribe()` handler that called `updateDerivedColumnsList()` (around line 633)
+- Remove or simplify the `tableState.tableName.subscribe()` handler that showed/hid the card (around line 636)
+
+**`src/table/TableContainer.ts`** — handle edge cases:
+
+Subscribe to `state.derivedColumns` changes. If the derived edit panel is open and its `getCurrentColumn()` no longer exists in the updated derived columns list, close the panel. This handles the case where undo/redo removes the column being edited:
+```typescript
+this.state.derivedColumns.subscribe((cols) => {
+  if (this.derivedEditPanel?.getIsOpen()) {
+    const currentCol = this.derivedEditPanel.getCurrentColumn();
+    if (currentCol && !cols.some(c => c.name === currentCol)) {
+      this.derivedEditPanel.close();
+    }
+  }
+});
+```
+
+When data is reloaded (detected via `state.schema` subscription in the existing `render()` flow), close the edit panel and modal if open.
+
+Ensure the `render()` method does not destroy the add-column button or modal — they are positioned absolutely and are not children of the header row that gets rebuilt.
+
+**Unit tests** (`tests/derived/DerivedColumnIntegration.test.ts`):
+- All new types (`ExpressionEditor`, `ExpressionEditorFactory`, `DefaultExpressionEditor`, `DerivedColumnEditPanel`, `DerivedColumnEditPanelOptions`, `DerivedColumnModal`, `DerivedColumnModalOptions`, `AddColumnButton`, `AddColumnButtonOptions`) are exported from `src/index.ts`
+- TableContainer with `showAddColumnButton: false` does not create the "+" button
+- TableContainer with `editorFactory` option passes it through to the edit panel and modal
+- Edit panel closes when the edited column is removed from `state.derivedColumns` (simulating undo)
+- Derived column can be reordered via drag-and-drop — f(x) icon and cell tint persist after reorder
+
+**Manual UI tests** (full end-to-end, demo at `http://localhost:4173/data-table/`):
+- Verify the sidebar "Derived Columns" card is gone
+- Full workflow: load CSV → click "+" → create expression column → see it appear with tint, italic name, f(x) icon → click f(x) → edit expression → validate → update → verify table shows new data → delete via edit panel → verify column gone
+- Undo/redo: create a derived column → Ctrl/Cmd+Z → column removed, all visual markers gone → Ctrl/Cmd+Shift+Z → column restored with tint, icon, and panel functionality
+- Session persistence: create a derived column → reload page → column is restored with f(x) icon, italic name, header tint, and cell tint
+- Dark mode: all new UI elements (f(x) icon, edit panel, modal, "+" button, tints) render correctly
+- Pin a derived column → tint persists on sticky header and cells
+- Drag-and-drop reorder a derived column → f(x) icon and tint follow the column
+- Hide a derived column → chip in hidden gutter → restore → f(x) icon, italic name, and tints return
+- Open the edit panel on a derived column → press Ctrl/Cmd+Z to undo that column's creation → edit panel closes gracefully without errors
+- Export (CSV/JSON/Parquet) includes derived columns with correct values
 
 ### Task 8.7: Derived Columns — Integration Fixes and Verification
 
@@ -1084,14 +1817,17 @@ Update `demo/main.ts`:
 - Remove `tableName` from `CrossfilterCoordinator` constructor call
 - Update `attachVisualizations()` to read tableName from state
 - Add `tableName` subscription for visualization reattachment
-- Add derived column count to the `updateTableInfo()` display: show "N derived" next to existing column/row counts when derived columns exist
+- Note: The demo sidebar "Derived Columns" card was already removed in Subtask 8.6.4, so no derived column UI updates are needed here
 
 #### Fix 4: Library exports
 
 Update `src/index.ts` to export all new public types and classes:
 - From `src/derived/types.ts`: `DerivedColumnDef`, `ExpressionColumnDef`, `VectorColumnDef`, `DerivedColumnKind`, `VectorDataType`, `CompletionContext`, `DerivedColumnInfo`
 - From `src/derived/ExpressionEditorTypes.ts`: `ExpressionEditor`, `ExpressionEditorFactory`
+- From `src/derived/DefaultExpressionEditor.ts`: `DefaultExpressionEditor`
+- From `src/derived/DerivedColumnEditPanel.ts`: `DerivedColumnEditPanel`, `DerivedColumnEditPanelOptions`
 - From `src/derived/DerivedColumnModal.ts`: `DerivedColumnModal`, `DerivedColumnModalOptions`
+- From `src/derived/AddColumnButton.ts`: `AddColumnButton`, `AddColumnButtonOptions`
 - From `src/derived/DerivedColumnManager.ts`: `DerivedColumnManager`
 
 #### Fix 5: Snapshot version bump

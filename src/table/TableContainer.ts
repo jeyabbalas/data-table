@@ -16,6 +16,8 @@ import { TableBody } from './TableBody';
 import { FilterBar } from '../filters/FilterBar';
 import { FilterPanel } from '../filters/FilterPanel';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
+import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
+import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { copyRowsToClipboard } from '../export/Clipboard';
 
 /**
@@ -32,6 +34,8 @@ export interface TableContainerOptions {
   showFilterBar?: boolean;
   /** Called when a filter is removed via filter chip, for clearing visualization state */
   onFilterRemove?: (column: string) => void;
+  /** Custom expression editor factory for derived column panel/modal */
+  editorFactory?: ExpressionEditorFactory;
 }
 
 /**
@@ -70,6 +74,7 @@ export class TableContainer {
   private columnReorder: ColumnReorder | null = null;
   private filterBar: FilterBar | null = null;
   private filterPanel: FilterPanel | null = null;
+  private derivedEditPanel: DerivedColumnEditPanel | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
@@ -105,6 +110,7 @@ export class TableContainer {
       classPrefix: 'dt',
       showFilterBar: true,
       onFilterRemove: undefined as unknown as (column: string) => void,
+      editorFactory: undefined as unknown as ExpressionEditorFactory,
       ...options,
     };
 
@@ -611,6 +617,12 @@ export class TableContainer {
       this.filterPanel = null;
     }
 
+    // Destroy derived edit panel (will be recreated lazily on next f(x) click)
+    if (this.derivedEditPanel) {
+      this.derivedEditPanel.destroy();
+      this.derivedEditPanel = null;
+    }
+
     // Clear existing column headers
     this.destroyColumnHeaders();
     this.headerRow.innerHTML = '';
@@ -643,6 +655,7 @@ export class TableContainer {
               {
                 classPrefix: this.resolvedOptions.classPrefix,
                 onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
+                onDerivedIconClick: (column, buttonEl) => this.handleDerivedIconClick(column, buttonEl),
               }
             );
             this.columnHeaders.push(columnHeader);
@@ -795,6 +808,11 @@ export class TableContainer {
   private handleFilterClick(column: string, anchorElement: HTMLElement): void {
     if (!this.actions) return;
 
+    // Mutual exclusion: close derived edit panel if open
+    if (this.derivedEditPanel?.getIsOpen()) {
+      this.derivedEditPanel.close();
+    }
+
     // Create panel lazily on first click
     if (!this.filterPanel) {
       this.filterPanel = new FilterPanel(this.state, this.actions, {
@@ -804,6 +822,30 @@ export class TableContainer {
     }
 
     this.filterPanel.toggle(column, anchorElement);
+  }
+
+  /**
+   * Handle derived column icon click from a column header.
+   * Creates the DerivedColumnEditPanel lazily and toggles it.
+   */
+  private handleDerivedIconClick(columnName: string, anchorElement: HTMLElement): void {
+    if (!this.actions) return;
+
+    // Mutual exclusion: close filter panel if open
+    if (this.filterPanel?.getIsOpen()) {
+      this.filterPanel.close();
+    }
+
+    // Create panel lazily on first click
+    if (!this.derivedEditPanel) {
+      this.derivedEditPanel = new DerivedColumnEditPanel(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+        editorFactory: this.resolvedOptions.editorFactory,
+      });
+      this.element.appendChild(this.derivedEditPanel.getElement());
+    }
+
+    this.derivedEditPanel.toggle(columnName, anchorElement);
   }
 
   /**
@@ -922,6 +964,12 @@ export class TableContainer {
     if (this.filterPanel) {
       this.filterPanel.destroy();
       this.filterPanel = null;
+    }
+
+    // Destroy derived column edit panel
+    if (this.derivedEditPanel) {
+      this.derivedEditPanel.destroy();
+      this.derivedEditPanel = null;
     }
 
     // Destroy hidden columns gutter

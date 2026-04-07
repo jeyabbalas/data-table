@@ -745,6 +745,266 @@
 }
 
 /* ===========================================
+   Derived Column Edit Panel
+   =========================================== */
+
+/* Panel container (same visual pattern as .dt-filter-panel) */
+.dt-derived-edit-panel {
+  position: absolute;
+  z-index: 22;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--dt-font-family);
+}
+
+/* Header */
+.dt-derived-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-derived-edit-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-derived-edit-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+
+.dt-derived-edit-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dt-text);
+}
+
+/* Body */
+.dt-derived-edit-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dt-derived-edit-section label {
+  display: block;
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.dt-derived-edit-name-error {
+  color: #ef4444;
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+
+/* Actions row */
+.dt-derived-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dt-derived-edit-validate {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  cursor: pointer;
+}
+
+.dt-derived-edit-validate:hover {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+}
+
+.dt-derived-edit-validate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-derived-edit-type-preview {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-derived-edit-update {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.dt-derived-edit-update:hover:not(:disabled) {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-derived-edit-update:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Danger zone */
+.dt-derived-edit-divider {
+  border: none;
+  border-top: 1px solid var(--dt-border);
+  margin: 0;
+}
+
+.dt-derived-edit-danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dt-derived-edit-delete {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--dt-font-size-sm);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+
+.dt-derived-edit-delete:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.dt-derived-edit-delete-confirm {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--dt-font-size-sm);
+}
+
+.dt-derived-edit-delete-confirm span {
+  color: var(--dt-text-secondary);
+}
+
+.dt-derived-edit-delete-confirm-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: var(--dt-font-size-xs);
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.dt-derived-edit-delete-confirm-yes {
+  border-color: #ef4444;
+  background: #ef4444;
+  color: #fff;
+}
+
+.dt-derived-edit-delete-confirm-yes:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.dt-derived-edit-delete-confirm-no {
+  border-color: var(--dt-border);
+  background: var(--dt-bg);
+  color: var(--dt-text-secondary);
+}
+
+.dt-derived-edit-delete-confirm-no:hover {
+  border-color: var(--dt-text-secondary);
+  color: var(--dt-text);
+}
+
+/* ===========================================
+   Expression Editor
+   =========================================== */
+
+.dt-expr-editor-input {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  box-sizing: border-box;
+}
+
+.dt-expr-editor-input:focus {
+  outline: none;
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-expr-editor-input--error {
+  border-color: #ef4444;
+}
+
+.dt-expr-editor-input--error:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.dt-expr-editor-error {
+  color: #ef4444;
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+
+.dt-expr-editor-context {
+  color: var(--dt-text-secondary);
+  font-size: 11px;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .dt-derived-edit-panel {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .dt-derived-edit-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ===========================================
    Column Divider
    =========================================== */
 

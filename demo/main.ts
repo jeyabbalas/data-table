@@ -607,12 +607,12 @@ bridge
       }
     });
 
-    // Subscribe to column reorder to re-attach visualizations
-    tableState.visibleColumns.subscribe(() => {
-      // Only re-attach if visualizations were already attached initially
+    // Debounced re-attachment of visualizations.
+    // Shared by visibleColumns and schema subscribers so that batch updates
+    // (e.g., updateDerivedColumn which sets both) only re-attach once.
+    function scheduleVisualizationReattach(): void {
       if (!tableState.tableName.get() || !visualizationsAttached) return;
 
-      // Clear any pending reorder timeout
       if (reorderTimeout) {
         clearTimeout(reorderTimeout);
       }
@@ -628,7 +628,15 @@ bridge
         attachVisualizations(tableName, schema);
         updateTableInfo();
       }, 100);
-    });
+    }
+
+    // Subscribe to column reorder to re-attach visualizations
+    tableState.visibleColumns.subscribe(scheduleVisualizationReattach);
+
+    // Subscribe to schema changes to re-attach visualizations.
+    // Schema changes trigger TableContainer.render() which destroys column
+    // headers — visualizations must be re-attached to the new headers.
+    tableState.schema.subscribe(scheduleVisualizationReattach);
 
     // Subscribe to derived columns changes
     tableState.derivedColumns.subscribe(() => {

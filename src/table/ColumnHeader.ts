@@ -24,6 +24,8 @@ export interface ColumnHeaderOptions {
   classPrefix?: string;
   /** Called when the filter button is clicked, with column name and button element for positioning */
   onFilterClick?: (column: string, buttonElement: HTMLElement) => void;
+  /** Called when the f(x) icon on a derived column is clicked */
+  onDerivedIconClick?: (columnName: string, buttonElement: HTMLElement) => void;
 }
 
 /**
@@ -273,6 +275,11 @@ export class ColumnHeader {
 
     // Filter button
     this.filterButton.addEventListener('click', this.handleFilterClick);
+
+    // Derived column icon button
+    if (this.derivedIconBtn) {
+      this.derivedIconBtn.addEventListener('click', this.handleDerivedIconClick);
+    }
   }
 
   /**
@@ -318,6 +325,12 @@ export class ColumnHeader {
     if (this.destroyed) return;
     event.stopPropagation();
     this.options.onFilterClick?.(this.column.name, this.filterButton);
+  };
+
+  private handleDerivedIconClick = (event: MouseEvent): void => {
+    if (this.destroyed) return;
+    event.stopPropagation();
+    this.options.onDerivedIconClick?.(this.column.name, this.derivedIconBtn!);
   };
 
   // =========================================
@@ -580,8 +593,11 @@ export class ColumnHeader {
     }
     this.unsubscribes = [];
 
-    // Clean up derived icon button reference
-    this.derivedIconBtn = null;
+    // Clean up derived icon button
+    if (this.derivedIconBtn) {
+      this.derivedIconBtn.removeEventListener('click', this.handleDerivedIconClick);
+      this.derivedIconBtn = null;
+    }
 
     // Remove element from DOM
     if (this.element.parentNode) {

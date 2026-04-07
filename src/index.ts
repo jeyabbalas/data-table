@@ -196,6 +196,13 @@ export type {
   CompletionContext,
 } from './derived/types';
 export { DerivedColumnManager } from './derived/DerivedColumnManager';
+export type {
+  ExpressionEditor,
+  ExpressionEditorFactory,
+} from './derived/ExpressionEditorTypes';
+export { DefaultExpressionEditor } from './derived/DefaultExpressionEditor';
+export { DerivedColumnEditPanel } from './derived/DerivedColumnEditPanel';
+export type { DerivedColumnEditPanelOptions } from './derived/DerivedColumnEditPanel';
 
 // Worker types (for advanced usage)
 export type {

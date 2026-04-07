@@ -38,6 +38,7 @@ export class DerivedColumnEditPanel {
   private currentEditor: ExpressionEditor | null = null;
   private currentColumn: string | null = null;
   private currentDef: DerivedColumnDef | null = null;
+  private currentAnchor: HTMLElement | null = null;
   private isOpen = false;
   private destroyed = false;
   private expressionValidated = false;
@@ -366,6 +367,13 @@ export class DerivedColumnEditPanel {
     this.currentColumn = columnName;
     this.currentDef = def;
 
+    // Toggle active state on icon button
+    if (this.currentAnchor) {
+      this.currentAnchor.classList.remove(`${this.prefix}-derived-icon-btn--active`);
+    }
+    this.currentAnchor = anchorElement;
+    anchorElement.classList.add(`${this.prefix}-derived-icon-btn--active`);
+
     // Update title
     this.titleEl.textContent = `Edit: ${columnName}`;
 
@@ -448,6 +456,13 @@ export class DerivedColumnEditPanel {
     if (!this.isOpen) return;
 
     this.isOpen = false;
+
+    // Remove active state from icon button
+    if (this.currentAnchor) {
+      this.currentAnchor.classList.remove(`${this.prefix}-derived-icon-btn--active`);
+      this.currentAnchor = null;
+    }
+
     this.element.style.display = 'none';
 
     this.unregisterCloseHandlers();

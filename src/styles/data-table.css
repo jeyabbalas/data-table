@@ -672,15 +672,14 @@
   padding: 0;
   border: none;
   background: transparent;
-  border-radius: var(--dt-radius-sm);
+  border-radius: 50%;
   cursor: pointer;
   color: var(--dt-primary);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition: color var(--dt-transition);
 }
 
 .dt-derived-icon-btn:hover {
-  background: rgba(37, 99, 235, 0.08);
-  color: var(--dt-primary-hover);
+  background: var(--dt-border);
 }
 
 .dt-derived-icon-btn:focus-visible {
@@ -691,6 +690,19 @@
 .dt-derived-icon-btn svg {
   width: 18px;
   height: 18px;
+}
+
+/* Active state: filled circle, white text — applied while edit panel is open */
+.dt-derived-icon-btn--active svg circle {
+  fill: var(--dt-primary);
+}
+
+.dt-derived-icon-btn--active svg text {
+  fill: var(--dt-bg);
+}
+
+.dt-derived-icon-btn--active:hover svg circle {
+  fill: var(--dt-primary-hover);
 }
 
 /* Derived column cell tinting — background covers the full cell including padding.
@@ -737,12 +749,6 @@
   background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
 }
 
-/* Dark mode: icon button hover adjustment */
-@media (prefers-color-scheme: dark) {
-  .dt-derived-icon-btn:hover {
-    background: rgba(59, 130, 246, 0.15);
-  }
-}
 
 /* ===========================================
    Derived Column Edit Panel
@@ -831,18 +837,27 @@
 }
 
 .dt-derived-edit-validate {
-  padding: 0.25rem 0.75rem;
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
-  border: 1px solid var(--dt-border);
+  font-weight: 500;
+  border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-bg);
-  color: var(--dt-text);
+  color: var(--dt-primary);
   cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
 }
 
 .dt-derived-edit-validate:hover {
-  border-color: var(--dt-primary);
-  color: var(--dt-primary);
+  background: var(--dt-primary-light);
+  border-color: var(--dt-primary-hover);
+  color: var(--dt-primary-hover);
+}
+
+.dt-derived-edit-validate:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
 }
 
 .dt-derived-edit-validate:disabled {
@@ -860,18 +875,26 @@
 }
 
 .dt-derived-edit-update {
-  padding: 0.25rem 0.75rem;
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
+  font-weight: 500;
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
   color: #fff;
   cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
 }
 
 .dt-derived-edit-update:hover:not(:disabled) {
   background: var(--dt-primary-hover);
   border-color: var(--dt-primary-hover);
+}
+
+.dt-derived-edit-update:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
 }
 
 .dt-derived-edit-update:disabled {
@@ -893,18 +916,26 @@
 }
 
 .dt-derived-edit-delete {
-  padding: 0.25rem 0.75rem;
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
-  border: 1px solid var(--dt-border);
+  font-weight: 500;
+  border: 1px solid #dc2626;
   border-radius: var(--dt-radius-sm);
-  background: var(--dt-bg);
-  color: var(--dt-text-secondary);
+  background: #dc2626;
+  color: #fff;
   cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
 }
 
 .dt-derived-edit-delete:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.dt-derived-edit-delete:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
 }
 
 .dt-derived-edit-delete-confirm {
@@ -919,22 +950,30 @@
 }
 
 .dt-derived-edit-delete-confirm-btn {
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-xs);
+  font-weight: 500;
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   border: 1px solid;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-derived-edit-delete-confirm-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
 }
 
 .dt-derived-edit-delete-confirm-yes {
-  border-color: #ef4444;
-  background: #ef4444;
+  border-color: #dc2626;
+  background: #dc2626;
   color: #fff;
 }
 
 .dt-derived-edit-delete-confirm-yes:hover {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
 
 .dt-derived-edit-delete-confirm-no {
@@ -992,6 +1031,9 @@
   font-size: 11px;
   margin-top: 0.5rem;
   line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 /* Dark mode adjustments */

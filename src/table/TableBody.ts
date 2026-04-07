@@ -616,6 +616,13 @@ export class TableBody {
         cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
       }
 
+      // Apply derived cell styling (after pinned logic so both classes can coexist)
+      if (colSchema?.isDerived) {
+        cellEl.classList.add(`${this.classPrefix}-cell--derived`);
+      } else {
+        cellEl.classList.remove(`${this.classPrefix}-cell--derived`);
+      }
+
       this.cellRenderer.render(cellEl, value, colSchema);
     }
   }

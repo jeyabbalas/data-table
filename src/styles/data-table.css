@@ -649,6 +649,102 @@
 }
 
 /* ===========================================
+   Derived Columns (Visual Identity)
+   =========================================== */
+
+/* Header tint */
+.dt-col-header--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 40%, var(--dt-bg-secondary));
+}
+
+.dt-col-header--derived:hover {
+  background: color-mix(in srgb, var(--dt-primary-light) 50%, var(--dt-bg-tertiary));
+}
+
+/* f(x) icon button in column name row */
+.dt-derived-icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  color: var(--dt-primary);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-derived-icon-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--dt-primary-hover);
+}
+
+.dt-derived-icon-btn:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Derived column cell tinting — background covers the full cell including padding.
+   align-self: stretch overrides the row's align-items: center so the tint
+   fills the entire row height. line-height re-centers single-line text. */
+.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+
+/* Hover state */
+.dt-row:hover .dt-cell--derived,
+.dt-row--hover .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
+}
+
+/* Selected state */
+.dt-row--selected .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-light));
+}
+
+.dt-row--selected:hover .dt-cell--derived,
+.dt-row--selected.dt-row--hover .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
+}
+
+/* Combined pinned + derived */
+.dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+}
+
+.dt-row:hover .dt-cell--pinned.dt-cell--derived,
+.dt-row--hover .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
+}
+
+.dt-row--selected .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-light));
+}
+
+.dt-row--selected:hover .dt-cell--pinned.dt-cell--derived,
+.dt-row--selected.dt-row--hover .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
+}
+
+/* Dark mode: icon button hover adjustment */
+@media (prefers-color-scheme: dark) {
+  .dt-derived-icon-btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* ===========================================
    Column Divider
    =========================================== */
 

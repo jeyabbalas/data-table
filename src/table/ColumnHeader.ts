@@ -46,6 +46,7 @@ export class ColumnHeader {
   private hideButton: HTMLElement;
   private filterButton: HTMLElement;
   private dragHandle: HTMLElement;
+  private derivedIconBtn: HTMLElement | null = null;
   private statsEl: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
@@ -98,6 +99,9 @@ export class ColumnHeader {
   private createElement(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.classPrefix}-col-header`;
+    if (this.column.isDerived) {
+      el.classList.add(`${this.classPrefix}-col-header--derived`);
+    }
     el.setAttribute('role', 'columnheader');
     el.setAttribute('aria-label', `${this.column.name}, ${this.column.type}`);
     el.setAttribute('data-column', this.column.name);
@@ -122,11 +126,29 @@ export class ColumnHeader {
         <circle cx="11" cy="12" r="1.5" />
       </svg>
     `;
+    // Derived column f(x) icon button (click handler wired in Task 8.6.2)
+    if (this.column.isDerived) {
+      const iconBtn = document.createElement('button');
+      iconBtn.className = `${this.classPrefix}-derived-icon-btn`;
+      iconBtn.setAttribute('type', 'button');
+      iconBtn.setAttribute('aria-label', 'Edit derived column');
+      iconBtn.setAttribute('title', 'Edit derived column');
+      iconBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/>
+        <text x="12" y="16" font-size="14" font-weight="600" font-style="italic" font-family="Georgia, serif" fill="currentColor" text-anchor="middle">f</text>
+      </svg>`;
+      nameRow.appendChild(iconBtn);
+      this.derivedIconBtn = iconBtn;
+    }
+
     // Column name
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
     nameEl.setAttribute('title', this.column.name); // Tooltip for truncated names
+    if (this.column.isDerived) {
+      nameEl.style.fontStyle = 'italic';
+    }
     nameRow.appendChild(nameEl);
 
     // Sort button with SVG arrows
@@ -530,6 +552,13 @@ export class ColumnHeader {
   }
 
   /**
+   * Get the derived column icon button (null for non-derived columns).
+   */
+  getDerivedIconBtn(): HTMLElement | null {
+    return this.derivedIconBtn;
+  }
+
+  /**
    * Destroy the column header and clean up resources
    */
   destroy(): void {
@@ -550,6 +579,9 @@ export class ColumnHeader {
       unsub();
     }
     this.unsubscribes = [];
+
+    // Clean up derived icon button reference
+    this.derivedIconBtn = null;
 
     // Remove element from DOM
     if (this.element.parentNode) {

@@ -731,27 +731,25 @@ describe('Derived Columns — Actions Integration', () => {
       const um = new UndoManager();
       const act = new StateActions(state, bridge as any, um);
 
-      // Load with a session that has a derived column (but not pinned — pins
-      // for derived cols are dropped by restoreStateFromSnapshot because
-      // derived cols aren't in the base schema yet at restore time).
+      // Load with a session that has a pinned derived column.
+      // restoreStateFromSnapshot now preserves derived column pins.
       const sessionSnapshot = {
         version: 2, timestamp: Date.now(), tableName: 'test_table',
         filters: [], sortColumns: [],
         visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
         columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
-        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
+        columnWidths: {}, pinnedColumns: ['total'], hiddenColumnInfo: {},
         derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
       };
       const store = createMockStore(sessionSnapshot as any);
       await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
 
-      // Pin the derived column AFTER load (simulates user interaction)
-      act.toggleColumnPin('total');
+      // Pin is now preserved from session restore
       expect(state.pinnedColumns.get()).toContain('total');
 
       await act.resetToInitial();
 
-      // Derived column pin should be stripped
+      // Derived column pin should be stripped on reset
       expect(state.pinnedColumns.get()).not.toContain('total');
       expect(state.derivedColumns.get()).toHaveLength(0);
     });
@@ -817,6 +815,110 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result).toBe(true);
       expect(state.derivedColumns.get()).toHaveLength(0);
       expect(state.tableName.get()).toBe('test_table');
+    });
+    it('preserves derived column filters, sorts, pins, widths, and order position through session restore', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+
+      const sessionSnapshot = {
+        version: 2,
+        timestamp: Date.now(),
+        tableName: 'test_table',
+        filters: [{ type: 'range', column: 'total', min: 0, max: 500 }],
+        sortColumns: [{ column: 'total', direction: 'desc' as const }],
+        visibleColumns: ['id', 'total', 'name', 'price', 'quantity'],
+        columnOrder: ['id', 'total', 'name', 'price', 'quantity'],
+        columnWidths: { total: 180 },
+        pinnedColumns: ['total'],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          {
+            kind: 'expression' as const,
+            name: 'total',
+            expression: 'price * quantity',
+          },
+        ],
+      };
+      const store = createMockStore(sessionSnapshot as any);
+      await act.loadData(new File([''], 'test.csv'), {
+        tableName: 'test_table',
+        sessionStore: store as any,
+      });
+
+      // All derived column state should be preserved
+      expect(state.filters.get()).toHaveLength(1);
+      expect(state.filters.get()[0].column).toBe('total');
+      expect(state.sortColumns.get()).toEqual([
+        { column: 'total', direction: 'desc' },
+      ]);
+      expect(state.pinnedColumns.get()).toContain('total');
+      expect(state.columnWidths.get().get('total')).toBe(180);
+
+      // Column order position preserved (total at index 1, not appended to end)
+      expect(state.columnOrder.get().indexOf('total')).toBe(1);
+
+      // Visible columns order preserved
+      expect(state.visibleColumns.get().indexOf('total')).toBe(1);
+    });
+
+    it('preserves hidden state for derived columns through session restore', async () => {
+      const bridge = createLoadableBridge();
+      bridge.loadData.mockResolvedValue({
+        tableName: 'test_table',
+        rowCount: 100,
+        schema: sampleSchema,
+      });
+      const um = new UndoManager();
+      const act = new StateActions(state, bridge as any, um);
+
+      const sessionSnapshot = {
+        version: 2,
+        timestamp: Date.now(),
+        tableName: 'test_table',
+        filters: [],
+        sortColumns: [],
+        visibleColumns: ['id', 'name', 'price', 'quantity'],
+        columnOrder: ['id', 'total', 'name', 'price', 'quantity'],
+        columnWidths: {},
+        pinnedColumns: [],
+        hiddenColumnInfo: {
+          total: {
+            column: 'total',
+            leftNeighbor: 'id',
+            rightNeighbor: 'name',
+          },
+        },
+        derivedColumns: [
+          {
+            kind: 'expression' as const,
+            name: 'total',
+            expression: 'price * quantity',
+          },
+        ],
+      };
+      const store = createMockStore(sessionSnapshot as any);
+      await act.loadData(new File([''], 'test.csv'), {
+        tableName: 'test_table',
+        sessionStore: store as any,
+      });
+
+      // Derived column should be hidden (NOT in visibleColumns)
+      expect(state.visibleColumns.get()).not.toContain('total');
+
+      // But present in columnOrder at correct position
+      expect(state.columnOrder.get().indexOf('total')).toBe(1);
+
+      // hiddenColumnInfo preserved
+      const info = state.hiddenColumnInfo.get().get('total');
+      expect(info).toBeDefined();
+      expect(info!.leftNeighbor).toBe('id');
+      expect(info!.rightNeighbor).toBe('name');
     });
   });
 

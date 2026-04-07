@@ -207,6 +207,14 @@ export class TableBody {
       }
     });
     this.unsubscribes.push(unsubHover);
+
+    // Re-fetch when table name changes (e.g., derived column VIEW creation/removal)
+    const unsubTableName = this.state.tableName.subscribe(() => {
+      if (!this.destroyed) {
+        this.invalidateCacheAndRefresh();
+      }
+    });
+    this.unsubscribes.push(unsubTableName);
   }
 
   /**

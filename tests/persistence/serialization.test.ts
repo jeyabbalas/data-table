@@ -579,6 +579,108 @@ describe('restoreStateFromSnapshot — derivedColumns', () => {
 });
 
 // =========================================
+// restoreStateFromSnapshot — derived column state preservation
+// =========================================
+
+describe('restoreStateFromSnapshot — derived column state preservation', () => {
+  it('preserves filters, sorts, pins, widths, hiddenInfo, and order for derived columns', () => {
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      filters: [
+        { type: 'range', column: 'age', min: 18, max: 65 },
+        { type: 'range', column: 'total', min: 0, max: 1000 },
+      ],
+      sortColumns: [{ column: 'total', direction: 'desc' }],
+      visibleColumns: ['id', 'total', 'name', 'age', 'created'],
+      columnOrder: ['id', 'total', 'name', 'age', 'created'],
+      columnWidths: { total: 200, id: 100 },
+      pinnedColumns: ['id', 'total'],
+      hiddenColumnInfo: {},
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    // Derived column filter preserved
+    expect(state.filters.get()).toHaveLength(2);
+    expect(state.filters.get().find(f => f.column === 'total')).toBeDefined();
+
+    // Derived column sort preserved
+    expect(state.sortColumns.get()).toEqual([
+      { column: 'total', direction: 'desc' },
+    ]);
+
+    // Derived column in visibleColumns at correct position
+    expect(state.visibleColumns.get()).toEqual(['id', 'total', 'name', 'age', 'created']);
+
+    // Derived column in columnOrder at correct position (not appended to end)
+    expect(state.columnOrder.get().indexOf('total')).toBe(1);
+
+    // Derived column width preserved
+    expect(state.columnWidths.get().get('total')).toBe(200);
+
+    // Derived column pin preserved
+    expect(state.pinnedColumns.get()).toEqual(['id', 'total']);
+  });
+
+  it('preserves hidden state for derived columns', () => {
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['id', 'name', 'age', 'created'],
+      columnOrder: ['id', 'total', 'name', 'age', 'created'],
+      hiddenColumnInfo: {
+        total: {
+          column: 'total',
+          leftNeighbor: 'id',
+          rightNeighbor: 'name',
+        },
+      },
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    // 'total' NOT in visibleColumns (it's hidden)
+    expect(state.visibleColumns.get()).not.toContain('total');
+
+    // 'total' IS in columnOrder (preserves position)
+    expect(state.columnOrder.get()).toContain('total');
+    expect(state.columnOrder.get().indexOf('total')).toBe(1);
+
+    // hiddenColumnInfo for 'total' preserved
+    const info = state.hiddenColumnInfo.get().get('total');
+    expect(info).toBeDefined();
+    expect(info!.leftNeighbor).toBe('id');
+    expect(info!.rightNeighbor).toBe('name');
+  });
+
+  it('still drops truly stale columns even with derived columns present', () => {
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      filters: [
+        { type: 'range', column: 'total', min: 0, max: 100 },
+        { type: 'range', column: 'nonexistent', min: 0, max: 50 },
+      ],
+      pinnedColumns: ['total', 'nonexistent'],
+      derivedColumns: [
+        { kind: 'expression', name: 'total', expression: 'id * 2' },
+      ],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    // 'total' is kept (derived column), 'nonexistent' is dropped (truly stale)
+    expect(state.filters.get()).toHaveLength(1);
+    expect(state.filters.get()[0].column).toBe('total');
+    expect(state.pinnedColumns.get()).toEqual(['total']);
+  });
+});
+
+// =========================================
 // serializeStateSnapshot / deserializeStateSnapshot — derivedColumns
 // =========================================
 

@@ -152,6 +152,14 @@ export function restoreStateFromSnapshot(
   if (schemaColumns.length === 0) return;
 
   const validColumns = new Set(schemaColumns.map((c) => c.name));
+
+  // Expand valid set with derived column names from snapshot so their
+  // references in filters, sorts, pins, etc. are not stripped as stale.
+  // (Matches the logic in deserializeStateSnapshot for undo/redo entries.)
+  if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
+    for (const d of snapshot.derivedColumns) validColumns.add(d.name);
+  }
+
   const allColumnNames = schemaColumns.map((c) => c.name);
 
   // Filters: deserialize and drop stale column references

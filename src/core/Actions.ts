@@ -231,38 +231,7 @@ export class StateActions {
         }
 
         // Strip derived column names from all column arrays restored by applySnapshot
-        if (derivedNames.size > 0) {
-          this.state.visibleColumns.set(
-            this.state.visibleColumns.get().filter(c => !derivedNames.has(c))
-          );
-          this.state.columnOrder.set(
-            this.state.columnOrder.get().filter(c => !derivedNames.has(c))
-          );
-          this.state.pinnedColumns.set(
-            this.state.pinnedColumns.get().filter(c => !derivedNames.has(c))
-          );
-          const hiddenInfo = new Map(this.state.hiddenColumnInfo.get());
-          for (const name of derivedNames) hiddenInfo.delete(name);
-          for (const [key, info] of hiddenInfo) {
-            if (derivedNames.has(info.leftNeighbor ?? '') || derivedNames.has(info.rightNeighbor ?? '')) {
-              hiddenInfo.set(key, {
-                ...info,
-                leftNeighbor: derivedNames.has(info.leftNeighbor ?? '') ? null : info.leftNeighbor,
-                rightNeighbor: derivedNames.has(info.rightNeighbor ?? '') ? null : info.rightNeighbor,
-              });
-            }
-          }
-          this.state.hiddenColumnInfo.set(hiddenInfo);
-          this.state.filters.set(
-            this.state.filters.get().filter(f => !derivedNames.has(f.column))
-          );
-          this.state.sortColumns.set(
-            this.state.sortColumns.get().filter(s => !derivedNames.has(s.column))
-          );
-          const widths = new Map(this.state.columnWidths.get());
-          for (const name of derivedNames) widths.delete(name);
-          this.state.columnWidths.set(widths);
-        }
+        this.stripDerivedColumnRefs(derivedNames);
 
         // Reset filteredRows when initial state has no filters
         if (this.initialSnapshot!.filters.length === 0) {
@@ -334,35 +303,32 @@ export class StateActions {
             );
 
             if (restoredSchemas.length > 0) {
-              // Update schema with restored derived entries
+              // Compute values needed for the batch
               const baseSchema = this.state.schema.get().filter(c => !c.isDerived);
-              this.state.schema.set([...baseSchema, ...restoredSchemas]);
-
-              // Switch tableName to VIEW
-              this.state.tableName.set(manager.getEffectiveTableName());
-
-              // Reconcile derivedColumns signal: drop any that failed to restore
               const restoredNames = new Set(restoredSchemas.map(s => s.name));
-              this.state.derivedColumns.set(
-                this.state.derivedColumns.get().filter(d => restoredNames.has(d.name))
+              const allSnapshotDerived = new Set(snapshot.derivedColumns!.map(d => d.name));
+              const failedNames = new Set(
+                [...allSnapshotDerived].filter(n => !restoredNames.has(n))
               );
 
-              // Re-add derived columns to visibility/order arrays
-              // (restoreStateFromSnapshot drops them since they aren't in base schema)
-              const order = this.state.columnOrder.get();
-              const visible = this.state.visibleColumns.get();
-              const orderSet = new Set(order);
-              const visibleSet = new Set(visible);
-              for (const s of restoredSchemas) {
-                if (!orderSet.has(s.name)) order.push(s.name);
-                if (!visibleSet.has(s.name)) visible.push(s.name);
-              }
-              this.state.columnOrder.set([...order]);
-              this.state.visibleColumns.set([...visible]);
+              // Batch all state mutations so render() sees fully settled state.
+              // Without this, schema.set triggers render() before tableName
+              // points to the VIEW, causing the initial fetch to fail.
+              batch(() => {
+                this.state.schema.set([...baseSchema, ...restoredSchemas]);
+                this.state.tableName.set(manager.getEffectiveTableName());
+                this.state.derivedColumns.set(
+                  this.state.derivedColumns.get().filter(d => restoredNames.has(d.name))
+                );
+                this.stripDerivedColumnRefs(failedNames);
+              });
             }
           } catch (err) {
             console.warn('Failed to restore derived columns:', err);
+            // All derived columns failed — clean up all references from state
+            const derivedNames = new Set(snapshot.derivedColumns!.map(d => d.name));
             this.state.derivedColumns.set([]);
+            this.stripDerivedColumnRefs(derivedNames);
           }
         }
       }
@@ -755,6 +721,54 @@ export class StateActions {
     const widths = new Map(this.state.columnWidths.get());
     widths.delete(column);
     this.state.columnWidths.set(widths);
+  }
+
+  // =========================================
+  // Derived Column Helpers
+  // =========================================
+
+  /**
+   * Remove all state references to the given column names.
+   * Used when derived columns fail to restore or are reset.
+   * Caller must handle derivedColumns signal and schema separately.
+   */
+  private stripDerivedColumnRefs(names: Set<string>): void {
+    if (names.size === 0) return;
+    batch(() => {
+      this.state.filters.set(
+        this.state.filters.get().filter(f => !names.has(f.column))
+      );
+      this.state.sortColumns.set(
+        this.state.sortColumns.get().filter(s => !names.has(s.column))
+      );
+      this.state.visibleColumns.set(
+        this.state.visibleColumns.get().filter(c => !names.has(c))
+      );
+      this.state.columnOrder.set(
+        this.state.columnOrder.get().filter(c => !names.has(c))
+      );
+      this.state.pinnedColumns.set(
+        this.state.pinnedColumns.get().filter(c => !names.has(c))
+      );
+      const widths = new Map(this.state.columnWidths.get());
+      const hidden = new Map(this.state.hiddenColumnInfo.get());
+      for (const name of names) {
+        widths.delete(name);
+        hidden.delete(name);
+      }
+      // Nullify neighbor refs pointing to removed columns
+      for (const [key, info] of hidden) {
+        if (names.has(info.leftNeighbor ?? '') || names.has(info.rightNeighbor ?? '')) {
+          hidden.set(key, {
+            ...info,
+            leftNeighbor: names.has(info.leftNeighbor ?? '') ? null : info.leftNeighbor,
+            rightNeighbor: names.has(info.rightNeighbor ?? '') ? null : info.rightNeighbor,
+          });
+        }
+      }
+      this.state.columnWidths.set(widths);
+      this.state.hiddenColumnInfo.set(hidden);
+    });
   }
 
   // =========================================

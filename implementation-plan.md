@@ -791,9 +791,9 @@ After `restoreStateFromSnapshot()`, if `snapshot.derivedColumns.length > 0`:
 
 ### Task 8.6: Derived Columns — UI
 
-Visual differentiation and interactive management for derived columns, split into four incremental subtasks. **Design principles:** (1) The action panel (pin, hide, filter, sort, drag-handle) is **identical** for all columns — derived columns can be hidden, pinned, filtered, and sorted just like source columns. (2) A clickable **f(x) icon** before the column name opens a floating edit panel for modifying existing derived columns. (3) A full-height **"+" button strip** at the table's right edge opens a modal for creating new derived columns. (4) **Cell tinting** covers the entire cell including padding.
+Visual differentiation and interactive management for derived columns, split into five incremental subtasks. **Design principles:** (1) The action panel (pin, hide, filter, sort, drag-handle) is **identical** for all columns — derived columns can be hidden, pinned, filtered, and sorted just like source columns. (2) A clickable **f(x) icon** before the column name opens a floating edit panel for modifying existing derived columns. (3) A full-height **"+" button strip** at the table's right edge opens a modal for creating new derived columns. (4) **Cell tinting** covers the entire cell including padding. (5) A **CodeMirror 6 SQL editor** replaces the plain textarea with syntax highlighting, schema-aware autocomplete, and DuckDB function completion.
 
-Dependency chain: **8.6.1 → 8.6.2 → 8.6.3 → 8.6.4**. Each subtask produces independently testable results.
+Dependency chain: **8.6.1 → 8.6.2 → 8.6.3 → 8.6.4 → 8.6.5**. Each subtask produces independently testable results.
 
 #### Subtask 8.6.1: Visual Markers and Cell Tinting
 
@@ -1692,7 +1692,451 @@ Destroy modal and button in `destroy()`.
 - Press Escape or click backdrop → modal closes without creating
 - Dark mode: modal and "+" button render correctly
 
-#### Subtask 8.6.4: Library Exports, Demo Cleanup, and Edge Cases
+#### Subtask 8.6.4: CodeMirror 6 Expression Editor
+
+Replace the built-in `DefaultExpressionEditor` (plain textarea) with a CodeMirror 6 editor that provides SQL syntax highlighting, schema-aware autocomplete (column names + DuckDB functions/keywords), inline error display, and automatic light/dark theme matching — all while maintaining backward compatibility with the `ExpressionEditor` interface and `input` event contract.
+
+**Background context:** The `DefaultExpressionEditor` (Subtask 8.6.2) is a monospace `<textarea>` with static column hints below it. While functional, it offers no syntax highlighting, no autocomplete, and no contextual help. CodeMirror 6 (`@codemirror/lang-sql`) provides a production-ready SQL editor with a built-in `DuckDBSQL` dialect and schema-aware completion. The library already bundles DuckDB WASM (~307KB ESM), so adding CodeMirror (~80-120KB gzipped) is proportional.
+
+**Key design decisions:**
+
+1. **Replace as default, keep textarea as fallback.** `CodeMirrorExpressionEditor` becomes the built-in default. `DefaultExpressionEditor` remains in the codebase and exported for consumers who want a zero-dependency alternative via `editorFactory`.
+
+2. **Compartment for dynamic schema updates.** `updateCompletionContext()` uses a CodeMirror `Compartment` to swap the SQL language configuration (with updated schema) without destroying/recreating the editor. This preserves cursor position, undo history, and scroll state.
+
+3. **DuckDB function list: static curated file.** A static TypeScript constant (~200 DuckDB functions grouped by category). Querying DuckDB at runtime would require an async bridge reference the editor doesn't have. The static list covers the vast majority of use cases and uses the existing `CompletionContext.functions` field as an override point.
+
+4. **Theme via CSS custom property bridge.** A CodeMirror `EditorView.theme()` that references `var(--dt-*)` CSS custom properties. This automatically handles light/dark mode without JS-side media query listeners.
+
+5. **`CompletionContext` interface is not extended.** The existing `functions?: string[]` field already supports custom function lists. The static DuckDB list is used as the default when `functions` is not provided.
+
+6. **`input` event contract honored.** `EditorView.updateListener` dispatches `new Event('input', { bubbles: true })` on the wrapper element on every document change, matching the native textarea behavior.
+
+**Dependencies to install** (production, in `package.json`):
+```
+npm install @codemirror/state @codemirror/view @codemirror/lang-sql @codemirror/autocomplete @codemirror/commands @codemirror/language
+```
+
+**Files to create:**
+
+**`src/sql-editor/duckdbFunctions.ts`** — static curated list of DuckDB SQL functions for autocomplete:
+
+```typescript
+/**
+ * Curated list of DuckDB SQL functions for autocomplete.
+ * Organized by category. Avoids requiring a live DuckDB connection.
+ */
+export const DUCKDB_FUNCTIONS: string[] = [
+  // Aggregate (~35)
+  'avg', 'count', 'count_star', 'first', 'last', 'max', 'min', 'sum',
+  'string_agg', 'list_agg', 'group_concat', 'approx_count_distinct',
+  'approx_quantile', 'median', 'mode', 'stddev', 'stddev_pop',
+  'stddev_samp', 'variance', 'var_pop', 'var_samp',
+  'corr', 'covar_pop', 'covar_samp', 'entropy', 'kurtosis',
+  'skewness', 'bit_and', 'bit_or', 'bit_xor', 'bool_and', 'bool_or',
+  'histogram', 'list', 'array_agg',
+
+  // Numeric / Math (~30)
+  'abs', 'acos', 'asin', 'atan', 'atan2', 'cbrt', 'ceil', 'ceiling',
+  'cos', 'cot', 'degrees', 'exp', 'floor', 'greatest',
+  'least', 'ln', 'log', 'log2', 'log10', 'pi', 'pow',
+  'power', 'radians', 'random', 'round', 'sign', 'sin', 'sqrt',
+  'tan', 'trunc', 'factorial', 'even', 'isnan', 'isinf', 'isfinite',
+
+  // String (~40)
+  'ascii', 'chr', 'concat', 'concat_ws', 'contains', 'format',
+  'left', 'length', 'lower', 'lpad', 'ltrim', 'md5',
+  'position', 'prefix', 'printf', 'regexp_extract',
+  'regexp_full_match', 'regexp_matches', 'regexp_replace',
+  'repeat', 'replace', 'reverse', 'right', 'rpad', 'rtrim',
+  'split_part', 'starts_with', 'string_split',
+  'strip_accents', 'strlen', 'substr', 'substring', 'suffix',
+  'trim', 'unicode', 'upper',
+  'levenshtein', 'jaccard', 'jaro_winkler_similarity',
+
+  // Date/Time (~45)
+  'age', 'current_date', 'current_time', 'current_timestamp',
+  'date_diff', 'datediff', 'date_part', 'datepart', 'date_sub',
+  'date_trunc', 'datetrunc', 'dayname', 'epoch', 'epoch_ms',
+  'epoch_us', 'epoch_ns', 'extract', 'last_day',
+  'make_date', 'make_time', 'make_timestamp',
+  'monthname', 'now', 'strftime', 'strptime',
+  'time_bucket', 'today',
+  'year', 'month', 'day', 'hour', 'minute', 'second',
+  'millennium', 'century', 'decade', 'quarter', 'dayofweek',
+  'dayofyear', 'week', 'weekday', 'weekofyear', 'yearweek',
+
+  // Casting / Type
+  'cast', 'try_cast', 'typeof',
+
+  // Conditional
+  'coalesce', 'ifnull', 'nullif',
+
+  // List / Array (~20)
+  'list_value', 'list_aggregate', 'list_any_value', 'list_append',
+  'list_concat', 'list_contains', 'list_distinct', 'list_filter',
+  'list_position', 'list_reduce', 'list_reverse_sort',
+  'list_slice', 'list_sort', 'list_transform', 'list_unique',
+  'flatten', 'generate_series', 'range', 'unnest',
+  'array_length', 'len',
+
+  // Struct / Map
+  'struct_pack', 'struct_extract', 'struct_insert',
+  'map', 'map_from_entries', 'map_entries', 'map_extract',
+  'map_keys', 'map_values', 'element_at', 'cardinality',
+
+  // Window
+  'row_number', 'rank', 'dense_rank', 'percent_rank', 'cume_dist',
+  'ntile', 'lag', 'lead', 'first_value', 'last_value', 'nth_value',
+
+  // Utility
+  'hash', 'sha256', 'uuid', 'gen_random_uuid', 'version',
+];
+```
+
+**`src/sql-editor/theme.ts`** — CodeMirror theme bridging `--dt-*` CSS custom properties:
+
+```typescript
+import { EditorView } from '@codemirror/view';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
+
+/**
+ * CodeMirror editor theme that uses the library's CSS custom properties.
+ * Automatically adapts to light/dark mode since --dt-* variables switch
+ * under @media (prefers-color-scheme: dark).
+ */
+export const dataTableTheme = EditorView.theme({
+  '&': {
+    fontSize: '13px',
+  },
+  '.cm-content': {
+    fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+    padding: '0.5rem',
+  },
+  '&.cm-focused': {
+    outline: 'none',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'var(--dt-bg-secondary)',
+  },
+  '.cm-selectionBackground': {
+    backgroundColor: 'var(--dt-primary-lighter) !important',
+  },
+  '.cm-cursor': {
+    borderLeftColor: 'var(--dt-text)',
+  },
+  '.cm-gutters': {
+    display: 'none',
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+  },
+});
+
+/**
+ * Syntax highlighting colors for SQL.
+ * Uses a mix of --dt-* custom properties and hardcoded colors
+ * for token types the library doesn't have variables for.
+ */
+export const dataTableHighlighting = syntaxHighlighting(HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--dt-primary)', fontWeight: 'bold' },
+  { tag: tags.string, color: '#16a34a' },           // green (light mode friendly)
+  { tag: tags.number, color: 'var(--dt-primary)' },
+  { tag: tags.comment, color: 'var(--dt-text-tertiary)', fontStyle: 'italic' },
+  { tag: tags.function(tags.variableName), fontWeight: 'bold' },
+  { tag: tags.operator, color: 'var(--dt-text-secondary)' },
+  { tag: tags.typeName, color: '#9333ea' },          // purple for types
+  { tag: tags.null, color: 'var(--dt-text-tertiary)' },
+  { tag: tags.bool, color: 'var(--dt-primary)' },
+]));
+```
+
+**`src/sql-editor/CodeMirrorExpressionEditor.ts`** — main editor class implementing `ExpressionEditor`:
+
+```typescript
+import { EditorState, Compartment } from '@codemirror/state';
+import { EditorView, keymap, placeholder } from '@codemirror/view';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { sql, DuckDBSQL } from '@codemirror/lang-sql';
+import { autocompletion } from '@codemirror/autocomplete';
+import type { CompletionContext as CMCompletionContext, CompletionResult } from '@codemirror/autocomplete';
+import type { CompletionContext } from '../derived/types';
+import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
+import { DUCKDB_FUNCTIONS } from './duckdbFunctions';
+import { dataTableTheme, dataTableHighlighting } from './theme';
+
+export class CodeMirrorExpressionEditor implements ExpressionEditor {
+  readonly element: HTMLElement;
+  private view: EditorView;
+  private errorDiv: HTMLElement;
+  private sqlCompartment: Compartment;
+  private prefix: string;
+
+  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt') {
+    this.prefix = classPrefix;
+    this.sqlCompartment = new Compartment();
+
+    // Root wrapper
+    this.element = document.createElement('div');
+    this.element.className = `${this.prefix}-cm-expr-editor`;
+
+    // Build CodeMirror state
+    const state = EditorState.create({
+      doc: '',
+      extensions: [
+        // SQL with DuckDB dialect + schema — wrapped in Compartment for dynamic updates
+        this.sqlCompartment.of(this.buildCompletionExtensions(context)),
+
+        // Autocompletion UI
+        autocompletion(),
+
+        // Standard keybindings + undo history
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        history(),
+
+        // Theme
+        dataTableTheme,
+        dataTableHighlighting,
+
+        // Placeholder
+        placeholder('Enter SQL expression, e.g. price * quantity'),
+
+        // Compact sizing
+        EditorView.theme({
+          '&': { minHeight: '80px', maxHeight: '200px' },
+        }),
+
+        // Dispatch synthetic 'input' event on document changes
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            this.element.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }),
+
+        // Accessibility
+        EditorView.contentAttributes.of({ 'aria-label': 'SQL Expression' }),
+      ],
+    });
+
+    this.view = new EditorView({ state, parent: this.element });
+
+    // Error display (below editor, hidden by default)
+    this.errorDiv = document.createElement('div');
+    this.errorDiv.className = `${this.prefix}-expr-editor-error`;
+    this.errorDiv.style.display = 'none';
+    this.element.appendChild(this.errorDiv);
+
+    container.appendChild(this.element);
+  }
+
+  getValue(): string {
+    return this.view.state.doc.toString();
+  }
+
+  setValue(value: string): void {
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: value },
+    });
+  }
+
+  focus(): void {
+    this.view.focus();
+  }
+
+  setError(error: string | null): void {
+    if (error !== null) {
+      this.element.classList.add(`${this.prefix}-cm-expr-editor--error`);
+      this.errorDiv.textContent = error;
+      this.errorDiv.style.display = '';
+    } else {
+      this.element.classList.remove(`${this.prefix}-cm-expr-editor--error`);
+      this.errorDiv.textContent = '';
+      this.errorDiv.style.display = 'none';
+    }
+  }
+
+  updateCompletionContext(context: CompletionContext): void {
+    this.view.dispatch({
+      effects: this.sqlCompartment.reconfigure(this.buildCompletionExtensions(context)),
+    });
+  }
+
+  destroy(): void {
+    this.view.destroy();
+    if (this.element.parentNode) {
+      this.element.parentNode.removeChild(this.element);
+    }
+  }
+
+  /**
+   * Build the SQL language extension + function completion source.
+   * Both are wrapped in the same Compartment so updateCompletionContext()
+   * can swap them atomically.
+   */
+  private buildCompletionExtensions(context: CompletionContext) {
+    const columnNames = context.columns.map((c) => c.name);
+    const funcList = context.functions ?? DUCKDB_FUNCTIONS;
+
+    return [
+      // SQL language with DuckDB dialect and column names as schema
+      sql({
+        dialect: DuckDBSQL,
+        schema: { '': columnNames },
+        upperCaseKeywords: true,
+      }),
+
+      // Additional function completion source (additive, not override)
+      EditorState.languageData.of(() => [
+        {
+          autocomplete: (cmCtx: CMCompletionContext): CompletionResult | null => {
+            const word = cmCtx.matchBefore(/\w+/);
+            if (!word && !cmCtx.explicit) return null;
+            return {
+              from: word?.from ?? cmCtx.pos,
+              options: funcList.map((f) => ({
+                label: f,
+                type: 'function',
+                boost: -1, // lower priority than column names
+              })),
+              validFor: /^\w*$/,
+            };
+          },
+        },
+      ]),
+    ];
+  }
+}
+```
+
+**`src/sql-editor/index.ts`** — barrel exports:
+
+```typescript
+export { CodeMirrorExpressionEditor } from './CodeMirrorExpressionEditor';
+export { DUCKDB_FUNCTIONS } from './duckdbFunctions';
+export { dataTableTheme, dataTableHighlighting } from './theme';
+```
+
+**Files to modify:**
+
+**`package.json`** — add CodeMirror dependencies to `dependencies`:
+```json
+"@codemirror/autocomplete": "^6.x",
+"@codemirror/commands": "^6.x",
+"@codemirror/lang-sql": "^6.x",
+"@codemirror/language": "^6.x",
+"@codemirror/state": "^6.x",
+"@codemirror/view": "^6.x"
+```
+Note: `@lezer/highlight` is a transitive dependency of `@codemirror/language` — it does not need explicit installation unless the `tags` import path requires it, in which case also install `@lezer/highlight`.
+
+**`src/derived/DerivedColumnEditPanel.ts`** — change the default editor:
+- Replace `import { DefaultExpressionEditor } from './DefaultExpressionEditor';` with `import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';`
+- In the fallback branch (around line 405), change `new DefaultExpressionEditor(...)` to `new CodeMirrorExpressionEditor(...)`
+
+**`src/derived/DerivedColumnModal.ts`** — same change:
+- Replace import (line 12) and fallback instantiation (around line 595)
+
+**`src/index.ts`** — add exports:
+```typescript
+// SQL Editor (CodeMirror-based expression editor)
+export { CodeMirrorExpressionEditor } from './sql-editor/CodeMirrorExpressionEditor';
+export { DUCKDB_FUNCTIONS } from './sql-editor/duckdbFunctions';
+```
+
+**`src/styles/data-table.css`** — add CodeMirror wrapper styles after the existing "Expression editor" section (after the `.dt-expr-editor-context` rule around line 1301):
+
+```css
+/* === CodeMirror Expression Editor === */
+
+.dt-cm-expr-editor .cm-editor {
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+}
+
+.dt-cm-expr-editor .cm-editor.cm-focused {
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-cm-expr-editor--error .cm-editor {
+  border-color: #ef4444;
+}
+
+.dt-cm-expr-editor--error .cm-editor.cm-focused {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+/* Autocomplete tooltip (rendered at body level by CodeMirror) */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--dt-primary-light);
+  color: var(--dt-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-tooltip.cm-tooltip-autocomplete {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}
+```
+
+**Unchanged files:**
+- `src/derived/DefaultExpressionEditor.ts` — kept as lightweight fallback, still exported from `src/index.ts`
+- `src/derived/ExpressionEditorTypes.ts` — `ExpressionEditor` interface unchanged
+- `src/derived/types.ts` — `CompletionContext` already has `functions?: string[]`
+
+**Unit tests:**
+
+Create `tests/sql-editor/duckdbFunctions.test.ts`:
+- `DUCKDB_FUNCTIONS` is a non-empty array of strings
+- No duplicate entries
+- Common functions present (`avg`, `count`, `sum`, `substr`, `cast`, `round`, `coalesce`, `length`, `upper`, `lower`)
+
+Create `tests/sql-editor/CodeMirrorExpressionEditor.test.ts`:
+- Note: CodeMirror requires DOM APIs that jsdom may not fully support. Add polyfills in `beforeAll`:
+  ```typescript
+  if (!document.createRange) {
+    document.createRange = () => ({ ... } as any);
+  }
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as any;
+  }
+  ```
+- Root element has `.dt-cm-expr-editor` class, error div exists and is hidden
+- `getValue()` / `setValue()` round-trip correctly
+- `setError(msg)` adds `--error` class and shows error div; `setError(null)` removes them
+- `updateCompletionContext()` does not throw with new context
+- `destroy()` removes element from parent
+- Dispatches `input` event on content change via `setValue()`
+- `focus()` does not throw
+- Custom class prefix: create with prefix `'my'`, verify CSS classes use `'my-'` prefix
+- If jsdom is incompatible with CodeMirror's DOM requirements despite polyfills, mark tests with `@vitest-environment jsdom` and skip with a clear reason
+
+**Manual UI verification** (demo at `http://localhost:4173/data-table/`):
+- Load CSV, click "+" → CodeMirror editor appears with SQL placeholder text
+- Type partial column name → autocomplete dropdown shows matching column names
+- Type DuckDB function prefix (e.g., `rou`) → autocomplete shows `round`
+- Accept suggestion via Tab/Enter → text inserted correctly
+- SQL keywords highlighted (SELECT, CASE, WHEN, etc.)
+- Click "Validate" → error appears below editor in red; valid expression clears error
+- Click f(x) icon on existing derived column → CodeMirror shows with existing expression pre-populated
+- Dark mode → editor, autocomplete tooltip, syntax colors all render correctly
+- In 360px edit panel → editor fits, scrollable if content is long
+- In 480px modal → editor fits within modal
+- Escape key → closes autocomplete first, then closes panel/modal on second press
+- Ctrl/Cmd+Z within editor → undoes text changes (CodeMirror internal undo, not state undo)
+
+#### Subtask 8.6.5: Library Exports, Demo Cleanup, and Edge Cases
 
 Export all new public types and classes, remove the demo sidebar derived columns card (all management now happens via the table's "+" button and f(x) edit panel), and handle edge cases.
 
@@ -1817,7 +2261,7 @@ Update `demo/main.ts`:
 - Remove `tableName` from `CrossfilterCoordinator` constructor call
 - Update `attachVisualizations()` to read tableName from state
 - Add `tableName` subscription for visualization reattachment
-- Note: The demo sidebar "Derived Columns" card was already removed in Subtask 8.6.4, so no derived column UI updates are needed here
+- Note: The demo sidebar "Derived Columns" card was already removed in Subtask 8.6.5, so no derived column UI updates are needed here
 
 #### Fix 4: Library exports
 
@@ -2061,7 +2505,8 @@ Phase 7 (Persistence):
 Phase 8 (Advanced):
   8.1 UndoManager → 8.2 Action Integration → 8.3 Keyboard Shortcuts
   8.4 Types/State/Manager → 8.5 Undo/Persistence (parallel with 8.6)
-                           → 8.6 UI/Editor/Modal  (parallel with 8.5)
+                           → 8.6 UI/Editor/Modal/CodeMirror (parallel with 8.5)
+                               (8.6.1→8.6.2→8.6.3→8.6.4 CodeMirror→8.6.5 Exports)
                                                    → 8.7 Integration Fixes
   8.8 Raw SQL Filter API → 8.9 Filter Presets → 8.10 Preset UI
 
@@ -2076,7 +2521,7 @@ Phase 9 (Polish):
 **Recommended execution order:**
 1. **7.5 → 7.6 → 7.7 → 7.8** (Persistence foundation — auto-save captures all future state additions)
 2. **8.1 → 8.2 → 8.3** (Undo/redo — all subsequent features are undoable from the start)
-3. **8.4 → (8.5 + 8.6 in parallel) → 8.7** (Derived columns — full virtual layer with expression + vector modes, undo/redo, editor extension point)
+3. **8.4 → (8.5 + 8.6 in parallel) → 8.7** (Derived columns — full virtual layer with expression + vector modes, undo/redo, CodeMirror 6 SQL editor with schema-aware autocomplete)
 4. **8.8** (Raw SQL Filter API — enables complex filters before presets)
 5. **8.9 → 8.10** (Filter presets — can serialize all filter types including raw SQL)
 6. **9.1 → 9.2 → 9.3 → 9.4 → 9.5** (Polish)
@@ -2089,7 +2534,8 @@ Phase 9 (Polish):
 |---|---|---|
 | 8.1–8.3 Undo/Redo | **Kept** | Essential for EDA workflow |
 | 8.4–8.5 Filter Presets | **Kept, moved to 8.9–8.10** | Reordered after raw SQL filters so presets can serialize them |
-| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with two modes (SQL expression + pre-computed vector), DuckDB VIEW mechanism, editor extension point for CodeMirror, async undo/redo, visual differentiation, edit/rename/delete |
+| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with two modes (SQL expression + pre-computed vector), DuckDB VIEW mechanism, async undo/redo, visual differentiation, edit/rename/delete |
+| **New: CodeMirror 6 SQL Editor** | **Added as Subtask 8.6.4** | Replaces plain textarea with CodeMirror 6 — SQL syntax highlighting, schema-aware column autocomplete, DuckDB function completion, automatic light/dark theming via CSS custom properties |
 | 8.8–8.9 SQL Editor | **Removed** | Out of scope for read-only EDA tool |
 | **New: Raw SQL Filter API** | **Added as 8.8** | Programmatic escape hatch for complex cross-column filters (OR clauses) |
 | 9.1 Query Caching | **Kept** | |

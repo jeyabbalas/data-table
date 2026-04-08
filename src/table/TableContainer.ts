@@ -100,6 +100,9 @@ export class TableContainer {
   private boundBodyScrollHandler: (() => void) | null = null;
   private boundHeaderScrollHandler: (() => void) | null = null;
 
+  // Suppress header→body scroll sync during programmatic smooth scrolling
+  private suppressReverseScrollSync = false;
+
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
 
@@ -350,7 +353,7 @@ export class TableContainer {
     };
 
     this.boundHeaderScrollHandler = () => {
-      if (isScrolling) return;
+      if (isScrolling || this.suppressReverseScrollSync) return;
       isScrolling = true;
       this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
       isScrolling = false;
@@ -741,6 +744,17 @@ export class TableContainer {
           }
         );
 
+        // Eagerly set content width so scrollWidth is correct for auto-scroll.
+        // initialize() sets this later via async DuckDB fetch, but scrollToRightEnd()
+        // may fire before that completes.
+        {
+          let totalWidth = 0;
+          for (const colName of visibleColumns) {
+            totalWidth += columnWidths.get(colName) ?? 150;
+          }
+          this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
+        }
+
         // Initialize table body asynchronously
         this.tableBody.initialize().catch((error) => {
           console.error('Error initializing table body:', error);
@@ -908,10 +922,27 @@ export class TableContainer {
     // Wait for the re-render triggered by the new column
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        const targetLeft = this.bodyScroll.scrollWidth;
+
+        // Suppress header→body sync so the smooth scroll animation isn't
+        // cancelled by stale scrollLeft values bouncing back from headerScroll.
+        this.suppressReverseScrollSync = true;
+
+        // Scroll header instantly to the target, then smooth-scroll the body.
+        this.headerScroll.scrollLeft = targetLeft;
         this.bodyScroll.scrollTo({
-          left: this.bodyScroll.scrollWidth,
+          left: targetLeft,
           behavior: 'smooth',
         });
+
+        // Re-enable sync after the animation settles and align both containers.
+        const onEnd = () => {
+          this.suppressReverseScrollSync = false;
+          this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+        };
+        this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
+        // Fallback for browsers without scrollend support
+        setTimeout(onEnd, 600);
       });
     });
   }

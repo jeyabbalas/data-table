@@ -64,23 +64,6 @@
     </div>
   </div>
 
-  <div class="card" id="derived-columns-card" style="display: none;">
-    <h2>Derived Columns</h2>
-    <p class="test-info" style="margin-bottom: 12px;">
-      Add virtual columns computed from SQL expressions. The expression is evaluated by DuckDB
-      and the result appears as a new column. Examples: <code>price * quantity</code>,
-      <code>UPPER(name)</code>, <code>CASE WHEN age > 30 THEN 'senior' ELSE 'junior' END</code>
-    </p>
-    <div class="row row--mb">
-      <input type="text" id="derived-name-input" placeholder="Column name" style="flex: 0 0 180px;">
-      <input type="text" id="derived-expr-input" placeholder="SQL expression (e.g. price * quantity)" style="flex: 1;">
-      <button id="validate-expr-btn" class="btn--secondary" disabled>Validate</button>
-      <button id="add-derived-btn" disabled>Add Column</button>
-    </div>
-    <div id="derived-validation-msg" style="font-size: 13px; min-height: 20px; margin-bottom: 8px;"></div>
-    <div id="derived-columns-list"></div>
-  </div>
-
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

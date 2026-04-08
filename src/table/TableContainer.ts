@@ -439,6 +439,11 @@ export class TableContainer {
     // Subscribe to schema changes to update header structure
     const unsubSchema = this.state.schema.subscribe(() => {
       if (!this.destroyed) {
+        // Close the derived column modal if open — it lives on document.body
+        // and render() won't reach it
+        if (this.derivedModal) {
+          this.derivedModal.close();
+        }
         this.render();
       }
     });

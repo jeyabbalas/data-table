@@ -1,13 +1,52 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { DerivedColumnModal } from '@/derived/DerivedColumnModal';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { EditorView } from '@codemirror/view';
+
+// CodeMirror requires DOM APIs that jsdom may not fully support
+beforeAll(() => {
+  if (!document.createRange) {
+    document.createRange = () =>
+      ({
+        setStart: () => {},
+        setEnd: () => {},
+        commonAncestorContainer: document.body,
+        getClientRects: () => [],
+        getBoundingClientRect: () => ({
+          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
+          x: 0, y: 0, toJSON: () => {},
+        }),
+        createContextualFragment: (html: string) => {
+          const template = document.createElement('template');
+          template.innerHTML = html;
+          return template.content;
+        },
+      } as unknown as Range);
+  }
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+
+/** Helper: set expression editor content via CodeMirror EditorView */
+function setEditorValue(root: HTMLElement, value: string): void {
+  const cmEditor = root.querySelector('.cm-editor') as HTMLElement;
+  const view = EditorView.findFromDOM(cmEditor)!;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: value },
+  });
+}
 
 // Mock WorkerBridge
 const mockBridge = {
@@ -254,9 +293,8 @@ describe('DerivedColumnModal', () => {
 
     modal.open();
 
-    // Set expression in the editor textarea
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * 2';
+    // Set expression in the editor
+    setEditorValue(modal.getElement(), 'price * 2');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -276,8 +314,7 @@ describe('DerivedColumnModal', () => {
 
     modal.open();
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * 2';
+    setEditorValue(modal.getElement(), 'price * 2');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -297,8 +334,7 @@ describe('DerivedColumnModal', () => {
 
     modal.open();
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'bad syntax!!!';
+    setEditorValue(modal.getElement(), 'bad syntax!!!');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -340,8 +376,7 @@ describe('DerivedColumnModal', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
     // Set expression and validate
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * quantity';
+    setEditorValue(modal.getElement(), 'price * quantity');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -366,8 +401,7 @@ describe('DerivedColumnModal', () => {
     input.value = 'total';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * 2';
+    setEditorValue(modal.getElement(), 'price * 2');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -379,8 +413,7 @@ describe('DerivedColumnModal', () => {
     });
 
     // Now edit the expression — should reset validation
-    textarea.value = 'price * 3';
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    setEditorValue(modal.getElement(), 'price * 3');
 
     expect(createBtn.disabled).toBe(true);
   });
@@ -462,8 +495,7 @@ describe('DerivedColumnModal', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
     // Set and validate expression
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * quantity';
+    setEditorValue(modal.getElement(), 'price * quantity');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -499,8 +531,7 @@ describe('DerivedColumnModal', () => {
     input.value = 'total';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * quantity';
+    setEditorValue(modal.getElement(), 'price * quantity');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -535,8 +566,7 @@ describe('DerivedColumnModal', () => {
     input.value = 'total';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'bad_expr';
+    setEditorValue(modal.getElement(), 'bad_expr');
 
     const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
@@ -614,8 +644,7 @@ describe('DerivedColumnModal', () => {
     input.value = 'total';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-    textarea.value = 'price * 2';
+    setEditorValue(modal.getElement(), 'price * 2');
 
     modal.close();
     modal.open();

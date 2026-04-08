@@ -55,6 +55,13 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev20.0"
+    "@codemirror/autocomplete": "^6.20.1",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev20.0",
+    "@lezer/highlight": "^1.2.3"
   }
 }

@@ -208,6 +208,10 @@ export type { DerivedColumnModalOptions } from './derived/DerivedColumnModal';
 export { AddColumnButton } from './derived/AddColumnButton';
 export type { AddColumnButtonOptions } from './derived/AddColumnButton';
 
+// SQL Editor (CodeMirror-based expression editor)
+export { CodeMirrorExpressionEditor } from './sql-editor/CodeMirrorExpressionEditor';
+export { DUCKDB_FUNCTIONS } from './sql-editor/duckdbFunctions';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

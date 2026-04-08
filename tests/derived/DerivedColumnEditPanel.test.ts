@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { DerivedColumnEditPanel } from '@/derived/DerivedColumnEditPanel';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
@@ -9,6 +9,52 @@ import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { DerivedColumnDef } from '@/derived/types';
+import { EditorView } from '@codemirror/view';
+
+// CodeMirror requires DOM APIs that jsdom may not fully support
+beforeAll(() => {
+  if (!document.createRange) {
+    document.createRange = () =>
+      ({
+        setStart: () => {},
+        setEnd: () => {},
+        commonAncestorContainer: document.body,
+        getClientRects: () => [],
+        getBoundingClientRect: () => ({
+          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
+          x: 0, y: 0, toJSON: () => {},
+        }),
+        createContextualFragment: (html: string) => {
+          const template = document.createElement('template');
+          template.innerHTML = html;
+          return template.content;
+        },
+      } as unknown as Range);
+  }
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+
+/** Helper: set expression editor content via CodeMirror EditorView */
+function setEditorValue(root: HTMLElement, value: string): void {
+  const cmEditor = root.querySelector('.cm-editor') as HTMLElement;
+  const view = EditorView.findFromDOM(cmEditor)!;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: value },
+  });
+}
+
+/** Helper: get expression editor content via CodeMirror EditorView */
+function getEditorValue(root: HTMLElement): string {
+  const cmEditor = root.querySelector('.cm-editor') as HTMLElement;
+  const view = EditorView.findFromDOM(cmEditor)!;
+  return view.state.doc.toString();
+}
 
 // Mock WorkerBridge
 const mockBridge = {
@@ -197,9 +243,9 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const textarea = panel.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-      expect(textarea).toBeTruthy();
-      expect(textarea.value).toBe('price * quantity');
+      const cmEditor = panel.getElement().querySelector('.cm-editor');
+      expect(cmEditor).toBeTruthy();
+      expect(getEditorValue(panel.getElement())).toBe('price * quantity');
 
       // Expression section should be visible
       const exprSection = panel.getElement().querySelector('.dt-derived-edit-expr-section') as HTMLElement;
@@ -456,8 +502,7 @@ describe('DerivedColumnEditPanel', () => {
       });
 
       // Change expression before updating
-      const textarea = panel.getElement().querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
-      textarea.value = 'price * 2';
+      setEditorValue(panel.getElement(), 'price * 2');
 
       // Re-validate since expression changed
       validateBtn.click();

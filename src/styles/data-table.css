@@ -1036,7 +1036,49 @@
   padding-right: 0.25rem;
 }
 
+/* === CodeMirror Expression Editor === */
+
+.dt-cm-expr-editor .cm-editor {
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+}
+
+.dt-cm-expr-editor .cm-editor.cm-focused {
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-cm-expr-editor--error .cm-editor {
+  border-color: #ef4444;
+}
+
+.dt-cm-expr-editor--error .cm-editor.cm-focused {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+/* Autocomplete tooltip (rendered at body level by CodeMirror) */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--dt-primary-light);
+  color: var(--dt-text);
+}
+
 /* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .cm-tooltip.cm-tooltip-autocomplete {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .dt-derived-edit-panel {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);

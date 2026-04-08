@@ -9,7 +9,7 @@
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
-import { DefaultExpressionEditor } from './DefaultExpressionEditor';
+import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { DerivedColumnDef, VectorDataType } from './types';
 
 export interface DerivedColumnModalOptions {
@@ -592,7 +592,7 @@ export class DerivedColumnModal {
     if (this.editorFactory) {
       this.currentEditor = this.editorFactory(this.editorContainer, context);
     } else {
-      this.currentEditor = new DefaultExpressionEditor(
+      this.currentEditor = new CodeMirrorExpressionEditor(
         this.editorContainer,
         context,
         this.prefix

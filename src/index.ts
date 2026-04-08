@@ -203,6 +203,10 @@ export type {
 export { DefaultExpressionEditor } from './derived/DefaultExpressionEditor';
 export { DerivedColumnEditPanel } from './derived/DerivedColumnEditPanel';
 export type { DerivedColumnEditPanelOptions } from './derived/DerivedColumnEditPanel';
+export { DerivedColumnModal } from './derived/DerivedColumnModal';
+export type { DerivedColumnModalOptions } from './derived/DerivedColumnModal';
+export { AddColumnButton } from './derived/AddColumnButton';
+export type { AddColumnButtonOptions } from './derived/AddColumnButton';
 
 // Worker types (for advanced usage)
 export type {

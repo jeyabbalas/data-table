@@ -17,6 +17,8 @@ import { FilterBar } from '../filters/FilterBar';
 import { FilterPanel } from '../filters/FilterPanel';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
+import { DerivedColumnModal } from '../derived/DerivedColumnModal';
+import { AddColumnButton } from '../derived/AddColumnButton';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { copyRowsToClipboard } from '../export/Clipboard';
 
@@ -36,6 +38,8 @@ export interface TableContainerOptions {
   onFilterRemove?: (column: string) => void;
   /** Custom expression editor factory for derived column panel/modal */
   editorFactory?: ExpressionEditorFactory;
+  /** Show "+" add column button at right edge (default: true) */
+  showAddColumnButton?: boolean;
 }
 
 /**
@@ -75,6 +79,9 @@ export class TableContainer {
   private filterBar: FilterBar | null = null;
   private filterPanel: FilterPanel | null = null;
   private derivedEditPanel: DerivedColumnEditPanel | null = null;
+  private derivedModal: DerivedColumnModal | null = null;
+  private addColumnButton: AddColumnButton | null = null;
+  private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
@@ -111,6 +118,7 @@ export class TableContainer {
       showFilterBar: true,
       onFilterRemove: undefined as unknown as (column: string) => void,
       editorFactory: undefined as unknown as ExpressionEditorFactory,
+      showAddColumnButton: true,
       ...options,
     };
 
@@ -151,7 +159,21 @@ export class TableContainer {
       this.element.appendChild(this.hiddenColumnsGutter.getElement());
     }
 
-    this.container.appendChild(this.element);
+    // Create add column button in a flex wrapper alongside the table
+    if (this.resolvedOptions.showAddColumnButton !== false && this.actions) {
+      this.addColumnButton = new AddColumnButton({
+        classPrefix: this.resolvedOptions.classPrefix,
+        onClick: () => this.handleAddColumnClick(),
+      });
+
+      this.wrapperElement = document.createElement('div');
+      this.wrapperElement.className = `${this.resolvedOptions.classPrefix}-table-wrapper`;
+      this.wrapperElement.appendChild(this.element);
+      this.wrapperElement.appendChild(this.addColumnButton.getElement());
+      this.container.appendChild(this.wrapperElement);
+    } else {
+      this.container.appendChild(this.element);
+    }
 
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
@@ -849,6 +871,47 @@ export class TableContainer {
   }
 
   /**
+   * Handle "+" add column button click.
+   * Opens the DerivedColumnModal for creating a new derived column.
+   */
+  private handleAddColumnClick(): void {
+    if (!this.actions) return;
+
+    // Close other floating panels (mutual exclusion)
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+
+    // Create modal lazily on first click
+    if (!this.derivedModal) {
+      this.derivedModal = new DerivedColumnModal(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+        editorFactory: this.resolvedOptions.editorFactory,
+        onCreated: () => this.scrollToRightEnd(),
+      });
+      // Append to document.body — fixed-position modals need body to avoid stacking context issues
+      document.body.appendChild(this.derivedModal.getElement());
+    }
+
+    this.derivedModal.open();
+  }
+
+  /**
+   * Smooth-scroll the body to the right end so the newly created column is visible.
+   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
+   */
+  private scrollToRightEnd(): void {
+    // Wait for the re-render triggered by the new column
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.bodyScroll.scrollTo({
+          left: this.bodyScroll.scrollWidth,
+          behavior: 'smooth',
+        });
+      });
+    });
+  }
+
+  /**
    * Get the root element
    */
   getElement(): HTMLElement {
@@ -972,6 +1035,18 @@ export class TableContainer {
       this.derivedEditPanel = null;
     }
 
+    // Destroy add column button
+    if (this.addColumnButton) {
+      this.addColumnButton.destroy();
+      this.addColumnButton = null;
+    }
+
+    // Destroy derived column modal
+    if (this.derivedModal) {
+      this.derivedModal.destroy();
+      this.derivedModal = null;
+    }
+
     // Destroy hidden columns gutter
     if (this.hiddenColumnsGutter) {
       this.hiddenColumnsGutter.destroy();
@@ -1018,9 +1093,10 @@ export class TableContainer {
     }
     this.unsubscribes = [];
 
-    // Remove element from DOM
-    if (this.element.parentNode) {
-      this.element.parentNode.removeChild(this.element);
+    // Remove element from DOM (wrapper or root)
+    const topEl = this.wrapperElement ?? this.element;
+    if (topEl.parentNode) {
+      topEl.parentNode.removeChild(topEl);
     }
   }
 }

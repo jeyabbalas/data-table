@@ -26,8 +26,9 @@ function createMockBridge(typeMap: Record<string, string> = {}) {
 
       // Type detection: SELECT typeof((...)) AS t FROM ...
       if (sql.includes('typeof(')) {
-        // Extract the expression inside typeof((...))
-        const match = sql.match(/typeof\(\((.+?)\)\)/);
+        // Extract the expression inside typeof((...)) — use greedy match anchored to ")) AS t"
+        // so expressions with nested parens (e.g., CAST(x AS INTEGER)) are captured correctly
+        const match = sql.match(/typeof\(\((.+)\)\) AS t/);
         const expr = match?.[1] ?? '';
         const duckdbType = typeMap[expr] ?? defaultType;
         return [{ t: duckdbType }];
@@ -188,6 +189,119 @@ describe('Derived Columns — Actions Integration', () => {
   });
 
   // =========================================
+  // addDerivedColumn (expression) — type detection for all types
+  // =========================================
+
+  describe('addDerivedColumn (expression) — all result types', () => {
+    // Uses a bridge with typeMap entries for expressions that produce each DuckDB type
+    let allTypesActions: StateActions;
+    let allTypesBridge: ReturnType<typeof createMockBridge>;
+    let allTypesState: TableState;
+
+    beforeEach(() => {
+      allTypesState = createTableState();
+      allTypesBridge = createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'CAST(price AS INTEGER)': 'INTEGER',
+        "CAST(price AS DECIMAL(10,2))": 'DECIMAL(10,2)',
+        'CURRENT_DATE': 'DATE',
+        'CURRENT_TIMESTAMP': 'TIMESTAMP',
+        'CURRENT_TIME': 'TIME',
+        "INTERVAL '1 day'": 'INTERVAL',
+        'uuid()': 'UUID',
+        'UPPER(name)': 'VARCHAR',
+        'quantity > 50': 'BOOLEAN',
+      });
+      allTypesActions = new StateActions(allTypesState, allTypesBridge as any);
+      initializeColumnsFromSchema(allTypesState, sampleSchema);
+      allTypesState.tableName.set('test_table');
+      allTypesState.baseTableName.set('test_table');
+      allTypesState.totalRows.set(100);
+      allTypesState.filteredRows.set(100);
+    });
+
+    it('detects integer type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'int_col', expression: 'CAST(price AS INTEGER)',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'int_col')!.type).toBe('integer');
+    });
+
+    it('detects float type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'float_col', expression: 'price * quantity',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'float_col')!.type).toBe('float');
+    });
+
+    it('detects decimal type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'dec_col', expression: 'CAST(price AS DECIMAL(10,2))',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'dec_col')!.type).toBe('decimal');
+    });
+
+    it('detects date type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'date_col', expression: 'CURRENT_DATE',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'date_col')!.type).toBe('date');
+    });
+
+    it('detects timestamp type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'ts_col', expression: 'CURRENT_TIMESTAMP',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'ts_col')!.type).toBe('timestamp');
+    });
+
+    it('detects time type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'time_col', expression: 'CURRENT_TIME',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'time_col')!.type).toBe('time');
+    });
+
+    it('detects interval type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'interval_col', expression: "INTERVAL '1 day'",
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'interval_col')!.type).toBe('interval');
+    });
+
+    it('detects uuid type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'uuid_col', expression: 'uuid()',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'uuid_col')!.type).toBe('uuid');
+    });
+
+    it('detects string type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'str_col', expression: 'UPPER(name)',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'str_col')!.type).toBe('string');
+    });
+
+    it('detects boolean type from expression', async () => {
+      const result = await allTypesActions.addDerivedColumn({
+        kind: 'expression', name: 'bool_col', expression: 'quantity > 50',
+      });
+      expect(result.success).toBe(true);
+      expect(allTypesState.schema.get().find(c => c.name === 'bool_col')!.type).toBe('boolean');
+    });
+  });
+
+  // =========================================
   // addDerivedColumn — Name Conflicts
   // =========================================
 
@@ -334,6 +448,136 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.success).toBe(true);
       const flagCol = state.schema.get().find(c => c.name === 'flags');
       expect(flagCol!.type).toBe('boolean');
+    });
+
+    it('adds a date vector column', async () => {
+      const values = Array.from({ length: 100 }, (_, i) => {
+        const d = new Date(2024, 0, 1 + (i % 28));
+        return d.toISOString().split('T')[0];
+      });
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'event_date',
+        vectorType: 'date',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'event_date');
+      expect(col).toBeDefined();
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('date');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('DATE'))).toBe(true);
+      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_event_date__'))).toBe(true);
+      expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
+    });
+
+    it('adds a timestamp vector column', async () => {
+      const values = Array.from({ length: 100 }, (_, i) => {
+        const d = new Date(2024, 0, 1 + (i % 28), 10, 30, i % 60);
+        return d.toISOString().replace('Z', '').replace('T', ' ');
+      });
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'event_ts',
+        vectorType: 'timestamp',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'event_ts');
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('timestamp');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('TIMESTAMP'))).toBe(true);
+    });
+
+    it('adds a time vector column', async () => {
+      const values = Array.from({ length: 100 }, (_, i) => {
+        const h = String(i % 24).padStart(2, '0');
+        const m = String(i % 60).padStart(2, '0');
+        return `${h}:${m}:00`;
+      });
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'event_time',
+        vectorType: 'time',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'event_time');
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('time');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('TIME'))).toBe(true);
+    });
+
+    it('adds an interval vector column', async () => {
+      const values = ['1 day', '2 hours 30 minutes', '3 months', '1 year 6 months'];
+      // Pad to 100 values
+      while (values.length < 100) values.push('1 day');
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'durations',
+        vectorType: 'interval',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'durations');
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('interval');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('INTERVAL'))).toBe(true);
+      // Verify string values are quoted in INSERT
+      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes("'1 day'"))).toBe(true);
+    });
+
+    it('adds a decimal vector column', async () => {
+      const values = Array.from({ length: 100 }, (_, i) => (i * 0.123456).toFixed(6));
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'precise_vals',
+        vectorType: 'decimal',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'precise_vals');
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('decimal');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('DECIMAL(18,6)'))).toBe(true);
+    });
+
+    it('adds a uuid vector column', async () => {
+      const values = Array.from({ length: 100 }, (_, i) => {
+        const hex = i.toString(16).padStart(12, '0');
+        return `550e8400-e29b-41d4-a716-${hex}`;
+      });
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'record_ids',
+        vectorType: 'uuid',
+        values,
+      });
+
+      expect(result.success).toBe(true);
+      const col = state.schema.get().find(c => c.name === 'record_ids');
+      expect(col!.isDerived).toBe(true);
+      expect(col!.type).toBe('uuid');
+
+      const calls = mockBridge.getQueryCalls();
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('UUID'))).toBe(true);
+      // Verify UUID values are quoted in INSERT
+      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes("'550e8400-e29b-41d4-a716-"))).toBe(true);
     });
   });
 

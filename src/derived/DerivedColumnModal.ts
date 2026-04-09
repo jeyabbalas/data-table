@@ -261,7 +261,7 @@ export class DerivedColumnModal {
 
     this.vectorTypeSelect = document.createElement('select');
     this.vectorTypeSelect.className = `${p}-filter-select`;
-    for (const vtype of ['integer', 'float', 'string', 'boolean'] as const) {
+    for (const vtype of ['integer', 'float', 'decimal', 'string', 'boolean', 'uuid', 'date', 'timestamp', 'time', 'interval'] as const) {
       const opt = document.createElement('option');
       opt.value = vtype;
       opt.textContent = vtype;
@@ -559,6 +559,78 @@ export class DerivedColumnModal {
             error: `Line ${i + 1}: "${lines[i]}" is not a valid boolean (use true/false/1/0)`,
           };
         }
+      }
+      return { success: true, values };
+    }
+
+    // Temporal, decimal, and UUID types — validate as strings, DuckDB casts on INSERT
+    if (vectorType === 'date') {
+      const re = /^\d{4}-\d{2}-\d{2}$/;
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!re.test(lines[i])) {
+          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid date (use YYYY-MM-DD)` };
+        }
+        values.push(lines[i]);
+      }
+      return { success: true, values };
+    }
+
+    if (vectorType === 'timestamp') {
+      const re = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!re.test(lines[i])) {
+          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid timestamp (use YYYY-MM-DD HH:MM:SS)` };
+        }
+        values.push(lines[i]);
+      }
+      return { success: true, values };
+    }
+
+    if (vectorType === 'time') {
+      const re = /^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!re.test(lines[i])) {
+          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid time (use HH:MM:SS)` };
+        }
+        values.push(lines[i]);
+      }
+      return { success: true, values };
+    }
+
+    if (vectorType === 'interval') {
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().length === 0) {
+          return { success: false, error: `Line ${i + 1}: interval cannot be empty (e.g. "1 day 2 hours")` };
+        }
+        values.push(lines[i]);
+      }
+      return { success: true, values };
+    }
+
+    if (vectorType === 'decimal') {
+      const re = /^-?\d+(\.\d+)?$/;
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!re.test(lines[i])) {
+          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid decimal (use a numeric value)` };
+        }
+        values.push(lines[i]);
+      }
+      return { success: true, values };
+    }
+
+    if (vectorType === 'uuid') {
+      const re = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const values: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!re.test(lines[i])) {
+          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid UUID (use xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx format)` };
+        }
+        values.push(lines[i]);
       }
       return { success: true, values };
     }

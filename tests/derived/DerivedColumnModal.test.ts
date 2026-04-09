@@ -627,6 +627,262 @@ describe('DerivedColumnModal', () => {
   });
 
   // =========================================
+  // Vector mode — all data types
+  // =========================================
+
+  describe('vector mode — extended types', () => {
+    /** Helper to create a vector column via the modal and verify the addDerivedColumn call */
+    async function createVectorColumn(
+      modalEl: HTMLElement,
+      modalInstance: DerivedColumnModal,
+      addSpy: ReturnType<typeof vi.fn>,
+      opts: { name: string; vectorType: string; textareaValue: string; expectedValues: unknown[]; expectedVectorType: string },
+    ) {
+      modalInstance.open();
+
+      // Set name
+      const input = modalEl.querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = opts.name;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Switch to vector mode
+      const radios = modalEl.querySelectorAll('input[type="radio"]');
+      const vectorRadio = radios[1] as HTMLInputElement;
+      vectorRadio.checked = true;
+      vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Set type
+      const select = modalEl.querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = opts.vectorType;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Enter values
+      const textarea = modalEl.querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = opts.textareaValue;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modalEl.querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      expect(createBtn.disabled).toBe(false);
+      createBtn.click();
+
+      await vi.waitFor(() => {
+        expect(addSpy).toHaveBeenCalledWith({
+          kind: 'vector',
+          name: opts.name,
+          vectorType: opts.expectedVectorType,
+          values: opts.expectedValues,
+        });
+      });
+
+      modalInstance.close();
+      addSpy.mockClear();
+    }
+
+    it('creates a date vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'dates',
+        vectorType: 'date',
+        textareaValue: '2024-01-15\n2024-06-30\n2025-12-01',
+        expectedValues: ['2024-01-15', '2024-06-30', '2025-12-01'],
+        expectedVectorType: 'date',
+      });
+    });
+
+    it('creates a timestamp vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'timestamps',
+        vectorType: 'timestamp',
+        textareaValue: '2024-01-15 10:30:00\n2024-06-30 23:59:59\n2025-12-01 00:00:00',
+        expectedValues: ['2024-01-15 10:30:00', '2024-06-30 23:59:59', '2025-12-01 00:00:00'],
+        expectedVectorType: 'timestamp',
+      });
+    });
+
+    it('creates a time vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'times',
+        vectorType: 'time',
+        textareaValue: '14:30:00\n09:15:30\n23:59:59',
+        expectedValues: ['14:30:00', '09:15:30', '23:59:59'],
+        expectedVectorType: 'time',
+      });
+    });
+
+    it('creates an interval vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'durations',
+        vectorType: 'interval',
+        textareaValue: '1 day\n2 hours 30 minutes\n1 year 6 months',
+        expectedValues: ['1 day', '2 hours 30 minutes', '1 year 6 months'],
+        expectedVectorType: 'interval',
+      });
+    });
+
+    it('creates a decimal vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'precise',
+        vectorType: 'decimal',
+        textareaValue: '123.456789\n-42.5\n0.001',
+        expectedValues: ['123.456789', '-42.5', '0.001'],
+        expectedVectorType: 'decimal',
+      });
+    });
+
+    it('creates a uuid vector column', async () => {
+      const addSpy = vi.spyOn(actions, 'addDerivedColumn').mockResolvedValue({ success: true });
+      await createVectorColumn(modal.getElement(), modal, addSpy, {
+        name: 'ids',
+        vectorType: 'uuid',
+        textareaValue: '550e8400-e29b-41d4-a716-446655440000\na1b2c3d4-e5f6-7890-abcd-ef1234567890\n00000000-0000-0000-0000-000000000001',
+        expectedValues: ['550e8400-e29b-41d4-a716-446655440000', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '00000000-0000-0000-0000-000000000001'],
+        expectedVectorType: 'uuid',
+      });
+    });
+
+    // --- Invalid value tests ---
+
+    it('shows error for invalid date values', () => {
+      modal.open();
+      const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+      (radios[1] as HTMLInputElement).checked = true;
+      (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+      const select = modal.getElement().querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = 'date';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = 'bad_dates';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = '2024-01-15\nnot-a-date\n2024-06-30';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      createBtn.click();
+
+      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      expect(errorEl.style.display).not.toBe('none');
+      expect(errorEl.textContent).toContain('Line 2');
+      expect(errorEl.textContent).toContain('not a valid date');
+    });
+
+    it('shows error for invalid timestamp values', () => {
+      modal.open();
+      const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+      (radios[1] as HTMLInputElement).checked = true;
+      (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+      const select = modal.getElement().querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = 'timestamp';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = 'bad_ts';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = '2024-01-15 10:30:00\njust-a-date\n2024-06-30 12:00:00';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      createBtn.click();
+
+      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      expect(errorEl.style.display).not.toBe('none');
+      expect(errorEl.textContent).toContain('Line 2');
+      expect(errorEl.textContent).toContain('not a valid timestamp');
+    });
+
+    it('shows error for invalid time values', () => {
+      modal.open();
+      const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+      (radios[1] as HTMLInputElement).checked = true;
+      (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+      const select = modal.getElement().querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = 'time';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = 'bad_time';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = '14:30:00\nnoon\n23:59:59';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      createBtn.click();
+
+      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      expect(errorEl.style.display).not.toBe('none');
+      expect(errorEl.textContent).toContain('Line 2');
+      expect(errorEl.textContent).toContain('not a valid time');
+    });
+
+    it('shows error for invalid decimal values', () => {
+      modal.open();
+      const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+      (radios[1] as HTMLInputElement).checked = true;
+      (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+      const select = modal.getElement().querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = 'decimal';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = 'bad_dec';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = '123.45\nabc\n0.001';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      createBtn.click();
+
+      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      expect(errorEl.style.display).not.toBe('none');
+      expect(errorEl.textContent).toContain('Line 2');
+      expect(errorEl.textContent).toContain('not a valid decimal');
+    });
+
+    it('shows error for invalid uuid values', () => {
+      modal.open();
+      const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+      (radios[1] as HTMLInputElement).checked = true;
+      (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+      const select = modal.getElement().querySelector('.dt-filter-select') as HTMLSelectElement;
+      select.value = 'uuid';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+      input.value = 'bad_uuid';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value = '550e8400-e29b-41d4-a716-446655440000\nnot-a-uuid\n00000000-0000-0000-0000-000000000001';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      createBtn.click();
+
+      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      expect(errorEl.style.display).not.toBe('none');
+      expect(errorEl.textContent).toContain('Line 2');
+      expect(errorEl.textContent).toContain('not a valid UUID');
+    });
+  });
+
+  // =========================================
   // Form Reset
   // =========================================
 

@@ -10,8 +10,18 @@ import type { DataType } from '../core/types';
 /** Discriminant for derived column kind */
 export type DerivedColumnKind = 'expression' | 'vector';
 
-/** Supported types for pre-computed vector data */
-export type VectorDataType = 'integer' | 'float' | 'string' | 'boolean';
+/** Supported types for pre-computed vector data (matches DataType) */
+export type VectorDataType =
+  | 'integer'
+  | 'float'
+  | 'decimal'
+  | 'string'
+  | 'boolean'
+  | 'uuid'
+  | 'date'
+  | 'timestamp'
+  | 'time'
+  | 'interval';
 
 /** SQL expression column — DuckDB evaluates the expression */
 export interface ExpressionColumnDef {

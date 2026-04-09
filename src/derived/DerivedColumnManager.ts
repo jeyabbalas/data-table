@@ -328,8 +328,14 @@ export class DerivedColumnManager {
     switch (vt) {
       case 'integer': return 'BIGINT';
       case 'float': return 'DOUBLE';
+      case 'decimal': return 'DECIMAL(18,6)';
       case 'string': return 'VARCHAR';
       case 'boolean': return 'BOOLEAN';
+      case 'uuid': return 'UUID';
+      case 'date': return 'DATE';
+      case 'timestamp': return 'TIMESTAMP';
+      case 'time': return 'TIME';
+      case 'interval': return 'INTERVAL';
     }
   }
 

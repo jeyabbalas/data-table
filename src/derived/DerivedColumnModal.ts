@@ -47,7 +47,7 @@ export class DerivedColumnModal {
   private destroyed = false;
   private expressionValidated = false;
   private creating = false;
-  private savedOverflow = '';
+  private scrollLockHandler: ((e: Event) => void) | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(
@@ -639,9 +639,10 @@ export class DerivedColumnModal {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-derived-modal-backdrop--open`);
 
-    // Lock body scroll
-    this.savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Prevent background scrolling without modifying body CSS (avoids layout shift)
+    this.scrollLockHandler = (e: Event) => { e.preventDefault(); };
+    document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
+    document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
 
     // Reset form
     this.resetForm();
@@ -672,8 +673,12 @@ export class DerivedColumnModal {
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-derived-modal-backdrop--open`);
 
-    // Restore body scroll
-    document.body.style.overflow = this.savedOverflow;
+    // Restore background scrolling
+    if (this.scrollLockHandler) {
+      document.removeEventListener('wheel', this.scrollLockHandler);
+      document.removeEventListener('touchmove', this.scrollLockHandler);
+      this.scrollLockHandler = null;
+    }
 
     // Unregister Escape handler
     if (this.escapeHandler) {

@@ -60,7 +60,7 @@ export class ExportDialog {
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Body scroll lock
-  private savedOverflow = '';
+  private scrollLockHandler: ((e: Event) => void) | null = null;
 
   constructor(
     private state: TableState,
@@ -394,9 +394,10 @@ export class ExportDialog {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-export-backdrop--open`);
 
-    // Lock body scroll
-    this.savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Prevent background scrolling without modifying body CSS (avoids layout shift)
+    this.scrollLockHandler = (e: Event) => { e.preventDefault(); };
+    document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
+    document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
 
     // Subscribe to state for live updates
     this.unsubscribes.push(
@@ -444,8 +445,12 @@ export class ExportDialog {
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-export-backdrop--open`);
 
-    // Restore body scroll
-    document.body.style.overflow = this.savedOverflow;
+    // Restore background scrolling
+    if (this.scrollLockHandler) {
+      document.removeEventListener('wheel', this.scrollLockHandler);
+      document.removeEventListener('touchmove', this.scrollLockHandler);
+      this.scrollLockHandler = null;
+    }
 
     // Cancel any in-flight export
     if (this.abortController) {

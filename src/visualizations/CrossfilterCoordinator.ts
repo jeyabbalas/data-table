@@ -19,7 +19,6 @@ export class CrossfilterCoordinator {
     private state: TableState,
     private actions: StateActions,
     private bridge: WorkerBridge,
-    private tableName: string
   ) {
     this.unsubscribe = state.filters.subscribe(filters => this.onFiltersChanged(filters));
   }
@@ -69,9 +68,11 @@ export class CrossfilterCoordinator {
       this.state.filteredRows.set(this.state.totalRows.get());
       return;
     }
+    const tableName = this.state.tableName.get();
+    if (!tableName) return;
     try {
       const where = filtersToWhereClause(filters);
-      const sql = `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(this.tableName)} WHERE ${where}`;
+      const sql = `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(tableName)} WHERE ${where}`;
       const result = await this.bridge.query<{ cnt: number }>(sql);
       // Only apply if this is still the latest filter change
       if (seq !== this.filterSequence) return;

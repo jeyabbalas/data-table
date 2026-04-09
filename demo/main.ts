@@ -24,7 +24,6 @@ import {
   isTimeType,
   isCategoricalType,
 } from '../src/visualizations/VisualizationFactory';
-import type { ColumnSchema } from '../src/core/types';
 import type { BaseVisualization } from '../src/visualizations';
 import { InteractionManager } from '../src/visualizations/InteractionManager';
 import { formatDefaultStats } from '../src/statistics/StatsFormatters';
@@ -165,8 +164,10 @@ function updateInfo(message: string): void {
 /**
  * Attach visualizations to columns based on their types
  */
-function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
+function attachVisualizations(): void {
   if (!tableContainer) return;
+  const tableName = tableState.tableName.get();
+  if (!tableName) return;
 
   // Save brush/selection states before destroying visualizations
   for (const viz of activeVisualizations) {
@@ -211,7 +212,7 @@ function attachVisualizations(tableName: string, schema: ColumnSchema[]): void {
   if (coordinator) {
     coordinator.destroy();
   }
-  coordinator = new CrossfilterCoordinator(tableState, actions, bridge, tableName);
+  coordinator = new CrossfilterCoordinator(tableState, actions, bridge);
 
   // Get all column headers
   const headers = tableContainer.getColumnHeaders();
@@ -517,12 +518,11 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
     autoSave.enable();
 
     // Attach visualizations after data loads
-    const schema = tableState.schema.get();
     const currentTableName = tableState.tableName.get();
     if (currentTableName) {
       // Small delay to ensure table is rendered
       setTimeout(() => {
-        attachVisualizations(currentTableName, schema);
+        attachVisualizations();
         updateTableInfo();
 
         // Cache data as Parquet in IndexedDB for auto-restore on page refresh
@@ -614,10 +614,7 @@ bridge
       // subscriber fired, which may precede a tableName update).
       reorderTimeout = setTimeout(() => {
         reorderTimeout = null;
-        const tableName = tableState.tableName.get();
-        if (!tableName) return;
-        const schema = tableState.schema.get();
-        attachVisualizations(tableName, schema);
+        attachVisualizations();
         updateTableInfo();
       }, 100);
     }
@@ -629,6 +626,11 @@ bridge
     // Schema changes trigger TableContainer.render() which destroys column
     // headers — visualizations must be re-attached to the new headers.
     tableState.schema.subscribe(scheduleVisualizationReattach);
+
+    // Subscribe to tableName changes to re-attach visualizations.
+    // When derived columns switch tableName from base to VIEW (or back),
+    // visualizations need fresh options pointing to the current table.
+    tableState.tableName.subscribe(scheduleVisualizationReattach);
 
     // Subscribe to derived columns changes to update info bar
     tableState.derivedColumns.subscribe(() => {

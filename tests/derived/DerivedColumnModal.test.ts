@@ -350,7 +350,7 @@ describe('DerivedColumnModal', () => {
 
     await vi.waitFor(() => {
       expect(preview.textContent).toContain('Syntax error');
-      expect(preview.style.color).toBe('rgb(239, 68, 68)');
+      expect(preview.style.color).toBe('var(--dt-error)');
     });
   });
 

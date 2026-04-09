@@ -411,14 +411,14 @@ describe('Derived Columns — Actions Integration', () => {
 
       // Helper table created + VIEW created
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('__dt_vec_scores__'))).toBe(true);
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_scores__'))).toBe(true);
+      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
+      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
       expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
 
       // VIEW should have a LEFT JOIN for the vector column
       const viewSQL = calls.find(sql => sql.includes('CREATE OR REPLACE VIEW'))!;
       expect(viewSQL).toContain('LEFT JOIN');
-      expect(viewSQL).toContain('__dt_vec_scores__');
+      expect(viewSQL).toContain('__dt_vec_scores_0__');
       expect(viewSQL).toContain('rowid');
     });
 
@@ -470,7 +470,7 @@ describe('Derived Columns — Actions Integration', () => {
 
       const calls = mockBridge.getQueryCalls();
       expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('DATE'))).toBe(true);
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_event_date__'))).toBe(true);
+      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_event_date_0__'))).toBe(true);
       expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
     });
 
@@ -714,7 +714,7 @@ describe('Derived Columns — Actions Integration', () => {
       await actions.removeDerivedColumn('scores');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('DROP TABLE IF EXISTS') && sql.includes('__dt_vec_scores__'))).toBe(true);
+      expect(calls.some(sql => sql.includes('DROP TABLE IF EXISTS') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
     });
   });
 
@@ -1197,7 +1197,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(lastView).toContain('price * quantity');
       expect(lastView).toContain('"total"');
       expect(lastView).toContain('LEFT JOIN');
-      expect(lastView).toContain('__dt_vec_scores__');
+      expect(lastView).toContain('__dt_vec_scores_0__');
     });
   });
 

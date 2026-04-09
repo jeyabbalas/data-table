@@ -256,7 +256,7 @@ describe('VIEW SQL structure', () => {
 
     const view = bridge.getQueryCalls().find(s => s.includes('CREATE OR REPLACE VIEW'))!;
     expect(view).toContain('h1."scores"');
-    expect(view).toContain('LEFT JOIN "__dt_vec_scores__" h1 ON t.rowid = h1.__rowid__');
+    expect(view).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.rowid = h1.__rowid__');
   });
 
   it('mixed expression + vector: both patterns in one VIEW', async () => {
@@ -275,7 +275,7 @@ describe('VIEW SQL structure', () => {
     expect(lastView).toContain('(price * 2) AS "doubled"');
     // Vector JOIN
     expect(lastView).toContain('h1."scores"');
-    expect(lastView).toContain('LEFT JOIN "__dt_vec_scores__" h1 ON t.rowid = h1.__rowid__');
+    expect(lastView).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.rowid = h1.__rowid__');
   });
 });
 

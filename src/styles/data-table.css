@@ -50,6 +50,11 @@
   --dt-col-width: 200px; /* Default column width */
   --dt-scrollbar-width: 17px;
 
+  /* Semantic colors */
+  --dt-success: #22c55e;
+  --dt-error: #ef4444;
+  --dt-error-dark: #dc2626;
+
   /* Misc */
   --dt-radius: 8px;
   --dt-radius-sm: 4px;
@@ -84,6 +89,11 @@
     /* Sort arrow colors */
     --dt-arrow-default: #4b5563;
     --dt-arrow-hover: #6b7280;
+
+    /* Semantic colors */
+    --dt-success: #4ade80;
+    --dt-error: #f87171;
+    --dt-error-dark: #ef4444;
   }
 }
 
@@ -822,7 +832,7 @@
 }
 
 .dt-derived-edit-name-error {
-  color: #ef4444;
+  color: var(--dt-error);
   font-size: var(--dt-font-size-xs);
   margin-top: 0.25rem;
   display: none;
@@ -920,9 +930,9 @@
   font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
-  border: 1px solid #dc2626;
+  border: 1px solid var(--dt-error-dark);
   border-radius: var(--dt-radius-sm);
-  background: #dc2626;
+  background: var(--dt-error-dark);
   color: #fff;
   cursor: pointer;
   transition: background var(--dt-transition), border-color var(--dt-transition);
@@ -966,8 +976,8 @@
 }
 
 .dt-derived-edit-delete-confirm-yes {
-  border-color: #dc2626;
-  background: #dc2626;
+  border-color: var(--dt-error-dark);
+  background: var(--dt-error-dark);
   color: #fff;
 }
 
@@ -1011,16 +1021,16 @@
 }
 
 .dt-expr-editor-input--error {
-  border-color: #ef4444;
+  border-color: var(--dt-error);
 }
 
 .dt-expr-editor-input--error:focus {
-  border-color: #ef4444;
+  border-color: var(--dt-error);
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
 }
 
 .dt-expr-editor-error {
-  color: #ef4444;
+  color: var(--dt-error);
   font-size: var(--dt-font-size-xs);
   margin-top: 0.25rem;
   display: none;
@@ -1049,11 +1059,11 @@
 }
 
 .dt-cm-expr-editor--error .cm-editor {
-  border-color: #ef4444;
+  border-color: var(--dt-error);
 }
 
 .dt-cm-expr-editor--error .cm-editor.cm-focused {
-  border-color: #ef4444;
+  border-color: var(--dt-error);
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
 }
 
@@ -1233,7 +1243,7 @@
 }
 
 .dt-derived-modal-name-error {
-  color: #ef4444;
+  color: var(--dt-error);
   font-size: var(--dt-font-size-xs);
   margin-top: 0.125rem;
   display: none;
@@ -1342,7 +1352,7 @@
 }
 
 .dt-derived-modal-vector-error {
-  color: #ef4444;
+  color: var(--dt-error);
   font-size: var(--dt-font-size-xs);
   display: none;
 }
@@ -1404,7 +1414,7 @@
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: var(--dt-radius-sm);
-  color: #dc2626;
+  color: var(--dt-error-dark);
   font-size: var(--dt-font-size-sm);
   display: none;
 }
@@ -2162,7 +2172,7 @@ body.dt-column-dragging * {
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: var(--dt-radius-sm);
-  color: #dc2626;
+  color: var(--dt-error-dark);
   font-size: var(--dt-font-size-sm);
   display: none;
 }

@@ -31,6 +31,11 @@ export class DerivedColumnManager {
   /** Ordered list of derived column info */
   private columns: DerivedColumnInfo[] = [];
 
+  /** Monotonic counter for unique helper table names */
+  private nextHelperTableId = 0;
+  /** Maps column name → assigned helper table ID */
+  private helperTableIds = new Map<string, number>();
+
   constructor(
     private bridge: WorkerBridge,
     private baseTableName: string,
@@ -257,6 +262,8 @@ export class DerivedColumnManager {
     }
 
     this.columns = [];
+    this.helperTableIds.clear();
+    this.nextHelperTableId = 0;
   }
 
   // --- Private implementation ---
@@ -289,6 +296,10 @@ export class DerivedColumnManager {
 
   /** Create helper table for a vector column and INSERT values in batches */
   private async createVectorHelperTable(def: VectorColumnDef): Promise<void> {
+    // Assign a unique ID if this column doesn't have one yet
+    if (!this.helperTableIds.has(def.name)) {
+      this.helperTableIds.set(def.name, this.nextHelperTableId++);
+    }
     const tableName = this.helperTableName(def.name);
     const duckdbType = this.vectorTypeToDuckDBType(def.vectorType);
 
@@ -315,12 +326,17 @@ export class DerivedColumnManager {
   private async dropVectorHelperTable(name: string): Promise<void> {
     const tableName = this.helperTableName(name);
     await this.bridge.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
+    this.helperTableIds.delete(name);
   }
 
-  /** Helper table name for a given column: __dt_vec_<sanitizedName>__ */
+  /** Helper table name for a given column: __dt_vec_<sanitizedName>_<id>__ */
   private helperTableName(columnName: string): string {
+    const id = this.helperTableIds.get(columnName);
+    if (id === undefined) {
+      throw new Error(`No helper table ID assigned for column "${columnName}"`);
+    }
     const sanitized = columnName.replace(/[^a-zA-Z0-9]/g, '_');
-    return `__dt_vec_${sanitized}__`;
+    return `__dt_vec_${sanitized}_${id}__`;
   }
 
   /** Map VectorDataType to DuckDB type string */

@@ -48,6 +48,7 @@ export class ExportDialog {
   private copyBtn!: HTMLButtonElement;
   private exportBtn!: HTMLButtonElement;
   private errorEl!: HTMLElement;
+  private dialogEl!: HTMLElement;
 
   // Format-specific inputs
   private delimiterSelect!: HTMLSelectElement;
@@ -91,6 +92,7 @@ export class ExportDialog {
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', `${p}-export-title`);
+    this.dialogEl = dialog;
     backdrop.appendChild(dialog);
 
     // Header
@@ -394,8 +396,12 @@ export class ExportDialog {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-export-backdrop--open`);
 
-    // Prevent background scrolling without modifying body CSS (avoids layout shift)
-    this.scrollLockHandler = (e: Event) => { e.preventDefault(); };
+    // Prevent background scrolling without modifying body CSS (avoids layout shift).
+    // Allow scroll events inside the dialog.
+    this.scrollLockHandler = (e: Event) => {
+      if (this.dialogEl.contains(e.target as Node)) return;
+      e.preventDefault();
+    };
     document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
     document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
 

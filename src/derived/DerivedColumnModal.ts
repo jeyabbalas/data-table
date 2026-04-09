@@ -22,6 +22,7 @@ export interface DerivedColumnModalOptions {
 
 export class DerivedColumnModal {
   private element: HTMLElement;
+  private dialogEl!: HTMLElement;
   private nameInput!: HTMLInputElement;
   private nameErrorEl!: HTMLElement;
   private expressionRadio!: HTMLInputElement;
@@ -87,6 +88,7 @@ export class DerivedColumnModal {
     dialog.appendChild(this.createBody());
     dialog.appendChild(this.createFooter());
 
+    this.dialogEl = dialog;
     return backdrop;
   }
 
@@ -267,6 +269,10 @@ export class DerivedColumnModal {
       opt.textContent = vtype;
       this.vectorTypeSelect.appendChild(opt);
     }
+    this.vectorTypeSelect.addEventListener('change', () => {
+      this.validateVectorValues();
+      this.updateCreateButtonState();
+    });
     section.appendChild(this.vectorTypeSelect);
 
     // Values textarea
@@ -281,7 +287,7 @@ export class DerivedColumnModal {
     this.vectorTextarea.placeholder = 'Enter one value per line...';
     this.vectorTextarea.spellcheck = false;
     this.vectorTextarea.addEventListener('input', () => {
-      this.validateVector();
+      this.validateVectorValues();
       this.updateCreateButtonState();
     });
     section.appendChild(this.vectorTextarea);
@@ -393,17 +399,27 @@ export class DerivedColumnModal {
     this.vectorInfoEl.textContent = `Expected: ${totalRows} values, one per line`;
   }
 
-  private validateVector(): void {
+  /** Run both count validation and type-specific validation */
+  private validateVectorValues(): void {
     const lines = this.getVectorLines();
-    const totalRows = this.state.totalRows.get();
-
     if (lines.length === 0) {
       this.vectorErrorEl.style.display = 'none';
       return;
     }
 
+    // Count check first
+    const totalRows = this.state.totalRows.get();
     if (lines.length !== totalRows) {
       this.vectorErrorEl.textContent = `Expected ${totalRows} values, got ${lines.length}`;
+      this.vectorErrorEl.style.display = '';
+      return;
+    }
+
+    // Type-specific validation
+    const vectorType = this.vectorTypeSelect.value as VectorDataType;
+    const parseResult = this.parseVectorValues(lines, vectorType);
+    if (!parseResult.success) {
+      this.vectorErrorEl.textContent = parseResult.error!;
       this.vectorErrorEl.style.display = '';
     } else {
       this.vectorErrorEl.textContent = '';
@@ -414,7 +430,9 @@ export class DerivedColumnModal {
   private isVectorValid(): boolean {
     const lines = this.getVectorLines();
     const totalRows = this.state.totalRows.get();
-    return lines.length === totalRows && totalRows > 0;
+    if (lines.length !== totalRows || totalRows === 0) return false;
+    const vectorType = this.vectorTypeSelect.value as VectorDataType;
+    return this.parseVectorValues(lines, vectorType).success;
   }
 
   private getVectorLines(): string[] {
@@ -462,19 +480,19 @@ export class DerivedColumnModal {
       const result = await this.actions.validateExpression(expression);
       if (result.valid) {
         this.typePreview.textContent = `Type: ${result.type} (${result.originalType})`;
-        this.typePreview.style.color = '#22c55e';
+        this.typePreview.style.color = 'var(--dt-success)';
         this.expressionValidated = true;
         this.currentEditor.setError(null);
       } else {
         this.typePreview.textContent = result.error ?? 'Validation failed';
-        this.typePreview.style.color = '#ef4444';
+        this.typePreview.style.color = 'var(--dt-error)';
         this.expressionValidated = false;
         this.currentEditor.setError(result.error ?? 'Validation failed');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.typePreview.textContent = msg;
-      this.typePreview.style.color = '#ef4444';
+      this.typePreview.style.color = 'var(--dt-error)';
       this.expressionValidated = false;
       this.currentEditor.setError(msg);
     } finally {
@@ -725,8 +743,12 @@ export class DerivedColumnModal {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-derived-modal-backdrop--open`);
 
-    // Prevent background scrolling without modifying body CSS (avoids layout shift)
-    this.scrollLockHandler = (e: Event) => { e.preventDefault(); };
+    // Prevent background scrolling without modifying body CSS (avoids layout shift).
+    // Allow scroll events inside the dialog (textarea, CodeMirror editor).
+    this.scrollLockHandler = (e: Event) => {
+      if (this.dialogEl.contains(e.target as Node)) return;
+      e.preventDefault();
+    };
     document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
     document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
 

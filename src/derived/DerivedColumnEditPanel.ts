@@ -579,14 +579,14 @@ export class DerivedColumnEditPanel {
         this.currentEditor.setError(null);
       } else {
         this.typePreview.textContent = result.error ?? 'Validation failed';
-        this.typePreview.style.color = '#ef4444';
+        this.typePreview.style.color = 'var(--dt-error)';
         this.expressionValidated = false;
         this.currentEditor.setError(result.error ?? 'Validation failed');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.typePreview.textContent = msg;
-      this.typePreview.style.color = '#ef4444';
+      this.typePreview.style.color = 'var(--dt-error)';
       this.expressionValidated = false;
       this.currentEditor.setError(msg);
     } finally {
@@ -626,12 +626,12 @@ export class DerivedColumnEditPanel {
         this.close();
       } else {
         this.typePreview.textContent = result.error ?? 'Update failed';
-        this.typePreview.style.color = '#ef4444';
+        this.typePreview.style.color = 'var(--dt-error)';
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.typePreview.textContent = msg;
-      this.typePreview.style.color = '#ef4444';
+      this.typePreview.style.color = 'var(--dt-error)';
     } finally {
       this.updating = false;
       this.updateBtn.textContent = 'Update';
@@ -646,8 +646,12 @@ export class DerivedColumnEditPanel {
       await this.actions.removeDerivedColumn(this.currentColumn);
       this.close();
     } catch (err) {
-      console.error('Failed to delete derived column:', err);
-      this.close();
+      const msg = err instanceof Error ? err.message : String(err);
+      this.typePreview.textContent = `Delete failed: ${msg}`;
+      this.typePreview.style.color = 'var(--dt-error)';
+      // Reset delete confirmation back to button state
+      this.deleteConfirmDiv.style.display = 'none';
+      this.deleteBtn.style.display = '';
     }
   }
 

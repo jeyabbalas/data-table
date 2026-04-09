@@ -37,6 +37,9 @@ export async function initializeDuckDB(): Promise<void> {
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   URL.revokeObjectURL(worker_url);
 
+  // Cast DECIMAL to DOUBLE so Arrow returns plain numbers instead of DecimalBigNum objects
+  await db.open({ query: { castDecimalToDouble: true } });
+
   // Create a connection
   conn = await db.connect();
 }
@@ -45,7 +48,7 @@ export async function initializeDuckDB(): Promise<void> {
  * Convert BigInt values to Numbers for JSON serialization
  * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify()
  */
-function convertBigInts(obj: unknown): unknown {
+export function convertBigInts(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
     return obj;
   }

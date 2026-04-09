@@ -322,6 +322,41 @@ describe('formatSQLValue', () => {
     const d = new Date('2024-06-15T12:00:00.000Z');
     expect(formatSQLValue(d)).toBe("'2024-06-15T12:00:00.000Z'");
   });
+
+  // Temporal string values (used in derived column vector insertion)
+  it('should quote date strings for DuckDB DATE columns', () => {
+    expect(formatSQLValue('2024-01-15')).toBe("'2024-01-15'");
+    expect(formatSQLValue('1970-01-01')).toBe("'1970-01-01'");
+    expect(formatSQLValue('2099-12-31')).toBe("'2099-12-31'");
+  });
+
+  it('should quote time strings for DuckDB TIME columns', () => {
+    expect(formatSQLValue('14:30:00')).toBe("'14:30:00'");
+    expect(formatSQLValue('00:00:00')).toBe("'00:00:00'");
+    expect(formatSQLValue('23:59:59.999')).toBe("'23:59:59.999'");
+  });
+
+  it('should quote timestamp strings for DuckDB TIMESTAMP columns', () => {
+    expect(formatSQLValue('2024-01-15 10:30:00')).toBe("'2024-01-15 10:30:00'");
+    expect(formatSQLValue('2024-01-15T10:30:00')).toBe("'2024-01-15T10:30:00'");
+    expect(formatSQLValue('2024-01-15 10:30:00.123')).toBe("'2024-01-15 10:30:00.123'");
+  });
+
+  it('should quote interval strings for DuckDB INTERVAL columns', () => {
+    expect(formatSQLValue('1 day')).toBe("'1 day'");
+    expect(formatSQLValue('2 hours 30 minutes')).toBe("'2 hours 30 minutes'");
+    expect(formatSQLValue('1 year 6 months')).toBe("'1 year 6 months'");
+  });
+
+  it('should quote UUID strings for DuckDB UUID columns', () => {
+    expect(formatSQLValue('550e8400-e29b-41d4-a716-446655440000'))
+      .toBe("'550e8400-e29b-41d4-a716-446655440000'");
+  });
+
+  it('should quote decimal strings for DuckDB DECIMAL columns', () => {
+    expect(formatSQLValue('123.456')).toBe("'123.456'");
+    expect(formatSQLValue('-0.5')).toBe("'-0.5'");
+  });
 });
 
 // =========================================

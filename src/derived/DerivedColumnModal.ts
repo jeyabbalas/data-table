@@ -638,17 +638,31 @@ export class DerivedColumnModal {
     // integer or float
     const values: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const num =
-        vectorType === 'integer'
-          ? parseInt(lines[i], 10)
-          : parseFloat(lines[i]);
-      if (isNaN(num)) {
-        return {
-          success: false,
-          error: `Line ${i + 1}: "${lines[i]}" is not a valid ${vectorType}`,
-        };
+      if (vectorType === 'integer') {
+        if (!/^-?\d+$/.test(lines[i])) {
+          return {
+            success: false,
+            error: `Line ${i + 1}: "${lines[i]}" is not a valid integer (use whole numbers only)`,
+          };
+        }
+        const num = parseInt(lines[i], 10);
+        if (isNaN(num)) {
+          return {
+            success: false,
+            error: `Line ${i + 1}: "${lines[i]}" is not a valid integer`,
+          };
+        }
+        values.push(num);
+      } else {
+        const num = parseFloat(lines[i]);
+        if (isNaN(num) || !Number.isFinite(num)) {
+          return {
+            success: false,
+            error: `Line ${i + 1}: "${lines[i]}" is not a valid float`,
+          };
+        }
+        values.push(num);
       }
-      values.push(num);
     }
     return { success: true, values };
   }

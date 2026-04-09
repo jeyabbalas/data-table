@@ -199,7 +199,7 @@ export class DerivedColumnModal {
     this.expressionRadio.checked = true;
     this.expressionRadio.addEventListener('change', () => this.onModeChange('expression'));
     exprLabel.appendChild(this.expressionRadio);
-    exprLabel.appendChild(document.createTextNode('Expression'));
+    exprLabel.appendChild(document.createTextNode('SQL Expression'));
     fieldset.appendChild(exprLabel);
 
     // Vector radio
@@ -211,7 +211,7 @@ export class DerivedColumnModal {
     this.vectorRadio.value = 'vector';
     this.vectorRadio.addEventListener('change', () => this.onModeChange('vector'));
     vecLabel.appendChild(this.vectorRadio);
-    vecLabel.appendChild(document.createTextNode('Vector'));
+    vecLabel.appendChild(document.createTextNode('Manually Enter Values'));
     fieldset.appendChild(vecLabel);
 
     return fieldset;
@@ -287,6 +287,7 @@ export class DerivedColumnModal {
     this.vectorTextarea.placeholder = 'Enter one value per line...';
     this.vectorTextarea.spellcheck = false;
     this.vectorTextarea.addEventListener('input', () => {
+      this.updateVectorInfo();
       this.validateVectorValues();
       this.updateCreateButtonState();
     });
@@ -395,8 +396,10 @@ export class DerivedColumnModal {
   }
 
   private updateVectorInfo(): void {
+    const lines = this.getVectorLines();
+    const count = lines.length;
     const totalRows = this.state.totalRows.get();
-    this.vectorInfoEl.textContent = `Expected: ${totalRows} values, one per line`;
+    this.vectorInfoEl.textContent = `${count} / ${totalRows} values entered`;
   }
 
   /** Run both count validation and type-specific validation */

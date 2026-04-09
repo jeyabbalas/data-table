@@ -479,7 +479,7 @@ describe('DerivedColumnModal', () => {
     vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
     const infoEl = modal.getElement().querySelector('.dt-derived-modal-vector-info') as HTMLElement;
-    expect(infoEl.textContent).toContain('3');
+    expect(infoEl.textContent).toBe('0 / 3 values entered');
   });
 
   // =========================================

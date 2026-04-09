@@ -656,16 +656,22 @@ describe('ExportDialog', () => {
 
   describe('body scroll lock', () => {
     it('should lock body scroll on open', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
       dialog.open();
-      expect(document.body.style.overflow).toBe('hidden');
+      expect(addSpy).toHaveBeenCalledWith('wheel', expect.any(Function), { passive: false });
+      expect(addSpy).toHaveBeenCalledWith('touchmove', expect.any(Function), { passive: false });
+      addSpy.mockRestore();
     });
 
     it('should restore body scroll on close', () => {
-      document.body.style.overflow = 'auto';
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
       dialog.open();
-      expect(document.body.style.overflow).toBe('hidden');
       dialog.close();
-      expect(document.body.style.overflow).toBe('auto');
+      expect(removeSpy).toHaveBeenCalledWith('wheel', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
     });
   });
 });

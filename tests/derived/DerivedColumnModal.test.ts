@@ -93,19 +93,26 @@ describe('DerivedColumnModal', () => {
   });
 
   it('open() makes modal visible and locks body scroll', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
     modal.open();
     expect(modal.getIsOpen()).toBe(true);
     expect(modal.getElement().classList.contains('dt-derived-modal-backdrop--open')).toBe(true);
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(addSpy).toHaveBeenCalledWith('wheel', expect.any(Function), { passive: false });
+    expect(addSpy).toHaveBeenCalledWith('touchmove', expect.any(Function), { passive: false });
+    addSpy.mockRestore();
   });
 
   it('close() hides modal and restores body scroll', () => {
-    document.body.style.overflow = 'auto';
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
     modal.open();
     modal.close();
     expect(modal.getIsOpen()).toBe(false);
     expect(modal.getElement().classList.contains('dt-derived-modal-backdrop--open')).toBe(false);
-    expect(document.body.style.overflow).toBe('auto');
+    expect(removeSpy).toHaveBeenCalledWith('wheel', expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 
   it('open() is a no-op if already open', () => {

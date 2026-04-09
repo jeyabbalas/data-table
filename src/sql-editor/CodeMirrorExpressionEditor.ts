@@ -118,35 +118,44 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
    * can swap them atomically.
    */
   private buildCompletionExtensions(context: CompletionContext) {
-    const columnNames = context.columns.map((c) => c.name);
     const funcList = context.functions ?? DUCKDB_FUNCTIONS;
 
+    // Column completions with type detail
+    const columnOptions = context.columns.map((c) => ({
+      label: c.name,
+      type: 'variable' as const,
+      detail: c.type,
+      boost: 0,
+    }));
+
+    // Function completions (lower priority)
+    const functionOptions = funcList.map((f) => ({
+      label: f,
+      type: 'function' as const,
+      boost: -1,
+    }));
+
+    const allOptions = [...columnOptions, ...functionOptions];
+
     return [
-      // SQL language with DuckDB dialect and column names as schema
+      // SQL language for syntax highlighting + keyword completions
       sql({
         dialect: PostgreSQL,
-        schema: { '': columnNames },
         upperCaseKeywords: true,
       }),
 
-      // Additional function completion source (additive, not override)
-      EditorState.languageData.of(() => [
-        {
-          autocomplete: (cmCtx: CMCompletionContext): CompletionResult | null => {
-            const word = cmCtx.matchBefore(/\w+/);
-            if (!word && !cmCtx.explicit) return null;
-            return {
-              from: word?.from ?? cmCtx.pos,
-              options: funcList.map((f) => ({
-                label: f,
-                type: 'function',
-                boost: -1, // lower priority than column names
-              })),
-              validFor: /^\w*$/,
-            };
-          },
+      // Column + function completion source via language data facet
+      PostgreSQL.language.data.of({
+        autocomplete: (cmCtx: CMCompletionContext): CompletionResult | null => {
+          const word = cmCtx.matchBefore(/\w+/);
+          if (!word && !cmCtx.explicit) return null;
+          return {
+            from: word?.from ?? cmCtx.pos,
+            options: allOptions,
+            validFor: /^\w*$/,
+          };
         },
-      ]),
+      }),
     ];
   }
 }

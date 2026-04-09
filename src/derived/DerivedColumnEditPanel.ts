@@ -490,11 +490,13 @@ export class DerivedColumnEditPanel {
     // Escape key
     this.escapeHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // If CodeMirror autocomplete is open, let it handle Escape first
+        if (document.querySelector('.cm-tooltip-autocomplete')) return;
         e.stopPropagation();
         this.close();
       }
     };
-    document.addEventListener('keydown', this.escapeHandler);
+    document.addEventListener('keydown', this.escapeHandler, true);
   }
 
   private unregisterCloseHandlers(): void {
@@ -503,7 +505,7 @@ export class DerivedColumnEditPanel {
       this.outsideClickHandler = null;
     }
     if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler);
+      document.removeEventListener('keydown', this.escapeHandler, true);
       this.escapeHandler = null;
     }
   }

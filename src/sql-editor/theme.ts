@@ -14,6 +14,7 @@ export const dataTableTheme = EditorView.theme({
   '.cm-content': {
     fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
     padding: '0.5rem',
+    caretColor: 'var(--dt-text)',
   },
   '&.cm-focused': {
     outline: 'none',

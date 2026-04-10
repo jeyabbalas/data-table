@@ -47,4 +47,65 @@ describe('convertBigInts', () => {
       nested: { count: 42, label: 'x' },
     });
   });
+
+  // Interval object conversion tests
+  describe('interval object detection', () => {
+    it('converts Arrow MonthDayNano interval to string (time only)', () => {
+      const interval = { months: 0, days: 0, nanoseconds: 3_600_000_000_000n };
+      expect(convertBigInts(interval)).toBe('01:00:00');
+    });
+
+    it('converts interval with days and time', () => {
+      const interval = { months: 0, days: 3, nanoseconds: 14_706_000_000_000n }; // 4h 5m 6s
+      expect(convertBigInts(interval)).toBe('3 days 04:05:06');
+    });
+
+    it('converts interval with months', () => {
+      const interval = { months: 14, days: 0, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('1 year 2 months');
+    });
+
+    it('converts interval with all components', () => {
+      const interval = { months: 14, days: 3, nanoseconds: 14_706_000_000_000n };
+      expect(convertBigInts(interval)).toBe('1 year 2 months 3 days 04:05:06');
+    });
+
+    it('converts zero interval', () => {
+      const interval = { months: 0, days: 0, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('00:00:00');
+    });
+
+    it('converts interval with micros field (DuckDB internal format)', () => {
+      const interval = { months: 0, days: 1, micros: 3_600_000_000 };
+      expect(convertBigInts(interval)).toBe('1 day 01:00:00');
+    });
+
+    it('converts interval inside a row object', () => {
+      const row = {
+        id: 1n,
+        name: 'test',
+        duration: { months: 0, days: 0, nanoseconds: 7_200_000_000_000n },
+      };
+      expect(convertBigInts(row)).toEqual({
+        id: 1,
+        name: 'test',
+        duration: '02:00:00',
+      });
+    });
+
+    it('converts interval with BigInt months/days fields', () => {
+      const interval = { months: 0n, days: 1n, nanoseconds: 3_600_000_000_000n };
+      expect(convertBigInts(interval)).toBe('1 day 01:00:00');
+    });
+
+    it('converts interval with all BigInt fields', () => {
+      const interval = { months: 14n, days: 3n, nanoseconds: 14_706_000_000_000n };
+      expect(convertBigInts(interval)).toBe('1 year 2 months 3 days 04:05:06');
+    });
+
+    it('converts zero interval with BigInt fields', () => {
+      const interval = { months: 0n, days: 0n, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('00:00:00');
+    });
+  });
 });

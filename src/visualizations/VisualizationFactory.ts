@@ -13,6 +13,7 @@ import { BaseVisualization } from './BaseVisualization';
 import { Histogram } from './histogram';
 import { DateHistogram } from './histogram';
 import { TimeHistogram } from './histogram';
+import { IntervalHistogram } from './histogram';
 import { ValueCounts } from './valuecounts';
 
 /**
@@ -61,6 +62,13 @@ export function isTimeType(type: DataType): boolean {
  */
 export function isCategoricalType(type: DataType): boolean {
   return type === 'string' || type === 'boolean' || type === 'uuid';
+}
+
+/**
+ * Check if a column type is interval (suitable for interval histogram)
+ */
+export function isIntervalType(type: DataType): boolean {
+  return type === 'interval';
 }
 
 /**
@@ -160,6 +168,13 @@ export class VisualizationFactory {
       name: 'time-histogram',
       isApplicable: isTimeType,
       constructor: TimeHistogram as unknown as VisualizationConstructor,
+      priority: 0,
+    });
+
+    this.register({
+      name: 'interval-histogram',
+      isApplicable: isIntervalType,
+      constructor: IntervalHistogram as unknown as VisualizationConstructor,
       priority: 0,
     });
 

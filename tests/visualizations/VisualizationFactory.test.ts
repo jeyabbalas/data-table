@@ -83,6 +83,29 @@ vi.mock('../../src/visualizations/histogram/TimeHistogramData', () => ({
   }),
 }));
 
+vi.mock('../../src/visualizations/histogram/IntervalHistogramData', () => ({
+  fetchIntervalHistogramData: vi.fn().mockResolvedValue({
+    bins: [{ binStartSeconds: 0, binEndSeconds: 3600, count: 5 }],
+    nullCount: 0,
+    total: 5,
+    minSeconds: 0,
+    maxSeconds: 3600,
+    medianSeconds: 1800,
+    isSingleValue: false,
+  }),
+  fetchIntervalColumnStats: vi.fn().mockResolvedValue({
+    minSeconds: 0, maxSeconds: 3600, medianSeconds: 1800, count: 5, nullCount: 0,
+  }),
+  fetchIntervalNumericBins: vi.fn().mockResolvedValue([
+    { binStartSeconds: 0, binEndSeconds: 3600, count: 5 },
+  ]),
+  secondsToIntervalString: vi.fn((s: number) => `${s}s`),
+  secondsToIntervalSQL: vi.fn((s: number) => `${s} seconds`),
+  parseIntervalToSeconds: vi.fn((s: string) => parseInt(s, 10) || 0),
+  MONTH_SECONDS: 2629800,
+  YEAR_SECONDS: 31557600,
+}));
+
 vi.mock('../../src/visualizations/valuecounts/ValueCountsData', () => ({
   fetchValueCountsData: vi.fn().mockResolvedValue({
     segments: [{ value: 'a', count: 5, percentage: 100 }],
@@ -103,6 +126,7 @@ import {
 import { Histogram } from '../../src/visualizations/histogram/Histogram';
 import { DateHistogram } from '../../src/visualizations/histogram/DateHistogram';
 import { TimeHistogram } from '../../src/visualizations/histogram/TimeHistogram';
+import { IntervalHistogram } from '../../src/visualizations/histogram/IntervalHistogram';
 import { ValueCounts } from '../../src/visualizations/valuecounts/ValueCounts';
 import { BaseVisualization } from '../../src/visualizations/BaseVisualization';
 import type { ColumnSchema, DataType } from '../../src/core/types';
@@ -175,13 +199,14 @@ describe('VisualizationFactory', () => {
   // 1. Default registration
   // =============================================
   describe('default registration', () => {
-    it('registers all 4 built-in types', () => {
+    it('registers all 5 built-in types', () => {
       const types = VisualizationFactory.getRegisteredTypes();
       expect(types).toContain('histogram');
       expect(types).toContain('date-histogram');
       expect(types).toContain('time-histogram');
+      expect(types).toContain('interval-histogram');
       expect(types).toContain('value-counts');
-      expect(types).toHaveLength(4);
+      expect(types).toHaveLength(5);
     });
   });
 
@@ -200,8 +225,8 @@ describe('VisualizationFactory', () => {
       expect(VisualizationFactory.isApplicable(makeColumn(type))).toBe(true);
     });
 
-    it('returns false for interval', () => {
-      expect(VisualizationFactory.isApplicable(makeColumn('interval'))).toBe(false);
+    it('returns true for interval', () => {
+      expect(VisualizationFactory.isApplicable(makeColumn('interval'))).toBe(true);
     });
   });
 
@@ -254,9 +279,9 @@ describe('VisualizationFactory', () => {
       expect(viz).toBeInstanceOf(ValueCounts);
     });
 
-    it('returns null for interval', () => {
+    it('returns IntervalHistogram for interval', () => {
       const viz = createAndTrack('interval');
-      expect(viz).toBeNull();
+      expect(viz).toBeInstanceOf(IntervalHistogram);
     });
 
     it('passes container, column, and options to the constructor', () => {
@@ -334,8 +359,8 @@ describe('VisualizationFactory', () => {
         priority: 0,
       });
 
-      // Should still only have 4 types (replaced, not added)
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(4);
+      // Should still only have 5 types (replaced, not added)
+      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(5);
 
       const viz = createAndTrack('integer');
       expect(viz).toBeInstanceOf(CustomViz);
@@ -374,7 +399,7 @@ describe('VisualizationFactory', () => {
 
       expect(VisualizationFactory.getRegisteredTypes()).not.toContain('custom');
       expect(VisualizationFactory.getRegisteredTypes()).toContain('histogram');
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(4);
+      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(5);
     });
   });
 
@@ -445,8 +470,8 @@ describe('VisualizationFactory', () => {
         }
       });
 
-      it('returns false for interval', () => {
-        expect(needsVisualization('interval')).toBe(false);
+      it('returns true for interval', () => {
+        expect(needsVisualization('interval')).toBe(true);
       });
     });
   });

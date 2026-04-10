@@ -41,20 +41,38 @@ export async function fetchIntervalStats(
   const col = quoteIdentifier(column);
   const table = quoteIdentifier(tableName);
 
-  const sql = `
-    SELECT
-      COUNT(*) as total,
-      COUNT(${col}) as non_null,
-      COUNT(*) - COUNT(${col}) as null_count,
-      MIN(${col})::VARCHAR as min_val,
-      MAX(${col})::VARCHAR as max_val,
-      APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val
-    FROM ${table}
-    ${whereSQL}
-  `;
-
   try {
-    const results = await bridge.query<IntervalStatsResult>(sql);
+    // Try full query with APPROX_QUANTILE first; fall back without it
+    // since APPROX_QUANTILE may not support INTERVAL in all DuckDB versions.
+    let results: IntervalStatsResult[];
+    try {
+      const sql = `
+        SELECT
+          COUNT(*) as total,
+          COUNT(${col}) as non_null,
+          COUNT(*) - COUNT(${col}) as null_count,
+          MIN(${col})::VARCHAR as min_val,
+          MAX(${col})::VARCHAR as max_val,
+          APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val
+        FROM ${table}
+        ${whereSQL}
+      `;
+      results = await bridge.query<IntervalStatsResult>(sql);
+    } catch {
+      // APPROX_QUANTILE not supported for INTERVAL — retry without median
+      const sql = `
+        SELECT
+          COUNT(*) as total,
+          COUNT(${col}) as non_null,
+          COUNT(*) - COUNT(${col}) as null_count,
+          MIN(${col})::VARCHAR as min_val,
+          MAX(${col})::VARCHAR as max_val,
+          NULL as median_val
+        FROM ${table}
+        ${whereSQL}
+      `;
+      results = await bridge.query<IntervalStatsResult>(sql);
+    }
 
     if (results.length === 0) {
       return {

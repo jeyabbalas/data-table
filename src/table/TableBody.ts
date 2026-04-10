@@ -315,11 +315,12 @@ export class TableBody {
     const visibleColumns = this.state.visibleColumns.get();
     const sortColumns = this.state.sortColumns.get();
     const filters = this.state.filters.get();
+    const schema = this.state.schema.get();
 
     if (visibleColumns.length === 0) return;
 
     // Build SQL query
-    const sql = this.buildRowQuery(tableName, visibleColumns, sortColumns, filters, start, end - start);
+    const sql = this.buildRowQuery(tableName, visibleColumns, sortColumns, filters, start, end - start, schema);
 
     try {
       const rows = await this.bridge.query<RowData>(sql);
@@ -342,10 +343,24 @@ export class TableBody {
     sortColumns: SortColumn[],
     filters: Filter[],
     offset: number,
-    limit: number
+    limit: number,
+    schema?: ColumnSchema[]
   ): string {
-    // Quote column names to handle special characters
-    const columnList = columns.map(quoteIdentifier).join(', ');
+    // Build schema lookup for type-aware column selection
+    const schemaMap = new Map<string, ColumnSchema>();
+    if (schema) {
+      for (const col of schema) schemaMap.set(col.name, col);
+    }
+
+    // Quote column names; cast INTERVAL columns to VARCHAR so DuckDB
+    // returns strings instead of Arrow MonthDayNano objects
+    const columnList = columns.map(col => {
+      const quoted = quoteIdentifier(col);
+      if (schemaMap.get(col)?.type === 'interval') {
+        return `CAST(${quoted} AS VARCHAR) AS ${quoted}`;
+      }
+      return quoted;
+    }).join(', ');
 
     let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
 

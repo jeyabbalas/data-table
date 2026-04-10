@@ -14,6 +14,8 @@ export interface RangeFilter {
   maxInclusive?: boolean;
   /** When true, lower bound uses > instead of >=. Used for strict greater-than filters. */
   minExclusive?: boolean;
+  /** Value type hint for SQL generation. When 'interval', values are prefixed with INTERVAL keyword. */
+  valueType?: 'interval';
 }
 
 export interface PointFilter {

@@ -13,6 +13,9 @@ export { DateHistogram } from './DateHistogram';
 // Time histogram (for TIME type columns)
 export { TimeHistogram } from './TimeHistogram';
 
+// Interval histogram (for INTERVAL type columns)
+export { IntervalHistogram } from './IntervalHistogram';
+
 // Numeric histogram data types and utilities
 export {
   // Types
@@ -52,6 +55,17 @@ export {
   detectTimeIntervalForTime,
   formatTimeForSQL,
 } from './TimeHistogramData';
+
+// Interval histogram data types and utilities
+export {
+  // Types
+  type IntervalHistogramBin,
+  type IntervalHistogramData,
+  // Functions
+  fetchIntervalHistogramData,
+  secondsToIntervalString,
+  parseIntervalToSeconds,
+} from './IntervalHistogramData';
 
 // Date formatting utilities
 export {

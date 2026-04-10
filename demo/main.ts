@@ -14,7 +14,7 @@ import {
   UndoManager,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
-import { Histogram, DateHistogram, TimeHistogram } from '../src/visualizations/histogram';
+import { Histogram, DateHistogram, TimeHistogram, IntervalHistogram } from '../src/visualizations/histogram';
 import { ValueCounts } from '../src/visualizations/valuecounts';
 import { CrossfilterCoordinator } from '../src/visualizations/CrossfilterCoordinator';
 import {
@@ -27,7 +27,6 @@ import {
 import type { BaseVisualization } from '../src/visualizations';
 import { InteractionManager } from '../src/visualizations/InteractionManager';
 import { formatDefaultStats } from '../src/statistics/StatsFormatters';
-import { fetchIntervalStats } from '../src/statistics/StatsComputer';
 import type { ColumnStatsData } from '../src/statistics/ColumnStatsTypes';
 import { ExportDialog } from '../src/export/ExportDialog';
 import { SessionStore } from '../src/persistence/SessionStore';
@@ -35,7 +34,7 @@ import { AutoSave } from '../src/persistence/AutoSave';
 import { quoteIdentifier } from '../src/filters/FilterSQL';
 
 // Visualization type union for type safety
-type VisualizationType = Histogram | DateHistogram | TimeHistogram | ValueCounts;
+type VisualizationType = Histogram | DateHistogram | TimeHistogram | IntervalHistogram | ValueCounts;
 
 // Elements
 const versionEl = document.getElementById('version')!;
@@ -173,7 +172,7 @@ function attachVisualizations(): void {
   for (const viz of activeVisualizations) {
     const column = viz.getColumn();
 
-    if (viz instanceof Histogram || viz instanceof DateHistogram || viz instanceof TimeHistogram) {
+    if (viz instanceof Histogram || viz instanceof DateHistogram || viz instanceof TimeHistogram || viz instanceof IntervalHistogram) {
       const brushState = viz.getBrushState();
       if (brushState) {
         brushStates.set(column.name, brushState);
@@ -271,7 +270,7 @@ function attachVisualizations(): void {
       },
       onBrushCommit: (colName: string) => {
         interactionManager.pushBrush(colName, visualization);
-        if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
+        if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram || visualization instanceof IntervalHistogram) {
           const state = visualization.getBrushState();
           if (state) brushStates.set(colName, state);
         }
@@ -290,7 +289,7 @@ function attachVisualizations(): void {
               selectedSegments: state.selectedSegments,
               selectedNull: state.selectedNull,
             });
-          } else if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) {
+          } else if (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram || visualization instanceof IntervalHistogram) {
             const state = visualization.getSelectionState();
             selectionStates.set(colName, state);
           }
@@ -316,7 +315,7 @@ function attachVisualizations(): void {
     if (savedBrush || savedSelection) {
       visualization.waitForData().then(() => {
         // Restore brush state (only for histograms)
-        if (savedBrush && (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram)) {
+        if (savedBrush && (visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram || visualization instanceof IntervalHistogram)) {
           visualization.setBrushState(savedBrush);
           interactionManager.pushBrush(column.name, visualization);
         }
@@ -331,7 +330,7 @@ function attachVisualizations(): void {
             if (savedSelection.selectedSegments.length > 0 || savedSelection.selectedNull) {
               interactionManager.pushSelection(column.name, visualization);
             }
-          } else if ((visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram) && savedSelection.selectedBin !== undefined) {
+          } else if ((visualization instanceof Histogram || visualization instanceof DateHistogram || visualization instanceof TimeHistogram || visualization instanceof IntervalHistogram) && savedSelection.selectedBin !== undefined) {
             visualization.setSelectionState({
               selectedBin: savedSelection.selectedBin,
               selectedNull: savedSelection.selectedNull,
@@ -348,32 +347,22 @@ function attachVisualizations(): void {
   // Sync filtered row count for filters restored from persistence
   coordinator!.syncExistingFilters();
 
-  // Fetch stats for columns without visualizations (e.g., interval)
+  // Fetch stats for columns without visualizations
   for (const header of headers) {
     const column = header.getColumn();
     if (VisualizationFactory.isApplicable(column)) continue;
 
+    // Simple row count fallback for non-visualized types
     const statsEl = header.getStatsElement();
-    if (column.type === 'interval') {
-      fetchIntervalStats(
-        tableName,
-        column.name,
-        tableState.filters.get(),
-        bridge
-      ).then((stats) => {
-        // Guard against stale update if table was replaced while fetching
-        if (statsEl.isConnected) {
-          statsEl.innerHTML = formatDefaultStats(stats, column.type);
-        }
-      });
-    }
+    const totalRows = tableState.totalRows.get();
+    statsEl.innerHTML = `<span class="dt-stats-line1">${totalRows.toLocaleString()} rows</span>`;
   }
 
   visualizationsAttached = true;
 }
 
 /**
- * Update stats for columns without visualizations (e.g., interval columns).
+ * Update stats for columns without visualizations.
  * Columns with visualizations update stats via onDefaultStatsChange callback.
  */
 function updateColumnStats(): void {
@@ -382,7 +371,6 @@ function updateColumnStats(): void {
   const totalRows = tableState.totalRows.get();
   const filters = tableState.filters.get();
   const headers = tableContainer.getColumnHeaders();
-  const currentTableName = tableState.tableName.get();
 
   for (const header of headers) {
     const column = header.getColumn();
@@ -390,28 +378,12 @@ function updateColumnStats(): void {
     if (VisualizationFactory.isApplicable(column)) continue;
 
     const statsEl = header.getStatsElement();
-
-    if (column.type === 'interval' && currentTableName) {
-      // Re-fetch full interval stats
-      fetchIntervalStats(
-        currentTableName,
-        column.name,
-        filters,
-        bridge,
-        filters.length > 0 ? totalRows : undefined
-      ).then((stats) => {
-        if (statsEl.isConnected) {
-          statsEl.innerHTML = formatDefaultStats(stats, column.type);
-        }
-      });
-    } else {
-      // Simple row count fallback for unknown non-visualized types
-      const filteredRows = tableState.filteredRows.get();
-      const defaultStats = filters.length > 0
-        ? `<span class="dt-stats-line1">${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()} rows</span>`
-        : `<span class="dt-stats-line1">${totalRows.toLocaleString()} rows</span>`;
-      statsEl.innerHTML = defaultStats;
-    }
+    // Simple row count fallback for non-visualized types
+    const filteredRows = tableState.filteredRows.get();
+    const defaultStats = filters.length > 0
+      ? `<span class="dt-stats-line1">${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()} rows</span>`
+      : `<span class="dt-stats-line1">${totalRows.toLocaleString()} rows</span>`;
+    statsEl.innerHTML = defaultStats;
   }
 }
 

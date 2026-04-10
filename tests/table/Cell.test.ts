@@ -196,6 +196,16 @@ describe('CellRenderer', () => {
         expect(renderer.formatValue('2 months', 'interval')).toBe('2mo');
         expect(renderer.formatValue('01:00:00', 'interval')).toBe('1h');
       });
+
+      it('should handle Arrow MonthDayNano interval objects', () => {
+        expect(renderer.formatValue({ months: 0, days: 1, nanoseconds: 0 }, 'interval')).toBe('1d');
+        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 }, 'interval')).toBe('1h');
+        expect(renderer.formatValue({ months: 14, days: 3, nanoseconds: 14_706_000_000_000 }, 'interval')).toBe('1y 2mo 3d 4h 5m 6s');
+      });
+
+      it('should handle zero interval object', () => {
+        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 0 }, 'interval')).toBe('0s');
+      });
     });
 
     describe('string type', () => {

@@ -36,6 +36,46 @@ describe('filterToSQL', () => {
         "(\"created\" >= '2024-01-01T00:00:00.000Z' AND \"created\" < '2024-12-31T00:00:00.000Z')"
       );
     });
+
+    it('should prefix values with INTERVAL keyword when valueType is interval', () => {
+      const filter: Filter = {
+        type: 'range', column: 'duration',
+        min: '1 day 02:00:00', max: '3 days 08:00:00',
+        valueType: 'interval',
+      };
+      expect(filterToSQL(filter)).toBe(
+        "(\"duration\" >= INTERVAL '1 day 02:00:00' AND \"duration\" < INTERVAL '3 days 08:00:00')"
+      );
+    });
+
+    it('should handle interval range with maxInclusive', () => {
+      const filter: Filter = {
+        type: 'range', column: 'duration',
+        min: '01:00:00', max: '05:00:00',
+        valueType: 'interval', maxInclusive: true,
+      };
+      expect(filterToSQL(filter)).toBe(
+        "(\"duration\" >= INTERVAL '01:00:00' AND \"duration\" <= INTERVAL '05:00:00')"
+      );
+    });
+
+    it('should handle interval range with open lower bound', () => {
+      const filter: Filter = {
+        type: 'range', column: 'duration',
+        min: -Infinity, max: '02:00:00',
+        valueType: 'interval',
+      };
+      expect(filterToSQL(filter)).toBe("\"duration\" < INTERVAL '02:00:00'");
+    });
+
+    it('should handle interval range with open upper bound', () => {
+      const filter: Filter = {
+        type: 'range', column: 'duration',
+        min: '01:00:00', max: Infinity,
+        valueType: 'interval',
+      };
+      expect(filterToSQL(filter)).toBe("\"duration\" >= INTERVAL '01:00:00'");
+    });
   });
 
   describe('point filter', () => {

@@ -72,20 +72,25 @@ export function filterToSQL(filter: Filter): string {
       const minOp = filter.minExclusive ? '>' : '>=';
       const maxOp = filter.maxInclusive ? '<=' : '<';
 
+      // Interval values need INTERVAL prefix for DuckDB comparison
+      const formatVal = filter.valueType === 'interval'
+        ? (v: unknown) => `INTERVAL ${formatSQLValue(v)}`
+        : formatSQLValue;
+
       if (minIsOpen && maxIsOpen) {
         return 'TRUE'; // No bounds — matches everything
       }
       if (minIsOpen) {
         // Open lower bound: only upper bound applies
-        return `${column} ${maxOp} ${formatSQLValue(filter.max)}`;
+        return `${column} ${maxOp} ${formatVal(filter.max)}`;
       }
       if (maxIsOpen) {
         // Open upper bound: only lower bound applies
-        return `${column} ${minOp} ${formatSQLValue(filter.min)}`;
+        return `${column} ${minOp} ${formatVal(filter.min)}`;
       }
       // Both bounds finite
-      const minVal = formatSQLValue(filter.min);
-      const maxVal = formatSQLValue(filter.max);
+      const minVal = formatVal(filter.min);
+      const maxVal = formatVal(filter.max);
       return `(${column} ${minOp} ${minVal} AND ${column} ${maxOp} ${maxVal})`;
     }
 

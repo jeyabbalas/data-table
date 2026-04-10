@@ -316,6 +316,33 @@ export class CellRenderer {
    * Output: "1y 2mo 3d 4h 5m 6s", "2d", "0s"
    */
   private formatInterval(value: unknown): string {
+    // DuckDB WASM may return INTERVAL as an Arrow MonthDayNano object
+    // with { months, days, nanoseconds }. Convert to string if so.
+    if (value !== null && typeof value === 'object' && 'months' in value && 'days' in value) {
+      const obj = value as Record<string, unknown>;
+      const months = Number(obj.months) || 0;
+      const days = Number(obj.days) || 0;
+      let totalMicros = 0;
+      if ('nanoseconds' in obj) totalMicros = Math.floor(Number(obj.nanoseconds) / 1000);
+      else if ('micros' in obj) totalMicros = Number(obj.micros) || 0;
+
+      const parts: string[] = [];
+      const years = Math.floor(Math.abs(months) / 12);
+      const remMonths = Math.abs(months) % 12;
+      if (years > 0) parts.push(`${years}y`);
+      if (remMonths > 0) parts.push(`${remMonths}mo`);
+      if (days !== 0) parts.push(`${Math.abs(days)}d`);
+      let absMicros = Math.abs(totalMicros);
+      const h = Math.floor(absMicros / 3_600_000_000);
+      absMicros -= h * 3_600_000_000;
+      const m = Math.floor(absMicros / 60_000_000);
+      absMicros -= m * 60_000_000;
+      const s = Math.floor(absMicros / 1_000_000);
+      if (h > 0) parts.push(`${h}h`);
+      if (m > 0) parts.push(`${m}m`);
+      if (s > 0) parts.push(`${s}s`);
+      return parts.length > 0 ? parts.join(' ') : '0s';
+    }
     if (typeof value !== 'string') {
       return String(value);
     }

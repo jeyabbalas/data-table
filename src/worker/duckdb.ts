@@ -45,8 +45,80 @@ export async function initializeDuckDB(): Promise<void> {
 }
 
 /**
- * Convert BigInt values to Numbers for JSON serialization
- * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify()
+ * Check if a value is a DuckDB WASM interval object.
+ *
+ * DuckDB WASM returns INTERVAL values as Arrow MonthDayNano objects
+ * with { months, days, nanoseconds } instead of strings. This detector
+ * checks for that shape so we can convert to a string representation.
+ */
+function isIntervalObject(obj: Record<string, unknown>): boolean {
+  return (
+    'months' in obj &&
+    'days' in obj &&
+    (typeof obj.months === 'number' || typeof obj.months === 'bigint') &&
+    (typeof obj.days === 'number' || typeof obj.days === 'bigint')
+  );
+}
+
+/**
+ * Convert a DuckDB WASM interval object to a DuckDB-style interval string.
+ *
+ * Input: { months: 14, days: 3, nanoseconds: 14706000000000n } (or micros)
+ * Output: "1 year 2 months 3 days 04:05:06"
+ */
+function intervalObjectToString(obj: Record<string, unknown>): string {
+  const months = Number(obj.months) || 0;
+  const days = Number(obj.days) || 0;
+
+  // DuckDB WASM may use "nanoseconds" (Arrow MonthDayNano) or "micros" (DuckDB internal)
+  let totalMicros = 0;
+  if ('nanoseconds' in obj) {
+    totalMicros = Math.floor(Number(obj.nanoseconds) / 1000);
+  } else if ('micros' in obj) {
+    totalMicros = Number(obj.micros) || 0;
+  }
+
+  const parts: string[] = [];
+
+  // Decompose months into years + remaining months
+  const years = Math.floor(Math.abs(months) / 12);
+  const remainingMonths = Math.abs(months) % 12;
+  if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
+  if (remainingMonths > 0) parts.push(`${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`);
+
+  // Days
+  if (days !== 0) parts.push(`${Math.abs(days)} day${Math.abs(days) > 1 ? 's' : ''}`);
+
+  // Time component from microseconds
+  const isNegativeTime = totalMicros < 0;
+  let absMicros = Math.abs(totalMicros);
+  const hours = Math.floor(absMicros / 3_600_000_000);
+  absMicros -= hours * 3_600_000_000;
+  const minutes = Math.floor(absMicros / 60_000_000);
+  absMicros -= minutes * 60_000_000;
+  const seconds = Math.floor(absMicros / 1_000_000);
+  absMicros -= seconds * 1_000_000;
+
+  if (hours > 0 || minutes > 0 || seconds > 0 || absMicros > 0 || parts.length === 0) {
+    let timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    if (absMicros > 0) {
+      timeStr += `.${String(absMicros).padStart(6, '0').replace(/0+$/, '')}`;
+    }
+    if (isNegativeTime) timeStr = `-${timeStr}`;
+    parts.push(timeStr);
+  }
+
+  const result = parts.join(' ');
+  // Apply overall negative sign if months are negative and no other parts exist
+  return months < 0 && years === 0 && remainingMonths === 0 ? `-${result}` : result;
+}
+
+/**
+ * Convert BigInt values to Numbers for JSON serialization, and convert
+ * DuckDB WASM interval objects to string representations.
+ *
+ * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify().
+ * It also returns INTERVAL values as Arrow MonthDayNano objects instead of strings.
  */
 export function convertBigInts(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
@@ -59,8 +131,15 @@ export function convertBigInts(obj: unknown): unknown {
     return obj.map(convertBigInts);
   }
   if (typeof obj === 'object') {
+    const record = obj as Record<string, unknown>;
+
+    // Detect and convert interval objects before general recursion
+    if (isIntervalObject(record)) {
+      return intervalObjectToString(record);
+    }
+
     const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
+    for (const [key, value] of Object.entries(record)) {
       result[key] = convertBigInts(value);
     }
     return result;

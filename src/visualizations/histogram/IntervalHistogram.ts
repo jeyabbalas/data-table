@@ -366,12 +366,26 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
     const filterMinSec = minIsOpen ? -Infinity : this.parseFilterValue(filter.min);
     const filterMaxSec = maxIsOpen ? Infinity : this.parseFilterValue(filter.max);
 
+    // Inset both edges by a small epsilon to compensate for floating-point
+    // drift from the SQL string round-trip (secondsToIntervalSQL rounds to
+    // microsecond precision, so the parsed-back value can differ by up to
+    // ~0.5µs from the original bin edge). Without this, the bin immediately
+    // before/after the selection can be falsely included when the filter
+    // boundary drifts past the shared bin edge.
+    //
+    // This is the left/right counterpart to the fencepost guards already in
+    // place on the data side: LEAST() clamping in buildIntervalHistogramSQL
+    // and maxInclusive in emitBrushFilter. Other histogram types (numeric,
+    // date, time) don't need this because their filter values don't undergo
+    // a lossy string conversion.
+    const EPS = 1e-3; // 1ms — well above max drift (~0.5µs), well below any practical bin width
+
     let startIdx = -1;
     let endIdx = -1;
 
     for (let i = 0; i < bins.length; i++) {
       const bin = bins[i];
-      if (bin.binEndSeconds > filterMinSec && bin.binStartSeconds < filterMaxSec) {
+      if (bin.binEndSeconds > filterMinSec + EPS && bin.binStartSeconds < filterMaxSec - EPS) {
         if (startIdx === -1) startIdx = i;
         endIdx = i;
       }

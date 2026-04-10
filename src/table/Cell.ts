@@ -6,6 +6,7 @@
  */
 
 import type { ColumnSchema, DataType } from '../core/types';
+import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
 
 /**
  * Format a number with scientific notation for extreme values.
@@ -317,7 +318,8 @@ export class CellRenderer {
    */
   private formatInterval(value: unknown): string {
     // DuckDB WASM may return INTERVAL as an Arrow MonthDayNano object
-    // with { months, days, nanoseconds }. Convert to string if so.
+    // with { months, days, nanoseconds }. Convert to total seconds and
+    // decompose into compact display format, preserving sign and fractional seconds.
     if (value !== null && typeof value === 'object' && 'months' in value && 'days' in value) {
       const obj = value as Record<string, unknown>;
       const months = Number(obj.months) || 0;
@@ -326,22 +328,35 @@ export class CellRenderer {
       if ('nanoseconds' in obj) totalMicros = Math.floor(Number(obj.nanoseconds) / 1000);
       else if ('micros' in obj) totalMicros = Number(obj.micros) || 0;
 
+      const DAY_SEC = 86400;
+      const totalSec = months * MONTH_SECONDS + days * DAY_SEC + totalMicros / 1_000_000;
+      if (totalSec === 0) return '0s';
+
+      const isNeg = totalSec < 0;
+      let remaining = Math.abs(totalSec);
       const parts: string[] = [];
-      const years = Math.floor(Math.abs(months) / 12);
-      const remMonths = Math.abs(months) % 12;
-      if (years > 0) parts.push(`${years}y`);
-      if (remMonths > 0) parts.push(`${remMonths}mo`);
-      if (days !== 0) parts.push(`${Math.abs(days)}d`);
-      let absMicros = Math.abs(totalMicros);
-      const h = Math.floor(absMicros / 3_600_000_000);
-      absMicros -= h * 3_600_000_000;
-      const m = Math.floor(absMicros / 60_000_000);
-      absMicros -= m * 60_000_000;
-      const s = Math.floor(absMicros / 1_000_000);
-      if (h > 0) parts.push(`${h}h`);
-      if (m > 0) parts.push(`${m}m`);
-      if (s > 0) parts.push(`${s}s`);
-      return parts.length > 0 ? parts.join(' ') : '0s';
+
+      const y = Math.floor(remaining / YEAR_SECONDS);
+      if (y > 0) { parts.push(`${y}y`); remaining -= y * YEAR_SECONDS; }
+      const mo = Math.floor(remaining / MONTH_SECONDS);
+      if (mo > 0) { parts.push(`${mo}mo`); remaining -= mo * MONTH_SECONDS; }
+      const d = Math.floor(remaining / DAY_SEC);
+      if (d > 0) { parts.push(`${d}d`); remaining -= d * DAY_SEC; }
+      const h = Math.floor(remaining / 3600);
+      if (h > 0) { parts.push(`${h}h`); remaining -= h * 3600; }
+      const m = Math.floor(remaining / 60);
+      if (m > 0) { parts.push(`${m}m`); remaining -= m * 60; }
+      if (remaining > 0 || parts.length === 0) {
+        const secs = Math.round(remaining * 1000) / 1000;
+        if (Number.isInteger(secs)) {
+          parts.push(`${secs}s`);
+        } else {
+          parts.push(`${parseFloat(secs.toFixed(3))}s`);
+        }
+      }
+
+      const result = parts.join(' ');
+      return isNeg ? `-${result}` : result;
     }
     if (typeof value !== 'string') {
       return String(value);

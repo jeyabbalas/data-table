@@ -40,9 +40,9 @@ describe('fetchIntervalStats', () => {
     expect(stats.nonNullCount).toBe(95);
     expect(stats.nullCount).toBe(5);
     expect(stats.filteredTotalRows).toBeNull();
-    expect(stats.minDisplay).toBe('00:05:00');
-    expect(stats.maxDisplay).toBe('02:30:00');
-    expect(stats.medianDisplay).toBe('01:00:00');
+    expect(stats.minDisplay).toBe('5m');
+    expect(stats.maxDisplay).toBe('2h 30m');
+    expect(stats.medianDisplay).toBe('1h');
   });
 
   it('returns correct stats with unfilteredTotal (filtered mode)', async () => {

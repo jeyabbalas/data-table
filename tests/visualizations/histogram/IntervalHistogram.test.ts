@@ -234,4 +234,74 @@ describe('IntervalHistogram', () => {
       expect(histogram.isDestroyed()).toBe(false);
     });
   });
+
+  describe('brush sync fencepost', () => {
+    it('does not include extra bin when filter min drifts below bin boundary', async () => {
+      // Simulate the round-trip precision loss: filter min is slightly below
+      // the bin boundary at 720, which could falsely include bin 0 ([0, 720)).
+      const { parseIntervalToSeconds } = await import(
+        '../../../src/visualizations/histogram/IntervalHistogramData'
+      );
+      vi.mocked(parseIntervalToSeconds).mockImplementation((s: unknown) => {
+        const str = String(s);
+        // Simulate drift: "720 seconds" parses to 719.9999 (just below bin edge)
+        if (str === '720 seconds') return 719.9999;
+        if (str === '2160 seconds') return 2160;
+        return parseInt(str, 10) || 0;
+      });
+
+      // Set up filter selecting bins 1-2 (720–2160)
+      options.filters = [{
+        column: 'duration',
+        type: 'range' as const,
+        min: '720 seconds',
+        max: '2160 seconds',
+        valueType: 'interval' as const,
+      }];
+
+      histogram = new IntervalHistogram(container, column, options);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Access private brushState to verify correct bin range
+      const state = (histogram as unknown as Record<string, unknown>);
+      const brushState = state.brushState as { startBinIndex: number; endBinIndex: number; committed: boolean };
+
+      expect(brushState.committed).toBe(true);
+      // Should select bins 1-2, NOT bins 0-2 (the epsilon guard prevents bin 0)
+      expect(brushState.startBinIndex).toBe(1);
+      expect(brushState.endBinIndex).toBe(2);
+    });
+
+    it('does not include extra bin when filter max drifts above bin boundary', async () => {
+      const { parseIntervalToSeconds } = await import(
+        '../../../src/visualizations/histogram/IntervalHistogramData'
+      );
+      vi.mocked(parseIntervalToSeconds).mockImplementation((s: unknown) => {
+        const str = String(s);
+        if (str === '720 seconds') return 720;
+        // Simulate drift: "2160 seconds" parses to 2160.0001 (just above bin edge)
+        if (str === '2160 seconds') return 2160.0001;
+        return parseInt(str, 10) || 0;
+      });
+
+      options.filters = [{
+        column: 'duration',
+        type: 'range' as const,
+        min: '720 seconds',
+        max: '2160 seconds',
+        valueType: 'interval' as const,
+      }];
+
+      histogram = new IntervalHistogram(container, column, options);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const state = (histogram as unknown as Record<string, unknown>);
+      const brushState = state.brushState as { startBinIndex: number; endBinIndex: number; committed: boolean };
+
+      expect(brushState.committed).toBe(true);
+      // Should select bins 1-2, NOT bins 1-3 (the epsilon guard prevents bin 3)
+      expect(brushState.startBinIndex).toBe(1);
+      expect(brushState.endBinIndex).toBe(2);
+    });
+  });
 });

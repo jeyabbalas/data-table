@@ -206,6 +206,18 @@ describe('CellRenderer', () => {
       it('should handle zero interval object', () => {
         expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 0 }, 'interval')).toBe('0s');
       });
+
+      it('should handle negative interval objects', () => {
+        expect(renderer.formatValue({ months: 0, days: -1, nanoseconds: 0 }, 'interval')).toBe('-1d');
+        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: -3_600_000_000_000 }, 'interval')).toBe('-1h');
+        expect(renderer.formatValue({ months: -14, days: -3, nanoseconds: -14_706_000_000_000 }, 'interval')).toBe('-1y 2mo 3d 4h 5m 6s');
+      });
+
+      it('should handle fractional seconds from interval objects', () => {
+        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 1_500_000_000 }, 'interval')).toBe('1.5s');
+        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 500_000_000 }, 'interval')).toBe('0.5s');
+        expect(renderer.formatValue({ months: 0, days: 0, micros: 1_500_000 }, 'interval')).toBe('1.5s');
+      });
     });
 
     describe('string type', () => {

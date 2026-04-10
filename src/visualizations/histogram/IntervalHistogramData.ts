@@ -134,33 +134,34 @@ export function parseIntervalToSeconds(value: string | Record<string, unknown> |
   const input = value.trim();
   if (!input) return null;
 
-  // Check for leading negative sign
-  const isNegative = input.startsWith('-');
-  const work = isNegative ? input.slice(1).trim() : input;
-
   let totalSeconds = 0;
 
-  // Parse year/month/day components
-  const yearMatch = work.match(/(\d+)\s*years?/i);
-  const monthMatch = work.match(/(\d+)\s*months?/i);
-  const dayMatch = work.match(/(\d+)\s*days?/i);
+  // Parse year/month/day components with optional per-component negative signs.
+  // DuckDB outputs intervals with independently-signed components, e.g.
+  // "-1 year -2 months 3 days -04:05:06".
+  const yearMatch = input.match(/(-?\d+)\s*years?/i);
+  const monthMatch = input.match(/(-?\d+)\s*months?/i);
+  const dayMatch = input.match(/(-?\d+)\s*days?/i);
 
   if (yearMatch) totalSeconds += parseInt(yearMatch[1], 10) * YEAR_SECONDS;
   if (monthMatch) totalSeconds += parseInt(monthMatch[1], 10) * MONTH_SECONDS;
   if (dayMatch) totalSeconds += parseInt(dayMatch[1], 10) * DAY_SECONDS;
 
-  // Parse time component (HH:MM:SS or HH:MM:SS.ffffff)
-  const timeMatch = work.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
+  // Parse time component with optional leading negative sign.
+  // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff".
+  const timeMatch = input.match(/(-?)(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
   if (timeMatch) {
-    totalSeconds += parseInt(timeMatch[1], 10) * 3600;
-    totalSeconds += parseInt(timeMatch[2], 10) * 60;
-    totalSeconds += parseInt(timeMatch[3], 10);
-    if (timeMatch[4]) {
-      totalSeconds += parseFloat(`0.${timeMatch[4]}`);
+    const timeSign = timeMatch[1] === '-' ? -1 : 1;
+    let timeSec = parseInt(timeMatch[2], 10) * 3600;
+    timeSec += parseInt(timeMatch[3], 10) * 60;
+    timeSec += parseInt(timeMatch[4], 10);
+    if (timeMatch[5]) {
+      timeSec += parseFloat(`0.${timeMatch[5]}`);
     }
+    totalSeconds += timeSign * timeSec;
   }
 
-  return isNegative ? -totalSeconds : totalSeconds;
+  return totalSeconds;
 }
 
 /**
@@ -242,27 +243,31 @@ export function secondsToIntervalSQL(seconds: number): string {
 
   const isNegative = seconds < 0;
   let remaining = Math.abs(seconds);
+  // Per-component sign prefix: DuckDB requires each component to be
+  // independently signed (e.g. "-1 day -01:01:01") rather than a single
+  // leading negative ("-1 day 01:01:01" would mean -1 day PLUS +1h1m1s).
+  const sign = isNegative ? '-' : '';
 
   const parts: string[] = [];
 
   // Extract years
   const years = Math.floor(remaining / YEAR_SECONDS);
   if (years > 0) {
-    parts.push(`${years} year${years > 1 ? 's' : ''}`);
+    parts.push(`${sign}${years} year${years > 1 ? 's' : ''}`);
     remaining -= years * YEAR_SECONDS;
   }
 
   // Extract months
   const months = Math.floor(remaining / MONTH_SECONDS);
   if (months > 0) {
-    parts.push(`${months} month${months > 1 ? 's' : ''}`);
+    parts.push(`${sign}${months} month${months > 1 ? 's' : ''}`);
     remaining -= months * MONTH_SECONDS;
   }
 
   // Extract days
   const days = Math.floor(remaining / DAY_SECONDS);
   if (days > 0) {
-    parts.push(`${days} day${days > 1 ? 's' : ''}`);
+    parts.push(`${sign}${days} day${days > 1 ? 's' : ''}`);
     remaining -= days * DAY_SECONDS;
   }
 
@@ -281,11 +286,10 @@ export function secondsToIntervalSQL(seconds: number): string {
       const micros = Math.round(fracSecs * 1_000_000);
       timeStr += `.${String(micros).padStart(6, '0').replace(/0+$/, '')}`;
     }
-    parts.push(timeStr);
+    parts.push(`${sign}${timeStr}`);
   }
 
-  const result = parts.join(' ');
-  return isNegative ? `-${result}` : result;
+  return parts.join(' ');
 }
 
 // =========================================

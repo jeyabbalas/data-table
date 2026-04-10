@@ -497,29 +497,29 @@ describe('formatDefaultStats - Interval Line 2', () => {
     nonNullCount: 1000,
     nullCount: 0,
     filteredTotalRows: null,
-    minDisplay: '00:02:00',
-    maxDisplay: '02:00:00',
-    medianDisplay: '00:30:00',
+    minDisplay: '2m',
+    maxDisplay: '2h',
+    medianDisplay: '30m',
     ...overrides,
   });
 
   it('shows min · med · max for intervals', () => {
     const result = formatDefaultStats(makeInterval(), 'interval');
-    expect(result).toContain('min 00:02:00');
-    expect(result).toContain('med 00:30:00');
-    expect(result).toContain('max 02:00:00');
+    expect(result).toContain('min 2m');
+    expect(result).toContain('med 30m');
+    expect(result).toContain('max 2h');
   });
 
   it('shows "all values" for single interval', () => {
     const result = formatDefaultStats(
       makeInterval({
-        minDisplay: '01:00:00',
-        maxDisplay: '01:00:00',
-        medianDisplay: '01:00:00',
+        minDisplay: '1h',
+        maxDisplay: '1h',
+        medianDisplay: '1h',
       }),
       'interval'
     );
-    expect(result).toContain('all values: 01:00:00');
+    expect(result).toContain('all values: 1h');
   });
 
   it('HTML-escapes interval display values', () => {

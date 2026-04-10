@@ -108,4 +108,41 @@ describe('convertBigInts', () => {
       expect(convertBigInts(interval)).toBe('00:00:00');
     });
   });
+
+  describe('negative interval objects', () => {
+    it('converts negative months', () => {
+      const interval = { months: -1, days: 0, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('-1 month');
+    });
+
+    it('converts negative months decomposed into years', () => {
+      const interval = { months: -14, days: 0, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('-1 year -2 months');
+    });
+
+    it('converts exactly negative one year', () => {
+      const interval = { months: -12, days: 0, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('-1 year');
+    });
+
+    it('converts negative days', () => {
+      const interval = { months: 0, days: -5, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('-5 days');
+    });
+
+    it('converts all-negative components', () => {
+      const interval = { months: -14, days: -3, nanoseconds: -14_706_000_000_000n };
+      expect(convertBigInts(interval)).toBe('-1 year -2 months -3 days -04:05:06');
+    });
+
+    it('converts mixed-sign components (positive months, negative days)', () => {
+      const interval = { months: 14, days: -3, nanoseconds: 0n };
+      expect(convertBigInts(interval)).toBe('1 year 2 months -3 days');
+    });
+
+    it('converts negative time only', () => {
+      const interval = { months: 0, days: 0, nanoseconds: -3_600_000_000_000n };
+      expect(convertBigInts(interval)).toBe('-01:00:00');
+    });
+  });
 });

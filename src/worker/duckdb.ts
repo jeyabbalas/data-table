@@ -80,16 +80,23 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
 
   const parts: string[] = [];
 
-  // Decompose months into years + remaining months
+  // Decompose months into years + remaining months.
+  // DuckDB intervals have independently-signed components, so apply
+  // the month sign to both the year and month display parts.
+  const monthSign = months < 0 ? '-' : '';
   const years = Math.floor(Math.abs(months) / 12);
   const remainingMonths = Math.abs(months) % 12;
-  if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
-  if (remainingMonths > 0) parts.push(`${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`);
+  if (years > 0) parts.push(`${monthSign}${years} year${years > 1 ? 's' : ''}`);
+  if (remainingMonths > 0) parts.push(`${monthSign}${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`);
 
-  // Days
-  if (days !== 0) parts.push(`${Math.abs(days)} day${Math.abs(days) > 1 ? 's' : ''}`);
+  // Days (independently signed)
+  const absDays = Math.abs(days);
+  if (absDays > 0) {
+    const daySign = days < 0 ? '-' : '';
+    parts.push(`${daySign}${absDays} day${absDays > 1 ? 's' : ''}`);
+  }
 
-  // Time component from microseconds
+  // Time component from microseconds (sign already handled via isNegativeTime)
   const isNegativeTime = totalMicros < 0;
   let absMicros = Math.abs(totalMicros);
   const hours = Math.floor(absMicros / 3_600_000_000);
@@ -108,9 +115,7 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
     parts.push(timeStr);
   }
 
-  const result = parts.join(' ');
-  // Apply overall negative sign if months are negative and no other parts exist
-  return months < 0 && years === 0 && remainingMonths === 0 ? `-${result}` : result;
+  return parts.join(' ');
 }
 
 /**

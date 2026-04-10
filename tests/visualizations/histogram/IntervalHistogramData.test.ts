@@ -86,6 +86,21 @@ describe('parseIntervalToSeconds', () => {
     expect(parseIntervalToSeconds('-1 day')).toBe(-86400);
   });
 
+  it('should parse per-component negative signs', () => {
+    // All components negative (e.g. from secondsToIntervalSQL(-90061))
+    expect(parseIntervalToSeconds('-1 day -01:01:01')).toBe(-86400 - 3661);
+    // Full negative combined
+    const fullNeg = -(YEAR_SECONDS + 2 * MONTH_SECONDS + 3 * 86400 + 4 * 3600 + 5 * 60 + 6);
+    expect(parseIntervalToSeconds('-1 year -2 months -3 days -04:05:06')).toBe(fullNeg);
+  });
+
+  it('should parse mixed-sign components', () => {
+    // Positive year, negative months (DuckDB can produce this)
+    expect(parseIntervalToSeconds('1 year -2 months')).toBe(YEAR_SECONDS - 2 * MONTH_SECONDS);
+    // Negative days, positive time
+    expect(parseIntervalToSeconds('-3 days 04:05:06')).toBe(-3 * 86400 + 4 * 3600 + 5 * 60 + 6);
+  });
+
   it('should handle Arrow MonthDayNano interval objects', () => {
     expect(parseIntervalToSeconds({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 }))
       .toBe(3600);
@@ -200,9 +215,19 @@ describe('secondsToIntervalSQL', () => {
     }
   });
 
-  it('should handle negative values', () => {
+  it('should handle negative time-only values', () => {
     expect(secondsToIntervalSQL(-3600)).toBe('-01:00:00');
+  });
+
+  it('should handle negative day-only values', () => {
     expect(secondsToIntervalSQL(-86400)).toBe('-1 day');
+  });
+
+  it('should negate each component for negative combined values', () => {
+    // -90061 = -(1 day + 1h + 1m + 1s)
+    expect(secondsToIntervalSQL(-90061)).toBe('-1 day -01:01:01');
+    // Negative with fractional seconds
+    expect(secondsToIntervalSQL(-3661.5)).toBe('-01:01:01.5');
   });
 
   it('should preserve fractional seconds', () => {
@@ -217,6 +242,15 @@ describe('secondsToIntervalSQL', () => {
       const sql = secondsToIntervalSQL(v);
       const parsed = parseIntervalToSeconds(sql);
       expect(parsed).toBeCloseTo(v, 5);
+    }
+  });
+
+  it('should round-trip negative combined values through parseIntervalToSeconds', () => {
+    const values = [-3600, -86400, -90061, -(YEAR_SECONDS + 86400 + 3600)];
+    for (const v of values) {
+      const sql = secondsToIntervalSQL(v);
+      const parsed = parseIntervalToSeconds(sql);
+      expect(parsed).toBe(v);
     }
   });
 });

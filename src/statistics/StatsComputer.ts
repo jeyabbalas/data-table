@@ -10,6 +10,7 @@ import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { IntervalColumnStats } from './ColumnStatsTypes';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
+import { parseIntervalToSeconds, secondsToIntervalString } from '../visualizations/histogram/IntervalHistogramData';
 
 /**
  * SQL query result for interval stats
@@ -98,9 +99,9 @@ export async function fetchIntervalStats(
       nonNullCount: nonNull,
       nullCount: nullCount,
       filteredTotalRows: unfilteredTotal !== undefined ? total : null,
-      minDisplay: row.min_val ?? null,
-      maxDisplay: row.max_val ?? null,
-      medianDisplay: row.median_val ?? null,
+      minDisplay: row.min_val ? secondsToIntervalString(parseIntervalToSeconds(row.min_val)!) : null,
+      maxDisplay: row.max_val ? secondsToIntervalString(parseIntervalToSeconds(row.max_val)!) : null,
+      medianDisplay: row.median_val ? secondsToIntervalString(parseIntervalToSeconds(row.median_val)!) : null,
     };
   } catch (error) {
     console.error(

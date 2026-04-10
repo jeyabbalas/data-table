@@ -1249,4 +1249,294 @@ describe('Derived Columns — Actions Integration', () => {
       expect(undoManager.undoDepth).toBe(2); // add + remove
     });
   });
+
+  // =========================================
+  // Derived columns from derived columns
+  // =========================================
+
+  describe('derived from derived — expression referencing expression', () => {
+    let dfdActions: StateActions;
+    let dfdBridge: ReturnType<typeof createMockBridge>;
+    let dfdState: TableState;
+
+    beforeEach(() => {
+      dfdState = createTableState();
+      dfdBridge = createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'total * 0.1': 'DOUBLE',
+        'total + tax': 'DOUBLE',
+        'UPPER(name)': 'VARCHAR',
+        'quantity + 1': 'BIGINT',
+      });
+      dfdActions = new StateActions(dfdState, dfdBridge as any, new UndoManager());
+      initializeColumnsFromSchema(dfdState, sampleSchema);
+      dfdState.tableName.set('test_table');
+      dfdState.baseTableName.set('test_table');
+      dfdState.totalRows.set(100);
+      dfdState.filteredRows.set(100);
+    });
+
+    it('creates an expression column referencing another expression column', async () => {
+      const r1 = await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      expect(r1.success).toBe(true);
+
+      const r2 = await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+      expect(r2.success).toBe(true);
+
+      expect(dfdState.derivedColumns.get()).toHaveLength(2);
+      expect(dfdState.schema.get().filter(c => c.isDerived)).toHaveLength(2);
+
+      const taxCol = dfdState.schema.get().find(c => c.name === 'tax');
+      expect(taxCol).toBeDefined();
+      expect(taxCol!.isDerived).toBe(true);
+      expect(taxCol!.expression).toBe('total * 0.1');
+    });
+
+    it('creates a chain of 3 expression columns (A → B → C)', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+      const r3 = await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'grand_total',
+        expression: 'total + tax',
+      });
+
+      expect(r3.success).toBe(true);
+      expect(dfdState.derivedColumns.get()).toHaveLength(3);
+    });
+
+    it('generates CTE-based VIEW SQL with layered expressions', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+
+      const calls = dfdBridge.getQueryCalls();
+      const viewCalls = calls.filter(sql => sql.includes('CREATE OR REPLACE VIEW'));
+      const lastView = viewCalls[viewCalls.length - 1];
+
+      // Should use CTE structure
+      expect(lastView).toContain('WITH __dt_base AS');
+      expect(lastView).toContain('__dt_layer_1');
+      expect(lastView).toContain('__dt_layer_2');
+
+      // Both expressions should be present
+      expect(lastView).toContain('price * quantity');
+      expect(lastView).toContain('total * 0.1');
+
+      // total must be in layer 1, tax in layer 2 (dependency order)
+      const layer1Idx = lastView.indexOf('__dt_layer_1');
+      const layer2Idx = lastView.indexOf('__dt_layer_2');
+      const totalExprIdx = lastView.indexOf('price * quantity');
+      const taxExprIdx = lastView.indexOf('total * 0.1');
+      expect(totalExprIdx).toBeGreaterThan(layer1Idx);
+      expect(totalExprIdx).toBeLessThan(layer2Idx);
+      expect(taxExprIdx).toBeGreaterThan(layer2Idx);
+    });
+
+    it('validates expressions against the VIEW (not base table) when derived columns exist', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+
+      // Clear calls to see only the second column's queries
+      dfdBridge.getQueryCalls().length = 0;
+
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+
+      const calls = dfdBridge.getQueryCalls();
+
+      // Validation and typeof should query the VIEW, not the base table
+      const validationSQL = calls.find(sql => sql.includes('LIMIT 0'));
+      expect(validationSQL).toContain('__dt_view_test_table__');
+
+      const typeofSQL = calls.find(sql => sql.includes('typeof'));
+      expect(typeofSQL).toContain('__dt_view_test_table__');
+    });
+  });
+
+  describe('derived from derived — cycle detection', () => {
+    let dfdActions: StateActions;
+    let dfdBridge: ReturnType<typeof createMockBridge>;
+    let dfdState: TableState;
+
+    beforeEach(() => {
+      dfdState = createTableState();
+      dfdBridge = createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'total * 0.1': 'DOUBLE',
+        'col_b + 1': 'DOUBLE',
+        'col_a + 1': 'DOUBLE',
+      });
+      dfdActions = new StateActions(dfdState, dfdBridge as any, new UndoManager());
+      initializeColumnsFromSchema(dfdState, sampleSchema);
+      dfdState.tableName.set('test_table');
+      dfdState.baseTableName.set('test_table');
+      dfdState.totalRows.set(100);
+      dfdState.filteredRows.set(100);
+    });
+
+    it('rejects circular dependency (A references B, B references A)', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'col_a',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'col_b',
+        expression: 'col_a + 1',
+      });
+
+      // Now try to update col_a to reference col_b — creates a cycle
+      const result = await dfdActions.updateDerivedColumn('col_a', {
+        kind: 'expression',
+        name: 'col_a',
+        expression: 'col_b + 1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Circular dependency');
+
+      // State should be unchanged
+      const colA = dfdState.schema.get().find(c => c.name === 'col_a');
+      expect(colA!.expression).toBe('price * quantity');
+    });
+  });
+
+  describe('derived from derived — deletion protection', () => {
+    let dfdActions: StateActions;
+    let dfdBridge: ReturnType<typeof createMockBridge>;
+    let dfdState: TableState;
+
+    beforeEach(() => {
+      dfdState = createTableState();
+      dfdBridge = createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'total * 0.1': 'DOUBLE',
+      });
+      dfdActions = new StateActions(dfdState, dfdBridge as any, new UndoManager());
+      initializeColumnsFromSchema(dfdState, sampleSchema);
+      dfdState.tableName.set('test_table');
+      dfdState.baseTableName.set('test_table');
+      dfdState.totalRows.set(100);
+      dfdState.filteredRows.set(100);
+    });
+
+    it('blocks deletion of column that is referenced by another derived column', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+
+      await expect(dfdActions.removeDerivedColumn('total')).rejects.toThrow(
+        /Cannot delete "total".*referenced by.*"tax"/
+      );
+
+      // State unchanged — both columns still exist
+      expect(dfdState.derivedColumns.get()).toHaveLength(2);
+    });
+
+    it('allows deletion after removing dependent column first', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+
+      // Delete the dependent first
+      await dfdActions.removeDerivedColumn('tax');
+      expect(dfdState.derivedColumns.get()).toHaveLength(1);
+
+      // Now the dependency is gone, deletion should succeed
+      await dfdActions.removeDerivedColumn('total');
+      expect(dfdState.derivedColumns.get()).toHaveLength(0);
+      expect(dfdState.tableName.get()).toBe('test_table');
+    });
+  });
+
+  describe('derived from derived — rename blocking', () => {
+    let dfdActions: StateActions;
+    let dfdBridge: ReturnType<typeof createMockBridge>;
+    let dfdState: TableState;
+
+    beforeEach(() => {
+      dfdState = createTableState();
+      dfdBridge = createMockBridge({
+        'price * quantity': 'DOUBLE',
+        'total * 0.1': 'DOUBLE',
+      });
+      dfdActions = new StateActions(dfdState, dfdBridge as any, new UndoManager());
+      initializeColumnsFromSchema(dfdState, sampleSchema);
+      dfdState.tableName.set('test_table');
+      dfdState.baseTableName.set('test_table');
+      dfdState.totalRows.set(100);
+      dfdState.filteredRows.set(100);
+    });
+
+    it('blocks rename of column that is referenced by another derived column', async () => {
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await dfdActions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'total * 0.1',
+      });
+
+      const result = await dfdActions.updateDerivedColumn('total', {
+        kind: 'expression',
+        name: 'revenue',
+        expression: 'price * quantity',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Cannot rename');
+      expect(result.error).toContain('"tax"');
+
+      // Name unchanged
+      expect(dfdState.derivedColumns.get()[0].name).toBe('total');
+    });
+  });
 });

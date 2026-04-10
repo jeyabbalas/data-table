@@ -64,6 +64,24 @@ export class DerivedColumnManager {
     let detectedOriginalType: string;
 
     if (def.kind === 'expression') {
+      // Check for circular dependencies BEFORE SQL validation.
+      // This prevents self-referential expressions from passing validation
+      // against the VIEW (where the old column would still exist).
+      const tentativeInfo: DerivedColumnInfo = {
+        def,
+        detectedType: 'string', // placeholder
+        detectedOriginalType: 'VARCHAR',
+      };
+      const savedColumns = this.columns;
+      this.columns = [...savedColumns, tentativeInfo];
+      try {
+        this.topologicalSortExpressions();
+      } catch (err) {
+        this.columns = savedColumns;
+        throw err;
+      }
+      this.columns = savedColumns;
+
       // Validate expression
       await this.validateExpressionSQL(def.expression, def.name);
       // Detect result type
@@ -101,8 +119,37 @@ export class DerivedColumnManager {
 
     const oldInfo = this.columns[oldIndex];
 
+    // Block rename if other columns depend on this one
+    const isRename = oldName !== def.name;
+    if (isRename) {
+      const dependents = this.getDependents(oldName);
+      if (dependents.length > 0) {
+        throw new Error(
+          `Cannot rename "${oldName}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Update those columns first.`
+        );
+      }
+    }
+
     let detectedType: DataType;
     let detectedOriginalType: string;
+
+    if (def.kind === 'expression') {
+      // Cycle detection: tentatively replace and check
+      const tentativeInfo: DerivedColumnInfo = {
+        def,
+        detectedType: 'string',
+        detectedOriginalType: 'VARCHAR',
+      };
+      const savedColumns = [...this.columns];
+      this.columns[oldIndex] = tentativeInfo;
+      try {
+        this.topologicalSortExpressions();
+      } catch (err) {
+        this.columns = savedColumns;
+        throw err;
+      }
+      this.columns = savedColumns;
+    }
 
     // Clean up old vector helper table if the old column was a vector
     if (oldInfo.def.kind === 'vector') {
@@ -128,7 +175,22 @@ export class DerivedColumnManager {
 
     // Replace in-place to maintain order
     this.columns[oldIndex] = newInfo;
-    await this.recreateView();
+
+    try {
+      await this.recreateView();
+    } catch (viewErr) {
+      // Rollback: restore old column info and attempt to recreate the old VIEW
+      this.columns[oldIndex] = oldInfo;
+      if (oldInfo.def.kind === 'vector') {
+        await this.createVectorHelperTable(oldInfo.def);
+      }
+      try {
+        await this.recreateView();
+      } catch {
+        // Best-effort restore
+      }
+      throw viewErr;
+    }
 
     return newInfo;
   }
@@ -141,6 +203,14 @@ export class DerivedColumnManager {
     const index = this.columns.findIndex(c => c.def.name === name);
     if (index === -1) {
       throw new Error(`Derived column "${name}" not found`);
+    }
+
+    // Block deletion if other columns depend on this one
+    const dependents = this.getDependents(name);
+    if (dependents.length > 0) {
+      throw new Error(
+        `Cannot delete "${name}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Delete those columns first.`
+      );
     }
 
     const info = this.columns[index];
@@ -266,20 +336,145 @@ export class DerivedColumnManager {
     this.nextHelperTableId = 0;
   }
 
+  // --- Dependency tracking ---
+
+  /**
+   * Find which existing derived columns an expression references.
+   * Strips single-quoted string literals first to avoid false positives.
+   */
+  private getExpressionDependencies(expression: string, excludeName?: string): Set<string> {
+    const deps = new Set<string>();
+
+    // Strip single-quoted string literals to avoid matching column names inside strings
+    const stripped = expression.replace(/'(?:[^'\\]|\\.)*'/g, '');
+
+    for (const info of this.columns) {
+      const name = info.def.name;
+      if (name === excludeName) continue;
+
+      // Check for quoted identifier: "column_name" (with DuckDB double-quote escaping)
+      const quotedPattern = `"${name.replace(/"/g, '""')}"`;
+      if (stripped.includes(quotedPattern)) {
+        deps.add(name);
+        continue;
+      }
+
+      // Check for unquoted identifier with word boundaries (case-insensitive).
+      // Only for names that are valid unquoted SQL identifiers.
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+        if (regex.test(stripped)) {
+          deps.add(name);
+        }
+      }
+    }
+
+    return deps;
+  }
+
+  /**
+   * Return expression columns in dependency order using Kahn's algorithm.
+   * Throws if a circular dependency is detected.
+   * Operates only on expression columns — vectors have no dependencies.
+   */
+  private topologicalSortExpressions(): DerivedColumnInfo[] {
+    const expressions = this.columns.filter(c => c.def.kind === 'expression');
+    if (expressions.length <= 1) return expressions;
+
+    const exprNames = new Set(expressions.map(c => c.def.name));
+    const exprMap = new Map(expressions.map(c => [c.def.name, c]));
+
+    // Build adjacency: for each column, which other expression columns does it depend on?
+    const deps = new Map<string, Set<string>>();
+    for (const col of expressions) {
+      const allDeps = this.getExpressionDependencies(
+        (col.def as { expression: string }).expression
+      );
+      // Only keep dependencies on other expression columns
+      deps.set(col.def.name, new Set([...allDeps].filter(d => exprNames.has(d))));
+    }
+
+    // Kahn's algorithm
+    const inDegree = new Map<string, number>();
+    for (const [name, d] of deps) {
+      inDegree.set(name, d.size);
+    }
+
+    const queue: string[] = [];
+    for (const [name, degree] of inDegree) {
+      if (degree === 0) queue.push(name);
+    }
+
+    const sorted: string[] = [];
+    while (queue.length > 0) {
+      const name = queue.shift()!;
+      sorted.push(name);
+
+      for (const [other, otherDeps] of deps) {
+        if (otherDeps.has(name)) {
+          otherDeps.delete(name);
+          const newDegree = inDegree.get(other)! - 1;
+          inDegree.set(other, newDegree);
+          if (newDegree === 0) {
+            queue.push(other);
+          }
+        }
+      }
+    }
+
+    if (sorted.length !== expressions.length) {
+      const inCycle = expressions
+        .filter(c => !sorted.includes(c.def.name))
+        .map(c => `"${c.def.name}"`);
+      throw new Error(`Circular dependency detected among derived columns: ${inCycle.join(', ')}`);
+    }
+
+    return sorted.map(name => exprMap.get(name)!);
+  }
+
+  /**
+   * Return names of expression columns that directly reference the given column.
+   * Used for deletion protection and rename blocking.
+   */
+  getDependents(columnName: string): string[] {
+    const dependents: string[] = [];
+    for (const col of this.columns) {
+      if (col.def.kind === 'expression') {
+        const deps = this.getExpressionDependencies(
+          (col.def as { expression: string }).expression
+        );
+        if (deps.has(columnName)) {
+          dependents.push(col.def.name);
+        }
+      }
+    }
+    return dependents;
+  }
+
   // --- Private implementation ---
 
-  /** Validate expression: SELECT (<expr>) AS "<alias>" FROM "<base>" LIMIT 0 */
+  /**
+   * Table name to use for validation and type detection queries.
+   * Uses the VIEW (which includes all existing derived columns) when available,
+   * falls back to the base table when no derived columns exist yet.
+   */
+  private get validationTableName(): string {
+    return this.columns.length > 0 ? this.viewName : this.baseTableName;
+  }
+
+  /** Validate expression: SELECT (<expr>) AS "<alias>" FROM "<view_or_base>" LIMIT 0 */
   private async validateExpressionSQL(expression: string, alias: string): Promise<void> {
-    const sql = `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.baseTableName)} LIMIT 0`;
+    const sql = `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.validationTableName)} LIMIT 0`;
     await this.bridge.query(sql);
   }
 
-  /** Detect type: SELECT typeof((<expr>)) AS t FROM "<base>" LIMIT 1, then mapDuckDBType() */
+  /** Detect type: SELECT typeof((<expr>)) AS t FROM "<view_or_base>" LIMIT 1, then mapDuckDBType() */
   private async detectType(expression: string): Promise<{
     detectedType: DataType;
     detectedOriginalType: string;
   }> {
-    const sql = `SELECT typeof((${expression})) AS t FROM ${quoteIdentifier(this.baseTableName)} LIMIT 1`;
+    const sql = `SELECT typeof((${expression})) AS t FROM ${quoteIdentifier(this.validationTableName)} LIMIT 1`;
     const rows = await this.bridge.query<{ t: string }>(sql);
 
     if (rows.length === 0) {
@@ -356,9 +551,18 @@ export class DerivedColumnManager {
   }
 
   /**
-   * Recreate the VIEW from current columns list.
-   * Expression columns contribute inline expressions in the SELECT list.
-   * Vector columns contribute a LEFT JOIN with the helper table.
+   * Recreate the VIEW from current columns list using CTEs.
+   *
+   * Structure:
+   *   WITH __dt_base AS (SELECT t.*, [vector JOINs] FROM base t ...),
+   *        __dt_layer_1 AS (SELECT *, (expr) AS col FROM __dt_base),
+   *        __dt_layer_2 AS (SELECT *, (expr) AS col FROM __dt_layer_1),
+   *        ...
+   *   SELECT * FROM __dt_layer_N
+   *
+   * Vector columns go in the base CTE (JOINed via rowid, which is only
+   * available on physical tables). Expression columns are topologically
+   * sorted so each layer can reference columns from all previous layers.
    */
   private async recreateView(): Promise<void> {
     if (this.columns.length === 0) {
@@ -366,29 +570,51 @@ export class DerivedColumnManager {
       return;
     }
 
-    const selectParts: string[] = ['t.*'];
+    // --- Base CTE: base table columns + vector columns via LEFT JOIN ---
+    const vectors = this.columns.filter(c => c.def.kind === 'vector');
+    const baseSelectParts: string[] = ['t.*'];
     const joinParts: string[] = [];
     let joinCounter = 0;
 
-    for (const info of this.columns) {
-      if (info.def.kind === 'expression') {
-        selectParts.push(`(${info.def.expression}) AS ${quoteIdentifier(info.def.name)}`);
-      } else {
-        joinCounter++;
-        const alias = `h${joinCounter}`;
-        const helperTable = this.helperTableName(info.def.name);
-        selectParts.push(`${alias}.${quoteIdentifier(info.def.name)}`);
-        joinParts.push(
-          `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.rowid = ${alias}.__rowid__`
-        );
-      }
+    for (const info of vectors) {
+      joinCounter++;
+      const alias = `h${joinCounter}`;
+      const helperTable = this.helperTableName(info.def.name);
+      baseSelectParts.push(`${alias}.${quoteIdentifier(info.def.name)}`);
+      joinParts.push(
+        `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.rowid = ${alias}.__rowid__`
+      );
     }
 
-    const selectClause = selectParts.join(', ');
-    const fromClause = quoteIdentifier(this.baseTableName) + ' t';
-    const joinClause = joinParts.length > 0 ? ' ' + joinParts.join(' ') : '';
+    const baseSelect = baseSelectParts.join(', ');
+    const baseFrom = quoteIdentifier(this.baseTableName) + ' t';
+    const baseJoin = joinParts.length > 0 ? ' ' + joinParts.join(' ') : '';
+    const baseCTE = `__dt_base AS (SELECT ${baseSelect} FROM ${baseFrom}${baseJoin})`;
 
-    const sql = `CREATE OR REPLACE VIEW ${quoteIdentifier(this.viewName)} AS SELECT ${selectClause} FROM ${fromClause}${joinClause}`;
+    // --- Expression layers: one CTE per expression column in dependency order ---
+    const sortedExpressions = this.topologicalSortExpressions();
+
+    if (sortedExpressions.length === 0) {
+      // Only vector columns — single CTE, no layering needed
+      const sql = `CREATE OR REPLACE VIEW ${quoteIdentifier(this.viewName)} AS WITH ${baseCTE} SELECT * FROM __dt_base`;
+      await this.bridge.query(sql);
+      return;
+    }
+
+    const cteParts: string[] = [baseCTE];
+    let prevLayer = '__dt_base';
+
+    for (let i = 0; i < sortedExpressions.length; i++) {
+      const info = sortedExpressions[i];
+      const layerName = `__dt_layer_${i + 1}`;
+      const expr = (info.def as { expression: string }).expression;
+      cteParts.push(
+        `${layerName} AS (SELECT *, (${expr}) AS ${quoteIdentifier(info.def.name)} FROM ${prevLayer})`
+      );
+      prevLayer = layerName;
+    }
+
+    const sql = `CREATE OR REPLACE VIEW ${quoteIdentifier(this.viewName)} AS WITH ${cteParts.join(', ')} SELECT * FROM ${prevLayer}`;
     await this.bridge.query(sql);
   }
 

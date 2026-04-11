@@ -83,4 +83,28 @@ describe('splitCrossfilterFilters', () => {
     const result = splitCrossfilterFilters(filters, 'price');
     expect(result.foreground).toBe(filters);
   });
+
+  it('raw-sql filters are always included in background (global conditions)', () => {
+    const filters: Filter[] = [
+      { type: 'range', column: 'price', min: 10, max: 100 },
+      { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+    ];
+    const result = splitCrossfilterFilters(filters, 'price');
+    // Background excludes 'price' filter but keeps raw-sql
+    expect(result.background).toEqual([
+      { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+    ]);
+    expect(result.foreground).toBe(filters);
+    expect(result.hasOwnFilter).toBe(true);
+  });
+
+  it('raw-sql filters do not claim any real column', () => {
+    const filters: Filter[] = [
+      { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+    ];
+    const result = splitCrossfilterFilters(filters, 'age');
+    // raw-sql filter doesn't match column 'age', so no own filter
+    expect(result.hasOwnFilter).toBe(false);
+    expect(result.background).toEqual([]);
+  });
 });

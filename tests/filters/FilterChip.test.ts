@@ -378,4 +378,80 @@ describe('FilterChip', () => {
 
     chip.destroy();
   });
+
+  it('should render raw-sql chip with SQL column label', () => {
+    const filter: Filter = {
+      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+    };
+    const chip = new FilterChip(filter, () => {});
+    const el = chip.getElement();
+
+    const colEl = el.querySelector('.dt-filter-chip-column');
+    expect(colEl?.textContent).toBe('SQL');
+
+    const detailEl = el.querySelector('.dt-filter-chip-detail');
+    expect(detailEl?.textContent).toContain('age > 30');
+
+    chip.destroy();
+  });
+
+  it('should render raw-sql chip with label instead of SQL when provided', () => {
+    const filter: Filter = {
+      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30 AND status = 1', id: 'abc', label: 'Adult active',
+    };
+    const chip = new FilterChip(filter, () => {});
+    const el = chip.getElement();
+
+    const detailEl = el.querySelector('.dt-filter-chip-detail');
+    expect(detailEl?.textContent).toContain('Adult active');
+
+    chip.destroy();
+  });
+
+  it('should add code icon and SQL class to raw-sql chip', () => {
+    const filter: Filter = {
+      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+    };
+    const chip = new FilterChip(filter, () => {});
+    const el = chip.getElement();
+
+    expect(el.querySelector('.dt-filter-chip-sql-icon')).toBeTruthy();
+    expect(el.querySelector('.dt-filter-chip-label--sql')).toBeTruthy();
+
+    chip.destroy();
+  });
+
+  it('should make label clickable when onEdit is provided', () => {
+    const filter: Filter = {
+      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+    };
+    const onEdit = vi.fn();
+    const chip = new FilterChip(filter, () => {}, { onEdit });
+    const el = chip.getElement();
+
+    const label = el.querySelector('.dt-filter-chip-label') as HTMLElement;
+    expect(label.style.cursor).toBe('pointer');
+
+    label.click();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+
+    chip.destroy();
+  });
+
+  it('should not trigger onEdit when X button is clicked', () => {
+    const filter: Filter = {
+      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+    };
+    const onEdit = vi.fn();
+    const onRemove = vi.fn();
+    const chip = new FilterChip(filter, onRemove, { onEdit });
+    const el = chip.getElement();
+
+    const removeBtn = el.querySelector('.dt-filter-chip-remove') as HTMLButtonElement;
+    removeBtn.click();
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onEdit).not.toHaveBeenCalled();
+
+    chip.destroy();
+  });
 });

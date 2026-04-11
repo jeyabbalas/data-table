@@ -35,6 +35,7 @@ export type {
   NotSetFilter,
   NullFilter,
   PatternFilter,
+  RawSQLFilter,
 } from '../filters/FilterTypes';
 
 // Sort direction

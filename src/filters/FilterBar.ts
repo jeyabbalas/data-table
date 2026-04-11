@@ -8,7 +8,7 @@
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { Filter } from './FilterTypes';
-import { FilterChip } from './FilterChip';
+import { FilterChip, type FilterChipOptions } from './FilterChip';
 
 /**
  * Options for FilterBar
@@ -18,6 +18,8 @@ export interface FilterBarOptions {
   classPrefix?: string;
   /** Called when a filter chip is removed, for clearing visualization state */
   onFilterRemove?: (column: string) => void;
+  /** Called when a raw-sql filter chip body is clicked (for editing). Receives the filter id. */
+  onRawSQLEdit?: (id: string) => void;
 }
 
 /**
@@ -110,10 +112,18 @@ export class FilterBar {
 
     // Create new chips
     for (const filter of filters) {
+      const chipOptions: FilterChipOptions = { classPrefix: this.prefix };
+
+      // For raw-sql filters, pass onEdit callback for modal integration
+      if (filter.type === 'raw-sql' && this.options.onRawSQLEdit) {
+        const filterId = filter.id;
+        chipOptions.onEdit = () => this.options.onRawSQLEdit!(filterId);
+      }
+
       const chip = new FilterChip(
         filter,
         () => this.handleRemove(filter.column),
-        { classPrefix: this.prefix }
+        chipOptions
       );
       this.chips.push(chip);
       this.chipsContainer.appendChild(chip.getElement());

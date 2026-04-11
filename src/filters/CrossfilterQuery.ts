@@ -10,6 +10,14 @@ export interface CrossfilterSplit {
   hasOwnFilter: boolean;
 }
 
+/**
+ * Split filters for crossfilter behavior.
+ *
+ * Raw SQL filters (type 'raw-sql') use synthetic column keys (`__raw_sql_<id>__`)
+ * that never match real column names. This means they are always included in the
+ * background array (`f.column !== column` is always true for synthetic keys), which
+ * is the desired behavior — SQL filters are global conditions that apply everywhere.
+ */
 export function splitCrossfilterFilters(
   filters: Filter[],
   column: string

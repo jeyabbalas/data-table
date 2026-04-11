@@ -50,6 +50,17 @@
   </div>
 
   <div class="card">
+    <h2>Raw SQL Filter</h2>
+    <div class="row row--mb">
+      <input type="text" id="sql-filter-input" placeholder="Enter SQL WHERE clause (e.g., age > 30 AND status = 'active')" style="flex: 2;">
+      <input type="text" id="sql-filter-label" placeholder="Label (optional)" style="flex: 1;">
+      <button id="add-sql-filter-btn" disabled class="btn--secondary">Add SQL Filter</button>
+      <button id="validate-sql-btn" disabled class="btn--secondary">Validate</button>
+    </div>
+    <div id="sql-filter-info" class="info-panel" style="min-height: 1.25rem;"></div>
+  </div>
+
+  <div class="card">
     <div class="row" style="justify-content: space-between; align-items: center;">
       <div id="table-info" class="info-panel">
         Load a file or URL to see visualizations in column headers

@@ -7,7 +7,7 @@
 
 import type { SortColumn } from '../core/types';
 import type { HiddenColumnInfo } from '../core/State';
-import type { NullFilter, PatternFilter } from '../filters/FilterTypes';
+import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef } from '../derived/types';
 
 /** Current snapshot schema version — bump when the shape changes */
@@ -55,7 +55,8 @@ export type SerializedFilter =
   | SerializedSetFilter
   | SerializedNotSetFilter
   | NullFilter
-  | PatternFilter;
+  | PatternFilter
+  | RawSQLFilter;
 
 // Re-export derived column types from their canonical location
 export type DerivedColumnDef = _DerivedColumnDef;

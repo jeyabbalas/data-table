@@ -94,6 +94,7 @@ export function serializeFilter(filter: Filter): SerializedFilter {
     case 'null':
     case 'not-null':
     case 'pattern':
+    case 'raw-sql':
       return filter;
   }
 }
@@ -121,6 +122,7 @@ export function deserializeFilter(filter: SerializedFilter): Filter {
     case 'null':
     case 'not-null':
     case 'pattern':
+    case 'raw-sql':
       return filter;
   }
 }

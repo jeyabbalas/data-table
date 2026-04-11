@@ -249,6 +249,26 @@
   height: 10px;
 }
 
+/* SQL filter chip — clickable label */
+.dt-filter-chip-label--sql {
+  cursor: pointer;
+}
+.dt-filter-chip-label--sql:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--dt-primary);
+}
+/* SQL chip code icon */
+.dt-filter-chip-sql-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.2rem;
+  opacity: 0.7;
+}
+.dt-filter-chip-sql-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
 .dt-filter-clear-all {
   flex-shrink: 0;
   padding: 0.125rem 0.5rem;

@@ -56,7 +56,7 @@ export function deserializeStateSnapshot(
 
   const filters = s.filters
     .map(deserializeFilter)
-    .filter(f => effectiveValid.has(f.column));
+    .filter(f => f.type === 'raw-sql' || effectiveValid.has(f.column));
 
   const sortColumns = s.sortColumns.filter(sc => effectiveValid.has(sc.column));
 
@@ -162,10 +162,12 @@ export function restoreStateFromSnapshot(
 
   const allColumnNames = schemaColumns.map((c) => c.name);
 
-  // Filters: deserialize and drop stale column references
+  // Filters: deserialize and drop stale column references.
+  // Raw SQL filters use synthetic column keys that aren't in the schema —
+  // they must bypass column validation to survive session restore.
   const filters = snapshot.filters
     .map(deserializeFilter)
-    .filter((f) => validColumns.has(f.column));
+    .filter((f) => f.type === 'raw-sql' || validColumns.has(f.column));
 
   // Sort: drop stale column references
   const sortColumns = snapshot.sortColumns.filter((s) =>

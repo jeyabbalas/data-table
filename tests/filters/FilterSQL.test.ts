@@ -481,4 +481,61 @@ describe('filterToSQL edge cases', () => {
       expect(filterToSQL(filter)).toBe('"col""name" IS NULL');
     });
   });
+
+  describe('raw-sql filter', () => {
+    it('should wrap raw SQL in parentheses', () => {
+      const filter: Filter = { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' };
+      expect(filterToSQL(filter)).toBe('(age > 30)');
+    });
+
+    it('should handle complex SQL with OR clauses', () => {
+      const filter: Filter = {
+        type: 'raw-sql',
+        column: '__raw_sql_def__',
+        sql: "sex = 'male' OR age <= 18",
+        id: 'def',
+      };
+      expect(filterToSQL(filter)).toBe("(sex = 'male' OR age <= 18)");
+    });
+
+    it('should pass through SQL as-is without escaping', () => {
+      const filter: Filter = {
+        type: 'raw-sql',
+        column: '__raw_sql_ghi__',
+        sql: '"height" IS NULL OR "height" < 140',
+        id: 'ghi',
+      };
+      expect(filterToSQL(filter)).toBe('("height" IS NULL OR "height" < 140)');
+    });
+  });
+
+  describe('filtersToWhereClause with raw-sql', () => {
+    it('should never exclude raw-sql filters when excludeColumn is set', () => {
+      const filters: Filter[] = [
+        { type: 'range', column: 'price', min: 10, max: 100 },
+        { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+      ];
+      // Excluding 'price' should keep the raw-sql filter
+      const result = filtersToWhereClause(filters, 'price');
+      expect(result).toBe('(age > 30)');
+    });
+
+    it('should include raw-sql filters alongside other filters', () => {
+      const filters: Filter[] = [
+        { type: 'range', column: 'price', min: 10, max: 100 },
+        { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+      ];
+      const result = filtersToWhereClause(filters);
+      expect(result).toBe('("price" >= 10 AND "price" < 100) AND (age > 30)');
+    });
+
+    it('should AND multiple raw-sql filters together', () => {
+      const filters: Filter[] = [
+        { type: 'raw-sql', column: '__raw_sql_a__', sql: 'age > 30', id: 'a' },
+        { type: 'raw-sql', column: '__raw_sql_b__', sql: 'status = 1', id: 'b' },
+      ];
+      const result = filtersToWhereClause(filters);
+      expect(result).toBe('(age > 30) AND (status = 1)');
+    });
+  });
 });

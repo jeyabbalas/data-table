@@ -151,6 +151,9 @@ export function filterToSQL(filter: Filter): string {
       return 'FALSE';
     }
 
+    case 'raw-sql':
+      return '(' + filter.sql + ')';
+
     default: {
       // Unknown filter type - fail closed (match nothing) to avoid exposing unfiltered data
       console.error(`Unknown filter type: ${(filter as Filter).type}`);
@@ -171,9 +174,11 @@ export function filtersToWhereClause(
   filters: Filter[],
   excludeColumn?: string
 ): string {
-  // Filter out excluded column if specified
+  // Filter out excluded column if specified.
+  // Raw SQL filters are never excluded — they are global conditions that apply
+  // to all crossfilter views (their synthetic column keys never match real columns).
   const applicableFilters = excludeColumn
-    ? filters.filter((f) => f.column !== excludeColumn)
+    ? filters.filter((f) => f.type === 'raw-sql' || f.column !== excludeColumn)
     : filters;
 
   if (applicableFilters.length === 0) {

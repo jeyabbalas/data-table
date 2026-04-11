@@ -832,4 +832,61 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
     expect(deserialized.visibleColumns).toContain('total');
     expect(deserialized.columnWidths.get('total')).toBe(150);
   });
+
+  it('should preserve raw-sql filters through column validation (synthetic keys bypass)', () => {
+    const original: StateSnapshot = {
+      filters: [
+        { type: 'range', column: 'id', min: 1, max: 100 },
+        { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc', label: 'Adults' },
+        { type: 'raw-sql', column: '__raw_sql_def__', sql: 'status = 1', id: 'def' },
+      ],
+      sortColumns: [],
+      visibleColumns: ['id', 'name'],
+      columnOrder: ['id', 'name'],
+      columnWidths: new Map(),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [],
+    };
+
+    const serialized = serializeStateSnapshot(original);
+    const validColumns = new Set(['id', 'name']);
+    const deserialized = deserializeStateSnapshot(serialized, validColumns);
+
+    // All 3 filters should survive: range (valid column) + 2 raw-sql (bypass validation)
+    expect(deserialized.filters).toHaveLength(3);
+    expect(deserialized.filters[0].type).toBe('range');
+    expect(deserialized.filters[1].type).toBe('raw-sql');
+    expect(deserialized.filters[2].type).toBe('raw-sql');
+
+    // Verify raw-sql filter properties are intact
+    const sqlFilter = deserialized.filters[1] as import('@/filters/FilterTypes').RawSQLFilter;
+    expect(sqlFilter.sql).toBe('age > 30');
+    expect(sqlFilter.id).toBe('abc');
+    expect(sqlFilter.label).toBe('Adults');
+  });
+
+  it('should drop stale column filters but keep raw-sql filters', () => {
+    const original: StateSnapshot = {
+      filters: [
+        { type: 'range', column: 'deleted_column', min: 1, max: 100 },
+        { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+      ],
+      sortColumns: [],
+      visibleColumns: ['id', 'name'],
+      columnOrder: ['id', 'name'],
+      columnWidths: new Map(),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [],
+    };
+
+    const serialized = serializeStateSnapshot(original);
+    const validColumns = new Set(['id', 'name']);
+    const deserialized = deserializeStateSnapshot(serialized, validColumns);
+
+    // Only raw-sql filter survives (range filter's column doesn't exist)
+    expect(deserialized.filters).toHaveLength(1);
+    expect(deserialized.filters[0].type).toBe('raw-sql');
+  });
 });

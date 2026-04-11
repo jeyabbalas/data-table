@@ -89,6 +89,10 @@ function filterEqual(a: Filter, b: Filter): boolean {
       const bp = b as typeof a;
       return a.pattern === bp.pattern && a.mode === bp.mode;
     }
+    case 'raw-sql': {
+      const br = b as typeof a;
+      return a.sql === br.sql && a.id === br.id && (a.label ?? '') === (br.label ?? '');
+    }
     default:
       return false;
   }

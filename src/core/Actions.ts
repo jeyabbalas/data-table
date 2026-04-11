@@ -8,7 +8,8 @@
 
 import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
-import type { Filter, FilterType, SortColumn, ColumnSchema, DataType } from './types';
+import type { Filter, FilterType, RawSQLFilter, SortColumn, ColumnSchema, DataType } from './types';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import type { SessionStore } from '../persistence/SessionStore';
@@ -387,6 +388,102 @@ export class StateActions {
     this.captureForUndo();
     this.state.filters.set([]);
     this.state.filteredRows.set(this.state.totalRows.get());
+  }
+
+  // =========================================
+  // Raw SQL Filter Actions
+  // =========================================
+
+  /**
+   * Add a raw SQL filter. Does NOT re-validate — caller is responsible
+   * for validation (see validateSQLFilter). Creates a RawSQLFilter with
+   * a unique id and synthetic column key, appends to state.filters.
+   * Captures undo snapshot before mutation.
+   * @returns The filter's unique id
+   */
+  addRawSQLFilter(sql: string, label?: string): string {
+    const id = crypto.randomUUID();
+    const filter: RawSQLFilter = {
+      type: 'raw-sql',
+      column: `__raw_sql_${id}__`,
+      sql,
+      label,
+      id,
+    };
+    this.captureForUndo();
+    const current = this.state.filters.get();
+    this.state.filters.set([...current, filter]);
+    return id;
+  }
+
+  /**
+   * Update an existing raw SQL filter's SQL and/or label.
+   * Does NOT re-validate. Finds by id, replaces in state.filters.
+   * Captures undo snapshot before mutation. No-op if filter not found.
+   */
+  updateRawSQLFilter(id: string, sql: string, label?: string): void {
+    const syntheticKey = `__raw_sql_${id}__`;
+    const current = this.state.filters.get();
+    const index = current.findIndex(f => f.column === syntheticKey);
+    if (index < 0) return;
+    this.captureForUndo();
+    const updated = [...current];
+    updated[index] = {
+      type: 'raw-sql',
+      column: syntheticKey,
+      sql,
+      label,
+      id,
+    };
+    this.state.filters.set(updated);
+  }
+
+  /**
+   * Remove a raw SQL filter by id.
+   * Captures undo snapshot before mutation.
+   */
+  removeRawSQLFilter(id: string): void {
+    const syntheticKey = `__raw_sql_${id}__`;
+    this.removeFilter(syntheticKey);
+  }
+
+  /**
+   * Get all active raw SQL filters. Convenience getter.
+   */
+  getRawSQLFilters(): RawSQLFilter[] {
+    return this.state.filters.get().filter(
+      (f): f is RawSQLFilter => f.type === 'raw-sql'
+    );
+  }
+
+  /**
+   * Validate a SQL WHERE clause fragment. Runs the SQL against DuckDB
+   * and returns validity, match count, and any error message.
+   * Used by the SQL filter modal's Validate button (Task 8.9).
+   */
+  async validateSQLFilter(sql: string): Promise<{
+    valid: boolean;
+    matchCount?: number;
+    error?: string;
+  }> {
+    const tableName = this.state.tableName.get();
+    if (!tableName) return { valid: false, error: 'No table loaded' };
+    try {
+      const result = await this.bridge.query<{ cnt: number }>(
+        `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(tableName)} WHERE (${sql})`
+      );
+      return { valid: true, matchCount: Number(result[0].cnt) };
+    } catch (e) {
+      return { valid: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /**
+   * Get the complete WHERE clause SQL for all active filters.
+   * Convenience method for downstream apps that need the raw SQL string.
+   */
+  getFiltersSQL(): string {
+    return filtersToWhereClause(this.state.filters.get());
   }
 
   // =========================================

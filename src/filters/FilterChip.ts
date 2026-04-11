@@ -12,6 +12,8 @@ import type { Filter } from './FilterTypes';
  */
 export interface FilterChipOptions {
   classPrefix?: string;
+  /** Called when the chip body is clicked (for editing). Used by raw-sql filter chips. */
+  onEdit?: () => void;
 }
 
 /**
@@ -44,6 +46,14 @@ export function formatDisplayValue(value: unknown): string {
     return String(value);
   }
   return String(value);
+}
+
+/**
+ * Truncate a SQL string with ellipsis if it exceeds maxLen.
+ */
+function truncateSQL(sql: string, maxLen: number): string {
+  if (sql.length <= maxLen) return sql;
+  return sql.slice(0, maxLen - 1) + '\u2026';
 }
 
 /**
@@ -113,6 +123,10 @@ export function formatFilter(filter: Filter): { column: string; description: str
         description: `${modeLabels[filter.mode]} ${quote}`,
       };
     }
+    case 'raw-sql': {
+      const display = filter.label || truncateSQL(filter.sql, 40);
+      return { column: 'SQL', description: display };
+    }
   }
 }
 
@@ -123,6 +137,7 @@ export class FilterChip {
   private element: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly onEdit?: () => void;
 
   constructor(
     private filter: Filter,
@@ -130,6 +145,7 @@ export class FilterChip {
     options: FilterChipOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.onEdit = options.onEdit;
     this.element = this.createElement();
   }
 
@@ -153,8 +169,32 @@ export class FilterChip {
     detailEl.className = `${this.prefix}-filter-chip-detail`;
     detailEl.textContent = ` ${description}`;
 
+    // For raw-sql filters: add code icon prefix and SQL-specific styling
+    if (this.filter.type === 'raw-sql') {
+      label.classList.add(`${this.prefix}-filter-chip-label--sql`);
+
+      const icon = document.createElement('span');
+      icon.className = `${this.prefix}-filter-chip-sql-icon`;
+      icon.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 2L1 6L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 2L11 6L8 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
+      label.appendChild(icon);
+    }
+
     label.appendChild(colEl);
     label.appendChild(detailEl);
+
+    // Clickable label for editing (used by raw-sql chips)
+    if (this.onEdit) {
+      label.style.cursor = 'pointer';
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!this.destroyed) {
+          this.onEdit!();
+        }
+      });
+    }
 
     // Remove button
     const removeBtn = document.createElement('button');

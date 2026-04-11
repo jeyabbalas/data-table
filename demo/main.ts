@@ -50,11 +50,6 @@ const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButt
 const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const sqlFilterInput = document.getElementById('sql-filter-input') as HTMLInputElement;
-const sqlFilterLabel = document.getElementById('sql-filter-label') as HTMLInputElement;
-const addSqlFilterBtn = document.getElementById('add-sql-filter-btn') as HTMLButtonElement;
-const validateSqlBtn = document.getElementById('validate-sql-btn') as HTMLButtonElement;
-const sqlFilterInfo = document.getElementById('sql-filter-info')!;
 
 
 // Display version
@@ -649,40 +644,6 @@ bridge
     });
     undoManager.canRedoSignal.subscribe((canRedo) => {
       redoBtn.disabled = !canRedo;
-    });
-
-    // Raw SQL filter controls
-    tableState.tableName.subscribe((name) => {
-      addSqlFilterBtn.disabled = !name;
-      validateSqlBtn.disabled = !name;
-    });
-
-    addSqlFilterBtn.addEventListener('click', () => {
-      const sql = sqlFilterInput.value.trim();
-      if (!sql) return;
-      const label = sqlFilterLabel.value.trim() || undefined;
-      const id = actions.addRawSQLFilter(sql, label);
-      sqlFilterInfo.textContent = `Added SQL filter (id: ${id.slice(0, 8)}\u2026)`;
-      sqlFilterInput.value = '';
-      sqlFilterLabel.value = '';
-    });
-
-    validateSqlBtn.addEventListener('click', async () => {
-      const sql = sqlFilterInput.value.trim();
-      if (!sql) return;
-      sqlFilterInfo.textContent = 'Validating\u2026';
-      const result = await actions.validateSQLFilter(sql);
-      if (result.valid) {
-        sqlFilterInfo.textContent = `\u2705 Valid SQL \u2014 ${result.matchCount!.toLocaleString()} matching rows`;
-      } else {
-        sqlFilterInfo.textContent = `\u274c Invalid SQL: ${result.error}`;
-      }
-    });
-
-    sqlFilterInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !addSqlFilterBtn.disabled) {
-        addSqlFilterBtn.click();
-      }
     });
 
     // Open session store for persistence

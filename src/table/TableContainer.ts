@@ -20,6 +20,7 @@ import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
 import { DerivedColumnModal } from '../derived/DerivedColumnModal';
 import { AddColumnButton } from '../derived/AddColumnButton';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
+import { SQLFilterModal } from '../filters/SQLFilterModal';
 import { copyRowsToClipboard } from '../export/Clipboard';
 
 /**
@@ -40,6 +41,8 @@ export interface TableContainerOptions {
   editorFactory?: ExpressionEditorFactory;
   /** Show "+" add column button at right edge (default: true) */
   showAddColumnButton?: boolean;
+  /** Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true) */
+  showExpressionFilter?: boolean;
 }
 
 /**
@@ -80,6 +83,7 @@ export class TableContainer {
   private filterPanel: FilterPanel | null = null;
   private derivedEditPanel: DerivedColumnEditPanel | null = null;
   private derivedModal: DerivedColumnModal | null = null;
+  private sqlFilterModal: SQLFilterModal | null = null;
   private addColumnButton: AddColumnButton | null = null;
   private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
@@ -122,6 +126,7 @@ export class TableContainer {
       onFilterRemove: undefined as unknown as (column: string) => void,
       editorFactory: undefined as unknown as ExpressionEditorFactory,
       showAddColumnButton: true,
+      showExpressionFilter: true,
       ...options,
     };
 
@@ -148,6 +153,11 @@ export class TableContainer {
       this.filterBar = new FilterBar(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
         onFilterRemove: this.resolvedOptions.onFilterRemove,
+        alwaysShow: this.resolvedOptions.showExpressionFilter !== false,
+        onAddSQLFilter: this.resolvedOptions.showExpressionFilter !== false
+          ? () => this.openSQLFilterModal()
+          : undefined,
+        onRawSQLEdit: (id: string) => this.openSQLFilterModalForEdit(id),
       });
       this.element.appendChild(this.filterBar.getElement());
     }
@@ -442,10 +452,12 @@ export class TableContainer {
     // Subscribe to schema changes to update header structure
     const unsubSchema = this.state.schema.subscribe(() => {
       if (!this.destroyed) {
-        // Close the derived column modal if open — it lives on document.body
-        // and render() won't reach it
+        // Close modals that live on document.body — render() won't reach them
         if (this.derivedModal) {
           this.derivedModal.close();
+        }
+        if (this.sqlFilterModal?.getIsOpen()) {
+          this.sqlFilterModal.close();
         }
         this.render();
       }
@@ -849,9 +861,12 @@ export class TableContainer {
   private handleFilterClick(column: string, anchorElement: HTMLElement): void {
     if (!this.actions) return;
 
-    // Mutual exclusion: close derived edit panel if open
+    // Mutual exclusion: close other panels/modals if open
     if (this.derivedEditPanel?.getIsOpen()) {
       this.derivedEditPanel.close();
+    }
+    if (this.sqlFilterModal?.getIsOpen()) {
+      this.sqlFilterModal.close();
     }
 
     // Create panel lazily on first click
@@ -872,9 +887,12 @@ export class TableContainer {
   private handleDerivedIconClick(columnName: string, anchorElement: HTMLElement): void {
     if (!this.actions) return;
 
-    // Mutual exclusion: close filter panel if open
+    // Mutual exclusion: close other panels/modals if open
     if (this.filterPanel?.getIsOpen()) {
       this.filterPanel.close();
+    }
+    if (this.sqlFilterModal?.getIsOpen()) {
+      this.sqlFilterModal.close();
     }
 
     // Create panel lazily on first click
@@ -896,9 +914,10 @@ export class TableContainer {
   private handleAddColumnClick(): void {
     if (!this.actions) return;
 
-    // Close other floating panels (mutual exclusion)
+    // Close other floating panels/modals (mutual exclusion)
     if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
 
     // Create modal lazily on first click
     if (!this.derivedModal) {
@@ -912,6 +931,52 @@ export class TableContainer {
     }
 
     this.derivedModal.open();
+  }
+
+  /**
+   * Open the SQL filter modal in create mode.
+   */
+  private openSQLFilterModal(): void {
+    if (!this.actions) return;
+
+    // Mutual exclusion: close other panels/modals
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+
+    // Lazy creation
+    if (!this.sqlFilterModal) {
+      this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+        editorFactory: this.resolvedOptions.editorFactory,
+      });
+      document.body.appendChild(this.sqlFilterModal.getElement());
+    }
+
+    this.sqlFilterModal.open();
+  }
+
+  /**
+   * Open the SQL filter modal in edit mode for the given filter id.
+   */
+  private openSQLFilterModalForEdit(filterId: string): void {
+    if (!this.actions) return;
+
+    // Mutual exclusion
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+
+    // Lazy creation
+    if (!this.sqlFilterModal) {
+      this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
+        classPrefix: this.resolvedOptions.classPrefix,
+        editorFactory: this.resolvedOptions.editorFactory,
+      });
+      document.body.appendChild(this.sqlFilterModal.getElement());
+    }
+
+    this.sqlFilterModal.openForEdit(filterId);
   }
 
   /**
@@ -1081,6 +1146,12 @@ export class TableContainer {
     if (this.derivedModal) {
       this.derivedModal.destroy();
       this.derivedModal = null;
+    }
+
+    // Destroy SQL filter modal
+    if (this.sqlFilterModal) {
+      this.sqlFilterModal.destroy();
+      this.sqlFilterModal = null;
     }
 
     // Destroy hidden columns gutter

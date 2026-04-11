@@ -34,6 +34,9 @@ export type { FilterChipOptions } from './filters/FilterChip';
 export { FilterBar } from './filters/FilterBar';
 export type { FilterBarOptions } from './filters/FilterBar';
 
+export { SQLFilterModal } from './filters/SQLFilterModal';
+export type { SQLFilterModalOptions } from './filters/SQLFilterModal';
+
 export { FilterPanel } from './filters/FilterPanel';
 export type { FilterPanelOptions } from './filters/FilterPanel';
 export { FilterPanelField } from './filters/FilterPanelField';

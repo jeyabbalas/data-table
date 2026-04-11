@@ -16,7 +16,7 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
   private sqlCompartment: Compartment;
   private prefix: string;
 
-  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt') {
+  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt', config?: { placeholder?: string }) {
     this.prefix = classPrefix;
     this.sqlCompartment = new Compartment();
 
@@ -43,7 +43,7 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
         dataTableHighlighting,
 
         // Placeholder
-        placeholder('Enter SQL expression, e.g. price * quantity'),
+        placeholder(config?.placeholder ?? 'Enter SQL expression, e.g. price * quantity'),
 
         // Compact sizing
         EditorView.theme({

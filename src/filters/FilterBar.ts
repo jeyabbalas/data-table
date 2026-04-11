@@ -20,6 +20,10 @@ export interface FilterBarOptions {
   onFilterRemove?: (column: string) => void;
   /** Called when a raw-sql filter chip body is clicked (for editing). Receives the filter id. */
   onRawSQLEdit?: (id: string) => void;
+  /** When true, the filter bar is always visible (shows expression filter button even with no filters). Default: false. */
+  alwaysShow?: boolean;
+  /** Callback when the "Expression" filter button is clicked */
+  onAddSQLFilter?: () => void;
 }
 
 /**
@@ -30,6 +34,8 @@ export class FilterBar {
   private element: HTMLElement;
   private chipsContainer: HTMLElement;
   private clearAllButton: HTMLButtonElement;
+  private gutterLabel!: HTMLElement;
+  private expressionBtn!: HTMLButtonElement;
   private chips: FilterChip[] = [];
   private unsubscribe: (() => void) | null = null;
   private destroyed = false;
@@ -83,9 +89,27 @@ export class FilterBar {
     const label = document.createElement('span');
     label.className = `${this.prefix}-gutter-label`;
     label.textContent = 'Active filters';
+    this.gutterLabel = label;
+
+    // Expression filter button
+    this.expressionBtn = document.createElement('button');
+    this.expressionBtn.className = `${this.prefix}-filter-expression-btn`;
+    this.expressionBtn.type = 'button';
+    this.expressionBtn.title = 'Add expression filter (SQL WHERE condition)';
+    this.expressionBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 2L1.5 7L5 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 2L12.5 7L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg><span>Expression</span>`;
+    if (!this.options.onAddSQLFilter) {
+      this.expressionBtn.style.display = 'none';
+    }
+    this.expressionBtn.addEventListener('click', () => {
+      if (!this.destroyed) this.options.onAddSQLFilter?.();
+    });
 
     bar.appendChild(label);
     bar.appendChild(chips);
+    bar.appendChild(this.expressionBtn);
     bar.appendChild(clearAll);
 
     return bar;
@@ -104,11 +128,19 @@ export class FilterBar {
     this.chipsContainer.innerHTML = '';
 
     if (filters.length === 0) {
+      if (this.options.alwaysShow) {
+        // Bar stays visible but hide gutter label and clear-all
+        this.element.classList.remove(`${this.prefix}-filter-bar--hidden`);
+        this.gutterLabel.style.display = 'none';
+        this.clearAllButton.style.display = 'none';
+        return;
+      }
       this.element.classList.add(`${this.prefix}-filter-bar--hidden`);
       return;
     }
 
     this.element.classList.remove(`${this.prefix}-filter-bar--hidden`);
+    this.gutterLabel.style.display = '';
 
     // Create new chips
     for (const filter of filters) {

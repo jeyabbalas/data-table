@@ -209,4 +209,58 @@ describe('FilterBar', () => {
 
     bar.destroy();
   });
+
+  it('should smooth-scroll to the rightmost chip when chips overflow', async () => {
+    const bar = new FilterBar(state, actions);
+    const el = bar.getElement();
+    const chipsContainer = el.querySelector('.dt-filter-chips') as HTMLElement;
+
+    // Mock scrollTo and layout properties to simulate overflow
+    const scrollToMock = vi.fn();
+    chipsContainer.scrollTo = scrollToMock;
+    Object.defineProperty(chipsContainer, 'scrollWidth', {
+      value: 500,
+      configurable: true,
+    });
+    Object.defineProperty(chipsContainer, 'clientWidth', {
+      value: 200,
+      configurable: true,
+    });
+
+    // Add filters to trigger update
+    actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+    actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+
+    // Flush double-rAF (jsdom implements rAF as setTimeout(cb, 0))
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    );
+
+    expect(scrollToMock).toHaveBeenCalledWith({
+      left: 500,
+      behavior: 'smooth',
+    });
+
+    bar.destroy();
+  });
+
+  it('should not scroll when chips fit within the container', async () => {
+    const bar = new FilterBar(state, actions);
+    const el = bar.getElement();
+    const chipsContainer = el.querySelector('.dt-filter-chips') as HTMLElement;
+
+    const scrollToMock = vi.fn();
+    chipsContainer.scrollTo = scrollToMock;
+    // scrollWidth <= clientWidth means no overflow (jsdom defaults both to 0)
+
+    actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    );
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+
+    bar.destroy();
+  });
 });

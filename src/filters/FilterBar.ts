@@ -180,6 +180,21 @@ export class FilterBar {
       this.chipsContainer.appendChild(chip.getElement());
     }
 
+    // Smooth-scroll to the rightmost chip so the latest addition is visible
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (
+          !this.destroyed &&
+          this.chipsContainer.scrollWidth > this.chipsContainer.clientWidth
+        ) {
+          this.chipsContainer.scrollTo({
+            left: this.chipsContainer.scrollWidth,
+            behavior: 'smooth',
+          });
+        }
+      });
+    });
+
     // Show "Clear all" only when 2+ filters
     this.clearAllButton.style.display = filters.length >= 2 ? '' : 'none';
   }

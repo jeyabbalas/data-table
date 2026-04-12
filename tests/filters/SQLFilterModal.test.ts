@@ -214,10 +214,78 @@ describe('SQLFilterModal', () => {
       const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
-      // Wait for async validation
+      // Wait for async validation — signal is passed as second argument
       await vi.waitFor(() => {
-        expect(actions.validateSQLFilter).toHaveBeenCalledWith('age > 30');
+        expect(actions.validateSQLFilter).toHaveBeenCalled();
+        const [sql, signal] = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(sql).toBe('age > 30');
+        expect(signal).toBeInstanceOf(AbortSignal);
       });
+    });
+
+    it('aborts in-flight validation when editor content changes', async () => {
+      // Make validation hang so we can test abort on input change
+      let resolveFirst!: (val: { valid: boolean; matchCount: number }) => void;
+      (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new Promise(resolve => { resolveFirst = resolve; })
+      );
+
+      modal.open();
+      const cmEditor = modal.getElement().querySelector('.cm-editor') as HTMLElement;
+      if (!cmEditor) return;
+      const { EditorView } = await import('@codemirror/view');
+      const view = EditorView.findFromDOM(cmEditor);
+      if (!view) return;
+
+      // Start validation
+      view.dispatch({ changes: { from: 0, to: 0, insert: 'age > 30' } });
+      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      validateBtn?.click();
+
+      // Capture the signal
+      await vi.waitFor(() => {
+        expect(actions.validateSQLFilter).toHaveBeenCalledTimes(1);
+      });
+      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock.calls[0][1] as AbortSignal;
+      expect(signal.aborted).toBe(false);
+
+      // Edit content — should abort the in-flight validation and re-enable button
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'age > 40' } });
+      expect(signal.aborted).toBe(true);
+      expect(validateBtn.disabled).toBe(false);
+
+      // Resolve to prevent hanging
+      resolveFirst({ valid: true, matchCount: 42 });
+    });
+
+    it('aborts in-flight validation on close', async () => {
+      let resolveValidation!: (val: { valid: boolean; matchCount: number }) => void;
+      (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new Promise(resolve => { resolveValidation = resolve; })
+      );
+
+      modal.open();
+      const cmEditor = modal.getElement().querySelector('.cm-editor') as HTMLElement;
+      if (!cmEditor) return;
+      const { EditorView } = await import('@codemirror/view');
+      const view = EditorView.findFromDOM(cmEditor);
+      if (!view) return;
+
+      view.dispatch({ changes: { from: 0, to: 0, insert: 'test sql' } });
+      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      validateBtn?.click();
+
+      await vi.waitFor(() => {
+        expect(actions.validateSQLFilter).toHaveBeenCalledTimes(1);
+      });
+      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock.calls[0][1] as AbortSignal;
+
+      // Close while validation is in-flight
+      modal.close();
+      expect(signal.aborted).toBe(true);
+
+      // Resolve to prevent hanging
+      resolveValidation({ valid: true, matchCount: 0 });
     });
 
     it('shows match count on success', async () => {

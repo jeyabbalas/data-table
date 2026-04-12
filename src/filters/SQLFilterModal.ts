@@ -42,6 +42,7 @@ export class SQLFilterModal {
   private validationVersion = 0;
   private scrollLockHandler: ((e: Event) => void) | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private validationAbortController: AbortController | null = null;
 
   /** null = create mode, string = edit mode (the filter id) */
   private currentFilterId: string | null = null;
@@ -276,6 +277,11 @@ export class SQLFilterModal {
       this.previewEl.textContent = '';
       this.previewEl.style.color = '';
       this.currentEditor?.setError(null);
+      // Abort any in-flight validation — the SQL has changed so the result is stale
+      this.validationAbortController?.abort();
+      this.validationAbortController = null;
+      this.validateBtn.disabled = false;
+      this.validateBtn.textContent = 'Validate';
       this.updateApplyButtonState();
     };
     this.currentEditor.element.addEventListener('input', this.editorInputHandler);
@@ -310,6 +316,10 @@ export class SQLFilterModal {
     const sql = this.currentEditor.getValue().trim();
     if (!sql) return;
 
+    // Abort any in-flight validation query to free the DuckDB worker
+    this.validationAbortController?.abort();
+    this.validationAbortController = new AbortController();
+
     // Capture version so we can detect stale results if the editor is
     // modified while the async validation is in-flight.
     const versionAtStart = ++this.validationVersion;
@@ -319,7 +329,7 @@ export class SQLFilterModal {
     this.currentEditor.setError(null);
 
     try {
-      const result = await this.actions.validateSQLFilter(sql);
+      const result = await this.actions.validateSQLFilter(sql, this.validationAbortController.signal);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
         this.previewEl.textContent = `${result.matchCount!.toLocaleString()} rows match`;
@@ -480,6 +490,10 @@ export class SQLFilterModal {
 
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-sql-filter-modal-backdrop--open`);
+
+    // Abort any in-flight validation query
+    this.validationAbortController?.abort();
+    this.validationAbortController = null;
 
     // Restore background scrolling
     if (this.scrollLockHandler) {

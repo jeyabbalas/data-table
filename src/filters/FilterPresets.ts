@@ -14,6 +14,8 @@ import { serializeFilter, deserializeFilter } from '../persistence/SessionStore'
 import type { SerializedFilter } from '../persistence/types';
 import type { FilterPreset, FilterPresetCollection } from './FilterPresetTypes';
 
+const VALID_PATTERN_MODES = new Set(['contains', 'starts', 'ends', 'regex']);
+
 /** Known filter type discriminants for import validation */
 const KNOWN_FILTER_TYPES = new Set([
   'range', 'point', 'set', 'not-set', 'null', 'not-null', 'pattern', 'raw-sql',
@@ -163,10 +165,25 @@ export class FilterPresetManager {
         const fObj = f as Record<string, unknown>;
         if (typeof fObj.type !== 'string' || !KNOWN_FILTER_TYPES.has(fObj.type)) { filterErrors++; continue; }
         if (typeof fObj.column !== 'string' || !fObj.column) { filterErrors++; continue; }
-        if (fObj.type === 'raw-sql' && (typeof fObj.sql !== 'string' || typeof fObj.id !== 'string')) {
-          filterErrors++;
-          continue;
+        // Type-specific required field validation
+        let typeInvalid = false;
+        switch (fObj.type) {
+          case 'raw-sql':
+            if (typeof fObj.sql !== 'string' || typeof fObj.id !== 'string') typeInvalid = true;
+            break;
+          case 'range':
+            if (fObj.min === undefined || fObj.max === undefined) typeInvalid = true;
+            break;
+          case 'set':
+          case 'not-set':
+            if (!Array.isArray(fObj.values)) typeInvalid = true;
+            break;
+          case 'pattern':
+            if (typeof fObj.pattern !== 'string' || typeof fObj.mode !== 'string' || !VALID_PATTERN_MODES.has(fObj.mode)) typeInvalid = true;
+            break;
+          // null, not-null, point: no additional required fields
         }
+        if (typeInvalid) { filterErrors++; continue; }
         validatedFilters.push(f);
       }
       if (filterErrors > 0) {
@@ -183,7 +200,17 @@ export class FilterPresetManager {
         description:
           typeof p.description === 'string' ? p.description.trim() || undefined : undefined,
         filters: validatedFilters as SerializedFilter[],
-        sortColumns: Array.isArray(p.sortColumns) ? p.sortColumns : undefined,
+        sortColumns: (() => {
+          if (!Array.isArray(p.sortColumns)) return undefined;
+          const validated = (p.sortColumns as unknown[]).filter(
+            (s): s is SortColumn =>
+              typeof s === 'object' && s !== null &&
+              typeof (s as Record<string, unknown>).column === 'string' &&
+              ((s as Record<string, unknown>).direction === 'asc' ||
+               (s as Record<string, unknown>).direction === 'desc')
+          );
+          return validated.length > 0 ? validated : undefined;
+        })(),
         createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
         updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now(),
       });

@@ -135,7 +135,7 @@ describe('RawSQLFilter serialization round-trip', () => {
     expect(deserialized).toEqual(filter);
   });
 
-  it('is identity serialization (same object reference possible)', () => {
+  it('returns a new object (not the same reference)', () => {
     const filter: Filter = {
       type: 'raw-sql',
       column: '__raw_sql_ghi__',
@@ -143,7 +143,33 @@ describe('RawSQLFilter serialization round-trip', () => {
       id: 'ghi',
     };
     const serialized = serializeFilter(filter);
-    // Identity serialization means the serialized form is the same object
-    expect(serialized).toBe(filter);
+    expect(serialized).not.toBe(filter);
+    expect(serialized).toEqual(filter);
+  });
+
+  it('serialized copy is isolated from original (mutation safety)', () => {
+    const filter: Filter = {
+      type: 'raw-sql',
+      column: '__raw_sql_mut__',
+      sql: 'x = 1',
+      id: 'mut',
+      label: 'Original',
+    };
+    const serialized = serializeFilter(filter) as Record<string, unknown>;
+    serialized.label = 'Mutated';
+    expect((filter as Record<string, unknown>).label).toBe('Original');
+  });
+
+  it('deserialized copy is isolated from serialized form', () => {
+    const filter: Filter = {
+      type: 'raw-sql',
+      column: '__raw_sql_iso__',
+      sql: 'y = 2',
+      id: 'iso',
+    };
+    const serialized = serializeFilter(filter);
+    const deserialized = deserializeFilter(serialized) as Record<string, unknown>;
+    deserialized.sql = 'MUTATED';
+    expect((serialized as Record<string, unknown>).sql).toBe('y = 2');
   });
 });

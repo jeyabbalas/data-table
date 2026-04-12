@@ -355,6 +355,178 @@ describe('FilterPresetManager', () => {
       manager.importFromJSON(json);
       expect(manager.getPresets()).toHaveLength(2);
     });
+
+    // --- Type-specific field validation ---
+
+    it('rejects range filter missing min/max', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'range', column: 'x' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.some(e => e.includes('invalid filter'))).toBe(true);
+    });
+
+    it('rejects range filter missing only max', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [
+            { type: 'range', column: 'x', min: 0 },
+            { type: 'null', column: 'y' },
+          ],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(result.errors.some(e => e.includes('skipped 1 invalid filter'))).toBe(true);
+      expect(manager.getPresets()[0].filters).toHaveLength(1);
+    });
+
+    it('rejects set filter without values array', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'set', column: 'x', values: 'not-array' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.some(e => e.includes('invalid filter'))).toBe(true);
+    });
+
+    it('rejects not-set filter without values array', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'not-set', column: 'x' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.some(e => e.includes('invalid filter'))).toBe(true);
+    });
+
+    it('rejects pattern filter missing mode', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'pattern', column: 'x', pattern: 'test' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.some(e => e.includes('invalid filter'))).toBe(true);
+    });
+
+    it('rejects pattern filter with invalid mode', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'pattern', column: 'x', pattern: 'test', mode: 'invalid' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.some(e => e.includes('invalid filter'))).toBe(true);
+    });
+
+    it('accepts valid filters of all types', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [
+            { type: 'range', column: 'a', min: 0, max: 10 },
+            { type: 'point', column: 'b', value: 'x' },
+            { type: 'set', column: 'c', values: [1, 2] },
+            { type: 'not-set', column: 'd', values: [3] },
+            { type: 'null', column: 'e' },
+            { type: 'not-null', column: 'f' },
+            { type: 'pattern', column: 'g', pattern: 'test', mode: 'contains' },
+            { type: 'raw-sql', column: '__raw_sql_x__', sql: 'a > 1', id: 'x' },
+          ],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(result.errors).toHaveLength(0);
+      expect(manager.getPresets()[0].filters).toHaveLength(8);
+    });
+
+    // --- sortColumns validation ---
+
+    it('rejects sortColumns with non-string column', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'null', column: 'x' }],
+          sortColumns: [{ column: 123, direction: 'asc' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(manager.getPresets()[0].sortColumns).toBeUndefined();
+    });
+
+    it('rejects sortColumns with invalid direction', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'null', column: 'x' }],
+          sortColumns: [{ column: 'x', direction: 'up' }],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(manager.getPresets()[0].sortColumns).toBeUndefined();
+    });
+
+    it('keeps valid sortColumns and rejects invalid ones', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'null', column: 'x' }],
+          sortColumns: [
+            { column: 'a', direction: 'asc' },
+            { column: 123, direction: 'desc' },
+            { column: 'b', direction: 'desc' },
+          ],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(manager.getPresets()[0].sortColumns).toEqual([
+        { column: 'a', direction: 'asc' },
+        { column: 'b', direction: 'desc' },
+      ]);
+    });
+
+    it('converts all-invalid sortColumns to undefined', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [{
+          name: 'P',
+          filters: [{ type: 'null', column: 'x' }],
+          sortColumns: [null, 42, 'string'],
+        }],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(manager.getPresets()[0].sortColumns).toBeUndefined();
+    });
   });
 
   // ==========================================

@@ -95,7 +95,7 @@ export function serializeFilter(filter: Filter): SerializedFilter {
     case 'not-null':
     case 'pattern':
     case 'raw-sql':
-      return filter;
+      return { ...filter };
   }
 }
 
@@ -125,7 +125,7 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
     case 'not-null':
     case 'pattern':
     case 'raw-sql':
-      return filter;
+      return { ...filter };
     default:
       console.warn('Unknown filter type during deserialization:', (filter as Record<string, unknown>).type);
       return null;

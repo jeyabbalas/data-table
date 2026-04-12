@@ -591,4 +591,51 @@ describe('StateActions', () => {
       expect(callback).toHaveBeenCalled();
     });
   });
+
+  // ==========================================
+  // Raw SQL Filter API Guards
+  // ==========================================
+
+  describe('Raw SQL Filter API Guards', () => {
+    it('addRawSQLFilter throws on empty string', () => {
+      expect(() => actions.addRawSQLFilter('')).toThrow('SQL expression must not be empty');
+    });
+
+    it('addRawSQLFilter throws on whitespace-only string', () => {
+      expect(() => actions.addRawSQLFilter('   ')).toThrow('SQL expression must not be empty');
+    });
+
+    it('addRawSQLFilter does not capture undo before throwing', () => {
+      const filtersBefore = state.filters.get();
+      try { actions.addRawSQLFilter(''); } catch { /* expected */ }
+      expect(state.filters.get()).toBe(filtersBefore);
+    });
+
+    it('addRawSQLFilter succeeds with valid SQL', () => {
+      const id = actions.addRawSQLFilter('age > 30', 'Adults');
+      expect(id).toBeDefined();
+      const filters = state.filters.get();
+      expect(filters).toHaveLength(1);
+      expect(filters[0].type).toBe('raw-sql');
+    });
+
+    it('updateRawSQLFilter throws on empty string', () => {
+      const id = actions.addRawSQLFilter('age > 30');
+      expect(() => actions.updateRawSQLFilter(id, '')).toThrow('SQL expression must not be empty');
+    });
+
+    it('updateRawSQLFilter throws on whitespace-only string', () => {
+      const id = actions.addRawSQLFilter('age > 30');
+      expect(() => actions.updateRawSQLFilter(id, '   ')).toThrow('SQL expression must not be empty');
+    });
+
+    it('updateRawSQLFilter succeeds with valid SQL', () => {
+      const id = actions.addRawSQLFilter('age > 30');
+      actions.updateRawSQLFilter(id, 'age > 40', 'Older adults');
+      const filters = state.filters.get();
+      expect(filters).toHaveLength(1);
+      expect((filters[0] as any).sql).toBe('age > 40');
+      expect((filters[0] as any).label).toBe('Older adults');
+    });
+  });
 });

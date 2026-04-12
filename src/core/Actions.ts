@@ -425,6 +425,9 @@ export class StateActions {
    * @returns The filter's unique id
    */
   addRawSQLFilter(sql: string, label?: string): string {
+    if (!sql.trim()) {
+      throw new Error('SQL expression must not be empty');
+    }
     const id = crypto.randomUUID();
     const filter: RawSQLFilter = {
       type: 'raw-sql',
@@ -445,6 +448,9 @@ export class StateActions {
    * Captures undo snapshot before mutation. No-op if filter not found.
    */
   updateRawSQLFilter(id: string, sql: string, label?: string): void {
+    if (!sql.trim()) {
+      throw new Error('SQL expression must not be empty');
+    }
     const syntheticKey = `__raw_sql_${id}__`;
     const current = this.state.filters.get();
     const index = current.findIndex(f => f.column === syntheticKey);
@@ -484,7 +490,7 @@ export class StateActions {
    * and returns validity, match count, and any error message.
    * Used by the SQL filter modal's Validate button (Task 8.9).
    */
-  async validateSQLFilter(sql: string): Promise<{
+  async validateSQLFilter(sql: string, signal?: AbortSignal): Promise<{
     valid: boolean;
     matchCount?: number;
     error?: string;
@@ -493,10 +499,13 @@ export class StateActions {
     if (!tableName) return { valid: false, error: 'No table loaded' };
     try {
       const result = await this.bridge.query<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(tableName)} WHERE (${sql})`
+        `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(tableName)} WHERE (${sql})`,
+        signal
       );
       return { valid: true, matchCount: Number(result[0].cnt) };
     } catch (e) {
+      // Silently return for aborted requests — the caller has moved on
+      if (signal?.aborted) return { valid: false, error: 'Validation cancelled' };
       return { valid: false, error: e instanceof Error ? e.message : String(e) };
     }
   }

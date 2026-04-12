@@ -21,6 +21,8 @@ import { DerivedColumnModal } from '../derived/DerivedColumnModal';
 import { AddColumnButton } from '../derived/AddColumnButton';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { SQLFilterModal } from '../filters/SQLFilterModal';
+import { FilterPresetPanel } from '../filters/FilterPresetPanel';
+import type { FilterPresetManager } from '../filters/FilterPresets';
 import { copyRowsToClipboard } from '../export/Clipboard';
 
 /**
@@ -43,6 +45,8 @@ export interface TableContainerOptions {
   showAddColumnButton?: boolean;
   /** Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true) */
   showExpressionFilter?: boolean;
+  /** FilterPresetManager instance — enables the Presets button and preset panel */
+  presetManager?: FilterPresetManager;
 }
 
 /**
@@ -84,6 +88,7 @@ export class TableContainer {
   private derivedEditPanel: DerivedColumnEditPanel | null = null;
   private derivedModal: DerivedColumnModal | null = null;
   private sqlFilterModal: SQLFilterModal | null = null;
+  private presetPanel: FilterPresetPanel | null = null;
   private addColumnButton: AddColumnButton | null = null;
   private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
@@ -127,6 +132,7 @@ export class TableContainer {
       editorFactory: undefined as unknown as ExpressionEditorFactory,
       showAddColumnButton: true,
       showExpressionFilter: true,
+      presetManager: undefined as unknown as FilterPresetManager,
       ...options,
     };
 
@@ -153,11 +159,14 @@ export class TableContainer {
       this.filterBar = new FilterBar(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
         onFilterRemove: this.resolvedOptions.onFilterRemove,
-        alwaysShow: this.resolvedOptions.showExpressionFilter !== false,
+        alwaysShow: this.resolvedOptions.showExpressionFilter !== false || !!this.resolvedOptions.presetManager,
         onAddSQLFilter: this.resolvedOptions.showExpressionFilter !== false
           ? () => this.openSQLFilterModal()
           : undefined,
         onRawSQLEdit: (id: string) => this.openSQLFilterModalForEdit(id),
+        onPresetsClick: this.resolvedOptions.presetManager
+          ? () => this.handlePresetsClick()
+          : undefined,
       });
       this.element.appendChild(this.filterBar.getElement());
     }
@@ -659,6 +668,12 @@ export class TableContainer {
       this.filterPanel = null;
     }
 
+    // Destroy preset panel (will be recreated lazily on next presets click)
+    if (this.presetPanel) {
+      this.presetPanel.destroy();
+      this.presetPanel = null;
+    }
+
     // Destroy derived edit panel (will be recreated lazily on next f(x) click)
     if (this.derivedEditPanel) {
       this.derivedEditPanel.destroy();
@@ -868,6 +883,9 @@ export class TableContainer {
     if (this.sqlFilterModal?.getIsOpen()) {
       this.sqlFilterModal.close();
     }
+    if (this.presetPanel?.getIsOpen()) {
+      this.presetPanel.close();
+    }
 
     // Create panel lazily on first click
     if (!this.filterPanel) {
@@ -894,6 +912,9 @@ export class TableContainer {
     if (this.sqlFilterModal?.getIsOpen()) {
       this.sqlFilterModal.close();
     }
+    if (this.presetPanel?.getIsOpen()) {
+      this.presetPanel.close();
+    }
 
     // Create panel lazily on first click
     if (!this.derivedEditPanel) {
@@ -918,6 +939,7 @@ export class TableContainer {
     if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
+    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
 
     // Create modal lazily on first click
     if (!this.derivedModal) {
@@ -943,6 +965,7 @@ export class TableContainer {
     if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
 
     // Lazy creation
     if (!this.sqlFilterModal) {
@@ -966,6 +989,7 @@ export class TableContainer {
     if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
 
     // Lazy creation
     if (!this.sqlFilterModal) {
@@ -977,6 +1001,40 @@ export class TableContainer {
     }
 
     this.sqlFilterModal.openForEdit(filterId);
+  }
+
+  /**
+   * Handle "Presets" button click from filter bar.
+   * Creates the FilterPresetPanel lazily and toggles it.
+   */
+  private handlePresetsClick(): void {
+    if (!this.actions || !this.resolvedOptions.presetManager) return;
+
+    // Mutual exclusion: close other panels/modals
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
+    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+
+    // Lazy creation
+    if (!this.presetPanel) {
+      this.presetPanel = new FilterPresetPanel(
+        this.resolvedOptions.presetManager,
+        this.state,
+        this.actions,
+        { classPrefix: this.resolvedOptions.classPrefix }
+      );
+      this.element.appendChild(this.presetPanel.getElement());
+    }
+
+    // Find the presets button as anchor for positioning
+    const presetsBtn = this.filterBar?.getElement().querySelector(
+      `.${this.resolvedOptions.classPrefix}-filter-presets-btn`
+    ) as HTMLElement;
+
+    if (presetsBtn) {
+      this.presetPanel.toggle(presetsBtn);
+    }
   }
 
   /**
@@ -1128,6 +1186,12 @@ export class TableContainer {
     if (this.filterPanel) {
       this.filterPanel.destroy();
       this.filterPanel = null;
+    }
+
+    // Destroy preset panel
+    if (this.presetPanel) {
+      this.presetPanel.destroy();
+      this.presetPanel = null;
     }
 
     // Destroy derived column edit panel

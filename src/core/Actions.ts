@@ -390,6 +390,26 @@ export class StateActions {
     this.state.filteredRows.set(this.state.totalRows.get());
   }
 
+  /**
+   * Load a filter preset: replace all filters (and optionally sort) in one
+   * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
+   * entire pre-load state atomically.
+   */
+  loadFilterPreset(filters: Filter[], sortColumns?: SortColumn[]): void {
+    this.captureForUndo();
+    this.suppressUndoCapture = true;
+    try {
+      batch(() => {
+        this.state.filters.set(filters);
+        if (sortColumns) {
+          this.state.sortColumns.set(sortColumns);
+        }
+      });
+    } finally {
+      this.suppressUndoCapture = false;
+    }
+  }
+
   // =========================================
   // Raw SQL Filter Actions
   // =========================================

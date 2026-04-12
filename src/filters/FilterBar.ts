@@ -24,6 +24,8 @@ export interface FilterBarOptions {
   alwaysShow?: boolean;
   /** Callback when the "Expression" filter button is clicked */
   onAddSQLFilter?: () => void;
+  /** Callback when the "Presets" button is clicked */
+  onPresetsClick?: () => void;
 }
 
 /**
@@ -36,6 +38,7 @@ export class FilterBar {
   private clearAllButton: HTMLButtonElement;
   private gutterLabel!: HTMLElement;
   private expressionBtn!: HTMLButtonElement;
+  private presetsBtn!: HTMLButtonElement;
   private chips: FilterChip[] = [];
   private unsubscribe: (() => void) | null = null;
   private destroyed = false;
@@ -107,9 +110,25 @@ export class FilterBar {
       if (!this.destroyed) this.options.onAddSQLFilter?.();
     });
 
+    // Presets button (bookmark icon, shown when onPresetsClick is provided)
+    this.presetsBtn = document.createElement('button');
+    this.presetsBtn.className = `${this.prefix}-filter-presets-btn`;
+    this.presetsBtn.type = 'button';
+    this.presetsBtn.title = 'Manage filter presets';
+    this.presetsBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 1h8a1 1 0 0 1 1 1v10.5a.5.5 0 0 1-.8.4L7 10l-4.2 2.9a.5.5 0 0 1-.8-.4V2a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.3" fill="none"/>
+    </svg><span>Presets</span>`;
+    if (!this.options.onPresetsClick) {
+      this.presetsBtn.style.display = 'none';
+    }
+    this.presetsBtn.addEventListener('click', () => {
+      if (!this.destroyed) this.options.onPresetsClick?.();
+    });
+
     bar.appendChild(label);
     bar.appendChild(chips);
     bar.appendChild(this.expressionBtn);
+    bar.appendChild(this.presetsBtn);
     bar.appendChild(clearAll);
 
     return bar;

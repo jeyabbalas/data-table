@@ -42,6 +42,12 @@ export type { FilterPanelOptions } from './filters/FilterPanel';
 export { FilterPanelField } from './filters/FilterPanelField';
 export type { FilterPanelFieldOptions } from './filters/FilterPanelField';
 
+// Filter Presets
+export { FilterPresetManager } from './filters/FilterPresets';
+export type { FilterPreset, FilterPresetCollection } from './filters/FilterPresetTypes';
+export { FilterPresetPanel } from './filters/FilterPresetPanel';
+export type { FilterPresetPanelOptions } from './filters/FilterPresetPanel';
+
 // Core classes
 export { EventEmitter } from './core/EventEmitter';
 

@@ -12,6 +12,7 @@ import {
   StateActions,
   TableContainer,
   UndoManager,
+  FilterPresetManager,
 } from '../src/index';
 import { WorkerBridge } from '../src/data/WorkerBridge';
 import { Histogram, DateHistogram, TimeHistogram, IntervalHistogram } from '../src/visualizations/histogram';
@@ -523,6 +524,9 @@ bridge
       selectionStates.delete(column);
     });
 
+    // Create filter preset manager for saving/loading named filter sets
+    const presetManager = new FilterPresetManager();
+
     // Create TableContainer with bridge and filter removal handler
     tableContainer = new TableContainer(
       tableContainerEl,
@@ -537,6 +541,7 @@ bridge
           brushStates.delete(column);
           selectionStates.delete(column);
         },
+        presetManager,
       }
     );
 

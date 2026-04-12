@@ -2294,6 +2294,326 @@ body.dt-column-dragging * {
 }
 
 /* ===========================================
+   Filter Preset Panel
+   =========================================== */
+
+/* Presets button (in filter bar, next to Expression) */
+.dt-filter-presets-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px dashed var(--dt-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-presets-btn:hover {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+  background: var(--dt-primary-light);
+}
+
+.dt-filter-presets-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-filter-presets-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Panel container */
+.dt-filter-preset-panel {
+  position: absolute;
+  z-index: 22;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size);
+}
+
+/* Header */
+.dt-filter-preset-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+  flex-shrink: 0;
+}
+
+.dt-filter-preset-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  flex: 1;
+}
+
+.dt-filter-preset-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  color: var(--dt-text-secondary);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-preset-close:hover {
+  color: var(--dt-text);
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-filter-preset-close:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* Body */
+.dt-filter-preset-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Save section */
+.dt-filter-preset-save-section {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dt-filter-preset-save-section textarea.dt-filter-input {
+  resize: vertical;
+  min-height: 2.5em;
+  font-family: var(--dt-font-family);
+}
+
+.dt-filter-preset-save-btn {
+  width: 100%;
+  padding: 0.375rem 0.75rem;
+  border: none;
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: white;
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  transition: background var(--dt-transition), opacity var(--dt-transition);
+}
+
+.dt-filter-preset-save-btn:hover:not(:disabled) {
+  background: var(--dt-primary-hover);
+}
+
+.dt-filter-preset-save-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-filter-preset-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Input error flash */
+.dt-filter-input--error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Dividers */
+.dt-filter-preset-divider {
+  border-top: 1px solid var(--dt-border);
+}
+
+/* Preset list */
+.dt-filter-preset-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dt-filter-preset-empty {
+  padding: 1.25rem 0.75rem;
+  text-align: center;
+  color: var(--dt-text-tertiary);
+  font-size: var(--dt-font-size-sm);
+}
+
+/* Individual preset item */
+.dt-filter-preset-item {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border-light);
+  transition: background var(--dt-transition);
+}
+
+.dt-filter-preset-item:last-child {
+  border-bottom: none;
+}
+
+.dt-filter-preset-item:hover {
+  background: var(--dt-bg-secondary);
+}
+
+.dt-filter-preset-item-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dt-filter-preset-item-name {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.dt-filter-preset-item-meta {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dt-filter-preset-item-desc {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-top: 0.125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action buttons row */
+.dt-filter-preset-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+}
+
+.dt-filter-preset-action-btn {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  font-size: var(--dt-font-size-xs);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-preset-action-btn--load {
+  color: var(--dt-primary);
+  border-color: var(--dt-primary);
+}
+
+.dt-filter-preset-action-btn--load:hover {
+  background: var(--dt-primary);
+  color: white;
+}
+
+.dt-filter-preset-action-btn--delete {
+  color: var(--dt-text-tertiary);
+  border-color: var(--dt-border);
+}
+
+.dt-filter-preset-action-btn--delete:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.dt-filter-preset-action-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* Import/Export section */
+.dt-filter-preset-io {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dt-filter-preset-io-btn {
+  padding: 0.125rem 0.5rem;
+  border: 1px dashed var(--dt-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-xs);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-filter-preset-io-btn:hover:not(:disabled) {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+  background: var(--dt-primary-light);
+}
+
+.dt-filter-preset-io-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-filter-preset-io-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* Import status feedback */
+.dt-filter-preset-import-status {
+  font-size: var(--dt-font-size-xs);
+  white-space: nowrap;
+}
+
+.dt-filter-preset-import-status--success {
+  color: #16a34a;
+}
+
+.dt-filter-preset-import-status--warning {
+  color: #d97706;
+}
+
+/* Dark mode for preset panel */
+@media (prefers-color-scheme: dark) {
+  .dt-filter-preset-panel {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .dt-filter-preset-action-btn--delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+  }
+}
+
+/* ===========================================
    Placeholder States
    =========================================== */
 

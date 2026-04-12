@@ -32,7 +32,7 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'DataTable',
       fileName: 'data-table',
-      formats: ['es', 'umd'],
+      formats: ['es'],
     },
     rollupOptions: {
       external: [],

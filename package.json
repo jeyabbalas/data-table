@@ -3,14 +3,12 @@
   "version": "0.1.0",
   "description": "A client-side JavaScript library for interactive, explorable data tables using DuckDB WASM",
   "type": "module",
-  "main": "./dist/data-table.umd.cjs",
   "module": "./dist/data-table.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/data-table.js",
-      "require": "./dist/data-table.umd.cjs"
+      "import": "./dist/data-table.js"
     },
     "./styles": "./dist/data-table.css",
     "./styles.css": "./dist/data-table.css"
@@ -46,13 +44,13 @@
     "esbuild": "npm:esbuild-wasm@latest"
   },
   "devDependencies": {
-    "@types/node": "^25.0.3",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.4",
     "fake-indexeddb": "^6.2.5",
-    "jsdom": "^29.0.1",
-    "typescript": "^5.9.3",
-    "vite": "^8.0.1",
-    "vitest": "^4.0.16"
+    "jsdom": "^29.0.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -61,7 +59,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
-    "@duckdb/duckdb-wasm": "^1.33.1-dev20.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev42.0",
     "@lezer/highlight": "^1.2.3"
   }
 }

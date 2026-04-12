@@ -127,9 +127,9 @@ export class FilterBar {
 
     bar.appendChild(label);
     bar.appendChild(chips);
+    bar.appendChild(clearAll);
     bar.appendChild(this.expressionBtn);
     bar.appendChild(this.presetsBtn);
-    bar.appendChild(clearAll);
 
     return bar;
   }

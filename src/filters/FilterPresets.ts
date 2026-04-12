@@ -169,6 +169,13 @@ export class FilterPresetManager {
   }
 
   /**
+   * Replace all presets (used for session restore).
+   */
+  loadPresets(presets: FilterPreset[]): void {
+    this.presets.set(presets.map(p => ({ ...p })));
+  }
+
+  /**
    * Get all presets (convenience for non-reactive access).
    */
   getPresets(): FilterPreset[] {

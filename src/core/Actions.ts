@@ -19,6 +19,7 @@ import type { StateSnapshot } from './UndoManager';
 import { batch } from './Signal';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, CompletionContext } from '../derived/types';
+import type { FilterPresetManager } from '../filters/FilterPresets';
 
 /**
  * Options for loading data
@@ -26,6 +27,8 @@ import type { DerivedColumnDef, CompletionContext } from '../derived/types';
 export interface LoadDataOptions extends DataLoaderOptions {
   /** If provided, restores saved session state after loading */
   sessionStore?: SessionStore;
+  /** If provided, restores saved filter presets after loading */
+  presetManager?: FilterPresetManager;
 }
 
 /**
@@ -293,7 +296,7 @@ export class StateActions {
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
       if (snapshot) {
-        restoreStateFromSnapshot(this.state, snapshot, this.undoManager);
+        restoreStateFromSnapshot(this.state, snapshot, this.undoManager, options.presetManager);
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
         if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {

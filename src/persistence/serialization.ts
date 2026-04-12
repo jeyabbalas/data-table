@@ -11,6 +11,7 @@ import { SNAPSHOT_VERSION } from './types';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import { batch } from '../core/Signal';
 import type { UndoManager, StateSnapshot } from '../core/UndoManager';
+import type { FilterPresetManager } from '../filters/FilterPresets';
 
 // ── StateSnapshot serialization (undo/redo stacks) ────────────────────
 
@@ -107,7 +108,7 @@ export function deserializeStateSnapshot(
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
  */
-export function snapshotFromState(state: TableState, undoManager?: UndoManager): SessionSnapshot {
+export function snapshotFromState(state: TableState, undoManager?: UndoManager, presetManager?: FilterPresetManager): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -131,6 +132,13 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager):
     snapshot.redoStack = redoStack.map(serializeStateSnapshot);
   }
 
+  if (presetManager) {
+    const presets = presetManager.getPresets();
+    if (presets.length > 0) {
+      snapshot.filterPresets = presets;
+    }
+  }
+
   return snapshot;
 }
 
@@ -147,6 +155,7 @@ export function restoreStateFromSnapshot(
   state: TableState,
   snapshot: SessionSnapshot,
   undoManager?: UndoManager,
+  presetManager?: FilterPresetManager,
 ): void {
   const schemaColumns = state.schema.get();
   if (schemaColumns.length === 0) return;
@@ -254,5 +263,10 @@ export function restoreStateFromSnapshot(
       redoStack: (snapshot.redoStack ?? []).map(s => deserializeStateSnapshot(s, validColumns)),
     };
     undoManager.loadStacks(deserialized.undoStack, deserialized.redoStack);
+  }
+
+  // Restore filter presets if present
+  if (presetManager && snapshot.filterPresets && snapshot.filterPresets.length > 0) {
+    presetManager.loadPresets(snapshot.filterPresets);
   }
 }

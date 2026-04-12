@@ -2410,18 +2410,20 @@ body.dt-column-dragging * {
 .dt-filter-preset-save-btn {
   width: 100%;
   padding: 0.375rem 0.75rem;
-  border: none;
+  border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
   color: white;
   font-size: var(--dt-font-size-sm);
+  font-weight: 500;
   font-family: var(--dt-font-family);
   cursor: pointer;
-  transition: background var(--dt-transition), opacity var(--dt-transition);
+  transition: background var(--dt-transition), border-color var(--dt-transition), opacity var(--dt-transition);
 }
 
 .dt-filter-preset-save-btn:hover:not(:disabled) {
   background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
 }
 
 .dt-filter-preset-save-btn:focus {
@@ -2514,11 +2516,12 @@ body.dt-column-dragging * {
 }
 
 .dt-filter-preset-action-btn {
-  padding: 0.125rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   border: 1px solid var(--dt-border);
   border-radius: var(--dt-radius-sm);
   background: transparent;
   font-size: var(--dt-font-size-xs);
+  font-weight: 500;
   font-family: var(--dt-font-family);
   cursor: pointer;
   transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
@@ -2560,12 +2563,13 @@ body.dt-column-dragging * {
 }
 
 .dt-filter-preset-io-btn {
-  padding: 0.125rem 0.5rem;
-  border: 1px dashed var(--dt-border);
-  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
   background: transparent;
   color: var(--dt-text-secondary);
   font-size: var(--dt-font-size-xs);
+  font-weight: 500;
   font-family: var(--dt-font-family);
   cursor: pointer;
   white-space: nowrap;

@@ -65,6 +65,7 @@ let tableContainer: TableContainer | null = null;
 let exportDialog: ExportDialog | null = null;
 let tableCounter = 0;
 const sessionStore = new SessionStore();
+const presetManager = new FilterPresetManager();
 let autoSave: AutoSave | null = null;
 
 // Last-session tracking for auto-restore on page refresh
@@ -463,7 +464,7 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
   }
 
   try {
-    await actions.loadData(source, { tableName, sessionStore });
+    await actions.loadData(source, { tableName, sessionStore, presetManager });
     updateTableInfo();
 
     // Set export filename based on source
@@ -486,7 +487,7 @@ async function loadData(source: File | string, overrideTableName?: string): Prom
     // so lifecycle handlers (beforeunload, visibilitychange) are registered.
     // AutoSave only needs signals, not DOM — visualizations need the delay.
     if (!autoSave) {
-      autoSave = new AutoSave(tableState, sessionStore, { undoManager });
+      autoSave = new AutoSave(tableState, sessionStore, { undoManager, presetManager });
     }
     autoSave.enable();
 
@@ -523,9 +524,6 @@ bridge
       brushStates.delete(column);
       selectionStates.delete(column);
     });
-
-    // Create filter preset manager for saving/loading named filter sets
-    const presetManager = new FilterPresetManager();
 
     // Create TableContainer with bridge and filter removal handler
     tableContainer = new TableContainer(

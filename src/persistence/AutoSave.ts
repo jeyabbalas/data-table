@@ -10,6 +10,7 @@
 
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
+import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SessionStore } from './SessionStore';
 import { snapshotFromState } from './serialization';
 
@@ -18,6 +19,7 @@ const DEFAULT_DEBOUNCE_MS = 1000;
 export interface AutoSaveOptions {
   debounceMs?: number;
   undoManager?: UndoManager;
+  presetManager?: FilterPresetManager;
 }
 
 export class AutoSave {
@@ -26,6 +28,7 @@ export class AutoSave {
   private destroyed = false;
   private debounceMs: number;
   private undoManager: UndoManager | undefined;
+  private presetManager: FilterPresetManager | undefined;
   private boundOnVisibilityChange: (() => void) | null = null;
   private boundOnBeforeUnload: (() => void) | null = null;
 
@@ -36,6 +39,7 @@ export class AutoSave {
   ) {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.undoManager = options.undoManager;
+    this.presetManager = options.presetManager;
   }
 
   /** Subscribe to all persistent state signals and begin auto-saving. */
@@ -57,6 +61,13 @@ export class AutoSave {
 
     for (const signal of signals) {
       this.unsubscribes.push(signal.subscribe(() => this.scheduleSave()));
+    }
+
+    // Subscribe to preset changes
+    if (this.presetManager) {
+      this.unsubscribes.push(
+        this.presetManager.presets.subscribe(() => this.scheduleSave()),
+      );
     }
 
     // Subscribe to undo/redo stack changes so stacks are saved even when
@@ -152,7 +163,7 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager);
+    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
     this.store.save(snapshot);
   }
 
@@ -164,7 +175,7 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager);
+    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
     this.store.saveSync(snapshot);
   }
 }

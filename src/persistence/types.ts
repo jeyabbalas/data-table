@@ -9,9 +9,10 @@ import type { SortColumn } from '../core/types';
 import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef } from '../derived/types';
+import type { FilterPreset } from '../filters/FilterPresetTypes';
 
 /** Current snapshot schema version — bump when the shape changes */
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
 
 /** Marker object for serialized Date instances */
 export interface DateWrapper {
@@ -98,4 +99,6 @@ export interface SessionSnapshot {
   undoStack?: SerializedStateSnapshot[];
   /** Persisted redo stack (oldest → newest). Absent in pre-v1 snapshots. */
   redoStack?: SerializedStateSnapshot[];
+  /** Saved filter presets. Absent in pre-v3 snapshots. */
+  filterPresets?: FilterPreset[];
 }

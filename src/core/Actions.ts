@@ -1355,4 +1355,22 @@ export class StateActions {
   setHoveredColumn(column: string | null): void {
     this.state.hoveredColumn.set(column);
   }
+
+  // =========================================
+  // Cell Focus Actions
+  // =========================================
+
+  /**
+   * Set focused cell for keyboard navigation. Not undoable.
+   */
+  setFocusedCell(cell: { row: number; column: string } | null): void {
+    this.state.focusedCell.set(cell);
+  }
+
+  /**
+   * Clear focused cell.
+   */
+  clearFocusedCell(): void {
+    this.state.focusedCell.set(null);
+  }
 }

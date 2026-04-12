@@ -398,6 +398,87 @@ export class TableContainer {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    // --- Cell navigation (arrow keys without Ctrl/Meta) ---
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) &&
+        !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      switch (e.key) {
+        case 'ArrowUp':    this.moveFocus(-1, 0); break;
+        case 'ArrowDown':  this.moveFocus(1, 0); break;
+        case 'ArrowLeft':  this.moveFocus(0, -1); break;
+        case 'ArrowRight': this.moveFocus(0, 1); break;
+      }
+      return;
+    }
+
+    // Home / End
+    if (e.key === 'Home') {
+      e.preventDefault();
+      const visibleColumns = this.state.visibleColumns.get();
+      const rowCount = this.getEffectiveRowCount();
+      if (visibleColumns.length === 0 || rowCount === 0) return;
+
+      const current = this.state.focusedCell.get();
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+Home: first row, first column
+        this.setFocusAbsolute(0, visibleColumns[0]);
+      } else {
+        // Home: first column, same row
+        const row = current?.row ?? 0;
+        this.setFocusAbsolute(row, visibleColumns[0]);
+      }
+      return;
+    }
+
+    if (e.key === 'End') {
+      e.preventDefault();
+      const visibleColumns = this.state.visibleColumns.get();
+      const rowCount = this.getEffectiveRowCount();
+      if (visibleColumns.length === 0 || rowCount === 0) return;
+
+      const current = this.state.focusedCell.get();
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+End: last row, last column
+        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]);
+      } else {
+        // End: last column, same row
+        const row = current?.row ?? 0;
+        this.setFocusAbsolute(row, visibleColumns[visibleColumns.length - 1]);
+      }
+      return;
+    }
+
+    // PageUp / PageDown
+    if (e.key === 'PageUp' || e.key === 'PageDown') {
+      e.preventDefault();
+      if (!this.tableBody) return;
+
+      const vs = this.tableBody.getVirtualScroller();
+      const pageRows = Math.max(1, Math.floor(vs.getViewportHeight() / vs.getRowHeight()));
+      const delta = e.key === 'PageUp' ? -pageRows : pageRows;
+      this.moveFocus(delta, 0);
+      return;
+    }
+
+    // Tab / Shift+Tab
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      this.moveFocusTab(e.shiftKey);
+      return;
+    }
+
+    // Escape: clear focus (stop propagation so other Escape handlers don't fire)
+    if (e.key === 'Escape') {
+      if (this.state.focusedCell.get()) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.actions?.clearFocusedCell();
+        return;
+      }
+    }
+
+    // --- Modifier shortcuts (undo/redo/copy) ---
+
     // Ctrl+Z / Cmd+Z → undo
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
@@ -447,6 +528,170 @@ export class TableContainer {
       );
     } catch {
       // Silently fail for keyboard shortcuts
+    }
+  }
+
+  // =========================================
+  // Cell Focus Navigation
+  // =========================================
+
+  /**
+   * Get the effective row count (filtered or total).
+   */
+  private getEffectiveRowCount(): number {
+    const filters = this.state.filters.get();
+    return filters.length > 0
+      ? this.state.filteredRows.get()
+      : this.state.totalRows.get();
+  }
+
+  /**
+   * Move focused cell by delta, clamping to bounds.
+   * Sets focus if none exists (defaults to row 0, first column).
+   */
+  private moveFocus(deltaRow: number, deltaCol: number): void {
+    const visibleColumns = this.state.visibleColumns.get();
+    const rowCount = this.getEffectiveRowCount();
+    if (visibleColumns.length === 0 || rowCount === 0) return;
+
+    const current = this.state.focusedCell.get();
+    let row: number;
+    let colIdx: number;
+
+    if (current) {
+      row = current.row;
+      colIdx = visibleColumns.indexOf(current.column);
+      if (colIdx < 0) colIdx = 0; // column was hidden; reset
+    } else {
+      // No focus yet — start at top-left
+      row = 0;
+      colIdx = 0;
+    }
+
+    row = Math.max(0, Math.min(rowCount - 1, row + deltaRow));
+    colIdx = Math.max(0, Math.min(visibleColumns.length - 1, colIdx + deltaCol));
+
+    this.setFocusAbsolute(row, visibleColumns[colIdx]);
+  }
+
+  /**
+   * Set focus to absolute position and scroll into view.
+   */
+  private setFocusAbsolute(row: number, column: string): void {
+    this.actions?.setFocusedCell({ row, column });
+    this.scrollFocusedCellIntoView(row, column);
+  }
+
+  /**
+   * Move focus to the next/previous cell in tab order (left-to-right, top-to-bottom).
+   * Wraps across rows. Stops at table boundaries.
+   */
+  private moveFocusTab(reverse: boolean): void {
+    const visibleColumns = this.state.visibleColumns.get();
+    const rowCount = this.getEffectiveRowCount();
+    if (visibleColumns.length === 0 || rowCount === 0) return;
+
+    const current = this.state.focusedCell.get();
+    let row: number;
+    let colIdx: number;
+
+    if (current) {
+      row = current.row;
+      colIdx = visibleColumns.indexOf(current.column);
+      if (colIdx < 0) colIdx = 0;
+    } else {
+      // No focus: Tab → first cell, Shift+Tab → last cell
+      if (reverse) {
+        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]);
+      } else {
+        this.setFocusAbsolute(0, visibleColumns[0]);
+      }
+      return;
+    }
+
+    if (reverse) {
+      colIdx--;
+      if (colIdx < 0) {
+        if (row > 0) {
+          row--;
+          colIdx = visibleColumns.length - 1;
+        } else {
+          return; // At first cell, do nothing
+        }
+      }
+    } else {
+      colIdx++;
+      if (colIdx >= visibleColumns.length) {
+        if (row < rowCount - 1) {
+          row++;
+          colIdx = 0;
+        } else {
+          return; // At last cell, do nothing
+        }
+      }
+    }
+
+    this.setFocusAbsolute(row, visibleColumns[colIdx]);
+  }
+
+  /**
+   * Scroll the viewport so that the focused cell is visible
+   * both vertically and horizontally.
+   */
+  private scrollFocusedCellIntoView(row: number, column: string): void {
+    if (!this.tableBody) return;
+
+    const vs = this.tableBody.getVirtualScroller();
+
+    // --- Vertical scroll ---
+    const viewportHeight = vs.getViewportHeight();
+    const rowHeight = vs.getRowHeight();
+    const scrollTop = vs.getScrollTop();
+
+    const rowTop = row * rowHeight;
+    const rowBottom = rowTop + rowHeight;
+
+    if (rowTop < scrollTop) {
+      vs.scrollToRow(row, 'start');
+    } else if (rowBottom > scrollTop + viewportHeight) {
+      vs.scrollToRow(row, 'end');
+    }
+
+    // --- Horizontal scroll ---
+    const pinnedColumns = this.state.pinnedColumns.get();
+    if (pinnedColumns.includes(column)) {
+      return; // Pinned columns are always visible
+    }
+
+    const visibleColumns = this.state.visibleColumns.get();
+    const columnWidths = this.state.columnWidths.get();
+
+    // Compute left offset of the target column
+    let colLeft = 0;
+    for (const colName of visibleColumns) {
+      if (colName === column) break;
+      colLeft += columnWidths.get(colName) ?? 150;
+    }
+    const colWidth = columnWidths.get(column) ?? 150;
+    const colRight = colLeft + colWidth;
+
+    // Compute the sticky (pinned) zone width
+    let pinnedWidth = 0;
+    for (const pinned of pinnedColumns) {
+      pinnedWidth += columnWidths.get(pinned) ?? 150;
+    }
+
+    const scrollLeft = this.bodyScroll.scrollLeft;
+    const viewportWidth = this.bodyScroll.clientWidth;
+
+    // Effective visible range (accounting for pinned columns)
+    const effectiveLeft = scrollLeft + pinnedWidth;
+    const effectiveRight = scrollLeft + viewportWidth;
+
+    if (colLeft < effectiveLeft) {
+      this.bodyScroll.scrollLeft = colLeft - pinnedWidth;
+    } else if (colRight > effectiveRight) {
+      this.bodyScroll.scrollLeft = colRight - viewportWidth;
     }
   }
 
@@ -520,6 +765,43 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubPinned);
+
+    // Clamp focused cell when row count shrinks
+    const unsubFocusClamp = this.state.filteredRows.subscribe(() => {
+      if (this.destroyed) return;
+      const focusedCell = this.state.focusedCell.get();
+      if (!focusedCell) return;
+      const rowCount = this.getEffectiveRowCount();
+      if (focusedCell.row >= rowCount) {
+        if (rowCount === 0) {
+          this.actions?.clearFocusedCell();
+        } else {
+          this.actions?.setFocusedCell({
+            row: rowCount - 1,
+            column: focusedCell.column,
+          });
+        }
+      }
+    });
+    this.unsubscribes.push(unsubFocusClamp);
+
+    // Snap focus to first visible column if focused column is hidden
+    const unsubFocusCol = this.state.visibleColumns.subscribe((cols) => {
+      if (this.destroyed) return;
+      const focusedCell = this.state.focusedCell.get();
+      if (!focusedCell) return;
+      if (!cols.includes(focusedCell.column)) {
+        if (cols.length === 0) {
+          this.actions?.clearFocusedCell();
+        } else {
+          this.actions?.setFocusedCell({
+            row: focusedCell.row,
+            column: cols[0],
+          });
+        }
+      }
+    });
+    this.unsubscribes.push(unsubFocusCol);
   }
 
   // =========================================

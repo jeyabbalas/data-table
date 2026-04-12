@@ -2027,6 +2027,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Focused cell indicator (keyboard navigation) */
+.dt-cell--focused {
+  box-shadow: inset 0 0 0 2px var(--dt-primary);
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+  z-index: 1;
+}
+
 /* ===========================================
    Column Reordering
    =========================================== */

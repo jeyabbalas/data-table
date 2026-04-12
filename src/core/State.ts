@@ -65,6 +65,8 @@ export interface TableState {
   hoveredRow: Signal<number | null>;
   /** Currently hovered column name */
   hoveredColumn: Signal<string | null>;
+  /** Currently focused cell for keyboard navigation */
+  focusedCell: Signal<{ row: number; column: string } | null>;
 }
 
 /**
@@ -129,6 +131,7 @@ export function createTableState(): TableState {
     // UI
     hoveredRow: createSignal<number | null>(null),
     hoveredColumn: createSignal<string | null>(null),
+    focusedCell: createSignal<{ row: number; column: string } | null>(null),
   };
 }
 
@@ -163,6 +166,7 @@ export function resetTableState(state: TableState): void {
   state.selectedRows.set(new Set());
   state.hoveredRow.set(null);
   state.hoveredColumn.set(null);
+  state.focusedCell.set(null);
 }
 
 /**

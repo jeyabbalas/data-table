@@ -368,6 +368,11 @@ export class VirtualScroller {
     // Clamp to valid scroll range
     const maxScroll = this.contentContainer.offsetHeight - viewportHeight;
     this.scrollSource.scrollTop = Math.max(0, Math.min(maxScroll, scrollTop));
+
+    // Synchronously update visible range so getVisibleRange() reflects
+    // the new scroll position immediately. Without this, the rAF-throttled
+    // handleScroll() leaves currentRange stale until the next frame.
+    this.updateVisibleRange();
   }
 
   /**

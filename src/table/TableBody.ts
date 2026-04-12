@@ -54,11 +54,14 @@ export class TableBody {
   private destroyed = false;
   private fetchInProgress = false;
   private pendingFetch: { start: number; end: number } | null = null;
+  private isAnimatingScroll = false;
+  private scrollAnimationId: number | null = null;
 
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
   private rowElementMap: Map<number, HTMLElement> = new Map();
   private previousHoveredRow: number | null = null;
+  private previousFocusedCell: { row: number; column: string } | null = null;
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
@@ -105,6 +108,13 @@ export class TableBody {
 
     // Subscribe to scroll events
     const unsubScroll = this.virtualScroller.onScroll((range) => {
+      if (this.isAnimatingScroll) {
+        // During scroll animation: update range and re-render with cached data
+        // but don't trigger data fetches for intermediate positions
+        this.currentRange = range;
+        this.renderVisibleRows();
+        return;
+      }
       this.handleScroll(range);
     });
     this.unsubscribes.push(unsubScroll);
@@ -146,11 +156,19 @@ export class TableBody {
     // Re-fetch and scroll to top when filters change
     const unsubFilters = this.state.filters.subscribe((filters) => {
       if (!this.destroyed) {
-        this.virtualScroller.scrollToRow(0, 'start');
+        this.state.focusedCell.set(null);
         if (filters.length === 0) {
           this.virtualScroller.setTotalRows(this.state.totalRows.get());
         }
-        this.invalidateCacheAndRefresh();
+
+        const scrollTop = this.virtualScroller.getScrollTop();
+        if (scrollTop === 0) {
+          // Already at top — refresh data instantly
+          this.invalidateCacheAndRefresh();
+        } else {
+          // Animate scroll to top, then refresh data
+          this.smoothScrollToTopAndRefresh(scrollTop);
+        }
       }
     });
     this.unsubscribes.push(unsubFilters);
@@ -208,6 +226,14 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubHover);
 
+    // Update focus styling
+    const unsubFocus = this.state.focusedCell.subscribe(() => {
+      if (!this.destroyed) {
+        this.updateFocusStyles();
+      }
+    });
+    this.unsubscribes.push(unsubFocus);
+
     // Re-fetch when table name changes (e.g., derived column VIEW creation/removal)
     const unsubTableName = this.state.tableName.subscribe(() => {
       if (!this.destroyed) {
@@ -215,6 +241,47 @@ export class TableBody {
       }
     });
     this.unsubscribes.push(unsubTableName);
+  }
+
+  /**
+   * Animate scroll to the top of the table, then invalidate cache and refresh.
+   * Old data scrolls away during animation, then fresh data loads at position 0.
+   */
+  private smoothScrollToTopAndRefresh(startScrollTop: number): void {
+    // Cancel any ongoing animation
+    if (this.scrollAnimationId !== null) {
+      cancelAnimationFrame(this.scrollAnimationId);
+    }
+
+    const scrollContainer = this.virtualScroller.getScrollContainer();
+    const duration = 300;
+    const startTime = performance.now();
+    this.isAnimatingScroll = true;
+
+    const animate = (now: number) => {
+      if (this.destroyed) {
+        this.isAnimatingScroll = false;
+        this.scrollAnimationId = null;
+        return;
+      }
+
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3); // cubic ease-out
+      scrollContainer.scrollTop = Math.round(startScrollTop * (1 - eased));
+
+      if (scrollContainer.scrollTop === 0 || progress >= 1) {
+        // Animation complete — refresh data at position 0
+        this.scrollAnimationId = null;
+        this.isAnimatingScroll = false;
+        this.virtualScroller.scrollToRow(0, 'start');
+        this.invalidateCacheAndRefresh();
+      } else {
+        this.scrollAnimationId = requestAnimationFrame(animate);
+      }
+    };
+
+    this.scrollAnimationId = requestAnimationFrame(animate);
   }
 
   /**
@@ -405,6 +472,7 @@ export class TableBody {
     const visibleColumns = this.state.visibleColumns.get();
     const selectedRows = this.state.selectedRows.get();
     const hoveredRow = this.state.hoveredRow.get();
+    const focusedCell = this.state.focusedCell.get();
 
     const newStart = this.currentRange.start;
     const newEnd = this.currentRange.end;
@@ -462,8 +530,29 @@ export class TableBody {
         } else {
           rowEl.classList.remove(hoverClass);
         }
+
+        // Apply focus style
+        const focusClass = `${this.classPrefix}-cell--focused`;
+        if (focusedCell && focusedCell.row === i) {
+          const focusColIdx = visibleColumns.indexOf(focusedCell.column);
+          for (let c = 0; c < rowEl.children.length; c++) {
+            if (c === focusColIdx) {
+              rowEl.children[c].classList.add(focusClass);
+            } else {
+              rowEl.children[c].classList.remove(focusClass);
+            }
+          }
+        } else {
+          for (let c = 0; c < rowEl.children.length; c++) {
+            rowEl.children[c].classList.remove(focusClass);
+          }
+        }
       }
     }
+
+    // Keep previousFocusedCell in sync so updateFocusStyles() knows
+    // which DOM element currently has the focus class after a rebuild.
+    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
 
     // Calculate total width from actual column widths
     const columnWidths = this.state.columnWidths.get();
@@ -572,6 +661,12 @@ export class TableBody {
       `${this.classPrefix}-row--loading`
     );
 
+    // Clear cell-level focus class
+    const focusClass = `${this.classPrefix}-cell--focused`;
+    for (let i = 0; i < cleanEl.children.length; i++) {
+      cleanEl.children[i].classList.remove(focusClass);
+    }
+
     // Limit pool size to prevent memory bloat
     if (this.rowPool.length < 100) {
       this.rowPool.push(cleanEl);
@@ -678,9 +773,26 @@ export class TableBody {
       }
     });
 
-    // Click (selection)
+    // Click (selection + focus)
     rowEl.addEventListener('click', (event) => {
       this.handleRowClick(index, event);
+
+      // Set focused cell from clicked cell
+      if (this.actions && !this.destroyed) {
+        const cellEl = (event.target as HTMLElement).closest(
+          `.${this.classPrefix}-cell`
+        ) as HTMLElement | null;
+        if (cellEl && rowEl.contains(cellEl)) {
+          const cellIndex = Array.from(rowEl.children).indexOf(cellEl);
+          const visibleColumns = this.state.visibleColumns.get();
+          if (cellIndex >= 0 && cellIndex < visibleColumns.length) {
+            this.actions.setFocusedCell({
+              row: index,
+              column: visibleColumns[cellIndex],
+            });
+          }
+        }
+      }
     });
   }
 
@@ -747,6 +859,41 @@ export class TableBody {
     }
 
     this.previousHoveredRow = hoveredRow;
+  }
+
+  /**
+   * Update focus styles using O(1) element lookup.
+   * Removes dt-cell--focused from the previously focused cell (if visible)
+   * and adds it to the newly focused cell (if visible).
+   */
+  private updateFocusStyles(): void {
+    const focusedCell = this.state.focusedCell.get();
+    const focusClass = `${this.classPrefix}-cell--focused`;
+    const visibleColumns = this.state.visibleColumns.get();
+
+    // Remove from previous
+    if (this.previousFocusedCell) {
+      const prevRowEl = this.rowElementMap.get(this.previousFocusedCell.row);
+      if (prevRowEl) {
+        const prevColIdx = visibleColumns.indexOf(this.previousFocusedCell.column);
+        if (prevColIdx >= 0 && prevColIdx < prevRowEl.children.length) {
+          prevRowEl.children[prevColIdx].classList.remove(focusClass);
+        }
+      }
+    }
+
+    // Add to current
+    if (focusedCell) {
+      const rowEl = this.rowElementMap.get(focusedCell.row);
+      if (rowEl) {
+        const colIdx = visibleColumns.indexOf(focusedCell.column);
+        if (colIdx >= 0 && colIdx < rowEl.children.length) {
+          rowEl.children[colIdx].classList.add(focusClass);
+        }
+      }
+    }
+
+    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
   }
 
   /**
@@ -828,6 +975,11 @@ export class TableBody {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // Cancel any ongoing scroll animation
+    if (this.scrollAnimationId !== null) {
+      cancelAnimationFrame(this.scrollAnimationId);
+    }
 
     // Unsubscribe from all state subscriptions
     for (const unsub of this.unsubscribes) {

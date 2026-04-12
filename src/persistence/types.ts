@@ -8,11 +8,11 @@
 import type { SortColumn } from '../core/types';
 import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
-import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef } from '../derived/types';
+import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef, VectorDataType } from '../derived/types';
 import type { FilterPreset } from '../filters/FilterPresetTypes';
 
 /** Current snapshot schema version — bump when the shape changes */
-export const SNAPSHOT_VERSION = 3;
+export const SNAPSHOT_VERSION = 4;
 
 /** Marker object for serialized Date instances */
 export interface DateWrapper {
@@ -64,6 +64,38 @@ export type DerivedColumnDef = _DerivedColumnDef;
 export type ExpressionColumnDef = _ExpressionColumnDef;
 export type VectorColumnDef = _VectorColumnDef;
 
+// ── Vector value pool (v4+) ─────────────────────────────────────────
+
+/** A vector column stored by pool reference instead of inline values. */
+export interface PooledVectorColumnRef {
+  kind: 'vector';
+  name: string;
+  vectorType: VectorDataType;
+  /** Key into SessionSnapshot.vectorValuePool */
+  _poolRef: string;
+}
+
+/** Entry in the vector value pool. */
+export interface VectorValuePoolEntry {
+  vectorType: string;
+  values: unknown[];
+}
+
+/**
+ * Derived column in serialized form: may be inline (pre-v4) or pooled (v4+).
+ * Pool references replace inline values to deduplicate vector data across
+ * undo/redo stack entries.
+ */
+export type SerializedDerivedColumnDef =
+  | ExpressionColumnDef
+  | VectorColumnDef
+  | PooledVectorColumnRef;
+
+/** Type guard: true when a serialized derived column uses a pool reference. */
+export function isPooledVectorRef(d: SerializedDerivedColumnDef): d is PooledVectorColumnRef {
+  return d.kind === 'vector' && '_poolRef' in d;
+}
+
 /**
  * A serialized StateSnapshot (undo/redo stack entry).
  *
@@ -78,8 +110,8 @@ export interface SerializedStateSnapshot {
   columnWidths: Record<string, number>;
   pinnedColumns: string[];
   hiddenColumnInfo: Record<string, HiddenColumnInfo>;
-  /** Derived column definitions. Optional for backward compat with pre-existing entries. */
-  derivedColumns?: DerivedColumnDef[];
+  /** Derived column definitions. May use pool references (v4+) or inline values (pre-v4). */
+  derivedColumns?: SerializedDerivedColumnDef[];
 }
 
 /** A serialized snapshot of table state, keyed by tableName in IndexedDB */
@@ -99,6 +131,8 @@ export interface SessionSnapshot {
   undoStack?: SerializedStateSnapshot[];
   /** Persisted redo stack (oldest → newest). Absent in pre-v1 snapshots. */
   redoStack?: SerializedStateSnapshot[];
+  /** Deduplicated vector column values shared across undo/redo stack entries. Absent in pre-v4 snapshots. */
+  vectorValuePool?: Record<string, VectorValuePoolEntry>;
   /** Saved filter presets. Absent in pre-v3 snapshots. */
   filterPresets?: FilterPreset[];
 }

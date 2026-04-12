@@ -183,9 +183,12 @@ export type {
   SessionSnapshot,
   SerializedFilter,
   SerializedStateSnapshot,
+  SerializedDerivedColumnDef,
+  PooledVectorColumnRef,
+  VectorValuePoolEntry,
   DateWrapper,
 } from './persistence/types';
-export { SNAPSHOT_VERSION } from './persistence/types';
+export { SNAPSHOT_VERSION, isPooledVectorRef } from './persistence/types';
 export {
   snapshotFromState,
   restoreStateFromSnapshot,

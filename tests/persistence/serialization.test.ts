@@ -12,8 +12,9 @@ import {
   serializeStateSnapshot,
   deserializeStateSnapshot,
 } from '@/persistence/serialization';
-import { SNAPSHOT_VERSION } from '@/persistence/types';
+import { SNAPSHOT_VERSION, isPooledVectorRef } from '@/persistence/types';
 import type { SessionSnapshot, SerializedStateSnapshot } from '@/persistence/types';
+import { UndoManager, captureSnapshot } from '@/core/UndoManager';
 import type { StateSnapshot } from '@/core/UndoManager';
 
 // --- Test helpers ---
@@ -888,5 +889,310 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
     // Only raw-sql filter survives (range filter's column doesn't exist)
     expect(deserialized.filters).toHaveLength(1);
     expect(deserialized.filters[0].type).toBe('raw-sql');
+  });
+});
+
+// =========================================
+// Vector value pool deduplication (v4+)
+// =========================================
+
+describe('snapshotFromState — vector value pool deduplication', () => {
+  it('SNAPSHOT_VERSION is 4', () => {
+    expect(SNAPSHOT_VERSION).toBe(4);
+  });
+
+  it('creates pool when vector columns exist in undo stacks', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'scores', vectorType: 'float', values: [1, 2, 3] },
+    ]);
+
+    const undoManager = new UndoManager();
+    // Push a snapshot with the vector column
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+    expect(snapshot.vectorValuePool).toBeDefined();
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(1);
+  });
+
+  it('deduplicates shared vector values across undo entries by reference', () => {
+    const state = setupState();
+    const values = [10, 20, 30, 40, 50];
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values },
+    ]);
+
+    const undoManager = new UndoManager();
+
+    // Push 5 snapshots — vector column unchanged, so all share the same values ref
+    for (let i = 0; i < 5; i++) {
+      undoManager.push(captureSnapshot(state));
+      // Mutate something else so each snapshot is captured
+      state.filters.set([{ type: 'range', column: 'age', min: i, max: 100 }]);
+    }
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // Only 1 pool entry despite 5 stack entries
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(1);
+
+    // All undo stack entries use _poolRef
+    for (const entry of snapshot.undoStack!) {
+      expect(entry.derivedColumns).toHaveLength(1);
+      const d = entry.derivedColumns![0];
+      expect(isPooledVectorRef(d)).toBe(true);
+    }
+  });
+
+  it('creates separate pool entries when vector values change', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ]);
+
+    const undoManager = new UndoManager();
+
+    // Push 2 snapshots with original values
+    undoManager.push(captureSnapshot(state));
+    state.filters.set([{ type: 'null', column: 'name' }]);
+    undoManager.push(captureSnapshot(state));
+
+    // Change vector values (new reference)
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [4, 5, 6] },
+    ]);
+
+    // Push 2 more snapshots with new values
+    undoManager.push(captureSnapshot(state));
+    state.filters.set([]);
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // 2 distinct pool entries: one for [1,2,3], one for [4,5,6]
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(2);
+  });
+
+  it('does not create pool when no vector columns exist', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'expression', name: 'total', expression: 'id * 2' },
+    ]);
+
+    const undoManager = new UndoManager();
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+    expect(snapshot.vectorValuePool).toBeUndefined();
+  });
+
+  it('does not create pool when undo stacks are empty', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ]);
+
+    const undoManager = new UndoManager();
+    // No pushes — stacks are empty
+
+    const snapshot = snapshotFromState(state, undoManager);
+    expect(snapshot.undoStack).toEqual([]);
+    expect(snapshot.vectorValuePool).toBeUndefined();
+  });
+
+  it('handles multiple vector columns with independent dedup', () => {
+    const state = setupState();
+    const valuesA = [1, 2, 3];
+    const valuesB = ['a', 'b', 'c'];
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'nums', vectorType: 'integer', values: valuesA },
+      { kind: 'vector', name: 'strs', vectorType: 'string', values: valuesB },
+    ]);
+
+    const undoManager = new UndoManager();
+    // Push 3 snapshots — both columns unchanged
+    for (let i = 0; i < 3; i++) {
+      undoManager.push(captureSnapshot(state));
+      state.filters.set([{ type: 'range', column: 'age', min: i, max: 100 }]);
+    }
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // 2 pool entries (one per column), not 6 (3 entries × 2 columns)
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(2);
+  });
+
+  it('pool values are independent copies (mutating original does not affect pool)', () => {
+    const state = setupState();
+    const values = [1, 2, 3];
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'float', values },
+    ]);
+
+    const undoManager = new UndoManager();
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // Mutate original
+    values.push(4);
+
+    // Pool should have the original 3 elements
+    const poolEntry = Object.values(snapshot.vectorValuePool!)[0];
+    expect(poolEntry.values).toEqual([1, 2, 3]);
+  });
+});
+
+// =========================================
+// Vector value pool — round-trip (serialize → restore)
+// =========================================
+
+describe('vector value pool — round-trip', () => {
+  it('round-trips undo/redo stacks with pooled vector values', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'scores', vectorType: 'float', values: [10, 20, 30] },
+    ]);
+
+    const undoManager = new UndoManager();
+
+    // Simulate: push initial state, change filter, push again
+    undoManager.push(captureSnapshot(state));
+    state.filters.set([{ type: 'null', column: 'name' }]);
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // Restore into fresh state + undoManager
+    const restored = setupState();
+    restored.derivedColumns.set([
+      { kind: 'vector', name: 'scores', vectorType: 'float', values: [10, 20, 30] },
+    ]);
+    const restoredUndo = new UndoManager();
+    restoreStateFromSnapshot(restored, snapshot, restoredUndo);
+
+    // Undo stacks should be restored
+    expect(restoredUndo.canUndo).toBe(true);
+    expect(restoredUndo.undoDepth).toBe(2);
+
+    // Undo to first entry and check vector values
+    const current = captureSnapshot(restored);
+    const prev = restoredUndo.undo(current);
+    expect(prev).not.toBeNull();
+    expect(prev!.derivedColumns).toHaveLength(1);
+    expect(prev!.derivedColumns[0].kind).toBe('vector');
+    if (prev!.derivedColumns[0].kind === 'vector') {
+      expect(prev!.derivedColumns[0].values).toEqual([10, 20, 30]);
+    }
+  });
+
+  it('deserialized pool entries share array references across stack entries', () => {
+    const state = setupState();
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: [1, 2, 3] },
+    ]);
+
+    const undoManager = new UndoManager();
+    // Push 3 snapshots with same vector values
+    for (let i = 0; i < 3; i++) {
+      undoManager.push(captureSnapshot(state));
+      state.filters.set([{ type: 'range', column: 'age', min: i, max: 100 }]);
+    }
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // Restore
+    const restoredState = setupState();
+    restoredState.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: [1, 2, 3] },
+    ]);
+    const restoredUndo = new UndoManager();
+    restoreStateFromSnapshot(restoredState, snapshot, restoredUndo);
+
+    // Get deserialized stacks and verify reference sharing
+    const stacks = restoredUndo.getStacks();
+    expect(stacks.undoStack.length).toBe(3);
+
+    const vec0 = stacks.undoStack[0].derivedColumns[0];
+    const vec1 = stacks.undoStack[1].derivedColumns[0];
+    const vec2 = stacks.undoStack[2].derivedColumns[0];
+
+    if (vec0.kind === 'vector' && vec1.kind === 'vector' && vec2.kind === 'vector') {
+      // All three should share the same array reference (from the hydrated pool)
+      expect(vec0.values).toBe(vec1.values);
+      expect(vec1.values).toBe(vec2.values);
+      expect(vec0.values).toEqual([1, 2, 3]);
+    }
+  });
+
+  it('backward compat: deserializes pre-v4 inline values without pool', () => {
+    const state = setupState();
+    const undoManager = new UndoManager();
+
+    // Simulate a pre-v4 snapshot with inline values and no pool
+    const preV4Snapshot = createTestSnapshot({
+      derivedColumns: [
+        { kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] },
+      ],
+      // These have inline values (no _poolRef) — pre-v4 format
+      undoStack: [{
+        filters: [],
+        sortColumns: [],
+        visibleColumns: ['id', 'name', 'v'],
+        columnOrder: ['id', 'name', 'v'],
+        columnWidths: {},
+        pinnedColumns: [],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          { kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] },
+        ],
+      }],
+      // No vectorValuePool — pre-v4
+    }) as SessionSnapshot;
+
+    restoreStateFromSnapshot(state, preV4Snapshot, undoManager);
+
+    expect(undoManager.canUndo).toBe(true);
+    const stacks = undoManager.getStacks();
+    const vec = stacks.undoStack[0].derivedColumns[0];
+    expect(vec.kind).toBe('vector');
+    if (vec.kind === 'vector') {
+      expect(vec.values).toEqual([7, 8, 9]);
+    }
+  });
+
+  it('gracefully handles missing pool reference', () => {
+    const state = setupState();
+    const undoManager = new UndoManager();
+
+    // Snapshot with a _poolRef that doesn't exist in the pool
+    const snapshot = createTestSnapshot({
+      derivedColumns: [],
+      undoStack: [{
+        filters: [],
+        sortColumns: [],
+        visibleColumns: ['id', 'name'],
+        columnOrder: ['id', 'name'],
+        columnWidths: {},
+        pinnedColumns: [],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          { kind: 'vector', name: 'v', vectorType: 'float', _poolRef: 'nonexistent' } as any,
+        ],
+      }],
+      vectorValuePool: {},  // empty pool — ref won't resolve
+    }) as SessionSnapshot;
+
+    // Should not throw — graceful degradation
+    restoreStateFromSnapshot(state, snapshot, undoManager);
+
+    const stacks = undoManager.getStacks();
+    const vec = stacks.undoStack[0].derivedColumns[0];
+    expect(vec.kind).toBe('vector');
+    if (vec.kind === 'vector') {
+      // Graceful fallback to empty array
+      expect(vec.values).toEqual([]);
+    }
   });
 });

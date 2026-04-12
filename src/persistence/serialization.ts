@@ -7,12 +7,13 @@
 
 import type { TableState, HiddenColumnInfo } from '../core/State';
 import type { Filter } from '../filters/FilterTypes';
-import type { SessionSnapshot, SerializedStateSnapshot } from './types';
-import { SNAPSHOT_VERSION } from './types';
+import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
+import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import { batch } from '../core/Signal';
 import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import type { VectorColumnDef } from '../derived/types';
 
 // ── StateSnapshot serialization (undo/redo stacks) ────────────────────
 
@@ -49,6 +50,7 @@ export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnap
 export function deserializeStateSnapshot(
   s: SerializedStateSnapshot,
   validColumns: Set<string>,
+  hydratedPool?: Map<string, unknown[]>,
 ): StateSnapshot {
   // Expand valid set with derived column names from this snapshot entry
   const effectiveValid = new Set(validColumns);
@@ -87,11 +89,18 @@ export function deserializeStateSnapshot(
     }
   }
 
-  // Restore derived columns (deep copy vector values for independence)
+  // Restore derived columns — resolve pool references (v4+) or deep-copy inline values (pre-v4)
   const derivedColumns = s.derivedColumns
     ? s.derivedColumns.map(d => {
         if (d.kind === 'expression') return { ...d };
-        return { ...d, values: (d as import('../derived/types').VectorColumnDef).values.slice() } as typeof d;
+        if (isPooledVectorRef(d)) {
+          // Pool reference: share the hydrated array (safe — vector values are never mutated in place)
+          const values = hydratedPool?.get(d._poolRef);
+          if (!values) return { kind: 'vector' as const, name: d.name, vectorType: d.vectorType, values: [] as unknown[] } as VectorColumnDef;
+          return { kind: 'vector' as const, name: d.name, vectorType: d.vectorType, values } as VectorColumnDef;
+        }
+        // Inline values (pre-v4 backward compat): deep copy for IndexedDB independence
+        return { ...d, values: (d as VectorColumnDef).values.slice() } as typeof d;
       })
     : [];
 
@@ -129,8 +138,44 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
 
   if (undoManager) {
     const { undoStack, redoStack } = undoManager.getStacks();
-    snapshot.undoStack = undoStack.map(serializeStateSnapshot);
-    snapshot.redoStack = redoStack.map(serializeStateSnapshot);
+
+    // Build a vector value pool to deduplicate vector column values across
+    // stack entries. captureSnapshot() shares array references for unchanged
+    // vector columns, so reference identity detects duplicates efficiently.
+    const seenArrays = new Map<unknown[], string>();
+    const pool: Record<string, VectorValuePoolEntry> = {};
+
+    const serializeWithPool = (snap: StateSnapshot): SerializedStateSnapshot => ({
+      filters: snap.filters.map(serializeFilter),
+      sortColumns: snap.sortColumns.map(s => ({ ...s })),
+      visibleColumns: [...snap.visibleColumns],
+      columnOrder: [...snap.columnOrder],
+      columnWidths: Object.fromEntries(snap.columnWidths),
+      pinnedColumns: [...snap.pinnedColumns],
+      hiddenColumnInfo: Object.fromEntries(
+        Array.from(snap.hiddenColumnInfo.entries()).map(
+          ([k, v]) => [k, { ...v }],
+        ),
+      ),
+      derivedColumns: snap.derivedColumns.map(d => {
+        if (d.kind === 'expression') return { ...d };
+        const vec = d as VectorColumnDef;
+        const existingKey = seenArrays.get(vec.values);
+        if (existingKey) {
+          return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: existingKey };
+        }
+        const key = `vp_${Object.keys(pool).length}`;
+        pool[key] = { vectorType: vec.vectorType, values: vec.values.slice() };
+        seenArrays.set(vec.values, key);
+        return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: key };
+      }),
+    });
+
+    snapshot.undoStack = undoStack.map(serializeWithPool);
+    snapshot.redoStack = redoStack.map(serializeWithPool);
+    if (Object.keys(pool).length > 0) {
+      snapshot.vectorValuePool = pool;
+    }
   }
 
   if (presetManager) {
@@ -259,9 +304,19 @@ export function restoreStateFromSnapshot(
 
   // Restore undo/redo stacks if present
   if (undoManager && snapshot.undoStack) {
+    // Pre-hydrate vector value pool: .slice() each entry once for IndexedDB
+    // independence, then share the reference across all restored snapshots
+    // (safe because vector values arrays are never mutated in place).
+    let hydratedPool: Map<string, unknown[]> | undefined;
+    if (snapshot.vectorValuePool) {
+      hydratedPool = new Map();
+      for (const [key, entry] of Object.entries(snapshot.vectorValuePool)) {
+        hydratedPool.set(key, entry.values.slice());
+      }
+    }
     const deserialized = {
-      undoStack: snapshot.undoStack.map(s => deserializeStateSnapshot(s, validColumns)),
-      redoStack: (snapshot.redoStack ?? []).map(s => deserializeStateSnapshot(s, validColumns)),
+      undoStack: snapshot.undoStack.map(s => deserializeStateSnapshot(s, validColumns, hydratedPool)),
+      redoStack: (snapshot.redoStack ?? []).map(s => deserializeStateSnapshot(s, validColumns, hydratedPool)),
     };
     undoManager.loadStacks(deserialized.undoStack, deserialized.redoStack);
   }

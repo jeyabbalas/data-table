@@ -150,6 +150,7 @@ export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]
       const av = a[i] as VectorColumnDef;
       const bv = b[i] as VectorColumnDef;
       if (av.vectorType !== bv.vectorType) return false;
+      if (av.values === bv.values) continue; // reference fast-path (common after captureSnapshot)
       if (av.values.length !== bv.values.length) return false;
       for (let j = 0; j < av.values.length; j++) {
         if (av.values[j] !== bv.values[j]) return false;

@@ -13,6 +13,14 @@ describe('WorkerBridge', () => {
     expect(typeof bridge.loadData).toBe('function');
     expect(typeof bridge.terminate).toBe('function');
     expect(typeof bridge.isInitialized).toBe('function');
+    expect(typeof bridge.clearQueryCache).toBe('function');
+  });
+
+  it('should accept cache options in constructor', () => {
+    const bridge = new WorkerBridge({ maxEntries: 50, ttlMs: 10_000 });
+    expect(bridge).toBeInstanceOf(WorkerBridge);
+    // clearQueryCache should work without error
+    expect(() => bridge.clearQueryCache()).not.toThrow();
   });
 
   it('should throw if query called before initialize', async () => {

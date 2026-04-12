@@ -23,6 +23,7 @@ function createMockBridge() {
     loadData: vi.fn().mockResolvedValue(undefined),
     terminate: vi.fn(),
     isInitialized: vi.fn().mockReturnValue(true),
+    clearQueryCache: vi.fn(),
   };
 }
 

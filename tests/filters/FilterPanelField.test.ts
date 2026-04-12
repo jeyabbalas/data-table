@@ -14,6 +14,7 @@ const mockBridge = {
   initialize: vi.fn().mockResolvedValue(undefined),
   loadData: vi.fn().mockResolvedValue({ schema: [], rowCount: 0 }),
   destroy: vi.fn(),
+  clearQueryCache: vi.fn(),
 } as any;
 
 // Helper to create a field and attach it to the document

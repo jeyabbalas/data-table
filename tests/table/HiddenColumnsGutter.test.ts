@@ -13,6 +13,7 @@ const mockBridge = {
   initialize: vi.fn(),
   query: vi.fn(),
   terminate: vi.fn(),
+  clearQueryCache: vi.fn(),
 } as unknown as WorkerBridge;
 
 const sampleSchema: ColumnSchema[] = [

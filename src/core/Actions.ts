@@ -20,6 +20,7 @@ import { batch } from './Signal';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, CompletionContext } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import { attachCacheInvalidation } from '../data/QueryCache';
 
 /**
  * Options for loading data
@@ -54,6 +55,7 @@ export class StateActions {
     this.bridge = bridge;
     this.loader = new DataLoader(bridge);
     this.undoManager = undoManager;
+    attachCacheInvalidation(bridge, state);
   }
 
   // =========================================

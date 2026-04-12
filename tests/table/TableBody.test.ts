@@ -16,6 +16,7 @@ const createMockBridge = () => {
     initialize: vi.fn().mockResolvedValue(undefined),
     loadData: vi.fn().mockResolvedValue(undefined),
     terminate: vi.fn(),
+    clearQueryCache: vi.fn(),
   };
   return mockBridge;
 };

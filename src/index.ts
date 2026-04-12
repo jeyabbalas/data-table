@@ -115,6 +115,10 @@ export {
 export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
 export type { LoadOptions } from './data/WorkerBridge';
 
+// Query caching
+export { QueryCache } from './data/QueryCache';
+export type { QueryCacheOptions } from './data/QueryCache';
+
 // Data loader
 export { DataLoader } from './data/DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './data/DataLoader';

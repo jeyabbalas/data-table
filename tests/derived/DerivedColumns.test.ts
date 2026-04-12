@@ -54,6 +54,7 @@ function createMockBridge(typeMap: Record<string, string> = {}) {
     exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
     terminate: vi.fn(),
     isInitialized: vi.fn().mockReturnValue(true),
+    clearQueryCache: vi.fn(),
     getQueryCalls: () => queryCalls,
   };
 

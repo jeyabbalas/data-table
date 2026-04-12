@@ -8,6 +8,9 @@ export type { LoadOptions, ProgressInfo, ProgressCallback } from './WorkerBridge
 export { DataLoader } from './DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './DataLoader';
 
+export { QueryCache, attachCacheInvalidation } from './QueryCache';
+export type { QueryCacheOptions } from './QueryCache';
+
 export { detectSchema, mapDuckDBType } from './SchemaDetector';
 
 export { inferStringColumnType, inferAllStringColumnTypes } from './TypeInference';

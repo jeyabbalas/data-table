@@ -12,6 +12,7 @@ import type {
 } from '../worker/types';
 import type { ProgressInfo, ProgressCallback } from '../core/Progress';
 import type { ColumnSchema } from '../core/types';
+import { QueryCache, type QueryCacheOptions } from './QueryCache';
 
 // Re-export for convenience
 export type { ProgressInfo, ProgressCallback } from '../core/Progress';
@@ -39,6 +40,11 @@ export class WorkerBridge {
   private pendingRequests = new Map<string, PendingRequest>();
   private messageId = 0;
   private initPromise: Promise<void> | null = null;
+  private queryCache: QueryCache;
+
+  constructor(cacheOptions?: Partial<QueryCacheOptions>) {
+    this.queryCache = new QueryCache(cacheOptions);
+  }
 
   /**
    * Create the worker and wait for it to be ready
@@ -88,9 +94,24 @@ export class WorkerBridge {
   ): Promise<T[]> {
     this.ensureInitialized();
 
+    // Only cache SELECT queries
+    if (this.isCacheable(sql)) {
+      const cached = this.queryCache.get<T>(sql);
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
+
     const payload: QueryPayload = { sql };
     const result = await this.sendMessage('query', payload, undefined, signal);
-    return (result as { rows: T[] }).rows;
+    const rows = (result as { rows: T[] }).rows;
+
+    // Store in cache if cacheable and not aborted
+    if (this.isCacheable(sql) && !signal?.aborted) {
+      this.queryCache.set(sql, rows);
+    }
+
+    return rows;
   }
 
   /**
@@ -159,7 +180,15 @@ export class WorkerBridge {
         request.reject(new Error('Worker terminated'));
       }
       this.pendingRequests.clear();
+      this.queryCache.clear();
     }
+  }
+
+  /**
+   * Clear all cached query results
+   */
+  clearQueryCache(): void {
+    this.queryCache.clear();
   }
 
   /**
@@ -173,6 +202,10 @@ export class WorkerBridge {
     if (!this.worker) {
       throw new Error('WorkerBridge not initialized. Call initialize() first.');
     }
+  }
+
+  private isCacheable(sql: string): boolean {
+    return sql.trimStart().toUpperCase().startsWith('SELECT');
   }
 
   private generateId(): string {

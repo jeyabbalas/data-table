@@ -13,6 +13,7 @@ const createMockBridge = () => ({
   loadData: vi.fn().mockResolvedValue(undefined),
   terminate: vi.fn(),
   isInitialized: vi.fn().mockReturnValue(true),
+  clearQueryCache: vi.fn(),
 });
 
 describe('StateActions — Undo/Redo Integration', () => {
@@ -556,6 +557,7 @@ function createDerivedMockBridge(typeMap: Record<string, string> = {}) {
     exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
     terminate: vi.fn(),
     isInitialized: vi.fn().mockReturnValue(true),
+    clearQueryCache: vi.fn(),
   };
 }
 

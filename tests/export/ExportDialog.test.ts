@@ -30,6 +30,7 @@ const mockBridge = {
   loadData: vi.fn().mockResolvedValue({ schema: [], rowCount: 0 }),
   exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
   destroy: vi.fn(),
+  clearQueryCache: vi.fn(),
 } as any;
 
 const testSchema: ColumnSchema[] = [

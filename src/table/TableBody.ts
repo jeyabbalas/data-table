@@ -60,6 +60,7 @@ export class TableBody {
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
   private rowElementMap: Map<number, HTMLElement> = new Map();
+  private readonly MAX_ROW_CACHE = 500;
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
@@ -421,8 +422,30 @@ export class TableBody {
       rows.forEach((row, index) => {
         this.rowDataCache.set(start + index, row);
       });
+
+      // Evict distant rows to bound memory usage
+      this.evictDistantRows(start, end);
     } catch (error) {
       console.error('Error fetching rows:', error);
+    }
+  }
+
+  /**
+   * Evict cached rows furthest from the visible range to bound memory.
+   */
+  private evictDistantRows(visibleStart: number, visibleEnd: number): void {
+    if (this.rowDataCache.size <= this.MAX_ROW_CACHE) return;
+
+    const indices = [...this.rowDataCache.keys()];
+    indices.sort((a, b) => {
+      const distA = Math.min(Math.abs(a - visibleStart), Math.abs(a - visibleEnd));
+      const distB = Math.min(Math.abs(b - visibleStart), Math.abs(b - visibleEnd));
+      return distB - distA; // Most distant first
+    });
+
+    const toRemove = indices.slice(0, this.rowDataCache.size - this.MAX_ROW_CACHE);
+    for (const idx of toRemove) {
+      this.rowDataCache.delete(idx);
     }
   }
 

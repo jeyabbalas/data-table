@@ -33,6 +33,8 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
+  abortHandler?: (() => void) | null;
 }
 
 export class WorkerBridge {
@@ -222,13 +224,14 @@ export class WorkerBridge {
       const id = this.generateId();
 
       // Handle abort signal
+      let abortHandler: (() => void) | null = null;
       if (signal) {
         if (signal.aborted) {
           reject(new Error('Operation aborted'));
           return;
         }
 
-        signal.addEventListener('abort', () => {
+        abortHandler = () => {
           this.pendingRequests.delete(id);
           // Send cancel message to worker
           const cancelMessage: WorkerMessage = {
@@ -238,14 +241,27 @@ export class WorkerBridge {
           };
           this.worker?.postMessage(cancelMessage);
           reject(new Error('Operation aborted'));
-        });
+        };
+        signal.addEventListener('abort', abortHandler);
       }
 
-      this.pendingRequests.set(id, { resolve, reject, onProgress });
+      this.pendingRequests.set(id, {
+        resolve, reject, onProgress,
+        signal, abortHandler,
+      });
 
       const message: WorkerMessage = { id, type, payload };
       this.worker!.postMessage(message);
     });
+  }
+
+  /** Remove the abort listener for a completed request. */
+  private cleanupRequest(id: string): void {
+    const request = this.pendingRequests.get(id);
+    if (request?.signal && request.abortHandler) {
+      request.signal.removeEventListener('abort', request.abortHandler);
+    }
+    this.pendingRequests.delete(id);
   }
 
   private handleMessage(event: MessageEvent<WorkerResponse>): void {
@@ -259,12 +275,12 @@ export class WorkerBridge {
 
     switch (type) {
       case 'result':
-        this.pendingRequests.delete(id);
+        this.cleanupRequest(id);
         request.resolve(payload);
         break;
 
       case 'error':
-        this.pendingRequests.delete(id);
+        this.cleanupRequest(id);
         request.reject(new Error((payload as { message: string }).message));
         break;
 

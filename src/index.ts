@@ -229,6 +229,10 @@ export type { AddColumnButtonOptions } from './derived/AddColumnButton';
 export { CodeMirrorExpressionEditor } from './sql-editor/CodeMirrorExpressionEditor';
 export { DUCKDB_FUNCTIONS } from './sql-editor/duckdbFunctions';
 
+// Performance monitoring
+export { PerfMonitor } from './core/PerfMonitor';
+export type { PerfMark, PerfResult } from './core/PerfMonitor';
+
 // Worker types (for advanced usage)
 export type {
   WorkerMessage,

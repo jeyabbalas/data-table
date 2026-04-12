@@ -467,9 +467,15 @@ export class TableContainer {
       return;
     }
 
-    // Escape: clear focus (stop propagation so other Escape handlers don't fire)
+    // Escape: clear focus, but yield to open panels first
     if (e.key === 'Escape') {
       if (this.state.focusedCell.get()) {
+        // If a panel is open, let Escape close it instead of clearing focus.
+        // Modals (SQLFilterModal, DerivedColumnModal, DerivedColumnEditPanel) use
+        // capture-phase handlers and are already handled before this point.
+        if (this.filterPanel?.getIsOpen() || this.presetPanel?.getIsOpen()) {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         this.actions?.clearFocusedCell();

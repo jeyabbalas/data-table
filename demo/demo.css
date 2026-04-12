@@ -284,3 +284,59 @@ button:disabled {
     color: #94a3b8;
   }
 }
+
+/* ===========================================
+   Responsive — Tablet
+   =========================================== */
+
+@media (max-width: 768px) {
+  body {
+    padding: 1.5rem 2rem;
+  }
+
+  .table-wrapper {
+    height: 70vh;
+  }
+
+  .btn--secondary {
+    margin-left: 0;
+  }
+}
+
+/* ===========================================
+   Responsive — Mobile
+   =========================================== */
+
+@media (max-width: 480px) {
+  body {
+    padding: 1rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .table-wrapper {
+    height: 65vh;
+  }
+
+  input[type="text"],
+  input[type="file"] {
+    min-width: 0;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .test-info {
+    display: none;
+  }
+}

@@ -112,6 +112,10 @@ export class TableContainer {
   // Suppress header→body scroll sync during programmatic smooth scrolling
   private suppressReverseScrollSync = false;
 
+  // ARIA live region for screen reader announcements
+  private liveRegion: HTMLElement | null = null;
+  private pendingLiveUpdate = false;
+
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
 
@@ -172,6 +176,14 @@ export class TableContainer {
     }
 
     this.element.appendChild(this.bodyScroll);
+
+    // Create aria-live region for screen reader announcements
+    this.liveRegion = document.createElement('div');
+    this.liveRegion.setAttribute('role', 'status');
+    this.liveRegion.setAttribute('aria-live', 'polite');
+    this.liveRegion.setAttribute('aria-atomic', 'true');
+    this.liveRegion.className = `${this.resolvedOptions.classPrefix}-sr-only`;
+    this.element.appendChild(this.liveRegion);
 
     // Create hidden columns gutter after body
     if (this.actions) {
@@ -234,6 +246,8 @@ export class TableContainer {
     el.className = `${this.resolvedOptions.classPrefix}-root`;
     el.setAttribute('role', 'table');
     el.setAttribute('aria-label', 'Data table');
+    el.setAttribute('aria-rowcount', '0');
+    el.setAttribute('aria-colcount', '0');
     el.setAttribute('tabindex', '0');
     return el;
   }
@@ -702,6 +716,58 @@ export class TableContainer {
   }
 
   // =========================================
+  // ARIA Live Region
+  // =========================================
+
+  /**
+   * Schedule a live region update, coalescing rapid-fire signal changes
+   * into a single announcement per animation frame.
+   */
+  private scheduleLiveRegionUpdate(): void {
+    if (this.pendingLiveUpdate) return;
+    this.pendingLiveUpdate = true;
+    requestAnimationFrame(() => {
+      this.pendingLiveUpdate = false;
+      if (!this.destroyed) {
+        this.updateLiveRegion();
+      }
+    });
+  }
+
+  /**
+   * Update the aria-live region text to announce current table state.
+   */
+  private updateLiveRegion(): void {
+    if (!this.liveRegion) return;
+
+    const filters = this.state.filters.get();
+    const totalRows = this.state.totalRows.get();
+    const filteredRows = this.state.filteredRows.get();
+    const sortColumns = this.state.sortColumns.get();
+
+    const parts: string[] = [];
+
+    // Filter announcement
+    if (filters.length > 0) {
+      parts.push(
+        `${filters.length} ${filters.length === 1 ? 'filter' : 'filters'} active, showing ${filteredRows.toLocaleString()} of ${totalRows.toLocaleString()} rows`
+      );
+    } else {
+      parts.push(`Showing all ${totalRows.toLocaleString()} rows`);
+    }
+
+    // Sort announcement
+    if (sortColumns.length > 0) {
+      const sortDescriptions = sortColumns.map(
+        (s) => `${s.column} ${s.direction === 'asc' ? 'ascending' : 'descending'}`
+      );
+      parts.push(`sorted by ${sortDescriptions.join(', then ')}`);
+    }
+
+    this.liveRegion.textContent = parts.join(', ');
+  }
+
+  // =========================================
   // State Subscriptions
   // =========================================
 
@@ -771,6 +837,38 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubPinned);
+
+    // Update aria-rowcount when total rows change
+    const unsubAriaRows = this.state.totalRows.subscribe((total) => {
+      if (!this.destroyed) {
+        this.element.setAttribute('aria-rowcount', String(total));
+      }
+    });
+    this.unsubscribes.push(unsubAriaRows);
+
+    // Update aria-colcount when schema changes
+    const unsubAriaCols = this.state.schema.subscribe((schema) => {
+      if (!this.destroyed) {
+        this.element.setAttribute('aria-colcount', String(schema.length));
+      }
+    });
+    this.unsubscribes.push(unsubAriaCols);
+
+    // Update live region on filter/sort/filteredRows changes
+    const unsubLiveFilters = this.state.filters.subscribe(() => {
+      if (!this.destroyed) this.scheduleLiveRegionUpdate();
+    });
+    this.unsubscribes.push(unsubLiveFilters);
+
+    const unsubLiveFilteredRows = this.state.filteredRows.subscribe(() => {
+      if (!this.destroyed) this.scheduleLiveRegionUpdate();
+    });
+    this.unsubscribes.push(unsubLiveFilteredRows);
+
+    const unsubLiveSort = this.state.sortColumns.subscribe(() => {
+      if (!this.destroyed) this.scheduleLiveRegionUpdate();
+    });
+    this.unsubscribes.push(unsubLiveSort);
 
     // Clamp focused cell when row count shrinks
     const unsubFocusClamp = this.state.filteredRows.subscribe(() => {
@@ -950,6 +1048,10 @@ export class TableContainer {
     const tableName = this.state.tableName.get();
     const columnWidths = this.state.columnWidths.get();
 
+    // Update ARIA table dimensions
+    this.element.setAttribute('aria-rowcount', String(this.state.totalRows.get()));
+    this.element.setAttribute('aria-colcount', String(schema.length));
+
     // Destroy filter panel (will be recreated lazily on next filter click)
     if (this.filterPanel) {
       this.filterPanel.destroy();
@@ -993,6 +1095,7 @@ export class TableContainer {
         for (const colName of visibleColumns) {
           const colSchema = schema.find((s) => s.name === colName);
           if (colSchema) {
+            const schemaIndex = schema.findIndex((s) => s.name === colName);
             const columnHeader = new ColumnHeader(
               colSchema,
               this.state,
@@ -1001,6 +1104,7 @@ export class TableContainer {
                 classPrefix: this.resolvedOptions.classPrefix,
                 onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
                 onDerivedIconClick: (column, buttonEl) => this.handleDerivedIconClick(column, buttonEl),
+                colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
               }
             );
             this.columnHeaders.push(columnHeader);

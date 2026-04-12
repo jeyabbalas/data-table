@@ -63,6 +63,9 @@ export class TableBody {
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
+  // Cached column name -> 1-based schema index for aria-colindex
+  private colIndexMap: Map<string, number> = new Map();
+
   private readonly rowHeight: number;
   private readonly classPrefix: string;
   private readonly cellRenderer: CellRenderer;
@@ -99,6 +102,9 @@ export class TableBody {
   async initialize(): Promise<void> {
     if (this.destroyed) return;
 
+    // Build initial column index map for aria-colindex
+    this.rebuildColIndexMap();
+
     // Set total rows (use filteredRows when filters are active)
     const filters = this.state.filters.get();
     const effectiveTotal = filters.length > 0
@@ -134,9 +140,28 @@ export class TableBody {
   // =========================================
 
   /**
+   * Rebuild the column name -> 1-based schema index map.
+   */
+  private rebuildColIndexMap(): void {
+    this.colIndexMap.clear();
+    const schema = this.state.schema.get();
+    for (let i = 0; i < schema.length; i++) {
+      this.colIndexMap.set(schema[i].name, i + 1);
+    }
+  }
+
+  /**
    * Subscribe to state signals that require re-render
    */
   private subscribeToState(): void {
+    // Rebuild column index map when schema changes
+    const unsubSchema = this.state.schema.subscribe(() => {
+      if (!this.destroyed) {
+        this.rebuildColIndexMap();
+      }
+    });
+    this.unsubscribes.push(unsubSchema);
+
     // Re-fetch when visible columns change
     const unsubVisibleCols = this.state.visibleColumns.subscribe(() => {
       if (!this.destroyed) {
@@ -521,8 +546,10 @@ export class TableBody {
 
         if (selectedRows.has(i)) {
           rowEl.classList.add(selectedClass);
+          rowEl.setAttribute('aria-selected', 'true');
         } else {
           rowEl.classList.remove(selectedClass);
+          rowEl.removeAttribute('aria-selected');
         }
 
         if (hoveredRow === i) {
@@ -621,12 +648,14 @@ export class TableBody {
         }
       }
 
-      // Clear any stale classes
+      // Clear any stale classes and ARIA attributes
       rowEl.classList.remove(
         `${this.classPrefix}-row--selected`,
         `${this.classPrefix}-row--hover`,
         `${this.classPrefix}-row--loading`
       );
+      rowEl.removeAttribute('aria-selected');
+      rowEl.removeAttribute('aria-rowindex');
     } else {
       // Create new row
       rowEl = document.createElement('div');
@@ -654,12 +683,14 @@ export class TableBody {
     // When reused, new listeners will be attached via attachRowEventListeners
     const cleanEl = rowEl.cloneNode(true) as HTMLElement;
 
-    // Clear stale state
+    // Clear stale state and ARIA attributes
     cleanEl.classList.remove(
       `${this.classPrefix}-row--selected`,
       `${this.classPrefix}-row--hover`,
       `${this.classPrefix}-row--loading`
     );
+    cleanEl.removeAttribute('aria-rowindex');
+    cleanEl.removeAttribute('aria-selected');
 
     // Clear cell-level focus class
     const focusClass = `${this.classPrefix}-cell--focused`;
@@ -684,6 +715,7 @@ export class TableBody {
     schemaMap: Map<string, ColumnSchema>
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
+    rowEl.setAttribute('aria-rowindex', String(index + 1));
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
 
     const columnWidths = this.state.columnWidths.get();
@@ -707,6 +739,12 @@ export class TableBody {
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
       const cellEl = cells[i] as HTMLElement;
+
+      // ARIA: 1-based column index in full schema
+      const ariaColIdx = this.colIndexMap.get(colName);
+      if (ariaColIdx !== undefined) {
+        cellEl.setAttribute('aria-colindex', String(ariaColIdx));
+      }
 
       // Apply dynamic width
       const width = columnWidths.get(colName) ?? 150;
@@ -745,6 +783,7 @@ export class TableBody {
     rowEl.className = `${this.classPrefix}-row ${this.classPrefix}-row--loading`;
     rowEl.style.height = `${this.rowHeight}px`;
     rowEl.setAttribute('data-row-index', String(index));
+    rowEl.setAttribute('aria-rowindex', String(index + 1));
 
     const placeholderCell = document.createElement('div');
     placeholderCell.className = `${this.classPrefix}-cell`;
@@ -829,8 +868,10 @@ export class TableBody {
     for (const [index, rowEl] of this.rowElementMap) {
       if (selectedRows.has(index)) {
         rowEl.classList.add(selectedClass);
+        rowEl.setAttribute('aria-selected', 'true');
       } else {
         rowEl.classList.remove(selectedClass);
+        rowEl.removeAttribute('aria-selected');
       }
     }
   }

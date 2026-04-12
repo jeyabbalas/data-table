@@ -26,6 +26,8 @@ export interface ColumnHeaderOptions {
   onFilterClick?: (column: string, buttonElement: HTMLElement) => void;
   /** Called when the f(x) icon on a derived column is clicked */
   onDerivedIconClick?: (columnName: string, buttonElement: HTMLElement) => void;
+  /** 1-based column index in the full schema (for aria-colindex) */
+  colIndex?: number;
 }
 
 /**
@@ -105,7 +107,10 @@ export class ColumnHeader {
       el.classList.add(`${this.classPrefix}-col-header--derived`);
     }
     el.setAttribute('role', 'columnheader');
-    el.setAttribute('aria-label', `${this.column.name}, ${this.column.type}`);
+    el.setAttribute('aria-label', this.buildAriaLabel());
+    if (this.options.colIndex !== undefined) {
+      el.setAttribute('aria-colindex', String(this.options.colIndex));
+    }
     el.setAttribute('data-column', this.column.name);
 
     // Name row container
@@ -419,6 +424,9 @@ export class ColumnHeader {
       `${this.classPrefix}-col-action-btn--active`,
       hasFilter
     );
+
+    // Update aria-label to reflect current sort/filter state
+    this.element.setAttribute('aria-label', this.buildAriaLabel());
   }
 
   /**
@@ -483,6 +491,40 @@ export class ColumnHeader {
   }
 
   // =========================================
+  // ARIA
+  // =========================================
+
+  /**
+   * Build a descriptive aria-label including sort and filter state.
+   */
+  private buildAriaLabel(): string {
+    const parts: string[] = [`${this.column.name}, ${this.column.type}`];
+
+    const sortColumns = this.state.sortColumns.get();
+    const sortIndex = sortColumns.findIndex((s) => s.column === this.column.name);
+    if (sortIndex !== -1) {
+      const direction = sortColumns[sortIndex].direction === 'asc' ? 'ascending' : 'descending';
+      if (sortColumns.length > 1) {
+        parts.push(`sorted ${direction} (priority ${sortIndex + 1})`);
+      } else {
+        parts.push(`sorted ${direction}`);
+      }
+    }
+
+    const filtersByCol = this.state.filtersByColumn.get();
+    const colFilters = filtersByCol.get(this.column.name);
+    if (colFilters && colFilters.length > 0) {
+      if (colFilters.length === 1) {
+        parts.push('filtered');
+      } else {
+        parts.push(`${colFilters.length} filters`);
+      }
+    }
+
+    return parts.join(', ');
+  }
+
+  // =========================================
   // Public API
   // =========================================
 
@@ -526,6 +568,9 @@ export class ColumnHeader {
       this.element.setAttribute('aria-sort', isAsc ? 'ascending' : 'descending');
       this.sortButton.setAttribute('title', isAsc ? 'Sort descending' : 'Remove sort');
     }
+
+    // Update aria-label to reflect current sort/filter state
+    this.element.setAttribute('aria-label', this.buildAriaLabel());
   }
 
   /**

@@ -42,6 +42,7 @@ export class DerivedColumnEditPanel {
   private isOpen = false;
   private destroyed = false;
   private expressionValidated = false;
+  private validationVersion = 0;
   private updating = false;
 
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -416,6 +417,7 @@ export class DerivedColumnEditPanel {
       // Listen for expression changes to reset validation
       this.removeEditorInputListener();
       this.editorInputHandler = () => {
+        this.validationVersion++;
         this.expressionValidated = false;
         this.typePreview.textContent = '';
         this.typePreview.style.color = '';
@@ -567,11 +569,16 @@ export class DerivedColumnEditPanel {
       return;
     }
 
+    // Capture version so we can detect stale results if the editor is
+    // modified while the async validation is in-flight.
+    const versionAtStart = ++this.validationVersion;
+
     this.validateBtn.disabled = true;
     this.validateBtn.textContent = 'Validating…';
 
     try {
       const result = await this.actions.validateExpression(expression);
+      if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
         this.typePreview.textContent = `Type: ${result.type} (${result.originalType})`;
         this.typePreview.style.color = '';
@@ -584,15 +591,18 @@ export class DerivedColumnEditPanel {
         this.currentEditor.setError(result.error ?? 'Validation failed');
       }
     } catch (err) {
+      if (this.validationVersion !== versionAtStart) return; // stale
       const msg = err instanceof Error ? err.message : String(err);
       this.typePreview.textContent = msg;
       this.typePreview.style.color = 'var(--dt-error)';
       this.expressionValidated = false;
       this.currentEditor.setError(msg);
     } finally {
-      this.validateBtn.disabled = false;
-      this.validateBtn.textContent = 'Validate';
-      this.updateButtonState();
+      if (this.validationVersion === versionAtStart) {
+        this.validateBtn.disabled = false;
+        this.validateBtn.textContent = 'Validate';
+        this.updateButtonState();
+      }
     }
   }
 

@@ -2548,6 +2548,14 @@ body.dt-column-dragging * {
   background: rgba(239, 68, 68, 0.06);
 }
 
+.dt-filter-preset-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+}
+
 .dt-filter-preset-action-btn:focus {
   outline: 2px solid var(--dt-primary);
   outline-offset: 1px;

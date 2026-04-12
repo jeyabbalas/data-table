@@ -252,6 +252,20 @@ describe('serializeFilter / deserializeFilter', () => {
     expect(serializeFilter(filter)).toEqual(filter);
     expect(deserializeFilter(serializeFilter(filter))).toEqual(filter);
   });
+
+  it('returns null for unknown filter type', () => {
+    const unknownFilter = { type: 'future-type', column: 'x', value: 42 } as unknown as Parameters<typeof deserializeFilter>[0];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = deserializeFilter(unknownFilter);
+
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Unknown filter type during deserialization:',
+      'future-type',
+    );
+    warnSpy.mockRestore();
+  });
 });
 
 // =========================================

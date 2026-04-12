@@ -39,6 +39,7 @@ export class SQLFilterModal {
   private destroyed = false;
   private validated = false;
   private applying = false;
+  private validationVersion = 0;
   private scrollLockHandler: ((e: Event) => void) | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -270,6 +271,7 @@ export class SQLFilterModal {
     // Listen for input changes to reset validation
     this.removeEditorInputListener();
     this.editorInputHandler = () => {
+      this.validationVersion++;
       this.validated = false;
       this.previewEl.textContent = '';
       this.previewEl.style.color = '';
@@ -308,12 +310,17 @@ export class SQLFilterModal {
     const sql = this.currentEditor.getValue().trim();
     if (!sql) return;
 
+    // Capture version so we can detect stale results if the editor is
+    // modified while the async validation is in-flight.
+    const versionAtStart = ++this.validationVersion;
+
     this.validateBtn.disabled = true;
     this.validateBtn.textContent = 'Validating\u2026';
     this.currentEditor.setError(null);
 
     try {
       const result = await this.actions.validateSQLFilter(sql);
+      if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
         this.previewEl.textContent = `${result.matchCount!.toLocaleString()} rows match`;
         this.previewEl.style.color = 'var(--dt-success)';
@@ -325,15 +332,18 @@ export class SQLFilterModal {
         this.validated = false;
       }
     } catch (err) {
+      if (this.validationVersion !== versionAtStart) return; // stale
       const msg = err instanceof Error ? err.message : String(err);
       this.previewEl.textContent = msg;
       this.previewEl.style.color = 'var(--dt-error)';
       this.currentEditor.setError(msg);
       this.validated = false;
     } finally {
-      this.validateBtn.disabled = false;
-      this.validateBtn.textContent = 'Validate';
-      this.updateApplyButtonState();
+      if (this.validationVersion === versionAtStart) {
+        this.validateBtn.disabled = false;
+        this.validateBtn.textContent = 'Validate';
+        this.updateApplyButtonState();
+      }
     }
   }
 

@@ -99,8 +99,10 @@ export function serializeFilter(filter: Filter): SerializedFilter {
   }
 }
 
-/** Convert a serialized filter back to a live Filter with Date objects restored */
-export function deserializeFilter(filter: SerializedFilter): Filter {
+/** Convert a serialized filter back to a live Filter with Date objects restored.
+ *  Returns null for unknown filter types (e.g. from a newer library version or
+ *  corrupted data) — callers must filter out nulls. */
+export function deserializeFilter(filter: SerializedFilter): Filter | null {
   switch (filter.type) {
     case 'range':
       return {
@@ -124,6 +126,9 @@ export function deserializeFilter(filter: SerializedFilter): Filter {
     case 'pattern':
     case 'raw-sql':
       return filter;
+    default:
+      console.warn('Unknown filter type during deserialization:', (filter as Record<string, unknown>).type);
+      return null;
   }
 }
 

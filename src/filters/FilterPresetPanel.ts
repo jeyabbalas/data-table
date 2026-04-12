@@ -449,10 +449,42 @@ export class FilterPresetPanel {
     deleteBtn.className = `${p}-filter-preset-action-btn ${p}-filter-preset-action-btn--delete`;
     deleteBtn.type = 'button';
     deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', () => this.handleDelete(preset.id));
+
+    // Inline confirmation for destructive delete action
+    const deleteConfirmDiv = document.createElement('div');
+    deleteConfirmDiv.className = `${p}-filter-preset-delete-confirm`;
+    deleteConfirmDiv.style.display = 'none';
+
+    const confirmText = document.createElement('span');
+    confirmText.textContent = 'Delete?';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = `${p}-filter-preset-action-btn ${p}-filter-preset-action-btn--delete`;
+    confirmBtn.type = 'button';
+    confirmBtn.textContent = 'Yes';
+    confirmBtn.addEventListener('click', () => this.handleDelete(preset.id));
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = `${p}-filter-preset-action-btn`;
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'No';
+    cancelBtn.addEventListener('click', () => {
+      deleteConfirmDiv.style.display = 'none';
+      deleteBtn.style.display = '';
+    });
+
+    deleteConfirmDiv.appendChild(confirmText);
+    deleteConfirmDiv.appendChild(confirmBtn);
+    deleteConfirmDiv.appendChild(cancelBtn);
+
+    deleteBtn.addEventListener('click', () => {
+      deleteBtn.style.display = 'none';
+      deleteConfirmDiv.style.display = 'flex';
+    });
 
     actionsEl.appendChild(loadBtn);
     actionsEl.appendChild(deleteBtn);
+    actionsEl.appendChild(deleteConfirmDiv);
     item.appendChild(actionsEl);
 
     return item;

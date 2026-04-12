@@ -11,7 +11,13 @@ import type { Filter } from './FilterTypes';
 import type { SortColumn } from '../core/types';
 import type { StateActions } from '../core/Actions';
 import { serializeFilter, deserializeFilter } from '../persistence/SessionStore';
+import type { SerializedFilter } from '../persistence/types';
 import type { FilterPreset, FilterPresetCollection } from './FilterPresetTypes';
+
+/** Known filter type discriminants for import validation */
+const KNOWN_FILTER_TYPES = new Set([
+  'range', 'point', 'set', 'not-set', 'null', 'not-null', 'pattern', 'raw-sql',
+]);
 
 export class FilterPresetManager {
   readonly presets: Signal<FilterPreset[]>;
@@ -57,7 +63,7 @@ export class FilterPresetManager {
     const preset = this.presets.get().find((p) => p.id === id);
     if (!preset) return;
 
-    const filters = preset.filters.map(deserializeFilter);
+    const filters = preset.filters.map(deserializeFilter).filter((f): f is Filter => f !== null);
     actions.loadFilterPreset(filters, preset.sortColumns);
   }
 
@@ -149,12 +155,34 @@ export class FilterPresetManager {
         continue;
       }
 
+      // Validate individual filters — reject objects with unknown/missing types
+      const validatedFilters: unknown[] = [];
+      let filterErrors = 0;
+      for (const f of p.filters as unknown[]) {
+        if (typeof f !== 'object' || f === null) { filterErrors++; continue; }
+        const fObj = f as Record<string, unknown>;
+        if (typeof fObj.type !== 'string' || !KNOWN_FILTER_TYPES.has(fObj.type)) { filterErrors++; continue; }
+        if (typeof fObj.column !== 'string' || !fObj.column) { filterErrors++; continue; }
+        if (fObj.type === 'raw-sql' && (typeof fObj.sql !== 'string' || typeof fObj.id !== 'string')) {
+          filterErrors++;
+          continue;
+        }
+        validatedFilters.push(f);
+      }
+      if (filterErrors > 0) {
+        errors.push(`Preset ${i}: skipped ${filterErrors} invalid filter(s)`);
+      }
+      if (validatedFilters.length === 0 && (p.filters as unknown[]).length > 0) {
+        errors.push(`Preset ${i}: no valid filters`);
+        continue;
+      }
+
       valid.push({
         id: crypto.randomUUID(),
         name: (p.name as string).trim(),
         description:
           typeof p.description === 'string' ? p.description.trim() || undefined : undefined,
-        filters: p.filters,
+        filters: validatedFilters as SerializedFilter[],
         sortColumns: Array.isArray(p.sortColumns) ? p.sortColumns : undefined,
         createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
         updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now(),

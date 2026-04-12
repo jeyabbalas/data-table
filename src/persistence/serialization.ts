@@ -6,6 +6,7 @@
  */
 
 import type { TableState, HiddenColumnInfo } from '../core/State';
+import type { Filter } from '../filters/FilterTypes';
 import type { SessionSnapshot, SerializedStateSnapshot } from './types';
 import { SNAPSHOT_VERSION } from './types';
 import { serializeFilter, deserializeFilter } from './SessionStore';
@@ -57,7 +58,7 @@ export function deserializeStateSnapshot(
 
   const filters = s.filters
     .map(deserializeFilter)
-    .filter(f => f.type === 'raw-sql' || effectiveValid.has(f.column));
+    .filter((f): f is Filter => f !== null && (f.type === 'raw-sql' || effectiveValid.has(f.column)));
 
   const sortColumns = s.sortColumns.filter(sc => effectiveValid.has(sc.column));
 
@@ -176,7 +177,7 @@ export function restoreStateFromSnapshot(
   // they must bypass column validation to survive session restore.
   const filters = snapshot.filters
     .map(deserializeFilter)
-    .filter((f) => f.type === 'raw-sql' || validColumns.has(f.column));
+    .filter((f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)));
 
   // Sort: drop stale column references
   const sortColumns = snapshot.sortColumns.filter((s) =>

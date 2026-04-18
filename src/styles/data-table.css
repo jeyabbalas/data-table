@@ -2147,6 +2147,16 @@
   cursor: grabbing;
 }
 
+/* Active column-resize drag. Scoped to the table root so the cursor / selection lock
+   never leaks onto the host page. The `!important` on cursor is required because
+   `.dt-col-resize-handle` itself declares `cursor: col-resize !important`, and we need
+   the same cursor to win on every descendant (cells, header chrome) during the drag. */
+.dt-root.dt-resizing,
+.dt-root.dt-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 .dt-drop-indicator {
   position: absolute;
   top: 0;

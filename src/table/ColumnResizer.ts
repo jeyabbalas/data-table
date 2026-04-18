@@ -53,6 +53,7 @@ export class ColumnResizer {
   private startX = 0;
   private startWidth = 0;
   private detached = false;
+  private root: HTMLElement | null = null;
 
   private readonly minWidth: number;
   private readonly maxWidth: number;
@@ -92,6 +93,17 @@ export class ColumnResizer {
   // =========================================
   // Handle Management
   // =========================================
+
+  /**
+   * Resolve (and cache) the nearest `.{prefix}-root` ancestor. Lazy so that the
+   * header may not yet be attached to the DOM at construction time.
+   */
+  private resolveRoot(): HTMLElement {
+    if (this.root) return this.root;
+    const root = this.header.closest(`.${this.classPrefix}-root`);
+    this.root = (root as HTMLElement) ?? this.header.ownerDocument.documentElement;
+    return this.root;
+  }
 
   /**
    * Create and attach the resize handle to the header
@@ -164,9 +176,8 @@ export class ColumnResizer {
       this.handle.classList.add(`${this.classPrefix}-col-resize-handle--active`);
     }
 
-    // Add resize cursor to body during drag
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    // Scope the resize cursor / selection lock to the table root, never the host body.
+    this.resolveRoot().classList.add(`${this.classPrefix}-resizing`);
 
     // Attach document-level listeners for drag continuation
     document.addEventListener('mousemove', this.boundMouseMove);
@@ -218,9 +229,7 @@ export class ColumnResizer {
       this.handle.classList.remove(`${this.classPrefix}-col-resize-handle--active`);
     }
 
-    // Restore cursor and user select
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    this.resolveRoot().classList.remove(`${this.classPrefix}-resizing`);
 
     // Remove document-level listeners
     document.removeEventListener('mousemove', this.boundMouseMove);

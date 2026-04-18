@@ -18,6 +18,13 @@ export type ExportScope = 'all' | 'filtered' | 'selected';
 export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /**
+   * Unique per-instance identifier mixed into element IDs so two tables on
+   * the same page don't collide on `aria-labelledby` targets. Normally
+   * supplied by `createDataTable()`; defaults to `''` for standalone/test
+   * construction.
+   */
+  instanceId?: string;
 }
 
 export class ExportDialog {
@@ -25,6 +32,7 @@ export class ExportDialog {
   private destroyed = false;
   private isOpen = false;
   private readonly prefix: string;
+  private readonly instanceId: string;
 
   // Source file base name (without extension) for export filenames
   private sourceName: string | null = null;
@@ -69,6 +77,7 @@ export class ExportDialog {
     options: ExportDialogOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.instanceId = options.instanceId ?? '';
     this.element = this.createElement();
   }
 
@@ -91,7 +100,7 @@ export class ExportDialog {
     dialog.className = `${p}-export-dialog`;
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-export-title`);
+    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-export-title`);
     this.dialogEl = dialog;
     backdrop.appendChild(dialog);
 
@@ -101,7 +110,7 @@ export class ExportDialog {
 
     const title = document.createElement('span');
     title.className = `${p}-export-title`;
-    title.id = `${p}-export-title`;
+    title.id = `${p}-${this.instanceId}-export-title`;
     title.textContent = 'Export Data';
 
     const closeBtn = document.createElement('button');

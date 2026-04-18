@@ -141,7 +141,10 @@ describe('ExportDialog', () => {
       const dialogEl = dialog.getElement().querySelector('.dt-export-dialog');
       expect(dialogEl?.getAttribute('role')).toBe('dialog');
       expect(dialogEl?.getAttribute('aria-modal')).toBe('true');
-      expect(dialogEl?.getAttribute('aria-labelledby')).toBe('dt-export-title');
+      const labelledBy = dialogEl?.getAttribute('aria-labelledby');
+      expect(labelledBy).toMatch(/-export-title$/);
+      // Integrity: aria-labelledby must resolve to an element inside this dialog.
+      expect(dialog.getElement().querySelector(`#${labelledBy}`)).not.toBeNull();
     });
 
     it('should have title', () => {

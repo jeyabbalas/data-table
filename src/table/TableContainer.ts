@@ -24,6 +24,7 @@ import { SQLFilterModal } from '../filters/SQLFilterModal';
 import { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { copyRowsToClipboard } from '../export/Clipboard';
+import { nextInstanceId } from '../core/instanceId';
 
 /**
  * Options for configuring the TableContainer
@@ -35,6 +36,12 @@ export interface TableContainerOptions {
   headerHeight?: number;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /**
+   * Unique per-instance identifier mixed into modal element IDs so two
+   * tables on the same page don't collide on `aria-labelledby` targets.
+   * Auto-generated if omitted.
+   */
+  instanceId?: string;
   /** Show filter bar between header and body (default: true) */
   showFilterBar?: boolean;
   /** Called when a filter is removed via filter chip, for clearing visualization state */
@@ -138,6 +145,7 @@ export class TableContainer {
       rowHeight: 32,
       headerHeight: 120,
       classPrefix: 'dt',
+      instanceId: '',
       showFilterBar: true,
       onFilterRemove: undefined as unknown as (column: string) => void,
       editorFactory: undefined as unknown as ExpressionEditorFactory,
@@ -147,6 +155,9 @@ export class TableContainer {
       portalTarget: undefined as unknown as HTMLElement,
       ...options,
     };
+    if (!this.resolvedOptions.instanceId) {
+      this.resolvedOptions.instanceId = nextInstanceId();
+    }
 
     // Create DOM structure
     this.element = this.createRootElement();
@@ -1349,6 +1360,7 @@ export class TableContainer {
     if (!this.derivedModal) {
       this.derivedModal = new DerivedColumnModal(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
         onCreated: () => this.scrollToRightEnd(),
       });
@@ -1377,6 +1389,7 @@ export class TableContainer {
     if (!this.sqlFilterModal) {
       this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
@@ -1401,6 +1414,7 @@ export class TableContainer {
     if (!this.sqlFilterModal) {
       this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());

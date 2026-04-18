@@ -184,7 +184,10 @@ describe('DerivedColumnModal', () => {
     const dialog = modal.getElement().querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog!.getAttribute('aria-modal')).toBe('true');
-    expect(dialog!.getAttribute('aria-labelledby')).toBe('dt-derived-modal-title');
+    const labelledBy = dialog!.getAttribute('aria-labelledby');
+    expect(labelledBy).toMatch(/-derived-modal-title$/);
+    // Integrity: aria-labelledby must resolve to an element inside this modal.
+    expect(modal.getElement().querySelector(`#${labelledBy}`)).not.toBeNull();
   });
 
   it('has title "New Derived Column"', () => {

@@ -36,6 +36,7 @@ import type { TableState } from './core/State';
 import { createTableState } from './core/State';
 import { StateActions, type LoadDataOptions } from './core/Actions';
 import { UndoManager } from './core/UndoManager';
+import { nextInstanceId } from './core/instanceId';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableEvents } from './core/TableEvents';
@@ -118,6 +119,12 @@ export interface CreateDataTableOptions {
 
   /** CSS class prefix. Default: `'dt'`. */
   classPrefix?: string;
+  /**
+   * Unique identifier mixed into element IDs so multiple tables on the
+   * same page don't collide on `aria-labelledby` targets. Auto-generated
+   * if omitted. Primarily useful for deterministic test IDs.
+   */
+  instanceId?: string;
   /** Custom expression editor factory (replaces the CodeMirror-based default). */
   editorFactory?: ExpressionEditorFactory;
   /** Row height in pixels. Default: 32. */
@@ -138,6 +145,13 @@ export interface DataTable {
   readonly bridge: WorkerBridge;
   /** UI container. Rarely needed directly; prefer the event bus. */
   readonly container: TableContainer;
+
+  /**
+   * Unique per-instance identifier, e.g. `'t1-a3f9'`. Mixed into modal
+   * element IDs to keep two tables on the same page from colliding on
+   * `aria-labelledby` targets.
+   */
+  readonly instanceId: string;
 
   /**
    * Load a new data source into the table. Re-uses the existing worker.
@@ -259,6 +273,9 @@ export async function createDataTable(
     presetManager = presetConfig.manager ?? new FilterPresetManager();
   }
 
+  // -------- Instance id (multi-instance DOM ID isolation) --------
+  const instanceId = opts.instanceId ?? nextInstanceId();
+
   // -------- UI container --------
   const tableContainer = new TableContainer(
     opts.container,
@@ -269,6 +286,7 @@ export async function createDataTable(
       rowHeight: opts.rowHeight,
       headerHeight: opts.headerHeight,
       classPrefix: opts.classPrefix ?? 'dt',
+      instanceId,
       showExpressionFilter: opts.expressionFilter !== false,
       editorFactory: opts.editorFactory,
       presetManager: presetManager ?? undefined,
@@ -512,6 +530,7 @@ export async function createDataTable(
     if (!exportDialog) {
       exportDialog = new ExportDialog(state, bridge, {
         classPrefix: opts.classPrefix ?? 'dt',
+        instanceId,
       });
       (opts.portalTarget ?? document.body).appendChild(exportDialog.getElement());
     }
@@ -750,6 +769,7 @@ export async function createDataTable(
     actions,
     bridge,
     container: tableContainer,
+    instanceId,
     loadData: loadDataImpl,
     on(event, handler) {
       emitter.on(event, handler);

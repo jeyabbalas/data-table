@@ -14,6 +14,13 @@ import type { DerivedColumnDef, VectorDataType } from './types';
 
 export interface DerivedColumnModalOptions {
   classPrefix?: string;
+  /**
+   * Unique per-instance identifier mixed into element IDs so two tables on
+   * the same page don't collide on `aria-labelledby` targets. Normally
+   * supplied by `TableContainer`/`createDataTable()`; defaults to `''`
+   * for standalone/test construction.
+   */
+  instanceId?: string;
   /** Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEditor. */
   editorFactory?: ExpressionEditorFactory;
   /** Called after a derived column is successfully created. */
@@ -40,6 +47,7 @@ export class DerivedColumnModal {
   private createBtn!: HTMLButtonElement;
 
   private readonly prefix: string;
+  private readonly instanceId: string;
   private editorFactory?: ExpressionEditorFactory;
   private onCreated?: () => void;
   private currentEditor: ExpressionEditor | null = null;
@@ -58,6 +66,7 @@ export class DerivedColumnModal {
     options?: DerivedColumnModalOptions
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
+    this.instanceId = options?.instanceId ?? '';
     this.editorFactory = options?.editorFactory;
     this.onCreated = options?.onCreated;
     this.element = this.createElement();
@@ -82,7 +91,7 @@ export class DerivedColumnModal {
     dialog.className = `${p}-derived-modal-dialog`;
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-derived-modal-title`);
+    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-derived-modal-title`);
     backdrop.appendChild(dialog);
 
     dialog.appendChild(this.createHeader());
@@ -101,7 +110,7 @@ export class DerivedColumnModal {
 
     const title = document.createElement('span');
     title.className = `${p}-derived-modal-title`;
-    title.id = `${p}-derived-modal-title`;
+    title.id = `${p}-${this.instanceId}-derived-modal-title`;
     title.textContent = 'New Derived Column';
 
     const closeBtn = document.createElement('button');

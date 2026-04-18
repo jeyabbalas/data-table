@@ -14,6 +14,13 @@ import type { RawSQLFilter } from './FilterTypes';
 
 export interface SQLFilterModalOptions {
   classPrefix?: string;
+  /**
+   * Unique per-instance identifier mixed into element IDs so two tables on
+   * the same page don't collide on `aria-labelledby` targets. Normally
+   * supplied by `TableContainer`/`createDataTable()`; defaults to `''`
+   * for standalone/test construction.
+   */
+  instanceId?: string;
   /** Custom editor factory. If omitted, uses CodeMirrorExpressionEditor. */
   editorFactory?: ExpressionEditorFactory;
 }
@@ -32,6 +39,7 @@ export class SQLFilterModal {
   private removeConfirmDiv!: HTMLElement;
 
   private readonly prefix: string;
+  private readonly instanceId: string;
   private editorFactory?: ExpressionEditorFactory;
   private currentEditor: ExpressionEditor | null = null;
   private editorInputHandler: (() => void) | null = null;
@@ -53,6 +61,7 @@ export class SQLFilterModal {
     options?: SQLFilterModalOptions
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
+    this.instanceId = options?.instanceId ?? '';
     this.editorFactory = options?.editorFactory;
     this.element = this.createElement();
   }
@@ -76,7 +85,7 @@ export class SQLFilterModal {
     dialog.className = `${p}-sql-filter-modal-dialog`;
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-sql-filter-modal-title`);
+    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-sql-filter-modal-title`);
     backdrop.appendChild(dialog);
 
     dialog.appendChild(this.createHeader());
@@ -95,7 +104,7 @@ export class SQLFilterModal {
 
     this.titleEl = document.createElement('span');
     this.titleEl.className = `${p}-sql-filter-modal-title`;
-    this.titleEl.id = `${p}-sql-filter-modal-title`;
+    this.titleEl.id = `${p}-${this.instanceId}-sql-filter-modal-title`;
     this.titleEl.textContent = 'New Expression Filter';
 
     const closeBtn = document.createElement('button');

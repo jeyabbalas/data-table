@@ -29,7 +29,6 @@ import {
 import type { DateFormatContext } from './DateFormatters';
 import {
   SharedHistogramBase,
-  COLORS,
   FONTS,
   PADDING,
   LAYOUT,
@@ -257,7 +256,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const labelY = this.height - 3;
       ctx.font = FONTS.axis;
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = COLORS.axisText;
+      ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
       const label = this.data.isNumericBinning && this.data.min
         ? formatDateForType(this.data.min, this.column.type)

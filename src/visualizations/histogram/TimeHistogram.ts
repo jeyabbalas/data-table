@@ -23,7 +23,6 @@ import type { TimeHistogramData } from './TimeHistogramData';
 import { formatTimeOnlyLabel, formatTimeOnlyLabelNumeric, formatTimeOnlyRange, formatTimeOnlyRangeNumeric } from './DateFormatters';
 import {
   SharedHistogramBase,
-  COLORS,
   FONTS,
   PADDING,
   LAYOUT,
@@ -237,7 +236,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       const labelY = this.height - 3;
       ctx.font = FONTS.axis;
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = COLORS.axisText;
+      ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
       const label = this.data.isNumericBinning
         ? formatTimeOnlyLabelNumeric(this.data.bins[0].binStartSeconds)

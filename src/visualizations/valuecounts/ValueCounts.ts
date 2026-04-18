@@ -19,46 +19,66 @@ import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
+import { resolveColor, resolveScope } from '../palette';
 
 // =========================================
-// Constants
+// Palette
 // =========================================
 
-/** Color palette for visualization elements - consistent with Histogram */
-const COLORS = {
-  // Category bars - consistent with Histogram
-  barFill: '#3b82f6', // Blue-500 (same as Histogram)
-  barHover: '#2563eb', // Blue-600 (hover state)
-  barFaded: '#93c5fd', // Blue-300 (when other is hovered)
+interface ValueCountsColors {
+  barFill: string;
+  barHover: string;
+  barFaded: string;
+  otherFill: string;
+  otherHover: string;
+  otherFaded: string;
+  nullFill: string;
+  nullHover: string;
+  nullFaded: string;
+  barFadedCrossfilter: string;
+  otherFadedCrossfilter: string;
+  nullFadedCrossfilter: string;
+  segmentBorder: string;
+  labelText: string;
+  labelTextLight: string;
+  axisText: string;
+  selectionIndicator: string;
+  nullSelectionIndicator: string;
+}
 
-  // "Other" segment - neutral gray
-  otherFill: '#94a3b8', // Slate-400
-  otherHover: '#64748b', // Slate-500
-  otherFaded: '#cbd5e1', // Slate-300
-
-  // Null segment - amber (integrated as category)
-  nullFill: '#f59e0b', // Amber-500
-  nullHover: '#d97706', // Amber-600
-  nullFaded: '#fcd34d', // Amber-300
-
-  // Crossfilter ghost segments (unfilled portion).
-  // 50% opacity (vs 25% in Histogram) so white segment labels remain legible.
-  barFadedCrossfilter: 'rgba(59, 130, 246, 0.5)',
-  otherFadedCrossfilter: 'rgba(148, 163, 184, 0.5)',
-  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.5)',
-
-  // Segment borders for demarcation
-  segmentBorder: '#e2e8f0', // Slate-200 (light border)
-
-  // Text colors
-  labelText: '#1e293b', // Slate-800 (dark text for light backgrounds)
-  labelTextLight: '#ffffff', // White (for dark backgrounds)
-  axisText: '#64748b', // Slate-500
-
-  // Selection indicator
-  selectionIndicator: '#2563eb', // Blue-600
-  nullSelectionIndicator: '#d97706', // Amber-600
-};
+/**
+ * Resolve the value-counts palette from CSS custom properties. Called once
+ * per render() so host-app `--dt-*` overrides and dark-mode flips propagate
+ * on the next paint. Crossfilter alphas use the 50% stops (vs histogram's
+ * 20%) so white segment labels remain legible on partially-filled bars.
+ */
+function getValueCountsColors(canvas: HTMLCanvasElement): ValueCountsColors {
+  const scope = resolveScope(canvas);
+  const r = (cssVar: string, fallback: string) => resolveColor(scope, cssVar, fallback);
+  return {
+    barFill: r('--dt-primary', '#3b82f6'),
+    barHover: r('--dt-primary-hover', '#2563eb'),
+    barFaded: r('--dt-primary-alpha-30', '#93c5fd'),
+    otherFill: r('--dt-neutral', '#94a3b8'),
+    otherHover: r('--dt-neutral-hover', '#64748b'),
+    otherFaded: r('--dt-neutral-soft', '#cbd5e1'),
+    nullFill: r('--dt-accent', '#f59e0b'),
+    nullHover: r('--dt-accent-hover', '#d97706'),
+    nullFaded: r('--dt-accent-soft', '#fcd34d'),
+    barFadedCrossfilter: r('--dt-primary-alpha-50', 'rgba(59, 130, 246, 0.5)'),
+    otherFadedCrossfilter: r('--dt-neutral-soft', 'rgba(148, 163, 184, 0.5)'),
+    nullFadedCrossfilter: r('--dt-accent-soft', 'rgba(245, 158, 11, 0.5)'),
+    segmentBorder: r('--dt-border', '#e2e8f0'),
+    labelText: r('--dt-text', '#1e293b'),
+    // labelTextLight stays white in both light and dark modes: it's the
+    // foreground for solid-color bar segments, which are always dark enough
+    // relative to white text regardless of theme.
+    labelTextLight: r('--dt-on-error', '#ffffff'),
+    axisText: r('--dt-text-secondary', '#64748b'),
+    selectionIndicator: r('--dt-primary-hover', '#2563eb'),
+    nullSelectionIndicator: r('--dt-accent-hover', '#d97706'),
+  };
+}
 
 /** Typography settings */
 const FONTS = {
@@ -165,6 +185,9 @@ export class ValueCounts extends BaseVisualization {
 
   // Folded count overrides for Other segment after render-time category folding
   private foldedCountOverrides: Map<string, number> | null = null;
+
+  // Palette resolved from CSS custom properties at the top of each render().
+  private colors!: ValueCountsColors;
 
   constructor(
     container: HTMLElement,
@@ -310,6 +333,10 @@ export class ValueCounts extends BaseVisualization {
     if (this.destroyed) return;
 
     this.clear();
+
+    // Resolve palette fresh so host-app --dt-* overrides and dark-mode
+    // flips propagate on the next render cycle.
+    this.colors = getValueCountsColors(this.canvas);
 
     if (!this.data) {
       return;
@@ -827,37 +854,37 @@ export class ValueCounts extends BaseVisualization {
       let fadedCrossfilterColor: string;
 
       if (bgSegment.isNull) {
-        fadedCrossfilterColor = COLORS.nullFadedCrossfilter;
+        fadedCrossfilterColor = this.colors.nullFadedCrossfilter;
         if (isHovered) {
-          fillColor = COLORS.nullHover;
+          fillColor = this.colors.nullHover;
         } else if (isSelected) {
-          fillColor = COLORS.nullHover;
+          fillColor = this.colors.nullHover;
         } else if (hasSelection || hasHover) {
-          fillColor = COLORS.nullFaded;
+          fillColor = this.colors.nullFaded;
         } else {
-          fillColor = COLORS.nullFill;
+          fillColor = this.colors.nullFill;
         }
       } else if (bgSegment.isOther || bgSegment.isAllUnique) {
-        fadedCrossfilterColor = COLORS.otherFadedCrossfilter;
+        fadedCrossfilterColor = this.colors.otherFadedCrossfilter;
         if (isHovered) {
-          fillColor = COLORS.otherHover;
+          fillColor = this.colors.otherHover;
         } else if (isSelected) {
-          fillColor = COLORS.otherHover;
+          fillColor = this.colors.otherHover;
         } else if (hasSelection || hasHover) {
-          fillColor = COLORS.otherFaded;
+          fillColor = this.colors.otherFaded;
         } else {
-          fillColor = COLORS.otherFill;
+          fillColor = this.colors.otherFill;
         }
       } else {
-        fadedCrossfilterColor = COLORS.barFadedCrossfilter;
+        fadedCrossfilterColor = this.colors.barFadedCrossfilter;
         if (isHovered) {
-          fillColor = COLORS.barHover;
+          fillColor = this.colors.barHover;
         } else if (isSelected) {
-          fillColor = COLORS.barHover;
+          fillColor = this.colors.barHover;
         } else if (hasSelection || hasHover) {
-          fillColor = COLORS.barFaded;
+          fillColor = this.colors.barFaded;
         } else {
-          fillColor = COLORS.barFill;
+          fillColor = this.colors.barFill;
         }
       }
 
@@ -917,7 +944,7 @@ export class ValueCounts extends BaseVisualization {
 
       // Draw border on right edge (except for last segment)
       if (i < numSegments - 1) {
-        ctx.strokeStyle = COLORS.segmentBorder;
+        ctx.strokeStyle = this.colors.segmentBorder;
         ctx.lineWidth = LAYOUT.segmentBorderWidth;
         ctx.beginPath();
         ctx.moveTo(pos.x + pos.width + 0.5, this.barArea.y);
@@ -1018,7 +1045,7 @@ export class ValueCounts extends BaseVisualization {
     if (!label) return;
 
     // Use white text on dark backgrounds (blue, gray), dark text on amber
-    ctx.fillStyle = segment.isNull ? COLORS.labelText : COLORS.labelTextLight;
+    ctx.fillStyle = segment.isNull ? this.colors.labelText : this.colors.labelTextLight;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -1049,8 +1076,8 @@ export class ValueCounts extends BaseVisualization {
         : this.renderSegments;
       const segment = layoutSegments[selectedIdx];
       ctx.fillStyle = segment?.isNull
-        ? COLORS.nullSelectionIndicator
-        : COLORS.selectionIndicator;
+        ? this.colors.nullSelectionIndicator
+        : this.colors.selectionIndicator;
 
       ctx.fillRect(
         pos.x,
@@ -1066,7 +1093,7 @@ export class ValueCounts extends BaseVisualization {
    */
   private drawEmptyState(): void {
     const ctx = this.ctx;
-    ctx.fillStyle = COLORS.axisText;
+    ctx.fillStyle = this.colors.axisText;
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

@@ -14,45 +14,58 @@ import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import { formatCount, formatPercent, truncateText } from '../utils';
+import { resolveColor, resolveScope } from '../palette';
 
 // =========================================
-// Constants
+// Palette
 // =========================================
 
-/** Color palette for histogram rendering */
-export const COLORS = {
-  // Bars
-  barFill: '#3b82f6', // Blue-500 (primary bars)
-  barHover: '#2563eb', // Blue-600 (hover state)
-  barFaded: '#93c5fd', // Blue-300 (non-hovered bars when one is hovered)
+export interface HistogramColors {
+  barFill: string;
+  barHover: string;
+  barFaded: string;
+  nullFill: string;
+  nullHover: string;
+  nullFaded: string;
+  axisText: string;
+  axisTextHover: string;
+  axisLine: string;
+  chartBg: string;
+  brushOverlay: string;
+  brushBorder: string;
+  selectionIndicator: string;
+  nullSelectionIndicator: string;
+  barFadedCrossfilter: string;
+  nullFadedCrossfilter: string;
+}
 
-  // Null bar
-  nullFill: '#f59e0b', // Amber-500
-  nullHover: '#d97706', // Amber-600
-  nullFaded: '#fcd34d', // Amber-300 (when histogram bar is hovered)
-
-  // Text
-  axisText: '#64748b', // Slate-500
-  axisTextHover: '#334155', // Slate-700 (hover stats)
-
-  // Axis line
-  axisLine: '#e2e8f0', // Slate-200 (light gray)
-
-  // Background
-  chartBg: 'transparent',
-
-  // Brush selection
-  brushOverlay: 'rgba(37, 99, 235, 0.2)', // Blue-600 with low alpha
-  brushBorder: 'rgba(37, 99, 235, 0.6)', // Blue-600 with medium alpha
-
-  // Selection indicator
-  selectionIndicator: '#2563eb', // Blue-600 (same as barHover)
-  nullSelectionIndicator: '#d97706', // Amber-600 (same as nullHover)
-
-  // Crossfilter ghost bars (unfilled portion)
-  barFadedCrossfilter: 'rgba(59, 130, 246, 0.25)', // Blue-500 at 25%
-  nullFadedCrossfilter: 'rgba(245, 158, 11, 0.25)', // Amber-500 at 25%
-};
+/**
+ * Resolve the histogram palette from CSS custom properties. Called once per
+ * `render()` so host-app theme overrides and dark-mode flips propagate on
+ * the next paint. Fallback hex values match the pre-variable defaults.
+ */
+export function getHistogramColors(canvas: HTMLCanvasElement): HistogramColors {
+  const scope = resolveScope(canvas);
+  const r = (cssVar: string, fallback: string) => resolveColor(scope, cssVar, fallback);
+  return {
+    barFill: r('--dt-primary', '#3b82f6'),
+    barHover: r('--dt-primary-hover', '#2563eb'),
+    barFaded: r('--dt-primary-alpha-30', '#93c5fd'),
+    nullFill: r('--dt-accent', '#f59e0b'),
+    nullHover: r('--dt-accent-hover', '#d97706'),
+    nullFaded: r('--dt-accent-soft', '#fcd34d'),
+    axisText: r('--dt-text-secondary', '#64748b'),
+    axisTextHover: r('--dt-text', '#334155'),
+    axisLine: r('--dt-border', '#e2e8f0'),
+    chartBg: 'transparent',
+    brushOverlay: r('--dt-primary-alpha-20', 'rgba(37, 99, 235, 0.2)'),
+    brushBorder: r('--dt-primary-alpha-50', 'rgba(37, 99, 235, 0.6)'),
+    selectionIndicator: r('--dt-primary-hover', '#2563eb'),
+    nullSelectionIndicator: r('--dt-accent-hover', '#d97706'),
+    barFadedCrossfilter: r('--dt-primary-alpha-20', 'rgba(59, 130, 246, 0.25)'),
+    nullFadedCrossfilter: r('--dt-accent-soft', 'rgba(245, 158, 11, 0.25)'),
+  };
+}
 
 /** Typography settings */
 export const FONTS = {
@@ -152,6 +165,10 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     lastClickY: 0,
   };
 
+  // Palette resolved from CSS custom properties at the top of each render().
+  // Do not read before render() has run at least once.
+  protected colors!: HistogramColors;
+
   // Computed layout (updated on render)
   protected chartArea = { x: 0, y: 0, width: 0, height: 0 };
   protected nullBarArea = { x: 0, y: 0, width: 0, height: 0 };
@@ -198,6 +215,10 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (this.destroyed || this.width === 0 || this.height === 0) return;
 
     this.clear();
+
+    // Resolve palette fresh so host-app --dt-* overrides and dark-mode
+    // flips propagate on the next render cycle.
+    this.colors = getHistogramColors(this.canvas);
 
     // Check for all-null state (bins empty but nulls exist)
     if (this.data && this.data.bins.length === 0 && this.data.nullCount > 0) {
@@ -340,7 +361,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     const ctx = this.ctx;
     const y = this.chartArea.y + this.chartArea.height;
 
-    ctx.strokeStyle = COLORS.axisLine;
+    ctx.strokeStyle = this.colors.axisLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(this.chartArea.x, y);
@@ -398,15 +419,15 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
       let fillColor: string;
       if (isThisHovered) {
-        fillColor = COLORS.barHover;
+        fillColor = this.colors.barHover;
       } else if (isThisSelected) {
-        fillColor = COLORS.barHover;
+        fillColor = this.colors.barHover;
       } else if (hasBrush && isInsideBrush) {
-        fillColor = COLORS.barHover;
+        fillColor = this.colors.barHover;
       } else if (hasSelection || hasBrush || isAnyHovered) {
-        fillColor = COLORS.barFaded;
+        fillColor = this.colors.barFaded;
       } else {
-        fillColor = COLORS.barFill;
+        fillColor = this.colors.barFill;
       }
 
       if (hasCrossfilter) {
@@ -426,7 +447,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
             pos.width,
             bgBarHeight,
             LAYOUT.barRadius,
-            COLORS.barFadedCrossfilter
+            this.colors.barFadedCrossfilter
           );
         }
 
@@ -529,13 +550,13 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     let fillColor: string;
     if (this.hoveredNull) {
-      fillColor = COLORS.nullHover;
+      fillColor = this.colors.nullHover;
     } else if (this.selectedNull) {
-      fillColor = COLORS.nullHover;
+      fillColor = this.colors.nullHover;
     } else if (hasSelection || hasBrush || isAnyHovered) {
-      fillColor = COLORS.nullFaded;
+      fillColor = this.colors.nullFaded;
     } else {
-      fillColor = COLORS.nullFill;
+      fillColor = this.colors.nullFill;
     }
 
     if (hasCrossfilter) {
@@ -544,7 +565,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
       const bgBarHeight = Math.max(LAYOUT.minBarHeight, bgHeightRatio * this.nullBarArea.height);
 
       this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - bgBarHeight,
-        this.nullBarArea.width, bgBarHeight, LAYOUT.barRadius, COLORS.nullFadedCrossfilter);
+        this.nullBarArea.width, bgBarHeight, LAYOUT.barRadius, this.colors.nullFadedCrossfilter);
 
       const fgHeightRatio = this.data.nullCount / maxCount;
       const fgBarHeight = Math.max(
@@ -601,14 +622,14 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
       const isInsideBrush = hasBrush && i >= brushStartIdx && i <= brushEndIdx;
 
       if (isSelected || isInsideBrush) {
-        ctx.fillStyle = COLORS.selectionIndicator;
+        ctx.fillStyle = this.colors.selectionIndicator;
         ctx.fillRect(pos.x, indicatorY, pos.width, indicatorHeight);
       }
     }
 
     // Draw indicator for null bar if selected
     if (this.selectedNull && this.data.nullCount > 0) {
-      ctx.fillStyle = COLORS.nullSelectionIndicator;
+      ctx.fillStyle = this.colors.nullSelectionIndicator;
       ctx.fillRect(
         this.nullBarArea.x,
         indicatorY,
@@ -628,7 +649,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     const centerX = this.nullBarArea.x + this.nullBarArea.width / 2;
     const labelY = this.height - 3;
 
-    ctx.fillStyle = COLORS.nullFill; // Amber color
+    ctx.fillStyle = this.colors.nullFill; // Amber color
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -647,7 +668,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     ctx.font = FONTS.axis;
     ctx.textBaseline = 'bottom';
-    ctx.fillStyle = COLORS.axisText;
+    ctx.fillStyle = this.colors.axisText;
 
     const minWidth = ctx.measureText(minLabel).width;
     const maxWidth = ctx.measureText(maxLabel).width;
@@ -688,7 +709,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
    */
   private drawEmptyState(): void {
     const ctx = this.ctx;
-    ctx.fillStyle = COLORS.axisText;
+    ctx.fillStyle = this.colors.axisText;
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -708,14 +729,14 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     const barHeight = this.height - PADDING.top - PADDING.bottom;
 
     // Determine color based on hover state
-    const fillColor = this.allNullHovered ? COLORS.nullHover : COLORS.nullFill;
+    const fillColor = this.allNullHovered ? this.colors.nullHover : this.colors.nullFill;
 
     // Draw full-width amber bar with rounded top corners
     this.drawRoundedBar(ctx, barX, barY, barWidth, barHeight, LAYOUT.barRadius, fillColor);
 
     // Draw axis line at bottom
     const axisY = barY + barHeight;
-    ctx.strokeStyle = COLORS.axisLine;
+    ctx.strokeStyle = this.colors.axisLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(barX, axisY);
@@ -724,7 +745,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     // Draw centered ∅ label below bar
     const labelY = this.height - 3;
-    ctx.fillStyle = COLORS.nullFill;
+    ctx.fillStyle = this.colors.nullFill;
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -1531,11 +1552,11 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (width <= 0) return;
 
     // Draw semi-transparent overlay
-    ctx.fillStyle = COLORS.brushOverlay;
+    ctx.fillStyle = this.colors.brushOverlay;
     ctx.fillRect(x, y, width, height);
 
     // Draw border
-    ctx.strokeStyle = COLORS.brushBorder;
+    ctx.strokeStyle = this.colors.brushBorder;
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, width, height);
   }

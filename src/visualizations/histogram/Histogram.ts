@@ -21,7 +21,6 @@ import {
 import type { HistogramData } from './HistogramData';
 import {
   SharedHistogramBase,
-  COLORS,
   FONTS,
   PADDING,
   LAYOUT,
@@ -278,7 +277,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       const labelY = this.height - 3;
       ctx.font = FONTS.axis;
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = COLORS.axisText;
+      ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
       const label = formatAxisValue(this.data.min);
       const centerX = this.chartArea.x + this.chartArea.width / 2;

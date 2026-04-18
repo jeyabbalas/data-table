@@ -23,7 +23,6 @@ import {
 import type { IntervalHistogramData } from './IntervalHistogramData';
 import {
   SharedHistogramBase,
-  COLORS,
   FONTS,
   PADDING,
   LAYOUT,
@@ -213,7 +212,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
       const labelY = this.height - 3;
       ctx.font = FONTS.axis;
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = COLORS.axisText;
+      ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
       const label = secondsToIntervalString(this.data.bins[0].binStartSeconds);
       const centerX = this.chartArea.x + this.chartArea.width / 2;

@@ -7,6 +7,13 @@
 
 export const VERSION = '0.1.0';
 
+// High-level facade — the recommended entry point for most consumers.
+// Wraps worker + state + actions + container + visualizations + persistence
+// + presets + undo/redo + export into a single `createDataTable()` call.
+export { createDataTable } from './DataTable';
+export type { DataTable, CreateDataTableOptions } from './DataTable';
+export type { TableEvents, TableEventName } from './core/TableEvents';
+
 // Core types
 export * from './core/types';
 
@@ -113,7 +120,7 @@ export {
 
 // Data layer
 export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
-export type { LoadOptions } from './data/WorkerBridge';
+export type { LoadOptions, WorkerBridgeOptions } from './data/WorkerBridge';
 
 // Query caching
 export { QueryCache } from './data/QueryCache';

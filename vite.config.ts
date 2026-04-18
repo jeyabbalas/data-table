@@ -31,13 +31,19 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'DataTable',
-      fileName: 'data-table',
-      formats: ['es'],
+      fileName: (format) => format === 'es' ? 'data-table.js' : 'data-table.cjs',
+      formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [],
+      // Externalize peer dependencies — consumers install them once in their app
+      // so they are not double-bundled.
+      external: [
+        /^@codemirror\//,
+        /^@lezer\//,
+        /^@duckdb\/duckdb-wasm/,
+      ],
       output: {
-        globals: {},
+        // No UMD build, so no globals mapping needed.
       },
     },
     sourcemap: true,

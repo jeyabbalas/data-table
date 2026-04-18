@@ -29,6 +29,20 @@ export interface LoadDataResult {
   schema: ColumnSchema[];
 }
 
+/**
+ * Construction options for {@link WorkerBridge}.
+ */
+export interface WorkerBridgeOptions {
+  /** Query cache configuration (LRU size, TTL). */
+  cache?: Partial<QueryCacheOptions>;
+  /**
+   * Maximum time (ms) to wait for the worker to signal ready and for
+   * DuckDB to initialize. Rejects `initialize()` with a descriptive
+   * error if exceeded. Default: 30000.
+   */
+  initializeTimeoutMs?: number;
+}
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -37,19 +51,26 @@ interface PendingRequest {
   abortHandler?: (() => void) | null;
 }
 
+const DEFAULT_INIT_TIMEOUT_MS = 30_000;
+
 export class WorkerBridge {
   private worker: Worker | null = null;
   private pendingRequests = new Map<string, PendingRequest>();
   private messageId = 0;
   private initPromise: Promise<void> | null = null;
   private queryCache: QueryCache;
+  private initializeTimeoutMs: number;
 
-  constructor(cacheOptions?: Partial<QueryCacheOptions>) {
-    this.queryCache = new QueryCache(cacheOptions);
+  constructor(options?: WorkerBridgeOptions) {
+    this.queryCache = new QueryCache(options?.cache);
+    this.initializeTimeoutMs = options?.initializeTimeoutMs ?? DEFAULT_INIT_TIMEOUT_MS;
   }
 
   /**
-   * Create the worker and wait for it to be ready
+   * Create the worker and wait for it to be ready.
+   *
+   * Rejects with a descriptive error if the worker fails to signal ready
+   * or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
    */
   async initialize(): Promise<void> {
     if (this.initPromise) {
@@ -57,6 +78,32 @@ export class WorkerBridge {
     }
 
     this.initPromise = new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        fn();
+      };
+
+      const timeoutHandle = setTimeout(() => {
+        settle(() => {
+          // Tear down the half-initialized worker so a later retry can rebuild.
+          if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
+          }
+          this.initPromise = null;
+          reject(
+            new Error(
+              `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms ` +
+                `(worker did not reach ready state or DuckDB failed to init). ` +
+                `If your app bundles the worker separately, verify it can import @duckdb/duckdb-wasm.`
+            )
+          );
+        });
+      }, this.initializeTimeoutMs);
+
       try {
         this.worker = new Worker(
           new URL('../worker/worker.ts', import.meta.url),
@@ -65,7 +112,7 @@ export class WorkerBridge {
 
         this.worker.onmessage = this.handleMessage.bind(this);
         this.worker.onerror = (error) => {
-          reject(new Error(`Worker error: ${error.message}`));
+          settle(() => reject(new Error(`Worker error: ${error.message}`)));
         };
 
         // Wait for worker ready signal
@@ -74,13 +121,13 @@ export class WorkerBridge {
             this.worker!.removeEventListener('message', readyHandler);
             // Now initialize DuckDB
             this.sendMessage('init', {})
-              .then(() => resolve())
-              .catch(reject);
+              .then(() => settle(() => resolve()))
+              .catch((err) => settle(() => reject(err)));
           }
         };
         this.worker.addEventListener('message', readyHandler);
       } catch (error) {
-        reject(error);
+        settle(() => reject(error));
       }
     });
 

@@ -267,6 +267,39 @@ Manual benchmarks: 1M row load, scroll FPS, filter apply latency, export speed, 
 
 ---
 
+## Phase 10: Library API Hardening (Completed)
+
+A senior review of the library's public API after Phases 0–9 identified
+portability gaps that would block a third-party app from embedding the
+table cleanly. Addressed in five tranches:
+
+**Tranche 1 — Publish readiness (`package.json`, `vite.config.ts`, `tsconfig.build.json`, `src/data/WorkerBridge.ts`):** Moved `@codemirror/*` and `@duckdb/duckdb-wasm` from `dependencies` to `peerDependencies` (CodeMirror optional). Removed the `"overrides": { "esbuild": "npm:esbuild-wasm@latest" }` that would propagate to every consumer's install tree. Added CJS output alongside ESM (`formats: ['es', 'cjs']`), externalized peers via regex in `rollupOptions.external` (bundle dropped from 835 KB → 405 KB ESM / 338 KB CJS). Added a `tsconfig.build.json` that emits `.d.ts` declarations. Added an `initializeTimeoutMs` (default 30s) to `WorkerBridge` so a crashed worker no longer hangs `initialize()` indefinitely. `WorkerBridge` constructor now takes `{ cache?, initializeTimeoutMs? }` (breaking: was `Partial<QueryCacheOptions>`, test updated).
+
+**Tranche 2 — CSS isolation (`src/styles/data-table.css`, `src/sql-editor/CodeMirrorExpressionEditor.ts`, `src/table/ColumnReorder.ts`):** CodeMirror autocomplete tooltips now carry a library-specific `dt-cm-autocomplete` class (via `autocompletion({ tooltipClass })`), scoping our CSS to our instances so host apps using CodeMirror elsewhere are untouched. Column-drag classes (`dt-column-dragging`, `dt-column-potential-drag`) are now toggled on the table root via `headerRow.closest('.dt-root')` instead of `<body>`; CSS selectors updated accordingly and `!important` removed. Modal backdrops use `z-index: var(--dt-z-modal, 1000)` so hosts can coordinate stacking. CSS custom properties defined on both `:root` (for body-appended modals) and `.dt-root` (for per-instance overrides without global pollution). Dark-mode variables likewise dual-scoped.
+
+**Tranche 3 — Configurable portal target (`src/table/TableContainer.ts`):** Added `portalTarget?: HTMLElement` option; a new `getPortalTarget()` helper replaces three `document.body.appendChild(...)` sites (derived-column modal and SQL filter modal). Defaults to `document.body` when omitted. Plumbed through the facade so consumers can route modals into their own portal container.
+
+**Tranche 4 — `createDataTable()` facade + typed events (`src/DataTable.ts`, `src/core/TableEvents.ts`, `src/index.ts`, `src/core/Actions.ts`, `demo/main.ts`):** New high-level facade that orchestrates bridge + state + actions + container + visualizations + crossfilter + interaction manager + autosave + presets + export dialog. Auto-attaches visualizations on schema changes (replaces the ~200-line `attachVisualizations()` that every consumer used to have to write). Unified `await table.destroy()` tears everything down in the right order; the facade tracks `ownsBridge` / `ownsSessionStore` so it doesn't terminate resources it didn't create. `TableEvents` is a typed event map (`filterChange`, `sortChange`, `columnChange`, `derivedChange`, `undoChange`, `loadStart`/`loadProgress`/`loadComplete`/`loadError`, `selectionChange`, `ready`, `destroy`) re-emitted from underlying signals via the existing `EventEmitter`. Feature toggles (`persistence`, `presets`, `undoRedo`, `expressionFilter`, `visualizations`, `exportDialog`) default true but can be disabled or supplied with config objects. `StateActions.loadData()` widened to accept `ArrayBuffer` (was `File | string`). `demo/main.ts` rewritten to use the facade: 730 LoC → 297 LoC (~80 of which is demo-specific Parquet caching + info-bar HTML).
+
+**Tranche 5 — Documentation (`README.md`, JSDoc on `createDataTable`, this section):** New consumer-facing README with quickstart, feature toggle table, event list, theming via CSS variables, multi-instance example (sharing a `WorkerBridge`), and an "Advanced: modular API" section that lists all building blocks for power users. JSDoc on the facade includes a working `createDataTable(…)` example that appears in VS Code autocomplete.
+
+**Key files (Phase 10):**
+- `src/DataTable.ts` — `createDataTable(opts)` factory and `DataTable` interface
+- `src/core/TableEvents.ts` — typed event map (defined as `type`, not `interface`, to satisfy `EventEmitter<Record<string, unknown>>` constraint)
+- `src/data/WorkerBridge.ts` — `WorkerBridgeOptions` with `cache` + `initializeTimeoutMs`; `initialize()` wraps ready-wait in `Promise.race` with timeout + worker teardown
+- `src/core/Actions.ts` — `loadData()` accepts `ArrayBuffer`
+- `src/table/TableContainer.ts` — `portalTarget` option + `getPortalTarget()` helper
+- `src/table/ColumnReorder.ts` — `resolveDragScope()` caches nearest `.dt-root` ancestor for drag-class toggling
+- `src/sql-editor/CodeMirrorExpressionEditor.ts` — `autocompletion({ tooltipClass })` for CSS isolation
+- `src/styles/data-table.css` — dual-scoped variables (`:root, .dt-root`), `--dt-z-modal` variable, CodeMirror tooltip selectors scoped to `.dt-cm-autocomplete`
+- `package.json` — peer dependencies, CJS + ESM exports, CJS output, removed esbuild override
+- `vite.config.ts` — `rollupOptions.external` for peer dep regex; `formats: ['es', 'cjs']`
+- `tsconfig.build.json` — emits `.d.ts` + `.d.ts.map` via `emitDeclarationOnly`
+- `demo/main.ts` — facade consumer (acceptance test for the new API)
+- `README.md` — user-facing documentation
+
+---
+
 ## Task Dependency Graph
 
 ```
@@ -288,6 +321,13 @@ Phase 9 (Polish):
   9.3 ARIA             (after 9.2)
   9.4 Responsive       (independent, nice-to-have)
   9.5 Performance      (after all features)
+
+Phase 10 (Library API Hardening — 2026-04-18):
+  10.1 Publish readiness    (package.json, vite.config, WorkerBridge timeout)
+  10.2 CSS isolation        (CodeMirror scope, drag scope, z-index var, dual-scope vars)
+  10.3 Portal target        (TableContainer.portalTarget)
+  10.4 createDataTable facade + typed events + demo rewrite
+  10.5 Documentation        (README, JSDoc, this section)
 ```
 
 **Recommended execution order:**

@@ -47,6 +47,13 @@ export interface TableContainerOptions {
   showExpressionFilter?: boolean;
   /** FilterPresetManager instance — enables the Presets button and preset panel */
   presetManager?: FilterPresetManager;
+  /**
+   * Where to mount fixed-position modals (derived column editor, SQL filter
+   * modal). Defaults to `document.body`. Pass your app's modal root container
+   * to keep the library's modals inside your stacking/portal hierarchy instead
+   * of at the top of the document.
+   */
+  portalTarget?: HTMLElement;
 }
 
 /**
@@ -137,6 +144,7 @@ export class TableContainer {
       showAddColumnButton: true,
       showExpressionFilter: true,
       presetManager: undefined as unknown as FilterPresetManager,
+      portalTarget: undefined as unknown as HTMLElement,
       ...options,
     };
 
@@ -1340,8 +1348,10 @@ export class TableContainer {
         editorFactory: this.resolvedOptions.editorFactory,
         onCreated: () => this.scrollToRightEnd(),
       });
-      // Append to document.body — fixed-position modals need body to avoid stacking context issues
-      document.body.appendChild(this.derivedModal.getElement());
+      // Mount in the configured portal target (defaults to <body>). Fixed-
+      // position modals need a root that isn't inside a transformed/filtered
+      // ancestor so they can cover the viewport without stacking-context surprises.
+      this.getPortalTarget().appendChild(this.derivedModal.getElement());
     }
 
     this.derivedModal.open();
@@ -1365,7 +1375,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         editorFactory: this.resolvedOptions.editorFactory,
       });
-      document.body.appendChild(this.sqlFilterModal.getElement());
+      this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
 
     this.sqlFilterModal.open();
@@ -1389,7 +1399,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         editorFactory: this.resolvedOptions.editorFactory,
       });
-      document.body.appendChild(this.sqlFilterModal.getElement());
+      this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
 
     this.sqlFilterModal.openForEdit(filterId);
@@ -1433,6 +1443,15 @@ export class TableContainer {
    * Smooth-scroll the body to the right end so the newly created column is visible.
    * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
    */
+  /**
+   * Resolve where fixed-position modals should mount. Callers use this
+   * instead of `document.body.appendChild(...)` so the host app can route
+   * our modals into its own portal container.
+   */
+  private getPortalTarget(): HTMLElement {
+    return this.resolvedOptions.portalTarget ?? document.body;
+  }
+
   private scrollToRightEnd(): void {
     // Wait for the re-render triggered by the new column
     requestAnimationFrame(() => {

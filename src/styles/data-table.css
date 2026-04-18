@@ -19,9 +19,21 @@
 
 /* ===========================================
    CSS Custom Properties (Theme Variables)
+   ===========================================
+
+   Scoping: variables are declared on BOTH `:root` and `.dt-root`.
+   - `:root` makes them available to body-appended elements (modals,
+     autocomplete tooltips) that are detached from the table DOM.
+   - `.dt-root` lets a consumer override variables per-instance, e.g.
+     `<div class="dt-root my-theme"> { --dt-primary: #10b981 }`, without
+     polluting the host page's global variable namespace.
+   Consumer-supplied overrides at `:root` win for global theming; overrides
+   at `.dt-root` win for that specific table (and its owned modals if the
+   consumer passes `portalTarget` into the same scope).
    =========================================== */
 
-:root {
+:root,
+.dt-root {
   /* Primary colors */
   --dt-primary: #2563eb;
   --dt-primary-hover: #1d4ed8;
@@ -63,11 +75,15 @@
   --dt-font-size: 0.875rem;
   --dt-font-size-sm: 0.75rem;
   --dt-font-size-xs: 0.7rem;
+
+  /* Stacking — override to coordinate with host-app modal layers. */
+  --dt-z-modal: 1000;
 }
 
 /* Dark mode - automatic based on system preference */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root,
+  .dt-root {
     /* Primary colors - slightly lighter for dark mode */
     --dt-primary: #3b82f6;
     --dt-primary-hover: #60a5fa;
@@ -1143,8 +1159,15 @@
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
 }
 
-/* Autocomplete tooltip (rendered at body level by CodeMirror) */
-.cm-tooltip.cm-tooltip-autocomplete {
+/*
+ * Autocomplete tooltip (rendered at document.body level by CodeMirror).
+ *
+ * We attach a library-specific class (`.dt-cm-autocomplete`) to our
+ * tooltip via `autocompletion({ tooltipClass })` in CodeMirrorExpressionEditor.
+ * Scoping the selector to that class prevents our styles from leaking into
+ * any other CodeMirror instance the host app may render.
+ */
+.dt-cm-autocomplete.cm-tooltip-autocomplete {
   background: var(--dt-bg);
   border: 1px solid var(--dt-border);
   border-radius: var(--dt-radius-sm);
@@ -1153,14 +1176,14 @@
   font-size: var(--dt-font-size-sm);
 }
 
-.cm-tooltip-autocomplete ul li[aria-selected] {
+.dt-cm-autocomplete.cm-tooltip-autocomplete ul li[aria-selected] {
   background: var(--dt-primary-light);
   color: var(--dt-text);
 }
 
 /* Dark mode adjustments */
 @media (prefers-color-scheme: dark) {
-  .cm-tooltip.cm-tooltip-autocomplete {
+  .dt-cm-autocomplete.cm-tooltip-autocomplete {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 }
@@ -1238,7 +1261,7 @@
 .dt-derived-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--dt-z-modal, 1000);
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);
@@ -1524,7 +1547,7 @@
 .dt-sql-filter-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--dt-z-modal, 1000);
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);
@@ -2045,15 +2068,16 @@
    Column Reordering
    =========================================== */
 
-body.dt-column-potential-drag,
-body.dt-column-dragging {
-  cursor: grabbing !important;
+/* Scoped to the table root so the grabbing cursor never leaks onto the host page. */
+.dt-root.dt-column-potential-drag,
+.dt-root.dt-column-dragging {
+  cursor: grabbing;
   user-select: none;
 }
 
-body.dt-column-potential-drag *,
-body.dt-column-dragging * {
-  cursor: grabbing !important;
+.dt-root.dt-column-potential-drag *,
+.dt-root.dt-column-dragging * {
+  cursor: grabbing;
 }
 
 .dt-drop-indicator {
@@ -2683,7 +2707,7 @@ body.dt-column-dragging * {
 .dt-export-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--dt-z-modal, 1000);
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);

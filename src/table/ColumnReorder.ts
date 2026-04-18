@@ -65,6 +65,10 @@ export class ColumnReorder {
   // Map of header elements to their mousedown handlers
   private headerHandlers = new Map<HTMLElement, (e: MouseEvent) => void>();
 
+  // Resolved at drag start so we can scope the drag classes to the table
+  // root instead of polluting <body>.
+  private dragScope: HTMLElement | null = null;
+
   constructor(
     private headerRow: HTMLElement,
     private onReorder: ReorderCallback,
@@ -79,6 +83,18 @@ export class ColumnReorder {
 
     // Create drop indicator element
     this.createDropIndicator();
+  }
+
+  /**
+   * Resolve the table root element that should carry the drag classes.
+   * Falls back to `<body>` only if no ancestor with the root class is found
+   * (should not happen in normal usage, but keeps behavior safe).
+   */
+  private resolveDragScope(): HTMLElement {
+    if (this.dragScope) return this.dragScope;
+    const root = this.headerRow.closest(`.${this.classPrefix}-root`);
+    this.dragScope = (root as HTMLElement) ?? document.body;
+    return this.dragScope;
   }
 
   // =========================================
@@ -155,8 +171,8 @@ export class ColumnReorder {
     this.draggedHeader = header;
     this.draggedColumn = columnName;
 
-    // Add class to show grabbing cursor immediately
-    document.body.classList.add(`${this.classPrefix}-column-potential-drag`);
+    // Add class to show grabbing cursor immediately (scoped to table root).
+    this.resolveDragScope().classList.add(`${this.classPrefix}-column-potential-drag`);
 
     // Prevent text selection during potential drag
     event.preventDefault();
@@ -199,8 +215,8 @@ export class ColumnReorder {
     this.isDragging = true;
     this.isPotentialDrag = false;
 
-    // Add visual feedback
-    document.body.classList.add(`${this.classPrefix}-column-dragging`);
+    // Add visual feedback (scoped to table root).
+    this.resolveDragScope().classList.add(`${this.classPrefix}-column-dragging`);
     this.draggedHeader?.classList.add(`${this.classPrefix}-col-header--dragging`);
   }
 
@@ -300,9 +316,10 @@ export class ColumnReorder {
    * Reset all drag state
    */
   private resetDragState(): void {
-    // Remove visual feedback
-    document.body.classList.remove(`${this.classPrefix}-column-dragging`);
-    document.body.classList.remove(`${this.classPrefix}-column-potential-drag`);
+    // Remove visual feedback (from the same scope we added it to).
+    const scope = this.resolveDragScope();
+    scope.classList.remove(`${this.classPrefix}-column-dragging`);
+    scope.classList.remove(`${this.classPrefix}-column-potential-drag`);
     this.draggedHeader?.classList.remove(`${this.classPrefix}-col-header--dragging`);
     this.hideDropIndicator();
 

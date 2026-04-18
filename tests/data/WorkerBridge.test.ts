@@ -17,10 +17,15 @@ describe('WorkerBridge', () => {
   });
 
   it('should accept cache options in constructor', () => {
-    const bridge = new WorkerBridge({ maxEntries: 50, ttlMs: 10_000 });
+    const bridge = new WorkerBridge({ cache: { maxEntries: 50, ttlMs: 10_000 } });
     expect(bridge).toBeInstanceOf(WorkerBridge);
     // clearQueryCache should work without error
     expect(() => bridge.clearQueryCache()).not.toThrow();
+  });
+
+  it('should accept initializeTimeoutMs in constructor', () => {
+    const bridge = new WorkerBridge({ initializeTimeoutMs: 5_000 });
+    expect(bridge).toBeInstanceOf(WorkerBridge);
   });
 
   it('should throw if query called before initialize', async () => {

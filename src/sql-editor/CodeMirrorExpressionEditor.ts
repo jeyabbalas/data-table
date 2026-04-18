@@ -31,8 +31,15 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
         // SQL with DuckDB dialect + schema — wrapped in Compartment for dynamic updates
         this.sqlCompartment.of(this.buildCompletionExtensions(context)),
 
-        // Autocompletion UI
-        autocompletion(),
+        // Autocompletion UI.
+        // `tooltipClass` attaches a library-specific class to the tooltip
+        // container (which CodeMirror mounts at document.body). That lets
+        // our CSS scope `.cm-tooltip-autocomplete` rules to our instances
+        // only, so they don't collide with any other CodeMirror editor in
+        // the host page.
+        autocompletion({
+          tooltipClass: () => `${this.prefix}-cm-autocomplete`,
+        }),
 
         // Standard keybindings + undo history
         keymap.of([...defaultKeymap, ...historyKeymap]),

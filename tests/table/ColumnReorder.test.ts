@@ -74,6 +74,9 @@ describe('ColumnReorder', () => {
 
   beforeEach(() => {
     container = document.createElement('div');
+    // Add dt-root class so ColumnReorder can scope drag classes to the
+    // table root instead of polluting <body>.
+    container.className = 'dt-root';
     document.body.appendChild(container);
 
     headerRow = document.createElement('div');
@@ -497,12 +500,14 @@ describe('ColumnReorder', () => {
         })
       );
 
-      expect(document.body.classList.contains('dt-column-dragging')).toBe(true);
+      expect(container.classList.contains('dt-column-dragging')).toBe(true);
+      // Critical isolation check: the class must NOT end up on <body>.
+      expect(document.body.classList.contains('dt-column-dragging')).toBe(false);
 
       // End drag
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 
-      expect(document.body.classList.contains('dt-column-dragging')).toBe(false);
+      expect(container.classList.contains('dt-column-dragging')).toBe(false);
 
       reorder.destroy();
     });

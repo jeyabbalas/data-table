@@ -187,7 +187,7 @@ export class FilterChip {
 
     // Clickable label for editing (used by raw-sql chips)
     if (this.onEdit) {
-      label.style.cursor = 'pointer';
+      label.classList.add(`${this.prefix}-filter-chip-label--clickable`);
       label.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!this.destroyed) {

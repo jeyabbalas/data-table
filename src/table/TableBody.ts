@@ -816,8 +816,7 @@ export class TableBody {
     rowEl.setAttribute('aria-rowindex', String(index + 1));
 
     const placeholderCell = document.createElement('div');
-    placeholderCell.className = `${this.classPrefix}-cell`;
-    placeholderCell.style.color = '#9ca3af';
+    placeholderCell.className = `${this.classPrefix}-cell ${this.classPrefix}-cell--placeholder`;
     placeholderCell.textContent = `Loading row ${index + 1}...`;
     rowEl.appendChild(placeholderCell);
 

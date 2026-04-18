@@ -1103,9 +1103,6 @@ export class TableContainer {
       const placeholder = document.createElement('div');
       placeholder.className = `${this.resolvedOptions.classPrefix}-placeholder`;
       placeholder.textContent = 'Load data to see the table';
-      placeholder.style.padding = '2rem';
-      placeholder.style.textAlign = 'center';
-      placeholder.style.color = '#6b7280';
       this.bodyContainer.appendChild(placeholder);
     } else {
       // Create header row container
@@ -1205,9 +1202,6 @@ export class TableContainer {
         // Fallback: show row count if no bridge/actions
         const bodyPlaceholder = document.createElement('div');
         bodyPlaceholder.className = `${this.resolvedOptions.classPrefix}-body-placeholder`;
-        bodyPlaceholder.style.padding = '2rem';
-        bodyPlaceholder.style.textAlign = 'center';
-        bodyPlaceholder.style.color = '#6b7280';
         bodyPlaceholder.textContent = `${this.state.totalRows.get().toLocaleString()} rows`;
         this.bodyContainer.appendChild(bodyPlaceholder);
       }

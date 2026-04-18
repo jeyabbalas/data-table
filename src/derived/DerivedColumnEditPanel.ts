@@ -194,8 +194,6 @@ export class DerivedColumnEditPanel {
 
     const vectorText = document.createElement('div');
     vectorText.className = `${p}-derived-edit-vector-text`;
-    vectorText.style.cssText =
-      'font-size: var(--dt-font-size-sm); color: var(--dt-text-secondary); padding: 0.5rem; background: var(--dt-bg-secondary); border-radius: var(--dt-radius-sm);';
 
     vectorSection.appendChild(vectorLabel);
     vectorSection.appendChild(vectorText);

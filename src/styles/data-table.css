@@ -373,6 +373,11 @@
   height: 10px;
 }
 
+/* Clickable filter chip label (toggled when an onEdit handler is wired). */
+.dt-filter-chip-label--clickable {
+  cursor: pointer;
+}
+
 /* SQL filter chip — clickable label */
 .dt-filter-chip-label--sql {
   cursor: pointer;
@@ -650,6 +655,10 @@
   text-overflow: ellipsis;
 }
 
+.dt-col-name--derived {
+  font-style: italic;
+}
+
 .dt-col-type {
   font-size: var(--dt-font-size-sm);
   color: var(--dt-text-secondary);
@@ -878,6 +887,16 @@
   height: 18px;
 }
 
+/* Italic serif "f" glyph for derived columns. The serif italic styling is a
+   deliberate typographic choice for the mathematical f(x) icon, intentionally
+   independent of the host font stack. */
+.dt-derived-fx-glyph {
+  font-family: 'Cambria', Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+}
+
 /* Active state: filled circle, white text — applied while edit panel is open */
 .dt-derived-icon-btn--active svg circle {
   fill: var(--dt-primary);
@@ -1005,6 +1024,14 @@
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-secondary);
   margin-bottom: 0.25rem;
+}
+
+.dt-derived-edit-vector-text {
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  padding: 0.5rem;
+  background: var(--dt-bg-secondary);
+  border-radius: var(--dt-radius-sm);
 }
 
 .dt-derived-edit-name-error {
@@ -2137,6 +2164,10 @@
   font-style: italic;
 }
 
+.dt-cell--placeholder {
+  color: var(--dt-text-tertiary);
+}
+
 .dt-cell--number {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -2785,7 +2816,8 @@
    Placeholder States
    =========================================== */
 
-.dt-placeholder {
+.dt-placeholder,
+.dt-body-placeholder {
   padding: 2rem;
   text-align: center;
   color: var(--dt-text-secondary);

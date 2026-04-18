@@ -142,7 +142,7 @@ export class ColumnHeader {
       iconBtn.setAttribute('title', 'Edit derived column');
       iconBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/>
-        <text x="12" y="16" font-size="14" font-weight="600" font-style="italic" font-family="Georgia, serif" fill="currentColor" text-anchor="middle">f</text>
+        <text x="12" y="16" class="${this.classPrefix}-derived-fx-glyph" fill="currentColor" text-anchor="middle">f</text>
       </svg>`;
       nameRow.appendChild(iconBtn);
       this.derivedIconBtn = iconBtn;
@@ -154,7 +154,7 @@ export class ColumnHeader {
     nameEl.textContent = this.column.name;
     nameEl.setAttribute('title', this.column.name); // Tooltip for truncated names
     if (this.column.isDerived) {
-      nameEl.style.fontStyle = 'italic';
+      nameEl.classList.add(`${this.classPrefix}-col-name--derived`);
     }
     nameRow.appendChild(nameEl);
 

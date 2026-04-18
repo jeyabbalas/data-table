@@ -55,7 +55,10 @@ export async function loadJSON(
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
   const timezone = options.timezone ?? 'UTC';
   if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw new Error(`Invalid timezone: ${timezone}`);
+    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
+      code: 'LOAD_INVALID_TIMEZONE',
+      details: { timezone },
+    });
   }
   await conn.query(`SET TimeZone = '${timezone}'`);
 
@@ -90,7 +93,10 @@ export async function loadJSON(
     if (options.sampleSize) {
       const n = Number(options.sampleSize);
       if (!Number.isInteger(n) || n <= 0) {
-        throw new Error('JSON sampleSize must be a positive integer');
+        throw Object.assign(new Error('JSON sampleSize must be a positive integer'), {
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'sampleSize' },
+        });
       }
       jsonOptions.push(`sample_size = ${n}`);
     }
@@ -98,7 +104,10 @@ export async function loadJSON(
     if (options.maxDepth) {
       const n = Number(options.maxDepth);
       if (!Number.isInteger(n) || n <= 0) {
-        throw new Error('JSON maxDepth must be a positive integer');
+        throw Object.assign(new Error('JSON maxDepth must be a positive integer'), {
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'maxDepth' },
+        });
       }
       jsonOptions.push(`maximum_depth = ${n}`);
     }

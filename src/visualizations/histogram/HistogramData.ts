@@ -10,6 +10,7 @@
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
+import { QueryError } from '../../core/errors';
 
 // Re-export for backward compatibility
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -495,8 +496,9 @@ export async function fetchHistogramData(
       distinctCount: stats.distinctCount,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to fetch histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    throw new QueryError(
+      `Failed to fetch histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`,
+      { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
 }

@@ -34,7 +34,10 @@ export async function loadParquet(
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
   const timezone = options.timezone ?? 'UTC';
   if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw new Error(`Invalid timezone: ${timezone}`);
+    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
+      code: 'LOAD_INVALID_TIMEZONE',
+      details: { timezone },
+    });
   }
   await conn.query(`SET TimeZone = '${timezone}'`);
 

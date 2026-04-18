@@ -13,6 +13,7 @@ import {
   buildSelectQuery,
   buildSelectedRowsQuery,
 } from './ExportQuery';
+import { ExportError } from '../core/errors';
 import type { ExportContext } from './ExportQuery';
 
 export type { ExportContext } from './ExportQuery';
@@ -90,7 +91,7 @@ export async function exportToParquet(
   signal?: AbortSignal
 ): Promise<Uint8Array> {
   if (!tableName) {
-    throw new Error('No table loaded');
+    throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
   }
 
   const opts: ParquetExportOptions = { ...DEFAULT_PARQUET_OPTIONS, ...options };
@@ -122,7 +123,7 @@ export async function exportParquetFromState(
 ): Promise<Uint8Array> {
   const tableName = state.tableName.get();
   if (!tableName) {
-    throw new Error('No table loaded');
+    throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
   }
 
   const context: ExportContext = {

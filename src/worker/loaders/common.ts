@@ -289,14 +289,17 @@ export async function convertColumnsToTimestamp(
 
     // Rename temp table to original name
     await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch {
+  } catch (cause) {
     // If conversion fails, try to clean up temp table
     try {
       await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
-    throw new Error(`Failed to convert columns to timestamp in table ${tableName}`);
+    throw Object.assign(
+      new Error(`Failed to convert columns to timestamp in table ${tableName}`, { cause }),
+      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'timestamp' } },
+    );
   }
 }
 
@@ -339,13 +342,16 @@ export async function convertColumnsToDate(
 
     await conn.query(`DROP TABLE ${quotedTable}`);
     await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch {
+  } catch (cause) {
     try {
       await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
-    throw new Error(`Failed to convert columns to date in table ${tableName}`);
+    throw Object.assign(
+      new Error(`Failed to convert columns to date in table ${tableName}`, { cause }),
+      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'date' } },
+    );
   }
 }
 
@@ -388,13 +394,16 @@ export async function convertColumnsToTime(
 
     await conn.query(`DROP TABLE ${quotedTable}`);
     await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch {
+  } catch (cause) {
     try {
       await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
     } catch {
       // Ignore cleanup errors
     }
-    throw new Error(`Failed to convert columns to time in table ${tableName}`);
+    throw Object.assign(
+      new Error(`Failed to convert columns to time in table ${tableName}`, { cause }),
+      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'time' } },
+    );
   }
 }
 

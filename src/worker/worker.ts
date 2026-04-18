@@ -7,6 +7,7 @@ import type {
   WorkerMessage,
   WorkerResponse,
   WorkerResponseType,
+  ErrorPayload,
   QueryPayload,
   LoadPayload,
   ExportPayload,
@@ -28,6 +29,36 @@ function respond(id: string, type: WorkerResponseType, payload: unknown): void {
   self.postMessage(response);
 }
 
+/**
+ * Build an error payload from a caught value, preserving any `code` /
+ * `details` that loaders attached to the thrown `Error`. The main-thread
+ * bridge passes this payload to `reconstructError()` to materialize a
+ * typed subclass.
+ */
+function toErrorPayload(
+  error: unknown,
+  fallbackMessage: string,
+  fallbackCode?: string,
+): ErrorPayload {
+  if (error instanceof Error) {
+    const withMeta = error as Error & {
+      code?: string;
+      details?: Record<string, unknown>;
+    };
+    const payload: ErrorPayload = {
+      message: error.message || fallbackMessage,
+    };
+    if (withMeta.code) payload.code = withMeta.code;
+    else if (fallbackCode) payload.code = fallbackCode;
+    if (withMeta.details) payload.details = withMeta.details;
+    return payload;
+  }
+  return {
+    message: fallbackMessage,
+    ...(fallbackCode ? { code: fallbackCode } : {}),
+  };
+}
+
 // Handle incoming messages
 async function handleMessage(message: WorkerMessage): Promise<void> {
   const { id, type, payload } = message;
@@ -41,7 +72,10 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
 
       case 'query': {
         if (!isInitialized()) {
-          respond(id, 'error', { message: 'DuckDB not initialized' });
+          respond(id, 'error', {
+            message: 'DuckDB not initialized',
+            code: 'BRIDGE_NOT_READY',
+          });
           break;
         }
         const { sql } = payload as QueryPayload;
@@ -52,7 +86,10 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
 
       case 'load': {
         if (!isInitialized()) {
-          respond(id, 'error', { message: 'DuckDB not initialized' });
+          respond(id, 'error', {
+            message: 'DuckDB not initialized',
+            code: 'BRIDGE_NOT_READY',
+          });
           break;
         }
 
@@ -118,6 +155,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
           } else {
             respond(id, 'error', {
               message: `Format '${format}' not yet supported`,
+              code: 'LOAD_FORMAT_UNSUPPORTED',
             });
             break;
           }
@@ -130,17 +168,21 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             schema: result.schema,
           });
         } catch (error) {
-          respond(id, 'error', {
-            message:
-              error instanceof Error ? error.message : 'Failed to load data',
-          });
+          respond(
+            id,
+            'error',
+            toErrorPayload(error, 'Failed to load data', 'LOAD_PARSE_FAILED'),
+          );
         }
         break;
       }
 
       case 'export': {
         if (!isInitialized()) {
-          respond(id, 'error', { message: 'DuckDB not initialized' });
+          respond(id, 'error', {
+            message: 'DuckDB not initialized',
+            code: 'BRIDGE_NOT_READY',
+          });
           break;
         }
 
@@ -166,9 +208,11 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
           } catch {
             // Ignore cleanup errors
           }
-          respond(id, 'error', {
-            message: error instanceof Error ? error.message : 'Export failed',
-          });
+          respond(
+            id,
+            'error',
+            toErrorPayload(error, 'Export failed', 'EXPORT_FAILED'),
+          );
         }
         break;
       }
@@ -179,12 +223,13 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
         break;
 
       default:
-        respond(id, 'error', { message: `Unknown message type: ${type}` });
+        respond(id, 'error', {
+          message: `Unknown message type: ${type}`,
+          code: 'INVARIANT',
+        });
     }
   } catch (error) {
-    respond(id, 'error', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    respond(id, 'error', toErrorPayload(error, 'Unknown error', 'QUERY_RUNTIME'));
   }
 }
 

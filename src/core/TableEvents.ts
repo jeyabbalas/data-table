@@ -12,6 +12,19 @@
 import type { Filter, SortColumn, ColumnSchema } from './types';
 import type { ProgressInfo } from './Progress';
 import type { DerivedColumnDef } from '../derived/types';
+import type { DataTableError } from './errors';
+
+/** Origin of an `error` event — which subsystem surfaced the failure. */
+export type TableErrorSource =
+  | 'load'
+  | 'query'
+  | 'export'
+  | 'persistence'
+  | 'visualization'
+  | 'sql-validation'
+  | 'derived-column'
+  | 'listener'
+  | 'unknown';
 
 // NOTE: defined as a `type` (not `interface`) so it satisfies
 // `Record<string, unknown>` for EventEmitter. Interfaces with named
@@ -33,8 +46,29 @@ export type TableEvents = {
     schema: ColumnSchema[];
   };
 
-  /** Fired if a load fails. */
+  /** Fired if a load fails. The `error` is always a typed DataTableError (subclass of Error). */
   loadError: { error: Error };
+
+  /**
+   * General error event. Fired for any recoverable typed error the library
+   * surfaces at runtime — load failures, SQL validation, export failures,
+   * persistence write failures, visualization fetch failures, etc.
+   * `source` discriminates which subsystem produced the error.
+   */
+  error: {
+    error: DataTableError;
+    source: TableErrorSource;
+  };
+
+  /**
+   * Non-fatal warning event. Emitted when the library continues operating
+   * in a degraded mode (e.g., stylesheet missing, IndexedDB unavailable).
+   */
+  warning: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
 
   /** Fired on any change to the active filter list. */
   filterChange: {

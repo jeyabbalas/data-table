@@ -13,6 +13,7 @@ import type { StateActions } from '../core/Actions';
 import { serializeFilter, deserializeFilter } from '../persistence/SessionStore';
 import type { SerializedFilter } from '../persistence/types';
 import type { FilterPreset, FilterPresetCollection } from './FilterPresetTypes';
+import { ConfigurationError } from '../core/errors';
 
 const VALID_PATTERN_MODES = new Set(['contains', 'starts', 'ends', 'regex']);
 
@@ -39,7 +40,9 @@ export class FilterPresetManager {
   ): FilterPreset {
     const trimmed = name.trim();
     if (!trimmed) {
-      throw new Error('Preset name is required');
+      throw new ConfigurationError('Preset name is required', {
+        code: 'OPTIONS_INVALID',
+      });
     }
 
     const now = Date.now();

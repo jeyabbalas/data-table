@@ -13,6 +13,7 @@ import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SessionStore } from './SessionStore';
 import { snapshotFromState } from './serialization';
+import { PersistenceError } from '../core/errors';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
@@ -20,6 +21,12 @@ export interface AutoSaveOptions {
   debounceMs?: number;
   undoManager?: UndoManager;
   presetManager?: FilterPresetManager;
+  /**
+   * Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
+   * transaction aborted). If omitted, save failures are swallowed —
+   * the facade wires this to emit an `error` event with `source: 'persistence'`.
+   */
+  onError?: (error: PersistenceError) => void;
 }
 
 export class AutoSave {
@@ -31,6 +38,7 @@ export class AutoSave {
   private presetManager: FilterPresetManager | undefined;
   private boundOnVisibilityChange: (() => void) | null = null;
   private boundOnBeforeUnload: (() => void) | null = null;
+  private onError: ((error: PersistenceError) => void) | undefined;
 
   constructor(
     private state: TableState,
@@ -40,6 +48,7 @@ export class AutoSave {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.undoManager = options.undoManager;
     this.presetManager = options.presetManager;
+    this.onError = options.onError;
   }
 
   /** Subscribe to all persistent state signals and begin auto-saving. */
@@ -164,7 +173,16 @@ export class AutoSave {
     if (this.state.tableName.get() == null) return;
 
     const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
-    this.store.save(snapshot);
+    try {
+      const result = this.store.save(snapshot) as unknown as Promise<void> | void;
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        (result as Promise<void>).catch((cause) => {
+          this.reportError(cause);
+        });
+      }
+    } catch (cause) {
+      this.reportError(cause);
+    }
   }
 
   /**
@@ -176,6 +194,22 @@ export class AutoSave {
     if (this.state.tableName.get() == null) return;
 
     const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
-    this.store.saveSync(snapshot);
+    try {
+      this.store.saveSync(snapshot);
+    } catch (cause) {
+      this.reportError(cause);
+    }
+  }
+
+  private reportError(cause: unknown): void {
+    if (!this.onError) return;
+    const err =
+      cause instanceof PersistenceError
+        ? cause
+        : new PersistenceError(
+            cause instanceof Error ? cause.message : String(cause),
+            { code: 'SAVE_FAILED', cause },
+          );
+    this.onError(err);
   }
 }

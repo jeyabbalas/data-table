@@ -6,6 +6,7 @@
  */
 
 import type { DataType } from '../core/types';
+import { ConfigurationError } from '../core/errors';
 
 /**
  * Base stats shared by all column types.
@@ -121,7 +122,9 @@ export function statsKindForDataType(
       return 'interval';
     default: {
       const _exhaustive: never = dataType;
-      throw new Error(`Unknown DataType: ${_exhaustive}`);
+      throw new ConfigurationError(`Unknown DataType: ${_exhaustive as string}`, {
+        code: 'INVARIANT',
+      });
     }
   }
 }

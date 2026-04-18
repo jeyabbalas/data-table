@@ -10,6 +10,7 @@
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
+import { QueryError } from '../../core/errors';
 
 // Re-export SQL utilities for use by other modules
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -231,8 +232,9 @@ export async function fetchValueCountsData(
       isAllUnique,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to fetch value counts for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    throw new QueryError(
+      `Failed to fetch value counts for column "${column}": ${error instanceof Error ? error.message : String(error)}`,
+      { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
 }
@@ -356,8 +358,9 @@ export async function fetchAlignedValueCountsData(
       isAllUnique,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to fetch aligned value counts for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    throw new QueryError(
+      `Failed to fetch aligned value counts for column "${column}": ${error instanceof Error ? error.message : String(error)}`,
+      { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
 }

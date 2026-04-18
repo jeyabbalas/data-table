@@ -21,6 +21,11 @@ import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, CompletionContext } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { attachCacheInvalidation } from '../data/QueryCache';
+import {
+  ConfigurationError,
+  DerivedColumnError,
+  SQLValidationError,
+} from './errors';
 
 /**
  * Options for loading data
@@ -428,7 +433,9 @@ export class StateActions {
    */
   addRawSQLFilter(sql: string, label?: string): string {
     if (!sql.trim()) {
-      throw new Error('SQL expression must not be empty');
+      throw new SQLValidationError('SQL expression must not be empty', {
+        code: 'SQL_SYNTAX',
+      });
     }
     const id = crypto.randomUUID();
     const filter: RawSQLFilter = {
@@ -451,7 +458,9 @@ export class StateActions {
    */
   updateRawSQLFilter(id: string, sql: string, label?: string): void {
     if (!sql.trim()) {
-      throw new Error('SQL expression must not be empty');
+      throw new SQLValidationError('SQL expression must not be empty', {
+        code: 'SQL_SYNTAX',
+      });
     }
     const syntheticKey = `__raw_sql_${id}__`;
     const current = this.state.filters.get();
@@ -911,7 +920,10 @@ export class StateActions {
     if (!this.derivedManager) {
       const baseTableName = this.state.baseTableName.get();
       if (!baseTableName) {
-        throw new Error('Cannot create derived columns before data is loaded');
+        throw new ConfigurationError(
+          'Cannot create derived columns before data is loaded',
+          { code: 'BRIDGE_NOT_READY' },
+        );
       }
       this.derivedManager = new DerivedColumnManager(this.bridge, baseTableName);
     }
@@ -1160,7 +1172,10 @@ export class StateActions {
     const currentSchema = this.state.schema.get();
     const entry = currentSchema.find(c => c.name === name);
     if (!entry?.isDerived) {
-      throw new Error(`Column "${name}" is not a derived column`);
+      throw new DerivedColumnError(`Column "${name}" is not a derived column`, {
+        code: 'NOT_FOUND',
+        details: { column: name },
+      });
     }
 
     // Capture undo snapshot locally — only push after success

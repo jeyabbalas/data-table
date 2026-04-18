@@ -13,6 +13,7 @@
 
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
+import { QueryError } from '../../core/errors';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
@@ -643,8 +644,9 @@ export async function fetchTimeHistogramData(
       isNumericBinning: false,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to fetch time histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    throw new QueryError(
+      `Failed to fetch time histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`,
+      { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
 }

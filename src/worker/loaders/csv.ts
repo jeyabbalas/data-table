@@ -34,7 +34,10 @@ export async function loadCSV(
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
   const timezone = options.timezone ?? 'UTC';
   if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw new Error(`Invalid timezone: ${timezone}`);
+    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
+      code: 'LOAD_INVALID_TIMEZONE',
+      details: { timezone },
+    });
   }
   await conn.query(`SET TimeZone = '${timezone}'`);
 
@@ -54,7 +57,10 @@ export async function loadCSV(
 
     if (options.delimiter) {
       if (options.delimiter.length !== 1) {
-        throw new Error('CSV delimiter must be a single character');
+        throw Object.assign(new Error('CSV delimiter must be a single character'), {
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'delimiter' },
+        });
       }
       csvOptions.push(`delim = '${options.delimiter.replace(/'/g, "''")}'`);
     }
@@ -66,7 +72,10 @@ export async function loadCSV(
     if (options.sampleSize) {
       const n = Number(options.sampleSize);
       if (!Number.isInteger(n) || n <= 0) {
-        throw new Error('CSV sampleSize must be a positive integer');
+        throw Object.assign(new Error('CSV sampleSize must be a positive integer'), {
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'sampleSize' },
+        });
       }
       csvOptions.push(`sample_size = ${n}`);
     }
@@ -74,7 +83,10 @@ export async function loadCSV(
     if (options.skip) {
       const n = Number(options.skip);
       if (!Number.isInteger(n) || n < 0) {
-        throw new Error('CSV skip must be a non-negative integer');
+        throw Object.assign(new Error('CSV skip must be a non-negative integer'), {
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'skip' },
+        });
       }
       csvOptions.push(`skip = ${n}`);
     }

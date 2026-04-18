@@ -52,6 +52,7 @@ export interface ResultPayload<T = unknown> {
 export interface ErrorPayload {
   message: string;
   code?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface ProgressPayload {

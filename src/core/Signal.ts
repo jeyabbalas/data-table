@@ -5,6 +5,8 @@
  * and computed values (derived reactive values that auto-update).
  */
 
+import { ConfigurationError } from './errors';
+
 /**
  * Signal interface - a mutable reactive value
  */
@@ -115,7 +117,9 @@ class ComputedImpl<T> implements Computed<T> {
 
   subscribe(callback: (value: T) => void): () => void {
     if (this.disposed) {
-      throw new Error('Cannot subscribe to a disposed computed');
+      throw new ConfigurationError('Cannot subscribe to a disposed computed', {
+        code: 'INVARIANT',
+      });
     }
     this.subscribers.add(callback);
     return () => {

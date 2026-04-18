@@ -11,6 +11,7 @@ import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
+import { QueryError } from '../../core/errors';
 
 // Re-export TimeInterval for convenience
 export type { TimeInterval } from './DateFormatters';
@@ -673,8 +674,9 @@ export async function fetchDateHistogramData(
       isNumericBinning: false,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to fetch date histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`
+    throw new QueryError(
+      `Failed to fetch date histogram data for column "${column}": ${error instanceof Error ? error.message : String(error)}`,
+      { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
 }

@@ -18,6 +18,7 @@ import type {
   VectorDataType,
   CompletionContext,
 } from './types';
+import { ConfigurationError, DerivedColumnError } from '../core/errors';
 import { mapDuckDBType } from '../data/SchemaDetector';
 import { quoteIdentifier, formatSQLValue } from '../filters/FilterSQL';
 
@@ -114,7 +115,10 @@ export class DerivedColumnManager {
   async updateColumn(oldName: string, def: DerivedColumnDef): Promise<DerivedColumnInfo> {
     const oldIndex = this.columns.findIndex(c => c.def.name === oldName);
     if (oldIndex === -1) {
-      throw new Error(`Derived column "${oldName}" not found`);
+      throw new DerivedColumnError(`Derived column "${oldName}" not found`, {
+        code: 'NOT_FOUND',
+        details: { column: oldName },
+      });
     }
 
     const oldInfo = this.columns[oldIndex];
@@ -124,8 +128,12 @@ export class DerivedColumnManager {
     if (isRename) {
       const dependents = this.getDependents(oldName);
       if (dependents.length > 0) {
-        throw new Error(
-          `Cannot rename "${oldName}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Update those columns first.`
+        throw new DerivedColumnError(
+          `Cannot rename "${oldName}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Update those columns first.`,
+          {
+            code: 'EXPRESSION_INVALID',
+            details: { column: oldName, dependents },
+          },
         );
       }
     }
@@ -202,14 +210,21 @@ export class DerivedColumnManager {
   async removeColumn(name: string): Promise<void> {
     const index = this.columns.findIndex(c => c.def.name === name);
     if (index === -1) {
-      throw new Error(`Derived column "${name}" not found`);
+      throw new DerivedColumnError(`Derived column "${name}" not found`, {
+        code: 'NOT_FOUND',
+        details: { column: name },
+      });
     }
 
     // Block deletion if other columns depend on this one
     const dependents = this.getDependents(name);
     if (dependents.length > 0) {
-      throw new Error(
-        `Cannot delete "${name}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Delete those columns first.`
+      throw new DerivedColumnError(
+        `Cannot delete "${name}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Delete those columns first.`,
+        {
+          code: 'EXPRESSION_INVALID',
+          details: { column: name, dependents },
+        },
       );
     }
 
@@ -427,7 +442,13 @@ export class DerivedColumnManager {
       const inCycle = expressions
         .filter(c => !sorted.includes(c.def.name))
         .map(c => `"${c.def.name}"`);
-      throw new Error(`Circular dependency detected among derived columns: ${inCycle.join(', ')}`);
+      throw new DerivedColumnError(
+        `Circular dependency detected among derived columns: ${inCycle.join(', ')}`,
+        {
+          code: 'CIRCULAR_DEPENDENCY',
+          details: { cycle: inCycle },
+        },
+      );
     }
 
     return sorted.map(name => exprMap.get(name)!);
@@ -528,7 +549,10 @@ export class DerivedColumnManager {
   private helperTableName(columnName: string): string {
     const id = this.helperTableIds.get(columnName);
     if (id === undefined) {
-      throw new Error(`No helper table ID assigned for column "${columnName}"`);
+      throw new ConfigurationError(
+        `No helper table ID assigned for column "${columnName}"`,
+        { code: 'INVARIANT', details: { column: columnName } },
+      );
     }
     const sanitized = columnName.replace(/[^a-zA-Z0-9]/g, '_');
     return `__dt_vec_${sanitized}_${id}__`;

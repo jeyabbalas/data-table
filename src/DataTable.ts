@@ -40,6 +40,10 @@ import { nextInstanceId } from './core/instanceId';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableEvents } from './core/TableEvents';
+import {
+  DataTableError,
+  LoadError,
+} from './core/errors';
 import type { DataFormat } from './data/DataLoader';
 import type { Filter, SortColumn } from './core/types';
 import type { DerivedColumnDef } from './derived/types';
@@ -250,6 +254,11 @@ export async function createDataTable(
   const undoManager = opts.undoRedo === false ? undefined : new UndoManager();
   const actions = new StateActions(state, bridge, undoManager);
 
+  // -------- Event bus --------
+  // Constructed early so the persistence and stylesheet checks below can
+  // emit `warning` events instead of silently degrading.
+  const emitter = new EventEmitter<TableEvents>();
+
   // -------- Persistence --------
   let sessionStore: SessionStore | null = null;
   let ownsSessionStore = false;
@@ -265,8 +274,15 @@ export async function createDataTable(
     }
     try {
       await sessionStore.open();
-    } catch {
-      // IndexedDB may be unavailable (private browsing, etc.); degrade silently.
+    } catch (cause) {
+      emitter.emit('warning', {
+        code: 'PERSISTENCE_UNAVAILABLE',
+        message:
+          'IndexedDB is unavailable; session persistence is disabled.',
+        details: {
+          reason: cause instanceof Error ? cause.message : String(cause),
+        },
+      });
       sessionStore = null;
       ownsSessionStore = false;
     }
@@ -307,15 +323,21 @@ export async function createDataTable(
       .trim();
     if (!marker) {
       stylesheetWarningEmitted = true;
-      console.warn(
+      const warnMessage =
         "[data-table] Stylesheet missing: add `import '@jeyabbalas/data-table/styles'` " +
-        "(or link dist/data-table.css) before mounting. The table will render without theming."
-      );
+        '(or link dist/data-table.css) before mounting. The table will render without theming.';
+      // Keep the console warning as a safety net if no consumer has wired
+      // up a `warning` listener yet (typical on the first createDataTable
+      // call before any subscriptions exist).
+      if (emitter.listenerCount('warning') === 0) {
+        console.warn(warnMessage);
+      }
+      emitter.emit('warning', {
+        code: 'STYLESHEET_MISSING',
+        message: warnMessage,
+      });
     }
   }
-
-  // -------- Event bus --------
-  const emitter = new EventEmitter<TableEvents>();
 
   // -------- Visualizations (auto-attach) --------
   const interactionManager =
@@ -472,6 +494,9 @@ export async function createDataTable(
             selectionStates.delete(colName);
           }
         },
+        onError: (err: DataTableError) => {
+          emitter.emit('error', { error: err, source: 'visualization' });
+        },
       };
 
       const created = VisualizationFactory.create(
@@ -539,6 +564,9 @@ export async function createDataTable(
     autoSave = new AutoSave(state, sessionStore, {
       undoManager,
       presetManager: presetManager ?? undefined,
+      onError: (err) => {
+        emitter.emit('error', { error: err, source: 'persistence' });
+      },
     });
     autoSave.enable();
   }
@@ -709,10 +737,16 @@ export async function createDataTable(
         schema: state.schema.get(),
       });
     } catch (error) {
-      emitter.emit('loadError', {
-        error: error instanceof Error ? error : new Error(String(error)),
-      });
-      throw error;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new LoadError(
+              error instanceof Error ? error.message : String(error),
+              { code: 'PARSE_FAILED', cause: error },
+            );
+      emitter.emit('loadError', { error: typed });
+      emitter.emit('error', { error: typed, source: 'load' });
+      throw typed;
     } finally {
       autoSave?.enable();
     }

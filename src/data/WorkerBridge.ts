@@ -6,12 +6,20 @@ import type {
   WorkerMessage,
   WorkerResponse,
   WorkerMessageType,
+  ErrorPayload,
   QueryPayload,
   LoadPayload,
   ExportPayload,
 } from '../worker/types';
 import type { ProgressInfo, ProgressCallback } from '../core/Progress';
 import type { ColumnSchema } from '../core/types';
+import {
+  ConfigurationError,
+  QueryError,
+  WorkerInitError,
+  WorkerTerminatedError,
+  reconstructError,
+} from '../core/errors';
 import { QueryCache, type QueryCacheOptions } from './QueryCache';
 
 // Re-export for convenience
@@ -95,11 +103,15 @@ export class WorkerBridge {
           }
           this.initPromise = null;
           reject(
-            new Error(
+            new WorkerInitError(
               `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms ` +
                 `(worker did not reach ready state or DuckDB failed to init). ` +
-                `If your app bundles the worker separately, verify it can import @duckdb/duckdb-wasm.`
-            )
+                `If your app bundles the worker separately, verify it can import @duckdb/duckdb-wasm.`,
+              {
+                code: 'WORKER_INIT_TIMEOUT',
+                details: { timeoutMs: this.initializeTimeoutMs },
+              },
+            ),
           );
         });
       }, this.initializeTimeoutMs);
@@ -112,7 +124,14 @@ export class WorkerBridge {
 
         this.worker.onmessage = this.handleMessage.bind(this);
         this.worker.onerror = (error) => {
-          settle(() => reject(new Error(`Worker error: ${error.message}`)));
+          settle(() =>
+            reject(
+              new WorkerInitError(`Worker error: ${error.message}`, {
+                code: 'WORKER_CRASHED',
+                cause: error,
+              }),
+            ),
+          );
         };
 
         // Wait for worker ready signal
@@ -226,7 +245,7 @@ export class WorkerBridge {
 
       // Reject all pending requests
       for (const [, request] of this.pendingRequests) {
-        request.reject(new Error('Worker terminated'));
+        request.reject(new WorkerTerminatedError('Worker terminated'));
       }
       this.pendingRequests.clear();
       this.queryCache.clear();
@@ -249,7 +268,10 @@ export class WorkerBridge {
 
   private ensureInitialized(): void {
     if (!this.worker) {
-      throw new Error('WorkerBridge not initialized. Call initialize() first.');
+      throw new ConfigurationError(
+        'WorkerBridge not initialized. Call initialize() first.',
+        { code: 'BRIDGE_NOT_READY' },
+      );
     }
   }
 
@@ -274,7 +296,7 @@ export class WorkerBridge {
       let abortHandler: (() => void) | null = null;
       if (signal) {
         if (signal.aborted) {
-          reject(new Error('Operation aborted'));
+          reject(new QueryError('Operation aborted', { code: 'QUERY_ABORTED' }));
           return;
         }
 
@@ -287,7 +309,7 @@ export class WorkerBridge {
             payload: { targetId: id },
           };
           this.worker?.postMessage(cancelMessage);
-          reject(new Error('Operation aborted'));
+          reject(new QueryError('Operation aborted', { code: 'QUERY_ABORTED' }));
         };
         signal.addEventListener('abort', abortHandler);
       }
@@ -328,7 +350,7 @@ export class WorkerBridge {
 
       case 'error':
         this.cleanupRequest(id);
-        request.reject(new Error((payload as { message: string }).message));
+        request.reject(reconstructError(payload as ErrorPayload));
         break;
 
       case 'progress':

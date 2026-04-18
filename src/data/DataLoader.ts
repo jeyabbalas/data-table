@@ -4,6 +4,7 @@
 
 import type { WorkerBridge } from './WorkerBridge';
 import type { ColumnSchema } from '../core/types';
+import { LoadError } from '../core/errors';
 
 export type DataFormat = 'csv' | 'json' | 'parquet';
 
@@ -47,7 +48,17 @@ export class DataLoader {
       format = options.format || this.detectFormatFromURL(source);
       const response = await fetch(source);
       if (!response.ok) {
-        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        throw new LoadError(
+          `Failed to fetch URL: ${response.status} ${response.statusText}`,
+          {
+            code: 'FETCH_FAILED',
+            details: {
+              status: response.status,
+              statusText: response.statusText,
+              url: source,
+            },
+          },
+        );
       }
       data =
         format === 'parquet'

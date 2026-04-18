@@ -13,6 +13,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import type { TableState } from '../core/State';
 import { resolveColumns, fetchAllRows } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
+import { ExportError } from '../core/errors';
 
 export type { ExportContext } from './ExportQuery';
 
@@ -107,7 +108,7 @@ export async function exportToJSON(
   signal?: AbortSignal
 ): Promise<string> {
   if (!tableName) {
-    throw new Error('No table loaded');
+    throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
   }
 
   const opts: JSONExportOptions = { ...DEFAULT_JSON_OPTIONS, ...options };
@@ -207,7 +208,7 @@ export async function exportJSONFromState(
 ): Promise<string> {
   const tableName = state.tableName.get();
   if (!tableName) {
-    throw new Error('No table loaded');
+    throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
   }
 
   const context: ExportContext = {

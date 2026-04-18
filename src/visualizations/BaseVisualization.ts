@@ -18,6 +18,11 @@
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
+import {
+  DataTableError,
+  ExportError,
+  QueryError,
+} from '../core/errors';
 
 /**
  * Manages shared window-level event listeners for all BaseVisualization instances.
@@ -93,6 +98,16 @@ export interface VisualizationOptions {
   onBrushClear?: (columnName: string) => void;
   /** Callback when selection changes (column name and hasSelection passed) */
   onSelectionChange?: (columnName: string, hasSelection: boolean) => void;
+  /**
+   * Callback invoked when the visualization fails to fetch, render, or
+   * update filters. Receives a typed {@link DataTableError} and a context
+   * describing which stage failed. The facade routes these to the
+   * `error` event with `source: 'visualization'`.
+   */
+  onError?: (
+    error: DataTableError,
+    context: { columnName?: string; stage: 'fetch' | 'render' | 'filter' },
+  ) => void;
 }
 
 /**
@@ -139,7 +154,9 @@ export abstract class BaseVisualization {
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d');
     if (!ctx) {
-      throw new Error('Failed to get 2D rendering context');
+      throw new ExportError('Failed to get 2D rendering context', {
+        code: 'CANVAS_UNAVAILABLE',
+      });
     }
     this.ctx = ctx;
 
@@ -378,6 +395,18 @@ export abstract class BaseVisualization {
     this.isFilterUpdate = true;
     try {
       await this.fetchData();
+    } catch (err) {
+      const typed =
+        err instanceof DataTableError
+          ? err
+          : new QueryError(
+              err instanceof Error ? err.message : String(err),
+              { code: 'QUERY_RUNTIME', cause: err },
+            );
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'filter',
+      });
     } finally {
       this.isFilterUpdate = false;
     }

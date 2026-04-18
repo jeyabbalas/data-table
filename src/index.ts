@@ -12,7 +12,24 @@ export const VERSION = '0.1.0';
 // + presets + undo/redo + export into a single `createDataTable()` call.
 export { createDataTable } from './DataTable';
 export type { DataTable, CreateDataTableOptions } from './DataTable';
-export type { TableEvents, TableEventName } from './core/TableEvents';
+export type { TableEvents, TableEventName, TableErrorSource } from './core/TableEvents';
+
+// Typed error model. All library errors extend DataTableError; catch sites
+// can narrow via `instanceof` and branch on `err.code`.
+export {
+  DataTableError,
+  WorkerInitError,
+  WorkerTerminatedError,
+  QueryError,
+  LoadError,
+  SQLValidationError,
+  DerivedColumnError,
+  PersistenceError,
+  ExportError,
+  ConfigurationError,
+  DestroyedError,
+} from './core/errors';
+export type { DataTableErrorOptions } from './core/errors';
 
 // Core types
 export * from './core/types';

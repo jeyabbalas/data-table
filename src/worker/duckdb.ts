@@ -159,7 +159,10 @@ export async function executeQuery<T = Record<string, unknown>>(
   sql: string
 ): Promise<T[]> {
   if (!conn) {
-    throw new Error('DuckDB not initialized. Call initializeDuckDB() first.');
+    throw Object.assign(
+      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
+      { code: 'BRIDGE_NOT_READY' },
+    );
   }
 
   const result = await conn.query(sql);
@@ -171,7 +174,10 @@ export async function executeQuery<T = Record<string, unknown>>(
  */
 export function getConnection(): duckdb.AsyncDuckDBConnection {
   if (!conn) {
-    throw new Error('DuckDB not initialized. Call initializeDuckDB() first.');
+    throw Object.assign(
+      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
+      { code: 'BRIDGE_NOT_READY' },
+    );
   }
   return conn;
 }
@@ -181,7 +187,10 @@ export function getConnection(): duckdb.AsyncDuckDBConnection {
  */
 export function getDatabase(): duckdb.AsyncDuckDB {
   if (!db) {
-    throw new Error('DuckDB not initialized. Call initializeDuckDB() first.');
+    throw Object.assign(
+      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
+      { code: 'BRIDGE_NOT_READY' },
+    );
   }
   return db;
 }

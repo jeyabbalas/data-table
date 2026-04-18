@@ -1,0 +1,401 @@
+/*
+ * Shell — root container, header area, filter bar, gutter labels,
+ * hidden-columns gutter, body-scroll wrapper. Precedes columns / modals /
+ * grid / filters / export / responsive in cascade order.
+ */
+
+/* ===========================================
+   Root Container
+   =========================================== */
+
+.dt-root {
+  position: relative; /* Containing block for pinned demarcation overlay */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  background: var(--dt-bg);
+  font-family: var(--dt-font-family);
+  container-type: inline-size;
+  container-name: dt-root;
+}
+
+.dt-root:focus {
+  outline: none;
+}
+
+/* ===========================================
+   Header Area
+   =========================================== */
+
+.dt-header-area {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-header-scroll {
+  flex: 1;
+  overflow-x: scroll;
+  /* Hide scrollbar - sync with body scroll via JavaScript */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.dt-header-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.dt-scrollbar-gutter {
+  /* Reserves space for body's vertical scrollbar */
+  width: var(--dt-scrollbar-width);
+  flex-shrink: 0;
+  background: var(--dt-bg-secondary);
+}
+
+.dt-header {
+  flex-shrink: 0;
+  background: var(--dt-bg-secondary);
+}
+
+.dt-header-row {
+  display: flex;
+  min-width: fit-content;
+  position: relative; /* Positioning context for drop indicator */
+}
+
+/* ===========================================
+   Filter Bar
+   =========================================== */
+
+.dt-filter-bar {
+  position: relative;
+  z-index: var(--dt-z-filter-bar, 40);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+  background: var(--dt-bg);
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 50px;
+  transition: max-height 0.2s ease, padding 0.2s ease, border-bottom-color 0.2s ease;
+}
+
+.dt-filter-bar--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+}
+
+.dt-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dt-border) transparent;
+}
+
+/* Thin scrollbar for chips container (WebKit/Blink) */
+.dt-filter-chips::-webkit-scrollbar {
+  height: 4px;
+}
+
+.dt-filter-chips::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dt-filter-chips::-webkit-scrollbar-thumb {
+  background: var(--dt-border);
+  border-radius: 2px;
+}
+
+.dt-filter-chips::-webkit-scrollbar-thumb:hover {
+  background: var(--dt-text-tertiary);
+}
+
+.dt-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  background: var(--dt-primary-light);
+  border: 1px solid var(--dt-primary);
+  border-radius: 999px;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  max-width: 280px;
+  white-space: nowrap;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.dt-filter-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-filter-chip-column {
+  font-weight: 600;
+  color: var(--dt-text);
+}
+
+.dt-filter-chip-detail {
+  color: var(--dt-text-secondary);
+}
+
+.dt-filter-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--dt-text-secondary);
+  transition: background var(--dt-transition), color var(--dt-transition);
+  flex-shrink: 0;
+}
+
+.dt-filter-chip-remove:hover {
+  background: var(--dt-primary);
+  color: white;
+}
+
+.dt-filter-chip-remove:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-filter-chip-remove svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Clickable filter chip label (toggled when an onEdit handler is wired). */
+.dt-filter-chip-label--clickable {
+  cursor: pointer;
+}
+
+/* SQL filter chip — clickable label */
+.dt-filter-chip-label--sql {
+  cursor: pointer;
+}
+.dt-filter-chip-label--sql:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--dt-primary);
+}
+/* SQL chip code icon */
+.dt-filter-chip-sql-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.2rem;
+  opacity: 0.7;
+}
+.dt-filter-chip-sql-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Expression filter button (in filter bar) */
+.dt-filter-expression-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--dt-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+}
+.dt-filter-expression-btn:hover {
+  border-color: var(--dt-primary);
+  color: var(--dt-primary);
+  background: var(--dt-primary-light);
+}
+.dt-filter-expression-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+.dt-filter-expression-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dt-filter-clear-all {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  border-radius: var(--dt-radius-sm);
+  transition: color var(--dt-transition), background var(--dt-transition);
+  white-space: nowrap;
+}
+
+.dt-filter-clear-all:hover {
+  color: var(--dt-text);
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-filter-clear-all:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* ===========================================
+   Gutter Labels (shared by filter bar and hidden gutter)
+   =========================================== */
+
+.dt-gutter-label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ===========================================
+   Hidden Columns Gutter
+   =========================================== */
+
+.dt-hidden-gutter {
+  position: relative;
+  z-index: var(--dt-z-header, 21);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+  background: var(--dt-bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
+  max-height: 200px;
+  transition: max-height 0.2s ease, padding 0.2s ease, border-top-color 0.2s ease;
+}
+
+.dt-hidden-gutter--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+}
+
+.dt-hidden-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  background: var(--dt-bg-tertiary);
+  border: 1px solid var(--dt-border);
+  border-radius: 999px;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  max-width: 280px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.dt-hidden-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-hidden-chip-restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--dt-text-secondary);
+  transition: background var(--dt-transition), color var(--dt-transition);
+  flex-shrink: 0;
+}
+
+.dt-hidden-chip-restore:hover {
+  background: var(--dt-text-secondary);
+  color: white;
+}
+
+.dt-hidden-chip-restore:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-hidden-chip-restore svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.dt-hidden-show-all {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-size: var(--dt-font-size-sm);
+  font-family: var(--dt-font-family);
+  cursor: pointer;
+  border-radius: var(--dt-radius-sm);
+  transition: color var(--dt-transition), background var(--dt-transition);
+  white-space: nowrap;
+}
+
+.dt-hidden-show-all:hover {
+  color: var(--dt-text);
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-hidden-show-all:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+/* ===========================================
+   Body Area
+   =========================================== */
+
+.dt-body-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.dt-body {
+  position: relative; /* Positioning context for virtual scroll */
+  min-width: fit-content;
+}
+

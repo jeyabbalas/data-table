@@ -1,0 +1,229 @@
+/*
+ * Export dialog — CSV / JSON / Parquet export modal + backdrop.
+ */
+
+/* ===========================================
+   Export Dialog Modal
+   =========================================== */
+
+.dt-export-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dt-z-modal, 1000);
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-backdrop);
+  display: none;
+}
+
+.dt-export-backdrop--open {
+  display: flex;
+}
+
+.dt-export-dialog {
+  width: 420px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+}
+
+.dt-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-export-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+}
+
+.dt-export-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-export-close:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+.dt-export-body {
+  padding: 0.75rem;
+}
+
+.dt-export-section {
+  border: none;
+  padding: 0;
+  margin: 0 0 0.625rem 0;
+}
+
+.dt-export-section legend {
+  font-weight: 600;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  margin-bottom: 0.25rem;
+}
+
+.dt-export-option {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  cursor: pointer;
+}
+
+.dt-export-option--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.dt-export-option input[type="radio"],
+.dt-export-option input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--dt-primary);
+}
+
+.dt-export-count {
+  color: var(--dt-text-tertiary);
+  font-size: var(--dt-font-size-xs);
+}
+
+.dt-export-format-options {
+  margin-bottom: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--dt-bg-secondary);
+  border-radius: var(--dt-radius-sm);
+  border: 1px solid var(--dt-border-light);
+}
+
+.dt-export-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.dt-export-field > label {
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.dt-export-field > select,
+.dt-export-field > input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-export-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.625rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+}
+
+.dt-export-btn {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: var(--dt-on-error);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 100px;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-export-btn:hover {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-export-btn--loading {
+  background: var(--dt-text-secondary);
+  border-color: var(--dt-text-secondary);
+}
+
+.dt-export-btn--loading:hover {
+  background: var(--dt-text-tertiary);
+  border-color: var(--dt-text-tertiary);
+}
+
+.dt-export-copy-btn {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-primary);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-export-copy-btn:hover {
+  background: var(--dt-primary-light);
+}
+
+.dt-export-copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-export-error {
+  padding: 0.375rem 0.5rem;
+  margin-top: 0.5rem;
+  background: var(--dt-error-bg);
+  border: 1px solid var(--dt-error-border-soft);
+  border-radius: var(--dt-radius-sm);
+  color: var(--dt-error-dark);
+  font-size: var(--dt-font-size-sm);
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dt-export-backdrop {
+    background: var(--dt-backdrop);
+  }
+
+  .dt-export-dialog {
+    box-shadow: 0 8px 32px var(--dt-shadow-md);
+  }
+
+  .dt-export-error {
+    color: var(--dt-error-text-strong);
+  }
+}
+

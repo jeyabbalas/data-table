@@ -66,7 +66,7 @@ import { ExportDialog } from './export/ExportDialog';
 
 // Emitted once per page lifetime when the library stylesheet is missing —
 // detected via the `--dt-stylesheet-loaded` marker declared on `:root` in
-// `src/styles/data-table.css`. Kept module-scoped so multiple
+// `src/styles/01-variables.css`. Kept module-scoped so multiple
 // `createDataTable()` calls don't spam the console.
 let stylesheetWarningEmitted = false;
 

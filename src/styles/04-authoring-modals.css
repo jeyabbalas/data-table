@@ -1,0 +1,585 @@
+/*
+ * Authoring modals — full-screen dialogs for creating derived columns and
+ * composing raw SQL WHERE clauses. Share the .dt-backdrop scrim.
+ */
+
+/* ===========================================
+   Derived Column Modal
+   =========================================== */
+
+/* Backdrop */
+.dt-derived-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dt-z-modal, 1000);
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-backdrop);
+  display: none;
+}
+
+.dt-derived-modal-backdrop--open {
+  display: flex;
+}
+
+/* Dialog */
+.dt-derived-modal-dialog {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+}
+
+/* Header */
+.dt-derived-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-derived-modal-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+}
+
+.dt-derived-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-derived-modal-close:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+/* Body */
+.dt-derived-modal-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dt-derived-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dt-derived-modal-section > label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  font-weight: 500;
+}
+
+.dt-derived-modal-name-error {
+  color: var(--dt-error);
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.125rem;
+  display: none;
+}
+
+/* Mode toggle */
+.dt-derived-modal-mode-group {
+  display: flex;
+  gap: 1rem;
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+
+.dt-derived-modal-mode-group legend {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.dt-derived-modal-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  cursor: pointer;
+}
+
+.dt-derived-modal-mode-option input[type="radio"] {
+  margin: 0;
+  accent-color: var(--dt-primary);
+}
+
+/* Expression section */
+.dt-derived-modal-editor-container {
+  min-height: 100px;
+}
+
+.dt-derived-modal-expr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.dt-derived-modal-validate {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-primary);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-derived-modal-validate:hover:not(:disabled) {
+  background: var(--dt-primary-light);
+  border-color: var(--dt-primary-hover);
+  color: var(--dt-primary-hover);
+}
+
+.dt-derived-modal-validate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-derived-modal-type-preview {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Vector section */
+.dt-derived-modal-vector-textarea {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  box-sizing: border-box;
+}
+
+.dt-derived-modal-vector-textarea:focus {
+  outline: none;
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-derived-modal-vector-info {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.dt-derived-modal-vector-error {
+  color: var(--dt-error);
+  font-size: var(--dt-font-size-xs);
+  display: none;
+}
+
+/* Footer */
+.dt-derived-modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.625rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+}
+
+.dt-derived-modal-cancel {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-derived-modal-cancel:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+.dt-derived-modal-create {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: var(--dt-on-error);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 80px;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-derived-modal-create:hover:not(:disabled) {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-derived-modal-create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* General error area */
+.dt-derived-modal-error {
+  padding: 0.375rem 0.5rem;
+  background: var(--dt-error-bg);
+  border: 1px solid var(--dt-error-border-soft);
+  border-radius: var(--dt-radius-sm);
+  color: var(--dt-error-dark);
+  font-size: var(--dt-font-size-sm);
+  display: none;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .dt-derived-modal-backdrop {
+    background: var(--dt-backdrop);
+  }
+  .dt-derived-modal-dialog {
+    box-shadow: 0 8px 32px var(--dt-shadow-md);
+  }
+  .dt-derived-modal-close:hover {
+    /* keep: dark-mode subtle light highlight; no semantic variable */
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .dt-add-column-btn:hover {
+    background: var(--dt-primary-alpha-10);
+  }
+  .dt-derived-modal-error {
+    color: var(--dt-error-text-strong);
+  }
+}
+
+/* ===========================================
+   SQL Filter Expression Modal
+   =========================================== */
+
+/* Backdrop */
+.dt-sql-filter-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dt-z-modal, 1000);
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-backdrop);
+  display: none;
+}
+
+.dt-sql-filter-modal-backdrop--open {
+  display: flex;
+}
+
+/* Dialog */
+.dt-sql-filter-modal-dialog {
+  width: 520px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+}
+
+/* Header */
+.dt-sql-filter-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-sql-filter-modal-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+}
+
+.dt-sql-filter-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-close:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+/* Body */
+.dt-sql-filter-modal-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dt-sql-filter-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dt-sql-filter-modal-section > label {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  font-weight: 500;
+}
+
+.dt-sql-filter-modal-hint {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  margin-top: 0.125rem;
+}
+
+/* Editor container */
+.dt-sql-filter-modal-editor-container {
+  min-height: 100px;
+}
+
+/* Actions row */
+.dt-sql-filter-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.dt-sql-filter-modal-validate {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-primary);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-validate:hover:not(:disabled) {
+  background: var(--dt-primary-light);
+  border-color: var(--dt-primary-hover);
+  color: var(--dt-primary-hover);
+}
+
+.dt-sql-filter-modal-validate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-sql-filter-modal-preview {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Divider */
+.dt-sql-filter-modal-divider {
+  border: none;
+  border-top: 1px solid var(--dt-border);
+  margin: 0;
+}
+
+/* Remove section (danger zone) */
+.dt-sql-filter-modal-remove-section {
+  display: none;
+}
+
+.dt-sql-filter-modal-danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dt-sql-filter-modal-remove {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-error-dark);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-error-dark);
+  color: var(--dt-on-error);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-remove:hover {
+  background: var(--dt-error-darker);
+  border-color: var(--dt-error-darker);
+}
+
+.dt-sql-filter-modal-remove:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-sql-filter-modal-remove-confirm {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--dt-font-size-sm);
+}
+
+.dt-sql-filter-modal-remove-confirm span {
+  color: var(--dt-text-secondary);
+}
+
+.dt-sql-filter-modal-remove-confirm-btn {
+  padding: 0.3rem 0.5rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-xs);
+  font-weight: 500;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  border: 1px solid;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-remove-confirm-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-sql-filter-modal-remove-confirm-yes {
+  border-color: var(--dt-error-dark);
+  background: var(--dt-error-dark);
+  color: var(--dt-on-error);
+}
+
+.dt-sql-filter-modal-remove-confirm-yes:hover {
+  background: var(--dt-error-darker);
+  border-color: var(--dt-error-darker);
+}
+
+.dt-sql-filter-modal-remove-confirm-no {
+  border-color: var(--dt-border);
+  background: var(--dt-bg);
+  color: var(--dt-text-secondary);
+}
+
+.dt-sql-filter-modal-remove-confirm-no:hover {
+  border-color: var(--dt-text-secondary);
+  color: var(--dt-text);
+}
+
+/* Footer */
+.dt-sql-filter-modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.625rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+}
+
+.dt-sql-filter-modal-cancel {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-cancel:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+.dt-sql-filter-modal-apply {
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: var(--dt-on-error);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 80px;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-sql-filter-modal-apply:hover:not(:disabled) {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-sql-filter-modal-apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .dt-sql-filter-modal-backdrop {
+    background: var(--dt-backdrop);
+  }
+  .dt-sql-filter-modal-dialog {
+    box-shadow: 0 8px 32px var(--dt-shadow-md);
+  }
+  .dt-sql-filter-modal-close:hover {
+    /* keep: dark-mode subtle light highlight; no semantic variable */
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+

@@ -1,0 +1,201 @@
+/**
+ * Interactive Data Table - Default Styles
+ *
+ * This CSS file provides default styling for the data table library.
+ * All colors and sizing use CSS custom properties for easy customization.
+ *
+ * Usage:
+ *   import '@jeyabbalas/data-table/styles';
+ *   // or
+ *   <link rel="stylesheet" href="path/to/data-table.css">
+ *
+ * Customization:
+ *   Override any --dt-* variable in your own CSS to customize the theme.
+ *   Example:
+ *     :root {
+ *       --dt-primary: #10b981;
+ *     }
+ */
+
+/* ===========================================
+   CSS Custom Properties (Theme Variables)
+   ===========================================
+
+   Scoping: variables are declared on `:root` only. CSS cascade takes care
+   of everything else:
+   - Elements inside `.dt-root` inherit from `:root` through the DOM.
+   - Body-portalled modals (derived column, SQL filter, export dialog,
+     CodeMirror autocomplete tooltip) are also descendants of `<html>`, so
+     they inherit the same values.
+   - Consumer global override: set `--dt-primary` on `:root` (or via
+     `document.documentElement.style.setProperty`) — cascades everywhere.
+   - Consumer per-instance override: set the variable on the specific
+     `.dt-root` element (inline style, or a custom class like
+     `.dt-root.my-theme { --dt-primary: #10b981 }`). Inline style wins over
+     `:root` unconditionally; a custom class wins by source order.
+
+   Do NOT redeclare these variables on `.dt-root`: that would shadow
+   `:root` overrides for everything inside the table.
+
+   Stacking ladder. All z-indices in this file go through `--dt-z-*`
+   variables (table body → pinned cols → header → action panels →
+   filter bar → floating panels → autocomplete → modals; gaps of ≥ 10
+   so consumers can slot their own layers between). Override globally
+   via `document.documentElement.style.setProperty('--dt-z-modal',
+   '5000')`, or per-instance on a `.dt-root` element. Pinned-column
+   stacking is computed in JS as `--dt-z-pinned-col + pinOrderOffset`,
+   so overriding `--dt-z-pinned-col` shifts the whole pinned group.
+   =========================================== */
+
+:root {
+  /* Load marker. `createDataTable()` reads this to detect a missing
+     stylesheet import and warn the consumer. Do not remove. */
+  --dt-stylesheet-loaded: 1;
+
+  /* Primary colors */
+  --dt-primary: #2563eb;
+  --dt-primary-hover: #1d4ed8;
+  --dt-primary-light: #eff6ff;
+  --dt-primary-lighter: #dbeafe;
+
+  /* Neutral colors */
+  --dt-bg: #ffffff;
+  --dt-bg-secondary: #f9fafb;
+  --dt-bg-tertiary: #f3f4f6;
+  --dt-border: #e5e7eb;
+  --dt-border-light: #f3f4f6;
+
+  /* Text colors */
+  --dt-text: #111827;
+  --dt-text-secondary: #6b7280;
+  --dt-text-tertiary: #9ca3af;
+
+  /* Sort arrow colors */
+  --dt-arrow-default: #d1d5db;
+  --dt-arrow-hover: #9ca3af;
+
+  /* Sizing */
+  --dt-header-height: 120px;
+  --dt-row-height: 32px;
+  --dt-col-width: 200px; /* Default column width */
+  --dt-scrollbar-width: 17px;
+
+  /* Semantic colors */
+  --dt-success: #22c55e;
+  --dt-error: #ef4444;
+  --dt-error-dark: #dc2626;
+
+  /* Alpha stops of --dt-primary. Overriding --dt-primary cascades via color-mix. */
+  --dt-primary-alpha-10: color-mix(in srgb, var(--dt-primary) 10%, transparent);
+  --dt-primary-alpha-20: color-mix(in srgb, var(--dt-primary) 20%, transparent);
+  --dt-primary-alpha-30: color-mix(in srgb, var(--dt-primary) 30%, transparent);
+  --dt-primary-alpha-50: color-mix(in srgb, var(--dt-primary) 50%, transparent);
+
+  /* Secondary accent (null bars, warning-ish chrome) */
+  --dt-accent: #f59e0b;
+  --dt-accent-hover: #d97706;
+  --dt-accent-soft: color-mix(in srgb, var(--dt-accent) 30%, transparent);
+
+  /* Neutral family (ValueCounts "Other" category — slates) */
+  --dt-neutral: #94a3b8;
+  --dt-neutral-hover: #64748b;
+  --dt-neutral-soft: color-mix(in srgb, var(--dt-neutral) 40%, transparent);
+
+  /* Error chrome tokens */
+  --dt-error-soft: color-mix(in srgb, var(--dt-error) 20%, transparent);
+  --dt-error-darker: #b91c1c;
+  --dt-error-bg: #fef2f2;
+  --dt-error-border-soft: #fecaca;
+  --dt-error-text-strong: #7f1d1d;
+  --dt-on-error: #ffffff;
+
+  /* Modal scrim + shadows */
+  --dt-backdrop: rgba(0, 0, 0, 0.4);
+  --dt-shadow-sm: rgba(0, 0, 0, 0.06);
+  --dt-shadow-md: rgba(0, 0, 0, 0.12);
+
+  /* Syntax-highlighting tokens (SQL editor) */
+  --dt-syntax-string: #16a34a;
+  --dt-syntax-type: #9333ea;
+
+  /* Misc */
+  --dt-radius: 8px;
+  --dt-radius-sm: 4px;
+  --dt-transition: 0.15s ease;
+  --dt-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --dt-font-size: 0.875rem;
+  --dt-font-size-sm: 0.75rem;
+  --dt-font-size-xs: 0.7rem;
+
+  /* Stacking ladder (override to coordinate with host-app modal layers).
+     Layers are ordered bottom → top. Integer gaps ≥ 10 so consumers can slot
+     their own UI (tooltips, toasts) between table layers without recompiling. */
+  --dt-z-table-body: 1;        /* focused cells, resize handle — lift within local stacking */
+  --dt-z-pinned-col: 20;       /* sticky pinned column base; JS adds per-pin offsets */
+  --dt-z-header: 21;           /* column header row + hidden-columns gutter */
+  --dt-z-action-panel: 30;     /* per-column action panel popovers (reserved) */
+  --dt-z-filter-bar: 40;       /* filter bar at top of table */
+  --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
+  --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
+  --dt-z-modal: 1000;          /* full-screen modals + backdrops */
+}
+
+/* Dark mode - automatic based on system preference */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Primary colors - slightly lighter for dark mode */
+    --dt-primary: #3b82f6;
+    --dt-primary-hover: #60a5fa;
+    --dt-primary-light: #1e3a5f;
+    --dt-primary-lighter: #1e40af;
+
+    /* Neutral colors - inverted */
+    --dt-bg: #111827;
+    --dt-bg-secondary: #1f2937;
+    --dt-bg-tertiary: #374151;
+    --dt-border: #374151;
+    --dt-border-light: #1f2937;
+
+    /* Text colors - inverted */
+    --dt-text: #f9fafb;
+    --dt-text-secondary: #d1d5db;
+    --dt-text-tertiary: #9ca3af;
+
+    /* Sort arrow colors */
+    --dt-arrow-default: #4b5563;
+    --dt-arrow-hover: #6b7280;
+
+    /* Semantic colors */
+    --dt-success: #4ade80;
+    --dt-error: #f87171;
+    --dt-error-dark: #ef4444;
+
+    /* Accent family — lighter amber for dark */
+    --dt-accent: #fbbf24;
+    --dt-accent-hover: #f59e0b;
+
+    /* Neutral family — swap the two slate anchors for dark */
+    --dt-neutral: #64748b;
+    --dt-neutral-hover: #94a3b8;
+
+    /* Error chrome surfaces */
+    --dt-error-darker: #dc2626;
+    --dt-error-bg: #451a1a;
+    --dt-error-border-soft: #7f1d1d;
+    --dt-error-text-strong: #fca5a5;
+
+    /* Modal scrim + shadows */
+    --dt-backdrop: rgba(0, 0, 0, 0.6);
+    --dt-shadow-sm: rgba(0, 0, 0, 0.4);
+    --dt-shadow-md: rgba(0, 0, 0, 0.5);
+
+    /* Syntax-highlighting tokens */
+    --dt-syntax-string: #4ade80;
+    --dt-syntax-type: #c084fc;
+
+    /* Note: --dt-primary-alpha-*, --dt-accent-soft, --dt-neutral-soft, --dt-error-soft
+       are derived via color-mix() from their base tokens; they do not need redeclaration
+       because the base tokens are redeclared above. */
+  }
+}
+

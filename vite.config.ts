@@ -1,32 +1,42 @@
 import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
 /**
- * Plugin to copy CSS file to dist directory after build
+ * Plugin to concatenate CSS module files into a single dist/data-table.css.
+ *
+ * Source modules live in src/styles/ with numeric-prefixed filenames
+ * (01-*.css, 02-*.css, …) so lexicographic sort == cascade order.
+ * The developer-facing src/styles/index.css manifest is skipped (it uses
+ * runtime @import, which the demo app relies on during dev).
  */
-function copyStylesPlugin(): Plugin {
+function buildStylesPlugin(): Plugin {
   return {
-    name: 'copy-styles',
+    name: 'build-styles',
     writeBundle() {
-      const srcPath = resolve(__dirname, 'src/styles/data-table.css');
+      const srcDir = resolve(__dirname, 'src/styles');
       const distPath = resolve(__dirname, 'dist/data-table.css');
-
-      // Ensure dist directory exists
       const distDir = resolve(__dirname, 'dist');
       if (!existsSync(distDir)) {
         mkdirSync(distDir, { recursive: true });
       }
 
-      // Copy the CSS file
-      copyFileSync(srcPath, distPath);
-      console.log('✓ Copied data-table.css to dist/');
+      const files = readdirSync(srcDir)
+        .filter((f) => /^\d\d-.+\.css$/.test(f))
+        .sort();
+
+      const combined = files
+        .map((f) => readFileSync(resolve(srcDir, f), 'utf8'))
+        .join('\n');
+
+      writeFileSync(distPath, combined, 'utf8');
+      console.log(`✓ Concatenated ${files.length} CSS modules → dist/data-table.css`);
     },
   };
 }
 
 export default defineConfig({
-  plugins: [copyStylesPlugin()],
+  plugins: [buildStylesPlugin()],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),

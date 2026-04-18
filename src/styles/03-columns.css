@@ -1,0 +1,782 @@
+/*
+ * Columns — column headers, resize/drag handles, action panel, derived-column
+ * visual identity, derived-column edit panel, expression editor (CodeMirror),
+ * add-column button. Keyframes colocate with their consumer.
+ */
+
+/* ===========================================
+   Column Headers
+   =========================================== */
+
+.dt-col-header {
+  display: flex;
+  flex-direction: column;
+  position: relative; /* For absolute positioning of resize handle */
+  width: var(--dt-col-width);
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem; /* Symmetric padding - no extra left padding */
+  border-right: 1px solid var(--dt-border);
+  cursor: default; /* No grab cursor - use drag handle instead */
+  transition: background var(--dt-transition), box-shadow var(--dt-transition);
+  background: var(--dt-bg-secondary);
+}
+
+.dt-col-header:hover {
+  background: var(--dt-bg-tertiary);
+}
+
+@keyframes dt-col-restore-flash {
+  0% { background-color: var(--dt-primary-alpha-10); }
+  100% { background-color: transparent; }
+}
+
+.dt-col-header--restored {
+  animation: dt-col-restore-flash 1.5s ease-out;
+}
+
+.dt-col-header:last-child {
+  border-right: none;
+}
+
+.dt-col-header--dragging {
+  opacity: 0.5;
+  background: var(--dt-bg-tertiary);
+}
+
+.dt-col-header--filtered {
+  box-shadow: inset 0 3px 0 0 var(--dt-primary);
+}
+
+.dt-col-header.dt-col-resetting {
+  transition: width 0.2s ease-out;
+}
+
+/* Name row: flex container for drag handle + column name */
+.dt-col-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dt-col-name {
+  flex: 1; /* Fill available width */
+  min-width: 0; /* Allow text truncation in flex container */
+  font-weight: 600;
+  font-size: var(--dt-font-size);
+  color: var(--dt-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-col-name--derived {
+  font-style: italic;
+}
+
+.dt-col-type {
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.dt-col-stats {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-tertiary);
+  margin-top: 0.25rem;
+  height: 5.2em; /* 4 lines × 1.3 line-height — accommodates wrapped stats + hover */
+  line-height: 1.3;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+.dt-col-stats .stats-label {
+  font-weight: 600;
+}
+
+.dt-col-stats .dt-stats-line2 {
+  opacity: 0.8;
+}
+
+.dt-col-viz {
+  height: 60px;
+  margin-top: 0.25rem;
+  background: var(--dt-bg-secondary);
+  border-radius: var(--dt-radius-sm);
+  border: 1px solid var(--dt-border);
+}
+
+/* ===========================================
+   Column Resize Handle
+   =========================================== */
+
+.dt-col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize !important;
+  background: transparent;
+  z-index: var(--dt-z-table-body, 1);
+}
+
+.dt-col-resize-handle:hover {
+  background: var(--dt-primary-alpha-50);
+}
+
+.dt-col-resize-handle--active {
+  background: var(--dt-primary);
+}
+
+/* ===========================================
+   Drag Handle (in action panel)
+   =========================================== */
+
+.dt-col-drag-handle {
+  /* Element within action panel flex container */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: grab;
+  opacity: 0.3;
+  transition: opacity var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-col-drag-handle:hover {
+  opacity: 0.7;
+  background: var(--dt-shadow-sm);
+}
+
+.dt-col-drag-handle:active {
+  cursor: grabbing;
+  opacity: 1;
+}
+
+.dt-col-drag-handle:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+  opacity: 0.7;
+}
+
+.dt-col-drag-handle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dt-col-drag-handle circle {
+  fill: var(--dt-text-secondary);
+}
+
+.dt-col-drag-handle--disabled {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Dark mode adjustments for drag handle */
+@media (prefers-color-scheme: dark) {
+  .dt-col-drag-handle:hover {
+    /* keep: dark-mode subtle light highlight; no semantic variable */
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* ===========================================
+   Column Action Panel
+   =========================================== */
+
+.dt-col-action-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.dt-col-action-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  color: var(--dt-arrow-default);
+  transition: color var(--dt-transition), background var(--dt-transition);
+}
+
+.dt-col-action-btn:hover {
+  color: var(--dt-arrow-hover);
+  background: var(--dt-shadow-sm);
+}
+
+.dt-col-action-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-col-action-btn--active {
+  color: var(--dt-primary);
+}
+
+.dt-col-action-btn--active:hover {
+  color: var(--dt-primary-hover);
+  background: var(--dt-primary-alpha-10);
+}
+
+.dt-col-action-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Dark mode adjustments for action buttons */
+@media (prefers-color-scheme: dark) {
+  .dt-col-action-btn:hover {
+    /* keep: dark-mode subtle light highlight; no semantic variable */
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .dt-col-action-btn--active:hover {
+    background: var(--dt-primary-alpha-20);
+  }
+}
+
+.dt-col-action-btn--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ===========================================
+   Derived Columns (Visual Identity)
+   =========================================== */
+
+/* Header tint */
+.dt-col-header--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 40%, var(--dt-bg-secondary));
+}
+
+.dt-col-header--derived:hover {
+  background: color-mix(in srgb, var(--dt-primary-light) 50%, var(--dt-bg-tertiary));
+}
+
+/* f(x) icon button in column name row */
+.dt-derived-icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--dt-primary);
+  transition: color var(--dt-transition);
+}
+
+.dt-derived-icon-btn:hover {
+  background: var(--dt-border);
+}
+
+.dt-derived-icon-btn:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Italic serif "f" glyph for derived columns. The serif italic styling is a
+   deliberate typographic choice for the mathematical f(x) icon, intentionally
+   independent of the host font stack. */
+.dt-derived-fx-glyph {
+  font-family: 'Cambria', Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* Active state: filled circle, white text — applied while edit panel is open */
+.dt-derived-icon-btn--active svg circle {
+  fill: var(--dt-primary);
+}
+
+.dt-derived-icon-btn--active svg text {
+  fill: var(--dt-bg);
+}
+
+.dt-derived-icon-btn--active:hover svg circle {
+  fill: var(--dt-primary-hover);
+}
+
+/* Derived column cell tinting — background covers the full cell including padding.
+   align-self: stretch overrides the row's align-items: center so the tint
+   fills the entire row height. line-height re-centers single-line text. */
+.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+
+/* Hover state */
+.dt-row:hover .dt-cell--derived,
+.dt-row--hover .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
+}
+
+/* Selected state */
+.dt-row--selected .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-light));
+}
+
+.dt-row--selected:hover .dt-cell--derived,
+.dt-row--selected.dt-row--hover .dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
+}
+
+/* Combined pinned + derived */
+.dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 20%, var(--dt-bg));
+}
+
+.dt-row:hover .dt-cell--pinned.dt-cell--derived,
+.dt-row--hover .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 30%, var(--dt-bg-secondary));
+}
+
+.dt-row--selected .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-light));
+}
+
+.dt-row--selected:hover .dt-cell--pinned.dt-cell--derived,
+.dt-row--selected.dt-row--hover .dt-cell--pinned.dt-cell--derived {
+  background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
+}
+
+
+/* ===========================================
+   Derived Column Edit Panel
+   =========================================== */
+
+/* Panel container (same visual pattern as .dt-filter-panel) */
+.dt-derived-edit-panel {
+  position: absolute;
+  z-index: var(--dt-z-floating-panel, 50);
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+}
+
+/* Header */
+.dt-derived-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-derived-edit-title {
+  font-weight: 600;
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-derived-edit-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--dt-radius-sm);
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+
+.dt-derived-edit-close:hover {
+  background: var(--dt-shadow-sm);
+  color: var(--dt-text);
+}
+
+/* Body */
+.dt-derived-edit-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dt-derived-edit-section label {
+  display: block;
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.dt-derived-edit-vector-text {
+  font-size: var(--dt-font-size-sm);
+  color: var(--dt-text-secondary);
+  padding: 0.5rem;
+  background: var(--dt-bg-secondary);
+  border-radius: var(--dt-radius-sm);
+}
+
+.dt-derived-edit-name-error {
+  color: var(--dt-error);
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+
+/* Actions row */
+.dt-derived-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dt-derived-edit-validate {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-primary);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+}
+
+.dt-derived-edit-validate:hover {
+  background: var(--dt-primary-light);
+  border-color: var(--dt-primary-hover);
+  color: var(--dt-primary-hover);
+}
+
+.dt-derived-edit-validate:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-edit-validate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-derived-edit-type-preview {
+  font-size: var(--dt-font-size-xs);
+  color: var(--dt-text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-derived-edit-update {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-primary);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-primary);
+  color: var(--dt-on-error);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-derived-edit-update:hover:not(:disabled) {
+  background: var(--dt-primary-hover);
+  border-color: var(--dt-primary-hover);
+}
+
+.dt-derived-edit-update:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-edit-update:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Danger zone */
+.dt-derived-edit-divider {
+  border: none;
+  border-top: 1px solid var(--dt-border);
+  margin: 0;
+}
+
+.dt-derived-edit-danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dt-derived-edit-delete {
+  padding: 0.3rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+  font-weight: 500;
+  border: 1px solid var(--dt-error-dark);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-error-dark);
+  color: var(--dt-on-error);
+  cursor: pointer;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-derived-edit-delete:hover {
+  background: var(--dt-error-darker);
+  border-color: var(--dt-error-darker);
+}
+
+.dt-derived-edit-delete:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-edit-delete-confirm {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--dt-font-size-sm);
+}
+
+.dt-derived-edit-delete-confirm span {
+  color: var(--dt-text-secondary);
+}
+
+.dt-derived-edit-delete-confirm-btn {
+  padding: 0.3rem 0.5rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-xs);
+  font-weight: 500;
+  border-radius: var(--dt-radius-sm);
+  cursor: pointer;
+  border: 1px solid;
+  transition: background var(--dt-transition), border-color var(--dt-transition);
+}
+
+.dt-derived-edit-delete-confirm-btn:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-derived-edit-delete-confirm-yes {
+  border-color: var(--dt-error-dark);
+  background: var(--dt-error-dark);
+  color: var(--dt-on-error);
+}
+
+.dt-derived-edit-delete-confirm-yes:hover {
+  background: var(--dt-error-darker);
+  border-color: var(--dt-error-darker);
+}
+
+.dt-derived-edit-delete-confirm-no {
+  border-color: var(--dt-border);
+  background: var(--dt-bg);
+  color: var(--dt-text-secondary);
+}
+
+.dt-derived-edit-delete-confirm-no:hover {
+  border-color: var(--dt-text-secondary);
+  color: var(--dt-text);
+}
+
+/* ===========================================
+   Expression Editor
+   =========================================== */
+
+.dt-expr-editor-input {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 0.5rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  box-sizing: border-box;
+}
+
+.dt-expr-editor-input:focus {
+  outline: none;
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-expr-editor-input--error {
+  border-color: var(--dt-error);
+}
+
+.dt-expr-editor-input--error:focus {
+  border-color: var(--dt-error);
+  box-shadow: 0 0 0 2px var(--dt-error-soft);
+}
+
+.dt-expr-editor-error {
+  color: var(--dt-error);
+  font-size: var(--dt-font-size-xs);
+  margin-top: 0.25rem;
+  display: none;
+}
+
+.dt-expr-editor-context {
+  color: var(--dt-text-secondary);
+  font-size: 11px;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* === CodeMirror Expression Editor === */
+
+.dt-cm-expr-editor .cm-editor {
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+}
+
+.dt-cm-expr-editor .cm-editor.cm-focused {
+  border-color: var(--dt-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dt-primary) 20%, transparent);
+}
+
+.dt-cm-expr-editor--error .cm-editor {
+  border-color: var(--dt-error);
+}
+
+.dt-cm-expr-editor--error .cm-editor.cm-focused {
+  border-color: var(--dt-error);
+  box-shadow: 0 0 0 2px var(--dt-error-soft);
+}
+
+/*
+ * Autocomplete tooltip (rendered at document.body level by CodeMirror).
+ *
+ * We attach a library-specific class (`.dt-cm-autocomplete`) to our
+ * tooltip via `autocompletion({ tooltipClass })` in CodeMirrorExpressionEditor.
+ * Scoping the selector to that class prevents our styles from leaking into
+ * any other CodeMirror instance the host app may render.
+ */
+.dt-cm-autocomplete.cm-tooltip-autocomplete {
+  z-index: var(--dt-z-autocomplete, 60);
+  background: var(--dt-bg);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  box-shadow: 0 4px 12px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+}
+
+.dt-cm-autocomplete.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--dt-primary-light);
+  color: var(--dt-text);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .dt-cm-autocomplete.cm-tooltip-autocomplete {
+    box-shadow: 0 4px 12px var(--dt-shadow-md);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .dt-derived-edit-panel {
+    box-shadow: 0 4px 16px var(--dt-shadow-md);
+  }
+  .dt-derived-edit-close:hover {
+    /* keep: dark-mode subtle light highlight; no semantic variable */
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ===========================================
+   Add Column Button (+)
+   =========================================== */
+
+/* Flex wrapper: table root + add-column button side by side */
+.dt-table-wrapper {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  overflow: hidden;
+  background: var(--dt-bg);
+}
+
+.dt-table-wrapper > .dt-root {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.dt-add-column-btn {
+  flex-shrink: 0;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--dt-border);
+  background: var(--dt-bg);
+  color: var(--dt-text-tertiary);
+  cursor: pointer;
+  border-radius: 0 var(--dt-radius) var(--dt-radius) 0;
+  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition), box-shadow var(--dt-transition);
+}
+
+.dt-add-column-btn:hover {
+  background: var(--dt-primary-light);
+  border-left-color: var(--dt-primary);
+  color: var(--dt-primary);
+  box-shadow: inset 0 1px 0 0 var(--dt-primary), inset 0 -1px 0 0 var(--dt-primary), inset -1px 0 0 0 var(--dt-primary);
+}
+
+.dt-add-column-btn:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
+}
+
+.dt-add-column-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+

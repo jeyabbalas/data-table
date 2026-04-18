@@ -1,0 +1,20 @@
+/*
+ * data-table — stylesheet source manifest.
+ *
+ * Consumers should NOT import this file. Import '@jeyabbalas/data-table/styles'
+ * instead, which resolves to the pre-concatenated dist/data-table.css produced
+ * by the build.
+ *
+ * This file is the developer entry point: the demo app links it during local
+ * dev so Vite's HMR picks up edits to individual module files.
+ *
+ * @import order encodes cascade order — do not reorder.
+ */
+@import './01-variables.css';
+@import './02-shell.css';
+@import './03-columns.css';
+@import './04-authoring-modals.css';
+@import './05-data-grid.css';
+@import './06-filters.css';
+@import './07-export.css';
+@import './08-responsive-a11y.css';

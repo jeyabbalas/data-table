@@ -36,6 +36,15 @@
 
    Do NOT redeclare these variables on `.dt-root`: that would shadow
    `:root` overrides for everything inside the table.
+
+   Stacking ladder. All z-indices in this file go through `--dt-z-*`
+   variables (table body → pinned cols → header → action panels →
+   filter bar → floating panels → autocomplete → modals; gaps of ≥ 10
+   so consumers can slot their own layers between). Override globally
+   via `document.documentElement.style.setProperty('--dt-z-modal',
+   '5000')`, or per-instance on a `.dt-root` element. Pinned-column
+   stacking is computed in JS as `--dt-z-pinned-col + pinOrderOffset`,
+   so overriding `--dt-z-pinned-col` shifts the whole pinned group.
    =========================================== */
 
 :root {
@@ -114,8 +123,17 @@
   --dt-font-size-sm: 0.75rem;
   --dt-font-size-xs: 0.7rem;
 
-  /* Stacking — override to coordinate with host-app modal layers. */
-  --dt-z-modal: 1000;
+  /* Stacking ladder (override to coordinate with host-app modal layers).
+     Layers are ordered bottom → top. Integer gaps ≥ 10 so consumers can slot
+     their own UI (tooltips, toasts) between table layers without recompiling. */
+  --dt-z-table-body: 1;        /* focused cells, resize handle — lift within local stacking */
+  --dt-z-pinned-col: 20;       /* sticky pinned column base; JS adds per-pin offsets */
+  --dt-z-header: 21;           /* column header row + hidden-columns gutter */
+  --dt-z-action-panel: 30;     /* per-column action panel popovers (reserved) */
+  --dt-z-filter-bar: 40;       /* filter bar at top of table */
+  --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
+  --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
+  --dt-z-modal: 1000;          /* full-screen modals + backdrops */
 }
 
 /* Dark mode - automatic based on system preference */
@@ -245,7 +263,7 @@
 
 .dt-filter-bar {
   position: relative;
-  z-index: 21;
+  z-index: var(--dt-z-filter-bar, 40);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -446,7 +464,7 @@
 
 .dt-hidden-gutter {
   position: relative;
-  z-index: 21;
+  z-index: var(--dt-z-header, 21);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -676,7 +694,7 @@
   width: 5px;
   cursor: col-resize !important;
   background: transparent;
-  z-index: 1;
+  z-index: var(--dt-z-table-body, 1);
 }
 
 .dt-col-resize-handle:hover {
@@ -925,7 +943,7 @@
 /* Panel container (same visual pattern as .dt-filter-panel) */
 .dt-derived-edit-panel {
   position: absolute;
-  z-index: 22;
+  z-index: var(--dt-z-floating-panel, 50);
   width: 360px;
   display: flex;
   flex-direction: column;
@@ -1234,6 +1252,7 @@
  * any other CodeMirror instance the host app may render.
  */
 .dt-cm-autocomplete.cm-tooltip-autocomplete {
+  z-index: var(--dt-z-autocomplete, 60);
   background: var(--dt-bg);
   border: 1px solid var(--dt-border);
   border-radius: var(--dt-radius-sm);
@@ -1948,7 +1967,7 @@
   bottom: 0;
   width: 2px;
   background: var(--dt-primary-alpha-20);
-  z-index: 20;
+  z-index: var(--dt-z-pinned-col, 20);
   pointer-events: none;
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2128,7 +2147,7 @@
   box-shadow: inset 0 0 0 2px var(--dt-primary);
   align-self: stretch;
   line-height: var(--dt-row-height);
-  z-index: 1;
+  z-index: var(--dt-z-table-body, 1);
 }
 
 /* ===========================================
@@ -2164,7 +2183,7 @@
   width: 3px;
   background: var(--dt-primary);
   pointer-events: none;
-  z-index: 100;
+  z-index: var(--dt-z-floating-panel, 50);
   border-radius: 2px;
   box-shadow: 0 0 4px var(--dt-primary-alpha-50);
 }
@@ -2175,7 +2194,7 @@
 
 .dt-filter-panel {
   position: absolute;
-  z-index: 22;
+  z-index: var(--dt-z-floating-panel, 50);
   width: 320px;
   display: flex;
   flex-direction: column;
@@ -2468,7 +2487,7 @@
 /* Panel container */
 .dt-filter-preset-panel {
   position: absolute;
-  z-index: 22;
+  z-index: var(--dt-z-floating-panel, 50);
   width: 320px;
   display: flex;
   flex-direction: column;

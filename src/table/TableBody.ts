@@ -70,6 +70,7 @@ export class TableBody {
   private readonly rowHeight: number;
   private readonly classPrefix: string;
   private readonly cellRenderer: CellRenderer;
+  private readonly container: HTMLElement;
 
   constructor(
     container: HTMLElement,
@@ -78,6 +79,7 @@ export class TableBody {
     private actions?: StateActions,
     options: TableBodyOptions = {}
   ) {
+    this.container = container;
     this.rowHeight = options.rowHeight ?? 32;
     this.classPrefix = options.classPrefix ?? 'dt';
     this.cellRenderer = new CellRenderer({ classPrefix: this.classPrefix });
@@ -744,6 +746,11 @@ export class TableBody {
     const columnWidths = this.state.columnWidths.get();
     const pinnedColumns = this.state.pinnedColumns.get();
 
+    const root = this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
+    const baseZ = Number(
+      getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()
+    ) || 20;
+
     // Compute pinned offsets
     const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
     let cumulativeLeft = 0;
@@ -751,7 +758,7 @@ export class TableBody {
       const pCol = pinnedColumns[i];
       pinnedOffsets.set(pCol, {
         left: cumulativeLeft,
-        zIndex: 10 + pinnedColumns.length - i,
+        zIndex: baseZ + (pinnedColumns.length - i),
       });
       cumulativeLeft += (columnWidths.get(pCol) ?? 150);
     }

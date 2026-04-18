@@ -960,6 +960,10 @@ export class TableContainer {
     const columnWidths = this.state.columnWidths.get();
     const prefix = this.resolvedOptions.classPrefix;
 
+    const baseZ = Number(
+      getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()
+    ) || 20;
+
     // Compute cumulative left offsets for pinned columns
     const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
     let cumulativeLeft = 0;
@@ -968,7 +972,7 @@ export class TableContainer {
       const colName = pinnedColumns[i];
       pinnedOffsets.set(colName, {
         left: cumulativeLeft,
-        zIndex: 10 + pinnedColumns.length - i,
+        zIndex: baseZ + (pinnedColumns.length - i),
       });
       const width = columnWidths.get(colName) ?? 150;
       cumulativeLeft += width;

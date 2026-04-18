@@ -48,6 +48,10 @@
    =========================================== */
 
 :root {
+  /* Load marker. `createDataTable()` reads this to detect a missing
+     stylesheet import and warn the consumer. Do not remove. */
+  --dt-stylesheet-loaded: 1;
+
   /* Primary colors */
   --dt-primary: #2563eb;
   --dt-primary-hover: #1d4ed8;

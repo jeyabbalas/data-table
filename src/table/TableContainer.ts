@@ -1456,11 +1456,13 @@ export class TableContainer {
    * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
    */
   /**
-   * Resolve where fixed-position modals should mount. Callers use this
-   * instead of `document.body.appendChild(...)` so the host app can route
-   * our modals into its own portal container.
+   * Where fixed-position modals owned by this table mount. Returns the
+   * `portalTarget` option if supplied, otherwise `document.body`. Exposed
+   * as the single source of truth so higher-level wiring (e.g.
+   * `createDataTable()`'s export dialog) can honour the same choice
+   * without re-implementing the fallback.
    */
-  private getPortalTarget(): HTMLElement {
+  public getPortalTarget(): HTMLElement {
     return this.resolvedOptions.portalTarget ?? document.body;
   }
 

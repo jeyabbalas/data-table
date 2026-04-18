@@ -125,6 +125,36 @@ both `:root` and `.dt-root`. Override globally:
 Dark mode uses `@media (prefers-color-scheme: dark)` automatically; override
 the dark-mode variables the same way.
 
+### Stacking ladder
+
+Every `z-index` in the library goes through a `--dt-z-*` variable, so you can
+interleave your own layers without hunting through the stylesheet. Defaults:
+
+| Variable                 | Default | Layer                                                  |
+|--------------------------|--------:|--------------------------------------------------------|
+| `--dt-z-table-body`      | `1`     | Table body cells (focused cells, resize handle)        |
+| `--dt-z-pinned-col`      | `20`    | Sticky pinned-column base; JS adds per-pin offsets     |
+| `--dt-z-header`          | `21`    | Column header row + hidden-columns gutter              |
+| `--dt-z-action-panel`    | `30`    | Per-column action panel popovers                       |
+| `--dt-z-filter-bar`      | `40`    | Filter bar at the top of the table                     |
+| `--dt-z-floating-panel`  | `50`    | In-page panels (filter, preset, derived-edit)          |
+| `--dt-z-autocomplete`    | `60`    | CodeMirror autocomplete tooltip (portalled to `<body>`)|
+| `--dt-z-modal`           | `1000`  | Full-screen modals + backdrops                         |
+
+Gaps are ≥ 10 so you can slot host-app UI between layers. To sit the whole
+table above a host `z-index: 3000` drawer, override the top of the ladder:
+
+```css
+:root {
+  --dt-z-modal: 5000;
+  --dt-z-autocomplete: 4900;
+  --dt-z-floating-panel: 4800;
+}
+```
+
+Pinned-column stacking is computed as `--dt-z-pinned-col + pinOrderOffset`,
+so overriding `--dt-z-pinned-col` shifts the whole pinned group together.
+
 ## CSS isolation
 
 The library is designed to embed cleanly inside third-party apps. All
@@ -137,6 +167,22 @@ selectors are prefixed with `dt-`. Notably:
   lower the variable to slot into your own stacking layer.
 - No bare tag selectors (`button { ... }`, `input { ... }`) leak into
   your page.
+
+### Shadow DOM
+
+The library is intentionally **not** packaged in a shadow root. The `dt-`
+prefix plus the `classPrefix` option is the escape hatch for stricter
+isolation — pass `classPrefix: 'myapp-dt'` (or similar) and every selector,
+modal, and tooltip re-renders with that prefix.
+
+Full shadow-DOM encapsulation was considered and deliberately rejected:
+modals portal into light DOM so they can inherit `--dt-*` theme variables
+from `:root` and escape ancestor `overflow: hidden`; wrapping the library
+in a shadow root blocks that inheritance unless every variable is manually
+forwarded. If your host app still needs shadow-DOM isolation, wrap the
+table yourself and forward the theme variables plus a light-DOM
+`portalTarget` — the library does not fight you, but it does not do it
+for you.
 
 ## Custom visualizations
 
@@ -171,6 +217,41 @@ await t1.destroy();
 await t2.destroy();
 bridge.terminate();
 ```
+
+Each table also gets a unique `instanceId` (auto-generated as `t<n>-<hex>`,
+e.g. `t1-a3f9`) that is mixed into modal element IDs and `aria-labelledby`
+targets so two tables on the same page never collide. It is exposed
+read-only on the returned `DataTable` — most consumers never touch it;
+pass `instanceId: 'my-stable-id'` only if you need deterministic DOM IDs
+for tests.
+
+For maximally-isolated side-by-side deployments (e.g. two tables with
+different themes, or mounting inside a page that also uses the library
+under a different version), give each table its own `classPrefix` and
+`portalTarget`:
+
+```ts
+const primaryPortal = document.getElementById('primary-modals')!;
+const comparePortal = document.getElementById('compare-modals')!;
+
+const primary = await createDataTable({
+  container: document.getElementById('primary')!,
+  source: f1,
+  classPrefix: 'primary-dt',
+  portalTarget: primaryPortal,
+});
+
+const compare = await createDataTable({
+  container: document.getElementById('compare')!,
+  source: f2,
+  classPrefix: 'compare-dt',
+  portalTarget: comparePortal,
+});
+```
+
+With distinct `classPrefix` values the two tables share no CSS selectors;
+with distinct `portalTarget` elements their modals mount into separate
+subtrees, so host styles can target one without affecting the other.
 
 ## Advanced: modular API
 

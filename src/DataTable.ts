@@ -64,6 +64,12 @@ import { FilterPresetManager } from './filters/FilterPresets';
 
 import { ExportDialog } from './export/ExportDialog';
 
+// Emitted once per page lifetime when the library stylesheet is missing —
+// detected via the `--dt-stylesheet-loaded` marker declared on `:root` in
+// `src/styles/data-table.css`. Kept module-scoped so multiple
+// `createDataTable()` calls don't spam the console.
+let stylesheetWarningEmitted = false;
+
 /**
  * Options accepted by {@link createDataTable}. All feature toggles default
  * to `true`; pass `false` (or a configuration object) to customize.
@@ -293,6 +299,20 @@ export async function createDataTable(
       portalTarget: opts.portalTarget,
     }
   );
+
+  // -------- Stylesheet presence check --------
+  if (!stylesheetWarningEmitted) {
+    const marker = getComputedStyle(document.documentElement)
+      .getPropertyValue('--dt-stylesheet-loaded')
+      .trim();
+    if (!marker) {
+      stylesheetWarningEmitted = true;
+      console.warn(
+        "[data-table] Stylesheet missing: add `import '@jeyabbalas/data-table/styles'` " +
+        "(or link dist/data-table.css) before mounting. The table will render without theming."
+      );
+    }
+  }
 
   // -------- Event bus --------
   const emitter = new EventEmitter<TableEvents>();
@@ -532,7 +552,7 @@ export async function createDataTable(
         classPrefix: opts.classPrefix ?? 'dt',
         instanceId,
       });
-      (opts.portalTarget ?? document.body).appendChild(exportDialog.getElement());
+      tableContainer.getPortalTarget().appendChild(exportDialog.getElement());
     }
     exportDialog.open();
   };

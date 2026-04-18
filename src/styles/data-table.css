@@ -2590,10 +2590,12 @@
   cursor: not-allowed;
 }
 
-/* Input error flash */
-.dt-filter-input--error {
-  border-color: var(--dt-error) !important;
-  box-shadow: 0 0 0 2px var(--dt-error-soft) !important;
+/* Input error flash. Higher specificity (.dt-root + double class) wins over
+   .dt-filter-input:focus without needing !important. Requires that any element
+   receiving --error also carries the base .dt-filter-input class. */
+.dt-root .dt-filter-input.dt-filter-input--error {
+  border-color: var(--dt-error);
+  box-shadow: 0 0 0 2px var(--dt-error-soft);
 }
 
 /* Dividers */
@@ -3071,7 +3073,10 @@
 
 /* --- Compact: container width below 550px --- */
 @container dt-root (max-width: 549px) {
-  /* Header: allow natural height when children are hidden */
+  /* Header: allow natural height when children are hidden.
+     !important is required because TableContainer.ts:297 sets
+     `el.style.minHeight` inline from `resolvedOptions.headerHeight`;
+     inline styles outrank any selector-specificity we could write. */
   .dt-header {
     min-height: auto !important;
   }
@@ -3144,4 +3149,21 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   Accessibility: honor user's reduced-motion preference.
+   Scoped to .dt-root so we only tame motion inside our own widgets — never on
+   the host page. The `!important` declarations are required because many of
+   our transitions/animations set durations via inline or high-specificity
+   rules; this is the standard pattern for this a11y media query.
+   ----------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .dt-root,
+  .dt-root * {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

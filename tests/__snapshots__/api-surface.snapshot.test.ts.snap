@@ -86,9 +86,12 @@ exports[`Public API surface > root export keys match snapshot 1`] = `
   "WorkerInitError",
   "WorkerTerminatedError",
   "createDataTable",
+  "defaultStrings",
   "defaultVisualizationRegistry",
   "deserializeFilter",
   "formatSQLValue",
+  "isStylesheetLoaded",
+  "mergeStrings",
   "quoteIdentifier",
   "serializeFilter",
 ]

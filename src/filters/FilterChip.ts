@@ -6,6 +6,7 @@
  */
 
 import type { Filter } from './FilterTypes';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for FilterChip
@@ -14,6 +15,8 @@ export interface FilterChipOptions {
   classPrefix?: string;
   /** Called when the chip body is clicked (for editing). Used by raw-sql filter chips. */
   onEdit?: () => void;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -57,18 +60,24 @@ function truncateSQL(sql: string, maxLen: number): string {
 }
 
 /**
- * Format a filter into a human-readable description
+ * Format a filter into a human-readable description.
  *
- * @returns Object with column name and description text
+ * @param filter - The filter to format.
+ * @param messages - Resolved i18n strings. Defaults to English.
+ * @returns Object with column name and description text.
  */
-export function formatFilter(filter: Filter): { column: string; description: string } {
+export function formatFilter(
+  filter: Filter,
+  messages: Strings = defaultStrings
+): { column: string; description: string } {
+  const d = messages.filters.chipDescriptions;
   switch (filter.type) {
     case 'range': {
       const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
       const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
 
       if (minIsOpen && maxIsOpen) {
-        return { column: filter.column, description: 'any value' };
+        return { column: filter.column, description: d.anyValue };
       }
       if (minIsOpen) {
         const op = filter.maxInclusive ? '\u2264' : '<';
@@ -80,52 +89,52 @@ export function formatFilter(filter: Filter): { column: string; description: str
       }
       const min = formatDisplayValue(filter.min);
       const max = formatDisplayValue(filter.max);
-      return { column: filter.column, description: `${min} \u2013 ${max}` };
+      return { column: filter.column, description: `${min} ${d.rangeSeparator} ${max}` };
     }
     case 'point': {
-      return { column: filter.column, description: `= ${formatDisplayValue(filter.value)}` };
+      return { column: filter.column, description: `${d.pointPrefix} ${formatDisplayValue(filter.value)}` };
     }
     case 'set': {
       const maxShow = 3;
       const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
       const list =
-        rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
-      const nullSuffix = filter.includeNull ? ' or null' : '';
-      return { column: filter.column, description: `in {${list}}${nullSuffix}` };
+        rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
+      return { column: filter.column, description: d.inSet(list, !!filter.includeNull) };
     }
     case 'not-set': {
       const maxShow = 3;
       const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
       const list =
-        rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
-      const nullSuffix = filter.includeNull ? ' or null' : '';
-      return { column: filter.column, description: `not in {${list}}${nullSuffix}` };
+        rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
+      return { column: filter.column, description: d.notInSet(list, !!filter.includeNull) };
     }
     case 'null': {
-      return { column: filter.column, description: 'is null' };
+      return { column: filter.column, description: d.isNull };
     }
     case 'not-null': {
-      return { column: filter.column, description: 'is not null' };
+      return { column: filter.column, description: d.isNotNull };
     }
     case 'pattern': {
-      const modeLabels: Record<string, string> = {
-        contains: 'contains',
-        starts: 'starts with',
-        ends: 'ends with',
-        regex: 'matches',
-      };
+      const modeLabel =
+        filter.mode === 'starts'
+          ? d.patternModes.startsWith
+          : filter.mode === 'ends'
+            ? d.patternModes.endsWith
+            : filter.mode === 'regex'
+              ? d.patternModes.regex
+              : d.patternModes.contains;
       const quote =
         filter.mode === 'regex' ? `/${filter.pattern}/` : `"${filter.pattern}"`;
       return {
         column: filter.column,
-        description: `${modeLabels[filter.mode]} ${quote}`,
+        description: `${modeLabel} ${quote}`,
       };
     }
     case 'raw-sql': {
       const display = filter.label || truncateSQL(filter.sql, 40);
-      return { column: 'SQL', description: display };
+      return { column: d.sqlColumn, description: display };
     }
   }
 }
@@ -138,6 +147,7 @@ export class FilterChip {
   private destroyed = false;
   private readonly prefix: string;
   private readonly onEdit?: () => void;
+  private readonly messages: Strings;
 
   constructor(
     private filter: Filter,
@@ -146,11 +156,12 @@ export class FilterChip {
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.onEdit = options.onEdit;
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
   }
 
   private createElement(): HTMLElement {
-    const { column, description } = formatFilter(this.filter);
+    const { column, description } = formatFilter(this.filter, this.messages);
 
     // Container span
     const chip = document.createElement('span');
@@ -199,7 +210,7 @@ export class FilterChip {
     // Remove button
     const removeBtn = document.createElement('button');
     removeBtn.className = `${this.prefix}-filter-chip-remove`;
-    removeBtn.setAttribute('aria-label', `Remove filter for ${column}`);
+    removeBtn.setAttribute('aria-label', this.messages.filters.ariaLabels.removeFilter(column));
     removeBtn.type = 'button';
     removeBtn.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M1 1L7 7M7 1L1 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

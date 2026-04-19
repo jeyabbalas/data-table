@@ -117,3 +117,18 @@ export type {
   ProgressCallback,
   ProgressStage,
 } from './core/Progress';
+
+// ---- Internationalization ----
+// Pass `messages: DeepPartial<Strings>` to `createDataTable` to override any
+// user-facing string. `defaultStrings` holds the English defaults;
+// `mergeStrings` applies overrides recursively (functions replace wholesale).
+export {
+  defaultStrings,
+  mergeStrings,
+} from './core/Strings';
+export type { Strings, DeepPartial } from './core/Strings';
+
+// ---- Stylesheet presence detection ----
+// Pair the sync getter with the `warning` event (code `STYLESHEET_MISSING`):
+// the getter is useful for pre-mount checks, the event for logging.
+export { isStylesheetLoaded } from './core/stylesheet';

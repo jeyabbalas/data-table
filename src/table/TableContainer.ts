@@ -25,22 +25,7 @@ import { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { KeyboardNavigator } from './KeyboardNavigator';
 import { nextInstanceId } from '../core/instanceId';
-
-/**
- * Screen-reader live-region string templates. Extracted as a single object
- * so Phase 8 (i18n) can swap it for a user-supplied function without
- * touching the announcement logic itself.
- */
-const LIVE_REGION_STRINGS = {
-  filtersActive: (n: number, shown: number, total: number): string =>
-    `${n} ${n === 1 ? 'filter' : 'filters'} active, showing ${shown.toLocaleString()} of ${total.toLocaleString()} rows`,
-  noFilters: (total: number): string =>
-    `Showing all ${total.toLocaleString()} rows`,
-  sortedBy: (descriptions: string[]): string =>
-    `sorted by ${descriptions.join(', then ')}`,
-  ascending: 'ascending',
-  descending: 'descending',
-};
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Light/dark theme selector accepted by {@link TableContainerOptions.colorScheme}
@@ -89,6 +74,8 @@ export interface TableContainerOptions {
    * `data-dt-color-scheme` onto the root element.
    */
   colorScheme?: ContainerColorScheme;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -160,6 +147,7 @@ export class TableContainer {
 
   // Resolved options with defaults applied
   private readonly resolvedOptions: Required<TableContainerOptions>;
+  private readonly messages: Strings;
 
   constructor(
     private container: HTMLElement,
@@ -182,11 +170,13 @@ export class TableContainer {
       presetManager: undefined as unknown as FilterPresetManager,
       portalTarget: undefined as unknown as HTMLElement,
       colorScheme: 'auto',
+      messages: defaultStrings,
       ...options,
     };
     if (!this.resolvedOptions.instanceId) {
       this.resolvedOptions.instanceId = nextInstanceId();
     }
+    this.messages = this.resolvedOptions.messages;
 
     // Create DOM structure
     this.element = this.createRootElement();
@@ -219,6 +209,7 @@ export class TableContainer {
         onPresetsClick: this.resolvedOptions.presetManager
           ? () => this.handlePresetsClick()
           : undefined,
+        messages: this.messages,
       });
       this.element.appendChild(this.filterBar.getElement());
     }
@@ -237,6 +228,7 @@ export class TableContainer {
     if (this.actions) {
       this.hiddenColumnsGutter = new HiddenColumnsGutter(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        messages: this.messages,
       });
       this.element.appendChild(this.hiddenColumnsGutter.getElement());
     }
@@ -246,6 +238,7 @@ export class TableContainer {
       this.addColumnButton = new AddColumnButton({
         classPrefix: this.resolvedOptions.classPrefix,
         onClick: () => this.handleAddColumnClick(),
+        messages: this.messages,
       });
 
       this.wrapperElement = document.createElement('div');
@@ -545,17 +538,18 @@ export class TableContainer {
 
     const parts: string[] = [];
 
+    const a = this.messages.a11y;
     if (filters.length > 0) {
-      parts.push(LIVE_REGION_STRINGS.filtersActive(filters.length, filteredRows, totalRows));
+      parts.push(a.filtersActive(filters.length, filteredRows, totalRows));
     } else {
-      parts.push(LIVE_REGION_STRINGS.noFilters(totalRows));
+      parts.push(a.noFilters(totalRows));
     }
 
     if (sortColumns.length > 0) {
       const sortDescriptions = sortColumns.map(
-        (s) => `${s.column} ${s.direction === 'asc' ? LIVE_REGION_STRINGS.ascending : LIVE_REGION_STRINGS.descending}`
+        (s) => `${s.column} ${s.direction === 'asc' ? a.ascending : a.descending}`
       );
-      parts.push(LIVE_REGION_STRINGS.sortedBy(sortDescriptions));
+      parts.push(a.sortedBy(sortDescriptions));
     }
 
     this.liveRegion.textContent = parts.join(', ');
@@ -903,6 +897,7 @@ export class TableContainer {
                 onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
                 onDerivedIconClick: (column, buttonEl) => this.handleDerivedIconClick(column, buttonEl),
                 colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
+                messages: this.messages,
               }
             );
             this.columnHeaders.push(columnHeader);
@@ -1079,6 +1074,7 @@ export class TableContainer {
       this.filterPanel = new FilterPanel(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
         colorSchemeSource: this.element,
+        messages: this.messages,
       });
       this.element.appendChild(this.filterPanel.getElement());
     }
@@ -1110,6 +1106,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         editorFactory: this.resolvedOptions.editorFactory,
         colorSchemeSource: this.element,
+        messages: this.messages,
       });
       this.element.appendChild(this.derivedEditPanel.getElement());
     }
@@ -1138,6 +1135,7 @@ export class TableContainer {
         editorFactory: this.resolvedOptions.editorFactory,
         onCreated: () => this.scrollToRightEnd(),
         colorSchemeSource: this.element,
+        messages: this.messages,
       });
       // Mount in the configured portal target (defaults to <body>). Fixed-
       // position modals need a root that isn't inside a transformed/filtered
@@ -1167,6 +1165,7 @@ export class TableContainer {
         instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
         colorSchemeSource: this.element,
+        messages: this.messages,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
@@ -1193,6 +1192,7 @@ export class TableContainer {
         instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
         colorSchemeSource: this.element,
+        messages: this.messages,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
@@ -1222,6 +1222,7 @@ export class TableContainer {
         {
           classPrefix: this.resolvedOptions.classPrefix,
           colorSchemeSource: this.element,
+          messages: this.messages,
         }
       );
       this.element.appendChild(this.presetPanel.getElement());

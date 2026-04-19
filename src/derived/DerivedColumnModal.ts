@@ -12,6 +12,7 @@ import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { DerivedColumnDef, VectorDataType } from './types';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface DerivedColumnModalOptions {
   classPrefix?: string;
@@ -32,6 +33,8 @@ export interface DerivedColumnModalOptions {
    * pass the `.dt-root` element here to keep it theme-synced.
    */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class DerivedColumnModal {
@@ -55,6 +58,7 @@ export class DerivedColumnModal {
 
   private readonly prefix: string;
   private readonly instanceId: string;
+  private readonly messages: Strings;
   private editorFactory?: ExpressionEditorFactory;
   private onCreated?: () => void;
   private colorSchemeSource?: HTMLElement;
@@ -74,6 +78,7 @@ export class DerivedColumnModal {
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.instanceId = options?.instanceId ?? '';
+    this.messages = options?.messages ?? defaultStrings;
     this.editorFactory = options?.editorFactory;
     this.onCreated = options?.onCreated;
     this.colorSchemeSource = options?.colorSchemeSource;
@@ -113,12 +118,12 @@ export class DerivedColumnModal {
     const title = document.createElement('span');
     title.className = `${p}-derived-modal-title`;
     title.id = `${p}-${this.instanceId}-derived-modal-title`;
-    title.textContent = 'New Derived Column';
+    title.textContent = this.messages.derived.newColumnTitle;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = `${p}-derived-modal-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.setAttribute('aria-label', this.messages.derived.closeLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -168,13 +173,13 @@ export class DerivedColumnModal {
     section.className = `${p}-derived-modal-section`;
 
     const label = document.createElement('label');
-    label.textContent = 'Column name';
+    label.textContent = this.messages.derived.nameLabel;
     section.appendChild(label);
 
     this.nameInput = document.createElement('input');
     this.nameInput.type = 'text';
     this.nameInput.className = `${p}-filter-input`;
-    this.nameInput.placeholder = 'e.g. total_price';
+    this.nameInput.placeholder = this.messages.derived.namePlaceholder;
     this.nameInput.autocomplete = 'off';
     this.nameInput.spellcheck = false;
     this.nameInput.addEventListener('input', () => {
@@ -198,7 +203,7 @@ export class DerivedColumnModal {
     fieldset.className = `${p}-derived-modal-mode-group`;
 
     const legend = document.createElement('legend');
-    legend.textContent = 'Column type';
+    legend.textContent = this.messages.derived.typeLabel;
     fieldset.appendChild(legend);
 
     // Expression radio
@@ -211,7 +216,7 @@ export class DerivedColumnModal {
     this.expressionRadio.checked = true;
     this.expressionRadio.addEventListener('change', () => this.onModeChange('expression'));
     exprLabel.appendChild(this.expressionRadio);
-    exprLabel.appendChild(document.createTextNode('SQL Expression'));
+    exprLabel.appendChild(document.createTextNode(this.messages.derived.expressionModeLabel));
     fieldset.appendChild(exprLabel);
 
     // Vector radio
@@ -223,7 +228,7 @@ export class DerivedColumnModal {
     this.vectorRadio.value = 'vector';
     this.vectorRadio.addEventListener('change', () => this.onModeChange('vector'));
     vecLabel.appendChild(this.vectorRadio);
-    vecLabel.appendChild(document.createTextNode('Manually Enter Values'));
+    vecLabel.appendChild(document.createTextNode(this.messages.derived.vectorModeLabel));
     fieldset.appendChild(vecLabel);
 
     return fieldset;
@@ -236,7 +241,7 @@ export class DerivedColumnModal {
     section.className = `${p}-derived-modal-section`;
 
     const label = document.createElement('label');
-    label.textContent = 'SQL Expression';
+    label.textContent = this.messages.derived.expressionLabel;
     section.appendChild(label);
 
     this.editorContainer = document.createElement('div');
@@ -250,7 +255,7 @@ export class DerivedColumnModal {
     this.validateBtn = document.createElement('button');
     this.validateBtn.className = `${p}-derived-modal-validate`;
     this.validateBtn.type = 'button';
-    this.validateBtn.textContent = 'Validate';
+    this.validateBtn.textContent = this.messages.common.validate;
     this.validateBtn.addEventListener('click', () => this.handleValidateExpression());
     actionsRow.appendChild(this.validateBtn);
 
@@ -270,7 +275,7 @@ export class DerivedColumnModal {
 
     // Type selector
     const typeLabel = document.createElement('label');
-    typeLabel.textContent = 'Data type';
+    typeLabel.textContent = this.messages.derived.vectorTypeLabel;
     section.appendChild(typeLabel);
 
     this.vectorTypeSelect = document.createElement('select');
@@ -289,14 +294,14 @@ export class DerivedColumnModal {
 
     // Values textarea
     const valLabel = document.createElement('label');
-    valLabel.textContent = 'Values (one per line)';
+    valLabel.textContent = this.messages.derived.vectorValuesLabel;
     valLabel.style.marginTop = '0.5rem';
     section.appendChild(valLabel);
 
     this.vectorTextarea = document.createElement('textarea');
     this.vectorTextarea.className = `${p}-derived-modal-vector-textarea`;
     this.vectorTextarea.rows = 8;
-    this.vectorTextarea.placeholder = 'Enter one value per line...';
+    this.vectorTextarea.placeholder = this.messages.derived.vectorPlaceholder;
     this.vectorTextarea.spellcheck = false;
     this.vectorTextarea.addEventListener('input', () => {
       this.updateVectorInfo();
@@ -328,14 +333,14 @@ export class DerivedColumnModal {
     const cancelBtn = document.createElement('button');
     cancelBtn.className = `${p}-derived-modal-cancel`;
     cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = this.messages.common.cancel;
     cancelBtn.addEventListener('click', () => this.close());
     footer.appendChild(cancelBtn);
 
     this.createBtn = document.createElement('button');
     this.createBtn.className = `${p}-derived-modal-create`;
     this.createBtn.type = 'button';
-    this.createBtn.textContent = 'Create';
+    this.createBtn.textContent = this.messages.derived.createButton;
     this.createBtn.disabled = true;
     this.createBtn.addEventListener('click', () => this.handleCreate());
     footer.appendChild(this.createBtn);
@@ -381,7 +386,7 @@ export class DerivedColumnModal {
     const name = this.nameInput.value.trim();
 
     if (!name) {
-      this.nameErrorEl.textContent = 'Name is required';
+      this.nameErrorEl.textContent = this.messages.derived.nameRequired;
       this.nameErrorEl.style.display = '';
       return;
     }
@@ -391,7 +396,7 @@ export class DerivedColumnModal {
     const duplicate = schema.find((s) => s.name === name);
 
     if (duplicate) {
-      this.nameErrorEl.textContent = `A column named "${name}" already exists`;
+      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(name);
       this.nameErrorEl.style.display = '';
     } else {
       this.nameErrorEl.textContent = '';
@@ -411,7 +416,7 @@ export class DerivedColumnModal {
     const lines = this.getVectorLines();
     const count = lines.length;
     const totalRows = this.state.totalRows.get();
-    this.vectorInfoEl.textContent = `${count} / ${totalRows} values entered`;
+    this.vectorInfoEl.textContent = this.messages.derived.vectorInfo(count, totalRows);
   }
 
   /** Run both count validation and type-specific validation */
@@ -425,7 +430,7 @@ export class DerivedColumnModal {
     // Count check first
     const totalRows = this.state.totalRows.get();
     if (lines.length !== totalRows) {
-      this.vectorErrorEl.textContent = `Expected ${totalRows} values, got ${lines.length}`;
+      this.vectorErrorEl.textContent = this.messages.derived.vectorCountMismatch(totalRows, lines.length);
       this.vectorErrorEl.style.display = '';
       return;
     }
@@ -484,7 +489,7 @@ export class DerivedColumnModal {
 
     const expression = this.currentEditor.getValue().trim();
     if (!expression) {
-      this.currentEditor.setError('Expression is required');
+      this.currentEditor.setError(this.messages.derived.expressionRequired);
       return;
     }
 
@@ -493,21 +498,21 @@ export class DerivedColumnModal {
     const versionAtStart = ++this.validationVersion;
 
     this.validateBtn.disabled = true;
-    this.validateBtn.textContent = 'Validating\u2026';
+    this.validateBtn.textContent = this.messages.common.validating;
 
     try {
       const result = await this.actions.validateExpression(expression);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.typePreview.textContent = `Type: ${result.type} (${result.originalType})`;
+        this.typePreview.textContent = this.messages.derived.typePreview(result.type!, result.originalType!);
         this.typePreview.style.color = 'var(--dt-success)';
         this.expressionValidated = true;
         this.currentEditor.setError(null);
       } else {
-        this.typePreview.textContent = result.error ?? 'Validation failed';
+        this.typePreview.textContent = result.error ?? this.messages.derived.validationFailed;
         this.typePreview.style.color = 'var(--dt-error)';
         this.expressionValidated = false;
-        this.currentEditor.setError(result.error ?? 'Validation failed');
+        this.currentEditor.setError(result.error ?? this.messages.derived.validationFailed);
       }
     } catch (err) {
       if (this.validationVersion !== versionAtStart) return; // stale
@@ -519,7 +524,7 @@ export class DerivedColumnModal {
     } finally {
       if (this.validationVersion === versionAtStart) {
         this.validateBtn.disabled = false;
-        this.validateBtn.textContent = 'Validate';
+        this.validateBtn.textContent = this.messages.common.validate;
         this.updateCreateButtonState();
       }
     }
@@ -555,7 +560,7 @@ export class DerivedColumnModal {
 
     this.creating = true;
     this.createBtn.disabled = true;
-    this.createBtn.textContent = 'Creating\u2026';
+    this.createBtn.textContent = this.messages.common.creating;
     this.errorEl.style.display = 'none';
 
     try {
@@ -564,7 +569,7 @@ export class DerivedColumnModal {
         this.close();
         this.onCreated?.();
       } else {
-        this.errorEl.textContent = result.error ?? 'Failed to create column';
+        this.errorEl.textContent = result.error ?? this.messages.derived.createFailed;
         this.errorEl.style.display = '';
       }
     } catch (err) {
@@ -573,7 +578,7 @@ export class DerivedColumnModal {
       this.errorEl.style.display = '';
     } finally {
       this.creating = false;
-      this.createBtn.textContent = 'Create';
+      this.createBtn.textContent = this.messages.derived.createButton;
       this.updateCreateButtonState();
     }
   }
@@ -582,6 +587,7 @@ export class DerivedColumnModal {
     lines: string[],
     vectorType: VectorDataType
   ): { success: boolean; values?: number[] | string[] | boolean[]; error?: string } {
+    const m = this.messages.derived;
     if (vectorType === 'string') {
       return { success: true, values: lines };
     }
@@ -595,10 +601,7 @@ export class DerivedColumnModal {
         } else if (lower === 'false' || lower === '0') {
           values.push(false);
         } else {
-          return {
-            success: false,
-            error: `Line ${i + 1}: "${lines[i]}" is not a valid boolean (use true/false/1/0)`,
-          };
+          return { success: false, error: m.vectorInvalidBoolean(i + 1, lines[i]) };
         }
       }
       return { success: true, values };
@@ -610,7 +613,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (!re.test(lines[i])) {
-          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid date (use YYYY-MM-DD)` };
+          return { success: false, error: m.vectorInvalidDate(i + 1, lines[i]) };
         }
         values.push(lines[i]);
       }
@@ -622,7 +625,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (!re.test(lines[i])) {
-          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid timestamp (use YYYY-MM-DD HH:MM:SS)` };
+          return { success: false, error: m.vectorInvalidTimestamp(i + 1, lines[i]) };
         }
         values.push(lines[i]);
       }
@@ -634,7 +637,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (!re.test(lines[i])) {
-          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid time (use HH:MM:SS)` };
+          return { success: false, error: m.vectorInvalidTime(i + 1, lines[i]) };
         }
         values.push(lines[i]);
       }
@@ -645,7 +648,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].trim().length === 0) {
-          return { success: false, error: `Line ${i + 1}: interval cannot be empty (e.g. "1 day 2 hours")` };
+          return { success: false, error: m.vectorInvalidInterval(i + 1) };
         }
         values.push(lines[i]);
       }
@@ -657,7 +660,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (!re.test(lines[i])) {
-          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid decimal (use a numeric value)` };
+          return { success: false, error: m.vectorInvalidDecimal(i + 1, lines[i]) };
         }
         values.push(lines[i]);
       }
@@ -669,7 +672,7 @@ export class DerivedColumnModal {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         if (!re.test(lines[i])) {
-          return { success: false, error: `Line ${i + 1}: "${lines[i]}" is not a valid UUID (use xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx format)` };
+          return { success: false, error: m.vectorInvalidUUID(i + 1, lines[i]) };
         }
         values.push(lines[i]);
       }
@@ -681,26 +684,17 @@ export class DerivedColumnModal {
     for (let i = 0; i < lines.length; i++) {
       if (vectorType === 'integer') {
         if (!/^-?\d+$/.test(lines[i])) {
-          return {
-            success: false,
-            error: `Line ${i + 1}: "${lines[i]}" is not a valid integer (use whole numbers only)`,
-          };
+          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]) };
         }
         const num = parseInt(lines[i], 10);
         if (isNaN(num)) {
-          return {
-            success: false,
-            error: `Line ${i + 1}: "${lines[i]}" is not a valid integer`,
-          };
+          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]) };
         }
         values.push(num);
       } else {
         const num = parseFloat(lines[i]);
         if (isNaN(num) || !Number.isFinite(num)) {
-          return {
-            success: false,
-            error: `Line ${i + 1}: "${lines[i]}" is not a valid float`,
-          };
+          return { success: false, error: m.vectorInvalidFloat(i + 1, lines[i]) };
         }
         values.push(num);
       }
@@ -826,7 +820,7 @@ export class DerivedColumnModal {
     this.errorEl.textContent = '';
     this.errorEl.style.display = 'none';
     this.creating = false;
-    this.createBtn.textContent = 'Create';
+    this.createBtn.textContent = this.messages.derived.createButton;
     this.createBtn.disabled = true;
   }
 

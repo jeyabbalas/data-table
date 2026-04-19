@@ -10,11 +10,14 @@ import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
 import type { FilterPresetManager } from './FilterPresets';
 import type { FilterPreset } from './FilterPresetTypes';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface FilterPresetPanelOptions {
   classPrefix?: string;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class FilterPresetPanel {
@@ -28,6 +31,7 @@ export class FilterPresetPanel {
   private fileInput!: HTMLInputElement;
   private readonly prefix: string;
   private readonly colorSchemeSource?: HTMLElement;
+  private readonly messages: Strings;
   private isOpen = false;
   private destroyed = false;
   private modalHost = new ModalHost();
@@ -42,6 +46,7 @@ export class FilterPresetPanel {
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.colorSchemeSource = options?.colorSchemeSource;
+    this.messages = options?.messages ?? defaultStrings;
     this.element = this.createElement();
 
     // Subscribe to presets signal for reactive list updates
@@ -78,12 +83,12 @@ export class FilterPresetPanel {
 
     const title = document.createElement('span');
     title.className = `${p}-filter-preset-title`;
-    title.textContent = 'Filter Presets';
+    title.textContent = this.messages.presets.title;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = `${p}-filter-preset-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close presets panel');
+    closeBtn.setAttribute('aria-label', this.messages.presets.closeLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -106,7 +111,7 @@ export class FilterPresetPanel {
     this.nameInput = document.createElement('input');
     this.nameInput.type = 'text';
     this.nameInput.className = `${p}-filter-input`;
-    this.nameInput.placeholder = 'Preset name';
+    this.nameInput.placeholder = this.messages.presets.namePlaceholder;
     this.nameInput.addEventListener('input', () => this.updateSaveButtonState());
     this.nameInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !this.saveBtn.disabled) {
@@ -116,13 +121,13 @@ export class FilterPresetPanel {
 
     this.descriptionInput = document.createElement('textarea');
     this.descriptionInput.className = `${p}-filter-input`;
-    this.descriptionInput.placeholder = 'Description (optional)';
+    this.descriptionInput.placeholder = this.messages.presets.descriptionPlaceholder;
     this.descriptionInput.rows = 2;
 
     this.saveBtn = document.createElement('button');
     this.saveBtn.className = `${p}-filter-preset-save-btn`;
     this.saveBtn.type = 'button';
-    this.saveBtn.textContent = 'Save Current Filters';
+    this.saveBtn.textContent = this.messages.presets.saveButton;
     this.saveBtn.disabled = true;
     this.saveBtn.addEventListener('click', () => this.handleSave());
 
@@ -149,14 +154,14 @@ export class FilterPresetPanel {
     this.exportBtn = document.createElement('button');
     this.exportBtn.className = `${p}-filter-preset-io-btn`;
     this.exportBtn.type = 'button';
-    this.exportBtn.textContent = 'Export All';
+    this.exportBtn.textContent = this.messages.presets.exportButton;
     this.exportBtn.disabled = this.presetManager.getPresets().length === 0;
     this.exportBtn.addEventListener('click', () => this.handleExport());
 
     const importBtn = document.createElement('button');
     importBtn.className = `${p}-filter-preset-io-btn`;
     importBtn.type = 'button';
-    importBtn.textContent = 'Import';
+    importBtn.textContent = this.messages.presets.importButton;
     importBtn.addEventListener('click', () => this.fileInput.click());
 
     this.fileInput = document.createElement('input');
@@ -321,18 +326,18 @@ export class FilterPresetPanel {
       const result = this.presetManager.importFromJSON(reader.result as string);
       if (result.errors.length > 0) {
         this.showImportStatus(
-          `Imported ${result.imported}, ${result.errors.length} error(s)`,
+          this.messages.presets.importPartial(result.imported, result.errors.length),
           'warning'
         );
       } else if (result.imported > 0) {
-        this.showImportStatus(`Imported ${result.imported} preset(s)`, 'success');
+        this.showImportStatus(this.messages.presets.importSuccess(result.imported), 'success');
       } else {
-        this.showImportStatus('No presets found in file', 'warning');
+        this.showImportStatus(this.messages.presets.importEmpty, 'warning');
       }
       this.fileInput.value = '';
     };
     reader.onerror = () => {
-      this.showImportStatus('Failed to read file', 'warning');
+      this.showImportStatus(this.messages.presets.importFailed, 'warning');
       this.fileInput.value = '';
     };
     reader.readAsText(file);
@@ -362,7 +367,7 @@ export class FilterPresetPanel {
     if (presets.length === 0) {
       const empty = document.createElement('div');
       empty.className = `${p}-filter-preset-empty`;
-      empty.textContent = 'No saved presets';
+      empty.textContent = this.messages.presets.emptyState;
       this.presetListEl.appendChild(empty);
       return;
     }
@@ -394,7 +399,7 @@ export class FilterPresetPanel {
       day: 'numeric',
       year: 'numeric',
     });
-    metaEl.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} · ${dateStr}`;
+    metaEl.textContent = this.messages.presets.meta(filterCount, dateStr);
 
     headerRow.appendChild(nameEl);
     headerRow.appendChild(metaEl);
@@ -415,13 +420,13 @@ export class FilterPresetPanel {
     const loadBtn = document.createElement('button');
     loadBtn.className = `${p}-filter-preset-action-btn ${p}-filter-preset-action-btn--load`;
     loadBtn.type = 'button';
-    loadBtn.textContent = 'Load';
+    loadBtn.textContent = this.messages.presets.loadButton;
     loadBtn.addEventListener('click', () => this.handleLoad(preset.id));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = `${p}-filter-preset-action-btn ${p}-filter-preset-action-btn--delete`;
     deleteBtn.type = 'button';
-    deleteBtn.textContent = 'Delete';
+    deleteBtn.textContent = this.messages.presets.deleteButton;
 
     // Inline confirmation for destructive delete action
     const deleteConfirmDiv = document.createElement('div');
@@ -429,18 +434,18 @@ export class FilterPresetPanel {
     deleteConfirmDiv.style.display = 'none';
 
     const confirmText = document.createElement('span');
-    confirmText.textContent = 'Delete?';
+    confirmText.textContent = this.messages.presets.deleteConfirmText;
 
     const confirmBtn = document.createElement('button');
     confirmBtn.className = `${p}-filter-preset-action-btn ${p}-filter-preset-action-btn--delete`;
     confirmBtn.type = 'button';
-    confirmBtn.textContent = 'Yes';
+    confirmBtn.textContent = this.messages.common.yes;
     confirmBtn.addEventListener('click', () => this.handleDelete(preset.id));
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = `${p}-filter-preset-action-btn`;
     cancelBtn.type = 'button';
-    cancelBtn.textContent = 'No';
+    cancelBtn.textContent = this.messages.common.no;
     cancelBtn.addEventListener('click', () => {
       deleteConfirmDiv.style.display = 'none';
       deleteBtn.style.display = '';

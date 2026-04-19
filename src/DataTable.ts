@@ -50,6 +50,13 @@ import type { DataFormat } from './data/DataLoader';
 import type { Filter, SortColumn } from './core/types';
 import type { DerivedColumnDef } from './derived/types';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+import {
+  type Strings,
+  type DeepPartial,
+  defaultStrings,
+  mergeStrings,
+} from './core/Strings';
+import { isStylesheetLoaded } from './core/stylesheet';
 
 import { TableContainer } from './table/TableContainer';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
@@ -191,6 +198,16 @@ export interface CreateDataTableOptions {
    * runtime.
    */
   colorScheme?: ColorScheme;
+
+  /**
+   * Override user-facing strings (button labels, placeholders, aria-live
+   * announcements, stats templates). Every key is optional; missing leaves
+   * fall back to English defaults. See `Strings` for the full shape.
+   *
+   * Messages are resolved once at construction and threaded to every
+   * component — recreate the table to switch languages at runtime.
+   */
+  messages?: DeepPartial<Strings>;
 }
 
 /**
@@ -326,6 +343,9 @@ export async function createDataTable(
   // -------- Options validation --------
   let colorScheme = validateColorScheme(opts.colorScheme, 'createDataTable');
 
+  // -------- Resolve i18n messages (done once, threaded to every component) --------
+  const messages: Strings = mergeStrings(defaultStrings, opts.messages);
+
   // -------- Worker bridge --------
   const ownsBridge = !opts.bridge;
   const bridge =
@@ -420,30 +440,24 @@ export async function createDataTable(
       presetManager: presetManager ?? undefined,
       portalTarget: opts.portalTarget,
       colorScheme,
+      messages,
     }
   );
 
   // -------- Stylesheet presence check --------
-  if (!stylesheetWarningEmitted) {
-    const marker = getComputedStyle(document.documentElement)
-      .getPropertyValue('--dt-stylesheet-loaded')
-      .trim();
-    if (!marker) {
-      stylesheetWarningEmitted = true;
-      const warnMessage =
-        "[data-table] Stylesheet missing: add `import '@jeyabbalas/data-table/styles'` " +
-        '(or link dist/data-table.css) before mounting. The table will render without theming.';
-      // Keep the console warning as a safety net if no consumer has wired
-      // up a `warning` listener yet (typical on the first createDataTable
-      // call before any subscriptions exist).
-      if (emitter.listenerCount('warning') === 0) {
-        console.warn(warnMessage);
-      }
-      emitter.emit('warning', {
-        code: 'STYLESHEET_MISSING',
-        message: warnMessage,
-      });
+  if (!stylesheetWarningEmitted && !isStylesheetLoaded()) {
+    stylesheetWarningEmitted = true;
+    const warnMessage = messages.errors.stylesheetMissing;
+    // Keep the console warning as a safety net if no consumer has wired
+    // up a `warning` listener yet (typical on the first createDataTable
+    // call before any subscriptions exist).
+    if (emitter.listenerCount('warning') === 0) {
+      console.warn(warnMessage);
     }
+    emitter.emit('warning', {
+      code: 'STYLESHEET_MISSING',
+      message: warnMessage,
+    });
   }
 
   // -------- Visualizations (auto-attach) --------
@@ -522,7 +536,7 @@ export async function createDataTable(
         // Fallback: simple row count for non-visualized types.
         const statsEl = header.getStatsElement();
         const total = state.totalRows.get();
-        statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${total.toLocaleString()} rows</span>`;
+        statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(total)}</span>`;
         continue;
       }
 
@@ -536,8 +550,8 @@ export async function createDataTable(
         const tr = state.totalRows.get();
         const af = state.filters.get();
         return af.length > 0
-          ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${fr.toLocaleString()} / ${tr.toLocaleString()} rows</span>`
-          : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${tr.toLocaleString()} rows</span>`;
+          ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.filteredRowCount(fr, tr)}</span>`
+          : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(tr)}</span>`;
       };
       statsEl.innerHTML = fallbackStats();
 
@@ -550,7 +564,7 @@ export async function createDataTable(
           coordinator!.handleFilterChange(column.name, filter);
         },
         onDefaultStatsChange: (stats: ColumnStatsData) => {
-          const html = formatDefaultStats(stats, column.type);
+          const html = formatDefaultStats(stats, column.type, messages);
           currentDefault = html;
           if (!showingHover) statsEl.innerHTML = html;
         },
@@ -689,6 +703,7 @@ export async function createDataTable(
         classPrefix: opts.classPrefix ?? 'dt',
         instanceId,
         colorSchemeSource: tableContainer.getElement(),
+        messages,
       });
       tableContainer.getPortalTarget().appendChild(exportDialog.getElement());
     }

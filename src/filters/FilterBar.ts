@@ -9,6 +9,7 @@ import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { Filter } from './FilterTypes';
 import { FilterChip, type FilterChipOptions } from './FilterChip';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for FilterBar
@@ -26,6 +27,8 @@ export interface FilterBarOptions {
   onAddSQLFilter?: () => void;
   /** Callback when the "Presets" button is clicked */
   onPresetsClick?: () => void;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -43,6 +46,7 @@ export class FilterBar {
   private unsubscribe: (() => void) | null = null;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly messages: Strings;
 
   constructor(
     private state: TableState,
@@ -50,6 +54,7 @@ export class FilterBar {
     private options: FilterBarOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.chipsContainer = this.element.querySelector(
       `.${this.prefix}-filter-chips`
@@ -73,7 +78,7 @@ export class FilterBar {
     const bar = document.createElement('div');
     bar.className = `${this.prefix}-filter-bar ${this.prefix}-filter-bar--hidden`;
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', 'Active filters');
+    bar.setAttribute('aria-label', this.messages.filters.activeFiltersLabel);
 
     const chips = document.createElement('div');
     chips.className = `${this.prefix}-filter-chips`;
@@ -81,7 +86,7 @@ export class FilterBar {
     const clearAll = document.createElement('button');
     clearAll.className = `${this.prefix}-filter-clear-all`;
     clearAll.type = 'button';
-    clearAll.textContent = 'Clear all';
+    clearAll.textContent = this.messages.filters.clearAllButton;
     clearAll.style.display = 'none';
     clearAll.addEventListener('click', () => {
       if (!this.destroyed) {
@@ -91,18 +96,18 @@ export class FilterBar {
 
     const label = document.createElement('span');
     label.className = `${this.prefix}-gutter-label`;
-    label.textContent = 'Active filters';
+    label.textContent = this.messages.filters.activeFiltersLabel;
     this.gutterLabel = label;
 
     // Expression filter button
     this.expressionBtn = document.createElement('button');
     this.expressionBtn.className = `${this.prefix}-filter-expression-btn`;
     this.expressionBtn.type = 'button';
-    this.expressionBtn.title = 'Add expression filter (SQL WHERE condition)';
+    this.expressionBtn.title = this.messages.filters.expressionFilterTooltip;
     this.expressionBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M5 2L1.5 7L5 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M9 2L12.5 7L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg><span>Expression</span>`;
+    </svg><span>${this.messages.filters.expressionFilterLabel}</span>`;
     if (!this.options.onAddSQLFilter) {
       this.expressionBtn.style.display = 'none';
     }
@@ -114,10 +119,10 @@ export class FilterBar {
     this.presetsBtn = document.createElement('button');
     this.presetsBtn.className = `${this.prefix}-filter-presets-btn`;
     this.presetsBtn.type = 'button';
-    this.presetsBtn.title = 'Manage filter presets';
+    this.presetsBtn.title = this.messages.filters.presetsButtonTooltip;
     this.presetsBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M3 1h8a1 1 0 0 1 1 1v10.5a.5.5 0 0 1-.8.4L7 10l-4.2 2.9a.5.5 0 0 1-.8-.4V2a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.3" fill="none"/>
-    </svg><span>Presets</span>`;
+    </svg><span>${this.messages.filters.presetsButtonLabel}</span>`;
     if (!this.options.onPresetsClick) {
       this.presetsBtn.style.display = 'none';
     }
@@ -163,7 +168,10 @@ export class FilterBar {
 
     // Create new chips
     for (const filter of filters) {
-      const chipOptions: FilterChipOptions = { classPrefix: this.prefix };
+      const chipOptions: FilterChipOptions = {
+        classPrefix: this.prefix,
+        messages: this.messages,
+      };
 
       // For raw-sql filters, pass onEdit callback for modal integration
       if (filter.type === 'raw-sql' && this.options.onRawSQLEdit) {

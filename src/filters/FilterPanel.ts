@@ -10,6 +10,7 @@ import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
 import { FilterPanelField } from './FilterPanelField';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for FilterPanel
@@ -23,6 +24,8 @@ export interface FilterPanelOptions {
    * color scheme changes at runtime via {@link DataTable.setColorScheme}.
    */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -40,6 +43,7 @@ export class FilterPanel {
   private destroyed = false;
   private readonly prefix: string;
   private readonly colorSchemeSource?: HTMLElement;
+  private readonly messages: Strings;
 
   // Focus trap / Escape / outside-click delegated to ModalHost.
   private modalHost = new ModalHost();
@@ -54,6 +58,7 @@ export class FilterPanel {
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.colorSchemeSource = options.colorSchemeSource;
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.body = this.element.querySelector(`.${this.prefix}-filter-panel-body`)!;
     this.titleEl = this.element.querySelector(`.${this.prefix}-filter-panel-title`)!;
@@ -94,7 +99,7 @@ export class FilterPanel {
 
     const title = document.createElement('span');
     title.className = `${this.prefix}-filter-panel-title`;
-    title.textContent = 'Filter';
+    title.textContent = this.messages.filters.panelTitle;
 
     const typeBadge = document.createElement('span');
     typeBadge.className = `${this.prefix}-filter-panel-type`;
@@ -102,7 +107,7 @@ export class FilterPanel {
     const clearBtn = document.createElement('button');
     clearBtn.className = `${this.prefix}-filter-panel-clear ${this.prefix}-filter-panel-clear--hidden`;
     clearBtn.type = 'button';
-    clearBtn.textContent = 'Clear';
+    clearBtn.textContent = this.messages.filters.clearButton;
     clearBtn.addEventListener('click', () => {
       this.currentField?.clear();
       this.updatePanelClearButton(false);
@@ -111,7 +116,7 @@ export class FilterPanel {
     const closeBtn = document.createElement('button');
     closeBtn.className = `${this.prefix}-filter-panel-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close filter panel');
+    closeBtn.setAttribute('aria-label', this.messages.filters.closePanelLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -197,6 +202,7 @@ export class FilterPanel {
     if (!this.currentField) {
       this.currentField = new FilterPanelField(colSchema, this.state, this.actions, {
         classPrefix: this.prefix,
+        messages: this.messages,
       });
       this.body.appendChild(this.currentField.getElement());
     }
@@ -206,7 +212,7 @@ export class FilterPanel {
     this.element.style.display = '';
 
     // Update header: title, type badge, clear button
-    this.titleEl.textContent = `Filter: ${column}`;
+    this.titleEl.textContent = this.messages.filters.panelTitleForColumn(column);
     this.typeBadgeEl.textContent = colSchema.type;
     const hasFilter = this.state.filtersByColumn.get().has(column);
     this.updatePanelClearButton(hasFilter);

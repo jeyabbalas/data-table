@@ -12,6 +12,7 @@ import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { DerivedColumnDef } from './types';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface DerivedColumnEditPanelOptions {
   classPrefix?: string;
@@ -19,6 +20,8 @@ export interface DerivedColumnEditPanelOptions {
   editorFactory?: ExpressionEditorFactory;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class DerivedColumnEditPanel {
@@ -37,6 +40,7 @@ export class DerivedColumnEditPanel {
   private deleteConfirmDiv: HTMLElement;
 
   private prefix: string;
+  private readonly messages: Strings;
   private editorFactory?: ExpressionEditorFactory;
   private colorSchemeSource?: HTMLElement;
   private currentEditor: ExpressionEditor | null = null;
@@ -59,6 +63,7 @@ export class DerivedColumnEditPanel {
     options?: DerivedColumnEditPanelOptions
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
+    this.messages = options?.messages ?? defaultStrings;
     this.editorFactory = options?.editorFactory;
     this.colorSchemeSource = options?.colorSchemeSource;
 
@@ -134,12 +139,12 @@ export class DerivedColumnEditPanel {
 
     const title = document.createElement('span');
     title.className = `${p}-derived-edit-title`;
-    title.textContent = 'Edit';
+    title.textContent = this.messages.derived.editTitle;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = `${p}-derived-edit-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close edit panel');
+    closeBtn.setAttribute('aria-label', this.messages.derived.closeEditLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -159,7 +164,7 @@ export class DerivedColumnEditPanel {
     nameSection.className = `${p}-derived-edit-section`;
 
     const nameLabel = document.createElement('label');
-    nameLabel.textContent = 'Column name';
+    nameLabel.textContent = this.messages.derived.nameLabel;
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
@@ -180,7 +185,7 @@ export class DerivedColumnEditPanel {
     exprSection.className = `${p}-derived-edit-section ${p}-derived-edit-expr-section`;
 
     const exprLabel = document.createElement('label');
-    exprLabel.textContent = 'SQL Expression';
+    exprLabel.textContent = this.messages.derived.expressionLabel;
 
     const editorContainer = document.createElement('div');
     editorContainer.className = `${p}-derived-edit-editor-container`;
@@ -195,7 +200,7 @@ export class DerivedColumnEditPanel {
     vectorSection.style.display = 'none';
 
     const vectorLabel = document.createElement('label');
-    vectorLabel.textContent = 'Column info';
+    vectorLabel.textContent = this.messages.derived.infoLabel;
 
     const vectorText = document.createElement('div');
     vectorText.className = `${p}-derived-edit-vector-text`;
@@ -211,7 +216,7 @@ export class DerivedColumnEditPanel {
     const validateBtn = document.createElement('button');
     validateBtn.className = `${p}-derived-edit-validate`;
     validateBtn.type = 'button';
-    validateBtn.textContent = 'Validate';
+    validateBtn.textContent = this.messages.common.validate;
 
     const typePreview = document.createElement('span');
     typePreview.className = `${p}-derived-edit-type-preview`;
@@ -219,7 +224,7 @@ export class DerivedColumnEditPanel {
     const updateBtn = document.createElement('button');
     updateBtn.className = `${p}-derived-edit-update`;
     updateBtn.type = 'button';
-    updateBtn.textContent = 'Update';
+    updateBtn.textContent = this.messages.common.update;
     updateBtn.disabled = true;
 
     actionsRow.appendChild(validateBtn);
@@ -239,23 +244,23 @@ export class DerivedColumnEditPanel {
     const deleteBtn = document.createElement('button');
     deleteBtn.className = `${p}-derived-edit-delete`;
     deleteBtn.type = 'button';
-    deleteBtn.textContent = 'Delete Column';
+    deleteBtn.textContent = this.messages.derived.deleteButton;
 
     const deleteConfirm = document.createElement('div');
     deleteConfirm.className = `${p}-derived-edit-delete-confirm`;
 
     const confirmText = document.createElement('span');
-    confirmText.textContent = 'Are you sure?';
+    confirmText.textContent = this.messages.common.deleteConfirm;
 
     const confirmBtn = document.createElement('button');
     confirmBtn.className = `${p}-derived-edit-delete-confirm-btn ${p}-derived-edit-delete-confirm-yes`;
     confirmBtn.type = 'button';
-    confirmBtn.textContent = 'Confirm';
+    confirmBtn.textContent = this.messages.common.confirm;
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = `${p}-derived-edit-delete-confirm-btn ${p}-derived-edit-delete-confirm-no`;
     cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = this.messages.common.cancel;
 
     deleteConfirm.appendChild(confirmText);
     deleteConfirm.appendChild(confirmBtn);
@@ -381,7 +386,7 @@ export class DerivedColumnEditPanel {
     anchorElement.classList.add(`${this.prefix}-derived-icon-btn--active`);
 
     // Update title
-    this.titleEl.textContent = `Edit: ${columnName}`;
+    this.titleEl.textContent = this.messages.derived.editTitleForColumn(columnName);
 
     // Populate name input
     this.nameInput.value = def.name;
@@ -438,7 +443,7 @@ export class DerivedColumnEditPanel {
       this.validateBtn.style.display = 'none';
 
       const vectorType = colSchema?.originalType ?? def.vectorType;
-      this.vectorInfoText.textContent = `Vector column (${vectorType}), ${def.values.length} values`;
+      this.vectorInfoText.textContent = this.messages.derived.vectorInfoText(vectorType, def.values.length);
 
       // No expression validation needed for vector columns
       this.expressionValidated = true;
@@ -494,7 +499,7 @@ export class DerivedColumnEditPanel {
     const name = this.nameInput.value.trim();
 
     if (!name) {
-      this.nameErrorEl.textContent = 'Name is required';
+      this.nameErrorEl.textContent = this.messages.derived.nameRequired;
       this.nameErrorEl.style.display = '';
       return;
     }
@@ -506,7 +511,7 @@ export class DerivedColumnEditPanel {
     );
 
     if (duplicate) {
-      this.nameErrorEl.textContent = `A column named "${name}" already exists`;
+      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(name);
       this.nameErrorEl.style.display = '';
     } else {
       this.nameErrorEl.textContent = '';
@@ -539,7 +544,7 @@ export class DerivedColumnEditPanel {
 
     const expression = this.currentEditor.getValue().trim();
     if (!expression) {
-      this.currentEditor.setError('Expression is required');
+      this.currentEditor.setError(this.messages.derived.expressionRequired);
       return;
     }
 
@@ -548,21 +553,21 @@ export class DerivedColumnEditPanel {
     const versionAtStart = ++this.validationVersion;
 
     this.validateBtn.disabled = true;
-    this.validateBtn.textContent = 'Validating…';
+    this.validateBtn.textContent = this.messages.common.validating;
 
     try {
       const result = await this.actions.validateExpression(expression);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.typePreview.textContent = `Type: ${result.type} (${result.originalType})`;
+        this.typePreview.textContent = this.messages.derived.typePreview(result.type!, result.originalType!);
         this.typePreview.style.color = '';
         this.expressionValidated = true;
         this.currentEditor.setError(null);
       } else {
-        this.typePreview.textContent = result.error ?? 'Validation failed';
+        this.typePreview.textContent = result.error ?? this.messages.derived.validationFailed;
         this.typePreview.style.color = 'var(--dt-error)';
         this.expressionValidated = false;
-        this.currentEditor.setError(result.error ?? 'Validation failed');
+        this.currentEditor.setError(result.error ?? this.messages.derived.validationFailed);
       }
     } catch (err) {
       if (this.validationVersion !== versionAtStart) return; // stale
@@ -574,7 +579,7 @@ export class DerivedColumnEditPanel {
     } finally {
       if (this.validationVersion === versionAtStart) {
         this.validateBtn.disabled = false;
-        this.validateBtn.textContent = 'Validate';
+        this.validateBtn.textContent = this.messages.common.validate;
         this.updateButtonState();
       }
     }
@@ -602,14 +607,14 @@ export class DerivedColumnEditPanel {
 
     this.updating = true;
     this.updateBtn.disabled = true;
-    this.updateBtn.textContent = 'Updating…';
+    this.updateBtn.textContent = this.messages.common.updating;
 
     try {
       const result = await this.actions.updateDerivedColumn(oldName, newDef);
       if (result.success) {
         this.close();
       } else {
-        this.typePreview.textContent = result.error ?? 'Update failed';
+        this.typePreview.textContent = result.error ?? this.messages.derived.updateFailed;
         this.typePreview.style.color = 'var(--dt-error)';
       }
     } catch (err) {
@@ -618,7 +623,7 @@ export class DerivedColumnEditPanel {
       this.typePreview.style.color = 'var(--dt-error)';
     } finally {
       this.updating = false;
-      this.updateBtn.textContent = 'Update';
+      this.updateBtn.textContent = this.messages.common.update;
       this.updateButtonState();
     }
   }
@@ -631,7 +636,7 @@ export class DerivedColumnEditPanel {
       this.close();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.typePreview.textContent = `Delete failed: ${msg}`;
+      this.typePreview.textContent = this.messages.derived.deleteFailed(msg);
       this.typePreview.style.color = 'var(--dt-error)';
       // Reset delete confirmation back to button state
       this.deleteConfirmDiv.style.display = 'none';

@@ -13,6 +13,7 @@ import { exportFromState } from './CSVExport';
 import { exportJSONFromState } from './JSONExport';
 import { exportParquetFromState } from './ParquetExport';
 import { copyToClipboard } from './Clipboard';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 export type ExportFormat = 'csv' | 'json' | 'parquet';
 export type ExportScope = 'all' | 'filtered' | 'selected';
@@ -32,6 +33,8 @@ export interface ExportDialogOptions {
    * pass the `.dt-root` element here to keep it theme-synced.
    */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class ExportDialog {
@@ -41,6 +44,7 @@ export class ExportDialog {
   private readonly prefix: string;
   private readonly instanceId: string;
   private readonly colorSchemeSource?: HTMLElement;
+  private readonly messages: Strings;
 
   // Source file base name (without extension) for export filenames
   private sourceName: string | null = null;
@@ -84,6 +88,7 @@ export class ExportDialog {
     this.prefix = options.classPrefix ?? 'dt';
     this.instanceId = options.instanceId ?? '';
     this.colorSchemeSource = options.colorSchemeSource;
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
   }
 
@@ -111,12 +116,12 @@ export class ExportDialog {
     const title = document.createElement('span');
     title.className = `${p}-export-title`;
     title.id = `${p}-${this.instanceId}-export-title`;
-    title.textContent = 'Export Data';
+    title.textContent = this.messages.export.title;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = `${p}-export-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close export dialog');
+    closeBtn.setAttribute('aria-label', this.messages.export.closeLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -151,13 +156,13 @@ export class ExportDialog {
     this.copyBtn = document.createElement('button');
     this.copyBtn.className = `${p}-export-copy-btn`;
     this.copyBtn.type = 'button';
-    this.copyBtn.textContent = 'Copy to Clipboard';
+    this.copyBtn.textContent = this.messages.export.copyButton;
     this.copyBtn.addEventListener('click', () => this.handleCopy());
 
     this.exportBtn = document.createElement('button');
     this.exportBtn.className = `${p}-export-btn`;
     this.exportBtn.type = 'button';
-    this.exportBtn.textContent = 'Download';
+    this.exportBtn.textContent = this.messages.export.downloadButton;
     this.exportBtn.addEventListener('click', () => this.handleExport());
 
     footer.appendChild(this.copyBtn);
@@ -173,13 +178,13 @@ export class ExportDialog {
     fieldset.className = `${p}-export-section`;
 
     const legend = document.createElement('legend');
-    legend.textContent = 'Format';
+    legend.textContent = this.messages.export.formatLabel;
     fieldset.appendChild(legend);
 
     const formats: { value: ExportFormat; label: string }[] = [
-      { value: 'csv', label: 'CSV' },
-      { value: 'json', label: 'JSON' },
-      { value: 'parquet', label: 'Parquet' },
+      { value: 'csv', label: this.messages.export.formats.csv },
+      { value: 'json', label: this.messages.export.formats.json },
+      { value: 'parquet', label: this.messages.export.formats.parquet },
     ];
 
     for (const fmt of formats) {
@@ -208,7 +213,7 @@ export class ExportDialog {
     fieldset.className = `${p}-export-section`;
 
     const legend = document.createElement('legend');
-    legend.textContent = 'Rows';
+    legend.textContent = this.messages.export.scopeLabel;
     fieldset.appendChild(legend);
 
     // All rows
@@ -222,7 +227,7 @@ export class ExportDialog {
     this.allCountEl = document.createElement('span');
     this.allCountEl.className = `${p}-export-count`;
     allLabel.appendChild(this.allRadio);
-    allLabel.appendChild(document.createTextNode(' All rows '));
+    allLabel.appendChild(document.createTextNode(` ${this.messages.export.scopes.all} `));
     allLabel.appendChild(this.allCountEl);
     fieldset.appendChild(allLabel);
 
@@ -236,7 +241,7 @@ export class ExportDialog {
     this.filteredCountEl = document.createElement('span');
     this.filteredCountEl.className = `${p}-export-count`;
     filteredLabel.appendChild(filteredRadio);
-    filteredLabel.appendChild(document.createTextNode(' Filtered rows '));
+    filteredLabel.appendChild(document.createTextNode(` ${this.messages.export.scopes.filtered} `));
     filteredLabel.appendChild(this.filteredCountEl);
     fieldset.appendChild(filteredLabel);
 
@@ -250,7 +255,7 @@ export class ExportDialog {
     this.selectedCountEl = document.createElement('span');
     this.selectedCountEl.className = `${p}-export-count`;
     this.selectedOption.appendChild(this.selectedRadio);
-    this.selectedOption.appendChild(document.createTextNode(' Selected rows '));
+    this.selectedOption.appendChild(document.createTextNode(` ${this.messages.export.scopes.selected} `));
     this.selectedOption.appendChild(this.selectedCountEl);
     fieldset.appendChild(this.selectedOption);
 
@@ -266,14 +271,14 @@ export class ExportDialog {
     const delimField = document.createElement('div');
     delimField.className = `${p}-export-field`;
     const delimLabel = document.createElement('label');
-    delimLabel.textContent = 'Delimiter';
+    delimLabel.textContent = this.messages.export.csv.delimiterLabel;
     this.delimiterSelect = document.createElement('select');
     this.delimiterSelect.className = `${p}-filter-select`;
     const delimiters = [
-      { value: ',', label: 'Comma (,)' },
-      { value: '\t', label: 'Tab' },
-      { value: ';', label: 'Semicolon (;)' },
-      { value: '|', label: 'Pipe (|)' },
+      { value: ',', label: this.messages.export.csv.delimiters.comma },
+      { value: '\t', label: this.messages.export.csv.delimiters.tab },
+      { value: ';', label: this.messages.export.csv.delimiters.semicolon },
+      { value: '|', label: this.messages.export.csv.delimiters.pipe },
     ];
     for (const d of delimiters) {
       const option = document.createElement('option');
@@ -289,7 +294,7 @@ export class ExportDialog {
     const headersField = document.createElement('div');
     headersField.className = `${p}-export-field`;
     const headersLabel = document.createElement('label');
-    headersLabel.textContent = 'Include headers';
+    headersLabel.textContent = this.messages.export.csv.headersLabel;
     this.headersCheckbox = document.createElement('input');
     this.headersCheckbox.type = 'checkbox';
     this.headersCheckbox.checked = true;
@@ -301,12 +306,12 @@ export class ExportDialog {
     const nullField = document.createElement('div');
     nullField.className = `${p}-export-field`;
     const nullLabel = document.createElement('label');
-    nullLabel.textContent = 'Null value';
+    nullLabel.textContent = this.messages.export.csv.nullValueLabel;
     this.nullValueInput = document.createElement('input');
     this.nullValueInput.type = 'text';
     this.nullValueInput.className = `${p}-filter-input`;
     this.nullValueInput.value = '';
-    this.nullValueInput.placeholder = '(empty)';
+    this.nullValueInput.placeholder = this.messages.export.csv.nullValuePlaceholder;
     nullField.appendChild(nullLabel);
     nullField.appendChild(this.nullValueInput);
     container.appendChild(nullField);
@@ -325,12 +330,12 @@ export class ExportDialog {
     const fmtField = document.createElement('div');
     fmtField.className = `${p}-export-field`;
     const fmtLabel = document.createElement('label');
-    fmtLabel.textContent = 'Format';
+    fmtLabel.textContent = this.messages.export.json.formatLabel;
     this.jsonFormatSelect = document.createElement('select');
     this.jsonFormatSelect.className = `${p}-filter-select`;
     const formats = [
-      { value: 'array', label: 'JSON Array' },
-      { value: 'ndjson', label: 'NDJSON (one object per line)' },
+      { value: 'array', label: this.messages.export.json.formats.array },
+      { value: 'ndjson', label: this.messages.export.json.formats.ndjson },
     ];
     for (const f of formats) {
       const option = document.createElement('option');
@@ -346,7 +351,7 @@ export class ExportDialog {
     const prettyField = document.createElement('div');
     prettyField.className = `${p}-export-field`;
     const prettyLabel = document.createElement('label');
-    prettyLabel.textContent = 'Pretty-print';
+    prettyLabel.textContent = this.messages.export.json.prettyLabel;
     this.jsonPrettyCheckbox = document.createElement('input');
     this.jsonPrettyCheckbox.type = 'checkbox';
     this.jsonPrettyCheckbox.checked = false;
@@ -547,7 +552,7 @@ export class ExportDialog {
       if (error instanceof DOMException && error.name === 'AbortError') {
         // Silently reset on cancel
       } else {
-        this.showError(error instanceof Error ? error.message : 'Export failed');
+        this.showError(error instanceof Error ? error.message : this.messages.export.exportFailedFallback);
       }
     } finally {
       this.abortController = null;
@@ -596,7 +601,7 @@ export class ExportDialog {
       if (error instanceof DOMException && error.name === 'AbortError') {
         // Silently reset on cancel
       } else {
-        this.showError(error instanceof Error ? error.message : 'Copy failed');
+        this.showError(error instanceof Error ? error.message : this.messages.export.copyFailedFallback);
       }
     } finally {
       this.abortController = null;
@@ -626,14 +631,14 @@ export class ExportDialog {
 
   private setExportingState(exporting: boolean): void {
     this.exporting = exporting;
-    this.exportBtn.textContent = exporting ? 'Cancel' : 'Download';
+    this.exportBtn.textContent = exporting ? this.messages.export.cancelButton : this.messages.export.downloadButton;
     this.exportBtn.classList.toggle(`${this.prefix}-export-btn--loading`, exporting);
     this.copyBtn.disabled = exporting;
   }
 
   private resetExportState(): void {
     this.exporting = false;
-    this.exportBtn.textContent = 'Download';
+    this.exportBtn.textContent = this.messages.export.downloadButton;
     this.exportBtn.classList.remove(`${this.prefix}-export-btn--loading`);
     this.copyBtn.disabled = false;
   }
@@ -645,7 +650,7 @@ export class ExportDialog {
 
   private showCopiedFeedback(): void {
     const original = this.copyBtn.textContent;
-    this.copyBtn.textContent = 'Copied!';
+    this.copyBtn.textContent = this.messages.export.copiedFeedback;
     setTimeout(() => {
       if (!this.destroyed) {
         this.copyBtn.textContent = original;

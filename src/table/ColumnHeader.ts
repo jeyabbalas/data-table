@@ -15,6 +15,7 @@ import type { ColumnSchema } from '../core/types';
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ColumnResizer } from './ColumnResizer';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for configuring the ColumnHeader
@@ -28,6 +29,8 @@ export interface ColumnHeaderOptions {
   onDerivedIconClick?: (columnName: string, buttonElement: HTMLElement) => void;
   /** 1-based column index in the full schema (for aria-colindex) */
   colIndex?: number;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -57,6 +60,7 @@ export class ColumnHeader {
   private destroyed = false;
   private readonly classPrefix: string;
   private readonly options: ColumnHeaderOptions;
+  private readonly messages: Strings;
 
   constructor(
     private column: ColumnSchema,
@@ -66,6 +70,7 @@ export class ColumnHeader {
   ) {
     this.options = options;
     this.classPrefix = options.classPrefix ?? 'dt';
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
     this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
@@ -121,8 +126,8 @@ export class ColumnHeader {
     const dragHandle = document.createElement('button');
     dragHandle.className = `${this.classPrefix}-col-drag-handle`;
     dragHandle.setAttribute('type', 'button');
-    dragHandle.setAttribute('aria-label', `Drag to reorder ${this.column.name}`);
-    dragHandle.setAttribute('title', 'Reorder column');
+    dragHandle.setAttribute('aria-label', this.messages.a11y.dragHandleLabel(this.column.name));
+    dragHandle.setAttribute('title', this.messages.a11y.dragHandleTitle);
     dragHandle.innerHTML = `
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="5" cy="4" r="1.5" />
@@ -138,8 +143,8 @@ export class ColumnHeader {
       const iconBtn = document.createElement('button');
       iconBtn.className = `${this.classPrefix}-derived-icon-btn`;
       iconBtn.setAttribute('type', 'button');
-      iconBtn.setAttribute('aria-label', 'Edit derived column');
-      iconBtn.setAttribute('title', 'Edit derived column');
+      iconBtn.setAttribute('aria-label', this.messages.a11y.editDerivedColumnLabel);
+      iconBtn.setAttribute('title', this.messages.a11y.editDerivedColumnTitle);
       iconBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="12" y="16" class="${this.classPrefix}-derived-fx-glyph" fill="currentColor" text-anchor="middle">f</text>
@@ -162,8 +167,8 @@ export class ColumnHeader {
     const sortBtn = document.createElement('button');
     sortBtn.className = `${this.classPrefix}-col-sort-btn`;
     sortBtn.setAttribute('type', 'button');
-    sortBtn.setAttribute('aria-label', `Sort by ${this.column.name}`);
-    sortBtn.setAttribute('title', 'Sort ascending');
+    sortBtn.setAttribute('aria-label', this.messages.a11y.sortButtonLabel(this.column.name));
+    sortBtn.setAttribute('title', this.messages.a11y.sortAscendingTitle);
     sortBtn.innerHTML = `
       <svg viewBox="0 0 10 14" aria-hidden="true">
         <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
@@ -187,8 +192,8 @@ export class ColumnHeader {
     const pinBtn = document.createElement('button');
     pinBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-pin-btn`;
     pinBtn.setAttribute('type', 'button');
-    pinBtn.setAttribute('aria-label', `Pin ${this.column.name}`);
-    pinBtn.setAttribute('title', 'Pin column');
+    pinBtn.setAttribute('aria-label', this.messages.a11y.pinButtonLabel(this.column.name));
+    pinBtn.setAttribute('title', this.messages.a11y.pinColumnTitle);
     pinBtn.innerHTML = `
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="8" cy="4.5" r="2.5" />
@@ -200,8 +205,8 @@ export class ColumnHeader {
     const hideBtn = document.createElement('button');
     hideBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-hide-btn`;
     hideBtn.setAttribute('type', 'button');
-    hideBtn.setAttribute('aria-label', `Hide ${this.column.name}`);
-    hideBtn.setAttribute('title', 'Hide column');
+    hideBtn.setAttribute('aria-label', this.messages.a11y.hideButtonLabel(this.column.name));
+    hideBtn.setAttribute('title', this.messages.a11y.hideColumnTitle);
     hideBtn.innerHTML = `
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">
         <path d="M2 8s2.5-4.5 6-4.5S14 8 14 8s-2.5 4.5-6 4.5S2 8 2 8z" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -214,8 +219,8 @@ export class ColumnHeader {
     const filterBtn = document.createElement('button');
     filterBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-filter-btn`;
     filterBtn.setAttribute('type', 'button');
-    filterBtn.setAttribute('aria-label', `Filter ${this.column.name}`);
-    filterBtn.setAttribute('title', 'Filter column');
+    filterBtn.setAttribute('aria-label', this.messages.a11y.filterButtonLabel(this.column.name));
+    filterBtn.setAttribute('title', this.messages.a11y.filterColumnTitle);
     filterBtn.innerHTML = `
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d="M2 3h12L9.5 8.5v4L6.5 14V8.5L2 3z" />
@@ -432,7 +437,7 @@ export class ColumnHeader {
    */
   private updateStatsLine(count: number): void {
     if (count > 0) {
-      this.statsEl.textContent = `${count.toLocaleString()} rows`;
+      this.statsEl.textContent = this.messages.statistics.rowCount(count);
     } else {
       this.statsEl.textContent = '';
     }
@@ -466,10 +471,10 @@ export class ColumnHeader {
       `${this.classPrefix}-col-action-btn--active`,
       isPinned
     );
-    this.pinButton.setAttribute('title', isPinned ? 'Unpin column' : 'Pin column');
+    this.pinButton.setAttribute('title', isPinned ? this.messages.a11y.unpinColumnTitle : this.messages.a11y.pinColumnTitle);
     this.pinButton.setAttribute(
       'aria-label',
-      isPinned ? `Unpin ${this.column.name}` : `Pin ${this.column.name}`
+      isPinned ? this.messages.a11y.unpinButtonLabel(this.column.name) : this.messages.a11y.pinButtonLabel(this.column.name)
     );
 
     // Disable drag-to-reorder for pinned columns
@@ -487,13 +492,13 @@ export class ColumnHeader {
     const isLastColumn = visibleColumns.length <= 1;
     if (isLastColumn) {
       this.hideButton.setAttribute('disabled', '');
-      this.hideButton.setAttribute('title', 'Cannot hide the last visible column');
+      this.hideButton.setAttribute('title', this.messages.a11y.cannotHideLastColumn);
       this.hideButton.classList.add(
         `${this.classPrefix}-col-action-btn--disabled`
       );
     } else {
       this.hideButton.removeAttribute('disabled');
-      this.hideButton.setAttribute('title', 'Hide column');
+      this.hideButton.setAttribute('title', this.messages.a11y.hideColumnTitle);
       this.hideButton.classList.remove(
         `${this.classPrefix}-col-action-btn--disabled`
       );
@@ -526,16 +531,17 @@ export class ColumnHeader {
    * Build a descriptive aria-label including sort and filter state.
    */
   private buildAriaLabel(): string {
+    const a = this.messages.a11y;
     const parts: string[] = [`${this.column.name}, ${this.column.type}`];
 
     const sortColumns = this.state.sortColumns.get();
     const sortIndex = sortColumns.findIndex((s) => s.column === this.column.name);
     if (sortIndex !== -1) {
-      const direction = sortColumns[sortIndex].direction === 'asc' ? 'ascending' : 'descending';
+      const direction = sortColumns[sortIndex].direction === 'asc' ? a.ascending : a.descending;
       if (sortColumns.length > 1) {
-        parts.push(`sorted ${direction} (priority ${sortIndex + 1})`);
+        parts.push(a.sortedMultiSuffix(direction, sortIndex + 1));
       } else {
-        parts.push(`sorted ${direction}`);
+        parts.push(a.sortedSuffix(direction));
       }
     }
 
@@ -543,9 +549,9 @@ export class ColumnHeader {
     const colFilters = filtersByCol.get(this.column.name);
     if (colFilters && colFilters.length > 0) {
       if (colFilters.length === 1) {
-        parts.push('filtered');
+        parts.push(a.filteredSuffix);
       } else {
-        parts.push(`${colFilters.length} filters`);
+        parts.push(a.multiFilteredSuffix(colFilters.length));
       }
     }
 
@@ -575,7 +581,7 @@ export class ColumnHeader {
       // Not sorted - hide badge
       this.sortBadge.style.display = 'none';
       this.element.setAttribute('aria-sort', 'none');
-      this.sortButton.setAttribute('title', 'Sort ascending');
+      this.sortButton.setAttribute('title', this.messages.a11y.sortAscendingTitle);
     } else {
       const sortConfig = sortColumns[sortIndex];
       const isAsc = sortConfig.direction === 'asc';
@@ -594,7 +600,7 @@ export class ColumnHeader {
       }
 
       this.element.setAttribute('aria-sort', isAsc ? 'ascending' : 'descending');
-      this.sortButton.setAttribute('title', isAsc ? 'Sort descending' : 'Remove sort');
+      this.sortButton.setAttribute('title', isAsc ? this.messages.a11y.sortDescendingTitle : this.messages.a11y.sortRemoveTitle);
     }
 
     // Update aria-label to reflect current sort/filter state

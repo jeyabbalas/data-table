@@ -12,6 +12,7 @@ import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { RawSQLFilter } from './FilterTypes';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface SQLFilterModalOptions {
   classPrefix?: string;
@@ -30,6 +31,8 @@ export interface SQLFilterModalOptions {
    * pass the `.dt-root` element here to keep it theme-synced.
    */
   colorSchemeSource?: HTMLElement;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class SQLFilterModal {
@@ -47,6 +50,7 @@ export class SQLFilterModal {
 
   private readonly prefix: string;
   private readonly instanceId: string;
+  private readonly messages: Strings;
   private editorFactory?: ExpressionEditorFactory;
   private colorSchemeSource?: HTMLElement;
   private currentEditor: ExpressionEditor | null = null;
@@ -69,6 +73,7 @@ export class SQLFilterModal {
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.instanceId = options?.instanceId ?? '';
+    this.messages = options?.messages ?? defaultStrings;
     this.editorFactory = options?.editorFactory;
     this.colorSchemeSource = options?.colorSchemeSource;
     this.element = this.createElement();
@@ -107,12 +112,12 @@ export class SQLFilterModal {
     this.titleEl = document.createElement('span');
     this.titleEl.className = `${p}-sql-filter-modal-title`;
     this.titleEl.id = `${p}-${this.instanceId}-sql-filter-modal-title`;
-    this.titleEl.textContent = 'New Expression Filter';
+    this.titleEl.textContent = this.messages.filters.sqlFilter.createTitle;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = `${p}-sql-filter-modal-close`;
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.setAttribute('aria-label', this.messages.filters.sqlFilter.closeLabel);
     closeBtn.innerHTML = `
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
@@ -136,16 +141,16 @@ export class SQLFilterModal {
     labelSection.className = `${p}-sql-filter-modal-section`;
 
     const labelLabel = document.createElement('label');
-    labelLabel.textContent = 'Label (optional)';
+    labelLabel.textContent = this.messages.filters.sqlFilter.labelFieldLabel;
 
     this.labelInput = document.createElement('input');
     this.labelInput.type = 'text';
     this.labelInput.className = `${p}-filter-input`;
-    this.labelInput.placeholder = 'e.g., High-value orders';
+    this.labelInput.placeholder = this.messages.filters.sqlFilter.labelPlaceholder;
 
     const hint = document.createElement('div');
     hint.className = `${p}-sql-filter-modal-hint`;
-    hint.textContent = 'Shown on the filter chip instead of the SQL text';
+    hint.textContent = this.messages.filters.sqlFilter.labelHint;
 
     labelSection.appendChild(labelLabel);
     labelSection.appendChild(this.labelInput);
@@ -157,7 +162,7 @@ export class SQLFilterModal {
     sqlSection.className = `${p}-sql-filter-modal-section`;
 
     const sqlLabel = document.createElement('label');
-    sqlLabel.textContent = 'SQL WHERE condition';
+    sqlLabel.textContent = this.messages.filters.sqlFilter.conditionLabel;
 
     this.editorContainer = document.createElement('div');
     this.editorContainer.className = `${p}-sql-filter-modal-editor-container`;
@@ -173,7 +178,7 @@ export class SQLFilterModal {
     this.validateBtn = document.createElement('button');
     this.validateBtn.className = `${p}-sql-filter-modal-validate`;
     this.validateBtn.type = 'button';
-    this.validateBtn.textContent = 'Validate';
+    this.validateBtn.textContent = this.messages.common.validate;
     this.validateBtn.addEventListener('click', () => this.handleValidate());
 
     this.previewEl = document.createElement('span');
@@ -196,7 +201,7 @@ export class SQLFilterModal {
     this.removeBtn = document.createElement('button');
     this.removeBtn.className = `${p}-sql-filter-modal-remove`;
     this.removeBtn.type = 'button';
-    this.removeBtn.textContent = 'Remove Filter';
+    this.removeBtn.textContent = this.messages.filters.sqlFilter.removeButton;
     this.removeBtn.addEventListener('click', () => {
       this.removeBtn.style.display = 'none';
       this.removeConfirmDiv.style.display = 'flex';
@@ -206,18 +211,18 @@ export class SQLFilterModal {
     this.removeConfirmDiv.className = `${p}-sql-filter-modal-remove-confirm`;
 
     const confirmText = document.createElement('span');
-    confirmText.textContent = 'Are you sure?';
+    confirmText.textContent = this.messages.filters.sqlFilter.removeConfirmText;
 
     const confirmBtn = document.createElement('button');
     confirmBtn.className = `${p}-sql-filter-modal-remove-confirm-btn ${p}-sql-filter-modal-remove-confirm-yes`;
     confirmBtn.type = 'button';
-    confirmBtn.textContent = 'Confirm';
+    confirmBtn.textContent = this.messages.common.confirm;
     confirmBtn.addEventListener('click', () => this.handleConfirmRemove());
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = `${p}-sql-filter-modal-remove-confirm-btn ${p}-sql-filter-modal-remove-confirm-no`;
     cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = this.messages.common.cancel;
     cancelBtn.addEventListener('click', () => {
       this.removeConfirmDiv.style.display = 'none';
       this.removeBtn.style.display = '';
@@ -246,14 +251,14 @@ export class SQLFilterModal {
     const cancelBtn = document.createElement('button');
     cancelBtn.className = `${p}-sql-filter-modal-cancel`;
     cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = this.messages.common.cancel;
     cancelBtn.addEventListener('click', () => this.close());
     footer.appendChild(cancelBtn);
 
     this.applyBtn = document.createElement('button');
     this.applyBtn.className = `${p}-sql-filter-modal-apply`;
     this.applyBtn.type = 'button';
-    this.applyBtn.textContent = 'Apply';
+    this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
     this.applyBtn.disabled = true;
     this.applyBtn.addEventListener('click', () => this.handleApply());
     footer.appendChild(this.applyBtn);
@@ -276,7 +281,7 @@ export class SQLFilterModal {
         this.editorContainer,
         context,
         this.prefix,
-        { placeholder: "Enter WHERE condition, e.g. age > 18 AND status = 'active'" }
+        { placeholder: this.messages.filters.sqlFilter.editorPlaceholder }
       );
     }
 
@@ -292,7 +297,7 @@ export class SQLFilterModal {
       this.validationAbortController?.abort();
       this.validationAbortController = null;
       this.validateBtn.disabled = false;
-      this.validateBtn.textContent = 'Validate';
+      this.validateBtn.textContent = this.messages.common.validate;
       this.updateApplyButtonState();
     };
     this.currentEditor.element.addEventListener('input', this.editorInputHandler);
@@ -336,14 +341,14 @@ export class SQLFilterModal {
     const versionAtStart = ++this.validationVersion;
 
     this.validateBtn.disabled = true;
-    this.validateBtn.textContent = 'Validating\u2026';
+    this.validateBtn.textContent = this.messages.common.validating;
     this.currentEditor.setError(null);
 
     try {
       const result = await this.actions.validateSQLFilter(sql, this.validationAbortController.signal);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.previewEl.textContent = `${result.matchCount!.toLocaleString()} rows match`;
+        this.previewEl.textContent = this.messages.filters.sqlFilter.validationResult(result.matchCount!);
         this.previewEl.style.color = 'var(--dt-success)';
         this.validated = true;
       } else {
@@ -362,7 +367,7 @@ export class SQLFilterModal {
     } finally {
       if (this.validationVersion === versionAtStart) {
         this.validateBtn.disabled = false;
-        this.validateBtn.textContent = 'Validate';
+        this.validateBtn.textContent = this.messages.common.validate;
         this.updateApplyButtonState();
       }
     }
@@ -418,8 +423,8 @@ export class SQLFilterModal {
     if (this.destroyed || this.isOpen) return;
 
     this.currentFilterId = null;
-    this.titleEl.textContent = 'New Expression Filter';
-    this.applyBtn.textContent = 'Apply';
+    this.titleEl.textContent = this.messages.filters.sqlFilter.createTitle;
+    this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
     this.removeSection.style.display = 'none';
 
     this.showModal(this.labelInput);
@@ -438,8 +443,8 @@ export class SQLFilterModal {
     if (!filter) return;
 
     this.currentFilterId = filterId;
-    this.titleEl.textContent = 'Edit Expression Filter';
-    this.applyBtn.textContent = 'Update';
+    this.titleEl.textContent = this.messages.filters.sqlFilter.editTitle;
+    this.applyBtn.textContent = this.messages.filters.sqlFilter.updateButton;
     this.removeSection.style.display = '';
 
     // Reset remove confirmation state

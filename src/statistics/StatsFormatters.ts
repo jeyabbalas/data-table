@@ -8,6 +8,7 @@
 import type { DataType } from '../core/types';
 import type { ColumnStatsData } from './ColumnStatsTypes';
 import { secondsToTimeString } from '../visualizations/histogram/TimeHistogramData';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 // =========================================
 // Number Formatting
@@ -90,8 +91,9 @@ export function escapeHtml(str: string): string {
  * - "892 / 1,234 rows · 3 null"
  * - "1,234 rows · all null"
  */
-function formatLine1(stats: ColumnStatsData): string {
+function formatLine1(stats: ColumnStatsData, messages: Strings): string {
   const { totalRows, nullCount, filteredTotalRows } = stats;
+  const s = messages.statistics;
 
   // Determine which counts to show
   const isFiltered =
@@ -100,20 +102,18 @@ function formatLine1(stats: ColumnStatsData): string {
   let line: string;
   if (isFiltered) {
     // "1 / 1,234 rows" — plural based on total, since it reads "1 of 1,234 rows"
-    const rowWord = totalRows === 1 ? 'row' : 'rows';
-    line = `${formatCount(filteredTotalRows)} / ${formatCount(totalRows)} ${rowWord}`;
+    line = s.filteredRowCount(filteredTotalRows, totalRows);
   } else {
-    const rowWord = totalRows === 1 ? 'row' : 'rows';
-    line = `${formatCount(totalRows)} ${rowWord}`;
+    line = s.rowCount(totalRows);
   }
 
   // Null annotation
   const currentTotal = isFiltered ? filteredTotalRows : totalRows;
   if (nullCount > 0) {
     if (nullCount === currentTotal) {
-      line += ' \u00B7 all null';
+      line += `${s.separator}${s.allNull}`;
     } else {
-      line += ` \u00B7 ${formatCount(nullCount)} null`;
+      line += `${s.separator}${s.nullCount(nullCount)}`;
     }
   }
 
@@ -129,24 +129,26 @@ function formatLine1(stats: ColumnStatsData): string {
  * "min 0 · med 42 · max 1.23e+6"
  */
 function formatNumericLine2(
-  stats: Extract<ColumnStatsData, { kind: 'numeric' }>
+  stats: Extract<ColumnStatsData, { kind: 'numeric' }>,
+  messages: Strings
 ): string {
+  const s = messages.statistics;
   // Loose equality (==) catches both null and undefined as defense-in-depth
   if (stats.min == null || stats.max == null) return '';
 
   // Single value case
   if (stats.min === stats.max) {
-    return `all values: ${formatStatValue(stats.min)}`;
+    return s.allValues(formatStatValue(stats.min));
   }
 
   const parts: string[] = [];
-  parts.push(`min ${formatStatValue(stats.min)}`);
+  parts.push(s.min(formatStatValue(stats.min)));
   if (stats.median !== null) {
-    parts.push(`med ${formatStatValue(stats.median)}`);
+    parts.push(s.median(formatStatValue(stats.median)));
   }
-  parts.push(`max ${formatStatValue(stats.max)}`);
+  parts.push(s.max(formatStatValue(stats.max)));
 
-  return parts.join(' \u00B7 ');
+  return parts.join(s.separator);
 }
 
 /**
@@ -154,14 +156,16 @@ function formatNumericLine2(
  */
 function formatCategoricalLine2(
   stats: Extract<ColumnStatsData, { kind: 'categorical' }>,
-  dataType: DataType
+  dataType: DataType,
+  messages: Strings
 ): string {
+  const s = messages.statistics;
   if (stats.nonNullCount === 0) return '';
 
   if (dataType === 'boolean') {
     if (stats.trueCount !== undefined && stats.nonNullCount > 0) {
       const pct = Math.round((stats.trueCount / stats.nonNullCount) * 100);
-      return `${pct}% true`;
+      return s.percentTrue(pct);
     }
     return '';
   }
@@ -170,19 +174,19 @@ function formatCategoricalLine2(
   const { distinctCount, nonNullCount } = stats;
 
   if (distinctCount === nonNullCount && nonNullCount > 1) {
-    return 'all unique';
+    return s.allUnique;
   }
 
   if (dataType === 'uuid') {
     if (nonNullCount > 0) {
       const pct = Math.round((distinctCount / nonNullCount) * 100);
-      return `${formatCount(distinctCount)} unique (${pct}%)`;
+      return s.uniquePercent(distinctCount, pct);
     }
     return '';
   }
 
   // string
-  return `${formatCount(distinctCount)} unique`;
+  return s.uniqueCount(distinctCount);
 }
 
 /**
@@ -190,7 +194,8 @@ function formatCategoricalLine2(
  * "2020-01-01 – 2024-12-31"
  */
 function formatTemporalLine2(
-  stats: Extract<ColumnStatsData, { kind: 'temporal' }>
+  stats: Extract<ColumnStatsData, { kind: 'temporal' }>,
+  messages: Strings
 ): string {
   // Loose equality (==) catches both null and undefined as defense-in-depth
   if (stats.min == null || stats.max == null) return '';
@@ -199,7 +204,7 @@ function formatTemporalLine2(
   const maxDate = formatDateForStats(stats.max);
 
   if (minDate === maxDate) {
-    return `all values: ${escapeHtml(minDate)}`;
+    return messages.statistics.allValues(escapeHtml(minDate));
   }
 
   return `${escapeHtml(minDate)} \u2013 ${escapeHtml(maxDate)}`;
@@ -226,7 +231,8 @@ function formatDateForStats(isoString: string): string {
  * "08:00:00 – 23:45:00"
  */
 function formatTimeLine2(
-  stats: Extract<ColumnStatsData, { kind: 'time' }>
+  stats: Extract<ColumnStatsData, { kind: 'time' }>,
+  messages: Strings
 ): string {
   if (stats.minSeconds === null || stats.maxSeconds === null) return '';
 
@@ -234,7 +240,7 @@ function formatTimeLine2(
   const maxTime = secondsToTimeString(stats.maxSeconds);
 
   if (minTime === maxTime) {
-    return `all values: ${minTime}`;
+    return messages.statistics.allValues(minTime);
   }
 
   return `${minTime} \u2013 ${maxTime}`;
@@ -245,22 +251,24 @@ function formatTimeLine2(
  * "min 2h · med 8h · max 48h"
  */
 function formatIntervalLine2(
-  stats: Extract<ColumnStatsData, { kind: 'interval' }>
+  stats: Extract<ColumnStatsData, { kind: 'interval' }>,
+  messages: Strings
 ): string {
+  const s = messages.statistics;
   if (stats.minDisplay === null || stats.maxDisplay === null) return '';
 
   if (stats.minDisplay === stats.maxDisplay) {
-    return `all values: ${escapeHtml(stats.minDisplay)}`;
+    return s.allValues(escapeHtml(stats.minDisplay));
   }
 
   const parts: string[] = [];
-  parts.push(`min ${escapeHtml(stats.minDisplay)}`);
+  parts.push(s.min(escapeHtml(stats.minDisplay)));
   if (stats.medianDisplay !== null) {
-    parts.push(`med ${escapeHtml(stats.medianDisplay)}`);
+    parts.push(s.median(escapeHtml(stats.medianDisplay)));
   }
-  parts.push(`max ${escapeHtml(stats.maxDisplay)}`);
+  parts.push(s.max(escapeHtml(stats.maxDisplay)));
 
-  return parts.join(' \u00B7 ');
+  return parts.join(s.separator);
 }
 
 // =========================================
@@ -272,13 +280,15 @@ function formatIntervalLine2(
  *
  * @param stats - The computed column stats data
  * @param dataType - The column's DataType (needed to disambiguate categorical subtypes)
+ * @param messages - Resolved i18n strings. Defaults to English.
  * @returns HTML string with line1 and optional line2 wrapped in span elements
  */
 export function formatDefaultStats(
   stats: ColumnStatsData,
-  dataType: DataType
+  dataType: DataType,
+  messages: Strings = defaultStrings
 ): string {
-  const line1 = formatLine1(stats);
+  const line1 = formatLine1(stats, messages);
 
   // No line 2 for empty data or all-null columns
   const currentTotal =
@@ -290,19 +300,19 @@ export function formatDefaultStats(
   let line2 = '';
   switch (stats.kind) {
     case 'numeric':
-      line2 = formatNumericLine2(stats);
+      line2 = formatNumericLine2(stats, messages);
       break;
     case 'categorical':
-      line2 = formatCategoricalLine2(stats, dataType);
+      line2 = formatCategoricalLine2(stats, dataType, messages);
       break;
     case 'temporal':
-      line2 = formatTemporalLine2(stats);
+      line2 = formatTemporalLine2(stats, messages);
       break;
     case 'time':
-      line2 = formatTimeLine2(stats);
+      line2 = formatTimeLine2(stats, messages);
       break;
     case 'interval':
-      line2 = formatIntervalLine2(stats);
+      line2 = formatIntervalLine2(stats, messages);
       break;
   }
 

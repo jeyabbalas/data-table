@@ -7,6 +7,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for HiddenColumnsGutter
@@ -14,6 +15,8 @@ import type { StateActions } from '../core/Actions';
 export interface HiddenColumnsGutterOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -27,6 +30,7 @@ export class HiddenColumnsGutter {
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
   private readonly prefix: string;
+  private readonly messages: Strings;
 
   constructor(
     private state: TableState,
@@ -34,6 +38,7 @@ export class HiddenColumnsGutter {
     options: HiddenColumnsGutterOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.chipsContainer = this.element.querySelector(
       `.${this.prefix}-hidden-chips`
@@ -61,11 +66,11 @@ export class HiddenColumnsGutter {
     const gutter = document.createElement('div');
     gutter.className = `${this.prefix}-hidden-gutter ${this.prefix}-hidden-gutter--hidden`;
     gutter.setAttribute('role', 'toolbar');
-    gutter.setAttribute('aria-label', 'Hidden columns');
+    gutter.setAttribute('aria-label', this.messages.a11y.hiddenColumnsLabel);
 
     const label = document.createElement('span');
     label.className = `${this.prefix}-gutter-label`;
-    label.textContent = 'Hidden columns';
+    label.textContent = this.messages.a11y.hiddenColumnsLabel;
 
     const chips = document.createElement('div');
     chips.className = `${this.prefix}-hidden-chips`;
@@ -73,7 +78,7 @@ export class HiddenColumnsGutter {
     const showAll = document.createElement('button');
     showAll.className = `${this.prefix}-hidden-show-all`;
     showAll.type = 'button';
-    showAll.textContent = 'Show all';
+    showAll.textContent = this.messages.common.showAll;
     showAll.style.display = 'none';
     showAll.addEventListener('click', () => {
       if (!this.destroyed) {
@@ -116,7 +121,7 @@ export class HiddenColumnsGutter {
   private createChip(colName: string): HTMLElement {
     const chip = document.createElement('span');
     chip.className = `${this.prefix}-hidden-chip`;
-    chip.title = `Show ${colName}`;
+    chip.title = this.messages.a11y.showColumn(colName);
 
     const nameEl = document.createElement('span');
     nameEl.className = `${this.prefix}-hidden-chip-name`;
@@ -124,7 +129,7 @@ export class HiddenColumnsGutter {
 
     const restoreBtn = document.createElement('button');
     restoreBtn.className = `${this.prefix}-hidden-chip-restore`;
-    restoreBtn.setAttribute('aria-label', `Show ${colName}`);
+    restoreBtn.setAttribute('aria-label', this.messages.a11y.showColumn(colName));
     restoreBtn.type = 'button';
     // Eye icon (without slash) — inverse of the hide button's eye-slash icon
     restoreBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">

@@ -5,18 +5,24 @@
  * Positioned absolutely within .dt-root, spanning full height.
  */
 
+import { type Strings, defaultStrings } from '../core/Strings';
+
 export interface AddColumnButtonOptions {
   classPrefix?: string;
   onClick?: () => void;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 export class AddColumnButton {
   private element: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly messages: Strings;
 
   constructor(private options: AddColumnButtonOptions = {}) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
   }
 
@@ -26,8 +32,8 @@ export class AddColumnButton {
     const btn = document.createElement('button');
     btn.className = `${p}-add-column-btn`;
     btn.type = 'button';
-    btn.setAttribute('aria-label', 'Add derived column');
-    btn.title = 'Add derived column';
+    btn.setAttribute('aria-label', this.messages.derived.addButtonLabel);
+    btn.title = this.messages.derived.addButtonLabel;
 
     btn.innerHTML = `
       <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">

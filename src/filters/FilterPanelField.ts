@@ -12,6 +12,7 @@ import type { ColumnSchema } from '../core/types';
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { Filter } from './FilterTypes';
+import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
  * Options for FilterPanelField
@@ -19,6 +20,8 @@ import type { Filter } from './FilterTypes';
 export interface FilterPanelFieldOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /** Resolved i18n strings. Defaults to English. */
+  messages?: Strings;
 }
 
 /**
@@ -30,6 +33,7 @@ export class FilterPanelField {
   private nullGroup: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly messages: Strings;
   private applyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Flag to prevent re-entrant sync when we apply our own filters.
@@ -45,6 +49,7 @@ export class FilterPanelField {
     options: FilterPanelFieldOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.controlsContainer = this.element.querySelector(
       `.${this.prefix}-filter-field-controls`
@@ -76,7 +81,7 @@ export class FilterPanelField {
       const applyBtn = document.createElement('button');
       applyBtn.className = `${this.prefix}-filter-field-apply`;
       applyBtn.type = 'button';
-      applyBtn.textContent = 'Apply';
+      applyBtn.textContent = this.messages.filters.applyButton;
       applyBtn.addEventListener('click', () => this.applyFilter());
       el.appendChild(applyBtn);
     }
@@ -85,13 +90,13 @@ export class FilterPanelField {
     const nullGroup = document.createElement('div');
     nullGroup.className = `${this.prefix}-filter-field-null`;
     nullGroup.setAttribute('role', 'radiogroup');
-    nullGroup.setAttribute('aria-label', `Null filter for ${this.column.name}`);
+    nullGroup.setAttribute('aria-label', this.messages.filters.ariaLabels.nullFilter(this.column.name));
 
     const radioName = `null-${this.column.name}-${Math.random().toString(36).slice(2, 8)}`;
     const nullOptions: Array<{ value: string; label: string }> = [
-      { value: 'any', label: 'Any' },
-      { value: 'null', label: 'Is null' },
-      { value: 'not-null', label: 'Is not null' },
+      { value: 'any', label: this.messages.filters.nullToggle.any },
+      { value: 'null', label: this.messages.filters.nullToggle.isNull },
+      { value: 'not-null', label: this.messages.filters.nullToggle.isNotNull },
     ];
 
     for (const opt of nullOptions) {
@@ -161,33 +166,40 @@ export class FilterPanelField {
 
   private createNumericControls(): void {
     const c = this.controlsContainer;
+    const ops = this.messages.filters.numericOperators;
+    const ph = this.messages.filters.placeholders;
+    const aria = this.messages.filters.ariaLabels;
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
-    select.setAttribute('aria-label', `Filter mode for ${this.column.name}`);
-    select.innerHTML = `
-      <option value="between">between</option>
-      <option value="eq">=</option>
-      <option value="neq">!=</option>
-      <option value="gt">&gt;</option>
-      <option value="gte">&gt;=</option>
-      <option value="lt">&lt;</option>
-      <option value="lte">&lt;=</option>
-    `;
+    select.setAttribute('aria-label', aria.filterMode(this.column.name));
+    const addOption = (value: string, label: string) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    };
+    addOption('between', ops.between);
+    addOption('eq', ops.equals);
+    addOption('neq', ops.notEquals);
+    addOption('gt', ops.greaterThan);
+    addOption('gte', ops.greaterThanOrEqual);
+    addOption('lt', ops.lessThan);
+    addOption('lte', ops.lessThanOrEqual);
 
     const input1 = document.createElement('input');
     input1.type = 'number';
     input1.className = `${this.prefix}-filter-input`;
-    input1.placeholder = 'min';
+    input1.placeholder = ph.min;
     input1.setAttribute('step', 'any');
-    input1.setAttribute('aria-label', `Minimum value for ${this.column.name}`);
+    input1.setAttribute('aria-label', aria.minValue(this.column.name));
 
     const input2 = document.createElement('input');
     input2.type = 'number';
     input2.className = `${this.prefix}-filter-input`;
-    input2.placeholder = 'max';
+    input2.placeholder = ph.max;
     input2.setAttribute('step', 'any');
-    input2.setAttribute('aria-label', `Maximum value for ${this.column.name}`);
+    input2.setAttribute('aria-label', aria.maxValue(this.column.name));
 
     c.appendChild(select);
     c.appendChild(input1);
@@ -196,7 +208,7 @@ export class FilterPanelField {
     // Toggle second input visibility based on mode
     const updateLayout = () => {
       input2.style.display = select.value === 'between' ? '' : 'none';
-      input1.placeholder = select.value === 'between' ? 'min' : 'value';
+      input1.placeholder = select.value === 'between' ? ph.min : ph.value;
     };
     updateLayout();
 
@@ -207,23 +219,29 @@ export class FilterPanelField {
 
   private createStringControls(): void {
     const c = this.controlsContainer;
+    const modes = this.messages.filters.stringModes;
+    const aria = this.messages.filters.ariaLabels;
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
-    select.setAttribute('aria-label', `Filter mode for ${this.column.name}`);
-    select.innerHTML = `
-      <option value="contains">contains</option>
-      <option value="starts">starts with</option>
-      <option value="ends">ends with</option>
-      <option value="regex">regex</option>
-      <option value="exact">exact match</option>
-    `;
+    select.setAttribute('aria-label', aria.filterMode(this.column.name));
+    const addOption = (value: string, label: string) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    };
+    addOption('contains', modes.contains);
+    addOption('starts', modes.startsWith);
+    addOption('ends', modes.endsWith);
+    addOption('regex', modes.regex);
+    addOption('exact', modes.exact);
 
     const input = document.createElement('input');
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
-    input.placeholder = 'Filter value...';
-    input.setAttribute('aria-label', `Filter value for ${this.column.name}`);
+    input.placeholder = this.messages.filters.placeholders.stringFilter;
+    input.setAttribute('aria-label', aria.filterValue(this.column.name));
 
     c.appendChild(select);
     c.appendChild(input);
@@ -241,9 +259,9 @@ export class FilterPanelField {
     group.className = `${this.prefix}-filter-bool-group`;
 
     const options: Array<{ value: string; label: string }> = [
-      { value: 'true', label: 'True' },
-      { value: 'false', label: 'False' },
-      { value: 'null', label: 'Null' },
+      { value: 'true', label: this.messages.filters.booleanOptions.true },
+      { value: 'false', label: this.messages.filters.booleanOptions.false },
+      { value: 'null', label: this.messages.filters.booleanOptions.null },
     ];
 
     for (const opt of options) {
@@ -271,28 +289,34 @@ export class FilterPanelField {
 
   private createDateControls(inputType: 'date' | 'datetime-local'): void {
     const c = this.controlsContainer;
+    const ops = this.messages.filters.dateOperators;
+    const aria = this.messages.filters.ariaLabels;
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
-    select.setAttribute('aria-label', `Date filter mode for ${this.column.name}`);
-    select.innerHTML = `
-      <option value="between">between</option>
-      <option value="eq">=</option>
-      <option value="before">before</option>
-      <option value="on-or-before">on or before</option>
-      <option value="after">after</option>
-      <option value="on-or-after">on or after</option>
-    `;
+    select.setAttribute('aria-label', aria.dateFilterMode(this.column.name));
+    const addOption = (value: string, label: string) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    };
+    addOption('between', ops.between);
+    addOption('eq', ops.equals);
+    addOption('before', ops.before);
+    addOption('on-or-before', ops.onOrBefore);
+    addOption('after', ops.after);
+    addOption('on-or-after', ops.onOrAfter);
 
     const input1 = document.createElement('input');
     input1.type = inputType;
     input1.className = `${this.prefix}-filter-input`;
-    input1.setAttribute('aria-label', `Start date for ${this.column.name}`);
+    input1.setAttribute('aria-label', aria.startDate(this.column.name));
 
     const input2 = document.createElement('input');
     input2.type = inputType;
     input2.className = `${this.prefix}-filter-input`;
-    input2.setAttribute('aria-label', `End date for ${this.column.name}`);
+    input2.setAttribute('aria-label', aria.endDate(this.column.name));
 
     c.appendChild(select);
     c.appendChild(input1);
@@ -310,24 +334,26 @@ export class FilterPanelField {
 
   private createTimeControls(): void {
     const c = this.controlsContainer;
+    const labels = this.messages.filters.labels;
+    const aria = this.messages.filters.ariaLabels;
 
     const label1 = document.createElement('span');
     label1.className = `${this.prefix}-filter-field-label`;
-    label1.textContent = 'From';
+    label1.textContent = labels.from;
 
     const input1 = document.createElement('input');
     input1.type = 'time';
     input1.className = `${this.prefix}-filter-input`;
-    input1.setAttribute('aria-label', `From time for ${this.column.name}`);
+    input1.setAttribute('aria-label', aria.fromTime(this.column.name));
 
     const label2 = document.createElement('span');
     label2.className = `${this.prefix}-filter-field-label`;
-    label2.textContent = 'To';
+    label2.textContent = labels.to;
 
     const input2 = document.createElement('input');
     input2.type = 'time';
     input2.className = `${this.prefix}-filter-input`;
-    input2.setAttribute('aria-label', `To time for ${this.column.name}`);
+    input2.setAttribute('aria-label', aria.toTime(this.column.name));
 
     c.appendChild(label1);
     c.appendChild(input1);
@@ -339,20 +365,26 @@ export class FilterPanelField {
 
   private createUuidControls(): void {
     const c = this.controlsContainer;
+    const modes = this.messages.filters.uuidModes;
+    const aria = this.messages.filters.ariaLabels;
 
     const select = document.createElement('select');
     select.className = `${this.prefix}-filter-select`;
-    select.setAttribute('aria-label', `UUID filter mode for ${this.column.name}`);
-    select.innerHTML = `
-      <option value="contains">contains</option>
-      <option value="exact">exact match</option>
-    `;
+    select.setAttribute('aria-label', aria.uuidFilterMode(this.column.name));
+    const addOption = (value: string, label: string) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    };
+    addOption('contains', modes.contains);
+    addOption('exact', modes.exact);
 
     const input = document.createElement('input');
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
-    input.placeholder = 'UUID value...';
-    input.setAttribute('aria-label', `UUID value for ${this.column.name}`);
+    input.placeholder = this.messages.filters.placeholders.uuidFilter;
+    input.setAttribute('aria-label', aria.uuidValue(this.column.name));
 
     c.appendChild(select);
     c.appendChild(input);
@@ -366,8 +398,8 @@ export class FilterPanelField {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
-    input.placeholder = 'Contains...';
-    input.setAttribute('aria-label', `Interval filter for ${this.column.name}`);
+    input.placeholder = this.messages.filters.placeholders.intervalFilter;
+    input.setAttribute('aria-label', this.messages.filters.ariaLabels.intervalFilter(this.column.name));
 
     c.appendChild(input);
 
@@ -490,22 +522,23 @@ export class FilterPanelField {
 
     // Validate regex before sending to DuckDB
     if (mode === 'regex') {
+      const v = this.messages.filters.validation;
       // Defense-in-depth: cap regex length to prevent expensive compilation
       if (value.length > 1000) {
-        input.setCustomValidity('Regular expression is too long (max 1000 characters)');
+        input.setCustomValidity(v.regexTooLong);
         input.reportValidity();
         return null;
       }
       // Block RE2-unsupported features (DuckDB uses RE2, not JavaScript RegExp)
       if (/\(\?[=!<]|\\[1-9]/.test(value)) {
-        input.setCustomValidity('Lookahead, lookbehind, and backreferences are not supported');
+        input.setCustomValidity(v.regexUnsupported);
         input.reportValidity();
         return null;
       }
       try {
         new RegExp(value);
       } catch {
-        input.setCustomValidity('Invalid regular expression');
+        input.setCustomValidity(v.regexInvalid);
         input.reportValidity();
         return null;
       }
@@ -639,7 +672,7 @@ export class FilterPanelField {
     if (mode === 'exact') {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(value)) {
-        input.setCustomValidity('Invalid UUID format');
+        input.setCustomValidity(this.messages.filters.validation.uuidInvalid);
         input.reportValidity();
         return null;
       }
@@ -734,6 +767,7 @@ export class FilterPanelField {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
     const inputs = this.controlsContainer.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
     if (!select || inputs.length < 2) return;
+    const ph = this.messages.filters.placeholders;
 
     if (filter.type === 'range') {
       const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
@@ -744,28 +778,28 @@ export class FilterPanelField {
         inputs[0].value = this.formatForInput(filter.min);
         inputs[1].value = this.formatForInput(filter.max);
         inputs[1].style.display = '';
-        inputs[0].placeholder = 'min';
+        inputs[0].placeholder = ph.min;
       } else if (maxIsOpen && !minIsOpen) {
         select.value = filter.minExclusive ? 'gt' : 'gte';
         inputs[0].value = this.formatForInput(filter.min);
         inputs[1].style.display = 'none';
-        inputs[0].placeholder = 'value';
+        inputs[0].placeholder = ph.value;
       } else if (minIsOpen && !maxIsOpen) {
         select.value = filter.maxInclusive ? 'lte' : 'lt';
         inputs[0].value = this.formatForInput(filter.max);
         inputs[1].style.display = 'none';
-        inputs[0].placeholder = 'value';
+        inputs[0].placeholder = ph.value;
       }
     } else if (filter.type === 'point') {
       select.value = 'eq';
       inputs[0].value = this.formatForInput(filter.value);
       inputs[1].style.display = 'none';
-      inputs[0].placeholder = 'value';
+      inputs[0].placeholder = ph.value;
     } else if (filter.type === 'not-set' && filter.values.length === 1) {
       select.value = 'neq';
       inputs[0].value = this.formatForInput(filter.values[0]);
       inputs[1].style.display = 'none';
-      inputs[0].placeholder = 'value';
+      inputs[0].placeholder = ph.value;
     }
   }
 
@@ -927,7 +961,7 @@ export class FilterPanelField {
     // Reset numeric layout (show second input for 'between')
     if (this.column.type === 'integer' || this.column.type === 'float' || this.column.type === 'decimal') {
       const numInputs = this.controlsContainer.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
-      if (numInputs[0]) numInputs[0].placeholder = 'min';
+      if (numInputs[0]) numInputs[0].placeholder = this.messages.filters.placeholders.min;
       if (numInputs[1]) numInputs[1].style.display = '';
     }
 

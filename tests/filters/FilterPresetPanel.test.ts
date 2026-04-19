@@ -84,7 +84,10 @@ describe('FilterPresetPanel', () => {
       panel.toggle(anchor);
       // Close handlers are registered inside requestAnimationFrame
       await new Promise(resolve => requestAnimationFrame(resolve));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // ModalHost scopes the keydown listener to the panel element.
+      panel
+        .getElement()
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(panel.getIsOpen()).toBe(false);
     });
   });

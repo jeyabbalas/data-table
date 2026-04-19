@@ -8,6 +8,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { DerivedColumnDef } from './types';
@@ -45,8 +46,7 @@ export class DerivedColumnEditPanel {
   private validationVersion = 0;
   private updating = false;
 
-  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private modalHost = new ModalHost();
   private editorInputHandler: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
 
@@ -122,6 +122,7 @@ export class DerivedColumnEditPanel {
     const el = document.createElement('div');
     el.className = `${p}-derived-edit-panel`;
     el.style.display = 'none';
+    el.setAttribute('role', 'dialog');
 
     // Header
     const header = document.createElement('div');
@@ -323,7 +324,9 @@ export class DerivedColumnEditPanel {
     let left = anchorRect.left - rootRect.left;
     const top = anchorRect.bottom - rootRect.top + 4; // 4px gap
 
-    const panelWidth = 360;
+    // Read the live width after the panel is visible so CSS overrides drive
+    // edge clamping. Falls back to 360 (CSS default) when offsetWidth is 0.
+    const panelWidth = this.element.offsetWidth || 360;
 
     // Clamp left so panel doesn't overflow right edge
     if (left + panelWidth > rootRect.width) {
@@ -443,18 +446,29 @@ export class DerivedColumnEditPanel {
     this.isOpen = true;
     this.element.style.display = '';
 
-    // Position below anchor
+    // Position below anchor (reads offsetWidth — must run after the panel is
+    // visible).
     this.position(anchorElement);
 
-    // Register close handlers (delay to avoid catching opening click)
-    requestAnimationFrame(() => {
-      this.registerCloseHandlers();
+    this.modalHost.open({
+      mode: 'panel',
+      element: this.element,
+      outsideClickIgnore: [`.${this.prefix}-derived-icon-btn`],
+      // Let CodeMirror autocomplete consume Escape before we close.
+      escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),
+      // Skip initial auto-focus so we don't steal focus from the CodeMirror
+      // editor when editing a derived expression column.
+      initialFocus: this.nameInput,
+      onClose: () => this.handleHostClose(),
     });
   }
 
   close(): void {
     if (!this.isOpen) return;
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
 
     // Remove active state from icon button
@@ -464,51 +478,8 @@ export class DerivedColumnEditPanel {
     }
 
     this.element.style.display = 'none';
-
-    this.unregisterCloseHandlers();
   }
 
-  // =========================================
-  // Close Handlers
-  // =========================================
-
-  private registerCloseHandlers(): void {
-    // Outside click
-    this.outsideClickHandler = (e: MouseEvent) => {
-      const target = e.target as Node;
-
-      // Ignore clicks inside the panel
-      if (this.element.contains(target)) return;
-
-      // Ignore clicks on derived icon buttons (they have their own toggle logic)
-      if (target instanceof Element && target.closest(`.${this.prefix}-derived-icon-btn`)) return;
-
-      this.close();
-    };
-    document.addEventListener('mousedown', this.outsideClickHandler);
-
-    // Escape key
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // If CodeMirror autocomplete is open, let it handle Escape first
-        if (document.querySelector('.cm-tooltip-autocomplete')) return;
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler, true);
-  }
-
-  private unregisterCloseHandlers(): void {
-    if (this.outsideClickHandler) {
-      document.removeEventListener('mousedown', this.outsideClickHandler);
-      this.outsideClickHandler = null;
-    }
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler, true);
-      this.escapeHandler = null;
-    }
-  }
 
   // =========================================
   // Validation & Actions
@@ -707,6 +678,7 @@ export class DerivedColumnEditPanel {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
 
     // Unsubscribe from state
     if (this.unsubscribe) {

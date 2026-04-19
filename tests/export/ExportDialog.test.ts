@@ -138,6 +138,8 @@ describe('ExportDialog', () => {
 
   describe('DOM structure', () => {
     it('should have dialog with role and aria attributes', () => {
+      // ARIA attributes are applied by ModalHost on open().
+      dialog.open();
       const dialogEl = dialog.getElement().querySelector('.dt-export-dialog');
       expect(dialogEl?.getAttribute('role')).toBe('dialog');
       expect(dialogEl?.getAttribute('aria-modal')).toBe('true');
@@ -145,6 +147,7 @@ describe('ExportDialog', () => {
       expect(labelledBy).toMatch(/-export-title$/);
       // Integrity: aria-labelledby must resolve to an element inside this dialog.
       expect(dialog.getElement().querySelector(`#${labelledBy}`)).not.toBeNull();
+      dialog.close();
     });
 
     it('should have title', () => {
@@ -184,7 +187,9 @@ describe('ExportDialog', () => {
 
     it('should close on Escape key', () => {
       dialog.open();
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // ModalHost scopes the keydown listener to the dialog element.
+      const inner = dialog.getElement().querySelector('.dt-export-dialog') as HTMLElement;
+      inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(dialog.getIsOpen()).toBe(false);
     });
 
@@ -206,9 +211,10 @@ describe('ExportDialog', () => {
       dialog.open();
       dialog.close();
 
-      // Re-open and close via Escape should still work
+      // Re-open and close via Escape should still work (listener is re-installed on open).
       dialog.open();
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      const inner = dialog.getElement().querySelector('.dt-export-dialog') as HTMLElement;
+      inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(dialog.getIsOpen()).toBe(false);
     });
   });

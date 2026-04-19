@@ -8,6 +8,7 @@
 
 import type { TableState } from '../core/State';
 import type { WorkerBridge } from '../data/WorkerBridge';
+import { ModalHost } from '../core/ModalHost';
 import { exportFromState } from './CSVExport';
 import { exportJSONFromState } from './JSONExport';
 import { exportParquetFromState } from './ParquetExport';
@@ -65,11 +66,8 @@ export class ExportDialog {
   private jsonFormatSelect!: HTMLSelectElement;
   private jsonPrettyCheckbox!: HTMLInputElement;
 
-  // Close handler references
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
-
-  // Body scroll lock
-  private scrollLockHandler: ((e: Event) => void) | null = null;
+  // Modal infrastructure (focus trap, Escape, scroll lock, ARIA).
+  private modalHost = new ModalHost();
 
   constructor(
     private state: TableState,
@@ -88,19 +86,13 @@ export class ExportDialog {
   private createElement(): HTMLElement {
     const p = this.prefix;
 
-    // Backdrop
+    // Backdrop (click-outside handled by ModalHost on open).
     const backdrop = document.createElement('div');
     backdrop.className = `${p}-export-backdrop`;
-    backdrop.addEventListener('mousedown', (e) => {
-      if (e.target === backdrop) this.close();
-    });
 
-    // Dialog
+    // Dialog (role/aria-modal/aria-labelledby applied by ModalHost on open).
     const dialog = document.createElement('div');
     dialog.className = `${p}-export-dialog`;
-    dialog.setAttribute('role', 'dialog');
-    dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-export-title`);
     this.dialogEl = dialog;
     backdrop.appendChild(dialog);
 
@@ -405,15 +397,6 @@ export class ExportDialog {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-export-backdrop--open`);
 
-    // Prevent background scrolling without modifying body CSS (avoids layout shift).
-    // Allow scroll events inside the dialog.
-    this.scrollLockHandler = (e: Event) => {
-      if (this.dialogEl.contains(e.target as Node)) return;
-      e.preventDefault();
-    };
-    document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
-    document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
-
     // Subscribe to state for live updates
     this.unsubscribes.push(
       this.state.totalRows.subscribe(() => {
@@ -438,34 +421,27 @@ export class ExportDialog {
     this.errorEl.style.display = 'none';
     this.errorEl.textContent = '';
 
-    // Register Escape handler
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler);
-
-    // Focus the dialog
     const firstRadio = this.element.querySelector('input[type="radio"]') as HTMLInputElement | null;
-    if (firstRadio) {
-      requestAnimationFrame(() => firstRadio.focus());
-    }
+    this.modalHost.open({
+      mode: 'modal',
+      element: this.element,
+      dialog: this.dialogEl,
+      labelledBy: `${this.prefix}-${this.instanceId}-export-title`,
+      initialFocus: firstRadio,
+      onClose: () => this.handleHostClose(),
+    });
   }
 
   close(): void {
     if (!this.isOpen) return;
+    // ModalHost.close() calls back into handleHostClose() which performs the
+    // component-local cleanup (subscriptions, abort controller, DOM class).
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-export-backdrop--open`);
-
-    // Restore background scrolling
-    if (this.scrollLockHandler) {
-      document.removeEventListener('wheel', this.scrollLockHandler);
-      document.removeEventListener('touchmove', this.scrollLockHandler);
-      this.scrollLockHandler = null;
-    }
 
     // Cancel any in-flight export
     if (this.abortController) {
@@ -479,12 +455,6 @@ export class ExportDialog {
       unsub();
     }
     this.unsubscribes = [];
-
-    // Remove Escape handler
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler);
-      this.escapeHandler = null;
-    }
   }
 
   // =========================================
@@ -702,6 +672,7 @@ export class ExportDialog {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
 
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);

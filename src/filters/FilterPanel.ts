@@ -8,6 +8,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { ModalHost } from '../core/ModalHost';
 import { FilterPanelField } from './FilterPanelField';
 
 /**
@@ -33,9 +34,8 @@ export class FilterPanel {
   private destroyed = false;
   private readonly prefix: string;
 
-  // Event handler references for cleanup
-  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  // Focus trap / Escape / outside-click delegated to ModalHost.
+  private modalHost = new ModalHost();
 
   // State subscription for external sync
   private unsubscribe: (() => void) | null = null;
@@ -75,6 +75,10 @@ export class FilterPanel {
     const el = document.createElement('div');
     el.className = `${this.prefix}-filter-panel`;
     el.style.display = 'none';
+    // role="dialog" is set here so assistive tech identifies the panel
+    // regardless of open state; aria-modal is intentionally omitted (the
+    // panel does not trap page interaction the way a modal does).
+    el.setAttribute('role', 'dialog');
 
     // Header
     const header = document.createElement('div');
@@ -135,7 +139,9 @@ export class FilterPanel {
     let left = anchorRect.left - rootRect.left;
     const top = anchorRect.bottom - rootRect.top + 4; // 4px gap
 
-    const panelWidth = 320;
+    // Read the live width after the panel is visible so the --dt-panel-width
+    // CSS variable (if overridden by the host app) drives edge clamping.
+    const panelWidth = this.element.offsetWidth || 320;
 
     // Clamp left so panel doesn't overflow right edge
     if (left + panelWidth > rootRect.width) {
@@ -197,12 +203,15 @@ export class FilterPanel {
     const hasFilter = this.state.filtersByColumn.get().has(column);
     this.updatePanelClearButton(hasFilter);
 
-    // Position below the anchor
+    // Position below the anchor (reads offsetWidth — must run after
+    // style.display = '').
     this.position(anchorElement);
 
-    // Register close handlers (with slight delay to avoid catching the opening click)
-    requestAnimationFrame(() => {
-      this.registerCloseHandlers();
+    this.modalHost.open({
+      mode: 'panel',
+      element: this.element,
+      outsideClickIgnore: [`.${this.prefix}-col-filter-btn`],
+      onClose: () => this.handleHostClose(),
     });
   }
 
@@ -216,51 +225,13 @@ export class FilterPanel {
    */
   close(): void {
     if (!this.isOpen) return;
+    // ModalHost.close() invokes handleHostClose() below for the DOM cleanup.
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
     this.element.style.display = 'none';
-
-    this.unregisterCloseHandlers();
-  }
-
-  // =========================================
-  // Close Handlers
-  // =========================================
-
-  private registerCloseHandlers(): void {
-    // Outside click
-    this.outsideClickHandler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      // Ignore clicks inside the panel
-      if (this.element.contains(target)) return;
-
-      // Ignore clicks on filter buttons (they have their own toggle logic)
-      if (target.closest(`.${this.prefix}-col-filter-btn`)) return;
-
-      this.close();
-    };
-    document.addEventListener('mousedown', this.outsideClickHandler);
-
-    // Escape key
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler);
-  }
-
-  private unregisterCloseHandlers(): void {
-    if (this.outsideClickHandler) {
-      document.removeEventListener('mousedown', this.outsideClickHandler);
-      this.outsideClickHandler = null;
-    }
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler);
-      this.escapeHandler = null;
-    }
   }
 
   // =========================================
@@ -307,6 +278,7 @@ export class FilterPanel {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
 
     // Unsubscribe from state
     if (this.unsubscribe) {

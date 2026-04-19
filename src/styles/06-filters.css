@@ -10,7 +10,7 @@
 .dt-filter-panel {
   position: absolute;
   z-index: var(--dt-z-floating-panel, 50);
-  width: 320px;
+  width: var(--dt-panel-width, 320px);
   display: flex;
   flex-direction: column;
   background: var(--dt-bg);
@@ -303,7 +303,7 @@
 .dt-filter-preset-panel {
   position: absolute;
   z-index: var(--dt-z-floating-panel, 50);
-  width: 320px;
+  width: var(--dt-panel-width, 320px);
   display: flex;
   flex-direction: column;
   background: var(--dt-bg);

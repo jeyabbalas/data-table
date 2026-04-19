@@ -7,6 +7,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { ModalHost } from '../core/ModalHost';
 import type { FilterPresetManager } from './FilterPresets';
 import type { FilterPreset } from './FilterPresetTypes';
 
@@ -26,8 +27,7 @@ export class FilterPresetPanel {
   private readonly prefix: string;
   private isOpen = false;
   private destroyed = false;
-  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private modalHost = new ModalHost();
   private unsubPresets: (() => void) | null = null;
   private unsubFilters: (() => void) | null = null;
 
@@ -66,6 +66,7 @@ export class FilterPresetPanel {
     const el = document.createElement('div');
     el.className = `${p}-filter-preset-panel`;
     el.style.display = 'none';
+    el.setAttribute('role', 'dialog');
 
     // --- Header ---
     const header = document.createElement('div');
@@ -193,7 +194,9 @@ export class FilterPresetPanel {
     let left = anchorRect.left - rootRect.left;
     const top = anchorRect.bottom - rootRect.top + 4; // 4px gap
 
-    const panelWidth = 320;
+    // Read the live width after the panel is visible so --dt-panel-width
+    // overrides drive edge clamping.
+    const panelWidth = this.element.offsetWidth || 320;
 
     // Clamp left so panel doesn't overflow right edge
     if (left + panelWidth > rootRect.width) {
@@ -227,59 +230,24 @@ export class FilterPresetPanel {
     this.renderPresetList();
     this.position(anchorElement);
 
-    // Focus the name input for immediate typing
-    requestAnimationFrame(() => {
-      this.nameInput.focus();
-      this.registerCloseHandlers();
+    this.modalHost.open({
+      mode: 'panel',
+      element: this.element,
+      initialFocus: this.nameInput,
+      outsideClickIgnore: [`.${this.prefix}-filter-presets-btn`],
+      onClose: () => this.handleHostClose(),
     });
   }
 
   close(): void {
     if (!this.isOpen) return;
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
     this.element.style.display = 'none';
     this.clearImportStatus();
-
-    this.unregisterCloseHandlers();
-  }
-
-  // =========================================
-  // Close Handlers
-  // =========================================
-
-  private registerCloseHandlers(): void {
-    this.outsideClickHandler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      // Ignore clicks inside the panel
-      if (this.element.contains(target)) return;
-
-      // Ignore clicks on the presets button (it has its own toggle logic)
-      if (target.closest(`.${this.prefix}-filter-presets-btn`)) return;
-
-      this.close();
-    };
-    document.addEventListener('mousedown', this.outsideClickHandler);
-
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler);
-  }
-
-  private unregisterCloseHandlers(): void {
-    if (this.outsideClickHandler) {
-      document.removeEventListener('mousedown', this.outsideClickHandler);
-      this.outsideClickHandler = null;
-    }
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler);
-      this.escapeHandler = null;
-    }
   }
 
   // =========================================
@@ -521,6 +489,7 @@ export class FilterPresetPanel {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
 
     if (this.unsubPresets) {
       this.unsubPresets();

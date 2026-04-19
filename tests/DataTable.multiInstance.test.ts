@@ -78,7 +78,10 @@ describe('multi-instance ID isolation', () => {
     expect(ids).toContain('dt-t1-aaaa-export-title');
     expect(ids).toContain('dt-t2-bbbb-export-title');
 
-    // Each dialog's aria-labelledby resolves to its own title, not the other's.
+    // aria-labelledby is set by ModalHost on open(). Open both dialogs and
+    // verify each resolves to its own title element.
+    a.open();
+    b.open();
     for (const dialog of [a, b]) {
       const dlgEl = dialog.getElement().querySelector('.dt-export-dialog')!;
       const labelledBy = dlgEl.getAttribute('aria-labelledby')!;

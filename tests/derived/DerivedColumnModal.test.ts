@@ -140,8 +140,10 @@ describe('DerivedColumnModal', () => {
 
   it('Escape key closes modal', () => {
     modal.open();
-    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-    document.dispatchEvent(event);
+    const dialog = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-dialog') as HTMLElement;
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(modal.getIsOpen()).toBe(false);
   });
 
@@ -181,6 +183,8 @@ describe('DerivedColumnModal', () => {
   // =========================================
 
   it('has dialog with correct role and aria attributes', () => {
+    // ARIA attributes are applied by ModalHost on open().
+    modal.open();
     const dialog = modal.getElement().querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog!.getAttribute('aria-modal')).toBe('true');
@@ -188,6 +192,7 @@ describe('DerivedColumnModal', () => {
     expect(labelledBy).toMatch(/-derived-modal-title$/);
     // Integrity: aria-labelledby must resolve to an element inside this modal.
     expect(modal.getElement().querySelector(`#${labelledBy}`)).not.toBeNull();
+    modal.close();
   });
 
   it('has title "New Derived Column"', () => {

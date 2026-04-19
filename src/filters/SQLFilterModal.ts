@@ -8,6 +8,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { RawSQLFilter } from './FilterTypes';
@@ -48,8 +49,7 @@ export class SQLFilterModal {
   private validated = false;
   private applying = false;
   private validationVersion = 0;
-  private scrollLockHandler: ((e: Event) => void) | null = null;
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private modalHost = new ModalHost();
   private validationAbortController: AbortController | null = null;
 
   /** null = create mode, string = edit mode (the filter id) */
@@ -73,19 +73,13 @@ export class SQLFilterModal {
   private createElement(): HTMLElement {
     const p = this.prefix;
 
-    // Backdrop
+    // Backdrop (click-outside handled by ModalHost on open).
     const backdrop = document.createElement('div');
     backdrop.className = `${p}-sql-filter-modal-backdrop`;
-    backdrop.addEventListener('mousedown', (e) => {
-      if (e.target === backdrop) this.close();
-    });
 
-    // Dialog
+    // Dialog (role/aria-modal/aria-labelledby applied by ModalHost on open).
     const dialog = document.createElement('div');
     dialog.className = `${p}-sql-filter-modal-dialog`;
-    dialog.setAttribute('role', 'dialog');
-    dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-sql-filter-modal-title`);
     backdrop.appendChild(dialog);
 
     dialog.appendChild(this.createHeader());
@@ -420,12 +414,7 @@ export class SQLFilterModal {
     this.applyBtn.textContent = 'Apply';
     this.removeSection.style.display = 'none';
 
-    this.showModal();
-
-    // Focus label input
-    requestAnimationFrame(() => {
-      this.labelInput.focus();
-    });
+    this.showModal(this.labelInput);
   }
 
   /** Open the modal in edit mode (pre-populated from existing SQL filter) */
@@ -449,73 +438,52 @@ export class SQLFilterModal {
     this.removeBtn.style.display = '';
     this.removeConfirmDiv.style.display = 'none';
 
-    this.showModal();
-
-    // Pre-populate fields
-    this.labelInput.value = filter.label ?? '';
-    if (this.currentEditor) {
-      this.currentEditor.setValue(filter.sql);
-    }
-
-    // Focus editor
-    requestAnimationFrame(() => {
-      this.currentEditor?.focus();
+    // ensureEditor runs inside showModal; set the value and focus it.
+    this.showModal(null, () => {
+      this.labelInput.value = filter.label ?? '';
+      if (this.currentEditor) {
+        this.currentEditor.setValue(filter.sql);
+        this.currentEditor.focus();
+      }
     });
   }
 
   /** Shared open logic for both create and edit modes */
-  private showModal(): void {
+  private showModal(initialFocus: HTMLElement | null, afterOpen?: () => void): void {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-sql-filter-modal-backdrop--open`);
 
-    // Prevent background scrolling (allow inside dialog)
-    this.scrollLockHandler = (e: Event) => {
-      if (this.dialogEl.contains(e.target as Node)) return;
-      e.preventDefault();
-    };
-    document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
-    document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
-
-    // Reset form state
+    // Reset form state + create editor before ModalHost probes for focusables.
     this.resetForm();
-
-    // Create editor
     this.ensureEditor();
 
-    // Register Escape handler
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // If CodeMirror autocomplete is open, let it handle Escape first
-        if (document.querySelector('.cm-tooltip-autocomplete')) return;
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler, true);
+    this.modalHost.open({
+      mode: 'modal',
+      element: this.element,
+      dialog: this.dialogEl,
+      labelledBy: `${this.prefix}-${this.instanceId}-sql-filter-modal-title`,
+      initialFocus,
+      // CodeMirror autocomplete handles its own Escape — don't let ModalHost
+      // close the dialog when autocomplete is consuming the key.
+      escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),
+      onClose: () => this.handleHostClose(),
+    });
+
+    if (afterOpen) afterOpen();
   }
 
   close(): void {
     if (!this.isOpen) return;
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-sql-filter-modal-backdrop--open`);
 
     // Abort any in-flight validation query
     this.validationAbortController?.abort();
     this.validationAbortController = null;
-
-    // Restore background scrolling
-    if (this.scrollLockHandler) {
-      document.removeEventListener('wheel', this.scrollLockHandler);
-      document.removeEventListener('touchmove', this.scrollLockHandler);
-      this.scrollLockHandler = null;
-    }
-
-    // Unregister Escape handler
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler, true);
-      this.escapeHandler = null;
-    }
 
     // Destroy editor to free resources
     this.destroyEditor();
@@ -552,6 +520,7 @@ export class SQLFilterModal {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
 
     if (this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);

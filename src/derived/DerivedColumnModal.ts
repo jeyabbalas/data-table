@@ -8,6 +8,7 @@
 
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import { ModalHost } from '../core/ModalHost';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { DerivedColumnDef, VectorDataType } from './types';
@@ -57,8 +58,7 @@ export class DerivedColumnModal {
   private expressionValidated = false;
   private validationVersion = 0;
   private creating = false;
-  private scrollLockHandler: ((e: Event) => void) | null = null;
-  private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private modalHost = new ModalHost();
 
   constructor(
     private state: TableState,
@@ -79,19 +79,13 @@ export class DerivedColumnModal {
   private createElement(): HTMLElement {
     const p = this.prefix;
 
-    // Backdrop
+    // Backdrop (click-outside handled by ModalHost on open).
     const backdrop = document.createElement('div');
     backdrop.className = `${p}-derived-modal-backdrop`;
-    backdrop.addEventListener('mousedown', (e) => {
-      if (e.target === backdrop) this.close();
-    });
 
-    // Dialog
+    // Dialog (role/aria-modal/aria-labelledby applied by ModalHost on open).
     const dialog = document.createElement('div');
     dialog.className = `${p}-derived-modal-dialog`;
-    dialog.setAttribute('role', 'dialog');
-    dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', `${p}-${this.instanceId}-derived-modal-title`);
     backdrop.appendChild(dialog);
 
     dialog.appendChild(this.createHeader());
@@ -765,56 +759,30 @@ export class DerivedColumnModal {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-derived-modal-backdrop--open`);
 
-    // Prevent background scrolling without modifying body CSS (avoids layout shift).
-    // Allow scroll events inside the dialog (textarea, CodeMirror editor).
-    this.scrollLockHandler = (e: Event) => {
-      if (this.dialogEl.contains(e.target as Node)) return;
-      e.preventDefault();
-    };
-    document.addEventListener('wheel', this.scrollLockHandler, { passive: false });
-    document.addEventListener('touchmove', this.scrollLockHandler, { passive: false });
-
-    // Reset form
+    // Reset form and create expression editor before ModalHost probes focus.
     this.resetForm();
-
-    // Create expression editor (default mode)
     this.ensureEditor();
 
-    // Register Escape handler
-    this.escapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // If CodeMirror autocomplete is open, let it handle Escape first
-        if (document.querySelector('.cm-tooltip-autocomplete')) return;
-        e.stopPropagation();
-        this.close();
-      }
-    };
-    document.addEventListener('keydown', this.escapeHandler, true);
-
-    // Focus name input
-    requestAnimationFrame(() => {
-      this.nameInput.focus();
+    this.modalHost.open({
+      mode: 'modal',
+      element: this.element,
+      dialog: this.dialogEl,
+      labelledBy: `${this.prefix}-${this.instanceId}-derived-modal-title`,
+      initialFocus: this.nameInput,
+      // CodeMirror autocomplete owns its own Escape — let it close first.
+      escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),
+      onClose: () => this.handleHostClose(),
     });
   }
 
   close(): void {
     if (!this.isOpen) return;
+    this.modalHost.close();
+  }
 
+  private handleHostClose(): void {
     this.isOpen = false;
     this.element.classList.remove(`${this.prefix}-derived-modal-backdrop--open`);
-
-    // Restore background scrolling
-    if (this.scrollLockHandler) {
-      document.removeEventListener('wheel', this.scrollLockHandler);
-      document.removeEventListener('touchmove', this.scrollLockHandler);
-      this.scrollLockHandler = null;
-    }
-
-    // Unregister Escape handler
-    if (this.escapeHandler) {
-      document.removeEventListener('keydown', this.escapeHandler, true);
-      this.escapeHandler = null;
-    }
 
     // Destroy editor to free resources
     this.destroyEditor();
@@ -870,6 +838,7 @@ export class DerivedColumnModal {
     this.destroyed = true;
 
     this.close();
+    this.modalHost.destroy();
     this.destroyEditor();
 
     if (this.element.parentNode) {

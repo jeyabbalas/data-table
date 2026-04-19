@@ -597,7 +597,10 @@ describe('DerivedColumnEditPanel', () => {
       // Wait for rAF to register close handlers
       await new Promise((r) => requestAnimationFrame(r));
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // ModalHost scopes the keydown listener to the panel element.
+      panel
+        .getElement()
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(panel.getIsOpen()).toBe(false);
 
       panel.destroy();

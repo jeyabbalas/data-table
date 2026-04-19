@@ -182,7 +182,10 @@ describe('SQLFilterModal', () => {
 
     it('Escape key closes modal', () => {
       modal.open();
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const dialog = modal
+        .getElement()
+        .querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
+      dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(modal.getIsOpen()).toBe(false);
     });
 

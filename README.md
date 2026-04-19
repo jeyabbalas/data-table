@@ -107,9 +107,15 @@ both `:root` and `.dt-root`. Override globally:
 :root {
   --dt-primary: #10b981;
   --dt-radius: 4px;
-  --dt-z-modal: 1500;   /* if your app's modal layer sits at z-index 1000 */
+  --dt-z-modal: 1500;       /* if your app's modal layer sits at z-index 1000 */
+  --dt-panel-width: 420px;  /* widen filter, preset, and derived-edit panels */
 }
 ```
+
+Floating-panel width (filter panel, preset panel, derived-column edit panel)
+is driven by `--dt-panel-width` (default `320px`). Override at `:root` or on
+any scoped ancestor — the TS-side edge-clamp measures the live width via
+`offsetWidth`, so overrides don't cause panels to overflow the table.
 
 …or per-instance by adding a class to the table element:
 
@@ -140,6 +146,11 @@ interleave your own layers without hunting through the stylesheet. Defaults:
 | `--dt-z-floating-panel`  | `50`    | In-page panels (filter, preset, derived-edit)          |
 | `--dt-z-autocomplete`    | `60`    | CodeMirror autocomplete tooltip (portalled to `<body>`)|
 | `--dt-z-modal`           | `1000`  | Full-screen modals + backdrops                         |
+| `--dt-z-modal-stack-step`| `2`     | Step added per stacked modal/panel so two-at-once dialogs layer predictably |
+
+Simultaneously-open modals or panels receive `--dt-z-{modal,floating-panel}
++ stackIndex * --dt-z-modal-stack-step`, so they never collide at the same
+layer. Override `--dt-z-modal-stack-step` to widen or narrow that step.
 
 Gaps are ≥ 10 so you can slot host-app UI between layers. To sit the whole
 table above a host `z-index: 3000` drawer, override the top of the ladder:

@@ -138,6 +138,13 @@
   --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
   --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
   --dt-z-modal: 1000;          /* full-screen modals + backdrops */
+  --dt-z-modal-stack-step: 2;  /* step added per open modal/panel so simultaneously-open dialogs layer predictably */
+
+  /* Default width for floating panels (filter panel, preset panel, derived-
+     column edit panel). Override at the `:root` (or scoped ancestor) to
+     widen panels. TS-side positioning re-measures via offsetWidth so edge
+     clamping respects the override. */
+  --dt-panel-width: 320px;
 }
 
 /* Dark mode - automatic based on system preference */

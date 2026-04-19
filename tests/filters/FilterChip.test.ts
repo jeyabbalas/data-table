@@ -430,7 +430,7 @@ describe('FilterChip', () => {
     const el = chip.getElement();
 
     const label = el.querySelector('.dt-filter-chip-label') as HTMLElement;
-    expect(label.style.cursor).toBe('pointer');
+    expect(label.classList.contains('dt-filter-chip-label--clickable')).toBe(true);
 
     label.click();
     expect(onEdit).toHaveBeenCalledTimes(1);

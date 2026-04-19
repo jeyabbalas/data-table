@@ -238,18 +238,22 @@ export class WorkerBridge {
    * Terminate the worker
    */
   terminate(): void {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-      this.initPromise = null;
+    if (!this.worker) return;
+    this.worker.terminate();
+    this.worker = null;
+    this.initPromise = null;
 
-      // Reject all pending requests
-      for (const [, request] of this.pendingRequests) {
-        request.reject(new WorkerTerminatedError('Worker terminated'));
-      }
-      this.pendingRequests.clear();
-      this.queryCache.clear();
+    // Reject all pending requests, releasing their abort listeners so that
+    // long-lived AbortSignals reused by the embedder don't accumulate
+    // handlers across bridge lifetimes.
+    const ids = Array.from(this.pendingRequests.keys());
+    for (const id of ids) {
+      const request = this.pendingRequests.get(id);
+      if (!request) continue;
+      request.reject(new WorkerTerminatedError('Worker terminated'));
+      this.cleanupRequest(id);
     }
+    this.queryCache.clear();
   }
 
   /**
@@ -301,7 +305,10 @@ export class WorkerBridge {
         }
 
         abortHandler = () => {
-          this.pendingRequests.delete(id);
+          // cleanupRequest also removes this very listener from the signal,
+          // preventing handler leaks when the same AbortSignal is reused
+          // across many aborted requests.
+          this.cleanupRequest(id);
           // Send cancel message to worker
           const cancelMessage: WorkerMessage = {
             id: this.generateId(),

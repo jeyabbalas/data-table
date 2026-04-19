@@ -41,7 +41,9 @@ import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableEvents } from './core/TableEvents';
 import {
+  ConfigurationError,
   DataTableError,
+  DestroyedError,
   LoadError,
 } from './core/errors';
 import type { DataFormat } from './data/DataLoader';
@@ -200,6 +202,21 @@ export interface DataTable {
    * session store (if owned). Call when unmounting from the DOM.
    */
   destroy(): Promise<void>;
+
+  /**
+   * `true` once {@link destroy} has been called. Useful as a guard in
+   * framework cleanup callbacks (e.g., React `useEffect` returns) that may
+   * run after an earlier destroy.
+   */
+  isDestroyed(): boolean;
+
+  /**
+   * `true` if IndexedDB-backed session persistence is active. Returns `false`
+   * when persistence was disabled via options OR when IndexedDB was
+   * unavailable at init time (check for a `warning` event with code
+   * `PERSISTENCE_UNAVAILABLE` to distinguish).
+   */
+  isPersistenceActive(): boolean;
 }
 
 type VisualizationType =
@@ -257,7 +274,30 @@ export async function createDataTable(
   // -------- Event bus --------
   // Constructed early so the persistence and stylesheet checks below can
   // emit `warning` events instead of silently degrading.
-  const emitter = new EventEmitter<TableEvents>();
+  // Forward-declared so the listener-error handler can reference `emitter`
+  // in its closure (the handler only fires after construction completes).
+  let emitter!: EventEmitter<TableEvents>;
+  emitter = new EventEmitter<TableEvents>((err, event) => {
+    if (event === 'error' || event === 'warning') {
+      // Do not re-emit — would recurse infinitely.
+      // eslint-disable-next-line no-console
+      console.error(
+        '[data-table] listener threw inside',
+        String(event),
+        'handler',
+        err,
+      );
+      return;
+    }
+    const typed =
+      err instanceof DataTableError
+        ? err
+        : new ConfigurationError(
+            err instanceof Error ? err.message : String(err),
+            { code: 'OPTIONS_INVALID', cause: err },
+          );
+    emitter.emit('error', { error: typed, source: 'listener' });
+  });
 
   // -------- Persistence --------
   let sessionStore: SessionStore | null = null;
@@ -588,6 +628,11 @@ export async function createDataTable(
   // -------- Re-emit signals as typed events --------
   const unsubscribes: Array<() => void> = [];
   let destroyed = false;
+  // Sticky-replay payload for the `ready` lifecycle event. Set once when
+  // `ready` fires; late subscribers via `table.on('ready', …)` receive a
+  // microtask-scheduled replay so they never miss it regardless of whether
+  // they registered before or after awaiting `createDataTable(...)`.
+  let readyPayload: { bridgeReady: true } | null = null;
 
   unsubscribes.push(
     state.filters.subscribe((filters: Filter[]) => {
@@ -753,7 +798,8 @@ export async function createDataTable(
   }
 
   // -------- Fire 'ready' (and maybe initial load) --------
-  emitter.emit('ready', { bridgeReady: true });
+  readyPayload = { bridgeReady: true };
+  emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
     // Do not await inside createDataTable — consumers can await the returned
     // promise via `table.on('loadComplete', …)` or a subsequent state read.
@@ -818,23 +864,59 @@ export async function createDataTable(
   }
 
   // -------- Public DataTable --------
+  const throwIfDestroyed = (method: string): void => {
+    if (destroyed) {
+      throw new DestroyedError(
+        `DataTable is destroyed; cannot call ${method}().`,
+      );
+    }
+  };
+
   const dataTable: DataTable = {
     state,
     actions,
     bridge,
     container: tableContainer,
     instanceId,
-    loadData: loadDataImpl,
+    loadData: (source, loadOpts) => {
+      if (destroyed) {
+        return Promise.reject(
+          new DestroyedError('DataTable is destroyed; cannot call loadData().'),
+        );
+      }
+      return loadDataImpl(source, loadOpts);
+    },
     on(event, handler) {
+      throwIfDestroyed('on');
+      if (event === 'ready' && readyPayload) {
+        const payload = readyPayload;
+        queueMicrotask(() => {
+          if (destroyed) return;
+          (handler as (p: { bridgeReady: true }) => void)(payload);
+        });
+      }
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
     off(event, handler) {
+      throwIfDestroyed('off');
       emitter.off(event, handler);
     },
-    openExportDialog: openExport,
-    clearSession,
+    openExportDialog() {
+      throwIfDestroyed('openExportDialog');
+      openExport();
+    },
+    clearSession() {
+      if (destroyed) {
+        return Promise.reject(
+          new DestroyedError('DataTable is destroyed; cannot call clearSession().'),
+        );
+      }
+      return clearSession();
+    },
     destroy,
+    isDestroyed: () => destroyed,
+    isPersistenceActive: () => sessionStore !== null,
   };
 
   return dataTable;

@@ -54,8 +54,11 @@ export class AutoSave {
   /** Subscribe to all persistent state signals and begin auto-saving. */
   enable(): void {
     if (this.destroyed) return;
-    // Prevent duplicate subscriptions
-    this.disable();
+    // Idempotent: repeated enable() calls without an intervening disable()
+    // are a no-op. A prior disable() + re-enable() could race on in-flight
+    // signal notifications; leaving existing subscriptions in place avoids
+    // that window.
+    if (this.unsubscribes.length > 0) return;
 
     const signals = [
       this.state.filters,

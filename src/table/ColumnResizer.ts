@@ -54,6 +54,10 @@ export class ColumnResizer {
   private startWidth = 0;
   private detached = false;
   private root: HTMLElement | null = null;
+  // Reset-animation cleanup state — transitionend and its setTimeout
+  // fallback both point here so detach() can cancel them.
+  private resetCleanup: (() => void) | null = null;
+  private resetFallback: ReturnType<typeof setTimeout> | null = null;
 
   private readonly minWidth: number;
   private readonly maxWidth: number;
@@ -132,6 +136,18 @@ export class ColumnResizer {
   detach(): void {
     if (this.detached) return;
     this.detached = true;
+
+    // Cancel any in-flight reset-animation cleanup so the setTimeout
+    // fallback doesn't touch the DOM after detach, and remove its
+    // transitionend listener.
+    if (this.resetFallback !== null) {
+      clearTimeout(this.resetFallback);
+      this.resetFallback = null;
+    }
+    if (this.resetCleanup) {
+      this.header.removeEventListener('transitionend', this.resetCleanup);
+      this.resetCleanup = null;
+    }
 
     // Stop any in-progress drag
     if (this.isDragging) {
@@ -260,19 +276,22 @@ export class ColumnResizer {
       this.onReset();
     }
 
-    // Remove transition class after animation completes
+    // Remove transition class after animation completes. Idempotent: the
+    // listener and the setTimeout fallback both call this; whichever runs
+    // first cancels the other.
     const cleanup = () => {
       this.header.classList.remove(resettingClass);
       cells.forEach((cell) => cell.classList.remove(resettingClass));
       this.header.removeEventListener('transitionend', cleanup);
+      if (this.resetFallback !== null) {
+        clearTimeout(this.resetFallback);
+        this.resetFallback = null;
+      }
+      this.resetCleanup = null;
     };
+    this.resetCleanup = cleanup;
     this.header.addEventListener('transitionend', cleanup);
-
-    // Fallback cleanup in case transitionend doesn't fire
-    setTimeout(() => {
-      this.header.classList.remove(resettingClass);
-      cells.forEach((cell) => cell.classList.remove(resettingClass));
-    }, 250);
+    this.resetFallback = setTimeout(cleanup, 250);
   }
 
   // =========================================

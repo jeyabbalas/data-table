@@ -14,6 +14,8 @@ Then open `http://localhost:5173/`. The landing page links each example.
 
 No pre-build needed — Vite serves the library from source via aliases (see `vite.examples.config.ts`).
 
+The same examples are also browsable on the deployed demo under [`/data-table/examples/`](https://jeyabbalas.github.io/data-table/examples/).
+
 ## The examples
 
 | # | Directory | Demonstrates | API surface |

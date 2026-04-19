@@ -3,9 +3,22 @@ import { resolve } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 
 const FIXTURES_ROOT = resolve(__dirname, 'tests/fixtures/datasets');
+const EXAMPLES_ROOT = resolve(__dirname, 'examples');
+
+const EXAMPLE_ENTRIES = [
+  '01-minimal',
+  '02-load-from-url',
+  '03-programmatic-filters',
+  '04-derived-columns',
+  '05-event-listeners',
+  '06-custom-theme',
+  '07-i18n-french',
+  '08-custom-visualization',
+];
 
 export default defineConfig({
   root: 'examples',
+  base: '/data-table/examples/',
   resolve: {
     alias: {
       '@jeyabbalas/data-table/styles': resolve(__dirname, 'src/styles/index.css'),
@@ -15,6 +28,18 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+  },
+  build: {
+    outDir: '../demo-dist/examples',
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: resolve(EXAMPLES_ROOT, 'index.html'),
+        ...Object.fromEntries(
+          EXAMPLE_ENTRIES.map((name) => [name, resolve(EXAMPLES_ROOT, name, 'index.html')]),
+        ),
+      },
+    },
   },
   server: {
     fs: { allow: [resolve(__dirname)] },

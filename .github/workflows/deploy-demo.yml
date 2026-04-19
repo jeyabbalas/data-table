@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build demo
+      - name: Build demo and examples
         run: npm run build:demo
 
       - name: Setup Pages

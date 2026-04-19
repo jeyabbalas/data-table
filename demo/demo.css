@@ -328,6 +328,39 @@ button:disabled {
 }
 
 /* ===========================================
+   Examples Call-to-Action
+   =========================================== */
+
+.examples-cta {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.examples-cta a {
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.examples-cta a:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-color-scheme: dark) {
+  .examples-cta {
+    border-top-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .examples-cta a {
+    color: #60a5fa;
+  }
+}
+
+/* ===========================================
    Responsive — Tablet
    =========================================== */
 

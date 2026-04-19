@@ -96,7 +96,7 @@ describe('Derived Column Visuals', () => {
       const el = header.getElement();
 
       const nameEl = el.querySelector('.dt-col-name') as HTMLElement;
-      expect(nameEl.style.fontStyle).toBe('italic');
+      expect(nameEl.classList.contains('dt-col-name--derived')).toBe(true);
 
       header.destroy();
     });
@@ -116,7 +116,7 @@ describe('Derived Column Visuals', () => {
       expect(el.querySelector('.dt-derived-icon-btn')).toBeNull();
 
       const nameEl = el.querySelector('.dt-col-name') as HTMLElement;
-      expect(nameEl.style.fontStyle).not.toBe('italic');
+      expect(nameEl.classList.contains('dt-col-name--derived')).toBe(false);
 
       header.destroy();
     });

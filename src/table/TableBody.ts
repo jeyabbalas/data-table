@@ -583,20 +583,25 @@ export class TableBody {
           rowEl.classList.remove(hoverClass);
         }
 
-        // Apply focus style
+        // Apply focus style + roving tabindex
         const focusClass = `${this.classPrefix}-cell--focused`;
         if (focusedCell && focusedCell.row === i) {
           const focusColIdx = visibleColumns.indexOf(focusedCell.column);
           for (let c = 0; c < rowEl.children.length; c++) {
+            const cell = rowEl.children[c] as HTMLElement;
             if (c === focusColIdx) {
-              rowEl.children[c].classList.add(focusClass);
+              cell.classList.add(focusClass);
+              cell.setAttribute('tabindex', '0');
             } else {
-              rowEl.children[c].classList.remove(focusClass);
+              cell.classList.remove(focusClass);
+              cell.setAttribute('tabindex', '-1');
             }
           }
         } else {
           for (let c = 0; c < rowEl.children.length; c++) {
-            rowEl.children[c].classList.remove(focusClass);
+            const cell = rowEl.children[c] as HTMLElement;
+            cell.classList.remove(focusClass);
+            cell.setAttribute('tabindex', '-1');
           }
         }
       }
@@ -664,6 +669,7 @@ export class TableBody {
           const cellEl = document.createElement('div');
           cellEl.className = `${this.classPrefix}-cell`;
           cellEl.setAttribute('role', 'cell');
+          cellEl.setAttribute('tabindex', '-1');
           rowEl.appendChild(cellEl);
         }
       } else if (currentCells > columnCount) {
@@ -693,6 +699,7 @@ export class TableBody {
         const cellEl = document.createElement('div');
         cellEl.className = `${this.classPrefix}-cell`;
         cellEl.setAttribute('role', 'cell');
+        cellEl.setAttribute('tabindex', '-1');
         rowEl.appendChild(cellEl);
       }
     }
@@ -717,10 +724,12 @@ export class TableBody {
     cleanEl.removeAttribute('aria-rowindex');
     cleanEl.removeAttribute('aria-selected');
 
-    // Clear cell-level focus class
+    // Clear cell-level focus class and reset roving tabindex
     const focusClass = `${this.classPrefix}-cell--focused`;
     for (let i = 0; i < cleanEl.children.length; i++) {
-      cleanEl.children[i].classList.remove(focusClass);
+      const cell = cleanEl.children[i] as HTMLElement;
+      cell.classList.remove(focusClass);
+      cell.setAttribute('tabindex', '-1');
     }
 
     // Limit pool size to prevent memory bloat
@@ -811,12 +820,15 @@ export class TableBody {
   private createPlaceholderRow(index: number): HTMLElement {
     const rowEl = document.createElement('div');
     rowEl.className = `${this.classPrefix}-row ${this.classPrefix}-row--loading`;
+    rowEl.setAttribute('role', 'row');
     rowEl.style.height = `${this.rowHeight}px`;
     rowEl.setAttribute('data-row-index', String(index));
     rowEl.setAttribute('aria-rowindex', String(index + 1));
 
     const placeholderCell = document.createElement('div');
     placeholderCell.className = `${this.classPrefix}-cell ${this.classPrefix}-cell--placeholder`;
+    placeholderCell.setAttribute('role', 'cell');
+    placeholderCell.setAttribute('tabindex', '-1');
     placeholderCell.textContent = `Loading row ${index + 1}...`;
     rowEl.appendChild(placeholderCell);
 
@@ -947,7 +959,9 @@ export class TableBody {
       if (prevRowEl) {
         const prevColIdx = visibleColumns.indexOf(this.previousFocusedCell.column);
         if (prevColIdx >= 0 && prevColIdx < prevRowEl.children.length) {
-          prevRowEl.children[prevColIdx].classList.remove(focusClass);
+          const prevCell = prevRowEl.children[prevColIdx] as HTMLElement;
+          prevCell.classList.remove(focusClass);
+          prevCell.setAttribute('tabindex', '-1');
         }
       }
     }
@@ -958,7 +972,9 @@ export class TableBody {
       if (rowEl) {
         const colIdx = visibleColumns.indexOf(focusedCell.column);
         if (colIdx >= 0 && colIdx < rowEl.children.length) {
-          rowEl.children[colIdx].classList.add(focusClass);
+          const cell = rowEl.children[colIdx] as HTMLElement;
+          cell.classList.add(focusClass);
+          cell.setAttribute('tabindex', '0');
         }
       }
     }

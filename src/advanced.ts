@@ -58,6 +58,9 @@ export type { ColumnReorderOptions, ReorderCallback } from './table/ColumnReorde
 export { HiddenColumnsGutter } from './table/HiddenColumnsGutter';
 export type { HiddenColumnsGutterOptions } from './table/HiddenColumnsGutter';
 
+export { KeyboardNavigator } from './table/KeyboardNavigator';
+export type { KeyboardNavigatorOptions } from './table/KeyboardNavigator';
+
 // ---- Filter UI components ----
 export { FilterChip } from './filters/FilterChip';
 export type { FilterChipOptions } from './filters/FilterChip';

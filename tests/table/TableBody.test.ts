@@ -128,6 +128,52 @@ describe('TableBody', () => {
     });
   });
 
+  describe('row/cell ARIA (Phase 6)', () => {
+    it('newly-created rows have role="row" and cells have role="cell" with tabindex="-1"', () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      // getOrCreateRow is internal; exercise it through the private accessor
+      // so we can verify the attributes on the construction path used during
+      // render without needing a materialized viewport.
+      const rowEl = (tableBody as unknown as {
+        getOrCreateRow(n: number): HTMLElement;
+      }).getOrCreateRow(5);
+
+      expect(rowEl.getAttribute('role')).toBe('row');
+      expect(rowEl.children.length).toBe(5);
+      for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
+        expect(cell.getAttribute('role')).toBe('cell');
+        expect(cell.getAttribute('tabindex')).toBe('-1');
+      }
+
+      tableBody.destroy();
+    });
+
+    it('pooled rows keep role=cell and tabindex=-1 on cells', () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      const internal = tableBody as unknown as {
+        getOrCreateRow(n: number): HTMLElement;
+        returnRowToPool(el: HTMLElement): void;
+      };
+
+      // Mark a cell as "focused" to simulate a row in-use
+      const rowEl = internal.getOrCreateRow(3);
+      (rowEl.children[1] as HTMLElement).setAttribute('tabindex', '0');
+      (rowEl.children[1] as HTMLElement).classList.add('dt-cell--focused');
+
+      // Return to pool and pull back out
+      internal.returnRowToPool(rowEl);
+      const reused = internal.getOrCreateRow(3);
+
+      for (const cell of Array.from(reused.children) as HTMLElement[]) {
+        expect(cell.getAttribute('role')).toBe('cell');
+        expect(cell.getAttribute('tabindex')).toBe('-1');
+        expect(cell.classList.contains('dt-cell--focused')).toBe(false);
+      }
+
+      tableBody.destroy();
+    });
+  });
+
   describe('SQL query building', () => {
     // Test the SQL building logic indirectly by checking what happens
     // when we manually trigger a refresh with mock data

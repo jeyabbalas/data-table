@@ -285,6 +285,11 @@ export class ColumnHeader {
     if (this.derivedIconBtn) {
       this.derivedIconBtn.addEventListener('click', this.handleDerivedIconClick);
     }
+
+    // Keyboard: Enter / Space on the header cell itself toggles sort.
+    // Scoped to e.target === element so descendant buttons (sort, pin, hide,
+    // filter) still get their own native button activation without double-firing.
+    this.element.addEventListener('keydown', this.handleHeaderKeyDown);
   }
 
   /**
@@ -301,6 +306,29 @@ export class ColumnHeader {
       this.actions.addToSort(this.column.name);
     } else {
       // Regular click: single column sort
+      this.actions.toggleSort(this.column.name);
+    }
+  };
+
+  /**
+   * Keyboard sort activation on the header cell. Fires only when the header
+   * itself is the event target, so focused buttons inside the header (sort,
+   * pin, hide, filter) keep their own native Enter/Space handling.
+   *
+   * Shift/Ctrl/Meta + Enter or Space adds to multi-sort (mirrors mouse).
+   */
+  private handleHeaderKeyDown = (event: KeyboardEvent): void => {
+    if (this.destroyed) return;
+    if (event.target !== this.element) return;
+
+    if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      this.actions.addToSort(this.column.name);
+    } else {
       this.actions.toggleSort(this.column.name);
     }
   };
@@ -631,6 +659,7 @@ export class ColumnHeader {
     this.pinButton.removeEventListener('click', this.handlePinClick);
     this.hideButton.removeEventListener('click', this.handleHideClick);
     this.filterButton.removeEventListener('click', this.handleFilterClick);
+    this.element.removeEventListener('keydown', this.handleHeaderKeyDown);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

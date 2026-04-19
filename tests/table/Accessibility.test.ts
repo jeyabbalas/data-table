@@ -445,4 +445,77 @@ describe('Accessibility: ARIA attributes', () => {
       tc.destroy();
     });
   });
+
+  // =========================================
+  // Phase 6: grid role + gridcell + roving tabindex
+  // =========================================
+
+  describe('grid role + roving tabindex', () => {
+    it('uses role="table" on the root element', () => {
+      const tc = new TableContainer(container, state);
+      expect(tc.getElement().getAttribute('role')).toBe('table');
+      tc.destroy();
+    });
+
+    // Note: Full row materialization requires a non-zero viewport height,
+    // which jsdom does not provide. Assertions on rendered row/cell ARIA and
+    // roving tabindex are verified via TableBody.getOrCreateRow in
+    // tests/table/TableBody.test.ts, and end-to-end in the axe-core scan
+    // (tests/a11y/axe.test.ts).
+  });
+
+  // =========================================
+  // Phase 6: header keyboard activation
+  // =========================================
+
+  describe('header keyboard sort activation', () => {
+    it('Enter on a header toggles single-column sort', () => {
+      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
+      const header = new ColumnHeader(column, state, actions);
+      document.body.appendChild(header.getElement());
+
+      header.getElement().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
+
+      expect(toggleSortSpy).toHaveBeenCalledWith('score');
+
+      header.destroy();
+    });
+
+    it('Shift+Enter on a header adds to multi-sort', () => {
+      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const addToSortSpy = vi.spyOn(actions, 'addToSort');
+      const header = new ColumnHeader(column, state, actions);
+      document.body.appendChild(header.getElement());
+
+      header.getElement().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true })
+      );
+
+      expect(addToSortSpy).toHaveBeenCalledWith('score');
+
+      header.destroy();
+    });
+
+    it('keyboard on a child button does not trigger header-level sort', () => {
+      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
+      const addToSortSpy = vi.spyOn(actions, 'addToSort');
+      const header = new ColumnHeader(column, state, actions);
+      document.body.appendChild(header.getElement());
+
+      const sortBtn = header.getElement().querySelector('button.dt-col-sort-btn')!;
+      sortBtn.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
+
+      // Header-level handler should have bailed via e.target !== element
+      expect(toggleSortSpy).not.toHaveBeenCalled();
+      expect(addToSortSpy).not.toHaveBeenCalled();
+
+      header.destroy();
+    });
+  });
 });

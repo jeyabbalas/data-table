@@ -23,8 +23,24 @@ import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { SQLFilterModal } from '../filters/SQLFilterModal';
 import { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
-import { copyRowsToClipboard } from '../export/Clipboard';
+import { KeyboardNavigator } from './KeyboardNavigator';
 import { nextInstanceId } from '../core/instanceId';
+
+/**
+ * Screen-reader live-region string templates. Extracted as a single object
+ * so Phase 8 (i18n) can swap it for a user-supplied function without
+ * touching the announcement logic itself.
+ */
+const LIVE_REGION_STRINGS = {
+  filtersActive: (n: number, shown: number, total: number): string =>
+    `${n} ${n === 1 ? 'filter' : 'filters'} active, showing ${shown.toLocaleString()} of ${total.toLocaleString()} rows`,
+  noFilters: (total: number): string =>
+    `Showing all ${total.toLocaleString()} rows`,
+  sortedBy: (descriptions: string[]): string =>
+    `sorted by ${descriptions.join(', then ')}`,
+  ascending: 'ascending',
+  descending: 'descending',
+};
 
 /**
  * Options for configuring the TableContainer
@@ -116,8 +132,8 @@ export class TableContainer {
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
 
-  // Keyboard shortcut handler
-  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  // Keyboard navigation / shortcuts
+  private keyboardNavigator: KeyboardNavigator | null = null;
 
   // Scroll synchronization handlers
   private boundBodyScrollHandler: (() => void) | null = null;
@@ -246,8 +262,17 @@ export class TableContainer {
     // Set up scroll synchronization between header and body
     this.setupScrollSync();
 
-    // Set up keyboard shortcuts (Ctrl+C to copy selected rows)
-    this.setupKeyboardShortcuts();
+    // Install keyboard navigation + shortcuts on the grid root
+    if (this.actions) {
+      this.keyboardNavigator = new KeyboardNavigator({
+        rootElement: this.element,
+        bodyScroll: this.bodyScroll,
+        state: this.state,
+        actions: this.actions,
+        getTableBody: () => this.tableBody,
+        getBridge: () => this.bridge,
+      });
+    }
 
     // Initial render
     this.render();
@@ -263,6 +288,12 @@ export class TableContainer {
   private createRootElement(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-root`;
+    // role="table" — valid ARIA for a data-table wrapper that also hosts
+    // sibling chrome (toolbar filter bar, status live region, toolbar hidden-
+    // columns gutter). Using role="grid" would require all owned children to
+    // be role="row"/"rowgroup"; restructuring the DOM to host chrome outside
+    // the grid is deferred. Interactive cell navigation (arrow keys, roving
+    // tabindex, Enter row-select) still works under role="table".
     el.setAttribute('role', 'table');
     el.setAttribute('aria-label', 'Data table');
     el.setAttribute('aria-rowcount', '0');
@@ -304,6 +335,10 @@ export class TableContainer {
   private createHeaderRow(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-header`;
+    // role="rowgroup" wraps the real row (class "dt-header-row") created
+    // during render(). That inner element carries role="row" and the
+    // columnheader cells — the ARIA tree ends up grid > rowgroup > row >
+    // columnheader, which satisfies aria-required-children / -parent.
     el.setAttribute('role', 'rowgroup');
     el.style.minHeight = `${this.resolvedOptions.headerHeight}px`;
     return el;
@@ -416,325 +451,6 @@ export class TableContainer {
   }
 
   // =========================================
-  // Keyboard Shortcuts
-  // =========================================
-
-  /**
-   * Set up keyboard shortcuts on the root element.
-   * Currently handles Ctrl+C / Cmd+C to copy selected rows as TSV.
-   */
-  private setupKeyboardShortcuts(): void {
-    this.keydownHandler = (e: KeyboardEvent) => {
-      this.handleKeyDown(e);
-    };
-    this.element.addEventListener('keydown', this.keydownHandler);
-  }
-
-  private handleKeyDown(e: KeyboardEvent): void {
-    // --- Cell navigation (arrow keys without Ctrl/Meta) ---
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) &&
-        !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      switch (e.key) {
-        case 'ArrowUp':    this.moveFocus(-1, 0); break;
-        case 'ArrowDown':  this.moveFocus(1, 0); break;
-        case 'ArrowLeft':  this.moveFocus(0, -1); break;
-        case 'ArrowRight': this.moveFocus(0, 1); break;
-      }
-      return;
-    }
-
-    // Home / End
-    if (e.key === 'Home') {
-      e.preventDefault();
-      const visibleColumns = this.state.visibleColumns.get();
-      const rowCount = this.getEffectiveRowCount();
-      if (visibleColumns.length === 0 || rowCount === 0) return;
-
-      const current = this.state.focusedCell.get();
-      if (e.ctrlKey || e.metaKey) {
-        // Ctrl+Home: first row, first column
-        this.setFocusAbsolute(0, visibleColumns[0]);
-      } else {
-        // Home: first column, same row
-        const row = current?.row ?? 0;
-        this.setFocusAbsolute(row, visibleColumns[0]);
-      }
-      return;
-    }
-
-    if (e.key === 'End') {
-      e.preventDefault();
-      const visibleColumns = this.state.visibleColumns.get();
-      const rowCount = this.getEffectiveRowCount();
-      if (visibleColumns.length === 0 || rowCount === 0) return;
-
-      const current = this.state.focusedCell.get();
-      if (e.ctrlKey || e.metaKey) {
-        // Ctrl+End: last row, last column
-        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]);
-      } else {
-        // End: last column, same row
-        const row = current?.row ?? 0;
-        this.setFocusAbsolute(row, visibleColumns[visibleColumns.length - 1]);
-      }
-      return;
-    }
-
-    // PageUp / PageDown
-    if (e.key === 'PageUp' || e.key === 'PageDown') {
-      e.preventDefault();
-      if (!this.tableBody) return;
-
-      const vs = this.tableBody.getVirtualScroller();
-      const pageRows = Math.max(1, Math.floor(vs.getViewportHeight() / vs.getRowHeight()));
-      const delta = e.key === 'PageUp' ? -pageRows : pageRows;
-      this.moveFocus(delta, 0);
-      return;
-    }
-
-    // Tab / Shift+Tab
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      this.moveFocusTab(e.shiftKey);
-      return;
-    }
-
-    // Escape: clear focus, but yield to open panels first
-    if (e.key === 'Escape') {
-      if (this.state.focusedCell.get()) {
-        // If a panel is open, let Escape close it instead of clearing focus.
-        // Modals (SQLFilterModal, DerivedColumnModal, DerivedColumnEditPanel) use
-        // capture-phase handlers and are already handled before this point.
-        if (this.filterPanel?.getIsOpen() || this.presetPanel?.getIsOpen()) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        this.actions?.clearFocusedCell();
-        return;
-      }
-    }
-
-    // --- Modifier shortcuts (undo/redo/copy) ---
-
-    // Ctrl+Z / Cmd+Z → undo
-    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      this.actions?.undo();
-      return;
-    }
-
-    // Ctrl+Shift+Z / Cmd+Shift+Z → redo
-    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      this.actions?.redo();
-      return;
-    }
-
-    // Ctrl+Y → redo (Windows convention)
-    if (e.key === 'y' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-      e.preventDefault();
-      this.actions?.redo();
-      return;
-    }
-
-    // Ctrl+C (Windows/Linux) or Cmd+C (Mac)
-    if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-      const selectedRows = this.state.selectedRows.get();
-      if (selectedRows.size === 0) return;
-
-      // Preserve native text copy when user has selected text
-      const textSelection = window.getSelection();
-      if (textSelection && textSelection.toString().length > 0) return;
-
-      e.preventDefault();
-      this.copySelectedRows();
-    }
-  }
-
-  private async copySelectedRows(): Promise<void> {
-    if (!this.bridge) return;
-
-    const selectedRows = this.state.selectedRows.get();
-    if (selectedRows.size === 0) return;
-
-    try {
-      await copyRowsToClipboard(
-        Array.from(selectedRows),
-        this.state,
-        this.bridge
-      );
-    } catch {
-      // Silently fail for keyboard shortcuts
-    }
-  }
-
-  // =========================================
-  // Cell Focus Navigation
-  // =========================================
-
-  /**
-   * Get the effective row count (filtered or total).
-   */
-  private getEffectiveRowCount(): number {
-    const filters = this.state.filters.get();
-    return filters.length > 0
-      ? this.state.filteredRows.get()
-      : this.state.totalRows.get();
-  }
-
-  /**
-   * Move focused cell by delta, clamping to bounds.
-   * Sets focus if none exists (defaults to row 0, first column).
-   */
-  private moveFocus(deltaRow: number, deltaCol: number): void {
-    const visibleColumns = this.state.visibleColumns.get();
-    const rowCount = this.getEffectiveRowCount();
-    if (visibleColumns.length === 0 || rowCount === 0) return;
-
-    const current = this.state.focusedCell.get();
-    let row: number;
-    let colIdx: number;
-
-    if (current) {
-      row = current.row;
-      colIdx = visibleColumns.indexOf(current.column);
-      if (colIdx < 0) colIdx = 0; // column was hidden; reset
-    } else {
-      // No focus yet — start at top-left
-      row = 0;
-      colIdx = 0;
-    }
-
-    row = Math.max(0, Math.min(rowCount - 1, row + deltaRow));
-    colIdx = Math.max(0, Math.min(visibleColumns.length - 1, colIdx + deltaCol));
-
-    this.setFocusAbsolute(row, visibleColumns[colIdx]);
-  }
-
-  /**
-   * Set focus to absolute position and scroll into view.
-   */
-  private setFocusAbsolute(row: number, column: string): void {
-    this.actions?.setFocusedCell({ row, column });
-    this.scrollFocusedCellIntoView(row, column);
-  }
-
-  /**
-   * Move focus to the next/previous cell in tab order (left-to-right, top-to-bottom).
-   * Wraps across rows. Stops at table boundaries.
-   */
-  private moveFocusTab(reverse: boolean): void {
-    const visibleColumns = this.state.visibleColumns.get();
-    const rowCount = this.getEffectiveRowCount();
-    if (visibleColumns.length === 0 || rowCount === 0) return;
-
-    const current = this.state.focusedCell.get();
-    let row: number;
-    let colIdx: number;
-
-    if (current) {
-      row = current.row;
-      colIdx = visibleColumns.indexOf(current.column);
-      if (colIdx < 0) colIdx = 0;
-    } else {
-      // No focus: Tab → first cell, Shift+Tab → last cell
-      if (reverse) {
-        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]);
-      } else {
-        this.setFocusAbsolute(0, visibleColumns[0]);
-      }
-      return;
-    }
-
-    if (reverse) {
-      colIdx--;
-      if (colIdx < 0) {
-        if (row > 0) {
-          row--;
-          colIdx = visibleColumns.length - 1;
-        } else {
-          return; // At first cell, do nothing
-        }
-      }
-    } else {
-      colIdx++;
-      if (colIdx >= visibleColumns.length) {
-        if (row < rowCount - 1) {
-          row++;
-          colIdx = 0;
-        } else {
-          return; // At last cell, do nothing
-        }
-      }
-    }
-
-    this.setFocusAbsolute(row, visibleColumns[colIdx]);
-  }
-
-  /**
-   * Scroll the viewport so that the focused cell is visible
-   * both vertically and horizontally.
-   */
-  private scrollFocusedCellIntoView(row: number, column: string): void {
-    if (!this.tableBody) return;
-
-    const vs = this.tableBody.getVirtualScroller();
-
-    // --- Vertical scroll ---
-    const viewportHeight = vs.getViewportHeight();
-    const rowHeight = vs.getRowHeight();
-    const scrollTop = vs.getScrollTop();
-
-    const rowTop = row * rowHeight;
-    const rowBottom = rowTop + rowHeight;
-
-    if (rowTop < scrollTop) {
-      vs.scrollToRow(row, 'start');
-    } else if (rowBottom > scrollTop + viewportHeight) {
-      vs.scrollToRow(row, 'end');
-    }
-
-    // --- Horizontal scroll ---
-    const pinnedColumns = this.state.pinnedColumns.get();
-    if (pinnedColumns.includes(column)) {
-      return; // Pinned columns are always visible
-    }
-
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnWidths = this.state.columnWidths.get();
-
-    // Compute left offset of the target column
-    let colLeft = 0;
-    for (const colName of visibleColumns) {
-      if (colName === column) break;
-      colLeft += columnWidths.get(colName) ?? 150;
-    }
-    const colWidth = columnWidths.get(column) ?? 150;
-    const colRight = colLeft + colWidth;
-
-    // Compute the sticky (pinned) zone width
-    let pinnedWidth = 0;
-    for (const pinned of pinnedColumns) {
-      pinnedWidth += columnWidths.get(pinned) ?? 150;
-    }
-
-    const scrollLeft = this.bodyScroll.scrollLeft;
-    const viewportWidth = this.bodyScroll.clientWidth;
-
-    // Effective visible range (accounting for pinned columns)
-    const effectiveLeft = scrollLeft + pinnedWidth;
-    const effectiveRight = scrollLeft + viewportWidth;
-
-    if (colLeft < effectiveLeft) {
-      this.bodyScroll.scrollLeft = colLeft - pinnedWidth;
-    } else if (colRight > effectiveRight) {
-      this.bodyScroll.scrollLeft = colRight - viewportWidth;
-    }
-  }
-
-  // =========================================
   // ARIA Live Region
   // =========================================
 
@@ -766,21 +482,17 @@ export class TableContainer {
 
     const parts: string[] = [];
 
-    // Filter announcement
     if (filters.length > 0) {
-      parts.push(
-        `${filters.length} ${filters.length === 1 ? 'filter' : 'filters'} active, showing ${filteredRows.toLocaleString()} of ${totalRows.toLocaleString()} rows`
-      );
+      parts.push(LIVE_REGION_STRINGS.filtersActive(filters.length, filteredRows, totalRows));
     } else {
-      parts.push(`Showing all ${totalRows.toLocaleString()} rows`);
+      parts.push(LIVE_REGION_STRINGS.noFilters(totalRows));
     }
 
-    // Sort announcement
     if (sortColumns.length > 0) {
       const sortDescriptions = sortColumns.map(
-        (s) => `${s.column} ${s.direction === 'asc' ? 'ascending' : 'descending'}`
+        (s) => `${s.column} ${s.direction === 'asc' ? LIVE_REGION_STRINGS.ascending : LIVE_REGION_STRINGS.descending}`
       );
-      parts.push(`sorted by ${sortDescriptions.join(', then ')}`);
+      parts.push(LIVE_REGION_STRINGS.sortedBy(sortDescriptions));
     }
 
     this.liveRegion.textContent = parts.join(', ');
@@ -894,7 +606,10 @@ export class TableContainer {
       if (this.destroyed) return;
       const focusedCell = this.state.focusedCell.get();
       if (!focusedCell) return;
-      const rowCount = this.getEffectiveRowCount();
+      const rowCount =
+        this.state.filters.get().length > 0
+          ? this.state.filteredRows.get()
+          : this.state.totalRows.get();
       if (focusedCell.row >= rowCount) {
         if (rowCount === 0) {
           this.actions?.clearFocusedCell();
@@ -1667,10 +1382,10 @@ export class TableContainer {
     // Clear resize callbacks
     this.resizeCallbacks.clear();
 
-    // Clean up keyboard handler
-    if (this.keydownHandler) {
-      this.element.removeEventListener('keydown', this.keydownHandler);
-      this.keydownHandler = null;
+    // Tear down keyboard navigator
+    if (this.keyboardNavigator) {
+      this.keyboardNavigator.destroy();
+      this.keyboardNavigator = null;
     }
 
     // Clean up scroll sync listeners

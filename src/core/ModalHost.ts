@@ -448,6 +448,19 @@ export class ModalHost {
 }
 
 // ---------------------------------------------------------------------------
+// Module-level queries
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when at least one ModalHost-managed dialog or panel is open.
+ * Consumers (e.g. the grid keyboard navigator) use this to defer to the open
+ * modal rather than compete for keystrokes.
+ */
+export function isAnyModalOpen(): boolean {
+  return openHosts.length > 0;
+}
+
+// ---------------------------------------------------------------------------
 // Test-only helper: reset module state between tests. Exported under an
 // underscore name to signal it's not part of the stable API.
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ exports[`Public API surface > advanced export keys match snapshot 1`] = `
   "Histogram",
   "InteractionManager",
   "IntervalHistogram",
+  "KeyboardNavigator",
   "SNAPSHOT_VERSION",
   "SQLFilterModal",
   "StateActions",

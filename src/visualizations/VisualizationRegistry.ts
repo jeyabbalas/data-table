@@ -77,6 +77,24 @@ export function isIntervalType(type: DataType): boolean {
 /**
  * Per-instance registry of visualization types. Built-ins are seeded at
  * construction and on `resetToDefaults()`.
+ *
+ * @example
+ * import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
+ * import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+ *
+ * class MyBoxPlot extends BaseVisualization {
+ *   // ...fetchData(), render(), handleMouseMove(), handleClick(), handleMouseLeave()
+ * }
+ *
+ * const registry = new VisualizationRegistry();
+ * registry.register({
+ *   name: 'box-plot',
+ *   isApplicable: (type) => type === 'float' || type === 'integer',
+ *   constructor: MyBoxPlot,
+ *   priority: 10, // higher than built-ins (0) — wins for numeric columns
+ * });
+ *
+ * const table = await createDataTable({ container, source, visualizationRegistry: registry });
  */
 export class VisualizationRegistry {
   private registry: VisualizationRegistration[] = [];

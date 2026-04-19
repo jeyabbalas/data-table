@@ -1,5 +1,18 @@
 /**
- * Type-safe event emitter for reactive event handling
+ * Type-safe event emitter for reactive event handling.
+ *
+ * Used internally by `createDataTable()` to expose `table.on()` / `table.off()`.
+ * Can be reused standalone when composing custom UIs on top of `/advanced`.
+ *
+ * @example
+ * import { EventEmitter } from '@jeyabbalas/data-table/advanced';
+ *
+ * type MyEvents = { click: { x: number; y: number }; close: void };
+ * const bus = new EventEmitter<MyEvents>();
+ *
+ * const unsub = bus.on('click', ({ x, y }) => console.log(x, y));
+ * bus.emit('click', { x: 10, y: 20 });
+ * unsub(); // or bus.off('click', handler)
  */
 
 type EventCallback<T> = (data: T) => void;

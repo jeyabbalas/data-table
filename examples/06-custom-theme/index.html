@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>06 — Custom theme</title>
+    <style>
+      /* Page chrome only. The --dt-* overrides live in theme.css, imported
+         from main.ts after the library's stylesheet so cascade order wins. */
+      html, body {
+        margin: 0; padding: 0; height: 100%;
+        background: #fffbf5; color: #1c1917;
+      }
+      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+      header {
+        padding: 0.5rem 1rem; border-bottom: 1px solid #d6d3d1;
+        display: flex; gap: 0.75rem; align-items: center;
+      }
+      header h1 { margin: 0 0.75rem 0 0; font-size: 1rem; font-weight: 600; }
+      header a { color: #9a3412; }
+      button {
+        font: inherit; padding: 0.35rem 0.75rem;
+        background: #fef3e2; border: 1px solid #d6d3d1; border-radius: 4px;
+        cursor: pointer; color: #1c1917;
+      }
+      button:hover { background: #fed7aa; }
+      button[aria-pressed='true'] {
+        background: var(--dt-primary, #c2410c); color: #fff;
+        border-color: var(--dt-primary, #c2410c);
+      }
+
+      /* Swap page chrome colors when the example switches to dark. */
+      body:has(.dt-root[data-dt-color-scheme="dark"]) { background: #1c1917; color: #fafaf9; }
+      body:has(.dt-root[data-dt-color-scheme="dark"]) header { border-bottom-color: #44403c; }
+      body:has(.dt-root[data-dt-color-scheme="dark"]) header a { color: #fdba74; }
+      body:has(.dt-root[data-dt-color-scheme="dark"]) button { background: #292524; border-color: #44403c; color: #fafaf9; }
+      body:has(.dt-root[data-dt-color-scheme="dark"]) button:hover { background: #44403c; }
+
+      #table { flex: 1; min-height: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>06 — Custom theme (<a href="/">back</a>)</h1>
+      <button id="btn-light" aria-pressed="false">Light</button>
+      <button id="btn-dark" aria-pressed="false">Dark</button>
+      <button id="btn-auto" aria-pressed="true">Auto</button>
+    </header>
+    <div id="table"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

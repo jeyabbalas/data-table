@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>08 — Custom visualization</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+      header { padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+      header h1 { margin: 0; font-size: 1rem; font-weight: 600; }
+      header p { margin: 0.25rem 0 0; color: #555; font-size: 0.9em; line-height: 1.45; }
+      header code { background: #f3f3f3; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.92em; }
+      #table { flex: 1; min-height: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>08 — Custom visualization (<a href="/">back</a>)</h1>
+      <p>
+        A US-states choropleth replaces the default <code>ValueCounts</code> on
+        the <code>state</code> column — each state shaded by row-count frequency.
+        Rendered with Observable Plot; topology from <code>us-atlas</code>. Hover a
+        state for its name and count.
+      </p>
+    </header>
+    <div id="table"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

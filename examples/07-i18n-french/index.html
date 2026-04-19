@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>07 — i18n (French)</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+      header { padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; }
+      header h1 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
+      header p { margin: 0; color: #555; font-size: 0.88em; line-height: 1.4; }
+      header details { margin-top: 0.35rem; color: #666; font-size: 0.85em; }
+      header details summary { cursor: pointer; user-select: none; }
+      #table { flex: 1; min-height: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>07 — i18n français (<a href="/">retour</a>)</h1>
+      <p>
+        Les libellés d'interface <strong>et</strong> les données sont en français — une
+        démo d'i18n complète où l'utilisateur lit sa langue native à tous les niveaux.
+      </p>
+      <details>
+        <summary>English</summary>
+        UI strings <strong>and</strong> the data are both in French — a complete i18n
+        demo where the user reads their native language at every level of the UI.
+        A chrome-only translation is only half the story; pair the
+        <code>messages</code> override with locale-native data to make the demo
+        representative of a real deployment.
+      </details>
+    </header>
+    <div id="table"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

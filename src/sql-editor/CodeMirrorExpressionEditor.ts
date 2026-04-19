@@ -9,6 +9,28 @@ import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
 import { DUCKDB_FUNCTIONS } from './duckdbFunctions';
 import { dataTableTheme, dataTableHighlighting } from './theme';
 
+/**
+ * Default `ExpressionEditor` implementation built on CodeMirror 6 with
+ * DuckDB SQL grammar, schema-aware autocompletion, and light/dark theming.
+ *
+ * Consumers who want a different editor (e.g., Monaco, a bespoke DSL) can
+ * implement the `ExpressionEditor` interface themselves and pass it via
+ * `createDataTable({ editorFactory })`.
+ *
+ * @example
+ * import { CodeMirrorExpressionEditor } from '@jeyabbalas/data-table/advanced';
+ *
+ * const editor = new CodeMirrorExpressionEditor(
+ *   hostEl,
+ *   { columns: [{ name: 'age', type: 'integer', isDerived: false }] },
+ *   'dt',
+ *   { placeholder: 'e.g. age * 2' }
+ * );
+ * // later:
+ * const expr = editor.getValue();
+ *
+ * @see DUCKDB_FUNCTIONS — the built-in function list surfaced by autocomplete.
+ */
 export class CodeMirrorExpressionEditor implements ExpressionEditor {
   readonly element: HTMLElement;
   private view: EditorView;

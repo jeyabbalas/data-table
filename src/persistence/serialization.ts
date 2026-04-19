@@ -31,10 +31,11 @@ export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnap
         ([k, v]) => [k, { ...v }],
       ),
     ),
-    // Deep copy for IndexedDB independence (vector values need their own array)
+    // Deep copy for IndexedDB independence (vector values need their own array).
+    // Array.from works on both plain arrays and TypedArrays.
     derivedColumns: snap.derivedColumns.map(d => {
       if (d.kind === 'expression') return { ...d };
-      return { ...d, values: (d as import('../derived/types').VectorColumnDef).values.slice() } as typeof d;
+      return { ...d, values: Array.from((d as import('../derived/types').VectorColumnDef).values as ArrayLike<unknown>) } as typeof d;
     }),
   };
 }
@@ -100,7 +101,7 @@ export function deserializeStateSnapshot(
           return { kind: 'vector' as const, name: d.name, vectorType: d.vectorType, values } as VectorColumnDef;
         }
         // Inline values (pre-v4 backward compat): deep copy for IndexedDB independence
-        return { ...d, values: (d as VectorColumnDef).values.slice() } as typeof d;
+        return { ...d, values: Array.from((d as VectorColumnDef).values as ArrayLike<unknown>) } as typeof d;
       })
     : [];
 
@@ -132,7 +133,7 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     hiddenColumnInfo: Object.fromEntries(state.hiddenColumnInfo.get()),
     derivedColumns: state.derivedColumns.get().map(d => {
       if (d.kind === 'expression') return { ...d };
-      return { ...d, values: d.values.slice() } as typeof d;
+      return { ...d, values: Array.from(d.values as ArrayLike<unknown>) } as typeof d;
     }),
   };
 
@@ -142,7 +143,7 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     // Build a vector value pool to deduplicate vector column values across
     // stack entries. captureSnapshot() shares array references for unchanged
     // vector columns, so reference identity detects duplicates efficiently.
-    const seenArrays = new Map<unknown[], string>();
+    const seenArrays = new Map<ArrayLike<unknown>, string>();
     const pool: Record<string, VectorValuePoolEntry> = {};
 
     const serializeWithPool = (snap: StateSnapshot): SerializedStateSnapshot => ({
@@ -160,13 +161,14 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
       derivedColumns: snap.derivedColumns.map(d => {
         if (d.kind === 'expression') return { ...d };
         const vec = d as VectorColumnDef;
-        const existingKey = seenArrays.get(vec.values);
+        const valuesRef = vec.values as ArrayLike<unknown>;
+        const existingKey = seenArrays.get(valuesRef);
         if (existingKey) {
           return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: existingKey };
         }
         const key = `vp_${Object.keys(pool).length}`;
-        pool[key] = { vectorType: vec.vectorType, values: vec.values.slice() };
-        seenArrays.set(vec.values, key);
+        pool[key] = { vectorType: vec.vectorType, values: Array.from(valuesRef) };
+        seenArrays.set(valuesRef, key);
         return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: key };
       }),
     });
@@ -297,7 +299,7 @@ export function restoreStateFromSnapshot(
     state.derivedColumns.set(
       snapshot.derivedColumns.map(d => {
         if (d.kind === 'expression') return { ...d };
-        return { ...d, values: d.values.slice() } as typeof d;
+        return { ...d, values: Array.from(d.values as ArrayLike<unknown>) } as typeof d;
       })
     );
   }

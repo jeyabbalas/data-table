@@ -1,6 +1,21 @@
 /**
  * CrossfilterCoordinator - Watches state.filters and propagates filter changes
  * to all registered visualizations, including the source that emitted the filter.
+ *
+ * Composed by `createDataTable()` for you. Use directly only when building a
+ * custom pipeline of `BaseVisualization` instances outside the facade.
+ *
+ * @example
+ * import { CrossfilterCoordinator } from '@jeyabbalas/data-table/advanced';
+ *
+ * const coord = new CrossfilterCoordinator(state, actions, bridge);
+ * coord.register('age', ageHistogram);
+ * coord.register('country', countryValueCounts);
+ * // later:
+ * coord.destroy();
+ *
+ * @see VisualizationRegistry
+ * @see InteractionManager
  */
 
 import type { TableState } from '../core/State';

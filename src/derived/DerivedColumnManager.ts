@@ -7,6 +7,23 @@
  * When derived columns exist, a DuckDB VIEW is created that includes
  * all base columns plus derived columns. All existing query paths
  * transparently query through the VIEW via state.tableName.
+ *
+ * Most consumers should use `table.actions.addDerivedColumn()` instead of
+ * instantiating this directly; it only makes sense to construct one when
+ * composing a custom pipeline with the `/advanced` primitives.
+ *
+ * @example
+ * // Preferred: go through StateActions
+ * await table.actions.addDerivedColumn({
+ *   kind: 'expression',
+ *   name: 'price_tier',
+ *   expression: `CASE WHEN price < 10 THEN 'low' WHEN price < 100 THEN 'mid' ELSE 'high' END`,
+ * });
+ *
+ * @see DerivedColumnModal
+ * @see DerivedColumnEditPanel
+ * @see AddColumnButton
+ * @see DefaultExpressionEditor
  */
 
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -527,13 +544,18 @@ export class DerivedColumnManager {
       `CREATE TABLE ${quoteIdentifier(tableName)} (__rowid__ BIGINT, ${quoteIdentifier(def.name)} ${duckdbType})`
     );
 
-    // Insert values in batches
+    // Insert values in batches. Iterate by index so both plain arrays and
+    // TypedArrays (Uint8Array etc.) work — TypedArray.prototype.map returns
+    // another TypedArray that coerces string callbacks to NaN→0.
     const values = def.values;
     for (let i = 0; i < values.length; i += VECTOR_BATCH_SIZE) {
-      const batch = values.slice(i, i + VECTOR_BATCH_SIZE);
-      const rows = batch.map((val, j) => `(${i + j}, ${formatSQLValue(val)})`).join(', ');
+      const end = Math.min(i + VECTOR_BATCH_SIZE, values.length);
+      const parts: string[] = [];
+      for (let j = i; j < end; j++) {
+        parts.push(`(${j}, ${formatSQLValue(values[j])})`);
+      }
       await this.bridge.query(
-        `INSERT INTO ${quoteIdentifier(tableName)} VALUES ${rows}`
+        `INSERT INTO ${quoteIdentifier(tableName)} VALUES ${parts.join(', ')}`
       );
     }
   }

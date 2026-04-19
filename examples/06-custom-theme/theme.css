@@ -1,0 +1,80 @@
+/* Theme overrides for @jeyabbalas/data-table — terracotta + cream + warm
+   stone, zero blue. Imported from main.ts AFTER the library's built-in
+   stylesheet so cascade order favors these rules.
+
+   Scope strategy:
+   - Light: `:root` — declares defaults on <html> that cascade everywhere,
+     including body-portaled modals (Export, Derived Column, SQL Filter)
+     via inherited custom-property values.
+   - Dark: bare `[data-dt-color-scheme="dark"]` — the library's own dark
+     block uses the same bare selector (src/styles/01-variables.css:288),
+     and ModalHost mirrors the attribute onto portal hosts, so this
+     matches both the in-tree `.dt-root` AND the portaled modal hosts.
+     Same specificity as the library default, but imported later → source
+     order wins. */
+
+/* ---- Light (default + explicit) ---------------------------------------- */
+:root,
+.dt-root {
+  /* Primary — terracotta family */
+  --dt-primary:         #c2410c;   /* orange-700 */
+  --dt-primary-hover:   #9a3412;   /* orange-800 */
+  --dt-primary-light:   #ffedd5;   /* orange-100 */
+  --dt-primary-lighter: #fff7ed;   /* orange-50  */
+
+  /* Accent — drives the null bar / missing-values segment. Warm magenta:
+     striking contrast against terracotta without re-using red; reads
+     instantly as "not-blue". */
+  --dt-accent:          #be185d;   /* rose-700 */
+  --dt-accent-hover:    #9f1239;   /* rose-800 */
+
+  /* Neutral — stones replace slate so "Other" chips feel earthy. */
+  --dt-neutral:         #78716c;   /* stone-500 */
+  --dt-neutral-hover:   #57534e;   /* stone-600 */
+
+  /* Syntax tokens in the SQL editor — no purple or blue. */
+  --dt-syntax-string:   #15803d;   /* green-700 */
+  --dt-syntax-type:     #9a3412;   /* orange-800 */
+
+  /* Tinted backgrounds + borders so rows feel warm without overpowering data. */
+  --dt-bg:              #fffbf5;
+  --dt-bg-secondary:    #fef3e2;
+  --dt-bg-tertiary:     #fde4c8;
+  --dt-border:          #e7d8c3;
+  --dt-border-light:    #f5ead8;
+
+  /* Sizing — compact variant so the recolor reads denser. */
+  --dt-row-height:      28px;
+  --dt-header-height:   104px;
+  --dt-radius:          3px;
+}
+
+/* ---- Dark — bare attribute selector reaches both .dt-root and portaled modals. -- */
+[data-dt-color-scheme="dark"] {
+  --dt-primary:         #fb923c;   /* orange-400 */
+  --dt-primary-hover:   #fdba74;   /* orange-300 */
+  --dt-primary-light:   #431407;   /* orange-950 */
+  --dt-primary-lighter: #7c2d12;   /* orange-900 */
+
+  --dt-accent:          #f472b6;   /* pink-400 */
+  --dt-accent-hover:    #ec4899;   /* pink-500 */
+
+  --dt-neutral:         #a8a29e;   /* stone-400 */
+  --dt-neutral-hover:   #78716c;   /* stone-500 */
+
+  --dt-syntax-string:   #86efac;   /* green-300 */
+  --dt-syntax-type:     #fdba74;   /* orange-300 */
+
+  --dt-bg:              #1c1917;   /* stone-950 — warm black */
+  --dt-bg-secondary:    #292524;   /* stone-900 */
+  --dt-bg-tertiary:     #44403c;   /* stone-800 */
+  --dt-border:          #44403c;
+  --dt-border-light:    #292524;
+
+  --dt-text:            #fafaf9;   /* stone-50  */
+  --dt-text-secondary:  #d6d3d1;   /* stone-300 */
+  --dt-text-tertiary:   #a8a29e;   /* stone-400 */
+
+  --dt-arrow-default:   #57534e;
+  --dt-arrow-hover:     #a8a29e;
+}

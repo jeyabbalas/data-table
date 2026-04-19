@@ -34,6 +34,23 @@ export interface FilterBarOptions {
 /**
  * FilterBar renders a horizontal bar of filter chips showing all active filters.
  * It auto-shows when filters are present and collapses when empty.
+ *
+ * @example
+ * import { FilterBar } from '@jeyabbalas/data-table/advanced';
+ *
+ * const bar = new FilterBar(parentEl, state, actions, {
+ *   classPrefix: 'dt',
+ *   alwaysShow: false,
+ *   onFilterRemove: (column) => console.log('cleared', column),
+ * });
+ * // unmount:
+ * bar.destroy();
+ *
+ * @see FilterChip
+ * @see FilterPanel
+ * @see FilterPanelField
+ * @see SQLFilterModal
+ * @see FilterPresetPanel
  */
 export class FilterBar {
   private element: HTMLElement;

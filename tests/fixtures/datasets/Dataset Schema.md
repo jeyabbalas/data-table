@@ -213,9 +213,56 @@ The original January 2024 parquet file from the NYC TLC contains approximately 3
 
 ---
 
+## Vins de France Dataset
+
+**Source:** Hand-authored for the `07-i18n-french` example.
+
+**Description:** A small French wine catalog used to demonstrate internationalization — column names, values, and the data's subject matter are all native French, so the i18n example pairs a French UI with a French-native dataset instead of translating chrome over English data.
+
+**Size:** 40 rows × 8 columns
+
+### Schema
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `region` | string | No | Wine-producing region (e.g. `Bourgogne`, `Bordeaux`, `Champagne`). |
+| `appellation` | string | No | Protected appellation within the region (e.g. `Chablis`, `Saint-Émilion`). |
+| `cepage` | string | No | Grape variety (e.g. `Chardonnay`, `Pinot Noir`, `Sauvignon Blanc`). |
+| `couleur` | string | No | Wine color: `rouge`, `blanc`, or `rosé`. |
+| `millesime` | integer | No | Vintage year (2016–2023). |
+| `prix_eur` | float | No | Average bottle price in euros. |
+| `production_hl` | integer | No | Annual production in hectolitres. |
+| `bio` | boolean | No | Whether the producer carries organic certification. |
+
+Provided as CSV + JSON. Parquet is not generated for this fixture because it is static and has no stress-testing role.
+
+---
+
+## US Customer Orders Dataset
+
+**Source:** Synthetic (hand-generated with deterministic PRNG; see `examples/08-custom-visualization/`).
+
+**Description:** Sample customer-order log used by the US-states choropleth example. 181 rows with a deliberately uneven per-state distribution (CA/TX/NY/FL heavy, Mountain West light, two null states) so the choropleth shows a clear gradient.
+
+**Size:** 181 rows × 5 columns.
+
+### Schema
+
+| Column | Data Type | Nullable | Description |
+|--------|-----------|----------|-------------|
+| `order_id` | integer | No | Sequential identifier 1…181. |
+| `state` | string | Yes | USPS 2-letter state code (`CA`, `NY`, `TX`, …). Empty for 2 rows. |
+| `product_category` | string | No | One of `Electronics`, `Apparel`, `Home`, `Books`, `Grocery`. |
+| `order_total_usd` | float | No | Order total in US dollars, $5–$2,500. |
+| `order_date` | date | No | Order date in 2025 (`YYYY-MM-DD`). |
+
+Provided as CSV only. This fixture is solely for the choropleth demo and has no stress-testing role.
+
+---
+
 ## File Formats
 
-Each dataset is provided in three formats:
+Each dataset is provided in three formats (except `vins_de_france` and `us_customer_orders`, CSV + JSON only and CSV only respectively):
 
 | Format | Extension | Description |
 |--------|-----------|-------------|

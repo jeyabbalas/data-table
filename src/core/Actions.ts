@@ -38,7 +38,34 @@ export interface LoadDataOptions extends DataLoaderOptions {
 }
 
 /**
- * StateActions class provides methods to manipulate TableState
+ * StateActions class provides methods to manipulate TableState.
+ *
+ * Exposed on `table.actions` from `createDataTable()`. This is the write-path
+ * counterpart to `table.state` (read signals). Every mutation (filter change,
+ * sort, column visibility, derived column, etc.) flows through here so undo,
+ * events, and persistence stay in sync.
+ *
+ * @example
+ * const table = await createDataTable({ container, source });
+ *
+ * // Apply a range filter programmatically
+ * table.actions.addFilter({
+ *   type: 'range',
+ *   column: 'age',
+ *   min: 18,
+ *   max: 65,
+ *   maxInclusive: true,
+ * });
+ *
+ * // Toggle sort on a column (none → asc → desc → none)
+ * table.actions.toggleSort('price');
+ *
+ * // Add a derived column
+ * await table.actions.addDerivedColumn({
+ *   kind: 'expression',
+ *   name: 'age_group',
+ *   expression: `CASE WHEN age < 18 THEN 'minor' ELSE 'adult' END`,
+ * });
  */
 export class StateActions {
   private bridge: WorkerBridge;

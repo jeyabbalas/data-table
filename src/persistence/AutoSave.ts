@@ -6,6 +6,19 @@
  *
  * When an UndoManager is provided, its undo/redo stacks are serialized
  * and persisted alongside the table state so they survive browser refreshes.
+ *
+ * @example
+ * import { AutoSave, SessionStore } from '@jeyabbalas/data-table';
+ *
+ * const store = new SessionStore();
+ * await store.open();
+ *
+ * const save = new AutoSave(state, store, {
+ *   debounceMs: 500,
+ *   onError: (err) => console.warn('save failed', err.code, err.message),
+ * });
+ * // later:
+ * save.destroy();
  */
 
 import type { TableState } from '../core/State';

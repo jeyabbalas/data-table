@@ -4,6 +4,18 @@
  * Provides a centered modal overlay with format selection (CSV/JSON/Parquet),
  * scope selection (all/filtered/selected), column selection, format-specific
  * options, download, and copy-to-clipboard functionality.
+ *
+ * Normally the facade wires `table.openExportDialog()` for you; use this class
+ * directly only when embedding the dialog inside a custom shell.
+ *
+ * @example
+ * import { ExportDialog } from '@jeyabbalas/data-table/advanced';
+ *
+ * const dialog = new ExportDialog(table.state, table.bridge, {
+ *   classPrefix: 'dt',
+ *   instanceId: table.instanceId,
+ * });
+ * dialog.open();
  */
 
 import type { TableState } from '../core/State';

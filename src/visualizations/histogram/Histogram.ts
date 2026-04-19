@@ -6,6 +6,27 @@
  * - Axis label formatting (scientific notation, locale formatting)
  * - Filter emission (point/set/range filters)
  * - Bin range formatting
+ *
+ * Not normally instantiated directly — the `VisualizationRegistry` picks it
+ * for `integer`, `float`, and `decimal` columns by default.
+ *
+ * @example
+ * import { VisualizationRegistry, Histogram } from '@jeyabbalas/data-table/advanced';
+ *
+ * // Bump Histogram's priority so a custom registration only wins for a
+ * // specific column type set.
+ * const registry = new VisualizationRegistry();
+ * registry.register({
+ *   name: 'histogram',
+ *   isApplicable: (type) => type === 'float',
+ *   constructor: Histogram as any,
+ *   priority: 5,
+ * });
+ *
+ * @see DateHistogram for date/timestamp columns
+ * @see TimeHistogram for TIME columns
+ * @see IntervalHistogram for INTERVAL columns
+ * @see ValueCounts for categorical columns
  */
 
 import type { VisualizationOptions } from '../BaseVisualization';

@@ -236,6 +236,17 @@ export function applySnapshot(state: TableState, snapshot: StateSnapshot): void 
  * current state before mutations (via captureSnapshot) and pass it to
  * push(). On undo/redo, the returned snapshot is applied externally
  * (via applySnapshot).
+ *
+ * @example
+ * import { UndoManager, captureSnapshot, applySnapshot } from '@jeyabbalas/data-table/advanced';
+ *
+ * const mgr = new UndoManager(50);
+ * // Before mutating state (e.g., in custom UI):
+ * mgr.push(captureSnapshot(table.state));
+ * // ...mutate state...
+ * // Later:
+ * const previous = mgr.undo(captureSnapshot(table.state));
+ * if (previous) applySnapshot(table.state, previous);
  */
 export class UndoManager {
   private undoStack: StateSnapshot[] = [];

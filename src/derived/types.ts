@@ -35,7 +35,7 @@ export interface VectorColumnDef {
   kind: 'vector';
   name: string;
   vectorType: VectorDataType;
-  values: number[] | string[] | boolean[];
+  values: ArrayLike<number> | ArrayLike<string> | ArrayLike<boolean>;
 }
 
 /** Union of both derived column kinds */

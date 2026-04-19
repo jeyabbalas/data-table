@@ -6,6 +6,16 @@
  *
  * Previously lived in demo code — now part of the library so consumers
  * don't have to reimplement it.
+ *
+ * @example
+ * import { InteractionManager } from '@jeyabbalas/data-table/advanced';
+ *
+ * const im = new InteractionManager();
+ * im.push('brush', 'age', ageHistogram);
+ * // Escape clears most recent; or manually:
+ * im.clearTop();
+ *
+ * @see CrossfilterCoordinator
  */
 
 /** Interface for visualizations that support brush clearing */

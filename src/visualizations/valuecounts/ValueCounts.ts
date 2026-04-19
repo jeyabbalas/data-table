@@ -10,6 +10,13 @@
  * - Hover highlighting and stats display
  * - Click-to-select behavior
  * - Responsive sizing
+ *
+ * The default `VisualizationRegistry` picks this for `string`, `boolean`, and
+ * `uuid` columns. Only instantiate directly when you're composing a custom
+ * visualization pipeline.
+ *
+ * @see Histogram for numeric columns
+ * @see VisualizationRegistry for registering a replacement
  */
 
 import { BaseVisualization } from '../BaseVisualization';

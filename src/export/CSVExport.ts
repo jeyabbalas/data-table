@@ -4,6 +4,23 @@
  * Supports configurable scope (all/filtered/selected rows), column selection,
  * delimiter, and null value handling. Queries DuckDB in batches to handle
  * large datasets without excessive memory usage.
+ *
+ * @example
+ * import { exportFromState } from '@jeyabbalas/data-table/advanced';
+ *
+ * const csv = await exportFromState(table.state, table.bridge, {
+ *   scope: 'filtered',
+ *   columns: 'all',
+ *   includeHeaders: true,
+ *   delimiter: ',',
+ *   nullValue: '',
+ * });
+ * // `csv` is a string you can drop into a Blob, write to disk, etc.
+ *
+ * @see exportToCSV for the lower-level row-array API
+ * @see exportJSONFromState
+ * @see exportParquetFromState
+ * @see copyToClipboard
  */
 
 import type { WorkerBridge } from '../data/WorkerBridge';

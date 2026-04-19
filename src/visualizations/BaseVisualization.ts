@@ -13,6 +13,24 @@
  * - handleMouseMove(): Handle hover interactions
  * - handleClick(): Handle click interactions
  * - handleMouseLeave(): Handle mouse leave
+ *
+ * @example
+ * import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+ *
+ * class SparkLine extends BaseVisualization {
+ *   protected async fetchData() {
+ *     // query this.bridge for the column's ordered values
+ *     return { points: [] as number[] };
+ *   }
+ *   protected render(_data: { points: number[] }) {
+ *     // draw on this.ctx using this.width, this.height
+ *   }
+ *   protected handleMouseMove(_event: MouseEvent) {}
+ *   protected handleClick(_event: MouseEvent) {}
+ *   protected handleMouseLeave() {}
+ * }
+ *
+ * @see VisualizationRegistry for registering custom subclasses.
  */
 
 import type { ColumnSchema, Filter } from '../core/types';

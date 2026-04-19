@@ -1,10 +1,32 @@
 /**
- * TableContainer - Main container component for the data table
+ * TableContainer - Main container component for the data table.
  *
  * Manages the overall DOM structure including:
  * - Header row container (for column headers)
  * - Body container (for data rows with virtual scrolling)
  * - Resize observer for responsive behavior
+ *
+ * Most consumers never touch this directly — `createDataTable()` composes it.
+ * Reach into `/advanced` for this class only when you need to embed the core
+ * table inside a custom shell without the filter bar / modal host.
+ *
+ * @example
+ * import { TableContainer } from '@jeyabbalas/data-table/advanced';
+ *
+ * const container = new TableContainer(rootEl, state, actions, bridge, {
+ *   rowHeight: 28,
+ *   headerHeight: 96,
+ * });
+ * // later:
+ * container.destroy();
+ *
+ * @see ColumnHeader
+ * @see VirtualScroller
+ * @see TableBody
+ * @see CellRenderer
+ * @see ColumnReorder
+ * @see HiddenColumnsGutter
+ * @see KeyboardNavigator
  */
 
 import type { TableState } from '../core/State';
@@ -647,6 +669,34 @@ export class TableContainer {
       if (!this.destroyed) this.scheduleLiveRegionUpdate();
     });
     this.unsubscribes.push(unsubLiveFilters);
+
+    // Preserve horizontal scroll position through filter changes. Filter
+    // add/remove triggers row re-fetch, the FilterBar max-height reveal
+    // or collapse, and visualization re-renders — any of which can
+    // transiently clamp scrollLeft to 0. Pin scrollLeft to its pre-change
+    // value for 1s, correcting any drift each animation frame. Covers
+    // the 300ms smooth scroll-to-top, the 200ms bar transition (in both
+    // directions — reveal on add, collapse on remove), plus async row
+    // and viz re-fetches.
+    const unsubFilterScroll = this.state.filters.subscribe(() => {
+      if (this.destroyed) return;
+      const savedLeft = this.bodyScroll.scrollLeft;
+      if (savedLeft === 0) return;
+
+      const deadline = performance.now() + 1000;
+      const correct = () => {
+        if (this.destroyed) return;
+        if (this.bodyScroll.scrollLeft !== savedLeft) {
+          this.bodyScroll.scrollLeft = savedLeft;
+          this.headerScroll.scrollLeft = savedLeft;
+        }
+        if (performance.now() < deadline) {
+          requestAnimationFrame(correct);
+        }
+      };
+      requestAnimationFrame(correct);
+    });
+    this.unsubscribes.push(unsubFilterScroll);
 
     const unsubLiveFilteredRows = this.state.filteredRows.subscribe(() => {
       if (!this.destroyed) this.scheduleLiveRegionUpdate();

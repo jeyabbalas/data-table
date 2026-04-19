@@ -54,6 +54,18 @@ export type TableEvents = {
    * surfaces at runtime — load failures, SQL validation, export failures,
    * persistence write failures, visualization fetch failures, etc.
    * `source` discriminates which subsystem produced the error.
+   *
+   * @example
+   * table.on('error', ({ error, source }) => {
+   *   if (error instanceof LoadError && error.code === 'PARSE_FAILED') {
+   *     toast('Could not read that file.');
+   *   } else if (source === 'persistence') {
+   *     // IDB failures are non-fatal; degrade quietly.
+   *     console.warn(error);
+   *   } else {
+   *     reportToSentry(error);
+   *   }
+   * });
    */
   error: {
     error: DataTableError;
@@ -63,6 +75,15 @@ export type TableEvents = {
   /**
    * Non-fatal warning event. Emitted when the library continues operating
    * in a degraded mode (e.g., stylesheet missing, IndexedDB unavailable).
+   *
+   * @example
+   * table.on('warning', ({ code, message }) => {
+   *   if (code === 'STYLESHEET_MISSING') {
+   *     console.warn('Forgot to import @jeyabbalas/data-table/styles?');
+   *   } else if (code === 'PERSISTENCE_UNAVAILABLE') {
+   *     // Running in a private window — inform the user.
+   *   }
+   * });
    */
   warning: {
     code: string;

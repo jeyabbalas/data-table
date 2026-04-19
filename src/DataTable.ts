@@ -45,7 +45,9 @@ import {
   DataTableError,
   DestroyedError,
   LoadError,
+  WorkerInitError,
 } from './core/errors';
+import { checkBrowserSupport } from './core/checkBrowserSupport';
 import type { DataFormat } from './data/DataLoader';
 import type { Filter, SortColumn } from './core/types';
 import type { DerivedColumnDef } from './derived/types';
@@ -208,6 +210,16 @@ export interface CreateDataTableOptions {
    * component — recreate the table to switch languages at runtime.
    */
   messages?: DeepPartial<Strings>;
+
+  /**
+   * When `true`, probe for required browser APIs before attempting worker
+   * init. Rejects with {@link WorkerInitError} (`code: 'WORKER_UNSUPPORTED'`,
+   * `details.missing: string[]`) if any probe fails. Default `false`: the
+   * library attempts to init and surfaces real failures later via the `error`
+   * event — fine for most apps. Flip this on when you want to render a
+   * dedicated "unsupported browser" screen instead of a half-mounted table.
+   */
+  strictBrowserCheck?: boolean;
 }
 
 /**
@@ -341,6 +353,16 @@ export async function createDataTable(
   opts: CreateDataTableOptions
 ): Promise<DataTable> {
   // -------- Options validation --------
+  if (opts.strictBrowserCheck) {
+    const check = checkBrowserSupport();
+    if (!check.supported) {
+      throw new WorkerInitError(
+        `Browser is missing required APIs: ${check.missing.join(', ')}.`,
+        { code: 'WORKER_UNSUPPORTED', details: { missing: check.missing } },
+      );
+    }
+  }
+
   let colorScheme = validateColorScheme(opts.colorScheme, 'createDataTable');
 
   // -------- Resolve i18n messages (done once, threaded to every component) --------

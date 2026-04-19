@@ -32,7 +32,18 @@ export interface DataTableErrorOptions {
   details?: Record<string, unknown>;
 }
 
-/** Base class for every error thrown by the library. */
+/**
+ * Base class for every error thrown by the library.
+ *
+ * @example
+ * import { DataTableError } from '@jeyabbalas/data-table';
+ *
+ * table.on('error', ({ error, source }) => {
+ *   if (error instanceof DataTableError) {
+ *     log({ name: error.name, code: error.code, source, details: error.details });
+ *   }
+ * });
+ */
 export class DataTableError extends Error {
   readonly code: string;
   readonly details?: Record<string, unknown>;
@@ -66,70 +77,169 @@ function withDefault(options: DataTableErrorOptions, defaultCode: string): DataT
   return { ...options, code: options.code ?? defaultCode };
 }
 
-/** Worker bootstrap / crash / unsupported-environment failures. */
+/**
+ * Worker bootstrap / crash / unsupported-environment failures.
+ *
+ * @example
+ * try {
+ *   await createDataTable({ container, source, strictBrowserCheck: true });
+ * } catch (err) {
+ *   if (err instanceof WorkerInitError && err.code === 'WORKER_UNSUPPORTED') {
+ *     renderUnsupportedScreen(err.details?.missing as string[]);
+ *   }
+ * }
+ */
 export class WorkerInitError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'WORKER_CRASHED'));
   }
 }
 
-/** Worker terminated mid-flight (intentional or unexpected). */
+/**
+ * Worker terminated mid-flight (intentional or unexpected).
+ *
+ * @example
+ * try { await table.actions.applyFilter(f); }
+ * catch (err) {
+ *   if (err instanceof WorkerTerminatedError) return; // table is tearing down; bail
+ *   throw err;
+ * }
+ */
 export class WorkerTerminatedError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'WORKER_TERMINATED'));
   }
 }
 
-/** SQL query failure at runtime (syntax, missing column, abort). */
+/**
+ * SQL query failure at runtime (syntax, missing column, abort).
+ *
+ * @example
+ * table.on('error', ({ error, source }) => {
+ *   if (source === 'query' && error instanceof QueryError) {
+ *     toast(`Query failed (${error.code}): ${error.message}`);
+ *   }
+ * });
+ */
 export class QueryError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'QUERY_RUNTIME'));
   }
 }
 
-/** Data-loading failure: fetch, parse, schema detection, abort. */
+/**
+ * Data-loading failure: fetch, parse, schema detection, abort.
+ *
+ * @example
+ * try { await table.loadData(file); }
+ * catch (err) {
+ *   if (err instanceof LoadError && err.code === 'PARSE_FAILED') {
+ *     toast('That file does not look like a valid CSV/JSON/Parquet.');
+ *   }
+ * }
+ */
 export class LoadError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'PARSE_FAILED'));
   }
 }
 
-/** SQL expression failed user-facing validation (raw-SQL filter modal etc.). */
+/**
+ * SQL expression failed user-facing validation (raw-SQL filter modal etc.).
+ *
+ * @example
+ * table.on('error', ({ error, source }) => {
+ *   if (source === 'sql-validation' && error instanceof SQLValidationError) {
+ *     showInlineErrorInEditor(error.message);
+ *   }
+ * });
+ */
 export class SQLValidationError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'SQL_SYNTAX'));
   }
 }
 
-/** Derived-column expression / vector / lifecycle error. */
+/**
+ * Derived-column expression / vector / lifecycle error.
+ *
+ * @example
+ * try { await table.actions.addDerivedColumn(def); }
+ * catch (err) {
+ *   if (err instanceof DerivedColumnError && err.code === 'DUPLICATE_NAME') {
+ *     toast('A column with that name already exists.');
+ *   }
+ * }
+ */
 export class DerivedColumnError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'EXPRESSION_INVALID'));
   }
 }
 
-/** Session persistence (IndexedDB) error. */
+/**
+ * Session persistence (IndexedDB) error.
+ *
+ * @example
+ * table.on('error', ({ error, source }) => {
+ *   if (source === 'persistence' && error instanceof PersistenceError) {
+ *     // IDB writes are best-effort; degrade gracefully.
+ *     console.warn('Session save failed:', error.code);
+ *   }
+ * });
+ */
 export class PersistenceError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'SAVE_FAILED'));
   }
 }
 
-/** Export-pipeline failure (CSV / JSON / Parquet / clipboard). */
+/**
+ * Export-pipeline failure (CSV / JSON / Parquet / clipboard).
+ *
+ * @example
+ * table.on('error', ({ error, source }) => {
+ *   if (source === 'export' && error instanceof ExportError) {
+ *     if (error.code === 'CLIPBOARD_UNAVAILABLE') toast('Clipboard blocked by browser.');
+ *     else toast(`Export failed: ${error.message}`);
+ *   }
+ * });
+ */
 export class ExportError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'EXPORT_FAILED'));
   }
 }
 
-/** Invalid configuration / options / internal invariant violation. */
+/**
+ * Invalid configuration / options / internal invariant violation.
+ *
+ * @example
+ * try { table.setColorScheme('neon' as 'light'); }
+ * catch (err) {
+ *   if (err instanceof ConfigurationError && err.code === 'OPTIONS_INVALID') {
+ *     // Programmer error — surface loudly in dev.
+ *   }
+ * }
+ */
 export class ConfigurationError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'INVARIANT'));
   }
 }
 
-/** Thrown by public methods called after `destroy()`. (Consumed in Phase 2.) */
+/**
+ * Thrown by public methods called after {@link DataTable.destroy} has run.
+ *
+ * @example
+ * useEffect(() => {
+ *   let table: DataTable | undefined;
+ *   createDataTable(opts).then((t) => { table = t; });
+ *   return () => {
+ *     if (table && !table.isDestroyed()) void table.destroy();
+ *   };
+ * }, []);
+ */
 export class DestroyedError extends DataTableError {
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, withDefault(options, 'DESTROYED'));

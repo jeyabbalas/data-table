@@ -132,3 +132,9 @@ export type { Strings, DeepPartial } from './core/Strings';
 // Pair the sync getter with the `warning` event (code `STYLESHEET_MISSING`):
 // the getter is useful for pre-mount checks, the event for logging.
 export { isStylesheetLoaded } from './core/stylesheet';
+
+// ---- Browser feature detection ----
+// Sync probe of the browser APIs the library relies on. Pair with
+// `strictBrowserCheck: true` on `createDataTable` for fail-fast init.
+export { checkBrowserSupport } from './core/checkBrowserSupport';
+export type { BrowserSupport } from './core/checkBrowserSupport';

@@ -7,28 +7,31 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 
-// Verify all derived column exports from the library index
+// Verify derived-column exports are reachable from the library.
+// Tier-1 (root) vs Tier-2 (/advanced) split is enforced by api-surface tests.
 import {
   DerivedColumnManager,
   DefaultExpressionEditor,
   DerivedColumnEditPanel,
   DerivedColumnModal,
   AddColumnButton,
-} from '@/index';
+} from '@/advanced';
 import type {
   DerivedColumnKind,
   VectorDataType,
   ExpressionColumnDef,
   VectorColumnDef,
   DerivedColumnDef,
-  DerivedColumnInfo,
   CompletionContext,
   ExpressionEditor,
   ExpressionEditorFactory,
+} from '@/index';
+import type {
+  DerivedColumnInfo,
   DerivedColumnEditPanelOptions,
   DerivedColumnModalOptions,
   AddColumnButtonOptions,
-} from '@/index';
+} from '@/advanced';
 
 // Mock ResizeObserver
 class MockResizeObserver implements ResizeObserver {

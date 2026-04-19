@@ -39,9 +39,17 @@ export default defineConfig({
   plugins: [buildStylesPlugin()],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      // Two entry points:
+      //   `.`        → dist/data-table.{js,cjs}
+      //   `./advanced` → dist/advanced.{js,cjs}
+      // package.json's `exports` field advertises which ones are public.
+      entry: {
+        'data-table': resolve(__dirname, 'src/index.ts'),
+        advanced: resolve(__dirname, 'src/advanced.ts'),
+      },
       name: 'DataTable',
-      fileName: (format) => format === 'es' ? 'data-table.js' : 'data-table.cjs',
+      fileName: (format, entryName) =>
+        format === 'es' ? `${entryName}.js` : `${entryName}.cjs`,
       formats: ['es', 'cjs'],
     },
     rollupOptions: {

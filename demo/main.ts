@@ -18,7 +18,7 @@ import {
   isDateType,
   isTimeType,
   isCategoricalType,
-} from '../src/visualizations/VisualizationFactory';
+} from '../src/advanced';
 
 // ----- DOM refs -----
 const versionEl = document.getElementById('version')!;

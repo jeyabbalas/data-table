@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { DataType, ColumnSchema, FilterType, Filter, DataTableOptions } from '@/core/types';
+import type { DataType, ColumnSchema, FilterType, Filter } from '@/core/types';
 
 describe('Core Types', () => {
   it('should allow valid DataType values', () => {
@@ -45,13 +45,5 @@ describe('Core Types', () => {
     };
     expect(filter.column).toBe('age');
     expect(filter.type).toBe('range');
-  });
-
-  it('should allow valid DataTableOptions', () => {
-    const options: DataTableOptions = {
-      headless: true,
-    };
-    expect(options.headless).toBe(true);
-    expect(options.container).toBeUndefined();
   });
 });

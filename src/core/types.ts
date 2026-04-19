@@ -46,9 +46,3 @@ export interface SortColumn {
   column: string;
   direction: SortDirection;
 }
-
-// Configuration options
-export interface DataTableOptions {
-  container?: HTMLElement;
-  headless?: boolean;
-}

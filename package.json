@@ -12,6 +12,10 @@
       "import": "./dist/data-table.js",
       "require": "./dist/data-table.cjs"
     },
+    "./advanced": {
+      "types": "./dist/advanced.d.ts",
+      "import": "./dist/advanced.js"
+    },
     "./styles": "./dist/data-table.css",
     "./styles.css": "./dist/data-table.css"
   },

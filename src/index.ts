@@ -3,19 +3,26 @@
  *
  * A client-side JavaScript library for interactive, explorable data tables
  * using DuckDB WASM for in-browser analytics.
+ *
+ * This is the root entry (`@jeyabbalas/data-table`) — the public surface.
+ * Advanced building blocks (low-level state, UI components, export helpers,
+ * visualization internals, persistence snapshot serializers, `AutoSave`)
+ * live at `@jeyabbalas/data-table/advanced`.
  */
 
 export const VERSION = '0.1.0';
 
-// High-level facade — the recommended entry point for most consumers.
-// Wraps worker + state + actions + container + visualizations + persistence
-// + presets + undo/redo + export into a single `createDataTable()` call.
+// ---- Facade ----
+// High-level entry point for most consumers. Wraps worker + state + actions
+// + container + visualizations + persistence + presets + undo/redo + export
+// into a single `createDataTable()` call.
 export { createDataTable } from './DataTable';
 export type { DataTable, CreateDataTableOptions } from './DataTable';
 export type { TableEvents, TableEventName, TableErrorSource } from './core/TableEvents';
 
-// Typed error model. All library errors extend DataTableError; catch sites
-// can narrow via `instanceof` and branch on `err.code`.
+// ---- Typed error model ----
+// All library errors extend `DataTableError`; catch sites narrow via
+// `instanceof` and branch on `err.code`.
 export {
   DataTableError,
   WorkerInitError,
@@ -31,10 +38,17 @@ export {
 } from './core/errors';
 export type { DataTableErrorOptions } from './core/errors';
 
-// Core types
-export * from './core/types';
+// ---- Core types ----
+export type {
+  DataType,
+  ColumnSchema,
+  Filter,
+  FilterType,
+  SortColumn,
+  SortDirection,
+} from './core/types';
 
-// Filter types (explicit re-exports for direct import)
+// ---- Filter shapes ----
 export type {
   RangeFilter,
   PointFilter,
@@ -45,134 +59,33 @@ export type {
   RawSQLFilter,
 } from './filters/FilterTypes';
 
-// Filter SQL generation
-export { filterToSQL, filtersToWhereClause, formatSQLValue, quoteIdentifier } from './filters/FilterSQL';
+// ---- SQL-authoring helpers ----
+// For consumers building raw SQL on top of the bridge (e.g. custom SELECTs,
+// data-quality rule authoring). Filter-object → WHERE-clause conversion is
+// handled internally; consumers construct `Filter[]` via `table.actions`.
+export { quoteIdentifier, formatSQLValue } from './filters/FilterSQL';
 
-// Crossfilter query utilities
-export { splitCrossfilterFilters } from './filters/CrossfilterQuery';
-export type { CrossfilterSplit } from './filters/CrossfilterQuery';
-
-// Filter UI components
-export { FilterChip, formatFilter, formatDisplayValue } from './filters/FilterChip';
-export type { FilterChipOptions } from './filters/FilterChip';
-export { FilterBar } from './filters/FilterBar';
-export type { FilterBarOptions } from './filters/FilterBar';
-
-export { SQLFilterModal } from './filters/SQLFilterModal';
-export type { SQLFilterModalOptions } from './filters/SQLFilterModal';
-
-export { FilterPanel } from './filters/FilterPanel';
-export type { FilterPanelOptions } from './filters/FilterPanel';
-export { FilterPanelField } from './filters/FilterPanelField';
-export type { FilterPanelFieldOptions } from './filters/FilterPanelField';
-
-// Filter Presets
+// ---- Filter presets ----
 export { FilterPresetManager } from './filters/FilterPresets';
 export type { FilterPreset, FilterPresetCollection } from './filters/FilterPresetTypes';
-export { FilterPresetPanel } from './filters/FilterPresetPanel';
-export type { FilterPresetPanelOptions } from './filters/FilterPresetPanel';
 
-// Core classes
-export { EventEmitter } from './core/EventEmitter';
-
-// Signals and reactive state
-export { createSignal, computed, batch } from './core/Signal';
-export type { Signal, Computed } from './core/Signal';
-
-// State management
-export {
-  createTableState,
-  resetTableState,
-  initializeColumnsFromSchema,
-} from './core/State';
-export type { TableState, HiddenColumnInfo } from './core/State';
-
-// State actions
-export { StateActions } from './core/Actions';
-export type { LoadDataOptions } from './core/Actions';
-
-// Undo/Redo
-export { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from './core/UndoManager';
-export type { StateSnapshot } from './core/UndoManager';
-
-// Table components
-export { TableContainer } from './table/TableContainer';
-export type { TableContainerOptions, ResizeCallback } from './table/TableContainer';
-
-export { ColumnHeader } from './table/ColumnHeader';
-export type { ColumnHeaderOptions } from './table/ColumnHeader';
-
-export { VirtualScroller } from './table/VirtualScroller';
-export type {
-  VirtualScrollerOptions,
-  VisibleRange,
-  ScrollCallback,
-  ScrollAlign,
-} from './table/VirtualScroller';
-
-export { TableBody } from './table/TableBody';
-export type { TableBodyOptions, RowData } from './table/TableBody';
-
-export { CellRenderer } from './table/Cell';
-export type { CellOptions } from './table/Cell';
-
-export { ColumnReorder } from './table/ColumnReorder';
-export type { ColumnReorderOptions, ReorderCallback } from './table/ColumnReorder';
-
-export { HiddenColumnsGutter } from './table/HiddenColumnsGutter';
-export type { HiddenColumnsGutterOptions } from './table/HiddenColumnsGutter';
-
-// Progress reporting
-export type {
-  ProgressInfo,
-  ProgressCallback,
-  ProgressStage,
-} from './core/Progress';
-export {
-  estimateTimeRemaining,
-  formatProgress,
-  formatBytes,
-  formatDuration,
-} from './core/Progress';
-
-// Data layer
+// ---- Data layer ----
+// Exposed for consumers pre-constructing a bridge or passing custom
+// load options (progress callbacks, abort signals, format overrides).
 export { WorkerBridge } from './data/WorkerBridge';
 export type { LoadOptions, WorkerBridgeOptions } from './data/WorkerBridge';
+export type { DataFormat, LoadResult } from './data/DataLoader';
 
-// Query caching
-export { QueryCache } from './data/QueryCache';
-export type { QueryCacheOptions } from './data/QueryCache';
+// ---- Persistence ----
+// `SessionStore` is injectable for apps that manage their own storage.
+// `serializeFilter` / `deserializeFilter` let apps round-trip filter
+// state into their own stores (URL params, cloud sync, etc.).
+export { SessionStore, serializeFilter, deserializeFilter } from './persistence/SessionStore';
+export type { SerializedFilter } from './persistence/types';
 
-// Data loader
-export { DataLoader } from './data/DataLoader';
-export type { DataFormat, LoadResult, DataLoaderOptions } from './data/DataLoader';
-
-// Schema detection
-export { detectSchema, mapDuckDBType } from './data/SchemaDetector';
-
-// Type inference
-export { inferStringColumnType, inferAllStringColumnTypes } from './data/TypeInference';
-export type { TypeInferenceResult, TypeInferenceOptions } from './data/TypeInference';
-
-// Pattern detection
-export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './data/PatternDetector';
-export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './data/PatternDetector';
-
-// Statistics
-export type {
-  ColumnStatsData,
-  NumericColumnStats,
-  CategoricalColumnStats,
-  TemporalColumnStats,
-  TimeColumnStats,
-  IntervalColumnStats,
-  BaseColumnStats,
-} from './statistics/ColumnStatsTypes';
-export { statsKindForDataType } from './statistics/ColumnStatsTypes';
-export { formatStatValue, formatCount, formatDefaultStats } from './statistics/StatsFormatters';
-export { fetchIntervalStats } from './statistics/StatsComputer';
-
-// Visualization registry (per-instance)
+// ---- Visualization registry ----
+// Register custom visualizations per-instance via `createDataTable({
+// visualizationRegistry })`, or globally via `defaultVisualizationRegistry`.
 export {
   VisualizationRegistry,
   defaultVisualizationRegistry,
@@ -181,102 +94,26 @@ export type {
   VisualizationRegistration,
   VisualizationConstructor,
 } from './visualizations/VisualizationRegistry';
-export {
-  isNumericType,
-  isDateType,
-  isTimeType,
-  isCategoricalType,
-  needsVisualization,
-} from './visualizations/VisualizationRegistry';
 
-// Deprecated static wrapper — kept for a transitional release; forwards to
-// `defaultVisualizationRegistry`. Phase 4 will prune this from the public surface.
-export { VisualizationFactory } from './visualizations/VisualizationFactory';
-
-// Export
-// Export - CSV
-export { exportToCSV, exportFromState } from './export/CSVExport';
-export type { ExportOptions } from './export/CSVExport';
-export type { ExportContext } from './export/ExportQuery';
-
-// Export - JSON
-export { exportToJSON, exportJSONFromState } from './export/JSONExport';
-export type { JSONExportOptions } from './export/JSONExport';
-
-// Export - Parquet
-export { exportToParquet, exportParquetFromState } from './export/ParquetExport';
-export type { ParquetExportOptions } from './export/ParquetExport';
-
-// Export - Clipboard
-export { copyToClipboard, copyRowsToClipboard } from './export/Clipboard';
-
-// Export - Dialog UI
-export { ExportDialog } from './export/ExportDialog';
-export type { ExportDialogOptions } from './export/ExportDialog';
-
-// Persistence
-export { SessionStore } from './persistence/SessionStore';
-export {
-  serializeFilter,
-  deserializeFilter,
-  isDateWrapper,
-  serializeValue,
-  deserializeValue,
-} from './persistence/SessionStore';
-export type {
-  SessionSnapshot,
-  SerializedFilter,
-  SerializedStateSnapshot,
-  SerializedDerivedColumnDef,
-  PooledVectorColumnRef,
-  VectorValuePoolEntry,
-  DateWrapper,
-} from './persistence/types';
-export { SNAPSHOT_VERSION, isPooledVectorRef } from './persistence/types';
-export {
-  snapshotFromState,
-  restoreStateFromSnapshot,
-  serializeStateSnapshot,
-  deserializeStateSnapshot,
-} from './persistence/serialization';
-export { AutoSave } from './persistence/AutoSave';
-export type { AutoSaveOptions } from './persistence/AutoSave';
-
-// Derived columns
+// ---- Derived columns ----
+// Types consumers need when passing initial derived-column definitions
+// or when injecting a custom expression editor.
 export type {
   DerivedColumnKind,
   VectorDataType,
   ExpressionColumnDef,
   VectorColumnDef,
   DerivedColumnDef,
-  DerivedColumnInfo,
   CompletionContext,
 } from './derived/types';
-export { DerivedColumnManager } from './derived/DerivedColumnManager';
 export type {
   ExpressionEditor,
   ExpressionEditorFactory,
 } from './derived/ExpressionEditorTypes';
-export { DefaultExpressionEditor } from './derived/DefaultExpressionEditor';
-export { DerivedColumnEditPanel } from './derived/DerivedColumnEditPanel';
-export type { DerivedColumnEditPanelOptions } from './derived/DerivedColumnEditPanel';
-export { DerivedColumnModal } from './derived/DerivedColumnModal';
-export type { DerivedColumnModalOptions } from './derived/DerivedColumnModal';
-export { AddColumnButton } from './derived/AddColumnButton';
-export type { AddColumnButtonOptions } from './derived/AddColumnButton';
 
-// SQL Editor (CodeMirror-based expression editor)
-export { CodeMirrorExpressionEditor } from './sql-editor/CodeMirrorExpressionEditor';
-export { DUCKDB_FUNCTIONS } from './sql-editor/duckdbFunctions';
-
-// Performance monitoring
-export { PerfMonitor } from './core/PerfMonitor';
-export type { PerfMark, PerfResult } from './core/PerfMonitor';
-
-// Worker types (for advanced usage)
+// ---- Progress reporting ----
 export type {
-  WorkerMessage,
-  WorkerResponse,
-  WorkerMessageType,
-  WorkerResponseType,
-} from './worker/types';
+  ProgressInfo,
+  ProgressCallback,
+  ProgressStage,
+} from './core/Progress';

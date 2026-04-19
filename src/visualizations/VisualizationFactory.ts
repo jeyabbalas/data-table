@@ -1,191 +1,88 @@
 /**
- * VisualizationFactory - Centralized creation of column visualizations
+ * @deprecated Use `VisualizationRegistry` (per-instance) instead. This
+ * static wrapper forwards to `defaultVisualizationRegistry` and will be
+ * removed in a future minor release.
  *
- * Provides a plugin-extensible registry for mapping DataTypes to visualization
- * constructors. Built-in registrations cover all standard column types.
- *
- * Task 4.8: Visualization Factory
+ * See `./VisualizationRegistry.ts` for the replacement — pass
+ * `visualizationRegistry` to `createDataTable()` to scope custom
+ * registrations to a single table.
  */
 
-import type { ColumnSchema, DataType } from '../core/types';
+import type { ColumnSchema } from '../core/types';
 import type { VisualizationOptions } from './BaseVisualization';
-import { BaseVisualization } from './BaseVisualization';
-import { Histogram } from './histogram';
-import { DateHistogram } from './histogram';
-import { TimeHistogram } from './histogram';
-import { IntervalHistogram } from './histogram';
-import { ValueCounts } from './valuecounts';
+import type { BaseVisualization } from './BaseVisualization';
+import {
+  defaultVisualizationRegistry,
+  type VisualizationRegistration,
+} from './VisualizationRegistry';
 
-/**
- * Constructor signature for visualization classes
- */
-export type VisualizationConstructor = new (
-  container: HTMLElement,
-  column: ColumnSchema,
-  options: VisualizationOptions
-) => BaseVisualization;
+// Re-export type predicates and registration types so existing imports
+// from this module keep working until the wrapper is removed.
+export {
+  isNumericType,
+  isDateType,
+  isTimeType,
+  isCategoricalType,
+  isIntervalType,
+  needsVisualization,
+  type VisualizationRegistration,
+  type VisualizationConstructor,
+} from './VisualizationRegistry';
 
-/**
- * Registration entry for a visualization type
- */
-export interface VisualizationRegistration {
-  name: string;
-  isApplicable: (type: DataType) => boolean;
-  constructor: VisualizationConstructor;
-  /** Higher priority wins when multiple registrations match; built-ins use 0 */
-  priority: number;
+let hasWarned = false;
+function warnOnce(): void {
+  if (hasWarned) return;
+  hasWarned = true;
+  // eslint-disable-next-line no-console
+  console.warn(
+    'VisualizationFactory is deprecated; use `VisualizationRegistry` and pass ' +
+      '`visualizationRegistry` to `createDataTable()`. The static wrapper will be ' +
+      'removed in a future minor release.',
+  );
 }
 
 /**
- * Check if a column type is numeric (suitable for numeric histogram)
- */
-export function isNumericType(type: DataType): boolean {
-  return type === 'integer' || type === 'float' || type === 'decimal';
-}
-
-/**
- * Check if a column type is date/timestamp (suitable for date histogram)
- */
-export function isDateType(type: DataType): boolean {
-  return type === 'date' || type === 'timestamp';
-}
-
-/**
- * Check if a column type is time (suitable for time histogram)
- */
-export function isTimeType(type: DataType): boolean {
-  return type === 'time';
-}
-
-/**
- * Check if a column type is categorical (suitable for value counts)
- */
-export function isCategoricalType(type: DataType): boolean {
-  return type === 'string' || type === 'boolean' || type === 'uuid';
-}
-
-/**
- * Check if a column type is interval (suitable for interval histogram)
- */
-export function isIntervalType(type: DataType): boolean {
-  return type === 'interval';
-}
-
-/**
- * Check if a column type has a registered visualization
- */
-export function needsVisualization(type: DataType): boolean {
-  return VisualizationFactory.isApplicable({ name: '', type, nullable: false, originalType: '' });
-}
-
-/**
- * Factory for creating visualizations based on column type.
- * Supports plugin registration with priority-based override.
+ * @deprecated Static wrapper that forwards to `defaultVisualizationRegistry`.
+ * Prefer constructing a `VisualizationRegistry` instance per table.
  */
 export class VisualizationFactory {
-  private static registry: VisualizationRegistration[] = [];
-
-  /**
-   * Register a visualization type. Replaces any existing registration with the same name.
-   */
+  /** @deprecated Use `VisualizationRegistry#register` on an instance. */
   static register(registration: VisualizationRegistration): void {
-    // Replace if name already exists
-    const idx = this.registry.findIndex((r) => r.name === registration.name);
-    if (idx >= 0) {
-      this.registry[idx] = registration;
-    } else {
-      this.registry.push(registration);
-    }
+    warnOnce();
+    defaultVisualizationRegistry.register(registration);
   }
 
-  /**
-   * Unregister a visualization type by name.
-   * @returns true if a registration was removed
-   */
+  /** @deprecated Use `VisualizationRegistry#unregister` on an instance. */
   static unregister(name: string): boolean {
-    const idx = this.registry.findIndex((r) => r.name === name);
-    if (idx >= 0) {
-      this.registry.splice(idx, 1);
-      return true;
-    }
-    return false;
+    warnOnce();
+    return defaultVisualizationRegistry.unregister(name);
   }
 
-  /**
-   * Create the appropriate visualization for a column.
-   * Iterates registry by descending priority, returns first match or null.
-   */
+  /** @deprecated Use `VisualizationRegistry#create` on an instance. */
   static create(
     container: HTMLElement,
     column: ColumnSchema,
-    options: VisualizationOptions
+    options: VisualizationOptions,
   ): BaseVisualization | null {
-    // Sort by descending priority
-    const sorted = [...this.registry].sort((a, b) => b.priority - a.priority);
-    for (const reg of sorted) {
-      if (reg.isApplicable(column.type)) {
-        return new reg.constructor(container, column, options);
-      }
-    }
-    return null;
+    warnOnce();
+    return defaultVisualizationRegistry.create(container, column, options);
   }
 
-  /**
-   * Check if any registered visualization matches the column's type.
-   */
+  /** @deprecated Use `VisualizationRegistry#isApplicable` on an instance. */
   static isApplicable(column: ColumnSchema): boolean {
-    return this.registry.some((r) => r.isApplicable(column.type));
+    warnOnce();
+    return defaultVisualizationRegistry.isApplicable(column);
   }
 
-  /**
-   * List all registered visualization type names.
-   */
+  /** @deprecated Use `VisualizationRegistry#getRegisteredTypes` on an instance. */
   static getRegisteredTypes(): string[] {
-    return this.registry.map((r) => r.name);
+    warnOnce();
+    return defaultVisualizationRegistry.getRegisteredTypes();
   }
 
-  /**
-   * Clear the registry and re-register all built-in visualization types.
-   */
+  /** @deprecated Use `VisualizationRegistry#resetToDefaults` on an instance. */
   static resetToDefaults(): void {
-    this.registry = [];
-
-    this.register({
-      name: 'histogram',
-      isApplicable: isNumericType,
-      constructor: Histogram as unknown as VisualizationConstructor,
-      priority: 0,
-    });
-
-    this.register({
-      name: 'date-histogram',
-      isApplicable: isDateType,
-      constructor: DateHistogram as unknown as VisualizationConstructor,
-      priority: 0,
-    });
-
-    this.register({
-      name: 'time-histogram',
-      isApplicable: isTimeType,
-      constructor: TimeHistogram as unknown as VisualizationConstructor,
-      priority: 0,
-    });
-
-    this.register({
-      name: 'interval-histogram',
-      isApplicable: isIntervalType,
-      constructor: IntervalHistogram as unknown as VisualizationConstructor,
-      priority: 0,
-    });
-
-    this.register({
-      name: 'value-counts',
-      isApplicable: isCategoricalType,
-      constructor: ValueCounts as unknown as VisualizationConstructor,
-      priority: 0,
-    });
+    warnOnce();
+    defaultVisualizationRegistry.resetToDefaults();
   }
 }
-
-// Auto-register built-in visualizations at module load
-VisualizationFactory.resetToDefaults();

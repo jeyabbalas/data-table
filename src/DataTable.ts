@@ -54,7 +54,10 @@ import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { TableContainer } from './table/TableContainer';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 import { InteractionManager } from './visualizations/InteractionManager';
-import { VisualizationFactory } from './visualizations/VisualizationFactory';
+import {
+  VisualizationRegistry,
+  defaultVisualizationRegistry,
+} from './visualizations/VisualizationRegistry';
 import type { BaseVisualization } from './visualizations/BaseVisualization';
 import { Histogram } from './visualizations/histogram/Histogram';
 import { DateHistogram } from './visualizations/histogram/DateHistogram';
@@ -114,6 +117,14 @@ export interface CreateDataTableOptions {
 
   /** Enable auto-attached column header visualizations (histograms, value counts). Default: `true`. */
   visualizations?: boolean;
+
+  /**
+   * Per-instance visualization registry. Use this to register custom
+   * visualizations (or override built-ins) without affecting other tables
+   * on the page. When omitted, the shared `defaultVisualizationRegistry`
+   * is used.
+   */
+  visualizationRegistry?: VisualizationRegistry;
 
   /** Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`. */
   exportDialog?: boolean;
@@ -386,6 +397,8 @@ export async function createDataTable(
   let activeVisualizations: BaseVisualization[] = [];
   const brushStates = new Map<string, BrushState>();
   const selectionStates = new Map<string, SelectionStateSnapshot>();
+  const vizRegistry: VisualizationRegistry =
+    opts.visualizationRegistry ?? defaultVisualizationRegistry;
 
   /** Clear saved interaction state for a single column (on filter removal). */
   const clearVisualizationState = (column: string): void => {
@@ -449,7 +462,7 @@ export async function createDataTable(
     const headers = tableContainer.getColumnHeaders();
     for (const header of headers) {
       const column = header.getColumn();
-      if (!VisualizationFactory.isApplicable(column)) {
+      if (!vizRegistry.isApplicable(column)) {
         // Fallback: simple row count for non-visualized types.
         const statsEl = header.getStatsElement();
         const total = state.totalRows.get();
@@ -539,7 +552,7 @@ export async function createDataTable(
         },
       };
 
-      const created = VisualizationFactory.create(
+      const created = vizRegistry.create(
         vizContainer,
         column,
         vizOptions
@@ -738,7 +751,7 @@ export async function createDataTable(
     const prefix = opts.classPrefix ?? 'dt';
     for (const header of headers) {
       const column = header.getColumn();
-      if (VisualizationFactory.isApplicable(column)) continue;
+      if (vizRegistry.isApplicable(column)) continue;
       const statsEl = header.getStatsElement();
       statsEl.innerHTML =
         activeFilters.length > 0

@@ -172,6 +172,8 @@ describe('VisualizationFactory', () => {
   let visualizations: BaseVisualization[] = [];
 
   beforeEach(() => {
+    // Suppress the Phase 3 deprecation warn emitted on the first static call.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     VisualizationFactory.resetToDefaults();
     vi.clearAllMocks();
   });

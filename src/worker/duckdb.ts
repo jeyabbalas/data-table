@@ -9,18 +9,23 @@ let conn: duckdb.AsyncDuckDBConnection | null = null;
 
 /**
  * Initialize DuckDB WASM
- * Loads the appropriate WASM bundle and creates a database connection
+ * Loads the appropriate WASM bundle and creates a database connection.
+ *
+ * @param bundles Optional bundle override for self-hosted / offline deployments.
+ *                When omitted, falls back to `getJsDelivrBundles()`.
  */
-export async function initializeDuckDB(): Promise<void> {
+export async function initializeDuckDB(
+  bundles?: duckdb.DuckDBBundles,
+): Promise<void> {
   if (db !== null) {
     return; // Already initialized
   }
 
-  // Get the bundles from CDN (recommended approach for WASM)
-  const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+  // Resolve bundle source: caller-provided override wins, else CDN default.
+  const sourceBundles = bundles ?? duckdb.getJsDelivrBundles();
 
   // Select the best bundle for this browser
-  const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+  const bundle = await duckdb.selectBundle(sourceBundles);
 
   // Create worker (DuckDB uses its own internal worker for some operations)
   const worker_url = URL.createObjectURL(

@@ -2,11 +2,13 @@
  * WorkerBridge provides a Promise-based API for communicating with the DuckDB worker
  */
 
+import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import type {
   WorkerMessage,
   WorkerResponse,
   WorkerMessageType,
   ErrorPayload,
+  InitPayload,
   QueryPayload,
   LoadPayload,
   ExportPayload,
@@ -49,6 +51,25 @@ export interface WorkerBridgeOptions {
    * error if exceeded. Default: 30000.
    */
   initializeTimeoutMs?: number;
+  /**
+   * Custom worker factory. Takes precedence over {@link workerUrl} and the
+   * built-in default. Useful for strict-CSP / bundler-specific deployments
+   * where the default `new Worker(new URL(...), { type: 'module' })` cannot
+   * be used. The caller is responsible for passing `{ type: 'module' }`.
+   */
+  workerFactory?: () => Worker;
+  /**
+   * Custom URL/path for the worker script. Instantiated via
+   * `new Worker(workerUrl, { type: 'module' })`. Ignored if
+   * {@link workerFactory} is set.
+   */
+  workerUrl?: string | URL;
+  /**
+   * DuckDB WASM bundles override for offline / self-hosted deployments.
+   * Forwarded to the worker on init; when omitted the worker falls back
+   * to `getJsDelivrBundles()`.
+   */
+  duckdbBundles?: DuckDBBundles;
 }
 
 interface PendingRequest {
@@ -68,10 +89,60 @@ export class WorkerBridge {
   private initPromise: Promise<void> | null = null;
   private queryCache: QueryCache;
   private initializeTimeoutMs: number;
+  private workerFactory?: () => Worker;
+  private workerUrl?: string | URL;
+  private duckdbBundles?: DuckDBBundles;
 
   constructor(options?: WorkerBridgeOptions) {
     this.queryCache = new QueryCache(options?.cache);
     this.initializeTimeoutMs = options?.initializeTimeoutMs ?? DEFAULT_INIT_TIMEOUT_MS;
+    this.workerFactory = options?.workerFactory;
+    this.workerUrl = options?.workerUrl;
+    this.duckdbBundles = options?.duckdbBundles;
+  }
+
+  /**
+   * Construct the Worker using (in priority) workerFactory, workerUrl, or
+   * the built-in default. Failures are wrapped in `WorkerInitError` with a
+   * `source` discriminator on `details` so consumers can tell factory/url
+   * mistakes from runtime crashes.
+   */
+  private createWorker(): Worker {
+    if (this.workerFactory) {
+      try {
+        const w = this.workerFactory();
+        if (!w || typeof w.postMessage !== 'function') {
+          throw new Error('workerFactory returned a non-Worker value');
+        }
+        return w;
+      } catch (err) {
+        throw new WorkerInitError(
+          `Custom workerFactory failed: ${err instanceof Error ? err.message : String(err)}`,
+          {
+            code: 'WORKER_CRASHED',
+            cause: err,
+            details: { source: 'workerFactory' },
+          },
+        );
+      }
+    }
+    if (this.workerUrl !== undefined) {
+      try {
+        return new Worker(this.workerUrl, { type: 'module' });
+      } catch (err) {
+        throw new WorkerInitError(
+          `Failed to construct worker from workerUrl: ${err instanceof Error ? err.message : String(err)}`,
+          {
+            code: 'WORKER_CRASHED',
+            cause: err,
+            details: { source: 'workerUrl', workerUrl: String(this.workerUrl) },
+          },
+        );
+      }
+    }
+    return new Worker(new URL('../worker/worker.ts', import.meta.url), {
+      type: 'module',
+    });
   }
 
   /**
@@ -117,10 +188,7 @@ export class WorkerBridge {
       }, this.initializeTimeoutMs);
 
       try {
-        this.worker = new Worker(
-          new URL('../worker/worker.ts', import.meta.url),
-          { type: 'module' }
-        );
+        this.worker = this.createWorker();
 
         this.worker.onmessage = this.handleMessage.bind(this);
         this.worker.onerror = (error) => {
@@ -138,8 +206,11 @@ export class WorkerBridge {
         const readyHandler = (event: MessageEvent<WorkerResponse>) => {
           if (event.data.id === '__ready__') {
             this.worker!.removeEventListener('message', readyHandler);
-            // Now initialize DuckDB
-            this.sendMessage('init', {})
+            // Now initialize DuckDB — forward optional bundles override.
+            const initPayload: InitPayload = this.duckdbBundles
+              ? { bundles: this.duckdbBundles }
+              : {};
+            this.sendMessage('init', initPayload)
               .then(() => settle(() => resolve()))
               .catch((err) => settle(() => reject(err)));
           }
@@ -369,12 +440,3 @@ export class WorkerBridge {
   }
 }
 
-// Singleton instance for convenience
-let defaultBridge: WorkerBridge | null = null;
-
-export function getDefaultBridge(): WorkerBridge {
-  if (!defaultBridge) {
-    defaultBridge = new WorkerBridge();
-  }
-  return defaultBridge;
-}

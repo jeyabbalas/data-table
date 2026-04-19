@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WorkerBridge, getDefaultBridge } from '@/data/WorkerBridge';
+import { WorkerBridge } from '@/data/WorkerBridge';
 
 describe('WorkerBridge', () => {
   it('should define WorkerBridge class', () => {
@@ -51,15 +51,14 @@ describe('WorkerBridge', () => {
   });
 });
 
-describe('getDefaultBridge', () => {
-  it('should return a WorkerBridge instance', () => {
-    const bridge = getDefaultBridge();
+describe('WorkerBridge configuration', () => {
+  it('should accept workerFactory in constructor', () => {
+    const bridge = new WorkerBridge({ workerFactory: () => new Worker('data:,') });
     expect(bridge).toBeInstanceOf(WorkerBridge);
   });
 
-  it('should return the same instance on multiple calls', () => {
-    const bridge1 = getDefaultBridge();
-    const bridge2 = getDefaultBridge();
-    expect(bridge1).toBe(bridge2);
+  it('should accept workerUrl in constructor', () => {
+    const bridge = new WorkerBridge({ workerUrl: 'data:,' });
+    expect(bridge).toBeInstanceOf(WorkerBridge);
   });
 });

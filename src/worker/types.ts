@@ -22,7 +22,12 @@ export interface WorkerResponse {
 
 // Specific message payloads
 export interface InitPayload {
-  // Future: configuration options
+  /**
+   * Custom DuckDB WASM bundles. When omitted, the worker falls back to
+   * `getJsDelivrBundles()`. Consumers on strict-CSP / offline deployments
+   * supply self-hosted bundles here.
+   */
+  bundles?: import('@duckdb/duckdb-wasm').DuckDBBundles;
 }
 
 export interface QueryPayload {

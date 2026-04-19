@@ -136,7 +136,7 @@ export {
 } from './core/Progress';
 
 // Data layer
-export { WorkerBridge, getDefaultBridge } from './data/WorkerBridge';
+export { WorkerBridge } from './data/WorkerBridge';
 export type { LoadOptions, WorkerBridgeOptions } from './data/WorkerBridge';
 
 // Query caching
@@ -172,10 +172,26 @@ export { statsKindForDataType } from './statistics/ColumnStatsTypes';
 export { formatStatValue, formatCount, formatDefaultStats } from './statistics/StatsFormatters';
 export { fetchIntervalStats } from './statistics/StatsComputer';
 
-// Visualization factory
+// Visualization registry (per-instance)
+export {
+  VisualizationRegistry,
+  defaultVisualizationRegistry,
+} from './visualizations/VisualizationRegistry';
+export type {
+  VisualizationRegistration,
+  VisualizationConstructor,
+} from './visualizations/VisualizationRegistry';
+export {
+  isNumericType,
+  isDateType,
+  isTimeType,
+  isCategoricalType,
+  needsVisualization,
+} from './visualizations/VisualizationRegistry';
+
+// Deprecated static wrapper — kept for a transitional release; forwards to
+// `defaultVisualizationRegistry`. Phase 4 will prune this from the public surface.
 export { VisualizationFactory } from './visualizations/VisualizationFactory';
-export type { VisualizationRegistration, VisualizationConstructor } from './visualizations/VisualizationFactory';
-export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './visualizations/VisualizationFactory';
 
 // Export
 // Export - CSV

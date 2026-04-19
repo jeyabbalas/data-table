@@ -8,6 +8,7 @@ import type {
   WorkerResponse,
   WorkerResponseType,
   ErrorPayload,
+  InitPayload,
   QueryPayload,
   LoadPayload,
   ExportPayload,
@@ -65,10 +66,12 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
 
   try {
     switch (type) {
-      case 'init':
-        await initializeDuckDB();
+      case 'init': {
+        const { bundles } = (payload as InitPayload) ?? {};
+        await initializeDuckDB(bundles);
         respond(id, 'result', { initialized: true });
         break;
+      }
 
       case 'query': {
         if (!isInitialized()) {

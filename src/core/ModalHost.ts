@@ -68,6 +68,15 @@ export interface ModalOptions {
    * the panel. Typical use: the anchor button that toggles the panel.
    */
   outsideClickIgnore?: Array<HTMLElement | string>;
+  /**
+   * Element whose `data-dt-color-scheme` attribute should be mirrored onto
+   * this modal/panel on open. Typically the owning table's `.dt-root`
+   * element. Body-portalled modals don't inherit the attribute via DOM
+   * ancestry, so copying keeps theming in sync. The copy is live: a
+   * MutationObserver watches the source and re-applies when the attribute
+   * changes while the modal is open.
+   */
+  colorSchemeSource?: HTMLElement;
 }
 
 export type ModalHostEvents = {
@@ -202,6 +211,8 @@ export class ModalHost {
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private backdropMousedownHandler: ((e: MouseEvent) => void) | null = null;
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private colorSchemeObserver: MutationObserver | null = null;
+  private hadColorSchemeAttr = false;
 
   /** Publicly readable by the scroll-lock carve-out logic. */
   dialogEl: HTMLElement | null = null;
@@ -265,6 +276,9 @@ export class ModalHost {
     this.keydownHandler = (e: KeyboardEvent) => this.handleKeydown(e);
     dialog.addEventListener('keydown', this.keydownHandler);
 
+    // Color-scheme inheritance for portalled modals.
+    this.setupColorSchemeMirror(opts);
+
     this._isOpen = true;
 
     // Initial focus.
@@ -323,6 +337,8 @@ export class ModalHost {
       this.outsideClickHandler = null;
     }
 
+    this.teardownColorSchemeMirror(opts);
+
     if (opts.mode === 'modal') releaseScrollLock();
 
     // Focus restore.
@@ -372,6 +388,49 @@ export class ModalHost {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  private setupColorSchemeMirror(opts: ModalOptions): void {
+    const source = opts.colorSchemeSource;
+    if (!source) return;
+    const target = opts.element;
+    // Capture whether the target already carried the attribute so we can
+    // restore the original state on close without clobbering non-library
+    // attributes set by the caller.
+    this.hadColorSchemeAttr = target.hasAttribute('data-dt-color-scheme');
+    this.applyColorSchemeFrom(source, target);
+
+    if (typeof MutationObserver === 'undefined') return;
+    this.colorSchemeObserver = new MutationObserver(() => {
+      if (this._isOpen) this.applyColorSchemeFrom(source, target);
+    });
+    this.colorSchemeObserver.observe(source, {
+      attributes: true,
+      attributeFilter: ['data-dt-color-scheme'],
+    });
+  }
+
+  private teardownColorSchemeMirror(opts: ModalOptions): void {
+    if (this.colorSchemeObserver) {
+      this.colorSchemeObserver.disconnect();
+      this.colorSchemeObserver = null;
+    }
+    if (opts.colorSchemeSource && !this.hadColorSchemeAttr) {
+      // Remove only if we added it; callers that pre-set the attribute keep theirs.
+      opts.element.removeAttribute('data-dt-color-scheme');
+    }
+    this.hadColorSchemeAttr = false;
+  }
+
+  private applyColorSchemeFrom(source: HTMLElement, target: HTMLElement): void {
+    const value = source.getAttribute('data-dt-color-scheme');
+    if (value === null) {
+      if (!this.hadColorSchemeAttr) {
+        target.removeAttribute('data-dt-color-scheme');
+      }
+    } else {
+      target.setAttribute('data-dt-color-scheme', value);
+    }
+  }
 
   private resolveInitialFocus(): HTMLElement | null {
     const opts = this.opts;

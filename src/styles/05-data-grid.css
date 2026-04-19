@@ -57,10 +57,14 @@
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Dark mode — pinned column demarcation line. */
 @media (prefers-color-scheme: dark) {
-  .dt-pinned-demarcation {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-pinned-demarcation {
     background: var(--dt-primary-alpha-30);
   }
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-pinned-demarcation {
+  background: var(--dt-primary-alpha-30);
 }
 
 /* ===========================================

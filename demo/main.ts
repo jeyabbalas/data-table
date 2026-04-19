@@ -11,6 +11,7 @@ import {
   VERSION,
   createDataTable,
   quoteIdentifier,
+  type ColorScheme,
   type DataTable,
 } from '../src/index';
 import {
@@ -35,8 +36,22 @@ const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
 const remountBtn = document.getElementById('remount-btn') as HTMLButtonElement;
+const themeRadios = Array.from(
+  document.querySelectorAll<HTMLInputElement>('input[name="theme"]'),
+);
 
 versionEl.textContent = VERSION;
+
+// Theme toggle: forwards to table.setColorScheme when the table exists,
+// otherwise seeds the initial colorScheme option for createDataTable.
+let currentScheme: ColorScheme = 'auto';
+for (const radio of themeRadios) {
+  radio.addEventListener('change', () => {
+    if (!radio.checked) return;
+    currentScheme = radio.value as ColorScheme;
+    table?.setColorScheme(currentScheme);
+  });
+}
 
 // ----- Session cache (demo-only; not a library responsibility) -----
 // Keeps a Parquet snapshot of the loaded table in IndexedDB so a page refresh
@@ -175,6 +190,7 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
         undoRedo: true,
         expressionFilter: true,
         visualizations: true,
+        colorScheme: currentScheme,
       });
       wireTableEvents(table);
       // Demo-only: expose the table for DevTools inspection of lifecycle,

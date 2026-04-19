@@ -26,6 +26,12 @@ export interface DerivedColumnModalOptions {
   editorFactory?: ExpressionEditorFactory;
   /** Called after a derived column is successfully created. */
   onCreated?: () => void;
+  /**
+   * Element to mirror `data-dt-color-scheme` from. The modal backdrop
+   * portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
+   * pass the `.dt-root` element here to keep it theme-synced.
+   */
+  colorSchemeSource?: HTMLElement;
 }
 
 export class DerivedColumnModal {
@@ -51,6 +57,7 @@ export class DerivedColumnModal {
   private readonly instanceId: string;
   private editorFactory?: ExpressionEditorFactory;
   private onCreated?: () => void;
+  private colorSchemeSource?: HTMLElement;
   private currentEditor: ExpressionEditor | null = null;
   private editorInputHandler: (() => void) | null = null;
   private isOpen = false;
@@ -69,6 +76,7 @@ export class DerivedColumnModal {
     this.instanceId = options?.instanceId ?? '';
     this.editorFactory = options?.editorFactory;
     this.onCreated = options?.onCreated;
+    this.colorSchemeSource = options?.colorSchemeSource;
     this.element = this.createElement();
   }
 
@@ -772,6 +780,7 @@ export class DerivedColumnModal {
       // CodeMirror autocomplete owns its own Escape — let it close first.
       escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
   }
 

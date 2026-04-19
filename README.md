@@ -101,7 +101,7 @@ Advanced consumers can also subscribe to signals on `table.state` directly
 ## Theming
 
 All colors, spacing, and typography are driven by CSS custom properties on
-both `:root` and `.dt-root`. Override globally:
+`:root`. Override globally:
 
 ```css
 :root {
@@ -128,32 +128,153 @@ any scoped ancestor — the TS-side edge-clamp measures the live width via
 </style>
 ```
 
-Dark mode uses `@media (prefers-color-scheme: dark)` automatically; override
-the dark-mode variables the same way.
+### Light / dark mode
 
-### Stacking ladder
+By default the library follows the OS `prefers-color-scheme` media query.
+Pass `colorScheme` to `createDataTable` to force a theme per instance, or
+call `table.setColorScheme(...)` at runtime to respond to your own theme
+toggle:
 
-Every `z-index` in the library goes through a `--dt-z-*` variable, so you can
-interleave your own layers without hunting through the stylesheet. Defaults:
+```ts
+const table = await createDataTable({
+  container,
+  source,
+  colorScheme: 'dark',           // 'light' | 'dark' | 'auto' (default)
+});
 
-| Variable                 | Default | Layer                                                  |
-|--------------------------|--------:|--------------------------------------------------------|
-| `--dt-z-table-body`      | `1`     | Table body cells (focused cells, resize handle)        |
-| `--dt-z-pinned-col`      | `20`    | Sticky pinned-column base; JS adds per-pin offsets     |
-| `--dt-z-header`          | `21`    | Column header row + hidden-columns gutter              |
-| `--dt-z-action-panel`    | `30`    | Per-column action panel popovers                       |
-| `--dt-z-filter-bar`      | `40`    | Filter bar at the top of the table                     |
-| `--dt-z-floating-panel`  | `50`    | In-page panels (filter, preset, derived-edit)          |
-| `--dt-z-autocomplete`    | `60`    | CodeMirror autocomplete tooltip (portalled to `<body>`)|
-| `--dt-z-modal`           | `1000`  | Full-screen modals + backdrops                         |
-| `--dt-z-modal-stack-step`| `2`     | Step added per stacked modal/panel so two-at-once dialogs layer predictably |
+myThemeToggle.addEventListener('change', (e) => {
+  table.setColorScheme(e.target.value); // 'light' | 'dark' | 'auto'
+});
+```
+
+`'light'` / `'dark'` set `data-dt-color-scheme="..."` on the `.dt-root`
+element (overriding the OS preference for that instance); `'auto'` clears
+the attribute and defers to `prefers-color-scheme`. Body-portalled modals
+(export dialog, SQL filter modal, derived-column modal) observe the
+attribute via `MutationObserver` so they stay in sync when the theme flips
+while a modal is open.
+
+### Variable reference
+
+<!-- dt-vars:start -->
+
+Every CSS custom property the library reads. All default to light-mode
+values declared on `:root`; dark-mode variants apply automatically under
+`prefers-color-scheme: dark` (unless the instance carries
+`data-dt-color-scheme="light"`) and unconditionally under
+`data-dt-color-scheme="dark"`.
+
+#### Palette
+
+| Variable | Role |
+|---|---|
+| `--dt-primary` | Accent colour for focused UI, buttons, sort indicators. |
+| `--dt-primary-hover` | Hover state for `--dt-primary`. |
+| `--dt-primary-light` | Light wash behind active rows/filters. |
+| `--dt-primary-lighter` | Lighter wash for selected-row backgrounds. |
+| `--dt-primary-alpha-10` | 10% alpha of `--dt-primary` (derived via `color-mix`). |
+| `--dt-primary-alpha-20` | 20% alpha of `--dt-primary`. |
+| `--dt-primary-alpha-30` | 30% alpha of `--dt-primary`. |
+| `--dt-primary-alpha-50` | 50% alpha of `--dt-primary`. |
+| `--dt-accent` | Secondary accent (null bars, warning chrome). |
+| `--dt-accent-hover` | Hover state for `--dt-accent`. |
+| `--dt-accent-soft` | Soft translucent version of `--dt-accent`. |
+| `--dt-neutral` | Neutral slate for ValueCounts "Other" category. |
+| `--dt-neutral-hover` | Hover state for `--dt-neutral`. |
+| `--dt-neutral-soft` | Soft translucent version of `--dt-neutral`. |
+| `--dt-success` | Success indicator colour (e.g. validated SQL). |
+
+#### Surfaces
+
+| Variable | Role |
+|---|---|
+| `--dt-bg` | Primary table background. |
+| `--dt-bg-secondary` | Secondary background (header, filter bar). |
+| `--dt-bg-tertiary` | Tertiary background (hover rows, input fills). |
+| `--dt-border` | Primary border colour. |
+| `--dt-border-light` | Subtle border for nested components. |
+| `--dt-backdrop` | Modal scrim (semi-transparent). |
+
+#### Text & icons
+
+| Variable | Role |
+|---|---|
+| `--dt-text` | Default text colour. |
+| `--dt-text-secondary` | Secondary / caption text. |
+| `--dt-text-tertiary` | Tertiary / placeholder text. |
+| `--dt-arrow-default` | Idle colour for sort/expand icons. |
+| `--dt-arrow-hover` | Hover colour for sort/expand icons. |
+
+#### Error / validation
+
+| Variable | Role |
+|---|---|
+| `--dt-error` | Base error colour. |
+| `--dt-error-dark` | Darker error accent (button hover, text). |
+| `--dt-error-darker` | Strongest error accent. |
+| `--dt-error-soft` | Soft translucent error wash. |
+| `--dt-error-bg` | Error surface background (banners, panels). |
+| `--dt-error-border-soft` | Soft border for error banners. |
+| `--dt-error-text-strong` | Strong error text for dark-mode legibility. |
+| `--dt-on-error` | Foreground on error-coloured surfaces. |
+
+#### Sizing
+
+| Variable | Default | Role |
+|---|--:|---|
+| `--dt-header-height` | `120px` | Column header area height (room for visualizations). |
+| `--dt-row-height` | `32px` | Virtual-scroller row height. |
+| `--dt-col-width` | `200px` | Default column width. |
+| `--dt-scrollbar-width` | `17px` | Reserved gutter for the body's vertical scrollbar. |
+| `--dt-panel-width` | `320px` | Floating-panel (filter / preset / derived-edit) width. |
+| `--dt-radius` | `8px` | Default border radius. |
+| `--dt-radius-sm` | `4px` | Small border radius (buttons, chips). |
+
+#### Typography
+
+| Variable | Role |
+|---|---|
+| `--dt-font-family` | Font family for all library chrome. |
+| `--dt-font-size` | Base font size. |
+| `--dt-font-size-sm` | Small font size (filter chips, hints). |
+| `--dt-font-size-xs` | Extra-small font size (stats captions). |
+
+#### Effects
+
+| Variable | Role |
+|---|---|
+| `--dt-transition` | Shared transition timing (`0.15s ease`). |
+| `--dt-shadow-sm` | Small elevation shadow. |
+| `--dt-shadow-md` | Medium elevation shadow (panels, modals). |
+
+#### Syntax highlighting
+
+| Variable | Role |
+|---|---|
+| `--dt-syntax-string` | String literals in the SQL editor. |
+| `--dt-syntax-type` | Type keywords in the SQL editor. |
+
+#### Stacking ladder
+
+Every `z-index` in the library goes through a `--dt-z-*` variable, so you
+can interleave your own layers without hunting through the stylesheet.
+Defaults:
+
+| Variable | Default | Layer |
+|---|--:|---|
+| `--dt-z-table-body` | `1` | Table body cells (focused cells, resize handle). |
+| `--dt-z-pinned-col` | `20` | Sticky pinned-column base; JS adds per-pin offsets. |
+| `--dt-z-header` | `21` | Column header row + hidden-columns gutter. |
+| `--dt-z-action-panel` | `30` | Per-column action panel popovers. |
+| `--dt-z-filter-bar` | `40` | Filter bar at the top of the table. |
+| `--dt-z-floating-panel` | `50` | In-page panels (filter, preset, derived-edit). |
+| `--dt-z-autocomplete` | `60` | CodeMirror autocomplete tooltip (portalled to `<body>`). |
+| `--dt-z-modal` | `1000` | Full-screen modals + backdrops. |
+| `--dt-z-modal-stack-step` | `2` | Step added per stacked modal/panel so two-at-once dialogs layer predictably. |
 
 Simultaneously-open modals or panels receive `--dt-z-{modal,floating-panel}
 + stackIndex * --dt-z-modal-stack-step`, so they never collide at the same
-layer. Override `--dt-z-modal-stack-step` to widen or narrow that step.
-
-Gaps are ≥ 10 so you can slot host-app UI between layers. To sit the whole
-table above a host `z-index: 3000` drawer, override the top of the ladder:
+layer. Gaps are ≥ 10 so you can slot host-app UI between layers:
 
 ```css
 :root {
@@ -165,6 +286,14 @@ table above a host `z-index: 3000` drawer, override the top of the ladder:
 
 Pinned-column stacking is computed as `--dt-z-pinned-col + pinOrderOffset`,
 so overriding `--dt-z-pinned-col` shifts the whole pinned group together.
+
+#### Internal
+
+| Variable | Role |
+|---|---|
+| `--dt-stylesheet-loaded` | Library-internal marker used by `createDataTable()` to warn when the stylesheet import is missing. Do not override. |
+
+<!-- dt-vars:end -->
 
 ## CSS isolation
 

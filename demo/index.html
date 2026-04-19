@@ -14,6 +14,12 @@
     <div class="status-bar">
       <span class="version">v<span id="version">...</span></span>
       <span id="init-status" class="init-status">Initializing...</span>
+      <fieldset class="theme-toggle" aria-label="Theme">
+        <legend class="sr-only">Theme</legend>
+        <label><input type="radio" name="theme" value="light"> Light</label>
+        <label><input type="radio" name="theme" value="dark"> Dark</label>
+        <label><input type="radio" name="theme" value="auto" checked> Auto</label>
+      </fieldset>
     </div>
     <p class="test-info">
       Explore tabular data entirely in the browser &mdash; no server required.

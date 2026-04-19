@@ -43,6 +43,12 @@ const LIVE_REGION_STRINGS = {
 };
 
 /**
+ * Light/dark theme selector accepted by {@link TableContainerOptions.colorScheme}
+ * and {@link TableContainer.setColorScheme}.
+ */
+export type ContainerColorScheme = 'light' | 'dark' | 'auto';
+
+/**
  * Options for configuring the TableContainer
  */
 export interface TableContainerOptions {
@@ -77,6 +83,12 @@ export interface TableContainerOptions {
    * of at the top of the document.
    */
   portalTarget?: HTMLElement;
+  /**
+   * Initial light/dark theme. `'auto'` (default) follows the OS
+   * `prefers-color-scheme`; `'light'` / `'dark'` force the theme by writing
+   * `data-dt-color-scheme` onto the root element.
+   */
+  colorScheme?: ContainerColorScheme;
 }
 
 /**
@@ -169,6 +181,7 @@ export class TableContainer {
       showExpressionFilter: true,
       presetManager: undefined as unknown as FilterPresetManager,
       portalTarget: undefined as unknown as HTMLElement,
+      colorScheme: 'auto',
       ...options,
     };
     if (!this.resolvedOptions.instanceId) {
@@ -237,6 +250,12 @@ export class TableContainer {
 
       this.wrapperElement = document.createElement('div');
       this.wrapperElement.className = `${this.resolvedOptions.classPrefix}-table-wrapper`;
+      // Mirror the color-scheme attribute onto the wrapper so the add-column
+      // button (a sibling of `.dt-root`) inherits the attribute-scoped vars.
+      this.applyColorSchemeAttribute(
+        this.wrapperElement,
+        this.resolvedOptions.colorScheme,
+      );
       this.wrapperElement.appendChild(this.element);
       this.wrapperElement.appendChild(this.addColumnButton.getElement());
       this.container.appendChild(this.wrapperElement);
@@ -299,7 +318,51 @@ export class TableContainer {
     el.setAttribute('aria-rowcount', '0');
     el.setAttribute('aria-colcount', '0');
     el.setAttribute('tabindex', '0');
+    this.applyColorSchemeAttribute(el, this.resolvedOptions.colorScheme);
     return el;
+  }
+
+  /**
+   * Write (or clear) the `data-dt-color-scheme` attribute for a given scheme.
+   * `'auto'` removes the attribute so CSS `prefers-color-scheme` governs;
+   * `'light'` / `'dark'` set it to force the theme regardless of OS preference.
+   */
+  private applyColorSchemeAttribute(el: HTMLElement, scheme: ContainerColorScheme): void {
+    if (scheme === 'auto') {
+      el.removeAttribute('data-dt-color-scheme');
+    } else {
+      el.setAttribute('data-dt-color-scheme', scheme);
+    }
+  }
+
+  /**
+   * Apply the color-scheme attribute to `.dt-root` and, when present, the
+   * flex wrapper that hosts the add-column button as a sibling. The wrapper
+   * copy exists so the `+` button inherits the attribute-scoped CSS
+   * variables — without it the sibling stays on the light defaults.
+   */
+  private applyColorSchemeToTargets(scheme: ContainerColorScheme): void {
+    this.applyColorSchemeAttribute(this.element, scheme);
+    if (this.wrapperElement) {
+      this.applyColorSchemeAttribute(this.wrapperElement, scheme);
+    }
+  }
+
+  /**
+   * Switch the light/dark theme for this container at runtime. Updates the
+   * `data-dt-color-scheme` attribute on the root element; open body-portalled
+   * modals observe the attribute via MutationObserver (installed by ModalHost
+   * when they were opened) and re-sync automatically.
+   */
+  setColorScheme(scheme: ContainerColorScheme): void {
+    if (this.destroyed) return;
+    this.resolvedOptions.colorScheme = scheme;
+    this.applyColorSchemeToTargets(scheme);
+  }
+
+  /** Returns the currently-applied color scheme. */
+  getColorScheme(): ContainerColorScheme {
+    return this.resolvedOptions.colorScheme;
   }
 
   /**
@@ -1015,6 +1078,7 @@ export class TableContainer {
     if (!this.filterPanel) {
       this.filterPanel = new FilterPanel(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        colorSchemeSource: this.element,
       });
       this.element.appendChild(this.filterPanel.getElement());
     }
@@ -1045,6 +1109,7 @@ export class TableContainer {
       this.derivedEditPanel = new DerivedColumnEditPanel(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
         editorFactory: this.resolvedOptions.editorFactory,
+        colorSchemeSource: this.element,
       });
       this.element.appendChild(this.derivedEditPanel.getElement());
     }
@@ -1072,6 +1137,7 @@ export class TableContainer {
         instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
         onCreated: () => this.scrollToRightEnd(),
+        colorSchemeSource: this.element,
       });
       // Mount in the configured portal target (defaults to <body>). Fixed-
       // position modals need a root that isn't inside a transformed/filtered
@@ -1100,6 +1166,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
+        colorSchemeSource: this.element,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
@@ -1125,6 +1192,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         instanceId: this.resolvedOptions.instanceId,
         editorFactory: this.resolvedOptions.editorFactory,
+        colorSchemeSource: this.element,
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
@@ -1151,7 +1219,10 @@ export class TableContainer {
         this.resolvedOptions.presetManager,
         this.state,
         this.actions,
-        { classPrefix: this.resolvedOptions.classPrefix }
+        {
+          classPrefix: this.resolvedOptions.classPrefix,
+          colorSchemeSource: this.element,
+        }
       );
       this.element.appendChild(this.presetPanel.getElement());
     }

@@ -32,12 +32,13 @@
   "scripts": {
     "dev": "vite",
     "dev:demo": "vite --config vite.demo.config.ts",
-    "build": "tsc --noEmit && vite build && tsc -p tsconfig.build.json",
+    "build": "npm run check:css-vars && tsc --noEmit && vite build && tsc -p tsconfig.build.json",
     "build:demo": "vite build --config vite.demo.config.ts",
     "preview": "vite preview",
     "preview:demo": "vite preview --config vite.demo.config.ts",
     "test": "vitest",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "check:css-vars": "node scripts/check-css-vars.mjs"
   },
   "keywords": [
     "data-table",

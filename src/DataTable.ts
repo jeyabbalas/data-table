@@ -80,6 +80,35 @@ import { ExportDialog } from './export/ExportDialog';
 let stylesheetWarningEmitted = false;
 
 /**
+ * Programmatic light/dark theme selector for a {@link DataTable} instance.
+ *
+ * - `'auto'` (default) — follow the OS `prefers-color-scheme` media query.
+ * - `'light'` / `'dark'` — force the theme regardless of OS preference.
+ *
+ * Applied via the `data-dt-color-scheme` attribute on the `.dt-root` element;
+ * body-portalled modals copy the attribute on open so their styling stays in
+ * sync. See the Theming section of the README for the full `--dt-*` variable
+ * reference.
+ */
+export type ColorScheme = 'light' | 'dark' | 'auto';
+
+const VALID_COLOR_SCHEMES: ReadonlyArray<ColorScheme> = ['light', 'dark', 'auto'];
+
+function validateColorScheme(value: unknown, origin: string): ColorScheme {
+  if (value === undefined) return 'auto';
+  if (
+    typeof value === 'string' &&
+    (VALID_COLOR_SCHEMES as ReadonlyArray<string>).includes(value)
+  ) {
+    return value as ColorScheme;
+  }
+  throw new ConfigurationError(
+    `${origin}: invalid colorScheme. Expected 'light', 'dark', or 'auto'.`,
+    { code: 'OPTIONS_INVALID', details: { received: value } },
+  );
+}
+
+/**
  * Options accepted by {@link createDataTable}. All feature toggles default
  * to `true`; pass `false` (or a configuration object) to customize.
  */
@@ -154,6 +183,14 @@ export interface CreateDataTableOptions {
   rowHeight?: number;
   /** Header height in pixels. Default: 120. */
   headerHeight?: number;
+
+  /**
+   * Initial light/dark theme selector. Defaults to `'auto'` (follows
+   * `prefers-color-scheme`). Pass `'light'` or `'dark'` to force a theme per
+   * instance, or call {@link DataTable.setColorScheme} later to switch at
+   * runtime.
+   */
+  colorScheme?: ColorScheme;
 }
 
 /**
@@ -229,6 +266,20 @@ export interface DataTable {
    * `PERSISTENCE_UNAVAILABLE` to distinguish).
    */
   isPersistenceActive(): boolean;
+
+  /**
+   * Switch the light/dark theme at runtime. `'light'` / `'dark'` force the
+   * corresponding theme; `'auto'` clears the override and lets
+   * `prefers-color-scheme` govern again. Open body-portalled modals re-sync
+   * automatically via their mounted `data-dt-color-scheme` attribute.
+   *
+   * @throws {@link ConfigurationError} — if `scheme` is not `'light' | 'dark' | 'auto'`.
+   * @throws {@link DestroyedError} — if the table has been destroyed.
+   */
+  setColorScheme(scheme: ColorScheme): void;
+
+  /** The currently-applied color scheme. Reflects the last {@link setColorScheme} call (or the initial option). */
+  getColorScheme(): ColorScheme;
 }
 
 type VisualizationType =
@@ -272,6 +323,9 @@ async function normalizeSource(
 export async function createDataTable(
   opts: CreateDataTableOptions
 ): Promise<DataTable> {
+  // -------- Options validation --------
+  let colorScheme = validateColorScheme(opts.colorScheme, 'createDataTable');
+
   // -------- Worker bridge --------
   const ownsBridge = !opts.bridge;
   const bridge =
@@ -365,6 +419,7 @@ export async function createDataTable(
       editorFactory: opts.editorFactory,
       presetManager: presetManager ?? undefined,
       portalTarget: opts.portalTarget,
+      colorScheme,
     }
   );
 
@@ -633,6 +688,7 @@ export async function createDataTable(
       exportDialog = new ExportDialog(state, bridge, {
         classPrefix: opts.classPrefix ?? 'dt',
         instanceId,
+        colorSchemeSource: tableContainer.getElement(),
       });
       tableContainer.getPortalTarget().appendChild(exportDialog.getElement());
     }
@@ -943,6 +999,13 @@ export async function createDataTable(
     destroy,
     isDestroyed: () => destroyed,
     isPersistenceActive: () => sessionStore !== null,
+    setColorScheme(scheme) {
+      throwIfDestroyed('setColorScheme');
+      const next = validateColorScheme(scheme, 'setColorScheme');
+      colorScheme = next;
+      tableContainer.setColorScheme(next);
+    },
+    getColorScheme: () => colorScheme,
   };
 
   return dataTable;

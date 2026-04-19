@@ -17,6 +17,12 @@ import { FilterPanelField } from './FilterPanelField';
 export interface FilterPanelOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
+  /**
+   * Element to mirror `data-dt-color-scheme` from (typically the owning
+   * table's `.dt-root`). Keeps the panel's theming in sync when the table's
+   * color scheme changes at runtime via {@link DataTable.setColorScheme}.
+   */
+  colorSchemeSource?: HTMLElement;
 }
 
 /**
@@ -33,6 +39,7 @@ export class FilterPanel {
   private isOpen = false;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly colorSchemeSource?: HTMLElement;
 
   // Focus trap / Escape / outside-click delegated to ModalHost.
   private modalHost = new ModalHost();
@@ -46,6 +53,7 @@ export class FilterPanel {
     options: FilterPanelOptions = {}
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.colorSchemeSource = options.colorSchemeSource;
     this.element = this.createElement();
     this.body = this.element.querySelector(`.${this.prefix}-filter-panel-body`)!;
     this.titleEl = this.element.querySelector(`.${this.prefix}-filter-panel-title`)!;
@@ -212,6 +220,7 @@ export class FilterPanel {
       element: this.element,
       outsideClickIgnore: [`.${this.prefix}-col-filter-btn`],
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
   }
 

@@ -24,6 +24,12 @@ export interface SQLFilterModalOptions {
   instanceId?: string;
   /** Custom editor factory. If omitted, uses CodeMirrorExpressionEditor. */
   editorFactory?: ExpressionEditorFactory;
+  /**
+   * Element to mirror `data-dt-color-scheme` from. The modal backdrop
+   * portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
+   * pass the `.dt-root` element here to keep it theme-synced.
+   */
+  colorSchemeSource?: HTMLElement;
 }
 
 export class SQLFilterModal {
@@ -42,6 +48,7 @@ export class SQLFilterModal {
   private readonly prefix: string;
   private readonly instanceId: string;
   private editorFactory?: ExpressionEditorFactory;
+  private colorSchemeSource?: HTMLElement;
   private currentEditor: ExpressionEditor | null = null;
   private editorInputHandler: (() => void) | null = null;
   private isOpen = false;
@@ -63,6 +70,7 @@ export class SQLFilterModal {
     this.prefix = options?.classPrefix ?? 'dt';
     this.instanceId = options?.instanceId ?? '';
     this.editorFactory = options?.editorFactory;
+    this.colorSchemeSource = options?.colorSchemeSource;
     this.element = this.createElement();
   }
 
@@ -467,6 +475,7 @@ export class SQLFilterModal {
       // close the dialog when autocomplete is consuming the key.
       escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
 
     if (afterOpen) afterOpen();

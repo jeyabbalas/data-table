@@ -23,6 +23,7 @@ import {
   ExportError,
   QueryError,
 } from '../core/errors';
+import { resolveScope } from './palette';
 
 /**
  * Manages shared window-level event listeners for all BaseVisualization instances.
@@ -141,6 +142,7 @@ export abstract class BaseVisualization {
   private boundClick: (e: MouseEvent) => void;
   private boundMouseDown: (e: MouseEvent) => void;
   private resizeObserver: ResizeObserver;
+  private colorSchemeObserver: MutationObserver | null = null;
 
   constructor(
     protected container: HTMLElement,
@@ -178,12 +180,37 @@ export abstract class BaseVisualization {
     this.resizeObserver = new ResizeObserver(this.handleResize.bind(this));
     this.resizeObserver.observe(container);
 
+    // Watch the owning `.dt-root` for runtime dark/light toggles so the
+    // canvas repaints with freshly-resolved CSS variables. Without this the
+    // brush overlay and selection highlights keep their pre-toggle rgba.
+    this.setupColorSchemeWatcher();
+
     // Register with shared window listener manager
     WindowListenerManager.register(this);
 
     // Initial size setup and interaction
     this.updateSize();
     this.setupInteraction();
+  }
+
+  /**
+   * Install a MutationObserver on the nearest `.dt-root` that calls `render()`
+   * whenever `data-dt-color-scheme` flips. Palette resolution happens inside
+   * `render()`, so the single re-render is enough to pick up the new theme.
+   */
+  private setupColorSchemeWatcher(): void {
+    if (typeof MutationObserver === 'undefined') return;
+    const scope = resolveScope(this.canvas);
+    // `resolveScope` falls back to the canvas itself when no `.dt-root`
+    // ancestor exists; that fallback has no attribute to watch, so skip it.
+    if (scope === (this.canvas as unknown as HTMLElement)) return;
+    this.colorSchemeObserver = new MutationObserver(() => {
+      if (!this.destroyed) this.render();
+    });
+    this.colorSchemeObserver.observe(scope, {
+      attributes: true,
+      attributeFilter: ['data-dt-color-scheme'],
+    });
   }
 
   // =========================================
@@ -435,6 +462,10 @@ export abstract class BaseVisualization {
 
     // Stop observing resize (optional chaining in case constructor failed partially)
     this.resizeObserver?.disconnect();
+
+    // Stop watching the root for color-scheme flips
+    this.colorSchemeObserver?.disconnect();
+    this.colorSchemeObserver = null;
 
     // Remove canvas from DOM
     if (this.canvas.parentNode) {

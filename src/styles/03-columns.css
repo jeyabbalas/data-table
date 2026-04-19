@@ -179,12 +179,17 @@
   pointer-events: none;
 }
 
-/* Dark mode adjustments for drag handle */
+/* Dark mode adjustments for drag handle. Dual-scoped: OS-dark unless the
+   subtree opts out, OR explicit `data-dt-color-scheme="dark"`. */
 @media (prefers-color-scheme: dark) {
-  .dt-col-drag-handle:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-drag-handle:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.1);
   }
+}
+[data-dt-color-scheme="dark"] .dt-col-drag-handle:hover,
+.dt-root[data-dt-color-scheme="dark"] .dt-col-drag-handle:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ===========================================
@@ -239,16 +244,24 @@
   fill: currentColor;
 }
 
-/* Dark mode adjustments for action buttons */
+/* Dark mode adjustments for action buttons. */
 @media (prefers-color-scheme: dark) {
-  .dt-col-action-btn:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-action-btn:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .dt-col-action-btn--active:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-action-btn--active:hover {
     background: var(--dt-primary-alpha-20);
   }
+}
+[data-dt-color-scheme="dark"] .dt-col-action-btn:hover,
+.dt-root[data-dt-color-scheme="dark"] .dt-col-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+[data-dt-color-scheme="dark"] .dt-col-action-btn--active:hover,
+.dt-root[data-dt-color-scheme="dark"] .dt-col-action-btn--active:hover {
+  background: var(--dt-primary-alpha-20);
 }
 
 .dt-col-action-btn--disabled {
@@ -385,6 +398,11 @@
   border-radius: var(--dt-radius);
   box-shadow: 0 4px 16px var(--dt-shadow-md);
   font-family: var(--dt-font-family);
+  /* Explicit `color` so descendants (notably CodeMirror's `.cm-content`,
+     which otherwise picks up OS canvas-text via `color-scheme`) inherit
+     a flipping token instead of freezing on the OS default. Modals set
+     the equivalent on their dialog element. */
+  color: var(--dt-text);
 }
 
 /* Header */
@@ -707,21 +725,37 @@
   color: var(--dt-text);
 }
 
-/* Dark mode adjustments */
+/* Dark mode — autocomplete tooltip. Portalled to <body>; the attribute is
+   not copied onto the tooltip (it's a CodeMirror tooltip, not ModalHost-
+   managed), so attribute-based scoping applies only if an ancestor carries
+   the attribute. OS dark mode still works via the bare `.cm-tooltip-autocomplete`
+   selector using CSS vars cascaded from `:root`. */
 @media (prefers-color-scheme: dark) {
   .dt-cm-autocomplete.cm-tooltip-autocomplete {
     box-shadow: 0 4px 12px var(--dt-shadow-md);
   }
 }
+[data-dt-color-scheme="dark"] .dt-cm-autocomplete.cm-tooltip-autocomplete {
+  box-shadow: 0 4px 12px var(--dt-shadow-md);
+}
 
+/* Dark mode — derived-column edit panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-derived-edit-panel {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-derived-edit-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
-  .dt-derived-edit-close:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-derived-edit-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-derived-edit-panel,
+[data-dt-color-scheme="dark"] .dt-derived-edit-panel {
+  box-shadow: 0 4px 16px var(--dt-shadow-md);
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-derived-edit-close:hover,
+[data-dt-color-scheme="dark"] .dt-derived-edit-close:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ===========================================

@@ -98,10 +98,18 @@ h2 {
 
 /* ===========================================
    Form Elements
-   =========================================== */
+   ===========================================
 
-input[type="text"],
-input[type="file"] {
+   These selectors are scoped to the demo-owned inputs (`#url-input` and
+   `#file-input`) on purpose. A generic `input[type="text"]` selector
+   outranks the library's `.dt-filter-input` class by specificity
+   ((0,1,1) vs (0,1,0)) and was overriding the library's dark/light
+   toggle on every modal input — caret, background, border stuck on the
+   demo-hardcoded values. Keep future demo form styling ID-scoped so
+   nothing bleeds into library widgets. */
+
+#url-input,
+#file-input {
   padding: 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -111,14 +119,14 @@ input[type="file"] {
 }
 
 @media (prefers-color-scheme: dark) {
-  input[type="text"],
-  input[type="file"] {
+  #url-input,
+  #file-input {
     background: #334155;
     border-color: #475569;
     color: #f1f5f9;
   }
 
-  input[type="text"]::placeholder {
+  #url-input::placeholder {
     color: #94a3b8;
   }
 }
@@ -181,6 +189,40 @@ button:disabled {
 
 .status-bar .init-status {
   font-weight: 500;
+}
+
+/* Theme toggle (Light / Dark / Auto) — demo-only chrome for Phase 7. */
+.theme-toggle {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.theme-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  cursor: pointer;
+}
+
+.theme-toggle input[type='radio'] {
+  margin: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .init-status--success {
@@ -321,8 +363,8 @@ button:disabled {
     height: 65vh;
   }
 
-  input[type="text"],
-  input[type="file"] {
+  #url-input,
+  #file-input {
     min-width: 0;
   }
 

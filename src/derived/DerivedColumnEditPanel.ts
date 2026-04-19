@@ -17,6 +17,8 @@ export interface DerivedColumnEditPanelOptions {
   classPrefix?: string;
   /** Custom editor factory. If omitted, uses DefaultExpressionEditor. */
   editorFactory?: ExpressionEditorFactory;
+  /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
+  colorSchemeSource?: HTMLElement;
 }
 
 export class DerivedColumnEditPanel {
@@ -36,6 +38,7 @@ export class DerivedColumnEditPanel {
 
   private prefix: string;
   private editorFactory?: ExpressionEditorFactory;
+  private colorSchemeSource?: HTMLElement;
   private currentEditor: ExpressionEditor | null = null;
   private currentColumn: string | null = null;
   private currentDef: DerivedColumnDef | null = null;
@@ -57,6 +60,7 @@ export class DerivedColumnEditPanel {
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.editorFactory = options?.editorFactory;
+    this.colorSchemeSource = options?.colorSchemeSource;
 
     // Build DOM
     this.element = this.createElement();
@@ -460,6 +464,7 @@ export class DerivedColumnEditPanel {
       // editor when editing a derived expression column.
       initialFocus: this.nameInput,
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
   }
 

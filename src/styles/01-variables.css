@@ -21,7 +21,7 @@
    CSS Custom Properties (Theme Variables)
    ===========================================
 
-   Scoping: variables are declared on `:root` only. CSS cascade takes care
+   Scoping: light defaults are declared on `:root`. CSS cascade takes care
    of everything else:
    - Elements inside `.dt-root` inherit from `:root` through the DOM.
    - Body-portalled modals (derived column, SQL filter, export dialog,
@@ -37,6 +37,13 @@
    Do NOT redeclare these variables on `.dt-root`: that would shadow
    `:root` overrides for everything inside the table.
 
+   Dark mode is dual-scoped: it applies via `prefers-color-scheme: dark`
+   unless an instance explicitly carries `data-dt-color-scheme="light"`,
+   and it applies unconditionally when an element (or ancestor) carries
+   `data-dt-color-scheme="dark"`. The attribute is set by `createDataTable`
+   on the `.dt-root` element and is copied onto body-portalled modal roots
+   by `ModalHost` so portalled content stays in sync.
+
    Stacking ladder. All z-indices in this file go through `--dt-z-*`
    variables (table body → pinned cols → header → action panels →
    filter bar → floating panels → autocomplete → modals; gaps of ≥ 10
@@ -48,6 +55,13 @@
    =========================================== */
 
 :root {
+  /* Native form-control chrome (caret, selection highlight, autofill,
+     scrollbars) follows this keyword. Light default here; the dark-mode
+     blocks below flip it alongside the `--dt-*` variables so inputs,
+     textareas and selects render consistently in both schemes — including
+     inside body-portalled modals that carry the copied attribute. */
+  color-scheme: light;
+
   /* Load marker. `createDataTable()` reads this to detect a missing
      stylesheet import and warn the consumer. Do not remove. */
   --dt-stylesheet-loaded: 1;
@@ -147,9 +161,18 @@
   --dt-panel-width: 320px;
 }
 
-/* Dark mode - automatic based on system preference */
+/* Dark mode — two triggers. See header comment for the full model.
+   (1) @media prefers-color-scheme: dark — applies everywhere under :root
+       unless a descendant subtree opts out via `data-dt-color-scheme="light"`.
+   (2) `[data-dt-color-scheme="dark"]` — explicit per-instance opt-in; wins
+       in OS light mode and keeps body-portalled modals in dark when their
+       owning table forces dark. Duplicated variable blocks are intentional
+       (CSS has no mixins). Keep these in sync with the `:root` light block. */
+
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
+
     /* Primary colors - slightly lighter for dark mode */
     --dt-primary: #3b82f6;
     --dt-primary-hover: #60a5fa;
@@ -204,5 +227,115 @@
        are derived via color-mix() from their base tokens; they do not need redeclaration
        because the base tokens are redeclared above. */
   }
+
+  /* Restore light tokens for subtrees that explicitly opt out of OS dark. */
+  [data-dt-color-scheme="light"] {
+    color-scheme: light;
+
+    /* Primary colors */
+    --dt-primary: #2563eb;
+    --dt-primary-hover: #1d4ed8;
+    --dt-primary-light: #eff6ff;
+    --dt-primary-lighter: #dbeafe;
+
+    /* Neutral colors */
+    --dt-bg: #ffffff;
+    --dt-bg-secondary: #f9fafb;
+    --dt-bg-tertiary: #f3f4f6;
+    --dt-border: #e5e7eb;
+    --dt-border-light: #f3f4f6;
+
+    /* Text colors */
+    --dt-text: #111827;
+    --dt-text-secondary: #6b7280;
+    --dt-text-tertiary: #9ca3af;
+
+    /* Sort arrow colors */
+    --dt-arrow-default: #d1d5db;
+    --dt-arrow-hover: #9ca3af;
+
+    /* Semantic colors */
+    --dt-success: #22c55e;
+    --dt-error: #ef4444;
+    --dt-error-dark: #dc2626;
+
+    /* Accent family */
+    --dt-accent: #f59e0b;
+    --dt-accent-hover: #d97706;
+
+    /* Neutral family */
+    --dt-neutral: #94a3b8;
+    --dt-neutral-hover: #64748b;
+
+    /* Error chrome */
+    --dt-error-darker: #b91c1c;
+    --dt-error-bg: #fef2f2;
+    --dt-error-border-soft: #fecaca;
+    --dt-error-text-strong: #7f1d1d;
+
+    /* Modal scrim + shadows */
+    --dt-backdrop: rgba(0, 0, 0, 0.4);
+    --dt-shadow-sm: rgba(0, 0, 0, 0.06);
+    --dt-shadow-md: rgba(0, 0, 0, 0.12);
+
+    /* Syntax-highlighting tokens */
+    --dt-syntax-string: #16a34a;
+    --dt-syntax-type: #9333ea;
+  }
+}
+
+/* Explicit dark opt-in — applies regardless of OS preference. */
+[data-dt-color-scheme="dark"] {
+  color-scheme: dark;
+
+  /* Primary colors - slightly lighter for dark mode */
+  --dt-primary: #3b82f6;
+  --dt-primary-hover: #60a5fa;
+  --dt-primary-light: #1e3a5f;
+  --dt-primary-lighter: #1e40af;
+
+  /* Neutral colors - inverted */
+  --dt-bg: #111827;
+  --dt-bg-secondary: #1f2937;
+  --dt-bg-tertiary: #374151;
+  --dt-border: #374151;
+  --dt-border-light: #1f2937;
+
+  /* Text colors - inverted */
+  --dt-text: #f9fafb;
+  --dt-text-secondary: #d1d5db;
+  --dt-text-tertiary: #9ca3af;
+
+  /* Sort arrow colors */
+  --dt-arrow-default: #4b5563;
+  --dt-arrow-hover: #6b7280;
+
+  /* Semantic colors */
+  --dt-success: #4ade80;
+  --dt-error: #f87171;
+  --dt-error-dark: #ef4444;
+
+  /* Accent family — lighter amber for dark */
+  --dt-accent: #fbbf24;
+  --dt-accent-hover: #f59e0b;
+
+  /* Neutral family — swap the two slate anchors for dark */
+  --dt-neutral: #64748b;
+  --dt-neutral-hover: #94a3b8;
+
+  /* Error chrome surfaces */
+  --dt-error-darker: #dc2626;
+  --dt-error-bg: #451a1a;
+  --dt-error-border-soft: #7f1d1d;
+  --dt-error-text-strong: #fca5a5;
+
+  /* Modal scrim + shadows */
+  --dt-backdrop: rgba(0, 0, 0, 0.6);
+  --dt-shadow-sm: rgba(0, 0, 0, 0.4);
+  --dt-shadow-md: rgba(0, 0, 0, 0.5);
+
+  /* Syntax-highlighting tokens */
+  --dt-syntax-string: #4ade80;
+  --dt-syntax-type: #c084fc;
 }
 

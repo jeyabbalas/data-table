@@ -250,16 +250,23 @@
   outline-offset: 1px;
 }
 
-/* Dark mode adjustments for filter panel */
+/* Dark mode adjustments for filter panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-filter-panel {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
 
-  .dt-filter-input:focus,
-  .dt-filter-select:focus {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-input:focus,
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-select:focus {
     box-shadow: 0 0 0 2px var(--dt-primary-alpha-30);
   }
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-filter-panel {
+  box-shadow: 0 4px 16px var(--dt-shadow-md);
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-filter-input:focus,
+.dt-root[data-dt-color-scheme="dark"] .dt-filter-select:focus {
+  box-shadow: 0 0 0 2px var(--dt-primary-alpha-30);
 }
 
 /* ===========================================
@@ -585,15 +592,21 @@
   color: var(--dt-accent-hover);
 }
 
-/* Dark mode for preset panel */
+/* Dark mode for preset panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-filter-preset-panel {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-preset-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
 
-  .dt-filter-preset-action-btn--delete:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-preset-action-btn--delete:hover {
     background: var(--dt-error-soft);
   }
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-filter-preset-panel {
+  box-shadow: 0 4px 16px var(--dt-shadow-md);
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-filter-preset-action-btn--delete:hover {
+  background: var(--dt-error-soft);
 }
 
 /* ===========================================

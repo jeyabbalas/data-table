@@ -13,6 +13,8 @@ import type { FilterPreset } from './FilterPresetTypes';
 
 export interface FilterPresetPanelOptions {
   classPrefix?: string;
+  /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
+  colorSchemeSource?: HTMLElement;
 }
 
 export class FilterPresetPanel {
@@ -25,6 +27,7 @@ export class FilterPresetPanel {
   private importStatusEl!: HTMLElement;
   private fileInput!: HTMLInputElement;
   private readonly prefix: string;
+  private readonly colorSchemeSource?: HTMLElement;
   private isOpen = false;
   private destroyed = false;
   private modalHost = new ModalHost();
@@ -38,6 +41,7 @@ export class FilterPresetPanel {
     options?: FilterPresetPanelOptions
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
+    this.colorSchemeSource = options?.colorSchemeSource;
     this.element = this.createElement();
 
     // Subscribe to presets signal for reactive list updates
@@ -236,6 +240,7 @@ export class FilterPresetPanel {
       initialFocus: this.nameInput,
       outsideClickIgnore: [`.${this.prefix}-filter-presets-btn`],
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
   }
 

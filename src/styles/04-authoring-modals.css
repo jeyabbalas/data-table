@@ -268,24 +268,44 @@
   display: none;
 }
 
-/* Dark mode */
+/* Dark mode — derived-column modal. Portalled to <body>; ModalHost copies
+   the owning table's `data-dt-color-scheme` attribute onto the backdrop
+   element on open. The `@media` rules are gated with
+   `:not([data-dt-color-scheme="light"])` so a forced-light instance in
+   OS-dark mode still renders light. Explicit `[data-dt-color-scheme="dark"]`
+   selectors cover forced-dark in OS-light. */
 @media (prefers-color-scheme: dark) {
-  .dt-derived-modal-backdrop {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) {
     background: var(--dt-backdrop);
   }
-  .dt-derived-modal-dialog {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
-  .dt-derived-modal-close:hover {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
-  .dt-add-column-btn:hover {
+  .dt-root:not([data-dt-color-scheme="light"]) .dt-add-column-btn:hover {
     background: var(--dt-primary-alpha-10);
   }
-  .dt-derived-modal-error {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-error {
     color: var(--dt-error-text-strong);
   }
+}
+.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] {
+  background: var(--dt-backdrop);
+}
+.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-dialog {
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+}
+.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.dt-root[data-dt-color-scheme="dark"] .dt-add-column-btn:hover {
+  background: var(--dt-primary-alpha-10);
+}
+.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-error {
+  color: var(--dt-error-text-strong);
 }
 
 /* ===========================================
@@ -569,17 +589,28 @@
   cursor: not-allowed;
 }
 
-/* Dark mode */
+/* Dark mode — SQL filter modal. Portalled to <body>; attribute is copied
+   onto the backdrop by ModalHost. Same dual-scoping pattern as the derived-
+   column modal above. */
 @media (prefers-color-scheme: dark) {
-  .dt-sql-filter-modal-backdrop {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) {
     background: var(--dt-backdrop);
   }
-  .dt-sql-filter-modal-dialog {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-sql-filter-modal-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
-  .dt-sql-filter-modal-close:hover {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-sql-filter-modal-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
+}
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] {
+  background: var(--dt-backdrop);
+}
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] .dt-sql-filter-modal-dialog {
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+}
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] .dt-sql-filter-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 

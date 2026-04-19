@@ -213,17 +213,28 @@
   display: none;
 }
 
+/* Dark mode — export dialog. Portalled to <body>; ModalHost copies the
+   `data-dt-color-scheme` attribute onto the backdrop on open. */
 @media (prefers-color-scheme: dark) {
-  .dt-export-backdrop {
+  .dt-export-backdrop:not([data-dt-color-scheme="light"]) {
     background: var(--dt-backdrop);
   }
 
-  .dt-export-dialog {
+  .dt-export-backdrop:not([data-dt-color-scheme="light"]) .dt-export-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
 
-  .dt-export-error {
+  .dt-export-backdrop:not([data-dt-color-scheme="light"]) .dt-export-error {
     color: var(--dt-error-text-strong);
   }
+}
+.dt-export-backdrop[data-dt-color-scheme="dark"] {
+  background: var(--dt-backdrop);
+}
+.dt-export-backdrop[data-dt-color-scheme="dark"] .dt-export-dialog {
+  box-shadow: 0 8px 32px var(--dt-shadow-md);
+}
+.dt-export-backdrop[data-dt-color-scheme="dark"] .dt-export-error {
+  color: var(--dt-error-text-strong);
 }
 

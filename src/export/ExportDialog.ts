@@ -26,6 +26,12 @@ export interface ExportDialogOptions {
    * construction.
    */
   instanceId?: string;
+  /**
+   * Element to mirror `data-dt-color-scheme` from. The dialog backdrop
+   * portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
+   * pass the `.dt-root` element here to keep it theme-synced.
+   */
+  colorSchemeSource?: HTMLElement;
 }
 
 export class ExportDialog {
@@ -34,6 +40,7 @@ export class ExportDialog {
   private isOpen = false;
   private readonly prefix: string;
   private readonly instanceId: string;
+  private readonly colorSchemeSource?: HTMLElement;
 
   // Source file base name (without extension) for export filenames
   private sourceName: string | null = null;
@@ -76,6 +83,7 @@ export class ExportDialog {
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.instanceId = options.instanceId ?? '';
+    this.colorSchemeSource = options.colorSchemeSource;
     this.element = this.createElement();
   }
 
@@ -429,6 +437,7 @@ export class ExportDialog {
       labelledBy: `${this.prefix}-${this.instanceId}-export-title`,
       initialFocus: firstRadio,
       onClose: () => this.handleHostClose(),
+      colorSchemeSource: this.colorSchemeSource,
     });
   }
 

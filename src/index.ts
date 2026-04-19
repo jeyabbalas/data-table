@@ -17,7 +17,7 @@ export const VERSION = '0.1.0';
 // + container + visualizations + persistence + presets + undo/redo + export
 // into a single `createDataTable()` call.
 export { createDataTable } from './DataTable';
-export type { DataTable, CreateDataTableOptions } from './DataTable';
+export type { DataTable, CreateDataTableOptions, ColorScheme } from './DataTable';
 export type { TableEvents, TableEventName, TableErrorSource } from './core/TableEvents';
 
 // ---- Typed error model ----

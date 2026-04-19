@@ -90,6 +90,7 @@ exports[`Public API surface > root export keys match snapshot 1`] = `
   "defaultStrings",
   "defaultVisualizationRegistry",
   "deserializeFilter",
+  "filtersToWhereClause",
   "formatSQLValue",
   "isStylesheetLoaded",
   "mergeStrings",

@@ -72,6 +72,14 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 - **Stylesheet presence detection.** New `isStylesheetLoaded(root?)` sync
   getter pairs with the `warning` event (`code: 'STYLESHEET_MISSING'`) — the
   getter is useful for pre-mount checks, the event for logging.
+- **`filtersToWhereClause` re-exported from the root.** The canonical
+  `Filter[] → SQL` converter (already used internally by every built-in
+  visualization, stats computer, and the export path) is now part of the
+  public API, alongside `quoteIdentifier` and `formatSQLValue`. Enables
+  custom `BaseVisualization` subclasses to rescope against active filters
+  in one line. Example 08 (custom choropleth) now demonstrates this:
+  `fetchData()` composes `filtersToWhereClause(this.options.filters)`
+  into its aggregation, so the map re-shades whenever filters change.
 - **Browser feature detection.** New `checkBrowserSupport(): { supported,
   missing }` sync probe of `Worker`, `WebAssembly`, `indexedDB`,
   `ResizeObserver`, `BigInt`, and `structuredClone`. New

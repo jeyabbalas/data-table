@@ -30,11 +30,12 @@ const MUST_NOT_LEAK_AT_ROOT = [
   'detectAllColumnPatterns',
 
   // Tier-3 — filter/SQL internals
-  // (quoteIdentifier and formatSQLValue are intentionally Tier-1 — the
-  // downstream DQ app needs them. filterToSQL / filtersToWhereClause are
-  // internal Filter-object → WHERE-clause converters.)
+  // (quoteIdentifier, formatSQLValue, filtersToWhereClause are Tier-1 —
+  // quoteIdentifier/formatSQLValue serve the downstream DQ app, and
+  // filtersToWhereClause lets custom BaseVisualization subclasses compose
+  // filter-aware SQL in userland. filterToSQL stays internal — it's the
+  // per-filter primitive, not the full WHERE-clause builder.)
   'filterToSQL',
-  'filtersToWhereClause',
   'splitCrossfilterFilters',
 
   // Tier-3 — persistence / snapshot serializers
@@ -135,9 +136,11 @@ const MUST_EXIST_AT_ROOT = [
   'ConfigurationError',
   'DestroyedError',
 
-  // SQL-authoring helpers (Tier-1 — elevated for downstream DQ app)
+  // SQL-authoring helpers (Tier-1 — elevated for downstream DQ app and
+  // for filter-aware custom BaseVisualization subclasses)
   'quoteIdentifier',
   'formatSQLValue',
+  'filtersToWhereClause',
 
   // Filter presets
   'FilterPresetManager',

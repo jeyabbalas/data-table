@@ -63,7 +63,7 @@ export type {
 // For consumers building raw SQL on top of the bridge (e.g. custom SELECTs,
 // data-quality rule authoring). Filter-object → WHERE-clause conversion is
 // handled internally; consumers construct `Filter[]` via `table.actions`.
-export { quoteIdentifier, formatSQLValue } from './filters/FilterSQL';
+export { quoteIdentifier, formatSQLValue, filtersToWhereClause } from './filters/FilterSQL';
 
 // ---- Filter presets ----
 export { FilterPresetManager } from './filters/FilterPresets';

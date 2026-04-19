@@ -1,6 +1,7 @@
 import '@jeyabbalas/data-table/styles';
 import {
   createDataTable,
+  filtersToWhereClause,
   VisualizationRegistry,
   type DataTable,
 } from '@jeyabbalas/data-table';
@@ -67,11 +68,20 @@ class StateChoropleth extends BaseVisualization {
   async fetchData(): Promise<void> {
     if (this.destroyed) return;
     const col = this.column.name;
+
+    // Compose active filters into the WHERE clause so the choropleth
+    // rescopes whenever the user filters elsewhere in the table. The base
+    // class already calls `fetchData()` on every filter change; we just
+    // need to consult `this.options.filters` here.
+    const notNull = `"${col}" IS NOT NULL AND "${col}" <> ''`;
+    const filterWhere = filtersToWhereClause(this.options.filters);
+    const where = filterWhere ? `${notNull} AND (${filterWhere})` : notNull;
+
     const [rows, states] = await Promise.all([
       this.options.bridge.query<{ state: string; n: number }>(
         `SELECT "${col}" AS state, COUNT(*) AS n
          FROM "${this.options.tableName}"
-         WHERE "${col}" IS NOT NULL AND "${col}" <> ''
+         WHERE ${where}
          GROUP BY 1`,
       ),
       loadStates(),

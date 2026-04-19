@@ -77,6 +77,24 @@ The fetch is cached at module scope: multiple choropleth instances on a page sha
 
 The six abstract methods `handleMouseMove`, `handleClick`, `handleMouseLeave`, `handleMouseDown`, `handleMouseUp`, `handleKeyDown` still have to exist or TypeScript refuses to compile — but they're empty no-ops here. Mouse events on the canvas are received but discarded (the canvas is hidden, so the user can't trigger any). Plot's own `title` attribute gives native `<title>` tooltips without needing JS listeners.
 
+## Responding to filters
+
+The choropleth rescopes automatically when the user filters any other column (e.g. brushes `order_total_usd`, picks a `product_category`): empty states fade to the `unknown` neutral, and the gradient redistributes over whatever rows remain.
+
+The mechanism is the standard `BaseVisualization` refresh loop — `createDataTable` registers every viz with `CrossfilterCoordinator`, which calls `updateFilters(filters)` on each `state.filters` change. The default `updateFilters` stashes the new array on `this.options.filters` and awaits `this.fetchData()`. A filter-aware custom viz just needs `fetchData` to consult `this.options.filters`:
+
+```ts
+import { filtersToWhereClause } from '@jeyabbalas/data-table';
+
+async fetchData() {
+  const filterWhere = filtersToWhereClause(this.options.filters);
+  const where = filterWhere ? `${yourNotNullPredicate} AND (${filterWhere})` : yourNotNullPredicate;
+  // ...run your SELECT with WHERE ${where}
+}
+```
+
+No subscription, no manual coordinator wiring — the facade handles both. Let the base class drive re-fetch.
+
 ## Adapting the pattern
 
 - **Europe / world**: swap the TopoJSON URL and the FIPS map. `world-atlas` gives countries; `europe-atlas` gives NUTS regions.

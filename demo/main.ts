@@ -157,14 +157,10 @@ function updateTableInfo(): void {
 }
 
 async function loadSource(source: File | string, overrideTableName?: string): Promise<void> {
-  const tableName = overrideTableName || `table_${++tableCounter}`;
-  if (overrideTableName) {
-    const m = overrideTableName.match(/^table_(\d+)$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n >= tableCounter) tableCounter = n;
-    }
-  }
+  // Unique-per-load tableName: Date.now keeps it monotonic across page reloads
+  // (so a fresh load can never collide with a previous session's persistence
+  // key), and the counter suffix disambiguates loads within the same ms.
+  const tableName = overrideTableName || `table_${Date.now()}_${++tableCounter}`;
   updateInfo('Loading data...');
 
   try {
@@ -214,6 +210,10 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
         .then((buffer) => cacheTableData(currentTableName, buffer, sourceName))
         .catch(() => { /* caching is best-effort */ });
     }
+
+    // Reset the file picker so the user can immediately re-select the same
+    // file (browsers suppress the change event on identical reselection).
+    if (source instanceof File) fileInput.value = '';
   } catch (error) {
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -288,14 +288,13 @@ remountBtn.addEventListener('click', async () => {
 });
 
 clearSessionBtn.addEventListener('click', async () => {
-  if (!table) return;
-  const tableName = table.state.baseTableName.get() ?? table.state.tableName.get();
-  if (tableName) {
-    await table.clearSession();
-    await clearCachedData(tableName);
-    try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
-    updateInfo('Session cleared. Reload the page to start fresh.');
-  }
+  const tableName = table?.state.baseTableName.get() ?? table?.state.tableName.get() ?? null;
+  if (table) await table.clearSession();
+  if (tableName) await clearCachedData(tableName);
+  try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+  fileInput.value = '';
+  urlInput.value = '';
+  updateInfo('Session cleared. Load a file or URL to start fresh.');
 });
 
 loadFileBtn.addEventListener('click', () => {

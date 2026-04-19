@@ -33,7 +33,7 @@
  */
 
 import type { TableState } from './core/State';
-import { createTableState } from './core/State';
+import { createTableState, resetTableState } from './core/State';
 import { StateActions, type LoadDataOptions } from './core/Actions';
 import { UndoManager } from './core/UndoManager';
 import { nextInstanceId } from './core/instanceId';
@@ -200,11 +200,12 @@ export interface DataTable {
   openExportDialog(): void;
 
   /**
-   * Delete the persisted UI snapshot for the current table from the session
-   * store (filters, sort, columns, undo/redo stack, derived columns, presets).
-   * In-memory state is untouched — the intended flow is "clear, then reload
-   * the page" so the table starts fresh. No-op if persistence is disabled or
-   * no table is loaded.
+   * Wipe the persisted UI snapshot for the current table AND reset in-memory
+   * state. Clears filters, sort, columns, derived columns, undo/redo stacks,
+   * filter presets, and the bridge's query cache. After this call the table
+   * behaves as if just constructed with no `source` — call {@link loadData}
+   * to populate it again. Safe to call when persistence is disabled (only the
+   * IndexedDB delete is skipped).
    */
   clearSession(): Promise<void>;
 
@@ -865,15 +866,27 @@ export async function createDataTable(
   }
 
   // -------- clearSession --------
-  // Matches the keying used by AutoSave's `snapshotFromState` in
-  // src/persistence/serialization.ts — baseTableName takes precedence so the
-  // same snapshot is shared between the base table and any VIEW derived from
-  // it (derived columns switch tableName to the VIEW).
+  // Order matters: disable AutoSave FIRST so the debounced save and the
+  // beforeunload handler can't resurrect the snapshot we're about to delete.
+  // Then delete the IDB row, then reset all in-memory state. Finally re-enable
+  // AutoSave — it short-circuits on a null tableName until new data is loaded.
+  // Key matches `snapshotFromState` (src/persistence/serialization.ts) —
+  // baseTableName takes precedence so the same snapshot is shared between
+  // the base table and any VIEW derived from it.
   async function clearSession(): Promise<void> {
-    if (!sessionStore) return;
-    const key = state.baseTableName.get() ?? state.tableName.get();
-    if (!key) return;
-    await sessionStore.delete(key);
+    autoSave?.disable();
+    try {
+      if (sessionStore) {
+        const key = state.baseTableName.get() ?? state.tableName.get();
+        if (key) await sessionStore.delete(key);
+      }
+      resetTableState(state);
+      undoManager?.clear();
+      presetManager?.presets.set([]);
+      bridge.clearQueryCache();
+    } finally {
+      autoSave?.enable();
+    }
   }
 
   // -------- Public DataTable --------

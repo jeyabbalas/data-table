@@ -90,8 +90,6 @@ const openHosts: ModalHost[] = [];
 
 let scrollLockCount = 0;
 let scrollLockHandler: ((e: Event) => void) | null = null;
-let scrollLockPrevPaddingRight: string | null = null;
-let scrollLockPrevOverflow: string | null = null;
 
 function readStackStep(): number {
   if (typeof window === 'undefined') return DEFAULT_STACK_STEP;
@@ -114,26 +112,17 @@ function computeZIndex(mode: 'modal' | 'panel', stackIndex: number): number {
   return base + stackIndex * readStackStep();
 }
 
-function scrollbarWidth(): number {
-  if (typeof window === 'undefined') return 0;
-  return Math.max(0, window.innerWidth - document.documentElement.clientWidth);
-}
-
+// Scroll lock is event-based, not style-based: we install non-passive wheel
+// and touchmove listeners that preventDefault outside any open dialog. We
+// deliberately do NOT write to `body.style.overflow` or `body.style.padding*`.
+// Mutating those shifts host-page layout (e.g. overriding a host's CSS
+// `padding-right` with an inline value widens the body's content box and
+// causes the data table to reflow). Since the scrollbar is never hidden,
+// there is no scrollbar-width reflow to compensate for.
 function acquireScrollLock(): void {
   scrollLockCount += 1;
   if (scrollLockCount > 1) return;
 
-  const body = document.body;
-  scrollLockPrevPaddingRight = body.style.paddingRight || '';
-  scrollLockPrevOverflow = body.style.overflow || '';
-
-  const sw = scrollbarWidth();
-  if (sw > 0) {
-    // Compensate for scrollbar reflow to avoid layout shift of host content.
-    body.style.paddingRight = `${sw}px`;
-  }
-
-  // Prevent wheel/touchmove outside any dialog from scrolling the background.
   scrollLockHandler = (e: Event) => {
     const target = e.target as Node | null;
     if (!target) return;
@@ -156,19 +145,6 @@ function releaseScrollLock(): void {
     document.removeEventListener('touchmove', scrollLockHandler);
     scrollLockHandler = null;
   }
-
-  // Restore the exact prior inline values (may have been set by the host app).
-  const body = document.body;
-  if (scrollLockPrevPaddingRight !== null) {
-    if (scrollLockPrevPaddingRight === '') body.style.removeProperty('padding-right');
-    else body.style.paddingRight = scrollLockPrevPaddingRight;
-  }
-  if (scrollLockPrevOverflow !== null) {
-    if (scrollLockPrevOverflow === '') body.style.removeProperty('overflow');
-    else body.style.overflow = scrollLockPrevOverflow;
-  }
-  scrollLockPrevPaddingRight = null;
-  scrollLockPrevOverflow = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -492,8 +468,4 @@ export function __resetModalHostForTests(): void {
     document.removeEventListener('touchmove', scrollLockHandler);
     scrollLockHandler = null;
   }
-  scrollLockPrevPaddingRight = null;
-  scrollLockPrevOverflow = null;
-  document.body.style.removeProperty('padding-right');
-  document.body.style.removeProperty('overflow');
 }

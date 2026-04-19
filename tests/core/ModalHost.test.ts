@@ -98,8 +98,17 @@ describe('ModalHost — stacking', () => {
 });
 
 describe('ModalHost — scroll lock', () => {
-  it('sets body.padding-right on first modal open and restores on last close', () => {
-    // Simulate scrollbar presence: innerWidth > clientWidth.
+  // Dispatch a cancelable wheel event on `document` and report whether any
+  // listener called preventDefault. We use dispatchEvent rather than trigger
+  // helpers so we can inspect the `defaultPrevented` flag directly.
+  function wheelWasBlocked(target: EventTarget): boolean {
+    const ev = new Event('wheel', { bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }
+
+  it('does not mutate body.padding-right or body.overflow across modal open/close', () => {
+    // Simulate scrollbar presence so any stale "compensation" code would trigger.
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     Object.defineProperty(document.documentElement, 'clientWidth', {
       configurable: true,
@@ -112,27 +121,62 @@ describe('ModalHost — scroll lock', () => {
     const hb = new ModalHost();
 
     expect(document.body.style.paddingRight).toBe('');
+    expect(document.body.style.overflow).toBe('');
+
     ha.open({ mode: 'modal', element: a.backdrop, dialog: a.dialog });
-    expect(document.body.style.paddingRight).toBe('15px');
+    expect(document.body.style.paddingRight).toBe('');
+    expect(document.body.style.overflow).toBe('');
 
     hb.open({ mode: 'modal', element: b.backdrop, dialog: b.dialog });
-    // Second open does not re-set padding.
-    expect(document.body.style.paddingRight).toBe('15px');
+    expect(document.body.style.paddingRight).toBe('');
+    expect(document.body.style.overflow).toBe('');
 
     hb.close();
-    // Still locked — one modal remains.
-    expect(document.body.style.paddingRight).toBe('15px');
+    ha.close();
+    expect(document.body.style.paddingRight).toBe('');
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('installs wheel/touchmove scroll prevention on first modal open and removes on last close', () => {
+    const a = makeModalPair();
+    const b = makeModalPair();
+    const ha = new ModalHost();
+    const hb = new ModalHost();
+
+    // Before any modal opens, a wheel event outside the dialog is not blocked.
+    const outside = document.createElement('div');
+    document.body.appendChild(outside);
+    expect(wheelWasBlocked(outside)).toBe(false);
+
+    ha.open({ mode: 'modal', element: a.backdrop, dialog: a.dialog });
+    // Wheel outside any open dialog is now blocked.
+    expect(wheelWasBlocked(outside)).toBe(true);
+    // Wheel inside the open dialog is allowed (not prevented).
+    expect(wheelWasBlocked(a.dialog)).toBe(false);
+
+    hb.open({ mode: 'modal', element: b.backdrop, dialog: b.dialog });
+    expect(wheelWasBlocked(outside)).toBe(true);
+    expect(wheelWasBlocked(b.dialog)).toBe(false);
+
+    hb.close();
+    // One modal still open — prevention stays installed.
+    expect(wheelWasBlocked(outside)).toBe(true);
 
     ha.close();
-    // Last close restores.
-    expect(document.body.style.paddingRight).toBe('');
+    // Last close — prevention removed.
+    expect(wheelWasBlocked(outside)).toBe(false);
   });
 
   it('does not apply scroll lock in panel mode', () => {
     const panel = makePanel();
     const host = new ModalHost();
+
+    const outside = document.createElement('div');
+    document.body.appendChild(outside);
+
     host.open({ mode: 'panel', element: panel });
     expect(document.body.style.paddingRight).toBe('');
+    expect(wheelWasBlocked(outside)).toBe(false);
     host.close();
   });
 });

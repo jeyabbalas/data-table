@@ -1,0 +1,402 @@
+[
+  {
+    "region": "Bourgogne",
+    "appellation": "Chablis",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2021,
+    "prix_eur": 28.5,
+    "production_hl": 320000,
+    "bio": false
+  },
+  {
+    "region": "Bourgogne",
+    "appellation": "Meursault",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2020,
+    "prix_eur": 72,
+    "production_hl": 54000,
+    "bio": false
+  },
+  {
+    "region": "Bourgogne",
+    "appellation": "Pommard",
+    "cepage": "Pinot Noir",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 58,
+    "production_hl": 28000,
+    "bio": true
+  },
+  {
+    "region": "Bourgogne",
+    "appellation": "Gevrey-Chambertin",
+    "cepage": "Pinot Noir",
+    "couleur": "rouge",
+    "millesime": 2020,
+    "prix_eur": 95,
+    "production_hl": 52000,
+    "bio": false
+  },
+  {
+    "region": "Bourgogne",
+    "appellation": "Mâcon-Villages",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 14.8,
+    "production_hl": 180000,
+    "bio": true
+  },
+  {
+    "region": "Bourgogne",
+    "appellation": "Puligny-Montrachet",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2020,
+    "prix_eur": 145,
+    "production_hl": 21000,
+    "bio": false
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Saint-Émilion",
+    "cepage": "Merlot",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 42,
+    "production_hl": 215000,
+    "bio": false
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Médoc",
+    "cepage": "Cabernet Sauvignon",
+    "couleur": "rouge",
+    "millesime": 2018,
+    "prix_eur": 34,
+    "production_hl": 260000,
+    "bio": false
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Pauillac",
+    "cepage": "Cabernet Sauvignon",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 120,
+    "production_hl": 60000,
+    "bio": true
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Pessac-Léognan",
+    "cepage": "Sauvignon Blanc",
+    "couleur": "blanc",
+    "millesime": 2021,
+    "prix_eur": 38.5,
+    "production_hl": 55000,
+    "bio": true
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Sauternes",
+    "cepage": "Sémillon",
+    "couleur": "blanc",
+    "millesime": 2017,
+    "prix_eur": 65,
+    "production_hl": 18000,
+    "bio": false
+  },
+  {
+    "region": "Bordeaux",
+    "appellation": "Margaux",
+    "cepage": "Cabernet Sauvignon",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 180,
+    "production_hl": 70000,
+    "bio": false
+  },
+  {
+    "region": "Loire",
+    "appellation": "Sancerre",
+    "cepage": "Sauvignon Blanc",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 22,
+    "production_hl": 195000,
+    "bio": true
+  },
+  {
+    "region": "Loire",
+    "appellation": "Pouilly-Fumé",
+    "cepage": "Sauvignon Blanc",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 24.5,
+    "production_hl": 75000,
+    "bio": false
+  },
+  {
+    "region": "Loire",
+    "appellation": "Vouvray",
+    "cepage": "Chenin Blanc",
+    "couleur": "blanc",
+    "millesime": 2020,
+    "prix_eur": 18,
+    "production_hl": 91000,
+    "bio": true
+  },
+  {
+    "region": "Loire",
+    "appellation": "Muscadet",
+    "cepage": "Melon de Bourgogne",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 9.8,
+    "production_hl": 480000,
+    "bio": false
+  },
+  {
+    "region": "Loire",
+    "appellation": "Chinon",
+    "cepage": "Cabernet Franc",
+    "couleur": "rouge",
+    "millesime": 2021,
+    "prix_eur": 16.5,
+    "production_hl": 85000,
+    "bio": true
+  },
+  {
+    "region": "Loire",
+    "appellation": "Rosé de Loire",
+    "cepage": "Gamay",
+    "couleur": "rosé",
+    "millesime": 2023,
+    "prix_eur": 11,
+    "production_hl": 62000,
+    "bio": false
+  },
+  {
+    "region": "Alsace",
+    "appellation": "Riesling Grand Cru",
+    "cepage": "Riesling",
+    "couleur": "blanc",
+    "millesime": 2020,
+    "prix_eur": 35,
+    "production_hl": 48000,
+    "bio": true
+  },
+  {
+    "region": "Alsace",
+    "appellation": "Gewurztraminer",
+    "cepage": "Gewurztraminer",
+    "couleur": "blanc",
+    "millesime": 2021,
+    "prix_eur": 26,
+    "production_hl": 54000,
+    "bio": false
+  },
+  {
+    "region": "Alsace",
+    "appellation": "Pinot Gris",
+    "cepage": "Pinot Gris",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 19.5,
+    "production_hl": 62000,
+    "bio": true
+  },
+  {
+    "region": "Alsace",
+    "appellation": "Crémant d'Alsace",
+    "cepage": "Pinot Blanc",
+    "couleur": "blanc",
+    "millesime": 2021,
+    "prix_eur": 13.5,
+    "production_hl": 155000,
+    "bio": false
+  },
+  {
+    "region": "Champagne",
+    "appellation": "Champagne Brut",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2018,
+    "prix_eur": 42,
+    "production_hl": 2400000,
+    "bio": false
+  },
+  {
+    "region": "Champagne",
+    "appellation": "Champagne Rosé",
+    "cepage": "Pinot Noir",
+    "couleur": "rosé",
+    "millesime": 2019,
+    "prix_eur": 58,
+    "production_hl": 280000,
+    "bio": false
+  },
+  {
+    "region": "Champagne",
+    "appellation": "Blanc de Blancs",
+    "cepage": "Chardonnay",
+    "couleur": "blanc",
+    "millesime": 2017,
+    "prix_eur": 78,
+    "production_hl": 92000,
+    "bio": true
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Châteauneuf-du-Pape",
+    "cepage": "Grenache",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 48,
+    "production_hl": 105000,
+    "bio": true
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Côte-Rôtie",
+    "cepage": "Syrah",
+    "couleur": "rouge",
+    "millesime": 2020,
+    "prix_eur": 85,
+    "production_hl": 12000,
+    "bio": false
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Hermitage",
+    "cepage": "Syrah",
+    "couleur": "rouge",
+    "millesime": 2018,
+    "prix_eur": 135,
+    "production_hl": 5400,
+    "bio": false
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Condrieu",
+    "cepage": "Viognier",
+    "couleur": "blanc",
+    "millesime": 2021,
+    "prix_eur": 62,
+    "production_hl": 4800,
+    "bio": true
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Gigondas",
+    "cepage": "Grenache",
+    "couleur": "rouge",
+    "millesime": 2020,
+    "prix_eur": 32,
+    "production_hl": 38000,
+    "bio": true
+  },
+  {
+    "region": "Rhône",
+    "appellation": "Tavel",
+    "cepage": "Grenache",
+    "couleur": "rosé",
+    "millesime": 2022,
+    "prix_eur": 17,
+    "production_hl": 28000,
+    "bio": false
+  },
+  {
+    "region": "Provence",
+    "appellation": "Côtes de Provence",
+    "cepage": "Grenache",
+    "couleur": "rosé",
+    "millesime": 2023,
+    "prix_eur": 13,
+    "production_hl": 900000,
+    "bio": true
+  },
+  {
+    "region": "Provence",
+    "appellation": "Bandol",
+    "cepage": "Mourvèdre",
+    "couleur": "rouge",
+    "millesime": 2019,
+    "prix_eur": 38,
+    "production_hl": 18000,
+    "bio": true
+  },
+  {
+    "region": "Provence",
+    "appellation": "Cassis",
+    "cepage": "Clairette",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 28,
+    "production_hl": 3200,
+    "bio": false
+  },
+  {
+    "region": "Languedoc",
+    "appellation": "Corbières",
+    "cepage": "Syrah",
+    "couleur": "rouge",
+    "millesime": 2021,
+    "prix_eur": 11.5,
+    "production_hl": 420000,
+    "bio": false
+  },
+  {
+    "region": "Languedoc",
+    "appellation": "Minervois",
+    "cepage": "Carignan",
+    "couleur": "rouge",
+    "millesime": 2020,
+    "prix_eur": 10.8,
+    "production_hl": 210000,
+    "bio": true
+  },
+  {
+    "region": "Languedoc",
+    "appellation": "Picpoul de Pinet",
+    "cepage": "Picpoul",
+    "couleur": "blanc",
+    "millesime": 2022,
+    "prix_eur": 9.5,
+    "production_hl": 125000,
+    "bio": false
+  },
+  {
+    "region": "Jura",
+    "appellation": "Vin Jaune",
+    "cepage": "Savagnin",
+    "couleur": "blanc",
+    "millesime": 2016,
+    "prix_eur": 52,
+    "production_hl": 2100,
+    "bio": true
+  },
+  {
+    "region": "Jura",
+    "appellation": "Arbois",
+    "cepage": "Poulsard",
+    "couleur": "rouge",
+    "millesime": 2021,
+    "prix_eur": 22.5,
+    "production_hl": 8600,
+    "bio": true
+  },
+  {
+    "region": "Beaujolais",
+    "appellation": "Morgon",
+    "cepage": "Gamay",
+    "couleur": "rouge",
+    "millesime": 2022,
+    "prix_eur": 15.8,
+    "production_hl": 68000,
+    "bio": false
+  }
+]

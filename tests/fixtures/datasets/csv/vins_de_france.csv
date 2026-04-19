@@ -1,0 +1,41 @@
+region,appellation,cepage,couleur,millesime,prix_eur,production_hl,bio
+Bourgogne,Chablis,Chardonnay,blanc,2021,28.50,320000,false
+Bourgogne,Meursault,Chardonnay,blanc,2020,72.00,54000,false
+Bourgogne,Pommard,Pinot Noir,rouge,2019,58.00,28000,true
+Bourgogne,Gevrey-Chambertin,Pinot Noir,rouge,2020,95.00,52000,false
+Bourgogne,Mâcon-Villages,Chardonnay,blanc,2022,14.80,180000,true
+Bourgogne,Puligny-Montrachet,Chardonnay,blanc,2020,145.00,21000,false
+Bordeaux,Saint-Émilion,Merlot,rouge,2019,42.00,215000,false
+Bordeaux,Médoc,Cabernet Sauvignon,rouge,2018,34.00,260000,false
+Bordeaux,Pauillac,Cabernet Sauvignon,rouge,2019,120.00,60000,true
+Bordeaux,Pessac-Léognan,Sauvignon Blanc,blanc,2021,38.50,55000,true
+Bordeaux,Sauternes,Sémillon,blanc,2017,65.00,18000,false
+Bordeaux,Margaux,Cabernet Sauvignon,rouge,2019,180.00,70000,false
+Loire,Sancerre,Sauvignon Blanc,blanc,2022,22.00,195000,true
+Loire,Pouilly-Fumé,Sauvignon Blanc,blanc,2022,24.50,75000,false
+Loire,Vouvray,Chenin Blanc,blanc,2020,18.00,91000,true
+Loire,Muscadet,Melon de Bourgogne,blanc,2022,9.80,480000,false
+Loire,Chinon,Cabernet Franc,rouge,2021,16.50,85000,true
+Loire,Rosé de Loire,Gamay,rosé,2023,11.00,62000,false
+Alsace,Riesling Grand Cru,Riesling,blanc,2020,35.00,48000,true
+Alsace,Gewurztraminer,Gewurztraminer,blanc,2021,26.00,54000,false
+Alsace,Pinot Gris,Pinot Gris,blanc,2022,19.50,62000,true
+Alsace,Crémant d'Alsace,Pinot Blanc,blanc,2021,13.50,155000,false
+Champagne,Champagne Brut,Chardonnay,blanc,2018,42.00,2400000,false
+Champagne,Champagne Rosé,Pinot Noir,rosé,2019,58.00,280000,false
+Champagne,Blanc de Blancs,Chardonnay,blanc,2017,78.00,92000,true
+Rhône,Châteauneuf-du-Pape,Grenache,rouge,2019,48.00,105000,true
+Rhône,Côte-Rôtie,Syrah,rouge,2020,85.00,12000,false
+Rhône,Hermitage,Syrah,rouge,2018,135.00,5400,false
+Rhône,Condrieu,Viognier,blanc,2021,62.00,4800,true
+Rhône,Gigondas,Grenache,rouge,2020,32.00,38000,true
+Rhône,Tavel,Grenache,rosé,2022,17.00,28000,false
+Provence,Côtes de Provence,Grenache,rosé,2023,13.00,900000,true
+Provence,Bandol,Mourvèdre,rouge,2019,38.00,18000,true
+Provence,Cassis,Clairette,blanc,2022,28.00,3200,false
+Languedoc,Corbières,Syrah,rouge,2021,11.50,420000,false
+Languedoc,Minervois,Carignan,rouge,2020,10.80,210000,true
+Languedoc,Picpoul de Pinet,Picpoul,blanc,2022,9.50,125000,false
+Jura,Vin Jaune,Savagnin,blanc,2016,52.00,2100,true
+Jura,Arbois,Poulsard,rouge,2021,22.50,8600,true
+Beaujolais,Morgon,Gamay,rouge,2022,15.80,68000,false

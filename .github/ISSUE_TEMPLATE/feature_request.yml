@@ -1,0 +1,57 @@
+name: Feature request
+description: Propose a new feature or enhancement for @jeyabbalas/data-table
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature.
+
+        Before submitting, please:
+        - Read [`AGENTS.md`](https://github.com/jeyabbalas/data-table/blob/main/AGENTS.md) §"What this library is / is not". Intentional non-goals include in-cell editing, row-click events, server-side pagination, and server-side rendering — features contradicting these are unlikely to land.
+        - Check whether the [`/advanced`](https://github.com/jeyabbalas/data-table/blob/main/docs/api-reference.md) entry already exposes what you need. Many advanced use cases are reachable through `VisualizationRegistry`, `WorkerBridge`, `FilterPresetManager`, or `SessionStore` without a new top-level API.
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case / problem
+      description: What are you trying to accomplish that the library doesn't support today? Describe the real-world scenario, not just the missing API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-api
+    attributes:
+      label: Proposed API
+      description: A rough TypeScript signature or code sketch showing how the feature would be used.
+      placeholder: |
+        ```ts
+        await createDataTable({
+          // new option:
+          onRowRender: (row, el) => { ... },
+        });
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds exist today? Is there an escape hatch in `/advanced` that almost works?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related issues, prior art in other libraries, screenshots, or mockups.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have read `AGENTS.md` §"What this library is / is not".
+          required: true
+        - label: This feature aligns with the stated project scope.
+          required: true

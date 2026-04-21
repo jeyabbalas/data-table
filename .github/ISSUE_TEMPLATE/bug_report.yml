@@ -1,0 +1,109 @@
+name: Bug report
+description: Report a bug or unexpected behavior in @jeyabbalas/data-table
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Before submitting, please:
+        - Search [existing issues](https://github.com/jeyabbalas/data-table/issues?q=is%3Aissue) for duplicates.
+        - Check the [troubleshooting guide](https://github.com/jeyabbalas/data-table/blob/main/docs/troubleshooting.md) — common issues (stylesheet missing, WASM 404s, SSR blanks, IndexedDB in private browsing) have documented fixes.
+        - Coding agents: read [`AGENTS.md`](https://github.com/jeyabbalas/data-table/blob/main/AGENTS.md) §"What this library is / is not" first. Several frequent reports are intentional non-features.
+
+  - type: input
+    id: version
+    attributes:
+      label: Library version
+      description: The version of `@jeyabbalas/data-table` you're running (from `package.json` or `npm ls`).
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Firefox
+        - Safari
+        - Edge
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser version
+      placeholder: "e.g. 131.0.6778.109"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. macOS 14.5, Windows 11, Ubuntu 22.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        A runnable snippet or link to a repository that reproduces the bug. The smallest change to `examples/01-minimal/main.ts` that triggers the problem is ideal.
+      placeholder: |
+        ```ts
+        import { createDataTable } from '@jeyabbalas/data-table';
+        import '@jeyabbalas/data-table/styles';
+
+        const table = await createDataTable({ mount: '#app' });
+        await table.loadData({ source: '/data.csv' });
+        // … describe the action that reproduces the bug
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior + console output
+      description: Include any stack traces, warnings, and `DataTableError` messages logged to the console.
+    validations:
+      required: true
+
+  - type: input
+    id: error-code
+    attributes:
+      label: DataTableError code (if applicable)
+      description: The `code` field from a thrown `DataTableError` (e.g. `LOAD_FAILED`, `WORKER_UNSUPPORTED`, `STYLESHEET_MISSING`).
+      placeholder: "e.g. LOAD_FAILED"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Framework (React/Vue/Svelte/…), bundler (Vite/Webpack/…), CSP policy, SSR/no-SSR, anything else that might be relevant.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I have checked `docs/troubleshooting.md`.
+          required: true
+        - label: I am using the latest released version.
+          required: true

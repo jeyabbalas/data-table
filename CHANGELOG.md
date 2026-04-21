@@ -4,6 +4,10 @@ All notable changes to `@jeyabbalas/data-table` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
 
+Planned work and discussion lives in GitHub Issues under the
+[`roadmap`](https://github.com/jeyabbalas/data-table/issues?q=is%3Aissue+label%3Aroadmap)
+label.
+
 ## [Unreleased]
 
 ### Added

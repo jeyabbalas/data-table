@@ -312,14 +312,7 @@ for the full symbol list.
 
 ## Development
 
-```bash
-npm install
-npm run dev              # demo + examples on http://localhost:5173/data-table/
-npm test
-npm run build            # emits dist/data-table.{js,cjs} + dist/index.d.ts
-npm run build:demo       # static site (demo + examples) → demo-dist/
-npm run preview          # preview the built site locally
-```
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for local setup, testing, the build pipeline, and the release workflow. See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to report bugs and submit changes.
 
 ## License
 

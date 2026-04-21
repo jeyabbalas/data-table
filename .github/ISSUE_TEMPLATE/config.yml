@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/jeyabbalas/data-table/blob/main/docs/troubleshooting.md
+    about: Check the troubleshooting guide first — common issues (stylesheet missing, WASM 404s, SSR blanks, IndexedDB in private browsing, React Strict Mode) have documented fixes.
+  - name: Documentation
+    url: https://github.com/jeyabbalas/data-table/blob/main/docs/README.md
+    about: API reference, guides, concepts, and framework integrations.

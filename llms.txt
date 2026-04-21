@@ -1,0 +1,62 @@
+# @jeyabbalas/data-table
+
+> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
+
+This file follows the [llms.txt](https://llmstxt.org) convention. It is a curated index for coding agents and LLM-driven tools. Human readers should start with [README.md](./README.md).
+
+## Start here (for agents)
+
+- [AGENTS.md](./AGENTS.md): Coding-agent guide — capability matrix, clarifying-question checklist, canonical snippets, common pitfalls. Read this before writing code against the library.
+- [README.md](./README.md): Feature list, install, quick start, framework integration.
+
+## Reference
+
+- [docs/api-reference.md](./docs/api-reference.md): Every public export, option, event, action, error code, filter shape, derived-column type.
+- [docs/troubleshooting.md](./docs/troubleshooting.md): 23 error codes and 15 common-issue FAQs with fix snippets.
+- [docs/performance.md](./docs/performance.md): Architectural limits, tuning guidance, self-benchmarking methodology.
+
+## Guides (task-oriented walkthroughs)
+
+- [docs/guides/loading-data.md](./docs/guides/loading-data.md): File / URL / Blob / ArrayBuffer ingestion, format detection, progress events.
+- [docs/guides/filters.md](./docs/guides/filters.md): The seven filter types, programmatic filter construction, serialization.
+- [docs/guides/derived-columns.md](./docs/guides/derived-columns.md): SQL-expression vs vector derived columns, DuckDB VIEW reconciliation.
+- [docs/guides/events.md](./docs/guides/events.md): Full event catalog, lifecycle ordering, error discrimination.
+- [docs/guides/visualizations.md](./docs/guides/visualizations.md): Built-in visualization classes and custom class registration.
+- [docs/guides/session-persistence.md](./docs/guides/session-persistence.md): IndexedDB lifecycle, `saveSync()` for page-exit, custom stores.
+- [docs/guides/theming.md](./docs/guides/theming.md): Complete `--dt-*` CSS variable reference, dark mode, per-instance overrides.
+- [docs/guides/i18n.md](./docs/guides/i18n.md): `Strings` interface, `DeepPartial` overrides, function-typed strings.
+- [docs/guides/accessibility.md](./docs/guides/accessibility.md): Keyboard map, ARIA surface, screen-reader testing.
+- [docs/guides/multi-table.md](./docs/guides/multi-table.md): Sharing `FilterPresetManager` and `SessionStore` across instances.
+- [docs/guides/csp-and-offline.md](./docs/guides/csp-and-offline.md): `workerFactory`, `workerUrl`, `duckdbBundles` for strict-CSP and offline.
+- [docs/guides/filter-presets.md](./docs/guides/filter-presets.md): Save / load / export / import preset JSON.
+
+## Concepts
+
+- [docs/concepts/architecture.md](./docs/concepts/architecture.md): System overview — signals, worker bridge RPC, crossfilter, virtual scroller, modal host.
+- [docs/concepts/state-model.md](./docs/concepts/state-model.md): `TableState` field inventory, subscription patterns, undo snapshot shape.
+
+## Integrations
+
+- [docs/integrations/react.md](./docs/integrations/react.md): SPAs, Strict Mode, route-change cleanup.
+- [docs/integrations/vue.md](./docs/integrations/vue.md): Vue 3 reactivity handling, teardown.
+- [docs/integrations/svelte.md](./docs/integrations/svelte.md): Action-based mount, Svelte 5 compatibility.
+- [docs/integrations/solid.md](./docs/integrations/solid.md): `createEffect` + `onCleanup` pattern.
+- [docs/integrations/nextjs.md](./docs/integrations/nextjs.md): App Router + Pages Router dynamic-import recipes.
+- [docs/integrations/nuxt.md](./docs/integrations/nuxt.md): `<ClientOnly>` and plugin-based setup.
+- [docs/integrations/vite.md](./docs/integrations/vite.md): Worker + WASM handling, `optimizeDeps`.
+- [docs/integrations/webpack.md](./docs/integrations/webpack.md): Worker emission, WASM asset module, CodeMirror chunks.
+- [docs/integrations/cdn.md](./docs/integrations/cdn.md): Import map + no-build HTML starter.
+
+## Examples
+
+- [examples/](./examples/README.md): 10 runnable single-feature examples, each ≤80 LOC, browsable from the demo via `npm run dev`.
+
+## Source (authoritative)
+
+- [src/index.ts](./src/index.ts): Tier-1 public API — `createDataTable`, types, `DataTableError`.
+- [src/advanced.ts](./src/advanced.ts): Tier-2 advanced API — state, actions, `BaseVisualization`, `VisualizationRegistry`, `WorkerBridge`, export helpers, filter presets.
+
+## Optional
+
+- [CHANGELOG.md](./CHANGELOG.md): Release notes in [Keep a Changelog](https://keepachangelog.com) format.
+- [LICENSE](./LICENSE): MIT.

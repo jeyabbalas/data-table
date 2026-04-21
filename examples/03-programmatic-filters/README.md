@@ -5,8 +5,8 @@ Four external buttons add semantically meaningful filters to a 100 K-row NYC tax
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/03-programmatic-filters/
+npm run dev
+# open http://localhost:5173/data-table/examples/03-programmatic-filters/
 ```
 
 ## API surface

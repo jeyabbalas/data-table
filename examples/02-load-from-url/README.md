@@ -5,8 +5,8 @@ Fetch 100,000 NYC yellow-taxi trip records from a URL and animate a progress bar
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/02-load-from-url/
+npm run dev
+# open http://localhost:5173/data-table/examples/02-load-from-url/
 ```
 
 ## API surface

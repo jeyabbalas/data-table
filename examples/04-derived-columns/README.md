@@ -5,8 +5,8 @@ Add a SQL-evaluated **expression** column and a JS-materialized **vector** colum
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/04-derived-columns/
+npm run dev
+# open http://localhost:5173/data-table/examples/04-derived-columns/
 ```
 
 ## API surface

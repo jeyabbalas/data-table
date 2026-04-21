@@ -5,8 +5,8 @@ The smallest possible mount: eight rows defined inline in the `.ts` file, wrappe
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/01-minimal/
+npm run dev
+# open http://localhost:5173/data-table/examples/01-minimal/
 ```
 
 ## API surface

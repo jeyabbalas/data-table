@@ -3,8 +3,8 @@
  * check-css-vars.mjs
  *
  * Validates that the `--dt-*` CSS custom property reference table in
- * README.md stays in sync with the variables actually declared in
- * `src/styles/*.css`. Exits non-zero on drift so the build fails fast.
+ * docs/guides/theming.md stays in sync with the variables actually declared
+ * in `src/styles/*.css`. Exits non-zero on drift so the build fails fast.
  *
  * Usage:
  *   node scripts/check-css-vars.mjs           # validate
@@ -13,7 +13,7 @@
  * Notes:
  *   - Counts only DECLARATIONS (`--dt-foo: value;`), not `var(--dt-foo)` uses.
  *   - Dedups across files.
- *   - The README table section is delimited by the markers
+ *   - The theming-guide table section is delimited by the markers
  *       <!-- dt-vars:start --> ... <!-- dt-vars:end -->
  *     so the script knows exactly what block to scan.
  */
@@ -25,7 +25,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
 const stylesDir = join(repoRoot, 'src', 'styles');
-const readmePath = join(repoRoot, 'README.md');
+const docPath = join(repoRoot, 'docs', 'guides', 'theming.md');
+const docRelPath = 'docs/guides/theming.md';
 
 const DECL_RE = /(--dt-[a-z0-9-]+)\s*:/g;
 
@@ -42,18 +43,18 @@ function collectDeclarations() {
   return declared;
 }
 
-/** Extract the `--dt-*` names referenced by the README table. */
-function collectReadmeVars() {
-  const readme = readFileSync(readmePath, 'utf8');
-  const start = readme.indexOf('<!-- dt-vars:start -->');
-  const end = readme.indexOf('<!-- dt-vars:end -->');
+/** Extract the `--dt-*` names referenced by the theming-guide table. */
+function collectDocVars() {
+  const doc = readFileSync(docPath, 'utf8');
+  const start = doc.indexOf('<!-- dt-vars:start -->');
+  const end = doc.indexOf('<!-- dt-vars:end -->');
   if (start === -1 || end === -1) {
     throw new Error(
-      'README.md is missing the `<!-- dt-vars:start -->` / `<!-- dt-vars:end -->` markers. ' +
+      `${docRelPath} is missing the \`<!-- dt-vars:start -->\` / \`<!-- dt-vars:end -->\` markers. ` +
         'Add them around the `--dt-*` reference table so this check knows where to look.',
     );
   }
-  const block = readme.slice(start, end);
+  const block = doc.slice(start, end);
   const names = new Set();
   // Match backtick-quoted `--dt-*` references within the block.
   for (const match of block.matchAll(/`(--dt-[a-z0-9-]+)`/g)) {
@@ -78,28 +79,28 @@ function main() {
     return;
   }
 
-  const documented = collectReadmeVars();
+  const documented = collectDocVars();
 
   const missing = [...declared].filter((n) => !documented.has(n)).sort();
   const extra = [...documented].filter((n) => !declared.has(n)).sort();
 
   if (missing.length === 0 && extra.length === 0) {
-    console.log(`check-css-vars: OK — ${declared.size} --dt-* variables match README.`);
+    console.log(`check-css-vars: OK — ${declared.size} --dt-* variables match ${docRelPath}.`);
     return;
   }
 
-  console.error('check-css-vars: README.md is out of sync with src/styles/*.css\n');
+  console.error(`check-css-vars: ${docRelPath} is out of sync with src/styles/*.css\n`);
   if (missing.length > 0) {
-    console.error('Declared in CSS but missing from README:');
+    console.error(`Declared in CSS but missing from ${docRelPath}:`);
     console.error(formatSet(new Set(missing)));
     console.error('');
   }
   if (extra.length > 0) {
-    console.error('Listed in README but not declared in any CSS file:');
+    console.error(`Listed in ${docRelPath} but not declared in any CSS file:`);
     console.error(formatSet(new Set(extra)));
     console.error('');
   }
-  console.error('Fix: update the table under the `<!-- dt-vars:start -->` ... `<!-- dt-vars:end -->` block in README.md.');
+  console.error(`Fix: update the table under the \`<!-- dt-vars:start -->\` ... \`<!-- dt-vars:end -->\` block in ${docRelPath}.`);
   console.error('     Run `node scripts/check-css-vars.mjs --emit` to seed a fresh list.');
   process.exit(1);
 }

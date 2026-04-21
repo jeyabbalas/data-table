@@ -5,8 +5,8 @@ Replace the default `ValueCounts` on a `state` column with a **US-states choropl
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/08-custom-visualization/
+npm run dev
+# open http://localhost:5173/data-table/examples/08-custom-visualization/
 ```
 
 ## API surface

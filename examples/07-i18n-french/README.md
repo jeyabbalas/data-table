@@ -60,6 +60,6 @@ Switching languages at runtime: `messages` is resolved once at `createDataTable(
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/07-i18n-french/
+npm run dev
+# open http://localhost:5173/data-table/examples/07-i18n-french/
 ```

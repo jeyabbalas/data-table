@@ -5,8 +5,8 @@ The side panel flows in both directions: **Observe** reflects table state via `o
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/05-event-listeners/
+npm run dev
+# open http://localhost:5173/data-table/examples/05-event-listeners/
 ```
 
 ## API surface

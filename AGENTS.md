@@ -345,11 +345,32 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 ## 9. Pointers
 
+**Reference (for lookup during code-gen)**
 - **API reference** — [`docs/api-reference.md`](./docs/api-reference.md)
 - **Troubleshooting** — [`docs/troubleshooting.md`](./docs/troubleshooting.md)
-- **Runnable examples** — [`examples/README.md`](./examples/README.md)
-- **Main README** — [`README.md`](./README.md)
+- **llms.txt** — [`llms.txt`](./llms.txt) (index of this doc, api-reference, troubleshooting, guides)
+
+**Guides (task-oriented walkthroughs)**
+- [`docs/guides/loading-data.md`](./docs/guides/loading-data.md), [`filters.md`](./docs/guides/filters.md), [`derived-columns.md`](./docs/guides/derived-columns.md), [`events.md`](./docs/guides/events.md), [`visualizations.md`](./docs/guides/visualizations.md), [`session-persistence.md`](./docs/guides/session-persistence.md)
+- [`theming.md`](./docs/guides/theming.md), [`i18n.md`](./docs/guides/i18n.md), [`accessibility.md`](./docs/guides/accessibility.md)
+- [`multi-table.md`](./docs/guides/multi-table.md), [`csp-and-offline.md`](./docs/guides/csp-and-offline.md), [`filter-presets.md`](./docs/guides/filter-presets.md)
+
+**Concepts (deep dives on architecture)**
+- [`docs/concepts/architecture.md`](./docs/concepts/architecture.md)
+- [`docs/concepts/state-model.md`](./docs/concepts/state-model.md)
+
+**Integrations (framework / bundler recipes)**
+- [`docs/integrations/react.md`](./docs/integrations/react.md), [`vue.md`](./docs/integrations/vue.md), [`svelte.md`](./docs/integrations/svelte.md), [`solid.md`](./docs/integrations/solid.md), [`nextjs.md`](./docs/integrations/nextjs.md), [`nuxt.md`](./docs/integrations/nuxt.md)
+- [`docs/integrations/vite.md`](./docs/integrations/vite.md), [`webpack.md`](./docs/integrations/webpack.md), [`cdn.md`](./docs/integrations/cdn.md)
+
+**Performance**
+- [`docs/performance.md`](./docs/performance.md)
+
+**Runnable code**
+- **Examples index** — [`examples/README.md`](./examples/README.md) (10 single-feature examples)
 - **Demo app** (full consumer showcase) — [`demo/`](./demo/)
+
+**Source-of-truth (prefer these over the docs when they disagree)**
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
 - **Options definition** — `src/DataTable.ts:124-223`
 - **Event payloads** — `src/core/TableEvents.ts`

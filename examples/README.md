@@ -1,18 +1,18 @@
 # Examples
 
-Eight single-feature examples for `@jeyabbalas/data-table`. Each one is ≤ 50 LOC, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
+Ten single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
 
 ## Run
 
 From the repo root:
 
 ```bash
-npm run example
+npm run dev
 ```
 
-Then open `http://localhost:5173/`. The landing page links each example.
+Then open `http://localhost:5173/data-table/` and click **ten focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
 
-No pre-build needed — Vite serves the library from source via aliases (see `vite.examples.config.ts`).
+No pre-build needed — Vite serves the library from source via aliases (see `vite.demo.config.ts`).
 
 The same examples are also browsable on the deployed demo under [`/data-table/examples/`](https://jeyabbalas.github.io/data-table/examples/).
 
@@ -28,5 +28,7 @@ The same examples are also browsable on the deployed demo under [`/data-table/ex
 | 06 | [`06-custom-theme`](./06-custom-theme/) | CSS variable overrides + `setColorScheme` | `--dt-*`, `setColorScheme` |
 | 07 | [`07-i18n-french`](./07-i18n-french/) | Translate every UI label via a `messages` override | `messages: DeepPartial<Strings>` |
 | 08 | [`08-custom-visualization`](./08-custom-visualization/) | Subclass `BaseVisualization`; register via per-instance `VisualizationRegistry` | `BaseVisualization`, `VisualizationRegistry` |
+| 09 | [`09-multi-table`](./09-multi-table/) | Two tables sharing a `FilterPresetManager` and a `SessionStore` | shared `presets.manager`, shared `persistence.sessionStore` |
+| 10 | [`10-filter-presets`](./10-filter-presets/) | Save / load / export / import filter presets with JSON | `FilterPresetManager.save / load / exportToJSON / importFromJSON` |
 
 For the full API, see [`docs/api-reference.md`](../docs/api-reference.md).

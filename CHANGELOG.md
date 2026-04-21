@@ -87,6 +87,24 @@ the project adheres to [Semantic Versioning](https://semver.org/).
   rejects with `WorkerInitError` (`code: 'WORKER_UNSUPPORTED'`,
   `details.missing: string[]`) before touching the worker. Default remains
   best-effort init (real failures surface later via the `error` event).
+- **Documentation — Phase 2 depth content.** Task-oriented guides under
+  `docs/guides/` (loading data, filters, derived columns, events,
+  visualizations, session persistence, theming, i18n, accessibility,
+  multi-table, CSP/offline, filter presets), architecture and state-model
+  concept docs under `docs/concepts/`, framework and bundler integration
+  guides under `docs/integrations/` (React, Vue, Svelte, Solid, Next.js,
+  Nuxt, Vite, Webpack, CDN), a methodology-first performance playbook at
+  `docs/performance.md`, and a docs landing index at `docs/README.md`. New
+  `llms.txt` at the repo root follows the [llmstxt.org](https://llmstxt.org)
+  convention for coding-agent indexing. Two new runnable examples —
+  `09-multi-table` (shared `FilterPresetManager` + `SessionStore` across
+  instances) and `10-filter-presets` (save / load / export / import
+  preset JSON). README's theming section trimmed to a summary + link;
+  the complete `--dt-*` CSS variable reference (60 tokens with light /
+  dark defaults side-by-side) now lives in `docs/guides/theming.md`, and
+  `scripts/check-css-vars.mjs` validates sync against that file. AGENTS.md
+  §9 Pointers expanded with links to every new guide, concept, and
+  integration doc.
 
 ### Changed
 

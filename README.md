@@ -51,11 +51,30 @@ await table.destroy();
 
 ## Documentation
 
-- **Start here:** Quick start (above) · [Runnable examples](./examples/README.md)
-- **API reference:** [docs/api-reference.md](./docs/api-reference.md) — every option, event, action, error, filter shape, and derived-column type.
-- **Troubleshooting:** [docs/troubleshooting.md](./docs/troubleshooting.md) — error codes and 15 FAQs with fix snippets.
-- **For AI coding agents:** [AGENTS.md](./AGENTS.md) — capability matrix, clarifying-question checklist, canonical snippets, pitfalls.
-- **Source:** Tier-1 exports live in [`src/index.ts`](./src/index.ts); Tier-2 in [`src/advanced.ts`](./src/advanced.ts).
+Full documentation lives under [`docs/`](./docs/README.md). A quick index:
+
+**Start here**
+- Quick start (above) · [Runnable examples](./examples/README.md)
+- [AGENTS.md](./AGENTS.md) — agent-facing guide: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
+
+**Reference**
+- [API reference](./docs/api-reference.md) — every option, event, action, error, filter shape, derived-column type
+- [Troubleshooting](./docs/troubleshooting.md) — 23 error codes and 15 common-issue FAQs with fix snippets
+
+**Guides**
+- [Loading data](./docs/guides/loading-data.md) · [Filters](./docs/guides/filters.md) · [Derived columns](./docs/guides/derived-columns.md) · [Events](./docs/guides/events.md)
+- [Visualizations](./docs/guides/visualizations.md) · [Session persistence](./docs/guides/session-persistence.md) · [Theming](./docs/guides/theming.md) · [i18n](./docs/guides/i18n.md)
+- [Accessibility](./docs/guides/accessibility.md) · [Multi-table dashboards](./docs/guides/multi-table.md) · [CSP and offline](./docs/guides/csp-and-offline.md) · [Filter presets](./docs/guides/filter-presets.md)
+
+**Concepts**
+- [Architecture](./docs/concepts/architecture.md) · [State model](./docs/concepts/state-model.md)
+
+**Integrations**
+- Frameworks: [React](./docs/integrations/react.md) · [Vue](./docs/integrations/vue.md) · [Svelte](./docs/integrations/svelte.md) · [Solid](./docs/integrations/solid.md) · [Next.js](./docs/integrations/nextjs.md) · [Nuxt](./docs/integrations/nuxt.md)
+- Bundlers: [Vite](./docs/integrations/vite.md) · [Webpack](./docs/integrations/webpack.md) · [CDN (no-build)](./docs/integrations/cdn.md)
+
+**Source**
+- Tier-1 exports live in [`src/index.ts`](./src/index.ts); Tier-2 in [`src/advanced.ts`](./src/advanced.ts).
 
 ## Framework integration
 
@@ -149,8 +168,9 @@ for payload types.
 
 ## Theming
 
-All colors, spacing, and typography are driven by CSS custom properties on
-`:root`. Override globally:
+All colors, spacing, typography, and z-indices are driven by CSS custom
+properties (60 `--dt-*` tokens in total). Override the ones you care about
+on `:root`, on a per-instance element, or at runtime.
 
 ```css
 :root {
@@ -161,162 +181,13 @@ All colors, spacing, and typography are driven by CSS custom properties on
 }
 ```
 
-Or per-instance via a class on the table element:
-
-```html
-<div id="my-table" class="dt-root mint-theme"></div>
-<style>
-  .dt-root.mint-theme { --dt-primary: #10b981; }
-</style>
-```
-
 Light/dark mode follows `prefers-color-scheme` by default. Pass
 `colorScheme: 'light' | 'dark' | 'auto'` to force a theme, or call
-`table.setColorScheme(...)` at runtime. Body-portalled modals (export,
-SQL filter, derived-column) stay in sync via `MutationObserver`.
+`table.setColorScheme(...)` at runtime; body-portalled modals stay in sync.
 
-<details>
-<summary>Complete CSS variable reference (90+ variables)</summary>
-
-<!-- dt-vars:start -->
-
-Every CSS custom property the library reads. All default to light-mode
-values declared on `:root`; dark-mode variants apply automatically under
-`prefers-color-scheme: dark` (unless the instance carries
-`data-dt-color-scheme="light"`) and unconditionally under
-`data-dt-color-scheme="dark"`.
-
-#### Palette
-
-| Variable | Role |
-|---|---|
-| `--dt-primary` | Accent colour for focused UI, buttons, sort indicators. |
-| `--dt-primary-hover` | Hover state for `--dt-primary`. |
-| `--dt-primary-light` | Light wash behind active rows/filters. |
-| `--dt-primary-lighter` | Lighter wash for selected-row backgrounds. |
-| `--dt-primary-alpha-10` | 10% alpha of `--dt-primary` (derived via `color-mix`). |
-| `--dt-primary-alpha-20` | 20% alpha of `--dt-primary`. |
-| `--dt-primary-alpha-30` | 30% alpha of `--dt-primary`. |
-| `--dt-primary-alpha-50` | 50% alpha of `--dt-primary`. |
-| `--dt-accent` | Secondary accent (null bars, warning chrome). |
-| `--dt-accent-hover` | Hover state for `--dt-accent`. |
-| `--dt-accent-soft` | Soft translucent version of `--dt-accent`. |
-| `--dt-neutral` | Neutral slate for ValueCounts "Other" category. |
-| `--dt-neutral-hover` | Hover state for `--dt-neutral`. |
-| `--dt-neutral-soft` | Soft translucent version of `--dt-neutral`. |
-| `--dt-success` | Success indicator colour (e.g. validated SQL). |
-
-#### Surfaces
-
-| Variable | Role |
-|---|---|
-| `--dt-bg` | Primary table background. |
-| `--dt-bg-secondary` | Secondary background (header, filter bar). |
-| `--dt-bg-tertiary` | Tertiary background (hover rows, input fills). |
-| `--dt-border` | Primary border colour. |
-| `--dt-border-light` | Subtle border for nested components. |
-| `--dt-backdrop` | Modal scrim (semi-transparent). |
-
-#### Text & icons
-
-| Variable | Role |
-|---|---|
-| `--dt-text` | Default text colour. |
-| `--dt-text-secondary` | Secondary / caption text. |
-| `--dt-text-tertiary` | Tertiary / placeholder text. |
-| `--dt-arrow-default` | Idle colour for sort/expand icons. |
-| `--dt-arrow-hover` | Hover colour for sort/expand icons. |
-
-#### Error / validation
-
-| Variable | Role |
-|---|---|
-| `--dt-error` | Base error colour. |
-| `--dt-error-dark` | Darker error accent (button hover, text). |
-| `--dt-error-darker` | Strongest error accent. |
-| `--dt-error-soft` | Soft translucent error wash. |
-| `--dt-error-bg` | Error surface background (banners, panels). |
-| `--dt-error-border-soft` | Soft border for error banners. |
-| `--dt-error-text-strong` | Strong error text for dark-mode legibility. |
-| `--dt-on-error` | Foreground on error-coloured surfaces. |
-
-#### Sizing
-
-| Variable | Default | Role |
-|---|--:|---|
-| `--dt-header-height` | `120px` | Column header area height (room for visualizations). |
-| `--dt-row-height` | `32px` | Virtual-scroller row height. |
-| `--dt-col-width` | `200px` | Default column width. |
-| `--dt-scrollbar-width` | `17px` | Reserved gutter for the body's vertical scrollbar. |
-| `--dt-panel-width` | `320px` | Floating-panel (filter / preset / derived-edit) width. |
-| `--dt-radius` | `8px` | Default border radius. |
-| `--dt-radius-sm` | `4px` | Small border radius (buttons, chips). |
-
-#### Typography
-
-| Variable | Role |
-|---|---|
-| `--dt-font-family` | Font family for all library chrome. |
-| `--dt-font-size` | Base font size. |
-| `--dt-font-size-sm` | Small font size (filter chips, hints). |
-| `--dt-font-size-xs` | Extra-small font size (stats captions). |
-
-#### Effects
-
-| Variable | Role |
-|---|---|
-| `--dt-transition` | Shared transition timing (`0.15s ease`). |
-| `--dt-shadow-sm` | Small elevation shadow. |
-| `--dt-shadow-md` | Medium elevation shadow (panels, modals). |
-
-#### Syntax highlighting
-
-| Variable | Role |
-|---|---|
-| `--dt-syntax-string` | String literals in the SQL editor. |
-| `--dt-syntax-type` | Type keywords in the SQL editor. |
-
-#### Stacking ladder
-
-Every `z-index` in the library goes through a `--dt-z-*` variable, so you
-can interleave your own layers without hunting through the stylesheet.
-
-| Variable | Default | Layer |
-|---|--:|---|
-| `--dt-z-table-body` | `1` | Table body cells (focused cells, resize handle). |
-| `--dt-z-pinned-col` | `20` | Sticky pinned-column base; JS adds per-pin offsets. |
-| `--dt-z-header` | `21` | Column header row + hidden-columns gutter. |
-| `--dt-z-action-panel` | `30` | Per-column action panel popovers. |
-| `--dt-z-filter-bar` | `40` | Filter bar at the top of the table. |
-| `--dt-z-floating-panel` | `50` | In-page panels (filter, preset, derived-edit). |
-| `--dt-z-autocomplete` | `60` | CodeMirror autocomplete tooltip (portalled to `<body>`). |
-| `--dt-z-modal` | `1000` | Full-screen modals + backdrops. |
-| `--dt-z-modal-stack-step` | `2` | Step added per stacked modal/panel so two-at-once dialogs layer predictably. |
-
-Simultaneously-open modals or panels receive `--dt-z-{modal,floating-panel}
-+ stackIndex * --dt-z-modal-stack-step`. Gaps are ≥ 10 so you can slot
-host-app UI between layers:
-
-```css
-:root {
-  --dt-z-modal: 5000;
-  --dt-z-autocomplete: 4900;
-  --dt-z-floating-panel: 4800;
-}
-```
-
-Pinned-column stacking is computed as `--dt-z-pinned-col + pinOrderOffset`,
-so overriding `--dt-z-pinned-col` shifts the whole pinned group together.
-
-#### Internal
-
-| Variable | Role |
-|---|---|
-| `--dt-stylesheet-loaded` | Library-internal marker used by `createDataTable()` to warn when the stylesheet import is missing. Do not override. |
-
-<!-- dt-vars:end -->
-
-</details>
+See **[docs/guides/theming.md](./docs/guides/theming.md)** for the complete
+variable reference with light/dark defaults side-by-side, the dark-mode
+scoping model, stacking-ladder deep-dive, and per-instance override patterns.
 
 ## CSS isolation
 
@@ -443,12 +314,11 @@ for the full symbol list.
 
 ```bash
 npm install
-npm run dev              # library playground
-npm run dev:demo         # demo app on http://localhost:5173/data-table/
-npm run example          # examples dev server at http://localhost:5173/
+npm run dev              # demo + examples on http://localhost:5173/data-table/
 npm test
 npm run build            # emits dist/data-table.{js,cjs} + dist/index.d.ts
-npm run build:demo
+npm run build:demo       # static site (demo + examples) → demo-dist/
+npm run preview          # preview the built site locally
 ```
 
 ## License

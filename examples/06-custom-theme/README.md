@@ -5,8 +5,8 @@ Re-skin the table in a warm **terracotta + rose + stone** palette — no blue an
 ## Run
 
 ```bash
-npm run example
-# open http://localhost:5173/06-custom-theme/
+npm run dev
+# open http://localhost:5173/data-table/examples/06-custom-theme/
 ```
 
 ## API surface

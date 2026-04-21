@@ -788,19 +788,22 @@
   justify-content: center;
   padding: 0;
   border: none;
-  border-left: 1px solid var(--dt-border);
   background: var(--dt-bg);
   color: var(--dt-text-tertiary);
   cursor: pointer;
   border-radius: 0 var(--dt-radius) var(--dt-radius) 0;
-  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition), box-shadow var(--dt-transition);
+  box-shadow: inset 1px 0 0 0 var(--dt-border);
+  transition: background var(--dt-transition), color var(--dt-transition), box-shadow var(--dt-transition);
 }
 
 .dt-add-column-btn:hover {
   background: var(--dt-primary-light);
-  border-left-color: var(--dt-primary);
   color: var(--dt-primary);
-  box-shadow: inset 1px 0 0 0 var(--dt-primary), inset -1px 0 0 0 var(--dt-primary), inset 0 1px 0 0 var(--dt-primary), inset 0 -1px 0 0 var(--dt-primary);
+  box-shadow:
+    inset 1px 0 0 0 var(--dt-primary),
+    inset -1px 0 0 0 var(--dt-primary),
+    inset 0 1px 0 0 var(--dt-primary),
+    inset 0 -1px 0 0 var(--dt-primary);
 }
 
 .dt-add-column-btn:focus-visible {

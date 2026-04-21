@@ -1,13 +1,14 @@
 # Multi-table dashboards
 
 Mounting two or more `DataTable` instances on the same page is a
-first-class use case. Each table owns its own DuckDB data, but filter
-presets and IndexedDB session storage can be shared so users see a
-unified experience.
+first-class use case. Tables can share a DuckDB worker, filter presets,
+and IndexedDB session storage so users see a unified experience without
+paying for two WASM runtimes.
 
 ## You'll learn how to
 
 - Mount multiple tables on one page
+- Share a `WorkerBridge` so one DuckDB instance backs every table (≈½ memory)
 - Share a `FilterPresetManager` so presets saved in one table are usable in another
 - Share a `SessionStore` so one IDB connection backs every table
 - Coordinate between tables by driving cross-table reactions off of events
@@ -24,8 +25,11 @@ import {
   createDataTable,
   FilterPresetManager,
   SessionStore,
+  WorkerBridge,
 } from '@jeyabbalas/data-table';
 
+const sharedBridge  = new WorkerBridge();
+await sharedBridge.initialize();
 const sharedPresets = new FilterPresetManager();
 const sharedStore   = new SessionStore();
 await sharedStore.open();
@@ -34,6 +38,7 @@ const trips = await createDataTable({
   container: document.getElementById('trips')!,
   source: 'trips.csv',
   tableName: 'trips',
+  bridge:      sharedBridge,
   presets:     { manager: sharedPresets },
   persistence: { sessionStore: sharedStore },
 });
@@ -42,36 +47,86 @@ const users = await createDataTable({
   container: document.getElementById('users')!,
   source: 'users.csv',
   tableName: 'users',
+  bridge:      sharedBridge,
   presets:     { manager: sharedPresets },
   persistence: { sessionStore: sharedStore },
 });
 ```
 
-Each table has its own `WorkerBridge` (so DuckDB state stays isolated), its
-own `TableContainer` (so DOM stays isolated), and its own event bus. But
-`sharedPresets` and `sharedStore` flow through both — any preset saved
-from `trips` appears in `users`'s preset panel too.
+Each table has its own `TableContainer` (so DOM stays isolated), its own
+`TableState` / `StateActions` (so filters, sort, undo stacks stay
+per-table), and its own event bus. But `sharedBridge`, `sharedPresets`,
+and `sharedStore` flow through both — one DuckDB heap, one preset list,
+one IndexedDB handle.
 
 ## What can and cannot be shared
 
 | Object | Shareable? | Why |
 |---|---|---|
+| `WorkerBridge` | ✅ yes (recommended for heavy dashboards) | One DuckDB worker = ≈½ memory and one WASM init instead of two. Requires distinct `tableName` per table. |
 | `FilterPresetManager` | ✅ yes | Presets are table-agnostic; they can be loaded onto any table with compatible columns |
 | `SessionStore` | ✅ yes | Snapshots are keyed by `tableName`, so one IDB connection can back many tables |
 | `VisualizationRegistry` | ✅ yes (with caveat) | Pass the same `VisualizationRegistry` to both tables if you want identical custom viz behavior |
-| `WorkerBridge` | ❌ no | The bridge owns a DuckDB database; sharing would intermix tables' data |
 | `StateActions`, `TableState` | ❌ no | Per-instance by definition |
 
-### `WorkerBridge` is not shared
+### Sharing a `WorkerBridge`
 
-Each table gets its own bridge because each bridge owns a DuckDB database
-with table-specific VIEWs, derived columns, and session state. Sharing
-would require coordinating namespace prefixes to keep data from clobbering
-— not worth the complexity.
+Pass one initialized `WorkerBridge` to each `createDataTable()` via the
+`bridge` option. The library honours `ownsBridge` semantics: only the
+caller-owned bridge is terminated when a table's `destroy()` runs
+([`src/DataTable.ts:372-374,:956`](../../src/DataTable.ts)). A bridge you
+constructed yourself survives every table's destruction — call
+`bridge.terminate()` when you're done with the page.
 
-Mounting many tables does mean many WASM workers. On a page with more than
-a few tables, consider lazy-mounting them (only call `createDataTable()`
-for the ones currently visible).
+**Requirements when sharing:**
+
+- **Distinct `tableName` per table.** DuckDB creates one table per call;
+  reusing a name replaces the previous one's data. `tableName: 'trips'` and
+  `tableName: 'users'` stay separate inside one DuckDB database.
+- **Derived-column VIEWs are already namespaced** as `__dt_view_<tableName>__`
+  ([`src/derived/DerivedColumnManager.ts:61`](../../src/derived/DerivedColumnManager.ts)),
+  so adding a derived column on one table doesn't alter the other's schema.
+
+**Caveats (honest):**
+
+- The bridge's query cache (keyed by SQL text) is shared. Usually a benefit —
+  identical queries from both tables hit the cache once. But
+  `table.clearSession()` calls `bridge.clearQueryCache()` globally, briefly
+  slowing queries on every table sharing the bridge until caches rewarm.
+- DuckDB-WASM is single-threaded inside one worker. If table A runs a slow
+  query, table B's queries queue behind it. In practice this is usually a win
+  (WASM context-switching is cheap and the library already caps concurrent
+  visualization queries at 4 per bridge), but avoid sharing when one table
+  routinely runs multi-second analytical queries that shouldn't head-of-line
+  block the other.
+
+### When to keep `WorkerBridge` per-table
+
+Separate bridges for each table when:
+
+- **Strong isolation** (multi-tenant, one table per tenant).
+- **Different `bridgeOptions`** — e.g., one table's WASM bundles are
+  self-hosted and the other's come from a CDN.
+- **Hot-swap one dataset** without invalidating the other's query cache.
+
+Mounting many tables with per-table bridges means many WASM workers. On a
+page with more than a few tables, consider lazy-mounting them (only call
+`createDataTable()` for the ones currently visible).
+
+### Memory budget
+
+Typical cost per table, based on [`docs/performance.md`](../performance.md)'s
+50-100 bytes/cell rule:
+
+| Rows × cols | Per table (own bridge) | Two tables (shared bridge) | Two tables (own bridges) |
+|---|---|---|---|
+| 100K × 20 | ~100-200 MB + 1 worker | ~200-400 MB + 1 worker | ~200-400 MB + 2 workers |
+| 1M × 20 | ~1-2 GB + 1 worker | ~2-4 GB + 1 worker | ~2-4 GB + 2 workers |
+
+Browsers cap per-tab memory around 2-4 GB on desktop and much lower on
+mobile (often 1 GB). For two 100K-row tables, shared-bridge fits comfortably
+on any device; per-table bridges can crash low-memory browsers with
+DevTools open. Share the bridge when the tables' data isn't adversarial.
 
 ## Coordinating between tables
 
@@ -143,9 +198,14 @@ Destroy tables first, then close shared resources:
 ```ts
 await trips.destroy();
 await users.destroy();
+sharedBridge.terminate();
 sharedStore.close();
 // FilterPresetManager has no explicit close method.
 ```
+
+Tables skip `bridge.terminate()` when they don't own the bridge
+(`ownsBridge` in `src/DataTable.ts:372,:956`), so a shared bridge survives
+both `destroy()` calls and must be terminated explicitly.
 
 Closing the store before destroying tables is benign (auto-save may skip a
 final flush) but not fatal — `SessionStore.saveSync()` silently no-ops on a
@@ -222,20 +282,20 @@ sharedPresets.save(`[trips] Weekend`, trips.state.filters.get());
 
 Your load UI can then filter the preset list by prefix.
 
-### Close all tables + store on route unmount
+### Close all tables + shared resources on route unmount
 
 ```ts
 async function teardownDashboard() {
   await Promise.all(tables.map((t) => t.destroy()));
+  sharedBridge.terminate();   // if you're sharing one
   sharedStore.close();
 }
 ```
 
 ## Gotchas
 
-- **Two tables with the same `tableName` share a session snapshot.** One overwrites the other on restore. Use unique names, or share a store and accept that the snapshot is per-name.
-- **`WorkerBridge` is not a shareable resource.** Don't try to pass the same `bridge` to multiple `createDataTable()` calls — the library wasn't designed for it; worker messages would cross-talk.
-- **Worker count scales with table count.** 5 tables = 5 WASM workers = 5× initialization cost. For many small tables consider one table with derived columns or a single query-driven view.
+- **Two tables with the same `tableName` share a session snapshot AND a DuckDB table.** Their state overwrites each other on restore, and if the bridge is shared the second `loadData()` replaces the first's data. Always use unique names.
+- **Worker count scales with table count when bridges aren't shared.** 5 tables × own bridge = 5 WASM workers = 5× initialization cost and 5× base memory. Share the bridge (see above) or, for many small views of the same dataset, consider one table with derived columns or a single query-driven view.
 - **Cross-filter loops.** If table A's `filterChange` handler modifies table B, and B's modifies A, you'll loop forever. Check equality before setting.
 - **Shared `defaultVisualizationRegistry` is a footgun.** Registering a custom viz without a per-instance registry affects every subsequent table on the page. Use explicit `VisualizationRegistry` instances.
 - **`portalTarget` must not have `overflow: hidden` above it.** Or modals can get clipped. Body is the safe default.

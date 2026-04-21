@@ -3,14 +3,19 @@ import {
   createDataTable,
   FilterPresetManager,
   SessionStore,
+  WorkerBridge,
   type DataTable,
 } from '@jeyabbalas/data-table';
 
 const DATA_URL =
   'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
 
-// Shared across both tables so a preset saved in A is usable in B,
-// and one IndexedDB connection backs both session snapshots.
+// One WorkerBridge (= one DuckDB WASM instance, one Web Worker) backs both
+// tables. Each table still owns its own UI, state, and filters; they just
+// share the ~100-200 MB DuckDB heap instead of running two copies.
+// Safe because workers route messages by id and DuckDB tables are namespaced
+// by the `tableName` option below.
+const sharedBridge = new WorkerBridge();
 const sharedPresets = new FilterPresetManager();
 const sharedStore = new SessionStore();
 
@@ -26,13 +31,16 @@ function renderCounter(): void {
 }
 
 (async () => {
+  await sharedBridge.initialize();
   await sharedStore.open();
 
   // Each table has a unique tableName — session snapshots are keyed by it,
-  // so the two tables don't overwrite each other's state in IDB.
+  // so the two tables don't overwrite each other's state in IDB, and the
+  // shared bridge keeps their DuckDB tables separate.
   a = await createDataTable({
     container: document.getElementById('table-a') as HTMLElement,
     tableName: 'trips_a',
+    bridge: sharedBridge,
     presets: { manager: sharedPresets },
     persistence: { sessionStore: sharedStore },
   });
@@ -40,6 +48,7 @@ function renderCounter(): void {
   b = await createDataTable({
     container: document.getElementById('table-b') as HTMLElement,
     tableName: 'trips_b',
+    bridge: sharedBridge,
     presets: { manager: sharedPresets },
     persistence: { sessionStore: sharedStore },
   });
@@ -47,10 +56,15 @@ function renderCounter(): void {
   a.on('filterChange', renderCounter);
   b.on('filterChange', renderCounter);
 
-  await Promise.all([
-    a.loadData(DATA_URL, { sourceFormat: 'csv' }),
-    b.loadData(DATA_URL, { sourceFormat: 'csv' }),
-  ]);
+  // Fetch the CSV once on the main thread and pass the ArrayBuffer to both
+  // tables. Avoids the 2× 10 MB JS-heap peak and the 2× network round-trip
+  // the previous `Promise.all([a.loadData(url), b.loadData(url)])` created.
+  // Loads are serialised because DuckDB-WASM is single-threaded — the parallel
+  // version was queueing behind itself inside DuckDB anyway.
+  const res = await fetch(DATA_URL);
+  const buf = await res.arrayBuffer();
+  await a.loadData(buf, { sourceFormat: 'csv' });
+  await b.loadData(buf, { sourceFormat: 'csv' });
   renderCounter();
 
   document.getElementById('save-a')!.addEventListener('click', () => {
@@ -75,5 +89,8 @@ function renderCounter(): void {
 window.addEventListener('beforeunload', async () => {
   await a?.destroy();
   await b?.destroy();
+  // Neither table owns the bridge, so it survives both destroys — terminate
+  // explicitly since this page is unloading.
+  sharedBridge.terminate();
   sharedStore.close();
 });

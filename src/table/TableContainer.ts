@@ -278,6 +278,19 @@ export class TableContainer {
       this.container.appendChild(this.element);
     }
 
+    // Virtual scrolling measures the mount container's height to decide how
+    // many rows to render. If the container is 0-tall at mount, no rows will
+    // appear until it grows — a common footgun when the library is dropped
+    // into a non-flex parent or a grid cell without a height chain.
+    if (this.container.getBoundingClientRect().height === 0) {
+      console.warn(
+        '[@jeyabbalas/data-table] Mount container has height 0 at initialization. ' +
+        'No rows will render until the container has a computed height. ' +
+        'Typical fix: make it a flex/grid child with `flex: 1; min-height: 0` ' +
+        '(see examples/01-minimal) or set an explicit height.',
+      );
+    }
+
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
 

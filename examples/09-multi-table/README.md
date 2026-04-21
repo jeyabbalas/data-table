@@ -1,8 +1,9 @@
 # 09 — Multi-table dashboard
 
-Two tables side-by-side share a `FilterPresetManager` and a `SessionStore`.
-Filter table A, save the filters as a preset, then load that preset onto
-table B — the filters apply there too.
+Two tables side-by-side share a `WorkerBridge` (one DuckDB worker for both),
+a `FilterPresetManager`, and a `SessionStore`. Filter table A, save the
+filters as a preset, then load that preset onto table B — the filters
+apply there too.
 
 ## Run
 
@@ -13,9 +14,10 @@ npm run dev
 
 ## API surface
 
+- [`WorkerBridge`](../../docs/api-reference.md#workerbridge) — construct and initialize once, pass to each table via `bridge`. Cuts DuckDB memory and init cost roughly in half.
 - [`FilterPresetManager`](../../docs/api-reference.md#filterpresetmanager) — construct once, pass to many tables via `presets: { manager }`
 - [`SessionStore`](../../docs/api-reference.md#sessionstore) — construct once, pass via `persistence: { sessionStore }`
-- [`tableName` option](../../docs/api-reference.md#createdatatable) — unique per table so snapshots don't collide
+- [`tableName` option](../../docs/api-reference.md#createdatatable) — unique per table so snapshots and DuckDB tables don't collide
 
 ## Data
 
@@ -40,10 +42,18 @@ schema, so a preset saved from A can be loaded onto B cleanly.
 
 ## What's *not* shared
 
-- The `WorkerBridge`. Each table owns its own DuckDB worker and data. The
-  library doesn't support bridge sharing (see the [multi-table
-  guide](../../docs/guides/multi-table.md) for why).
-- `TableState` and `StateActions`. Per-instance by definition.
+- `TableState` and `StateActions`. Per-instance by definition — each table has
+  its own filters, sort order, column visibility, and undo/redo stack.
+- DOM and event bus. Each table mounts into its own container with its own
+  `table.on(...)` subscriptions.
+
+### When would you want two bridges instead?
+
+Stick with one bridge per table when you need strong data isolation
+(multi-tenant), different `bridgeOptions` per table (e.g., self-hosted WASM
+paths that differ), or when one table routinely runs multi-second queries
+that shouldn't head-of-line-block the other. Otherwise, shared is the
+right default — see the [multi-table guide](../../docs/guides/multi-table.md).
 
 ## Related
 

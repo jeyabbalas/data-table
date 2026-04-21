@@ -25,16 +25,25 @@ import type { Filter } from '../core/types';
 import type { BaseVisualization } from './BaseVisualization';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
+/** Default max number of visualization queries in flight at once.
+ *  DuckDB-WASM runs single-threaded in one worker, so fanning out 20+ queries
+ *  on a wide table just queues them behind each other and blocks interactive
+ *  queries. A small cap (4) keeps the worker fed without head-of-line blocking. */
+const DEFAULT_VIZ_CONCURRENCY = 4;
+
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;
   private filterSequence = 0;
+  private readonly concurrency: number;
 
   constructor(
     private state: TableState,
     private actions: StateActions,
     private bridge: WorkerBridge,
+    concurrency: number = DEFAULT_VIZ_CONCURRENCY,
   ) {
+    this.concurrency = Math.max(1, concurrency);
     this.unsubscribe = state.filters.subscribe(filters => this.onFiltersChanged(filters));
   }
 
@@ -70,12 +79,36 @@ export class CrossfilterCoordinator {
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
     const seq = ++this.filterSequence;
 
-    const vizPromises = [...this.visualizations.entries()]
+    const vizTasks = [...this.visualizations.entries()]
       .filter(([, viz]) => !viz.isDestroyed())
-      .map(([, viz]) => viz.updateFilters(filters));
+      .map(([, viz]) => () => viz.updateFilters(filters));
 
-    // Run visualization updates and filtered row count in parallel (independent queries)
-    await Promise.all([...vizPromises, this.updateFilteredRowCount(filters, seq)]);
+    // Run visualization updates and filtered row count in parallel (independent
+    // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
+    // single-threaded worker on wide tables.
+    await Promise.all([
+      this.runLimited(vizTasks),
+      this.updateFilteredRowCount(filters, seq),
+    ]);
+  }
+
+  /** Run async tasks with a ceiling on simultaneous in-flight count.
+   *  Semantics mirror `Promise.all(tasks.map(t => t()))`: results preserve input
+   *  order, and the first rejection aborts the combined promise while sibling
+   *  tasks continue to run to completion in the background. */
+  private async runLimited<T>(tasks: Array<() => Promise<T>>): Promise<T[]> {
+    const results: T[] = new Array(tasks.length);
+    let cursor = 0;
+    const workerCount = Math.min(this.concurrency, tasks.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= tasks.length) return;
+        results[i] = await tasks[i]();
+      }
+    });
+    await Promise.all(workers);
+    return results;
   }
 
   private async updateFilteredRowCount(filters: Filter[], seq: number): Promise<void> {

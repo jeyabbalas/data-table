@@ -1,12 +1,11 @@
 /**
- * VirtualScroller - Efficient scrolling for large datasets
+ * Windowed scroller for rendering large row counts without blowing up the DOM.
  *
- * Creates a scroll container that only renders visible rows plus a buffer.
- * Manages scroll position, calculates visible range, and notifies listeners
- * when the visible range changes.
- *
- * This component handles the scrolling infrastructure. Row rendering is
- * delegated to the parent component (e.g., TableBody).
+ * Owns the scroll container and calculates the visible row range plus a
+ * configurable buffer; row rendering is delegated to the parent component
+ * (e.g. `TableBody`). `createDataTable()` composes one internally — reach
+ * for `VirtualScroller` on `/advanced` only when building a custom table
+ * shell that needs the same virtualization behaviour.
  */
 
 /**
@@ -51,21 +50,23 @@ export type ScrollCallback = (range: VisibleRange) => void;
 export type ScrollAlign = 'start' | 'center' | 'end';
 
 /**
- * VirtualScroller component for efficient rendering of large datasets.
- *
  * @example
- * ```typescript
+ * import { VirtualScroller } from '@jeyabbalas/data-table/advanced';
+ *
  * const scroller = new VirtualScroller(container, { rowHeight: 32 });
- * scroller.setTotalRows(10000);
+ * scroller.setTotalRows(10_000);
  *
  * scroller.onScroll((range) => {
  *   // Render rows from range.start to range.end
  *   // Position container at range.offsetY
  * });
  *
- * // Later, clean up
+ * // Later:
  * scroller.destroy();
- * ```
+ *
+ * @see VirtualScrollerOptions
+ * @see VisibleRange
+ * @see ScrollCallback
  */
 export class VirtualScroller {
   private scrollContainer: HTMLElement | null;

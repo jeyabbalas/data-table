@@ -1,7 +1,3 @@
-/**
- * WorkerBridge provides a Promise-based API for communicating with the DuckDB worker
- */
-
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import type {
   WorkerMessage,
@@ -82,6 +78,32 @@ interface PendingRequest {
 
 const DEFAULT_INIT_TIMEOUT_MS = 30_000;
 
+/**
+ * Promise-based RPC layer between the main thread and the DuckDB Web Worker.
+ *
+ * `createDataTable()` constructs one internally. Construct your own and pass
+ * it via `createDataTable({ bridge })` to share a single worker (and therefore
+ * a single DuckDB context) across multiple tables on a page, or to override
+ * `workerFactory` / `workerUrl` / `duckdbBundles` for strict-CSP and
+ * air-gapped deployments.
+ *
+ * @example
+ * import { WorkerBridge, createDataTable } from '@jeyabbalas/data-table';
+ *
+ * const bridge = new WorkerBridge();
+ * await bridge.initialize();
+ *
+ * const t1 = await createDataTable({ container: '#one', data: csv1, bridge });
+ * const t2 = await createDataTable({ container: '#two', data: csv2, bridge });
+ *
+ * // Later, on full-page teardown:
+ * await t1.destroy();
+ * await t2.destroy();
+ * bridge.terminate();
+ *
+ * @see WorkerBridgeOptions
+ * @see createDataTable
+ */
 export class WorkerBridge {
   private worker: Worker | null = null;
   private pendingRequests = new Map<string, PendingRequest>();

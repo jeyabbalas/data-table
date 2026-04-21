@@ -134,6 +134,38 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
 
 // --- SessionStore class ---
 
+/**
+ * IndexedDB-backed persistence store for `SessionSnapshot` records, keyed by
+ * `tableName` (which defaults to the table's `instanceId`).
+ *
+ * `createDataTable()` constructs and manages one internally when
+ * `persistence: true` (default). Construct your own to share one store
+ * across multiple `DataTable` instances on a page, inject a differently-keyed
+ * store, or swap the default for an app-specific backend (localStorage,
+ * remote sync, in-memory mock). Every method degrades gracefully — returns
+ * `null` / `[]` on failure and never throws — so private-browsing and
+ * no-IndexedDB environments fall back to a non-persistent session.
+ *
+ * @example
+ * import {
+ *   SessionStore,
+ *   createDataTable,
+ * } from '@jeyabbalas/data-table';
+ *
+ * // Share one store across many tables:
+ * const store = new SessionStore();
+ * await store.open();
+ *
+ * const t1 = await createDataTable({ container: '#one', data: csvA, sessionStore: store });
+ * const t2 = await createDataTable({ container: '#two', data: csvB, sessionStore: store });
+ *
+ * // Inspect persisted sessions:
+ * const snapshot = await store.load('my-table');
+ *
+ * @see SessionSnapshot
+ * @see AutoSave
+ * @see ../../docs/guides/session-persistence.md
+ */
 export class SessionStore {
   private db: IDBDatabase | null = null;
   private opening: Promise<boolean> | null = null;

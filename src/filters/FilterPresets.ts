@@ -1,8 +1,32 @@
 /**
- * FilterPresetManager — manages saved filter presets
+ * Manages named, JSON-serialisable snapshots of a table's filter state
+ * (a.k.a. "presets"): save / load / delete / rename / list / import / export.
  *
- * Provides CRUD operations for named filter presets, plus JSON export/import
- * for sharing presets across sessions or with downstream applications.
+ * `createDataTable()` attaches one automatically when `presets: true`
+ * (default); reach for a manual instance when you want to share the same
+ * preset list across multiple tables on a page (dashboard scenarios) or
+ * when plugging presets into app-level flows such as URL state or cloud
+ * sync.
+ *
+ * @example
+ * import {
+ *   FilterPresetManager,
+ *   createDataTable,
+ * } from '@jeyabbalas/data-table';
+ *
+ * // Share one preset list across two tables:
+ * const presetManager = new FilterPresetManager();
+ * await createDataTable({ container: '#one', data: csvA, presetManager });
+ * await createDataTable({ container: '#two', data: csvB, presetManager });
+ *
+ * // Round-trip presets to disk:
+ * const json = presetManager.exportJSON();
+ * localStorage.setItem('my-presets', json);
+ * presetManager.importJSON(localStorage.getItem('my-presets')!);
+ *
+ * @see FilterPreset
+ * @see FilterPresetCollection
+ * @see ../../docs/guides/filter-presets.md
  */
 
 import { createSignal } from '../core/Signal';

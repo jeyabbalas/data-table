@@ -36,7 +36,9 @@
     "preview": "vite preview --config vite.demo.config.ts",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "check:css-vars": "node scripts/check-css-vars.mjs"
+    "check:css-vars": "node scripts/check-css-vars.mjs",
+    "docs:api": "typedoc",
+    "docs:api:check": "typedoc --emit none"
   },
   "keywords": [
     "data-table",
@@ -105,6 +107,8 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.0.2",
     "topojson-client": "^3.1.0",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"

@@ -1,9 +1,34 @@
 /**
- * FilterPanel - Floating panel for creating column filters manually
+ * Floating panel for creating or editing the filter on a single column.
  *
- * Appears when the user clicks a filter button on a column header.
- * Shows filter controls for only the clicked column.
- * One instance per table, created lazily by TableContainer.
+ * `createDataTable()` instantiates one lazily per `TableContainer`; reach for
+ * `FilterPanel` on `/advanced` only when composing a bespoke container that
+ * reuses the built-in filter UX. The panel reads from `TableState`, writes
+ * via `StateActions`, and delegates focus-trap / Escape / outside-click
+ * handling to a shared {@link ModalHost}.
+ *
+ * @example
+ * import {
+ *   FilterPanel,
+ *   createTableState,
+ *   StateActions,
+ * } from '@jeyabbalas/data-table/advanced';
+ *
+ * const state = createTableState();
+ * const actions = new StateActions(state);
+ * const panel = new FilterPanel(state, actions, {
+ *   colorSchemeSource: document.querySelector('.dt-root')!,
+ * });
+ *
+ * // Attach to an anchor (typically a column-header filter button):
+ * panel.attach(anchorEl, 'age');
+ *
+ * // On teardown:
+ * panel.destroy();
+ *
+ * @see FilterPanelOptions
+ * @see FilterPanelField
+ * @see ../../docs/guides/filters.md
  */
 
 import type { TableState } from '../core/State';
@@ -28,9 +53,6 @@ export interface FilterPanelOptions {
   messages?: Strings;
 }
 
-/**
- * FilterPanel renders a floating panel with filter controls for a single column.
- */
 export class FilterPanel {
   private element: HTMLElement;
   private body: HTMLElement;

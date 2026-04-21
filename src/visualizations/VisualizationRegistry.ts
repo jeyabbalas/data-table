@@ -1,13 +1,35 @@
 /**
- * VisualizationRegistry — per-instance registry of column visualizations.
+ * Per-instance registry of column visualizations.
  *
- * Replaces the static-class `VisualizationFactory` so that custom
- * registrations are scoped to a single `createDataTable()` instance
- * instead of leaking across every table on the page.
+ * Replaces the static `VisualizationFactory` (now deprecated) so custom
+ * registrations are scoped to a single `createDataTable()` instance rather
+ * than leaking across every table on the page. Consumers typically pass
+ * a `VisualizationRegistry` via `createDataTable({ visualizationRegistry })`;
+ * when omitted the module-scoped `defaultVisualizationRegistry` is used.
  *
- * Consumers typically pass a `VisualizationRegistry` via
- * `createDataTable({ visualizationRegistry })`; when omitted, the
- * module-scoped `defaultVisualizationRegistry` is used.
+ * @example
+ * import {
+ *   VisualizationRegistry,
+ *   createDataTable,
+ * } from '@jeyabbalas/data-table';
+ * import { MyChoroplethVisualization } from './viz/MyChoropleth';
+ *
+ * const visualizationRegistry = new VisualizationRegistry();
+ * visualizationRegistry.register({
+ *   name: 'choropleth',
+ *   VisualizationClass: MyChoroplethVisualization,
+ *   match: (column) => column.name === 'fips_code',
+ * });
+ *
+ * await createDataTable({
+ *   container: '#table',
+ *   data: csv,
+ *   visualizationRegistry,
+ * });
+ *
+ * @see VisualizationRegistration
+ * @see VisualizationConstructor
+ * @see BaseVisualization
  */
 
 import type { ColumnSchema, DataType } from '../core/types';

@@ -6,7 +6,8 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 Planned work and discussion lives in GitHub Issues under the
 [`roadmap`](https://github.com/jeyabbalas/data-table/issues?q=is%3Aissue+label%3Aroadmap)
-label.
+label. Releases with breaking changes also get a dedicated walkthrough under
+[`docs/migration-guides/`](./docs/migration-guides/) alongside the entry below.
 
 ## [Unreleased]
 

@@ -97,6 +97,14 @@ npx vitest -u
 
 Mention the update in the PR description.
 
+These tests are the project's lightweight equivalent of running
+[`api-extractor`](https://api-extractor.com/) — they fail CI on any
+unintended addition, removal, or renaming of a public export, which is the
+guard that matters most for a library with two entry points. Signature-level
+diff tracking (`api-extractor`'s richer mode) isn't worth the config overhead
+at this scale; if the surface ever grows to warrant it, layer `api-extractor`
+on top of the existing snapshot without replacing it.
+
 ## Building
 
 ```bash
@@ -121,6 +129,17 @@ Only the `dist/` directory ships to npm (`files: ["dist"]` in `package.json`).
 - `npm run build:demo` — builds the static demo site into `demo-dist/` (used by the Pages deploy workflow).
 - `npm run preview` — serves the built demo from `demo-dist/`.
 - `npm run check:css-vars` — runs the CSS-variable sync check in isolation (useful after editing `src/styles/`).
+- `npm run docs:api` — regenerates [`docs/api/`](./docs/api/) from source JSDoc via [typedoc](https://typedoc.org/) + `typedoc-plugin-markdown`. Commit the resulting files alongside source changes so GitHub renders the refreshed reference without a build step.
+- `npm run docs:api:check` — runs typedoc in non-emit mode to verify that generation succeeds (useful in a pre-commit or CI step after JSDoc edits).
+
+### Generated API reference
+
+`docs/api/` is the **exhaustive, generated** API reference — every public symbol from `src/index.ts` and `src/advanced.ts` with signatures, parameter types, and rendered `@example` blocks. It complements [`docs/api-reference.md`](./docs/api-reference.md), which stays a **curated, narrative** overview (options tables, event catalog, error codes).
+
+- Source of truth: JSDoc on the `export`ed declarations.
+- Regenerate after any JSDoc or signature change: `npm run docs:api`.
+- Do not hand-edit files inside `docs/api/` — they're overwritten on the next generation.
+- Typedoc is deliberately **not** wired into `npm run build`; keep the core build path lean and treat the generated reference as a pure-docs artifact.
 
 ## Project layout
 

@@ -12,7 +12,9 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 
 ## Reference
 
-- [API reference](./api-reference.md) — every option, event, action, error code, filter shape, derived-column type
+- [API reference](./api-reference.md) — curated narrative: every option, event, action, error code, filter shape, derived-column type
+- [Generated API reference](./api/README.md) — exhaustive signatures auto-generated from source JSDoc (regenerate via `npm run docs:api`)
+- [Glossary](./glossary.md) — alphabetical index of domain terms with cross-links to the relevant guide or concept doc
 - [Troubleshooting](./troubleshooting.md) — 23 error codes and 15 common-issue FAQs with fix snippets
 - [Performance](./performance.md) — architectural limits, self-benchmarking methodology
 
@@ -52,6 +54,11 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 - [Vite](./integrations/vite.md)
 - [Webpack](./integrations/webpack.md)
 - [CDN (no-build)](./integrations/cdn.md)
+
+## Release info
+
+- [CHANGELOG](../CHANGELOG.md) — per-release notes in Keep-a-Changelog format
+- [Migration guides](./migration-guides/README.md) — step-by-step upgrade paths for releases that contain breaking changes
 
 ---
 

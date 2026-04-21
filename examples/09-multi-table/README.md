@@ -27,8 +27,7 @@ schema, so a preset saved from A can be loaded onto B cleanly.
 ## What to observe
 
 1. **Filter something on A** — drag a histogram brush, click a value in the
-   ValueCounts list, or use the filter bar. The status bar shows updated
-   counts for both tables.
+   ValueCounts list, or use the filter bar.
 2. **Save preset from A** — snapshots the current filter set with a name.
    The preset appears in *both* tables' Presets panel because the manager
    is shared.

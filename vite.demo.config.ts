@@ -14,7 +14,6 @@ const EXAMPLES = [
   '07-i18n-french',
   '08-custom-visualization',
   '09-multi-table',
-  '10-filter-presets',
 ];
 
 export default defineConfig({

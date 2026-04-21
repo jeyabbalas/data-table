@@ -17,7 +17,7 @@ to drive it from your own UI.
 ## Prerequisites
 
 - Read: [Filters guide](./filters.md), [API reference — `FilterPresetManager`](../api-reference.md#filterpresetmanager)
-- Runnable example: [`examples/10-filter-presets`](../../examples/10-filter-presets/)
+- Runnable example: [`examples/09-multi-table`](../../examples/09-multi-table/)
 
 ## Minimal example
 

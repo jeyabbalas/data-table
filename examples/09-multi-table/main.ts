@@ -22,14 +22,6 @@ const sharedStore = new SessionStore();
 let a: DataTable | undefined;
 let b: DataTable | undefined;
 
-const status = document.getElementById('status') as HTMLElement;
-function renderCounter(): void {
-  if (!a || !b) return;
-  const an = a.state.filteredRows.get();
-  const bn = b.state.filteredRows.get();
-  status.textContent = `A: ${an.toLocaleString()} · B: ${bn.toLocaleString()}`;
-}
-
 (async () => {
   await sharedBridge.initialize();
   await sharedStore.open();
@@ -53,9 +45,6 @@ function renderCounter(): void {
     persistence: { sessionStore: sharedStore },
   });
 
-  a.on('filterChange', renderCounter);
-  b.on('filterChange', renderCounter);
-
   // Fetch the CSV once on the main thread and pass the ArrayBuffer to both
   // tables. Avoids the 2× 10 MB JS-heap peak and the 2× network round-trip
   // the previous `Promise.all([a.loadData(url), b.loadData(url)])` created.
@@ -65,7 +54,6 @@ function renderCounter(): void {
   const buf = await res.arrayBuffer();
   await a.loadData(buf, { sourceFormat: 'csv' });
   await b.loadData(buf, { sourceFormat: 'csv' });
-  renderCounter();
 
   document.getElementById('save-a')!.addEventListener('click', () => {
     const name = `A snapshot ${sharedPresets.getPresets().length + 1}`;

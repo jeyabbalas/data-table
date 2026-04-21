@@ -1,6 +1,6 @@
 # Examples
 
-Ten single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
+Nine single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
 
 ## Run
 
@@ -29,6 +29,5 @@ The same examples are also browsable on the deployed demo under [`/data-table/ex
 | 07 | [`07-i18n-french`](./07-i18n-french/) | Translate every UI label via a `messages` override | `messages: DeepPartial<Strings>` |
 | 08 | [`08-custom-visualization`](./08-custom-visualization/) | Subclass `BaseVisualization`; register via per-instance `VisualizationRegistry` | `BaseVisualization`, `VisualizationRegistry` |
 | 09 | [`09-multi-table`](./09-multi-table/) | Two tables sharing a `FilterPresetManager` and a `SessionStore` | shared `presets.manager`, shared `persistence.sessionStore` |
-| 10 | [`10-filter-presets`](./10-filter-presets/) | Save / load / export / import filter presets with JSON | `FilterPresetManager.save / load / exportToJSON / importFromJSON` |
 
 For the full API, see [`docs/api-reference.md`](../docs/api-reference.md).

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>07 — i18n (French)</title>
+    <title>07 — Table en français</title>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; }
       body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
@@ -17,18 +17,19 @@
   </head>
   <body>
     <header>
-      <h1>07 — i18n français (<a href="../">retour</a>)</h1>
+      <h1>07 — Table en français (<a href="../">retour</a>)</h1>
       <p>
-        Les libellés d'interface <strong>et</strong> les données sont en français — une
-        démo d'i18n complète où l'utilisateur lit sa langue native à tous les niveaux.
+        Scénario : un outil interne chez un caviste français. Chaque bouton,
+        menu, info-bulle et ligne de statut est en français — ouvrez un filtre
+        de colonne, la boîte d'export ou les préréglages pour vérifier.
       </p>
       <details>
         <summary>English</summary>
-        UI strings <strong>and</strong> the data are both in French — a complete i18n
-        demo where the user reads their native language at every level of the UI.
-        A chrome-only translation is only half the story; pair the
-        <code>messages</code> override with locale-native data to make the demo
-        representative of a real deployment.
+        Scenario: an internal tool at a French wine merchant. Every button,
+        menu, tooltip, and status line reads in French — open a column's filter
+        panel, the export dialog, or the presets panel to check. The whole
+        translation is a single <code>messages</code> object passed to
+        <code>createDataTable()</code>; see <code>fr.ts</code>.
       </details>
     </header>
     <div id="table"></div>

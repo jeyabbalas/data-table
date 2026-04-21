@@ -860,3 +860,5 @@ await createDataTable({
 ```
 
 Messages are resolved once at `createDataTable()` time and threaded to every component. Recreate the table to switch languages at runtime.
+
+**Scope.** `messages` controls every string the library renders itself — labels, buttons, tooltips, aria-text, and stats-line templates. Out of scope: number and date formatting use the browser's host locale via `.toLocaleString()` (independent of `messages`), cell content comes from your data, and right-to-left layouts are not supported today. See `examples/07-i18n-french/` for a fully worked French translation.

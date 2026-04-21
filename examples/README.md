@@ -26,7 +26,7 @@ The same examples are also browsable on the deployed demo under [`/data-table/ex
 | 04 | [`04-derived-columns`](./04-derived-columns/) | Expression + vector derived columns | `actions.addDerivedColumn` |
 | 05 | [`05-event-listeners`](./05-event-listeners/) | External panel reflects filter / sort / selection | `on()`, `off()` |
 | 06 | [`06-custom-theme`](./06-custom-theme/) | CSS variable overrides + `setColorScheme` | `--dt-*`, `setColorScheme` |
-| 07 | [`07-i18n-french`](./07-i18n-french/) | Partial `messages` override | `messages: DeepPartial<Strings>` |
+| 07 | [`07-i18n-french`](./07-i18n-french/) | Translate every UI label via a `messages` override | `messages: DeepPartial<Strings>` |
 | 08 | [`08-custom-visualization`](./08-custom-visualization/) | Subclass `BaseVisualization`; register via per-instance `VisualizationRegistry` | `BaseVisualization`, `VisualizationRegistry` |
 
 For the full API, see [`docs/api-reference.md`](../docs/api-reference.md).

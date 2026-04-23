@@ -14,6 +14,7 @@ let table: DataTable | undefined;
     container,
     tableName: 'titanic',
     colorScheme: 'auto',
+    persistence: false,
   });
 
   const setScheme = (scheme: ColorScheme) => {

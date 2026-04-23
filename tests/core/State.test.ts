@@ -3,6 +3,7 @@ import {
   createTableState,
   resetTableState,
   initializeColumnsFromSchema,
+  isSystemColumn,
   type TableState,
 } from '@/core/State';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
@@ -360,6 +361,40 @@ describe('State', () => {
 
       expect(schemaCallback).toHaveBeenCalledWith(schema);
       expect(visibleCallback).toHaveBeenCalledWith(['test']);
+    });
+
+    it('excludes system columns from visibleColumns but keeps them in columnOrder and schema', () => {
+      const state = createTableState();
+      const schema: ColumnSchema[] = [
+        { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+        { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
+      ];
+
+      initializeColumnsFromSchema(state, schema);
+
+      expect(state.schema.get()).toEqual(schema);
+      expect(state.columnOrder.get()).toEqual(['__rowid__', 'id', 'name']);
+      expect(state.visibleColumns.get()).toEqual(['id', 'name']);
+    });
+  });
+
+  describe('isSystemColumn', () => {
+    const schema: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    ];
+
+    it('returns true for a column flagged with system: true', () => {
+      expect(isSystemColumn(schema, '__rowid__')).toBe(true);
+    });
+
+    it('returns false for a non-system column', () => {
+      expect(isSystemColumn(schema, 'id')).toBe(false);
+    });
+
+    it('returns false for an unknown column', () => {
+      expect(isSystemColumn(schema, 'does_not_exist')).toBe(false);
     });
   });
 

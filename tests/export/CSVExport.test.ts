@@ -148,6 +148,38 @@ describe('resolveColumns', () => {
   it('should return empty array for all-invalid explicit list', () => {
     expect(resolveColumns(['nope', 'nada'], context)).toEqual([]);
   });
+
+  // -------------------------------------------------------------------------
+  // System-column filtering (Phase 1)
+  // -------------------------------------------------------------------------
+
+  describe('system-column filtering', () => {
+    const schemaWithSystem: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...schema,
+    ];
+    const orderWithSystem = ['__rowid__', 'id', 'name', 'price', 'date'];
+
+    it('excludes system columns from "all"', () => {
+      expect(
+        resolveColumns('all', { columnOrder: orderWithSystem, schema: schemaWithSystem }),
+      ).toEqual(['id', 'name', 'price', 'date']);
+    });
+
+    it('preserves system columns when caller passes an explicit list', () => {
+      expect(
+        resolveColumns(
+          ['__rowid__', 'id'],
+          { columnOrder: orderWithSystem, schema: schemaWithSystem },
+        ),
+      ).toEqual(['__rowid__', 'id']);
+    });
+
+    it('returns plain columnOrder reference when the schema has no system columns', () => {
+      const r = resolveColumns('all', context);
+      expect(r).toEqual(context.columnOrder);
+    });
+  });
 });
 
 // =========================================

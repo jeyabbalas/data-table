@@ -46,7 +46,10 @@ export type {
   FilterType,
   SortColumn,
   SortDirection,
+  RowId,
 } from './core/types';
+export { ROWID_COLUMN } from './core/types';
+export type { GetColumnValuesOptions } from './core/Actions';
 
 // ---- Filter shapes ----
 export type {

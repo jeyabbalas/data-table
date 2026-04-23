@@ -13,7 +13,11 @@ const unsubs: Array<() => void> = [];
 let table: DataTable | undefined;
 
 (async () => {
-  table = await createDataTable({ container, tableName: 'titanic' });
+  table = await createDataTable({
+    container,
+    tableName: 'titanic',
+    persistence: false,
+  });
 
   // ----- Observe: side panel reflects state updates driven by events -----
   unsubs.push(

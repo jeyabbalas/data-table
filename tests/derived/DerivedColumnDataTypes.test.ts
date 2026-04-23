@@ -249,7 +249,7 @@ describe('VIEW SQL structure', () => {
     expect(view).not.toContain('LEFT JOIN');
   });
 
-  it('vector column: aliased reference in SELECT, LEFT JOIN on rowid', async () => {
+  it('vector column: aliased reference in SELECT, LEFT JOIN on explicit __rowid__', async () => {
     const { bridge, actions } = setupActions();
     await actions.addDerivedColumn({
       kind: 'vector', name: 'scores', vectorType: 'float', values: [1, 2, 3],
@@ -257,7 +257,11 @@ describe('VIEW SQL structure', () => {
 
     const view = bridge.getQueryCalls().find(s => s.includes('CREATE OR REPLACE VIEW'))!;
     expect(view).toContain('h1."scores"');
-    expect(view).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.rowid = h1.__rowid__');
+    // Phase 1: join on the explicit __rowid__ column synthesized at load,
+    // not the implicit DuckDB `rowid` pseudo-column (which is reassigned on
+    // table rewrites such as enhanceSchemaTypes' retype step).
+    expect(view).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
+    expect(view).not.toMatch(/ON\s+t\.rowid\s*=/);
   });
 
   it('mixed expression + vector: both patterns in one VIEW', async () => {
@@ -274,9 +278,9 @@ describe('VIEW SQL structure', () => {
 
     // Expression inline
     expect(lastView).toContain('(price * 2) AS "doubled"');
-    // Vector JOIN
+    // Vector JOIN on explicit __rowid__ (Phase 1).
     expect(lastView).toContain('h1."scores"');
-    expect(lastView).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.rowid = h1.__rowid__');
+    expect(lastView).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
   });
 });
 

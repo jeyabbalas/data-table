@@ -89,6 +89,11 @@ export class ExportDialog {
   private jsonFormatSelect!: HTMLSelectElement;
   private jsonPrettyCheckbox!: HTMLInputElement;
 
+  // System-column opt-in (visible only when the schema has any `system: true`
+  // columns, e.g. the synthetic `__rowid__`).
+  private systemColumnsSection!: HTMLElement;
+  private systemColumnsCheckbox!: HTMLInputElement;
+
   // Modal infrastructure (focus trap, Escape, scroll lock, ARIA).
   private modalHost = new ModalHost();
 
@@ -151,6 +156,7 @@ export class ExportDialog {
 
     body.appendChild(this.createFormatSection());
     body.appendChild(this.createScopeSection());
+    body.appendChild(this.createSystemColumnsSection());
     body.appendChild(this.createCSVOptions());
     body.appendChild(this.createJSONOptions());
 
@@ -272,6 +278,44 @@ export class ExportDialog {
     fieldset.appendChild(this.selectedOption);
 
     return fieldset;
+  }
+
+  private createSystemColumnsSection(): HTMLElement {
+    const p = this.prefix;
+    const container = document.createElement('div');
+    container.className = `${p}-export-field`;
+    // Hidden by default; `open()` reveals it only when the schema has any
+    // system columns. Avoids leaking an irrelevant control to plain datasets.
+    container.style.display = 'none';
+
+    const label = document.createElement('label');
+    this.systemColumnsCheckbox = document.createElement('input');
+    this.systemColumnsCheckbox.type = 'checkbox';
+    this.systemColumnsCheckbox.checked = false;
+    label.appendChild(this.systemColumnsCheckbox);
+    label.appendChild(
+      document.createTextNode(' Include system columns (e.g. __rowid__)'),
+    );
+
+    container.appendChild(label);
+    this.systemColumnsSection = container;
+    return container;
+  }
+
+  /**
+   * Return the columns option to pass to exporters: 'all' when no system
+   * columns exist or the user has not opted in; otherwise an explicit array
+   * that prepends system columns to the default column order.
+   */
+  private getColumnsForExport(): 'all' | string[] {
+    const schema = this.state.schema.get();
+    const systemNames = schema.filter((c) => c.system === true).map((c) => c.name);
+    if (systemNames.length === 0 || !this.systemColumnsCheckbox?.checked) {
+      return 'all';
+    }
+    const order = this.state.columnOrder.get();
+    const nonSystem = order.filter((n) => !systemNames.includes(n));
+    return [...systemNames, ...nonSystem];
   }
 
   private createCSVOptions(): HTMLElement {
@@ -442,6 +486,13 @@ export class ExportDialog {
     // Initial count update
     this.updateScopeCounts();
 
+    // Reveal the system-columns checkbox only if the current schema has any
+    // system columns. Reset the checkbox each time the dialog opens so the
+    // default remains exclusion.
+    const hasSystem = this.state.schema.get().some((c) => c.system === true);
+    this.systemColumnsSection.style.display = hasSystem ? '' : 'none';
+    this.systemColumnsCheckbox.checked = false;
+
     // Clear any previous error
     this.errorEl.style.display = 'none';
     this.errorEl.textContent = '';
@@ -524,10 +575,12 @@ export class ExportDialog {
     try {
       const signal = this.abortController.signal;
 
+      const columns = this.getColumnsForExport();
+
       if (format === 'csv') {
         const result = await exportFromState(this.state, this.bridge, {
           scope,
-          columns: 'all',
+          columns,
           delimiter: this.delimiterSelect.value,
           includeHeaders: this.headersCheckbox.checked,
           nullValue: this.nullValueInput.value,
@@ -539,7 +592,7 @@ export class ExportDialog {
         const jsonFormat = this.jsonFormatSelect.value as 'array' | 'ndjson';
         const result = await exportJSONFromState(this.state, this.bridge, {
           scope,
-          columns: 'all',
+          columns,
           format: jsonFormat,
           pretty: this.jsonPrettyCheckbox.checked,
         }, signal);
@@ -551,7 +604,7 @@ export class ExportDialog {
       } else {
         const result = await exportParquetFromState(this.state, this.bridge, {
           scope,
-          columns: 'all',
+          columns,
         }, signal);
 
         const blob = new Blob([result.buffer as ArrayBuffer], { type: 'application/octet-stream' });
@@ -590,10 +643,12 @@ export class ExportDialog {
       const signal = this.abortController.signal;
       let result: string;
 
+      const columns = this.getColumnsForExport();
+
       if (format === 'csv') {
         result = await exportFromState(this.state, this.bridge, {
           scope,
-          columns: 'all',
+          columns,
           delimiter: this.delimiterSelect.value,
           includeHeaders: this.headersCheckbox.checked,
           nullValue: this.nullValueInput.value,
@@ -601,7 +656,7 @@ export class ExportDialog {
       } else {
         result = await exportJSONFromState(this.state, this.bridge, {
           scope,
-          columns: 'all',
+          columns,
           format: this.jsonFormatSelect.value as 'array' | 'ndjson',
           pretty: this.jsonPrettyCheckbox.checked,
         }, signal);

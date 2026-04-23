@@ -5,7 +5,13 @@
 import { getDatabase, getConnection } from '../duckdb';
 import type { LoadResult, ParquetLoadOptions } from './types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
-import { enhanceSchemaTypes, quoteIdentifier } from './common';
+import {
+  enhanceSchemaTypes,
+  quoteIdentifier,
+  wrapReservedColumnError,
+  makeReservedColumnError,
+} from './common';
+import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 
 let tableCounter = 0;
 
@@ -49,15 +55,43 @@ export async function loadParquet(
   await db.registerFileBuffer(fileName, content);
 
   try {
+    // Reject explicit column lists that include the reserved __rowid__ name.
+    if (options.columns?.includes(ROWID_COLUMN)) {
+      throw makeReservedColumnError();
+    }
+
     // Build column selection
     const columnSelect = options.columns?.length
       ? options.columns.map((c) => quoteIdentifier(c)).join(', ')
       : '*';
 
-    // Create table from Parquet using read_parquet
+    // Inject a synthetic __rowid__ as the first column of a new table.
+    // DuckDB silently aliases a duplicate column name in the projection
+    // (producing __rowid___1) rather than throwing, so preflight with
+    // DESCRIBE to reject sources that already have a __rowid__ column.
+    // The wrapReservedColumnError catch below stays as defense-in-depth.
+    // Skip the probe when an explicit column list was given — we already
+    // rejected __rowid__ there above, and an unrelated __rowid__ in the
+    // Parquet file itself won't reach the projection.
+    if (!options.columns?.length) {
+      const probeResult = await conn.query(
+        `DESCRIBE SELECT * FROM read_parquet('${fileName}')`,
+      );
+      const probeColumns = probeResult
+        .toArray()
+        .map((row) => String(row.toJSON().column_name));
+      if (probeColumns.includes(ROWID_COLUMN)) {
+        throw makeReservedColumnError();
+      }
+    }
+
     const tbl = quoteIdentifier(tableName);
-    const createSql = `CREATE TABLE ${tbl} AS SELECT ${columnSelect} FROM read_parquet('${fileName}')`;
-    await conn.query(createSql);
+    const createSql = `CREATE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
+    try {
+      await conn.query(createSql);
+    } catch (err) {
+      throw wrapReservedColumnError(err);
+    }
 
     // Get row count
     const countResult = await conn.query(
@@ -73,12 +107,17 @@ export async function loadParquet(
     describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
 
     const columns = describeRows.map((row) => String(row.column_name));
-    const schema = describeRows.map((row) => ({
-      name: String(row.column_name),
-      type: mapDuckDBType(String(row.column_type)),
-      nullable: row.null === 'YES',
-      originalType: String(row.column_type),
-    }));
+    const schema = describeRows.map((row) => {
+      const name = String(row.column_name);
+      const entry: ColumnSchema = {
+        name,
+        type: mapDuckDBType(String(row.column_type)),
+        nullable: row.null === 'YES',
+        originalType: String(row.column_type),
+      };
+      if (name === ROWID_COLUMN) entry.system = true;
+      return entry;
+    });
 
     return { tableName, rowCount, columns, schema };
   } finally {

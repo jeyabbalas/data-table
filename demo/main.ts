@@ -219,18 +219,44 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
     } catch { /* unavailable in some browsers */ }
 
     // Cache the loaded table as Parquet so a refresh restores without a prompt.
+    // Export only original source columns — excluding system columns
+    // (e.g. `__rowid__`) and derived columns — so the round-tripped cache
+    // doesn't feed the loader's `__rowid__` back in on the next load.
     const currentTableName = table.state.tableName.get();
-    if (currentTableName) {
-      table.bridge
-        .exportToBuffer(`SELECT * FROM ${quoteIdentifier(currentTableName)}`, 'parquet')
-        .then((buffer) => cacheTableData(currentTableName, buffer, sourceName))
-        .catch(() => { /* caching is best-effort */ });
+    const baseTable = table.state.baseTableName.get() ?? currentTableName;
+    if (currentTableName && baseTable) {
+      const cacheCols = table.state.schema
+        .get()
+        .filter((c) => !c.system && !c.isDerived)
+        .map((c) => quoteIdentifier(c.name))
+        .join(', ');
+      if (cacheCols) {
+        table.bridge
+          .exportToBuffer(
+            `SELECT ${cacheCols} FROM ${quoteIdentifier(baseTable)}`,
+            'parquet',
+          )
+          .then((buffer) => cacheTableData(currentTableName, buffer, sourceName))
+          .catch(() => { /* caching is best-effort */ });
+      }
     }
 
     // Reset the file picker so the user can immediately re-select the same
     // file (browsers suppress the change event on identical reselection).
     if (source instanceof File) fileInput.value = '';
   } catch (error) {
+    // One-time migration for users who have an older cache that still
+    // contains a leaked `__rowid__` column: clear it and prompt for a
+    // fresh load instead of repeating the failing restore.
+    const code = (error as { code?: string }).code;
+    if (code === 'LOAD_RESERVED_COLUMN_NAME') {
+      try { await clearCachedData(tableName); } catch { /* ignore */ }
+      try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+      updateInfo(
+        'Cached session was stale and has been cleared. Load a file or URL to continue.',
+      );
+      return;
+    }
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

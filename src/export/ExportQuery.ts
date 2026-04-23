@@ -35,15 +35,24 @@ type RowData = Record<string, unknown>;
  * Resolve which columns to export based on the option value.
  *
  * Returns column names in the appropriate order, validated against the schema.
+ * When `option === 'all'`, library-synthesized system columns (e.g.
+ * `__rowid__`) are excluded so default exports round-trip cleanly. Callers
+ * that want system columns must pass them in an explicit string array.
  */
 export function resolveColumns(
   option: 'all' | string[],
   context: Pick<ExportContext, 'columnOrder' | 'schema'>
 ): string[] {
   if (option === 'all') {
-    return context.columnOrder;
+    const systemNames = new Set(
+      context.schema.filter((c) => c.system === true).map((c) => c.name),
+    );
+    return systemNames.size === 0
+      ? context.columnOrder
+      : context.columnOrder.filter((n) => !systemNames.has(n));
   }
-  // Explicit column list — validate against schema
+  // Explicit column list — validate against schema, but do NOT filter system
+  // columns: the caller has explicitly opted in.
   const schemaNames = new Set(context.schema.map((c) => c.name));
   return option.filter((name) => schemaNames.has(name));
 }

@@ -189,10 +189,23 @@ export function initializeColumnsFromSchema(
   schema: ColumnSchema[]
 ): void {
   const columnNames = schema.map((col) => col.name);
+  // System columns (e.g. synthetic __rowid__) stay in columnOrder and schema
+  // so they remain queryable and listable in the column chooser, but are
+  // excluded from the default visible set so the grid does not show them
+  // unless the app explicitly opts in via showColumn().
+  const visibleNames = schema.filter((col) => !col.system).map((col) => col.name);
   state.schema.set(schema);
-  state.visibleColumns.set(columnNames);
+  state.visibleColumns.set(visibleNames);
   state.columnOrder.set(columnNames);
   state.columnWidths.set(new Map());
   state.pinnedColumns.set([]);
   state.hiddenColumnInfo.set(new Map());
+}
+
+/**
+ * Return true if `name` refers to a library-synthesized system column
+ * (e.g. the reserved `__rowid__`).
+ */
+export function isSystemColumn(schema: ColumnSchema[], name: string): boolean {
+  return schema.some((c) => c.name === name && c.system === true);
 }

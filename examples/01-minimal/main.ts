@@ -21,7 +21,11 @@ const container = document.getElementById('table') as HTMLElement;
 let table: DataTable | undefined;
 
 (async () => {
-  table = await createDataTable({ container, tableName: 'team' });
+  table = await createDataTable({
+    container,
+    tableName: 'team',
+    persistence: false,
+  });
   const blob = new Blob([JSON.stringify(DATA)], { type: 'application/json' });
   await table.loadData(blob, { sourceFormat: 'json' });
 })();

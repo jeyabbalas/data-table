@@ -239,15 +239,21 @@ export function restoreStateFromSnapshot(
     visibleColumns = allColumnNames;
   }
 
-  // Column order: filter to valid, then append any new schema columns
+  // Column order: filter to valid, then insert any schema columns that
+  // weren't in the snapshot at their schema index (rather than always
+  // appending to the end). This keeps system columns like __rowid__ —
+  // which live at schema index 0 — at the leftmost position when a
+  // pre-Phase-1 snapshot restores against a post-Phase-1 schema.
   const restoredOrder = snapshot.columnOrder.filter((c) =>
     validColumns.has(c),
   );
   const orderSet = new Set(restoredOrder);
-  for (const col of allColumnNames) {
-    if (!orderSet.has(col)) {
-      restoredOrder.push(col);
-    }
+  for (let i = 0; i < allColumnNames.length; i++) {
+    const col = allColumnNames[i];
+    if (orderSet.has(col)) continue;
+    const insertAt = Math.min(i, restoredOrder.length);
+    restoredOrder.splice(insertAt, 0, col);
+    orderSet.add(col);
   }
 
   // Column widths: Record → Map, skip stale columns

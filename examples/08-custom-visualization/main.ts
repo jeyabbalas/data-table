@@ -184,6 +184,7 @@ let table: DataTable | undefined;
     container,
     tableName: 'orders',
     visualizationRegistry: registry,
+    persistence: false,
   });
   await table.loadData(DATA_URL, { sourceFormat: 'csv' });
 })();

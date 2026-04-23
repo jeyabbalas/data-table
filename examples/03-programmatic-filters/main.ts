@@ -5,15 +5,17 @@ const DATA_URL =
   'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
 
 const container = document.getElementById('table') as HTMLElement;
-const status = document.getElementById('status') as HTMLElement;
 
 let table: DataTable | undefined;
 
 (async () => {
-  table = await createDataTable({ container, tableName: 'nyc_taxi' });
+  table = await createDataTable({
+    container,
+    tableName: 'nyc_taxi',
+    persistence: false,
+  });
 
-  table.on('filterChange', ({ filters, filteredRowCount, totalRowCount }) => {
-    status.textContent = `${filters.length} filter(s) · ${filteredRowCount.toLocaleString()}/${totalRowCount.toLocaleString()} rows`;
+  table.on('filterChange', ({ filters }) => {
     console.log('[03] filterChange', filters);
   });
 

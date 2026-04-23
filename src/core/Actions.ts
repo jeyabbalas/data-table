@@ -21,11 +21,35 @@ import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, CompletionContext } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { attachCacheInvalidation } from '../data/QueryCache';
+import { buildSelectedRowsQuery } from '../export/ExportQuery';
+import { ROWID_COLUMN } from './types';
 import {
   ConfigurationError,
   DerivedColumnError,
+  QueryError,
   SQLValidationError,
 } from './errors';
+
+/**
+ * Options for {@link StateActions.getColumnValues}.
+ */
+export interface GetColumnValuesOptions {
+  /**
+   * Which rows to include:
+   * - `'all'` (default) — every row in the effective table.
+   * - `'filtered'` — only rows matching the currently active filters.
+   * - `'selected'` — only rows in the current selection (positional indices
+   *   resolved against the current filter/sort view, same semantics as the
+   *   export "selected rows" scope).
+   */
+  scope?: 'all' | 'filtered' | 'selected';
+  /** Optional cap on the number of returned values. Non-negative integer. */
+  limit?: number;
+  /** Optional offset applied after WHERE and ORDER BY. Non-negative integer. */
+  offset?: number;
+  /** Optional AbortSignal forwarded to the DuckDB worker. */
+  signal?: AbortSignal;
+}
 
 /**
  * Options for loading data
@@ -1269,6 +1293,117 @@ export class StateActions {
   }
 
   /**
+   * Return the values of a single column as an in-memory array, honoring the
+   * current effective table (base or derived-column VIEW), the requested
+   * scope, and optional pagination.
+   *
+   * Values are returned in stable `__rowid__` order for `scope: 'all'` and
+   * `scope: 'filtered'`. For `scope: 'selected'` the values are returned in
+   * positional order within the current filter/sort view (same semantics as
+   * the export "selected rows" scope) — not strict selection insertion order.
+   *
+   * Numeric columns materialize into the narrowest sensible typed array:
+   * - DuckDB `BIGINT` / `HUGEINT` → `BigInt64Array`
+   * - other integer types → `Int32Array`
+   * - `FLOAT` / `DOUBLE` / `DECIMAL` → `Float64Array`
+   * - all other types → `unknown[]`
+   *
+   * If any returned row carries a `NULL` value, the function falls back to
+   * `unknown[]` regardless of declared type so that `null` is preserved (the
+   * typed-array packed form would coerce `null` to `0`, which is ambiguous).
+   *
+   * The reserved `__rowid__` column is retrievable by name; its values are
+   * BIGINT-backed and return as `BigInt64Array`. For plain-number
+   * consumption, coerce with `Number(bigint)` (lossless for rowids below
+   * `Number.MAX_SAFE_INTEGER`).
+   *
+   * @example
+   * const rowIds = await table.actions.getColumnValues('__rowid__');
+   * // rowIds is BigInt64Array. Convert a single value: Number(rowIds[0]).
+   *
+   * @example
+   * await table.actions.addFilter({ type: 'range', column: 'age', min: 18 });
+   * const adultAges = await table.actions.getColumnValues('age', { scope: 'filtered' });
+   *
+   * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `name` is not
+   *   in the current schema.
+   * @throws `QueryError` with `code: 'INVALID_PAGINATION'` when `limit` or
+   *   `offset` is present but not a non-negative integer.
+   * @throws `QueryError` with `code: 'NO_TABLE'` when called before any data
+   *   is loaded.
+   */
+  async getColumnValues(
+    name: string,
+    opts: GetColumnValuesOptions = {},
+  ): Promise<unknown[] | Int32Array | Float64Array | BigInt64Array> {
+    const schema = this.state.schema.get();
+    const entry = schema.find((c) => c.name === name);
+    if (!entry) {
+      throw new QueryError(`Column "${name}" not found`, {
+        code: 'COLUMN_NOT_FOUND',
+        details: { column: name },
+      });
+    }
+
+    const { limit, offset, scope = 'all', signal } = opts;
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
+      throw new QueryError(
+        `Invalid limit: ${limit} (must be a non-negative integer)`,
+        { code: 'INVALID_PAGINATION', details: { limit } },
+      );
+    }
+    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
+      throw new QueryError(
+        `Invalid offset: ${offset} (must be a non-negative integer)`,
+        { code: 'INVALID_PAGINATION', details: { offset } },
+      );
+    }
+
+    const tbl = this.state.tableName.get();
+    if (!tbl) {
+      throw new QueryError('No table loaded', { code: 'NO_TABLE' });
+    }
+
+    const pagination =
+      (limit !== undefined ? ` LIMIT ${limit}` : '') +
+      (offset !== undefined ? ` OFFSET ${offset}` : '');
+
+    let sql: string;
+    let valKey: string;
+
+    if (scope === 'selected') {
+      const selected = this.state.selectedRows.get();
+      if (selected.size === 0) {
+        return emptyTypedResult(entry);
+      }
+      const indices = Array.from(selected);
+      // Reuse the export "selected rows" pattern. TODO: when selection
+      // migrates to __rowid__ (Phase 3+), switch this branch to a direct
+      // `WHERE __rowid__ IN (...)` filter on the base table.
+      const baseSql = buildSelectedRowsQuery(
+        tbl,
+        [name],
+        this.state.filters.get(),
+        this.state.sortColumns.get(),
+        indices,
+      );
+      sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;
+      valKey = name;
+    } else {
+      const quotedCol = quoteIdentifier(name);
+      const quotedTbl = quoteIdentifier(tbl);
+      const filtersFragment =
+        scope === 'filtered' ? filtersToWhereClause(this.state.filters.get()) : '';
+      const where = filtersFragment ? ` WHERE ${filtersFragment}` : '';
+      sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where} ORDER BY ${quoteIdentifier(ROWID_COLUMN)}${pagination}`;
+      valKey = 'val';
+    }
+
+    const rows = await this.bridge.query<Record<string, unknown>>(sql, signal);
+    return materializeColumn(rows, valKey, entry);
+  }
+
+  /**
    * Validate an expression without adding it. For UI preview.
    */
   async validateExpression(expression: string): Promise<{
@@ -1415,4 +1550,74 @@ export class StateActions {
   clearFocusedCell(): void {
     this.state.focusedCell.set(null);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Column-value materialization helpers (supporting getColumnValues).
+// ---------------------------------------------------------------------------
+
+function isBigIntOriginalType(originalType: string): boolean {
+  return /BIGINT|HUGEINT/i.test(originalType);
+}
+
+function emptyTypedResult(
+  schema: ColumnSchema,
+): unknown[] | Int32Array | Float64Array | BigInt64Array {
+  if (schema.type === 'integer') {
+    return isBigIntOriginalType(schema.originalType)
+      ? new BigInt64Array(0)
+      : new Int32Array(0);
+  }
+  if (schema.type === 'float' || schema.type === 'decimal') {
+    return new Float64Array(0);
+  }
+  return [];
+}
+
+function materializeColumn(
+  rows: Array<Record<string, unknown>>,
+  key: string,
+  schema: ColumnSchema,
+): unknown[] | Int32Array | Float64Array | BigInt64Array {
+  const len = rows.length;
+
+  // Detect NULLs (DuckDB's JS layer surfaces SQL NULL as JS null/undefined).
+  // Typed arrays cannot represent null, so any NULL forces a fallback to
+  // unknown[] to keep the semantic distinction intact.
+  let hasNull = false;
+  for (let i = 0; i < len; i++) {
+    if (rows[i][key] == null) {
+      hasNull = true;
+      break;
+    }
+  }
+  if (hasNull) {
+    return rows.map((r) => r[key]);
+  }
+
+  if (schema.type === 'integer') {
+    if (isBigIntOriginalType(schema.originalType)) {
+      const arr = new BigInt64Array(len);
+      for (let i = 0; i < len; i++) {
+        const v = rows[i][key];
+        arr[i] = typeof v === 'bigint' ? v : BigInt(v as number | string);
+      }
+      return arr;
+    }
+    const arr = new Int32Array(len);
+    for (let i = 0; i < len; i++) {
+      arr[i] = Number(rows[i][key]);
+    }
+    return arr;
+  }
+
+  if (schema.type === 'float' || schema.type === 'decimal') {
+    const arr = new Float64Array(len);
+    for (let i = 0; i < len; i++) {
+      arr[i] = Number(rows[i][key]);
+    }
+    return arr;
+  }
+
+  return rows.map((r) => r[key]);
 }

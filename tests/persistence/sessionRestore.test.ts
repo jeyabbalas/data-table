@@ -195,6 +195,63 @@ describe('Session Restore on Load', () => {
     expect(filters[0].column).toBe('age');
   });
 
+  it('places a newly-introduced system column (__rowid__) at columnOrder[0]', async () => {
+    // Schema introduces __rowid__ at index 0 after a snapshot was saved
+    // without it (e.g. a pre-Phase-1 session restoring onto a post-Phase-1
+    // schema). The restore must place __rowid__ at schema index 0, not
+    // append it to the end, so showColumn('__rowid__') lands it at the
+    // leftmost grid position.
+    const schemaWithRowid: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...sampleSchema,
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithRowid,
+    });
+
+    // Snapshot predates __rowid__: columnOrder = ['name', 'id', 'age']
+    const snapshot = createTestSnapshot();
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.columnOrder.get()).toEqual(['__rowid__', 'name', 'id', 'age']);
+  });
+
+  it('inserts newly-introduced non-system columns at their schema index', async () => {
+    // Verify the general insert-at-schema-index rule for non-system columns
+    // too. Schema adds 'email' between 'name' and 'age'; snapshot had no
+    // 'email' column.
+    const schemaWithEmail: ColumnSchema[] = [
+      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
+      { name: 'email', type: 'string', nullable: true, originalType: 'VARCHAR' },
+      { name: 'age', type: 'integer', nullable: true, originalType: 'INTEGER' },
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithEmail,
+    });
+
+    // Snapshot had a custom order: ['name', 'id', 'age']. 'email' must
+    // land at its schema index (2), which is position 2 in this order.
+    const snapshot = createTestSnapshot();
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.columnOrder.get()).toEqual(['name', 'id', 'email', 'age']);
+  });
+
   it('round-trips state through snapshot and restore', async () => {
     mockDataLoad();
 

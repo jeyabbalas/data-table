@@ -30,6 +30,6 @@ npm run dev
 - **Expression** — when the value is a pure function of other columns already loaded into DuckDB. Free: no JS round-trip, arbitrary filter/sort support.
 - **Vector** — when the value comes from outside DuckDB: a JS-side ML model, an external API, or a geo/categorical lookup table that's easier to keep in memory than to import as a second DuckDB table. Stored as a typed array; length must equal `state.totalRows`.
 
-## Gotcha — vector columns need `ORDER BY rowid`
+## Gotcha — vector columns need `ORDER BY __rowid__`
 
-If your vector values are sourced from a DuckDB query (e.g., `SELECT PULocationID FROM nyc_taxi` here), you **must** add `ORDER BY rowid` to that query. The `DerivedColumnManager` materializes the array into a helper table keyed by array index, then joins `base.rowid = helper.__rowid__`. Without an explicit order, DuckDB may return rows in arbitrary scan order and the join silently misaligns — the derived column appears but every row is `NULL`. This is the single most common pitfall when building vector columns that depend on the loaded data.
+If your vector values are sourced from a DuckDB query (e.g., `SELECT PULocationID FROM nyc_taxi` here), you **must** add `ORDER BY __rowid__` to that query. The `DerivedColumnManager` materializes the array into a helper table keyed by array index, then joins `base.__rowid__ = helper.__rowid__`. Without an explicit order, DuckDB may return rows in arbitrary scan order and the join silently misaligns — the derived column appears but every row is `NULL`. This is the single most common pitfall when building vector columns that depend on the loaded data.

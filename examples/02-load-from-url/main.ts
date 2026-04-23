@@ -6,7 +6,6 @@ const DATA_URL =
 
 const container = document.getElementById('table') as HTMLElement;
 const bar = document.querySelector('#progress > span') as HTMLElement;
-const status = document.getElementById('status') as HTMLElement;
 
 let table: DataTable | undefined;
 
@@ -15,25 +14,24 @@ let table: DataTable | undefined;
   // loadData is invoked. `createDataTable({ source })` awaits the initial
   // load internally, meaning progress events would fire before `.on()` could
   // attach a handler. See examples/README.md for the full rationale.
-  table = await createDataTable({ container, tableName: 'nyc_taxi' });
+  table = await createDataTable({
+    container,
+    tableName: 'nyc_taxi',
+    persistence: false,
+  });
 
   table.on('loadStart', () => {
-    status.textContent = 'starting…';
     bar.style.width = '3%';
   });
   table.on('loadProgress', (info) => {
-    const pct = Math.max(3, info.percent);
-    bar.style.width = `${pct}%`;
-    status.textContent = `${info.stage} ${Math.round(pct)}%`;
+    bar.style.width = `${Math.max(3, info.percent)}%`;
   });
-  table.on('loadComplete', ({ rowCount }) => {
+  table.on('loadComplete', () => {
     bar.style.width = '100%';
-    status.textContent = `${rowCount.toLocaleString()} rows loaded`;
   });
-  table.on('loadError', ({ error }) => {
+  table.on('loadError', () => {
     bar.style.width = '100%';
     bar.style.background = 'var(--dt-error, #ef4444)';
-    status.textContent = `error: ${error.message}`;
   });
 
   await table.loadData(DATA_URL, { sourceFormat: 'csv' });

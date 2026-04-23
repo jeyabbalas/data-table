@@ -16,6 +16,39 @@ export function quoteIdentifier(name: string): string {
 }
 
 /**
+ * Build the canonical LOAD_RESERVED_COLUMN_NAME LoadError for a source that
+ * already contains a `__rowid__` column.
+ */
+export function makeReservedColumnError(): Error {
+  return Object.assign(
+    new Error(
+      'Column name "__rowid__" is reserved for the synthetic row id. Rename the source column and reload.',
+    ),
+    {
+      code: 'LOAD_RESERVED_COLUMN_NAME',
+      details: { sourceColumn: '__rowid__' },
+    },
+  );
+}
+
+/**
+ * If an error from `CREATE TABLE AS SELECT ... __rowid__ ...` looks like a
+ * DuckDB duplicate-column binder error (i.e. the source already has a
+ * `__rowid__` column), rewrap it as the canonical reserved-name error.
+ * Otherwise rethrow the original.
+ */
+export function wrapReservedColumnError(err: unknown): Error {
+  const message = err instanceof Error ? err.message : String(err);
+  // DuckDB phrasing varies slightly across versions ("duplicate column name",
+  // "Table has duplicate column name", "duplicate alias", etc.); match on the
+  // pair of signals that is specific to our injected __rowid__.
+  if (/duplicate/i.test(message) && /__rowid__/.test(message)) {
+    return makeReservedColumnError();
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+/**
  * ISO timestamp pattern
  * Matches formats:
  * - YYYY-MM-DDTHH:MM:SS
@@ -277,11 +310,14 @@ export async function convertColumnsToTimestamp(
   const quotedTable = quoteIdentifier(tableName);
 
   try {
-    // Create new table with correct types and preserved column order
+    // Create new table with correct types and preserved column order.
+    // ORDER BY __rowid__ keeps row identity aligned after recreation — DuckDB
+    // does not guarantee scan order on CREATE TABLE AS SELECT without it.
+    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
     await conn.query(`
       CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}
+      FROM ${quotedTable}${orderBy}
     `);
 
     // Drop original table
@@ -334,10 +370,11 @@ export async function convertColumnsToDate(
   const quotedTable = quoteIdentifier(tableName);
 
   try {
+    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
     await conn.query(`
       CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}
+      FROM ${quotedTable}${orderBy}
     `);
 
     await conn.query(`DROP TABLE ${quotedTable}`);
@@ -386,10 +423,11 @@ export async function convertColumnsToTime(
   const quotedTable = quoteIdentifier(tableName);
 
   try {
+    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
     await conn.query(`
       CREATE TABLE ${quotedTemp} AS
       SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}
+      FROM ${quotedTable}${orderBy}
     `);
 
     await conn.query(`DROP TABLE ${quotedTable}`);

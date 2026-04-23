@@ -627,8 +627,12 @@ export class DerivedColumnManager {
       const alias = `h${joinCounter}`;
       const helperTable = this.helperTableName(info.def.name);
       baseSelectParts.push(`${alias}.${quoteIdentifier(info.def.name)}`);
+      // Join on the explicit `__rowid__` column synthesized at load time.
+      // DuckDB's implicit `rowid` pseudo-column is reassigned whenever a
+      // table is rewritten (e.g. by enhanceSchemaTypes type-enhancement),
+      // so joining on it is not stable; `__rowid__` survives rewrites.
       joinParts.push(
-        `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.rowid = ${alias}.__rowid__`
+        `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.__rowid__ = ${alias}.__rowid__`
       );
     }
 

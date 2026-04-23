@@ -13,6 +13,7 @@ let table: DataTable | undefined;
     container,
     tableName: 'vins',
     messages: frenchMessages,
+    persistence: false,
   });
   await table.loadData(DATA_URL, { sourceFormat: 'csv' });
 })();

@@ -78,6 +78,7 @@ exports[`Public API surface > root export keys match snapshot 1`] = `
   "LoadError",
   "PersistenceError",
   "QueryError",
+  "ROWID_COLUMN",
   "SQLValidationError",
   "SessionStore",
   "VERSION",

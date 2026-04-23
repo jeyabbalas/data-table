@@ -5,20 +5,14 @@ const DATA_URL =
   'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
 
 const container = document.getElementById('table') as HTMLElement;
-const status = document.getElementById('status') as HTMLElement;
 
 let table: DataTable | undefined;
 
 (async () => {
-  table = await createDataTable({ container, tableName: 'nyc_taxi' });
-
-  table.on('loadComplete', ({ rowCount }) => {
-    status.textContent = `${rowCount.toLocaleString()} rows`;
-  });
-  table.on('derivedChange', ({ derivedColumns }) => {
-    status.textContent = `${derivedColumns.length} derived: ${derivedColumns
-      .map((d) => d.name)
-      .join(', ')}`;
+  table = await createDataTable({
+    container,
+    tableName: 'nyc_taxi',
+    persistence: false,
   });
 
   await table.loadData(DATA_URL, { sourceFormat: 'csv', tableName: 'nyc_taxi' });
@@ -40,13 +34,13 @@ let table: DataTable | undefined;
   // the pattern you use when the per-row value comes from an ML model,
   // an external API, or a geo lookup that can't be done in SQL.
   document.getElementById('btn-vec')!.onclick = async () => {
-    // ORDER BY rowid is REQUIRED: the helper table built by
+    // ORDER BY __rowid__ is REQUIRED: the helper table built by
     // DerivedColumnManager keys each vector value on array index, and the
-    // VIEW joins `t.rowid = h.__rowid__`. Without the explicit order,
+    // VIEW joins `t.__rowid__ = h.__rowid__`. Without the explicit order,
     // DuckDB may return rows in arbitrary scan order and the join
     // silently misaligns, leaving every row's is_airport = NULL.
     const rows = await table!.bridge.query<{ PULocationID: number }>(
-      'SELECT PULocationID FROM nyc_taxi ORDER BY rowid',
+      'SELECT PULocationID FROM nyc_taxi ORDER BY __rowid__',
     );
     const AIRPORTS = new Set([1, 132, 138]);
     const values = new Uint8Array(rows.length);

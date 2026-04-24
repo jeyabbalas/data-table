@@ -49,6 +49,9 @@ export type {
 export { TableBody } from './table/TableBody';
 export type { TableBodyOptions, RowData } from './table/TableBody';
 
+export { AnnotationPopover } from './table/AnnotationPopover';
+export type { AnnotationPopoverOptions } from './table/AnnotationPopover';
+
 export { CellRenderer } from './table/Cell';
 export type { CellOptions } from './table/Cell';
 

@@ -3,6 +3,7 @@
 exports[`Public API surface > advanced export keys match snapshot 1`] = `
 [
   "AddColumnButton",
+  "AnnotationPopover",
   "AnnotationStore",
   "AutoSave",
   "BaseVisualization",

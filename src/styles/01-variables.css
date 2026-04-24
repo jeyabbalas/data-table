@@ -150,6 +150,7 @@
   --dt-z-action-panel: 30;     /* per-column action panel popovers (reserved) */
   --dt-z-filter-bar: 40;       /* filter bar at top of table */
   --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
+  --dt-z-annotation-popover: 55; /* annotation popover (slots between floating panels and autocomplete) */
   --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
   --dt-z-modal: 1000;          /* full-screen modals + backdrops */
   --dt-z-modal-stack-step: 2;  /* step added per open modal/panel so simultaneously-open dialogs layer predictably */
@@ -159,6 +160,31 @@
      widen panels. TS-side positioning re-measures via offsetWidth so edge
      clamping respects the override. */
   --dt-panel-width: 320px;
+
+  /* Annotation severity palette — drives row / cell / header tints and the
+     annotation popover's severity pills. `fg` = foreground/text inside the
+     tinted surface; `bg` = tint background; `bdr` = strong border/accent
+     used for cell left-border and header underline. Three severities cover
+     the validation and QC use cases; ordering is error > warning > info
+     (see `AnnotationStore.getByCell` severity rank). */
+  --dt-annotation-error-fg: #7a0b14;
+  --dt-annotation-error-bg: #fde2e5;
+  --dt-annotation-error-bdr: #d34551;
+  --dt-annotation-warning-fg: #7a4a00;
+  --dt-annotation-warning-bg: #fff0cc;
+  --dt-annotation-warning-bdr: #d89b1b;
+  --dt-annotation-info-fg: #003e66;
+  --dt-annotation-info-bg: #d6ecfa;
+  --dt-annotation-info-bdr: #2687c7;
+
+  /* Hover background for annotated cells — a subtle darkening of the
+     base tint, pulled toward the saturated border color so it reads as
+     on-theme in both light and dark modes (dark-mode `-bg` / `-bdr`
+     overrides cascade through the nested `var(...)` references below
+     without needing duplicate definitions). */
+  --dt-annotation-error-bg-hover:   color-mix(in srgb, var(--dt-annotation-error-bg)   82%, var(--dt-annotation-error-bdr)   18%);
+  --dt-annotation-warning-bg-hover: color-mix(in srgb, var(--dt-annotation-warning-bg) 82%, var(--dt-annotation-warning-bdr) 18%);
+  --dt-annotation-info-bg-hover:    color-mix(in srgb, var(--dt-annotation-info-bg)    82%, var(--dt-annotation-info-bdr)    18%);
 }
 
 /* Dark mode — two triggers. See header comment for the full model.
@@ -223,6 +249,20 @@
     --dt-syntax-string: #4ade80;
     --dt-syntax-type: #c084fc;
 
+    /* Annotation palette — lifted foregrounds + muted backgrounds so tints
+       read against `--dt-bg: #111827` without shouting. Borders stay
+       saturated so the cell left-border and header underline remain visible
+       against tinted cells. */
+    --dt-annotation-error-fg: #fca5a5;
+    --dt-annotation-error-bg: #451a1a;
+    --dt-annotation-error-bdr: #dc2626;
+    --dt-annotation-warning-fg: #fcd34d;
+    --dt-annotation-warning-bg: #3f2d0a;
+    --dt-annotation-warning-bdr: #d89b1b;
+    --dt-annotation-info-fg: #93c5fd;
+    --dt-annotation-info-bg: #0f2a44;
+    --dt-annotation-info-bdr: #2687c7;
+
     /* Note: --dt-primary-alpha-*, --dt-accent-soft, --dt-neutral-soft, --dt-error-soft
        are derived via color-mix() from their base tokens; they do not need redeclaration
        because the base tokens are redeclared above. */
@@ -281,6 +321,18 @@
     /* Syntax-highlighting tokens */
     --dt-syntax-string: #16a34a;
     --dt-syntax-type: #9333ea;
+
+    /* Annotation palette — light defaults (restored when an instance opts
+       out of OS dark via data-dt-color-scheme="light"). */
+    --dt-annotation-error-fg: #7a0b14;
+    --dt-annotation-error-bg: #fde2e5;
+    --dt-annotation-error-bdr: #d34551;
+    --dt-annotation-warning-fg: #7a4a00;
+    --dt-annotation-warning-bg: #fff0cc;
+    --dt-annotation-warning-bdr: #d89b1b;
+    --dt-annotation-info-fg: #003e66;
+    --dt-annotation-info-bg: #d6ecfa;
+    --dt-annotation-info-bdr: #2687c7;
   }
 }
 
@@ -337,5 +389,18 @@
   /* Syntax-highlighting tokens */
   --dt-syntax-string: #4ade80;
   --dt-syntax-type: #c084fc;
+
+  /* Annotation palette — dark variants. Mirrors the @media block above so
+     body-portalled popovers that carry `data-dt-color-scheme="dark"` stay
+     in sync when the OS preference is light. */
+  --dt-annotation-error-fg: #fca5a5;
+  --dt-annotation-error-bg: #451a1a;
+  --dt-annotation-error-bdr: #dc2626;
+  --dt-annotation-warning-fg: #fcd34d;
+  --dt-annotation-warning-bg: #3f2d0a;
+  --dt-annotation-warning-bdr: #d89b1b;
+  --dt-annotation-info-fg: #93c5fd;
+  --dt-annotation-info-bg: #0f2a44;
+  --dt-annotation-info-bdr: #2687c7;
 }
 

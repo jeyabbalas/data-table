@@ -233,6 +233,7 @@ can interleave your own layers without hunting through the stylesheet.
 | `--dt-z-action-panel` | `30` | Per-column action panel popovers (reserved). |
 | `--dt-z-filter-bar` | `40` | Filter bar at the top of the table. |
 | `--dt-z-floating-panel` | `50` | In-page panels (filter, preset, derived-edit, drop indicator). |
+| `--dt-z-annotation-popover` | `55` | Annotation popover (sits between floating panels and the autocomplete tooltip). |
 | `--dt-z-autocomplete` | `60` | CodeMirror autocomplete tooltip (portalled to `<body>`). |
 | `--dt-z-modal` | `1000` | Full-screen modals + backdrops. |
 | `--dt-z-modal-stack-step` | `2` | Step added per stacked modal/panel so simultaneously-open dialogs layer predictably. |
@@ -251,6 +252,29 @@ host-app UI between layers:
 
 Pinned-column stacking is computed as `--dt-z-pinned-col + pinOrderOffset`,
 so overriding `--dt-z-pinned-col` shifts the whole pinned group together.
+
+### Annotations
+
+Palette used by the row / cell / column-header annotation overlays and the
+annotation popover. Each severity has a `fg` (text), `bg` (tint) and `bdr`
+(stripe / underline / pill border) token. Override any of them to match a
+host-app design system; the library reads them through `var()` so there's
+no rebuild step.
+
+| Variable | Role | Light default | Dark default |
+|---|---|---|---|
+| `--dt-annotation-error-fg` | Error-severity text on tinted surfaces. | `#7a0b14` | `#fca5a5` |
+| `--dt-annotation-error-bg` | Error-severity surface tint (rows, cells, headers, pills). | `#fde2e5` | `#451a1a` |
+| `--dt-annotation-error-bdr` | Error-severity accent (cell left-border, header underline, pill border). | `#d34551` | `#dc2626` |
+| `--dt-annotation-warning-fg` | Warning-severity text on tinted surfaces. | `#7a4a00` | `#fcd34d` |
+| `--dt-annotation-warning-bg` | Warning-severity surface tint. | `#fff0cc` | `#3f2d0a` |
+| `--dt-annotation-warning-bdr` | Warning-severity accent. | `#d89b1b` | `#d89b1b` |
+| `--dt-annotation-info-fg` | Info-severity text on tinted surfaces. | `#003e66` | `#93c5fd` |
+| `--dt-annotation-info-bg` | Info-severity surface tint. | `#d6ecfa` | `#0f2a44` |
+| `--dt-annotation-info-bdr` | Info-severity accent. | `#2687c7` | `#2687c7` |
+| `--dt-annotation-error-bg-hover` | Hover surface for error-tinted cells. Derived from `-bg` + `-bdr` via `color-mix`; overriding the base tokens flows through automatically. | derived | derived |
+| `--dt-annotation-warning-bg-hover` | Hover surface for warning-tinted cells. Derived from `-bg` + `-bdr`. | derived | derived |
+| `--dt-annotation-info-bg-hover` | Hover surface for info-tinted cells. Derived from `-bg` + `-bdr`. | derived | derived |
 
 ### Internal
 

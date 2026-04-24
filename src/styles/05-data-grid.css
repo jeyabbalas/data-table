@@ -281,3 +281,208 @@
   box-shadow: 0 0 4px var(--dt-primary-alpha-50);
 }
 
+/* ===========================================
+   Annotation overlay — rows and cells
+   ===========================================
+
+   Hierarchy (cell > col > row) — CSS source order is the mechanism. Row
+   rules come first, column rules second, cell rules last, so whichever
+   scope applies last to a given cell wins the bg / stripe / hover
+   cascade at intersections. The same precedence is mirrored in
+   `TableBody.resolveAnnotatedCell` so the popover list matches what the
+   viewer sees.
+
+   Per-cell, per-scope classes (no union propagation):
+   - `.dt-cell--row-annotated` + severity — applied to every cell in a
+     row-annotated row. Makes row annotations paint with the same
+     per-cell signature as columns (left-stripe on every cell; row-hover
+     darkens each cell independently instead of being overridden by
+     `.dt-row:hover`'s bg).
+   - `.dt-cell--col-annotated` + severity — applied to every cell in a
+     column-annotated column.
+   - `.dt-cell--annotated` + severity — applied only to a cell with its
+     own cell-scope annotation (strict `(rowId, colName)` match).
+
+   All three families use `align-self: stretch` + `line-height:
+   var(--dt-row-height)` (the `.dt-cell--focused` pattern) so the
+   background and left stripe fill the entire cell — padding included —
+   instead of only the text line-box.
+
+   `.dt-row--annotated` + `.dt-row--annotation-<sev>` remain as
+   marker classes on the row element for backward compat and DOM/CSS
+   hooks, but no longer paint anything. All tint lives on cells.
+
+   Severity-hide data attributes (example 11): when the host sets
+   `data-dt-ann-filter-<severity>="off"` on `.dt-root`, the matching
+   severity's tint vanishes across every cell-level class family. Header
+   rules live in 03-columns.css. */
+
+/* Row element marker — no paint. Kept as a DOM/CSS hook. */
+.dt-row--annotated {
+  transition: background-color var(--dt-transition, 0.15s ease);
+}
+
+/* Row-scope cell — every cell in an annotated row. */
+.dt-cell--row-annotated {
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+.dt-cell--row-annotation-error {
+  background-color: var(--dt-annotation-error-bg);
+  color: var(--dt-annotation-error-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-cell--row-annotation-warning {
+  background-color: var(--dt-annotation-warning-bg);
+  color: var(--dt-annotation-warning-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-cell--row-annotation-info {
+  background-color: var(--dt-annotation-info-bg);
+  color: var(--dt-annotation-info-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Column-scope cell — every cell in an annotated column. Ordered AFTER
+   row-scope so col wins the cascade at row+col intersections. */
+.dt-cell--col-annotated {
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+.dt-cell--col-annotation-error {
+  background-color: var(--dt-annotation-error-bg);
+  color: var(--dt-annotation-error-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-cell--col-annotation-warning {
+  background-color: var(--dt-annotation-warning-bg);
+  color: var(--dt-annotation-warning-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-cell--col-annotation-info {
+  background-color: var(--dt-annotation-info-bg);
+  color: var(--dt-annotation-info-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Cell-scope cell — this rule block must stay AFTER the col-scope block
+   so `.dt-cell--annotated` wins at row+cell, col+cell, and row+col+cell
+   intersections. */
+.dt-cell--annotated {
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+.dt-cell--annotation-error {
+  background-color: var(--dt-annotation-error-bg);
+  color: var(--dt-annotation-error-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-cell--annotation-warning {
+  background-color: var(--dt-annotation-warning-bg);
+  color: var(--dt-annotation-warning-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-cell--annotation-info {
+  background-color: var(--dt-annotation-info-bg);
+  color: var(--dt-annotation-info-fg);
+  box-shadow: inset 3px 0 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Hover — slightly darker, on-theme shade for the annotation bg. Same
+   row → col → cell cascade order as the base rules so the most-specific
+   scope's severity wins the hover color at intersections. The row
+   family uses a descendant selector rooted at `.dt-row:hover` so every
+   annotated cell in the hovered row darkens together, mirroring the
+   existing row-hover semantics. Col and cell use direct `:hover` on the
+   cell. */
+.dt-row:hover .dt-cell--row-annotation-error,
+.dt-row--hover .dt-cell--row-annotation-error {
+  background-color: var(--dt-annotation-error-bg-hover);
+}
+.dt-row:hover .dt-cell--row-annotation-warning,
+.dt-row--hover .dt-cell--row-annotation-warning {
+  background-color: var(--dt-annotation-warning-bg-hover);
+}
+.dt-row:hover .dt-cell--row-annotation-info,
+.dt-row--hover .dt-cell--row-annotation-info {
+  background-color: var(--dt-annotation-info-bg-hover);
+}
+
+.dt-cell--col-annotation-error:hover {
+  background-color: var(--dt-annotation-error-bg-hover);
+}
+.dt-cell--col-annotation-warning:hover {
+  background-color: var(--dt-annotation-warning-bg-hover);
+}
+.dt-cell--col-annotation-info:hover {
+  background-color: var(--dt-annotation-info-bg-hover);
+}
+
+.dt-cell--annotation-error:hover {
+  background-color: var(--dt-annotation-error-bg-hover);
+}
+.dt-cell--annotation-warning:hover {
+  background-color: var(--dt-annotation-warning-bg-hover);
+}
+.dt-cell--annotation-info:hover {
+  background-color: var(--dt-annotation-info-bg-hover);
+}
+
+/* Focus ring compound — keep the blue 2px inset on top of the
+   annotation stripe. Covers all three cell-level class families so
+   keyboard focus stays visible whichever tint the cell carries. */
+.dt-cell--row-annotated.dt-cell--focused,
+.dt-cell--col-annotated.dt-cell--focused,
+.dt-cell--annotated.dt-cell--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 3px 0 0 0 currentColor;
+}
+.dt-cell--row-annotation-error.dt-cell--focused,
+.dt-cell--col-annotation-error.dt-cell--focused,
+.dt-cell--annotation-error.dt-cell--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 3px 0 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-cell--row-annotation-warning.dt-cell--focused,
+.dt-cell--col-annotation-warning.dt-cell--focused,
+.dt-cell--annotation-warning.dt-cell--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 3px 0 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-cell--row-annotation-info.dt-cell--focused,
+.dt-cell--col-annotation-info.dt-cell--focused,
+.dt-cell--annotation-info.dt-cell--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 3px 0 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Severity-filter opt-out — neutralise the matching severity across all
+   three cell-level class families. Header rules live in 03-columns.css.
+   Row-element selectors are intentionally omitted: `.dt-row--annotated`
+   carries no paint, so the row-cell rules are sufficient. */
+[data-dt-ann-filter-error="off"] .dt-cell--row-annotation-error,
+[data-dt-ann-filter-error="off"] .dt-cell--col-annotation-error,
+[data-dt-ann-filter-error="off"] .dt-cell--annotation-error {
+  background-color: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+[data-dt-ann-filter-warning="off"] .dt-cell--row-annotation-warning,
+[data-dt-ann-filter-warning="off"] .dt-cell--col-annotation-warning,
+[data-dt-ann-filter-warning="off"] .dt-cell--annotation-warning {
+  background-color: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+[data-dt-ann-filter-info="off"] .dt-cell--row-annotation-info,
+[data-dt-ann-filter-info="off"] .dt-cell--col-annotation-info,
+[data-dt-ann-filter-info="off"] .dt-cell--annotation-info {
+  background-color: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+

@@ -26,8 +26,10 @@
       .row { display: flex; gap: 0.4rem; }
       .row > * { flex: 1; }
       .counter { font-size: 0.85em; color: #555; margin-top: 0.35rem; }
-      pre.viewer, pre.log { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8em; white-space: pre-wrap; color: #222; background: #fafafa; padding: 0.5rem; border-radius: 3px; border: 1px solid #eee; max-height: 260px; overflow: auto; word-break: break-word; }
+      pre.viewer, pre.log, ol.viewer { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8em; white-space: pre-wrap; color: #222; background: #fafafa; padding: 0.5rem; border-radius: 3px; border: 1px solid #eee; max-height: 260px; overflow: auto; word-break: break-word; }
       pre.log { max-height: 140px; }
+      ol.viewer { padding-left: 1.6rem; max-height: 200px; }
+      ol.viewer li { margin: 0.12rem 0; }
     </style>
   </head>
   <body>
@@ -39,17 +41,35 @@
           <h2>About</h2>
           <p>
             <code>table.annotations</code> is a programmatic row / column / cell
-            overlay. This phase delivers the data layer only — CRUD, intersection
-            lookups, JSON round-trip, and auto-persistence via
-            <code>SessionSnapshot</code>. Visible rendering lands in Phase 4.
+            overlay. Phase 4 layers the visible rendering on top: CSS tints on
+            rows / cells / column headers and a library-owned popover grouped
+            by scope.
           </p>
           <ol>
-            <li>Click a Setup button to add an annotation.</li>
-            <li>Watch the live JSON viewer and event log update.</li>
-            <li>Download the JSON, edit it, load it back — round-trip preserves
-                unknown fields.</li>
-            <li>Reload the page — annotations survive (IndexedDB session).</li>
+            <li>Click a Scenario button (A–D) to seed a specific overlay.</li>
+            <li>Hover or keyboard-focus an annotated cell or header to open
+                the popover.</li>
+            <li>Toggle the severity filter checkboxes to hide a severity tint
+                without modifying the store.</li>
+            <li>Watch the viewport intersection panel update as you scroll.</li>
           </ol>
+        </section>
+
+        <section>
+          <h2>Scenarios</h2>
+          <button id="btn-scenario-a">A — row-scope warning (rowId 5)</button>
+          <button id="btn-scenario-b">B — column-scope error (<code>fare_amount</code>)</button>
+          <button id="btn-scenario-c">C — cell-scope info (rowId 3, <code>fare_amount</code>)</button>
+          <button id="btn-scenario-d">D — intersecting at (rowId 7, <code>fare_amount</code>)</button>
+          <p class="counter">Each button clears existing annotations first so scenarios don't accumulate.</p>
+        </section>
+
+        <section>
+          <h2>Severity filter</h2>
+          <label><input id="filter-error" type="checkbox" checked /> Show <strong>error</strong> tints</label>
+          <label><input id="filter-warning" type="checkbox" checked /> Show <strong>warning</strong> tints</label>
+          <label><input id="filter-info" type="checkbox" checked /> Show <strong>info</strong> tints</label>
+          <p class="counter">Visual-only — annotations remain in the store regardless.</p>
         </section>
 
         <section>
@@ -67,6 +87,12 @@
           <button id="btn-many">Add 100 random annotations</button>
           <button id="btn-clear">Clear all</button>
           <p class="counter">Count: <span id="count">0</span></p>
+        </section>
+
+        <section>
+          <h2>Viewport intersections</h2>
+          <ol id="intersection" class="viewer"><li>(no annotated cells in view)</li></ol>
+          <p class="counter">Lists every annotated cell in the currently-rendered rows — updates on scroll + mutations.</p>
         </section>
 
         <section>

@@ -16,6 +16,8 @@ import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ColumnResizer } from './ColumnResizer';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { AnnotationPopover, maxSeverity } from './AnnotationPopover';
 
 /**
  * Options for configuring the ColumnHeader
@@ -31,6 +33,10 @@ export interface ColumnHeaderOptions {
   colIndex?: number;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings;
+  /** Shared annotation store for column-scope annotation classes + popover. */
+  annotations?: AnnotationStore;
+  /** Shared popover singleton used to display column-scope annotations on hover / focus. */
+  annotationPopover?: AnnotationPopover;
 }
 
 /**
@@ -262,8 +268,71 @@ export class ColumnHeader {
     actionPanel.appendChild(dragHandle);
     el.appendChild(actionPanel);
 
+    // Apply annotation classes + popover wiring on initial render. The
+    // store subscription in subscribeToState() re-applies on every
+    // annotation change.
+    this.applyAnnotationClasses(el);
+
     return el;
   }
+
+  /**
+   * Read column-scope annotations from the store and rewrite the header's
+   * annotation CSS classes + data attributes. `getByColumn` also surfaces
+   * cell-scope annotations (every cell ann lands in byRow/byColumn/byCell),
+   * so we filter to `scope === 'column'` — a pure cell annotation must not
+   * tint the header.
+   */
+  private applyAnnotationClasses(el: HTMLElement): void {
+    const p = this.classPrefix;
+    const annotations = this.options.annotations;
+    el.classList.remove(
+      `${p}-col-header--annotated`,
+      `${p}-col-header--annotation-error`,
+      `${p}-col-header--annotation-warning`,
+      `${p}-col-header--annotation-info`,
+    );
+    delete el.dataset.dtAnnotationCount;
+    if (!annotations) return;
+    const anns = annotations
+      .getByColumn(this.column.name)
+      .filter((a) => a.scope === 'column');
+    if (anns.length === 0) return;
+    const sev = maxSeverity(anns);
+    if (!sev) return;
+    el.classList.add(
+      `${p}-col-header--annotated`,
+      `${p}-col-header--annotation-${sev}`,
+    );
+    el.dataset.dtAnnotationCount = String(anns.length);
+  }
+
+  /**
+   * Show the shared popover anchored on the header root, populated with the
+   * current column-scope annotations. No-op when no popover / store is
+   * wired or when the column has no column-scope annotations (cell-scope
+   * annotations at cells in this column don't open the header popover —
+   * they open the cell's own popover).
+   */
+  private showAnnotationPopover = (): void => {
+    if (this.destroyed) return;
+    const popover = this.options.annotationPopover;
+    const store = this.options.annotations;
+    if (!popover || !store) return;
+    const anns = store.getByColumn(this.column.name).filter((a) => a.scope === 'column');
+    if (anns.length === 0) return;
+    popover.show(this.element, anns);
+  };
+
+  /**
+   * Start the popover's grace-period dismissal. Called on `pointerleave` /
+   * `focusout` of the header. The popover cancels the timer if the user
+   * moves into the popover itself.
+   */
+  private scheduleAnnotationHide = (): void => {
+    if (this.destroyed) return;
+    this.options.annotationPopover?.scheduleGraceHide();
+  };
 
   // =========================================
   // Event Handling
@@ -295,6 +364,14 @@ export class ColumnHeader {
     // Scoped to e.target === element so descendant buttons (sort, pin, hide,
     // filter) still get their own native button activation without double-firing.
     this.element.addEventListener('keydown', this.handleHeaderKeyDown);
+
+    // Annotation popover — show on pointerenter/focusin, schedule hide on
+    // pointerleave/focusout. The popover itself cancels the pending hide
+    // when the user moves onto its DOM.
+    this.element.addEventListener('pointerenter', this.showAnnotationPopover);
+    this.element.addEventListener('pointerleave', this.scheduleAnnotationHide);
+    this.element.addEventListener('focusin', this.showAnnotationPopover);
+    this.element.addEventListener('focusout', this.scheduleAnnotationHide);
   }
 
   /**
@@ -430,6 +507,18 @@ export class ColumnHeader {
 
     // Set initial hide button state
     this.updateHideButtonState(this.state.visibleColumns.get());
+
+    // Annotation store — re-apply classes whenever any mutation lands.
+    // Coarse re-read (one getByColumn call per change) is cheaper than
+    // filtering payload.ids through `store.get(id)?.scope === 'column' && …`.
+    if (this.options.annotations) {
+      const unsubAnn = this.options.annotations.on('change', () => {
+        if (!this.destroyed) {
+          this.applyAnnotationClasses(this.element);
+        }
+      });
+      this.unsubscribes.push(unsubAnn);
+    }
   }
 
   /**
@@ -666,6 +755,10 @@ export class ColumnHeader {
     this.hideButton.removeEventListener('click', this.handleHideClick);
     this.filterButton.removeEventListener('click', this.handleFilterClick);
     this.element.removeEventListener('keydown', this.handleHeaderKeyDown);
+    this.element.removeEventListener('pointerenter', this.showAnnotationPopover);
+    this.element.removeEventListener('pointerleave', this.scheduleAnnotationHide);
+    this.element.removeEventListener('focusin', this.showAnnotationPopover);
+    this.element.removeEventListener('focusout', this.scheduleAnnotationHide);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

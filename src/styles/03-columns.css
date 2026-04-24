@@ -817,3 +817,63 @@
   flex-shrink: 0;
 }
 
+/* ===========================================
+   Column header — annotation overlay
+   ===========================================
+
+   Applied when a column has one or more column-scope annotations. We paint:
+   - A tinted background on the header container.
+   - A strong underline at the bottom edge so it stays visible even when
+     pinned headers stick next to filter chrome.
+
+   `dt-col-header--filtered` already draws an inset top border via
+   `--dt-primary`, so the two states compose without conflict (top = filtered,
+   bottom = annotated). */
+.dt-col-header--annotated {
+  transition: background-color var(--dt-transition, 0.15s ease);
+}
+.dt-col-header--annotation-error {
+  background-color: color-mix(in srgb, var(--dt-annotation-error-bg) 70%, transparent);
+  box-shadow: inset 0 -3px 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-col-header--annotation-warning {
+  background-color: color-mix(in srgb, var(--dt-annotation-warning-bg) 70%, transparent);
+  box-shadow: inset 0 -3px 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-col-header--annotation-info {
+  background-color: color-mix(in srgb, var(--dt-annotation-info-bg) 70%, transparent);
+  box-shadow: inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Coexist with the active-filter inset top border. Stack both insets so
+   neither signal is lost on a column that is both filtered and annotated. */
+.dt-col-header--filtered.dt-col-header--annotation-error {
+  box-shadow:
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-col-header--filtered.dt-col-header--annotation-warning {
+  box-shadow:
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-col-header--filtered.dt-col-header--annotation-info {
+  box-shadow:
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Severity-hide opt-out (example 11 parity with row / cell rules). */
+[data-dt-ann-filter-error="off"] .dt-col-header--annotation-error,
+[data-dt-ann-filter-warning="off"] .dt-col-header--annotation-warning,
+[data-dt-ann-filter-info="off"] .dt-col-header--annotation-info {
+  background-color: transparent;
+  box-shadow: none;
+}
+/* Preserve the filtered top border when the annotation is hidden. */
+[data-dt-ann-filter-error="off"] .dt-col-header--filtered.dt-col-header--annotation-error,
+[data-dt-ann-filter-warning="off"] .dt-col-header--filtered.dt-col-header--annotation-warning,
+[data-dt-ann-filter-info="off"] .dt-col-header--filtered.dt-col-header--annotation-info {
+  box-shadow: inset 0 3px 0 0 var(--dt-primary);
+}
+

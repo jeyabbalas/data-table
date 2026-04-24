@@ -59,6 +59,7 @@ import {
 } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import { AnnotationStore } from './annotations/AnnotationStore';
+import { AnnotationPopover } from './table/AnnotationPopover';
 
 import { TableContainer } from './table/TableContainer';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
@@ -453,6 +454,16 @@ export async function createDataTable(
   // -------- Instance id (multi-instance DOM ID isolation) --------
   const instanceId = opts.instanceId ?? nextInstanceId();
 
+  // -------- Annotations --------
+  // Constructed here (before TableContainer) so TableBody and every
+  // ColumnHeader can be wired with the store + popover at construction
+  // time; AutoSave below subscribes to the store's change event.
+  const annotationStore = new AnnotationStore({ tableName: state.baseTableName });
+  const annotationPopover = new AnnotationPopover({
+    classPrefix: opts.classPrefix ?? 'dt',
+    portalTarget: opts.portalTarget,
+  });
+
   // -------- UI container --------
   const tableContainer = new TableContainer(
     opts.container,
@@ -470,6 +481,8 @@ export async function createDataTable(
       portalTarget: opts.portalTarget,
       colorScheme,
       messages,
+      annotations: annotationStore,
+      annotationPopover,
     }
   );
 
@@ -711,12 +724,6 @@ export async function createDataTable(
     coordinator.syncExistingFilters();
   };
 
-  // -------- Annotations --------
-  // Constructed before AutoSave so AutoSave can subscribe to the store's
-  // change event. We pass the `baseTableName` signal so `toJSON()` tags the
-  // output with the loader-assigned name once data has loaded.
-  const annotationStore = new AnnotationStore({ tableName: state.baseTableName });
-
   // -------- AutoSave --------
   if (sessionStore && opts.persistence !== false) {
     autoSave = new AutoSave(state, sessionStore, {
@@ -943,6 +950,7 @@ export async function createDataTable(
 
     autoSave?.disable();
     annotationStore.destroy();
+    annotationPopover.destroy();
     for (const unsub of unsubscribes) {
       try {
         unsub();

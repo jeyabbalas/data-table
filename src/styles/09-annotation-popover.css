@@ -1,0 +1,127 @@
+/* ===========================================
+   Annotation popover
+   ===========================================
+
+   Shared singleton anchored to a cell or column header via
+   `AnnotationPopover.show()`. Rendered fixed-position in `portalTarget`
+   (defaults to `document.body`), so all styling must go through CSS custom
+   properties — the popover does not inherit from `.dt-root`.
+
+   Structure:
+     .dt-annotation-popover
+       section.dt-annotation-popover__group--{row|column|cell}
+         h4.dt-annotation-popover__group-title
+         ul.dt-annotation-popover__list
+           li.dt-annotation-entry.dt-annotation-entry--{severity}
+             span.dt-annotation-pill.dt-annotation-pill--{severity}
+             div.dt-annotation-body
+               div.dt-annotation-message
+               div.dt-annotation-meta
+*/
+
+.dt-annotation-popover {
+  position: fixed;
+  z-index: var(--dt-z-annotation-popover, 55);
+  max-width: 420px;
+  min-width: 220px;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius, 8px);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--dt-shadow-md) 100%, transparent);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size, 0.875rem);
+  line-height: 1.4;
+  display: none;
+}
+
+.dt-annotation-popover:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
+}
+
+.dt-annotation-popover__group {
+  padding: 0.25rem 0;
+}
+
+.dt-annotation-popover__group + .dt-annotation-popover__group {
+  border-top: 1px solid var(--dt-border-light);
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+}
+
+.dt-annotation-popover__group-title {
+  margin: 0 0 0.3rem;
+  font-size: var(--dt-font-size-xs, 0.7rem);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dt-text-secondary);
+  font-weight: 600;
+}
+
+.dt-annotation-popover__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dt-annotation-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.dt-annotation-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.4rem;
+  min-width: 3.5em;
+  height: 1.35em;
+  border-radius: 999px;
+  font-size: var(--dt-font-size-xs, 0.7rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.dt-annotation-pill--error {
+  background: var(--dt-annotation-error-bg);
+  color: var(--dt-annotation-error-fg);
+  border-color: var(--dt-annotation-error-bdr);
+}
+
+.dt-annotation-pill--warning {
+  background: var(--dt-annotation-warning-bg);
+  color: var(--dt-annotation-warning-fg);
+  border-color: var(--dt-annotation-warning-bdr);
+}
+
+.dt-annotation-pill--info {
+  background: var(--dt-annotation-info-bg);
+  color: var(--dt-annotation-info-fg);
+  border-color: var(--dt-annotation-info-bdr);
+}
+
+.dt-annotation-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dt-annotation-message {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.dt-annotation-meta {
+  margin-top: 0.15rem;
+  font-size: var(--dt-font-size-xs, 0.7rem);
+  color: var(--dt-text-tertiary);
+}

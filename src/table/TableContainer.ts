@@ -32,6 +32,8 @@
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
@@ -98,6 +100,18 @@ export interface TableContainerOptions {
   colorScheme?: ContainerColorScheme;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings;
+  /**
+   * Shared annotation store. When provided, `TableBody` and every
+   * `ColumnHeader` subscribe to it so annotations render inline (tint +
+   * popover) without requiring a full `render()`.
+   */
+  annotations?: AnnotationStore;
+  /**
+   * Shared popover singleton used by `TableBody` and `ColumnHeader` to
+   * display intersecting annotations on hover / focus. Owned by
+   * `createDataTable`; destroyed alongside the container.
+   */
+  annotationPopover?: AnnotationPopover;
 }
 
 /**
@@ -193,6 +207,8 @@ export class TableContainer {
       portalTarget: undefined as unknown as HTMLElement,
       colorScheme: 'auto',
       messages: defaultStrings,
+      annotations: undefined as unknown as AnnotationStore,
+      annotationPopover: undefined as unknown as AnnotationPopover,
       ...options,
     };
     if (!this.resolvedOptions.instanceId) {
@@ -961,6 +977,8 @@ export class TableContainer {
                 onDerivedIconClick: (column, buttonEl) => this.handleDerivedIconClick(column, buttonEl),
                 colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
                 messages: this.messages,
+                annotations: this.resolvedOptions.annotations,
+                annotationPopover: this.resolvedOptions.annotationPopover,
               }
             );
             this.columnHeaders.push(columnHeader);
@@ -1016,6 +1034,8 @@ export class TableContainer {
             classPrefix: this.resolvedOptions.classPrefix,
             scrollContainer: this.bodyScroll,
             // headerHeight no longer needed - body scroll only contains body
+            annotations: this.resolvedOptions.annotations,
+            annotationPopover: this.resolvedOptions.annotationPopover,
           }
         );
 

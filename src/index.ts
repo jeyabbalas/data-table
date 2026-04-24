@@ -32,6 +32,7 @@ export {
   SQLValidationError,
   DerivedColumnError,
   PersistenceError,
+  AnnotationError,
   ExportError,
   ConfigurationError,
   DestroyedError,
@@ -85,6 +86,24 @@ export type { DataFormat, LoadResult } from './data/DataLoader';
 // state into their own stores (URL params, cloud sync, etc.).
 export { SessionStore, serializeFilter, deserializeFilter } from './persistence/SessionStore';
 export type { SerializedFilter } from './persistence/types';
+
+// ---- Annotations ----
+// Programmatic row / column / cell annotation overlay exposed on
+// `table.annotations`. Types let consumers build JSON payloads for
+// `loadJSON` without constructing a store by hand.
+export type {
+  Annotation,
+  AnnotationScope,
+  AnnotationSeverity,
+  RowAnnotation,
+  ColumnAnnotation,
+  CellAnnotation,
+  AnnotationFile,
+  AnnotationChangePayload,
+  AnnotationChangeHandler,
+  NewAnnotation,
+} from './annotations/types';
+export { ANNOTATION_FILE_VERSION } from './annotations/types';
 
 // ---- Visualization registry ----
 // Register custom visualizations per-instance via `createDataTable({

@@ -164,15 +164,30 @@ describe('AutoSave', () => {
       autoSave.destroy();
     });
 
-    it('stops saving after disable', () => {
+    it('flushes pending save via saveSync and stops future saves', () => {
       const autoSave = new AutoSave(state, store);
       autoSave.enable();
 
       state.filters.set([{ type: 'null', column: 'name' }]);
       autoSave.disable();
 
+      // disable() flushes in-flight state — otherwise a reload whose
+      // beforeunload handler triggers destroy() before AutoSave's own
+      // flush handler would lose the pending change.
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
+
+      // No further saves should fire from the debounce timer or new changes.
       vi.advanceTimersByTime(2000);
       expect(store.save).not.toHaveBeenCalled();
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not flush on disable when no save is pending', () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      autoSave.disable();
+      expect(store.saveSync).not.toHaveBeenCalled();
     });
 
     it('can re-enable after disable', () => {
@@ -203,15 +218,19 @@ describe('AutoSave', () => {
   });
 
   describe('destroy', () => {
-    it('cancels pending save', () => {
+    it('flushes pending save via saveSync, then stops future saves', () => {
       const autoSave = new AutoSave(state, store);
       autoSave.enable();
 
       state.filters.set([{ type: 'null', column: 'name' }]);
       autoSave.destroy();
 
+      // destroy() delegates to disable() which flushes in-flight state.
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
+
       vi.advanceTimersByTime(2000);
       expect(store.save).not.toHaveBeenCalled();
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
     });
 
     it('prevents re-enable after destroy', () => {

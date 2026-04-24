@@ -21,6 +21,11 @@ const sharedStore = new SessionStore();
 
 let a: DataTable | undefined;
 let b: DataTable | undefined;
+// Cached once the initial load lands so the "Clear session + reload" button
+// can feed both tables again without a second network round-trip. The worker
+// bridge copies — not transfers — the ArrayBuffer, so reusing it across
+// loadData calls is safe.
+let sharedBuffer: ArrayBuffer | null = null;
 
 (async () => {
   await sharedBridge.initialize();
@@ -51,9 +56,12 @@ let b: DataTable | undefined;
   // Loads are serialised because DuckDB-WASM is single-threaded — the parallel
   // version was queueing behind itself inside DuckDB anyway.
   const res = await fetch(DATA_URL);
-  const buf = await res.arrayBuffer();
-  await a.loadData(buf, { sourceFormat: 'csv' });
-  await b.loadData(buf, { sourceFormat: 'csv' });
+  sharedBuffer = await res.arrayBuffer();
+  // Explicit tableName is required for session persistence to key correctly —
+  // without it the loader auto-generates a fresh name every page load and
+  // AutoSave would never find the snapshot on reload.
+  await a.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_a' });
+  await b.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_b' });
 
   document.getElementById('save-a')!.addEventListener('click', () => {
     const name = `A snapshot ${sharedPresets.getPresets().length + 1}`;
@@ -71,6 +79,22 @@ let b: DataTable | undefined;
   document.getElementById('clear')!.addEventListener('click', () => {
     a!.actions.clearFilters();
     b!.actions.clearFilters();
+  });
+
+  // Full-session wipe for both tables: deletes both IDB rows, empties the
+  // shared preset list, clears each table's undo stack, then reloads the
+  // CSV buffer into both tables so the page stays usable. `clearSession`
+  // resets JS state only — the DuckDB tables survive, so drop them before
+  // the second loadData or `CREATE TABLE` throws "already exists".
+  document.getElementById('clear-session')!.addEventListener('click', async () => {
+    if (!sharedBuffer) return;
+    await a!.clearSession();
+    await b!.clearSession();
+    await sharedBridge.query('DROP TABLE IF EXISTS "trips_a"');
+    await sharedBridge.query('DROP TABLE IF EXISTS "trips_b"');
+    await a!.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_a' });
+    await b!.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_b' });
+    console.log('[09] session cleared and both tables reloaded');
   });
 })();
 

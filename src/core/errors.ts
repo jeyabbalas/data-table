@@ -17,6 +17,7 @@
  * | `EXPORT_*`    | {@link ExportError}          |
  * | `DERIVED_*`   | {@link DerivedColumnError}   |
  * | `PERSIST_*` / `IDB_*` | {@link PersistenceError} |
+ * | `ANNOTATION_*` | {@link AnnotationError}     |
  * | `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` / `BRIDGE_*` / `INVARIANT` | {@link ConfigurationError} |
  * | `DESTROYED`   | {@link DestroyedError}       |
  *
@@ -195,6 +196,28 @@ export class PersistenceError extends DataTableError {
 }
 
 /**
+ * Annotation CRUD, JSON I/O, or session-restore error.
+ *
+ * Codes: `ANNOTATION_DUPLICATE_ID`, `ANNOTATION_NOT_FOUND`,
+ * `ANNOTATION_INVALID_SHAPE`, `ANNOTATION_VERSION_UNSUPPORTED`,
+ * `ANNOTATION_SCOPE_IMMUTABLE`, `ANNOTATION_ROWID_IMMUTABLE`,
+ * `ANNOTATION_COLUMN_IMMUTABLE`, default `ANNOTATION_FAILED`.
+ *
+ * @example
+ * try { table.annotations.loadJSON(file); }
+ * catch (err) {
+ *   if (err instanceof AnnotationError && err.code === 'ANNOTATION_VERSION_UNSUPPORTED') {
+ *     toast('Annotation file was produced by a newer version.');
+ *   }
+ * }
+ */
+export class AnnotationError extends DataTableError {
+  constructor(message: string, options: DataTableErrorOptions = {}) {
+    super(message, withDefault(options, 'ANNOTATION_FAILED'));
+  }
+}
+
+/**
  * Export-pipeline failure (CSV / JSON / Parquet / clipboard).
  *
  * @example
@@ -279,6 +302,9 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
   }
   if (code.startsWith('PERSIST_') || code.startsWith('IDB_') || code === 'SNAPSHOT_INVALID' || code === 'VERSION_MISMATCH' || code === 'SAVE_FAILED') {
     return new PersistenceError(message, options);
+  }
+  if (code.startsWith('ANNOTATION_')) {
+    return new AnnotationError(message, options);
   }
   if (code === 'DESTROYED') return new DestroyedError(message, options);
   if (

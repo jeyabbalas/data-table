@@ -58,6 +58,7 @@ import {
   mergeStrings,
 } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
+import { AnnotationStore } from './annotations/AnnotationStore';
 
 import { TableContainer } from './table/TableContainer';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
@@ -233,6 +234,13 @@ export interface DataTable {
   readonly bridge: WorkerBridge;
   /** UI container. Rarely needed directly; prefer the event bus. */
   readonly container: TableContainer;
+  /**
+   * Programmatic row / column / cell annotation store. Annotations are
+   * app-authored metadata (validation errors, QC notes) that overlay the
+   * table read-only; they do not participate in undo/redo and persist
+   * independently via `SessionSnapshot`.
+   */
+  readonly annotations: AnnotationStore;
 
   /**
    * Unique per-instance identifier, e.g. `'t1-a3f9'`. Mixed into modal
@@ -703,11 +711,18 @@ export async function createDataTable(
     coordinator.syncExistingFilters();
   };
 
+  // -------- Annotations --------
+  // Constructed before AutoSave so AutoSave can subscribe to the store's
+  // change event. We pass the `baseTableName` signal so `toJSON()` tags the
+  // output with the loader-assigned name once data has loaded.
+  const annotationStore = new AnnotationStore({ tableName: state.baseTableName });
+
   // -------- AutoSave --------
   if (sessionStore && opts.persistence !== false) {
     autoSave = new AutoSave(state, sessionStore, {
       undoManager,
       presetManager: presetManager ?? undefined,
+      annotationStore,
       onError: (err) => {
         emitter.emit('error', { error: err, source: 'persistence' });
       },
@@ -882,6 +897,7 @@ export async function createDataTable(
         sessionStore: loadOpts?.sessionStore ?? sessionStore ?? undefined,
         presetManager:
           loadOpts?.presetManager ?? presetManager ?? undefined,
+        annotationStore,
       };
       await actions.loadData(normalized, mergedOpts);
       emitter.emit('loadComplete', {
@@ -926,6 +942,7 @@ export async function createDataTable(
     emitter.emit('destroy', {});
 
     autoSave?.disable();
+    annotationStore.destroy();
     for (const unsub of unsubscribes) {
       try {
         unsub();
@@ -977,6 +994,7 @@ export async function createDataTable(
       resetTableState(state);
       undoManager?.clear();
       presetManager?.presets.set([]);
+      annotationStore.clear('all');
       bridge.clearQueryCache();
     } finally {
       autoSave?.enable();
@@ -997,6 +1015,7 @@ export async function createDataTable(
     actions,
     bridge,
     container: tableContainer,
+    annotations: annotationStore,
     instanceId,
     loadData: (source, loadOpts) => {
       if (destroyed) {

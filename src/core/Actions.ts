@@ -20,6 +20,7 @@ import { batch } from './Signal';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { attachCacheInvalidation } from '../data/QueryCache';
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
 import { ROWID_COLUMN } from './types';
@@ -59,6 +60,8 @@ export interface LoadDataOptions extends DataLoaderOptions {
   sessionStore?: SessionStore;
   /** If provided, restores saved filter presets after loading */
   presetManager?: FilterPresetManager;
+  /** If provided, restores saved annotations after loading */
+  annotationStore?: AnnotationStore;
 }
 
 /**
@@ -387,7 +390,7 @@ export class StateActions {
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
       if (snapshot) {
-        restoreStateFromSnapshot(this.state, snapshot, this.undoManager, options.presetManager);
+        restoreStateFromSnapshot(this.state, snapshot, this.undoManager, options.presetManager, options.annotationStore);
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
         if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {

@@ -10,9 +10,10 @@ import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef, VectorDataType } from '../derived/types';
 import type { FilterPreset } from '../filters/FilterPresetTypes';
+import type { AnnotationFile } from '../annotations/types';
 
 /** Current snapshot schema version — bump when the shape changes */
-export const SNAPSHOT_VERSION = 4;
+export const SNAPSHOT_VERSION = 5;
 
 /** Marker object for serialized Date instances */
 export interface DateWrapper {
@@ -135,4 +136,6 @@ export interface SessionSnapshot {
   vectorValuePool?: Record<string, VectorValuePoolEntry>;
   /** Saved filter presets. Absent in pre-v3 snapshots. */
   filterPresets?: FilterPreset[];
+  /** Saved annotations. Absent in pre-v5 snapshots. */
+  annotations?: AnnotationFile;
 }

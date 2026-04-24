@@ -38,6 +38,11 @@ schema, so a preset saved from A can be loaded onto B cleanly.
 5. **Reload the page** — both tables restore their individual session
    snapshots from the shared `SessionStore`, keyed by their
    `tableName` (`trips_a`, `trips_b`).
+6. **Clear session + reload** — `table.clearSession()` on both A and B
+   (deletes both IDB rows, empties the shared preset list, clears each
+   undo stack) and then re-loads the CSV buffer into both tables. A
+   subsequent page reload finds nothing in `SessionStore` and starts from
+   scratch.
 
 ## What's *not* shared
 

@@ -897,8 +897,8 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
 // =========================================
 
 describe('snapshotFromState — vector value pool deduplication', () => {
-  it('SNAPSHOT_VERSION is 4', () => {
-    expect(SNAPSHOT_VERSION).toBe(4);
+  it('SNAPSHOT_VERSION is 5', () => {
+    expect(SNAPSHOT_VERSION).toBe(5);
   });
 
   it('creates pool when vector columns exist in undo stacks', () => {

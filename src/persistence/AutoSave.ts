@@ -24,6 +24,7 @@
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { SessionStore } from './SessionStore';
 import { snapshotFromState } from './serialization';
 import { PersistenceError } from '../core/errors';
@@ -34,6 +35,7 @@ export interface AutoSaveOptions {
   debounceMs?: number;
   undoManager?: UndoManager;
   presetManager?: FilterPresetManager;
+  annotationStore?: AnnotationStore;
   /**
    * Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
    * transaction aborted). If omitted, save failures are swallowed —
@@ -49,6 +51,7 @@ export class AutoSave {
   private debounceMs: number;
   private undoManager: UndoManager | undefined;
   private presetManager: FilterPresetManager | undefined;
+  private annotationStore: AnnotationStore | undefined;
   private boundOnVisibilityChange: (() => void) | null = null;
   private boundOnBeforeUnload: (() => void) | null = null;
   private onError: ((error: PersistenceError) => void) | undefined;
@@ -61,6 +64,7 @@ export class AutoSave {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.undoManager = options.undoManager;
     this.presetManager = options.presetManager;
+    this.annotationStore = options.annotationStore;
     this.onError = options.onError;
   }
 
@@ -92,6 +96,14 @@ export class AutoSave {
     if (this.presetManager) {
       this.unsubscribes.push(
         this.presetManager.presets.subscribe(() => this.scheduleSave()),
+      );
+    }
+
+    // Subscribe to annotation-store changes. The store's `on('change', …)`
+    // API returns a plain unsubscribe function matching our signal contract.
+    if (this.annotationStore) {
+      this.unsubscribes.push(
+        this.annotationStore.on('change', () => this.scheduleSave()),
       );
     }
 
@@ -132,8 +144,21 @@ export class AutoSave {
     }
   }
 
-  /** Unsubscribe from all signals and cancel any pending save. */
+  /** Unsubscribe from all signals and flush any pending save. */
   disable(): void {
+    // Flush any pending debounced save before tearing down. Without this,
+    // a beforeunload handler that triggers destroy() (and therefore
+    // disable()) ahead of AutoSave's own flushPendingSave handler would
+    // silently drop in-flight state. That happens whenever a consumer
+    // registers `window.addEventListener('beforeunload', …)` synchronously
+    // at module load — its handler runs before createDataTable's async
+    // init reaches enable() and wires up AutoSave's own flush.
+    // Safe in every call site: loadData calls disable() before resetTableState
+    // so the flush captures fully-settled pre-load state; clearSession's
+    // subsequent IDB delete runs after this sync put (same-store
+    // transactions serialise) so the net result is still deleted.
+    this.flushPendingSave();
+
     for (const unsub of this.unsubscribes) {
       unsub();
     }
@@ -188,7 +213,7 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
+    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager, this.annotationStore);
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof (result as Promise<void>).then === 'function') {
@@ -209,7 +234,7 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager);
+    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager, this.annotationStore);
     try {
       this.store.saveSync(snapshot);
     } catch (cause) {

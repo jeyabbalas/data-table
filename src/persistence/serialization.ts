@@ -14,6 +14,7 @@ import { batch } from '../core/Signal';
 import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { VectorColumnDef } from '../derived/types';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
 
 // ── StateSnapshot serialization (undo/redo stacks) ────────────────────
 
@@ -119,7 +120,7 @@ export function deserializeStateSnapshot(
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
  */
-export function snapshotFromState(state: TableState, undoManager?: UndoManager, presetManager?: FilterPresetManager): SessionSnapshot {
+export function snapshotFromState(state: TableState, undoManager?: UndoManager, presetManager?: FilterPresetManager, annotationStore?: AnnotationStore): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -187,6 +188,10 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     }
   }
 
+  if (annotationStore && annotationStore.count() > 0) {
+    snapshot.annotations = annotationStore.toJSON();
+  }
+
   return snapshot;
 }
 
@@ -204,6 +209,7 @@ export function restoreStateFromSnapshot(
   snapshot: SessionSnapshot,
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
+  annotationStore?: AnnotationStore,
 ): void {
   const schemaColumns = state.schema.get();
   if (schemaColumns.length === 0) return;
@@ -332,5 +338,16 @@ export function restoreStateFromSnapshot(
   // Restore filter presets if present
   if (presetManager && snapshot.filterPresets && snapshot.filterPresets.length > 0) {
     presetManager.loadPresets(snapshot.filterPresets);
+  }
+
+  // Restore annotations if present. A corrupt blob (e.g. from a manual edit
+  // of IndexedDB) must not block session restore for the rest of the state —
+  // match the "silently drop stale references" posture used above.
+  if (annotationStore && snapshot.annotations) {
+    try {
+      annotationStore.loadJSON(snapshot.annotations, 'replace');
+    } catch {
+      // Leave the store empty on any parse/shape failure.
+    }
   }
 }

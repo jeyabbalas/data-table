@@ -129,6 +129,13 @@ export type {
 } from './persistence/types';
 export { SNAPSHOT_VERSION, isPooledVectorRef } from './persistence/types';
 
+// ---- Annotations (advanced construction) ----
+// Most consumers reach the store via `table.annotations`. Export the class
+// and id generator here for composability (tests, framework integrations).
+export { AnnotationStore } from './annotations/AnnotationStore';
+export type { AnnotationStoreOptions } from './annotations/AnnotationStore';
+export { generateAnnotationId, isAnnotationIdShape } from './annotations/AnnotationId';
+
 // ---- Statistics ----
 export type {
   ColumnStatsData,

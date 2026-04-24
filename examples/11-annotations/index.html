@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>11 — Annotations</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+      header { padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+      header h1 { margin: 0; font-size: 1rem; font-weight: 600; }
+      .split { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 0; }
+      #table { min-height: 0; }
+      aside { padding: 1rem; border-left: 1px solid #ddd; overflow: auto; font-size: 0.9em; background: #fafafa; display: flex; flex-direction: column; gap: 1rem; }
+      aside section { background: #fff; border: 1px solid #e5e5e5; border-radius: 4px; padding: 0.75rem; }
+      aside section h2 { font-size: 0.75em; margin: 0 0 0.5rem; color: #555; text-transform: uppercase; letter-spacing: 0.08em; }
+      aside p { margin: 0 0 0.5rem; }
+      aside ol { margin: 0; padding-left: 1.1rem; }
+      aside ol li { margin: 0.2rem 0; }
+      aside code { background: #f3f3f3; padding: 0 0.2rem; border-radius: 3px; font-size: 0.95em; }
+      aside label { display: flex; align-items: center; gap: 0.4rem; margin: 0.25rem 0; font-size: 0.9em; }
+      aside label > select, aside label > input[type="number"] { flex: 1; font: inherit; padding: 0.2rem 0.4rem; border: 1px solid #ccc; border-radius: 3px; min-width: 0; }
+      aside button { display: block; width: 100%; text-align: left; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; background: #f3f3f3; border: 1px solid #ccc; border-radius: 3px; font: inherit; cursor: pointer; }
+      aside button:hover { background: #e9e9e9; }
+      aside button:last-child { margin-bottom: 0; }
+      .row { display: flex; gap: 0.4rem; }
+      .row > * { flex: 1; }
+      .counter { font-size: 0.85em; color: #555; margin-top: 0.35rem; }
+      pre.viewer, pre.log { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8em; white-space: pre-wrap; color: #222; background: #fafafa; padding: 0.5rem; border-radius: 3px; border: 1px solid #eee; max-height: 260px; overflow: auto; word-break: break-word; }
+      pre.log { max-height: 140px; }
+    </style>
+  </head>
+  <body>
+    <header><h1>11 — Annotations (<a href="../">back</a>)</h1></header>
+    <div class="split">
+      <div id="table"></div>
+      <aside>
+        <section>
+          <h2>About</h2>
+          <p>
+            <code>table.annotations</code> is a programmatic row / column / cell
+            overlay. This phase delivers the data layer only — CRUD, intersection
+            lookups, JSON round-trip, and auto-persistence via
+            <code>SessionSnapshot</code>. Visible rendering lands in Phase 4.
+          </p>
+          <ol>
+            <li>Click a Setup button to add an annotation.</li>
+            <li>Watch the live JSON viewer and event log update.</li>
+            <li>Download the JSON, edit it, load it back — round-trip preserves
+                unknown fields.</li>
+            <li>Reload the page — annotations survive (IndexedDB session).</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>Setup — add annotations</h2>
+          <label>severity for the next add
+            <select id="sev">
+              <option value="error">error</option>
+              <option value="warning" selected>warning</option>
+              <option value="info">info</option>
+            </select>
+          </label>
+          <button id="btn-row">Add row annotation (rowId 5)</button>
+          <button id="btn-col">Add column annotation (<code>fare_amount</code>)</button>
+          <button id="btn-cell">Add cell annotation (rowId 3, <code>fare_amount</code>)</button>
+          <button id="btn-many">Add 100 random annotations</button>
+          <button id="btn-clear">Clear all</button>
+          <p class="counter">Count: <span id="count">0</span></p>
+        </section>
+
+        <section>
+          <h2>Session JSON</h2>
+          <div class="row">
+            <button id="btn-download">Download JSON</button>
+            <button id="btn-load">Load JSON…</button>
+          </div>
+          <input id="file-picker" type="file" accept="application/json,.json" style="display:none" />
+          <p class="counter">Note: Load replaces everything currently in the store.</p>
+        </section>
+
+        <section>
+          <h2>Clear session</h2>
+          <button id="btn-clear-session">Clear session + reload</button>
+          <p class="counter">
+            Wipes annotations + filters + sort + presets + undo stack + IndexedDB
+            entry for this table, then re-fetches the CSV so the grid is
+            interactive again. Unlike <strong>Clear all</strong> (annotations
+            only), this deletes the saved snapshot.
+          </p>
+        </section>
+
+        <section>
+          <h2>Live JSON viewer</h2>
+          <pre id="viewer" class="viewer">(empty)</pre>
+        </section>
+
+        <section>
+          <h2>Event log</h2>
+          <pre id="log" class="log">(no events yet)</pre>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

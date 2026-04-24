@@ -3,6 +3,7 @@
 exports[`Public API surface > advanced export keys match snapshot 1`] = `
 [
   "AddColumnButton",
+  "AnnotationStore",
   "AutoSave",
   "BaseVisualization",
   "CellRenderer",
@@ -54,7 +55,9 @@ exports[`Public API surface > advanced export keys match snapshot 1`] = `
   "formatCount",
   "formatDefaultStats",
   "formatStatValue",
+  "generateAnnotationId",
   "initializeColumnsFromSchema",
+  "isAnnotationIdShape",
   "isCategoricalType",
   "isDateType",
   "isIntervalType",
@@ -69,6 +72,8 @@ exports[`Public API surface > advanced export keys match snapshot 1`] = `
 
 exports[`Public API surface > root export keys match snapshot 1`] = `
 [
+  "ANNOTATION_FILE_VERSION",
+  "AnnotationError",
   "ConfigurationError",
   "DataTableError",
   "DerivedColumnError",

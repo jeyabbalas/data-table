@@ -18,7 +18,7 @@ import { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from
 import type { StateSnapshot } from './UndoManager';
 import { batch } from './Signal';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
-import type { DerivedColumnDef, CompletionContext } from '../derived/types';
+import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { attachCacheInvalidation } from '../data/QueryCache';
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
@@ -100,6 +100,11 @@ export class StateActions {
   private undoRedoInProgress = false;
   private widthDragSnapshot: StateSnapshot | null = null;
   private onFilterRemoveCallback?: (column: string) => void;
+  private onDerivedChangeCallback?: (payload: {
+    derivedColumns: DerivedColumnDef[];
+    kind: 'added' | 'removed' | 'updated' | 'replaced';
+    columnName?: string;
+  }) => void;
   private initialSnapshot: StateSnapshot | null = null;
   private derivedManager: DerivedColumnManager | null = null;
 
@@ -131,6 +136,34 @@ export class StateActions {
    */
   setOnFilterRemove(callback: (column: string) => void): void {
     this.onFilterRemoveCallback = callback;
+  }
+
+  /**
+   * Register a callback fired for each derived-column lifecycle event
+   * (add / remove / update / replace). Used by the DataTable facade to
+   * emit the `derivedChange` event with the right `kind` discriminator.
+   */
+  setOnDerivedChange(
+    callback: (payload: {
+      derivedColumns: DerivedColumnDef[];
+      kind: 'added' | 'removed' | 'updated' | 'replaced';
+      columnName?: string;
+    }) => void,
+  ): void {
+    this.onDerivedChangeCallback = callback;
+  }
+
+  /** Emit a derived-change event with the current column list. */
+  private emitDerivedChange(
+    kind: 'added' | 'removed' | 'updated' | 'replaced',
+    columnName?: string,
+  ): void {
+    if (!this.onDerivedChangeCallback) return;
+    this.onDerivedChangeCallback({
+      derivedColumns: this.state.derivedColumns.get(),
+      kind,
+      columnName,
+    });
   }
 
   /** Notify callback for each column that lost its filter between two states */
@@ -976,7 +1009,11 @@ export class StateActions {
           { code: 'BRIDGE_NOT_READY' },
         );
       }
-      this.derivedManager = new DerivedColumnManager(this.bridge, baseTableName);
+      this.derivedManager = new DerivedColumnManager(
+        this.bridge,
+        baseTableName,
+        () => this.state.totalRows.get(),
+      );
     }
     return this.derivedManager;
   }
@@ -1013,6 +1050,10 @@ export class StateActions {
       this.state.schema.set(baseSchema);
       this.state.derivedColumns.set([]);
     }
+
+    // Bulk reconciliation (undo/redo/session restore): emit a single event
+    // with no columnName since multiple columns may have changed at once.
+    this.emitDerivedChange('updated');
   }
 
   /**
@@ -1065,6 +1106,8 @@ export class StateActions {
         this.state.visibleColumns.set([...this.state.visibleColumns.get(), def.name]);
         this.state.columnOrder.set([...this.state.columnOrder.get(), def.name]);
       });
+
+      this.emitDerivedChange('added', def.name);
 
       return { success: true };
     } catch (err) {
@@ -1206,6 +1249,8 @@ export class StateActions {
         }
       });
 
+      this.emitDerivedChange('updated', def.name);
+
       return { success: true };
     } catch (err) {
       return {
@@ -1213,6 +1258,114 @@ export class StateActions {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Replace a derived column at the same name with a new definition.
+   *
+   * Same-name-only — does not support renaming (use {@link updateDerivedColumn}
+   * for that). Pre-flights every dependent column against the proposed new def
+   * before touching DuckDB. On dependent incompatibility returns a structured
+   * `DerivedColumnError` with `code: 'DEPENDENTS_INCOMPATIBLE'` whose
+   * `details.dependentsAffected` names each dependent that would break and
+   * `details.reasons` maps each dependent name to the DuckDB error. The
+   * replacement is atomic: if any pre-flight check or the final VIEW recreate
+   * fails, the column reverts to its prior definition.
+   *
+   * @example
+   * const result = await table.actions.replaceDerivedColumn('tip_pct', {
+   *   kind: 'expression',
+   *   name: 'tip_pct',
+   *   expression: 'CAST(tip_amount AS VARCHAR)', // breaks numeric dependents
+   * });
+   * if (!result.success && result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
+   *   const { dependentsAffected, reasons } = result.error.details!;
+   *   console.log('affected:', dependentsAffected, 'reasons:', reasons);
+   * }
+   */
+  async replaceDerivedColumn(
+    name: string,
+    newDef: DerivedColumnDef,
+  ): Promise<
+    | { success: true; info: DerivedColumnInfo }
+    | { success: false; error: DerivedColumnError }
+  > {
+    const currentSchema = this.state.schema.get();
+    const oldEntry = currentSchema.find(c => c.name === name);
+    if (!oldEntry?.isDerived) {
+      return {
+        success: false,
+        error: new DerivedColumnError(`Column "${name}" is not a derived column`, {
+          code: 'NOT_FOUND',
+          details: { column: name },
+        }),
+      };
+    }
+
+    if (newDef.name !== name) {
+      return {
+        success: false,
+        error: new DerivedColumnError(
+          `replaceDerivedColumn does not support renaming: target "${name}" vs new "${newDef.name}". Use updateDerivedColumn instead.`,
+          { code: 'EXPRESSION_INVALID', details: { target: name, newName: newDef.name } },
+        ),
+      };
+    }
+
+    // Capture undo snapshot locally — only push after success.
+    const preSnapshot = this.undoManager && !this.suppressUndoCapture
+      ? captureSnapshot(this.state) : null;
+
+    let info: DerivedColumnInfo;
+    try {
+      const manager = this.ensureDerivedManager();
+      info = await manager.replaceColumn(name, newDef);
+    } catch (err) {
+      const typedError = err instanceof DerivedColumnError
+        ? err
+        : new DerivedColumnError(
+            err instanceof Error ? err.message : String(err),
+            { code: 'EXPRESSION_INVALID', cause: err },
+          );
+      return { success: false, error: typedError };
+    }
+
+    // Push to undo stack AFTER DuckDB success, BEFORE state mutation.
+    if (preSnapshot && this.undoManager) {
+      this.undoManager.push(preSnapshot);
+    }
+
+    const typeChanged = oldEntry.type !== info.detectedType;
+
+    batch(() => {
+      this.state.derivedColumns.set(
+        this.state.derivedColumns.get().map(d => d.name === name ? newDef : d)
+      );
+
+      const newSchemaEntry: ColumnSchema = {
+        name: newDef.name,
+        type: info.detectedType,
+        nullable: true,
+        originalType: info.detectedOriginalType,
+        isDerived: true,
+        expression: newDef.kind === 'expression' ? newDef.expression : undefined,
+      };
+      this.state.schema.set(
+        currentSchema.map(c => c.name === name ? newSchemaEntry : c)
+      );
+
+      if (typeChanged) {
+        const filters = this.state.filters.get();
+        if (filters.some(f => f.column === name)) {
+          this.state.filters.set(filters.filter(f => f.column !== name));
+          this.onFilterRemoveCallback?.(name);
+        }
+      }
+    });
+
+    this.emitDerivedChange('replaced', name);
+
+    return { success: true, info };
   }
 
   /**
@@ -1290,6 +1443,8 @@ export class StateActions {
       // Switch tableName: revert to base if no more derived columns
       this.state.tableName.set(manager.getEffectiveTableName());
     });
+
+    this.emitDerivedChange('removed', name);
   }
 
   /**

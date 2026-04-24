@@ -111,8 +111,20 @@ export type TableEvents = {
     columnOrder: string[];
   };
 
-  /** Fired when derived columns are added, updated, or removed. */
-  derivedChange: { derivedColumns: DerivedColumnDef[] };
+  /**
+   * Fired when derived columns are added, updated, removed, or replaced.
+   *
+   * @property derivedColumns - The full list after the change.
+   * @property kind - Which operation triggered the event.
+   * @property columnName - The column that changed (omitted only for bulk
+   *   reconciliation during undo/redo or session restore, where multiple
+   *   columns may change in one step).
+   */
+  derivedChange: {
+    derivedColumns: DerivedColumnDef[];
+    kind: 'added' | 'removed' | 'updated' | 'replaced';
+    columnName?: string;
+  };
 
   /** Fired whenever canUndo/canRedo changes (e.g., after any action or an undo/redo). */
   undoChange: { canUndo: boolean; canRedo: boolean };

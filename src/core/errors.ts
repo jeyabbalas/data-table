@@ -274,7 +274,7 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
   if (code.startsWith('EXPORT_') || code === 'NO_TABLE_LOADED' || code === 'CLIPBOARD_UNAVAILABLE' || code === 'CANVAS_UNAVAILABLE') {
     return new ExportError(message, options);
   }
-  if (code.startsWith('DERIVED_') || code === 'EXPRESSION_INVALID' || code === 'DUPLICATE_NAME' || code === 'VECTOR_LENGTH_MISMATCH' || code === 'CIRCULAR_DEPENDENCY' || code === 'NOT_FOUND') {
+  if (code.startsWith('DERIVED_') || code === 'EXPRESSION_INVALID' || code === 'DUPLICATE_NAME' || code === 'VECTOR_LENGTH_MISMATCH' || code === 'CIRCULAR_DEPENDENCY' || code === 'NOT_FOUND' || code === 'DEPENDENTS_INCOMPATIBLE') {
     return new DerivedColumnError(message, options);
   }
   if (code.startsWith('PERSIST_') || code.startsWith('IDB_') || code === 'SNAPSHOT_INVALID' || code === 'VERSION_MISMATCH' || code === 'SAVE_FAILED') {

@@ -50,7 +50,6 @@ import {
 import { checkBrowserSupport } from './core/checkBrowserSupport';
 import type { DataFormat } from './data/DataLoader';
 import type { Filter, SortColumn } from './core/types';
-import type { DerivedColumnDef } from './derived/types';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import {
   type Strings,
@@ -778,11 +777,13 @@ export async function createDataTable(
       });
     })
   );
-  unsubscribes.push(
-    state.derivedColumns.subscribe((derivedColumns: DerivedColumnDef[]) => {
-      emitter.emit('derivedChange', { derivedColumns });
-    })
-  );
+  // derivedChange is emitted explicitly from the action call sites (see
+  // src/core/Actions.ts) so the payload can carry the `kind` discriminator
+  // and the specific `columnName` that changed. Undo/redo and session
+  // restore go through reconcileDerivedColumns and emit with kind omitted.
+  actions.setOnDerivedChange((payload) => {
+    emitter.emit('derivedChange', payload);
+  });
   if (undoManager) {
     unsubscribes.push(
       undoManager.canUndoSignal.subscribe(() => {

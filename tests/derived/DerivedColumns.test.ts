@@ -580,6 +580,20 @@ describe('Derived Columns — Actions Integration', () => {
       // Verify UUID values are quoted in INSERT
       expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes("'550e8400-e29b-41d4-a716-"))).toBe(true);
     });
+
+    it('rejects a vector whose length does not match totalRows', async () => {
+      // state.totalRows is 100 (set in beforeEach). 50 values should reject.
+      const result = await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'short_vec',
+        vectorType: 'integer',
+        values: new Array(50).fill(0),
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/has 50 values but the table has 100 rows/);
+      expect(state.derivedColumns.get()).toHaveLength(0);
+    });
   });
 
   // =========================================
@@ -840,6 +854,31 @@ describe('Derived Columns — Actions Integration', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not a derived column');
+    });
+
+    it('rejects vector update whose length does not match totalRows', async () => {
+      // Seed a vector with the correct length, then try to update with a mismatched one.
+      await actions.addDerivedColumn({
+        kind: 'vector',
+        name: 'flags',
+        vectorType: 'integer',
+        values: new Array(100).fill(0),
+      });
+
+      const result = await actions.updateDerivedColumn('flags', {
+        kind: 'vector',
+        name: 'flags',
+        vectorType: 'integer',
+        values: new Array(42).fill(1), // wrong length
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/has 42 values but the table has 100 rows/);
+      // Original vector definition still in place.
+      expect(state.derivedColumns.get().find(d => d.name === 'flags')).toMatchObject({
+        kind: 'vector',
+        name: 'flags',
+      });
     });
   });
 

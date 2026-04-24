@@ -57,6 +57,7 @@ export class DerivedColumnManager {
   constructor(
     private bridge: WorkerBridge,
     private baseTableName: string,
+    private getTotalRows: () => number = () => 0,
   ) {
     this.viewName = `__dt_view_${baseTableName}__`;
   }
@@ -108,6 +109,7 @@ export class DerivedColumnManager {
       detectedOriginalType = typeInfo.detectedOriginalType;
     } else {
       // Vector column: create helper table
+      this.assertVectorLength(def);
       await this.createVectorHelperTable(def);
       detectedOriginalType = this.vectorTypeToDuckDBType(def.vectorType);
       detectedType = mapDuckDBType(detectedOriginalType);
@@ -187,6 +189,7 @@ export class DerivedColumnManager {
       detectedType = typeInfo.detectedType;
       detectedOriginalType = typeInfo.detectedOriginalType;
     } else {
+      this.assertVectorLength(def);
       await this.createVectorHelperTable(def);
       detectedOriginalType = this.vectorTypeToDuckDBType(def.vectorType);
       detectedType = mapDuckDBType(detectedOriginalType);
@@ -206,6 +209,140 @@ export class DerivedColumnManager {
     } catch (viewErr) {
       // Rollback: restore old column info and attempt to recreate the old VIEW
       this.columns[oldIndex] = oldInfo;
+      if (oldInfo.def.kind === 'vector') {
+        await this.createVectorHelperTable(oldInfo.def);
+      }
+      try {
+        await this.recreateView();
+      } catch {
+        // Best-effort restore
+      }
+      throw viewErr;
+    }
+
+    return newInfo;
+  }
+
+  /**
+   * Replace a derived column at the same name with a new definition.
+   *
+   * Same-name-only — does not support renaming (use {@link updateColumn} for that).
+   * Pre-flights every dependent against the proposed new def before touching the
+   * VIEW. On dependent incompatibility, throws a `DEPENDENTS_INCOMPATIBLE` error
+   * whose `details.dependentsAffected` lists the dependent names and
+   * `details.reasons` maps each name to the DuckDB error.
+   */
+  async replaceColumn(name: string, newDef: DerivedColumnDef): Promise<DerivedColumnInfo> {
+    if (newDef.name !== name) {
+      throw new DerivedColumnError(
+        `replaceColumn does not support renaming: target "${name}" vs new "${newDef.name}". Use updateColumn instead.`,
+        { code: 'EXPRESSION_INVALID', details: { target: name, newName: newDef.name } },
+      );
+    }
+
+    const oldIndex = this.columns.findIndex(c => c.def.name === name);
+    if (oldIndex === -1) {
+      throw new DerivedColumnError(`Derived column "${name}" not found`, {
+        code: 'NOT_FOUND',
+        details: { column: name },
+      });
+    }
+
+    const oldInfo = this.columns[oldIndex];
+
+    let detectedType: DataType;
+    let detectedOriginalType: string;
+
+    if (newDef.kind === 'expression') {
+      // 1. Validate the new expression in isolation against the current VIEW.
+      await this.validateExpressionSQL(newDef.expression, newDef.name);
+
+      // 2. Detect the new expression's result type.
+      const typeInfo = await this.detectType(newDef.expression);
+      detectedType = typeInfo.detectedType;
+      detectedOriginalType = typeInfo.detectedOriginalType;
+
+      // 3. Cycle check with tentative in-memory swap.
+      const tentativeInfo: DerivedColumnInfo = {
+        def: newDef,
+        detectedType,
+        detectedOriginalType,
+      };
+      const savedColumns = [...this.columns];
+      this.columns[oldIndex] = tentativeInfo;
+      try {
+        this.topologicalSortExpressions();
+      } catch (err) {
+        this.columns = savedColumns;
+        throw err;
+      }
+      this.columns = savedColumns;
+
+      // 4. CTE-based pre-flight of every dependent against the proposed new def.
+      const reasons = await this.validateDependentsAgainst(name, newDef);
+      if (Object.keys(reasons).length > 0) {
+        throw new DerivedColumnError(
+          `Replacing "${name}" would break ${Object.keys(reasons).length} dependent column(s): ${Object.keys(reasons).map(d => `"${d}"`).join(', ')}`,
+          {
+            code: 'DEPENDENTS_INCOMPATIBLE',
+            details: {
+              column: name,
+              dependentsAffected: Object.keys(reasons),
+              reasons,
+            },
+          },
+        );
+      }
+    } else {
+      this.assertVectorLength(newDef);
+      // For vector replace, defer helper-table creation until after dependent
+      // pre-flight (dependents of a vector are empty in practice, but we still
+      // run the check for symmetry and to catch forward-compat regressions).
+      const reasons = await this.validateDependentsAgainst(name, newDef);
+      if (Object.keys(reasons).length > 0) {
+        throw new DerivedColumnError(
+          `Replacing vector "${name}" would break ${Object.keys(reasons).length} dependent column(s): ${Object.keys(reasons).join(', ')}`,
+          {
+            code: 'DEPENDENTS_INCOMPATIBLE',
+            details: {
+              column: name,
+              dependentsAffected: Object.keys(reasons),
+              reasons,
+            },
+          },
+        );
+      }
+      detectedOriginalType = this.vectorTypeToDuckDBType(newDef.vectorType);
+      detectedType = mapDuckDBType(detectedOriginalType);
+    }
+
+    // Clean up old vector helper table if the old column was a vector.
+    if (oldInfo.def.kind === 'vector') {
+      await this.dropVectorHelperTable(name);
+    }
+
+    // Create new helper table for vector replace.
+    if (newDef.kind === 'vector') {
+      await this.createVectorHelperTable(newDef);
+    }
+
+    const newInfo: DerivedColumnInfo = {
+      def: newDef,
+      detectedType,
+      detectedOriginalType,
+    };
+
+    this.columns[oldIndex] = newInfo;
+
+    try {
+      await this.recreateView();
+    } catch (viewErr) {
+      // Rollback: restore old column info + helper table, retry VIEW best-effort.
+      this.columns[oldIndex] = oldInfo;
+      if (newDef.kind === 'vector') {
+        // Drop the freshly-created new helper table.
+        try { await this.dropVectorHelperTable(name); } catch { /* best-effort */ }
+      }
       if (oldInfo.def.kind === 'vector') {
         await this.createVectorHelperTable(oldInfo.def);
       }
@@ -505,6 +642,130 @@ export class DerivedColumnManager {
   private async validateExpressionSQL(expression: string, alias: string): Promise<void> {
     const sql = `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.validationTableName)} LIMIT 0`;
     await this.bridge.query(sql);
+  }
+
+  /**
+   * Enforce that a vector column's values array has exactly one entry per base
+   * table row. Short arrays previously produced silent NULLs via the rowid
+   * LEFT JOIN; long arrays silently dropped entries.
+   */
+  private assertVectorLength(def: VectorColumnDef): void {
+    const expected = this.getTotalRows();
+    const actual = def.values.length;
+    if (expected > 0 && actual !== expected) {
+      throw new DerivedColumnError(
+        `Vector column "${def.name}" has ${actual} values but the table has ${expected} rows`,
+        {
+          code: 'VECTOR_LENGTH_MISMATCH',
+          details: { column: def.name, expected, actual },
+        },
+      );
+    }
+  }
+
+  /**
+   * Pre-flight every dependent's expression against a tentative replacement of
+   * `oldName` with `newDef`, without mutating the real VIEW. Walks dependents
+   * in topological order and builds a scratch CTE per dependent that includes
+   * the new expression (and any previously-validated intermediate dependents
+   * it transitively depends on). Returns a map of `dependentName → duckdbError`
+   * for failures; an empty map means the replacement is safe.
+   *
+   * Vector replacements cannot have dependents (vectors are terminal in the
+   * dependency graph), so this returns an empty map when `newDef.kind === 'vector'`.
+   */
+  private async validateDependentsAgainst(
+    oldName: string,
+    newDef: DerivedColumnDef,
+  ): Promise<Record<string, string>> {
+    const reasons: Record<string, string> = {};
+
+    // Collect the transitive set of expression columns that depend on `oldName`.
+    const directDependents = new Set(this.getDependents(oldName));
+    if (directDependents.size === 0) return reasons;
+
+    // Build transitive closure by repeatedly expanding via getDependents.
+    const transitive = new Set<string>(directDependents);
+    let frontier: string[] = [...directDependents];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const depName of frontier) {
+        for (const innerDep of this.getDependents(depName)) {
+          if (!transitive.has(innerDep)) {
+            transitive.add(innerDep);
+            next.push(innerDep);
+          }
+        }
+      }
+      frontier = next;
+    }
+
+    // Topologically order the transitive dependents so earlier CTE layers feed
+    // later ones. Reuse the manager's existing sort, then filter to our set.
+    const sortedAll = this.topologicalSortExpressions();
+    const sortedDependents = sortedAll.filter(info => transitive.has(info.def.name));
+
+    // Build scratch CTE SQL. Layer 0 = base table + the replacement. Layers 1..N =
+    // each dependent in topo order. We validate by running `SELECT (<depExpr>)
+    // FROM <lastLayer> LIMIT 0` at each layer. Any dependent that fails gets
+    // its error captured; validation of later dependents continues using the
+    // dependent's original expression (best-effort enumeration).
+    const replacementExpr = newDef.kind === 'expression'
+      ? (newDef as { expression: string }).expression
+      : null;
+
+    if (replacementExpr === null) {
+      // Vector replacements produce a fixed type; no expression to inject.
+      // For dependents that reference the vector column, the column still
+      // exists with its new DuckDB type. Validate each dependent against a
+      // scratch CTE that shadows the vector column with a CAST to the new type.
+      const newVectorType = (newDef as VectorColumnDef).vectorType;
+      const duckdbType = this.vectorTypeToDuckDBType(newVectorType);
+      for (const depInfo of sortedDependents) {
+        const depExpr = (depInfo.def as { expression: string }).expression;
+        const preflightCTE = `WITH __dt_preflight AS (SELECT * REPLACE (CAST(${quoteIdentifier(oldName)} AS ${duckdbType}) AS ${quoteIdentifier(oldName)}) FROM ${quoteIdentifier(this.validationTableName)})`;
+        const sql = `${preflightCTE} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM __dt_preflight LIMIT 0`;
+        try {
+          await this.bridge.query(sql);
+        } catch (err) {
+          reasons[depInfo.def.name] = this.cleanErrorMessage(err);
+        }
+      }
+      return reasons;
+    }
+
+    // Expression replacement. Build a layered CTE where layer 0 replaces
+    // `oldName` with `(newExpr)` and subsequent layers add each intermediate
+    // dependent so transitive dependents see the correct type.
+    const cteLayers: string[] = [];
+    const baseCTE = `__dt_preflight_0 AS (SELECT * REPLACE ((${replacementExpr}) AS ${quoteIdentifier(oldName)}) FROM ${quoteIdentifier(this.validationTableName)})`;
+    cteLayers.push(baseCTE);
+
+    let prevLayer = '__dt_preflight_0';
+    for (let i = 0; i < sortedDependents.length; i++) {
+      const depInfo = sortedDependents[i];
+      const depExpr = (depInfo.def as { expression: string }).expression;
+      const layerName = `__dt_preflight_${i + 1}`;
+
+      // Validate the dependent's expression against the previous layer.
+      const validateSql = `WITH ${cteLayers.join(', ')} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer} LIMIT 0`;
+      try {
+        await this.bridge.query(validateSql);
+      } catch (err) {
+        reasons[depInfo.def.name] = this.cleanErrorMessage(err);
+        // Continue validating remaining dependents; the failed layer will
+        // silently carry the original (pre-replace) column into subsequent
+        // layers, which is enough to keep enumeration going.
+      }
+
+      // Add this dependent as a layer for subsequent transitive dependents.
+      cteLayers.push(
+        `${layerName} AS (SELECT *, (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer})`
+      );
+      prevLayer = layerName;
+    }
+
+    return reasons;
   }
 
   /** Detect type: SELECT typeof((<expr>)) AS t FROM "<view_or_base>" LIMIT 1, then mapDuckDBType() */

@@ -151,6 +151,7 @@
   --dt-z-filter-bar: 40;       /* filter bar at top of table */
   --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
   --dt-z-annotation-popover: 55; /* annotation popover (slots between floating panels and autocomplete) */
+  --dt-z-col-tooltip: 56;      /* column-header tooltip popover (one above annotation popover) */
   --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
   --dt-z-modal: 1000;          /* full-screen modals + backdrops */
   --dt-z-modal-stack-step: 2;  /* step added per open modal/panel so simultaneously-open dialogs layer predictably */

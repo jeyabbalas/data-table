@@ -8,7 +8,19 @@
 
 import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
-import type { Filter, FilterType, RawSQLFilter, SortColumn, ColumnSchema, DataType } from './types';
+import type {
+  Filter,
+  FilterType,
+  RawSQLFilter,
+  SortColumn,
+  ColumnSchema,
+  DataType,
+  ColumnHeaderTooltipContent,
+} from './types';
+import {
+  normalizeColumnHeaderTooltip,
+  tooltipContentEquals,
+} from './columnHeaderTooltip';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
@@ -951,40 +963,65 @@ export class StateActions {
   }
 
   /**
-   * Set or clear an app-controlled tooltip on a column header's name span.
+   * Set or clear an app-controlled tooltip rendered as a styled popover on
+   * the column-header name span.
    *
-   * The text appears as the native browser tooltip when the user hovers the
-   * column name. Pass `null` or an empty string to remove the override; the
-   * header then falls back to the column name (the default truncated-name
-   * tooltip behavior).
+   * `content` may be:
+   * - A `ColumnHeaderTooltipContent` object with optional `title`,
+   *   `description`, and `items[]` (label/value rows; value can be a string
+   *   or a string array for chip-style enums).
+   * - A plain string, treated as a description-only shorthand
+   *   (`{ description: string }`).
+   * - `null` (or any input that normalizes to empty) to clear the override.
    *
-   * Does not participate in undo/redo. Persists in the session snapshot
-   * alongside `columnWidths`. Setting an unknown column name is silently
-   * accepted (matches `setColumnWidth`); the override only takes visible
-   * effect once a header for that column renders.
+   * Every text field is rendered via `.textContent` — HTML is NOT supported
+   * by design, eliminating the XSS surface. Malformed items (missing label,
+   * non-string non-array value) are silently dropped.
+   *
+   * Does not participate in undo/redo (app-authored metadata, same as
+   * `setColumnWidth`). Persists in the session snapshot alongside
+   * `columnWidths`. Setting an unknown column name is silently accepted;
+   * the override takes visible effect once a header for that column renders.
    *
    * @example
    * ```ts
+   * // Plain string shorthand — renders as description-only.
    * table.actions.setColumnHeaderTooltip('age', 'Age in completed years');
-   * table.actions.setColumnHeaderTooltip('age', null); // remove
+   *
+   * // Structured content with title, description, and items.
+   * table.actions.setColumnHeaderTooltip('payment_type', {
+   *   title: 'Payment method',
+   *   description: 'How the rider paid for the trip.',
+   *   items: [
+   *     { label: 'Allowed values', value: ['Credit card', 'Cash', 'No charge'] },
+   *     { label: 'Source', value: 'TLC schema v1.0' },
+   *   ],
+   * });
+   *
+   * // Clear.
+   * table.actions.setColumnHeaderTooltip('age', null);
    * ```
    */
-  setColumnHeaderTooltip(column: string, text: string | null): void {
-    const tooltips = new Map(this.state.columnHeaderTooltips.get());
-    if (text == null || text.length === 0) {
-      if (!tooltips.has(column)) return;
-      tooltips.delete(column);
-    } else {
-      if (tooltips.get(column) === text) return;
-      tooltips.set(column, text);
-    }
-    this.state.columnHeaderTooltips.set(tooltips);
+  setColumnHeaderTooltip(
+    column: string,
+    content: string | ColumnHeaderTooltipContent | null,
+  ): void {
+    const next = normalizeColumnHeaderTooltip(content);
+    const map = this.state.columnHeaderTooltips.get();
+    const current = map.get(column) ?? null;
+    if (tooltipContentEquals(current, next)) return;
+    const newMap = new Map(map);
+    if (next === null) newMap.delete(column);
+    else newMap.set(column, next);
+    this.state.columnHeaderTooltips.set(newMap);
   }
 
   /**
-   * Get the app-controlled tooltip for a column header, or `null` if unset.
+   * Get the app-controlled tooltip content for a column header, or `null`
+   * if unset. Always returns the normalized object form, even when the
+   * setter was called with the string shorthand.
    */
-  getColumnHeaderTooltip(column: string): string | null {
+  getColumnHeaderTooltip(column: string): ColumnHeaderTooltipContent | null {
     return this.state.columnHeaderTooltips.get().get(column) ?? null;
   }
 
@@ -1238,6 +1275,14 @@ export class StateActions {
           }
           this.state.columnWidths.set(widths);
 
+          // columnHeaderTooltips
+          const tooltips = new Map(this.state.columnHeaderTooltips.get());
+          if (tooltips.has(oldName)) {
+            tooltips.set(def.name, tooltips.get(oldName)!);
+            tooltips.delete(oldName);
+            this.state.columnHeaderTooltips.set(tooltips);
+          }
+
           // pinnedColumns
           this.state.pinnedColumns.set(
             this.state.pinnedColumns.get().map(c => c === oldName ? def.name : c)
@@ -1458,6 +1503,12 @@ export class StateActions {
       const widths = new Map(this.state.columnWidths.get());
       widths.delete(name);
       this.state.columnWidths.set(widths);
+
+      // Remove from columnHeaderTooltips
+      const tooltips = new Map(this.state.columnHeaderTooltips.get());
+      if (tooltips.delete(name)) {
+        this.state.columnHeaderTooltips.set(tooltips);
+      }
 
       // Remove from pinnedColumns
       this.state.pinnedColumns.set(

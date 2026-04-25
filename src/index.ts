@@ -48,6 +48,8 @@ export type {
   SortColumn,
   SortDirection,
   RowId,
+  ColumnHeaderTooltipContent,
+  ColumnHeaderTooltipItem,
 } from './core/types';
 export { ROWID_COLUMN } from './core/types';
 export type { GetColumnValuesOptions } from './core/Actions';

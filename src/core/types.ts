@@ -64,3 +64,34 @@ export interface SortColumn {
   column: string;
   direction: SortDirection;
 }
+
+/**
+ * A label/value entry inside a column-header tooltip.
+ *
+ * - `value: string` renders inline next to the label ("Units: USD").
+ * - `value: string[]` renders as a wrapping chip list — a natural fit for
+ *   enum sets. Empty array drops the row.
+ */
+export interface ColumnHeaderTooltipItem {
+  label: string;
+  value: string | string[];
+}
+
+/**
+ * Structured content for a column-header tooltip popover.
+ *
+ * Every field is optional. An object with all fields empty (or missing)
+ * normalizes to `null` (i.e. clears the tooltip).
+ *
+ * The library renders all string fields via `.textContent` — HTML strings
+ * are NOT supported and not interpreted. This eliminates the XSS surface
+ * by construction.
+ */
+export interface ColumnHeaderTooltipContent {
+  /** Optional bold heading. */
+  title?: string;
+  /** Optional free-text body. Whitespace preserved (`white-space: pre-wrap`). */
+  description?: string;
+  /** Optional ordered list of label/value items. */
+  items?: ColumnHeaderTooltipItem[];
+}

@@ -153,24 +153,53 @@ let table: DataTable | undefined;
   wireFilter('filter-info', 'info');
 
   // =========================================
-  // Column header tooltips (Phase 5) — app-controlled native tooltip on the
-  // column-name span, independent from the Phase-4 annotation popover.
+  // Column header tooltips (Phase 5) — structured popover anchored on the
+  // column-name span. Independent from the Phase-4 annotation popover; a
+  // column may have both visible at once.
   // =========================================
   $<HTMLButtonElement>('btn-tooltip-set-total').onclick = () => {
-    table!.actions.setColumnHeaderTooltip(
-      'total_amount',
-      'Sum of fare, surcharge, mta_tax, tip, and tolls (USD).',
-    );
+    table!.actions.setColumnHeaderTooltip('total_amount', {
+      title: 'Total fare paid (USD)',
+      description:
+        'Sum of fare, surcharge, MTA tax, tip, and tolls.\n' +
+        'Equal to the credit-card receipt amount for card-paying riders.',
+      items: [
+        { label: 'Units', value: 'USD' },
+        { label: 'Components', value: ['fare', 'surcharge', 'mta_tax', 'tip', 'tolls'] },
+      ],
+    });
   };
   $<HTMLButtonElement>('btn-tooltip-set-passengers').onclick = () => {
+    table!.actions.setColumnHeaderTooltip('passenger_count', {
+      title: 'Passenger count',
+      description: 'Number of passengers reported by the driver at trip start.',
+      items: [
+        { label: 'Type', value: 'integer' },
+        { label: 'Range', value: '0 to 9' },
+        { label: 'Notes', value: 'A value of 0 typically indicates missing or unentered data.' },
+      ],
+    });
+  };
+  $<HTMLButtonElement>('btn-tooltip-set-payment').onclick = () => {
+    table!.actions.setColumnHeaderTooltip('payment_type', {
+      title: 'Payment method',
+      description: 'How the rider paid for the trip.',
+      items: [
+        { label: 'Allowed values', value: ['Credit card', 'Cash', 'No charge', 'Dispute', 'Unknown'] },
+        { label: 'Source', value: 'TLC trip-record schema v1.0' },
+      ],
+    });
+  };
+  $<HTMLButtonElement>('btn-tooltip-set-string-shorthand').onclick = () => {
     table!.actions.setColumnHeaderTooltip(
-      'passenger_count',
-      'Number of passengers reported by the driver.',
+      'fare_amount',
+      'Metered fare component (before surcharges and tip).',
     );
   };
   $<HTMLButtonElement>('btn-tooltip-clear').onclick = () => {
-    table!.actions.setColumnHeaderTooltip('total_amount', null);
-    table!.actions.setColumnHeaderTooltip('passenger_count', null);
+    for (const col of ['total_amount', 'passenger_count', 'payment_type', 'fare_amount']) {
+      table!.actions.setColumnHeaderTooltip(col, null);
+    }
   };
 
   // Clear session — full wipe (annotations + filters + sort + presets + IDB),

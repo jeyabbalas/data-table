@@ -7,6 +7,8 @@
 
 import type { TableState, HiddenColumnInfo } from '../core/State';
 import type { Filter } from '../filters/FilterTypes';
+import type { ColumnHeaderTooltipContent } from '../core/types';
+import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
 import { serializeFilter, deserializeFilter } from './SessionStore';
@@ -275,13 +277,16 @@ export function restoreStateFromSnapshot(
     }
   }
 
-  // Column header tooltips: Record → Map, skip stale columns and non-string entries
-  const columnHeaderTooltips = new Map<string, string>();
+  // Column header tooltips: Record → Map. Each entry is normalized via the
+  // shared helper so legacy string entries (in-flight Phase 5 IDB state) and
+  // structured object entries deserialize through one code path. Malformed
+  // fields drop; entries that normalize to null are omitted.
+  const columnHeaderTooltips = new Map<string, ColumnHeaderTooltipContent>();
   if (snapshot.columnHeaderTooltips) {
-    for (const [col, text] of Object.entries(snapshot.columnHeaderTooltips)) {
-      if (validColumns.has(col) && typeof text === 'string' && text.length > 0) {
-        columnHeaderTooltips.set(col, text);
-      }
+    for (const [col, raw] of Object.entries(snapshot.columnHeaderTooltips)) {
+      if (!validColumns.has(col)) continue;
+      const normalized = normalizeColumnHeaderTooltip(raw);
+      if (normalized !== null) columnHeaderTooltips.set(col, normalized);
     }
   }
 

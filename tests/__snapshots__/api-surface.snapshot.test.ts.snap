@@ -10,6 +10,7 @@ exports[`Public API surface > advanced export keys match snapshot 1`] = `
   "CellRenderer",
   "CodeMirrorExpressionEditor",
   "ColumnHeader",
+  "ColumnHeaderTooltipPopover",
   "ColumnReorder",
   "CrossfilterCoordinator",
   "DUCKDB_FUNCTIONS",

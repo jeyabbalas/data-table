@@ -34,6 +34,7 @@ import type { StateActions } from '../core/Actions';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
+import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnHeader } from './ColumnHeader';
 import { ColumnReorder } from './ColumnReorder';
 import { TableBody } from './TableBody';
@@ -112,6 +113,12 @@ export interface TableContainerOptions {
    * `createDataTable`; destroyed alongside the container.
    */
   annotationPopover?: AnnotationPopover;
+  /**
+   * Shared popover singleton used by `ColumnHeader` to display the app-set
+   * column-header tooltip on hover / focus of the column-name span. Owned
+   * by `createDataTable`; destroyed alongside the container.
+   */
+  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover;
 }
 
 /**
@@ -209,6 +216,7 @@ export class TableContainer {
       messages: defaultStrings,
       annotations: undefined as unknown as AnnotationStore,
       annotationPopover: undefined as unknown as AnnotationPopover,
+      columnHeaderTooltipPopover: undefined as unknown as ColumnHeaderTooltipPopover,
       ...options,
     };
     if (!this.resolvedOptions.instanceId) {
@@ -979,6 +987,7 @@ export class TableContainer {
                 messages: this.messages,
                 annotations: this.resolvedOptions.annotations,
                 annotationPopover: this.resolvedOptions.annotationPopover,
+                columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
               }
             );
             this.columnHeaders.push(columnHeader);

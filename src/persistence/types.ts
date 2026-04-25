@@ -5,7 +5,7 @@
  * Serialized forms replace Date objects with DateWrapper for JSON round-trip fidelity.
  */
 
-import type { SortColumn } from '../core/types';
+import type { SortColumn, ColumnHeaderTooltipContent } from '../core/types';
 import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef, VectorDataType } from '../derived/types';
@@ -138,6 +138,12 @@ export interface SessionSnapshot {
   filterPresets?: FilterPreset[];
   /** Saved annotations. Absent in pre-v5 snapshots. */
   annotations?: AnnotationFile;
-  /** App-controlled column-header tooltip overrides. Absent in pre-Phase-5 snapshots. */
-  columnHeaderTooltips?: Record<string, string>;
+  /**
+   * App-controlled column-header tooltip overrides.
+   *
+   * String entries are an in-flight Phase 5 legacy format (a description-only
+   * shorthand) and are normalized to `{ description: string }` on restore.
+   * Object entries are validated field-by-field; malformed fields drop.
+   */
+  columnHeaderTooltips?: Record<string, string | ColumnHeaderTooltipContent>;
 }

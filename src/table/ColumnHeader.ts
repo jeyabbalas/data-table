@@ -11,13 +11,17 @@
  * Supports click to sort and Shift+click for multi-column sort.
  */
 
-import type { ColumnSchema } from '../core/types';
+import type {
+  ColumnSchema,
+  ColumnHeaderTooltipContent,
+} from '../core/types';
 import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ColumnResizer } from './ColumnResizer';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { AnnotationPopover, maxSeverity } from './AnnotationPopover';
+import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 
 /**
  * Options for configuring the ColumnHeader
@@ -37,6 +41,8 @@ export interface ColumnHeaderOptions {
   annotations?: AnnotationStore;
   /** Shared popover singleton used to display column-scope annotations on hover / focus. */
   annotationPopover?: AnnotationPopover;
+  /** Shared singleton used to display the app-controlled column-name tooltip popover. */
+  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover;
 }
 
 /**
@@ -160,18 +166,19 @@ export class ColumnHeader {
       this.derivedIconBtn = iconBtn;
     }
 
-    // Column name
+    // Column name. Tooltip is rendered as a styled popover anchored on this
+    // span (see attachEventListeners), not the native `title` attribute.
+    // applyTooltipReactivity() applies tabindex when an override exists so
+    // keyboard users can reach the popover.
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
-    // Tooltip text: app override via setColumnHeaderTooltip, else the column
-    // name (the existing fallback for truncated names).
     this.nameEl = nameEl;
-    nameEl.setAttribute('title', this.resolveHeaderTooltip());
     if (this.column.isDerived) {
       nameEl.classList.add(`${this.classPrefix}-col-name--derived`);
     }
     nameRow.appendChild(nameEl);
+    this.applyTooltipReactivity();
 
     // Sort button with SVG arrows
     const sortBtn = document.createElement('button');
@@ -281,26 +288,57 @@ export class ColumnHeader {
   }
 
   /**
-   * Resolve the effective tooltip text for the header name span: the
-   * app-set override from `state.columnHeaderTooltips` if non-empty,
-   * else the column name (the default truncated-name tooltip).
+   * Resolve the structured tooltip content for this column, or `null` if no
+   * override is set.
    */
-  private resolveHeaderTooltip(): string {
-    const override = this.state.columnHeaderTooltips
-      .get()
-      .get(this.column.name);
-    return override && override.length > 0 ? override : this.column.name;
+  private resolveTooltipContent(): ColumnHeaderTooltipContent | null {
+    return (
+      this.state.columnHeaderTooltips.get().get(this.column.name) ?? null
+    );
   }
 
   /**
-   * Re-apply the resolved tooltip to the header name span. Called from the
-   * `columnHeaderTooltips` signal subscription so the title attribute stays
-   * in sync with app updates without rebuilding the header DOM.
+   * Re-sync nameEl `tabindex` with the override state and refresh / hide an
+   * already-displayed popover. Called from the `columnHeaderTooltips` signal
+   * subscription so the rendered popover stays in sync with app updates
+   * without rebuilding the header DOM.
    */
-  private applyHeaderTooltip(): void {
+  private applyTooltipReactivity(): void {
     if (this.destroyed || !this.nameEl) return;
-    this.nameEl.setAttribute('title', this.resolveHeaderTooltip());
+    const content = this.resolveTooltipContent();
+    if (content) {
+      this.nameEl.setAttribute('tabindex', '0');
+    } else {
+      this.nameEl.removeAttribute('tabindex');
+    }
+    const popover = this.options.columnHeaderTooltipPopover;
+    if (popover && popover.isOpenFor(this.nameEl)) {
+      if (content) popover.refresh(this.nameEl, content);
+      else popover.hide();
+    }
   }
+
+  /**
+   * Show the shared tooltip popover anchored on the name span. No-op when
+   * no override is set or no popover singleton is wired.
+   */
+  private showColumnTooltip = (): void => {
+    if (this.destroyed) return;
+    const popover = this.options.columnHeaderTooltipPopover;
+    if (!popover) return;
+    const content = this.resolveTooltipContent();
+    if (!content) return;
+    popover.show(this.nameEl, content);
+  };
+
+  /**
+   * Start the tooltip popover's grace-period dismissal. Called on
+   * `pointerleave` / `focusout` of the name span.
+   */
+  private scheduleColumnTooltipHide = (): void => {
+    if (this.destroyed) return;
+    this.options.columnHeaderTooltipPopover?.scheduleGraceHide();
+  };
 
   /**
    * Read column-scope annotations from the store and rewrite the header's
@@ -398,6 +436,14 @@ export class ColumnHeader {
     this.element.addEventListener('pointerleave', this.scheduleAnnotationHide);
     this.element.addEventListener('focusin', this.showAnnotationPopover);
     this.element.addEventListener('focusout', this.scheduleAnnotationHide);
+
+    // Column-header tooltip popover — anchored on the name span (different
+    // DOM node from the annotation popover so they coexist on a column
+    // that has both an annotation and a tooltip override).
+    this.nameEl.addEventListener('pointerenter', this.showColumnTooltip);
+    this.nameEl.addEventListener('pointerleave', this.scheduleColumnTooltipHide);
+    this.nameEl.addEventListener('focusin', this.showColumnTooltip);
+    this.nameEl.addEventListener('focusout', this.scheduleColumnTooltipHide);
   }
 
   /**
@@ -546,11 +592,11 @@ export class ColumnHeader {
       this.unsubscribes.push(unsubAnn);
     }
 
-    // Column-header tooltip override — re-apply on every signal change.
-    // Cheap (one Map.get + one setAttribute per change); idempotent when
-    // unrelated columns' tooltips change.
+    // Column-header tooltip override — re-apply on every signal change so
+    // the nameEl tabindex stays in sync and a currently-displayed popover
+    // refreshes in place. Idempotent when unrelated columns change.
     const unsubTooltip = this.state.columnHeaderTooltips.subscribe(() => {
-      this.applyHeaderTooltip();
+      if (!this.destroyed) this.applyTooltipReactivity();
     });
     this.unsubscribes.push(unsubTooltip);
   }
@@ -793,6 +839,10 @@ export class ColumnHeader {
     this.element.removeEventListener('pointerleave', this.scheduleAnnotationHide);
     this.element.removeEventListener('focusin', this.showAnnotationPopover);
     this.element.removeEventListener('focusout', this.scheduleAnnotationHide);
+    this.nameEl.removeEventListener('pointerenter', this.showColumnTooltip);
+    this.nameEl.removeEventListener('pointerleave', this.scheduleColumnTooltipHide);
+    this.nameEl.removeEventListener('focusin', this.showColumnTooltip);
+    this.nameEl.removeEventListener('focusout', this.scheduleColumnTooltipHide);
 
     // Unsubscribe from state
     for (const unsub of this.unsubscribes) {

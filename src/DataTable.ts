@@ -60,6 +60,7 @@ import {
 import { isStylesheetLoaded } from './core/stylesheet';
 import { AnnotationStore } from './annotations/AnnotationStore';
 import { AnnotationPopover } from './table/AnnotationPopover';
+import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
 
 import { TableContainer } from './table/TableContainer';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
@@ -463,6 +464,10 @@ export async function createDataTable(
     classPrefix: opts.classPrefix ?? 'dt',
     portalTarget: opts.portalTarget,
   });
+  const columnHeaderTooltipPopover = new ColumnHeaderTooltipPopover({
+    classPrefix: opts.classPrefix ?? 'dt',
+    portalTarget: opts.portalTarget,
+  });
 
   // -------- UI container --------
   const tableContainer = new TableContainer(
@@ -483,6 +488,7 @@ export async function createDataTable(
       messages,
       annotations: annotationStore,
       annotationPopover,
+      columnHeaderTooltipPopover,
     }
   );
 
@@ -951,6 +957,7 @@ export async function createDataTable(
     autoSave?.disable();
     annotationStore.destroy();
     annotationPopover.destroy();
+    columnHeaderTooltipPopover.destroy();
     for (const unsub of unsubscribes) {
       try {
         unsub();

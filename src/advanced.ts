@@ -52,6 +52,9 @@ export type { TableBodyOptions, RowData } from './table/TableBody';
 export { AnnotationPopover } from './table/AnnotationPopover';
 export type { AnnotationPopoverOptions } from './table/AnnotationPopover';
 
+export { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
+export type { ColumnHeaderTooltipPopoverOptions } from './table/ColumnHeaderTooltipPopover';
+
 export { CellRenderer } from './table/Cell';
 export type { CellOptions } from './table/Cell';
 

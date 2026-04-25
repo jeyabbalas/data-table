@@ -6,7 +6,12 @@
  */
 
 import { createSignal, computed, type Signal, type Computed } from './Signal';
-import type { ColumnSchema, Filter, SortColumn } from './types';
+import type {
+  ColumnSchema,
+  Filter,
+  SortColumn,
+  ColumnHeaderTooltipContent,
+} from './types';
 import type { DerivedColumnDef } from '../derived/types';
 
 /** Metadata for a hidden column — tracks neighbors at hide time for intelligent restore */
@@ -55,8 +60,8 @@ export interface TableState {
   pinnedColumns: Signal<string[]>;
   /** Metadata for hidden columns — tracks neighbors at hide time for intelligent restore */
   hiddenColumnInfo: Signal<Map<string, HiddenColumnInfo>>;
-  /** App-controlled override for the native tooltip on column header name spans */
-  columnHeaderTooltips: Signal<Map<string, string>>;
+  /** App-controlled column-header tooltip overrides, rendered as a styled popover. */
+  columnHeaderTooltips: Signal<Map<string, ColumnHeaderTooltipContent>>;
 
   // Selection
   /** Set of selected row indices */
@@ -126,7 +131,7 @@ export function createTableState(): TableState {
     columnWidths: createSignal<Map<string, number>>(new Map()),
     pinnedColumns: createSignal<string[]>([]),
     hiddenColumnInfo: createSignal<Map<string, HiddenColumnInfo>>(new Map()),
-    columnHeaderTooltips: createSignal<Map<string, string>>(new Map()),
+    columnHeaderTooltips: createSignal<Map<string, ColumnHeaderTooltipContent>>(new Map()),
 
     // Selection
     selectedRows: createSignal<Set<number>>(new Set()),

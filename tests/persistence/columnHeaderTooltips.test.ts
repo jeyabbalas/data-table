@@ -4,7 +4,10 @@ import {
   initializeColumnsFromSchema,
 } from '@/core/State';
 import type { TableState } from '@/core/State';
-import type { ColumnSchema } from '@/core/types';
+import type {
+  ColumnSchema,
+  ColumnHeaderTooltipContent,
+} from '@/core/types';
 import {
   snapshotFromState,
   restoreStateFromSnapshot,
@@ -61,19 +64,19 @@ function bareSnapshot(
 }
 
 describe('snapshotFromState — columnHeaderTooltips', () => {
-  it('writes tooltips as a Record when at least one is set', () => {
+  it('writes tooltips as a Record of structured content when at least one is set', () => {
     const state = setupState();
     state.columnHeaderTooltips.set(
-      new Map([
-        ['age', 'Age in years'],
-        ['name', 'Full name'],
+      new Map<string, ColumnHeaderTooltipContent>([
+        ['age', { description: 'Age in years' }],
+        ['name', { title: 'Full name', items: [{ label: 'Type', value: 'string' }] }],
       ]),
     );
 
     const snapshot = snapshotFromState(state);
     expect(snapshot.columnHeaderTooltips).toEqual({
-      age: 'Age in years',
-      name: 'Full name',
+      age: { description: 'Age in years' },
+      name: { title: 'Full name', items: [{ label: 'Type', value: 'string' }] },
     });
   });
 
@@ -81,22 +84,59 @@ describe('snapshotFromState — columnHeaderTooltips', () => {
     const state = setupState();
     const snapshot = snapshotFromState(state);
     expect(snapshot.columnHeaderTooltips).toBeUndefined();
-    expect(Object.prototype.hasOwnProperty.call(snapshot, 'columnHeaderTooltips')).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(snapshot, 'columnHeaderTooltips'),
+    ).toBe(false);
   });
 });
 
 describe('restoreStateFromSnapshot — columnHeaderTooltips', () => {
-  it('restores tooltips from a Record into a Map', () => {
+  it('restores structured tooltips from a Record into a Map', () => {
     const state = setupState();
     const snapshot = bareSnapshot({
-      columnHeaderTooltips: { age: 'Age in years', name: 'Full name' },
+      columnHeaderTooltips: {
+        age: { description: 'Age in years' },
+        name: { title: 'Full name' },
+      },
     });
 
     restoreStateFromSnapshot(state, snapshot);
 
     const tooltips = state.columnHeaderTooltips.get();
-    expect(tooltips.get('age')).toBe('Age in years');
-    expect(tooltips.get('name')).toBe('Full name');
+    expect(tooltips.get('age')).toEqual({ description: 'Age in years' });
+    expect(tooltips.get('name')).toEqual({ title: 'Full name' });
+    expect(tooltips.size).toBe(2);
+  });
+
+  it('back-compat: legacy string entry restores as { description: string }', () => {
+    const state = setupState();
+    const snapshot = bareSnapshot({
+      columnHeaderTooltips: {
+        age: 'Age in years',
+      } as unknown as Record<string, ColumnHeaderTooltipContent>,
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    expect(state.columnHeaderTooltips.get().get('age')).toEqual({
+      description: 'Age in years',
+    });
+  });
+
+  it('mixed: restores both legacy string and structured object entries', () => {
+    const state = setupState();
+    const snapshot = bareSnapshot({
+      columnHeaderTooltips: {
+        age: 'legacy',
+        name: { title: 'New', description: 'D' },
+      } as unknown as Record<string, ColumnHeaderTooltipContent>,
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    const tooltips = state.columnHeaderTooltips.get();
+    expect(tooltips.get('age')).toEqual({ description: 'legacy' });
+    expect(tooltips.get('name')).toEqual({ title: 'New', description: 'D' });
     expect(tooltips.size).toBe(2);
   });
 
@@ -104,8 +144,8 @@ describe('restoreStateFromSnapshot — columnHeaderTooltips', () => {
     const state = setupState();
     const snapshot = bareSnapshot({
       columnHeaderTooltips: {
-        age: 'kept',
-        ghost: 'dropped',
+        age: { description: 'kept' },
+        ghost: { description: 'dropped' },
       },
     });
 
@@ -116,42 +156,71 @@ describe('restoreStateFromSnapshot — columnHeaderTooltips', () => {
     expect(tooltips.has('ghost')).toBe(false);
   });
 
-  it('drops empty-string and non-string tooltip entries defensively', () => {
+  it('drops malformed object entries defensively', () => {
     const state = setupState();
     const snapshot = bareSnapshot({
       columnHeaderTooltips: {
-        age: 'kept',
-        name: '',
-        // @ts-expect-error — simulate a corrupted snapshot
+        age: { description: 'kept' },
+        // @ts-expect-error — corrupted snapshot
+        name: { items: 'not an array' },
+        // @ts-expect-error — corrupted snapshot
         id: 42,
-      } as Record<string, string>,
+      } as Record<string, ColumnHeaderTooltipContent>,
     });
 
     restoreStateFromSnapshot(state, snapshot);
 
     const tooltips = state.columnHeaderTooltips.get();
-    expect(tooltips.size).toBe(1);
-    expect(tooltips.get('age')).toBe('kept');
+    expect(tooltips.get('age')).toEqual({ description: 'kept' });
+    expect(tooltips.has('name')).toBe(false);
+    expect(tooltips.has('id')).toBe(false);
+  });
+
+  it('drops entries that normalize to null (all-empty fields)', () => {
+    const state = setupState();
+    const snapshot = bareSnapshot({
+      columnHeaderTooltips: {
+        age: { title: '', description: '', items: [] },
+        name: { description: 'kept' },
+      },
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    const tooltips = state.columnHeaderTooltips.get();
+    expect(tooltips.has('age')).toBe(false);
+    expect(tooltips.has('name')).toBe(true);
   });
 
   it('pre-Phase-5 snapshot (no columnHeaderTooltips field) restores cleanly with empty map', () => {
     const state = setupState();
-    state.columnHeaderTooltips.set(new Map([['age', 'should be wiped']]));
+    state.columnHeaderTooltips.set(
+      new Map([['age', { description: 'should be wiped' }]]),
+    );
 
-    const snapshot = bareSnapshot(); // no columnHeaderTooltips field
+    const snapshot = bareSnapshot();
     restoreStateFromSnapshot(state, snapshot);
 
     expect(state.columnHeaderTooltips.get().size).toBe(0);
   });
 
-  it('round-trips through snapshot → restore', () => {
+  it('round-trips structured content through snapshot → restore', () => {
     const original = setupState();
-    original.columnHeaderTooltips.set(
-      new Map([
-        ['age', 'Age in years'],
-        ['name', 'Full name'],
-      ]),
-    );
+    const content: Map<string, ColumnHeaderTooltipContent> = new Map([
+      [
+        'age',
+        {
+          title: 'Age',
+          description: 'Age in years',
+          items: [
+            { label: 'Type', value: 'integer' },
+            { label: 'Range', value: ['0', '120'] },
+          ],
+        },
+      ],
+      ['name', { title: 'Full name' }],
+    ]);
+    original.columnHeaderTooltips.set(content);
 
     const snapshot = snapshotFromState(original);
 
@@ -159,9 +228,9 @@ describe('restoreStateFromSnapshot — columnHeaderTooltips', () => {
     restoreStateFromSnapshot(restored, snapshot);
 
     const tooltips = restored.columnHeaderTooltips.get();
-    expect(tooltips.get('age')).toBe('Age in years');
-    expect(tooltips.get('name')).toBe('Full name');
     expect(tooltips.size).toBe(2);
+    expect(tooltips.get('age')).toEqual(content.get('age'));
+    expect(tooltips.get('name')).toEqual(content.get('name'));
   });
 });
 
@@ -183,7 +252,9 @@ describe('AutoSave — columnHeaderTooltips subscription', () => {
     const autoSave = new AutoSave(state, store);
     autoSave.enable();
 
-    state.columnHeaderTooltips.set(new Map([['age', 'Age in years']]));
+    state.columnHeaderTooltips.set(
+      new Map([['age', { description: 'Age in years' }]]),
+    );
     expect(store.save).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1000);
@@ -191,28 +262,37 @@ describe('AutoSave — columnHeaderTooltips subscription', () => {
 
     const savedSnapshot = (store.save as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as SessionSnapshot;
-    expect(savedSnapshot.columnHeaderTooltips).toEqual({ age: 'Age in years' });
+    expect(savedSnapshot.columnHeaderTooltips).toEqual({
+      age: { description: 'Age in years' },
+    });
 
     autoSave.destroy();
   });
 
-  it('a no-op tooltip set does not trigger a save', () => {
-    state.columnHeaderTooltips.set(new Map([['age', 'A']]));
-
+  it('a structured-content set persists the object form', () => {
     const autoSave = new AutoSave(state, store);
     autoSave.enable();
 
-    // Re-set to the exact same Map content via the action would be a no-op,
-    // but here we set a brand new (equal) Map directly: the signal still
-    // notifies because the reference changed. So we test the action path
-    // via StateActions to confirm action-level no-op suppression.
-    // (This is an integration-flavored guard for the AutoSave path.)
-    state.columnHeaderTooltips.set(new Map([['age', 'A']]));
+    state.columnHeaderTooltips.set(
+      new Map<string, ColumnHeaderTooltipContent>([
+        [
+          'age',
+          {
+            title: 'Age',
+            items: [{ label: 'Range', value: ['0', '120'] }],
+          },
+        ],
+      ]),
+    );
 
     vi.advanceTimersByTime(1000);
-    // The signal-level set fires because reference changed; the action-level
-    // no-op suppression is tested in tests/core/column-header-tooltip.test.ts.
     expect(store.save).toHaveBeenCalledTimes(1);
+
+    const savedSnapshot = (store.save as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as SessionSnapshot;
+    expect(savedSnapshot.columnHeaderTooltips).toEqual({
+      age: { title: 'Age', items: [{ label: 'Range', value: ['0', '120'] }] },
+    });
 
     autoSave.destroy();
   });

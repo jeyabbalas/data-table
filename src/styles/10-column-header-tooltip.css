@@ -1,0 +1,132 @@
+/* ===========================================
+   Column-header tooltip popover
+   ===========================================
+
+   Shared singleton anchored to a column-name span via
+   `ColumnHeaderTooltipPopover.show()`. Rendered fixed-position in
+   `portalTarget` (defaults to `document.body`), so all styling must go
+   through CSS custom properties — the popover does not inherit from
+   `.dt-root`.
+
+   Structure:
+     .dt-col-tooltip
+       .dt-col-tooltip__title           (optional, bold heading)
+       .dt-col-tooltip__description     (optional, free-text body)
+       ul.dt-col-tooltip__items         (optional, label/value rows)
+         li.dt-col-tooltip__item
+           span.dt-col-tooltip__item-label
+           span.dt-col-tooltip__item-value     (string value)
+           OR
+           span.dt-col-tooltip__item-values    (string[] value)
+             span.dt-col-tooltip__chip
+*/
+
+.dt-col-tooltip {
+  position: fixed;
+  z-index: var(--dt-z-col-tooltip, 56);
+  max-width: 420px;
+  min-width: 240px;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius, 8px);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--dt-shadow-md) 100%, transparent);
+  padding: 0.55rem 0.75rem;
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size, 0.875rem);
+  line-height: 1.4;
+  display: none;
+}
+
+.dt-col-tooltip:focus {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
+}
+
+.dt-col-tooltip__title {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+  color: var(--dt-text);
+  word-break: break-word;
+}
+
+.dt-col-tooltip__description {
+  margin: 0 0 0.45rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--dt-text);
+}
+
+/* When both title and description are present, the title's bottom margin
+   plus description's top margin would overstack; the description's
+   margin-bottom carries the gap to the items list, so no extra spacing
+   needed here. */
+
+.dt-col-tooltip__items {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-top: 1px solid var(--dt-border-light);
+}
+
+/* When there's no title or description above, drop the divider/padding
+   so a items-only popover doesn't show an orphan top border. */
+.dt-col-tooltip__items:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dt-col-tooltip__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  font-size: var(--dt-font-size-xs, 0.78rem);
+  line-height: 1.4;
+}
+
+.dt-col-tooltip__item-label {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--dt-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.dt-col-tooltip__item-label::after {
+  content: ":";
+  margin-left: 0;
+  color: var(--dt-text-tertiary);
+}
+
+.dt-col-tooltip__item-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--dt-text);
+  word-break: break-word;
+}
+
+.dt-col-tooltip__item-values {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.dt-col-tooltip__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.45rem;
+  height: 1.4em;
+  border-radius: 999px;
+  border: 1px solid var(--dt-border);
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+  font-size: var(--dt-font-size-xs, 0.78rem);
+  line-height: 1;
+  word-break: break-word;
+  max-width: 100%;
+}

@@ -192,6 +192,11 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     snapshot.annotations = annotationStore.toJSON();
   }
 
+  const tooltips = state.columnHeaderTooltips.get();
+  if (tooltips.size > 0) {
+    snapshot.columnHeaderTooltips = Object.fromEntries(tooltips);
+  }
+
   return snapshot;
 }
 
@@ -270,6 +275,16 @@ export function restoreStateFromSnapshot(
     }
   }
 
+  // Column header tooltips: Record → Map, skip stale columns and non-string entries
+  const columnHeaderTooltips = new Map<string, string>();
+  if (snapshot.columnHeaderTooltips) {
+    for (const [col, text] of Object.entries(snapshot.columnHeaderTooltips)) {
+      if (validColumns.has(col) && typeof text === 'string' && text.length > 0) {
+        columnHeaderTooltips.set(col, text);
+      }
+    }
+  }
+
   // Pinned columns: filter to valid
   const pinnedColumns = snapshot.pinnedColumns.filter((c) =>
     validColumns.has(c),
@@ -302,6 +317,7 @@ export function restoreStateFromSnapshot(
     state.columnWidths.set(columnWidths);
     state.pinnedColumns.set(pinnedColumns);
     state.hiddenColumnInfo.set(hiddenColumnInfo);
+    state.columnHeaderTooltips.set(columnHeaderTooltips);
   });
 
   // Restore derivedColumns signal if present in snapshot.

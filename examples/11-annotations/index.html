@@ -70,6 +70,19 @@
         </section>
 
         <section>
+          <h2>Column header tooltips</h2>
+          <p class="counter" style="margin-top: 0">
+            Native browser tooltip on the column-name span — independent
+            from the annotation popover. Hover the column name (not the
+            rest of the header) to see it.
+          </p>
+          <button id="btn-tooltip-set-total">Set tooltip on <code>total_amount</code></button>
+          <button id="btn-tooltip-set-passengers">Set tooltip on <code>passenger_count</code></button>
+          <button id="btn-tooltip-clear">Clear both tooltips</button>
+          <p class="counter">Persists across reload via session snapshot.</p>
+        </section>
+
+        <section>
           <h2>Session JSON</h2>
           <div class="row">
             <button id="btn-download">Download JSON</button>

@@ -950,6 +950,44 @@ export class StateActions {
     this.state.columnWidths.set(widths);
   }
 
+  /**
+   * Set or clear an app-controlled tooltip on a column header's name span.
+   *
+   * The text appears as the native browser tooltip when the user hovers the
+   * column name. Pass `null` or an empty string to remove the override; the
+   * header then falls back to the column name (the default truncated-name
+   * tooltip behavior).
+   *
+   * Does not participate in undo/redo. Persists in the session snapshot
+   * alongside `columnWidths`. Setting an unknown column name is silently
+   * accepted (matches `setColumnWidth`); the override only takes visible
+   * effect once a header for that column renders.
+   *
+   * @example
+   * ```ts
+   * table.actions.setColumnHeaderTooltip('age', 'Age in completed years');
+   * table.actions.setColumnHeaderTooltip('age', null); // remove
+   * ```
+   */
+  setColumnHeaderTooltip(column: string, text: string | null): void {
+    const tooltips = new Map(this.state.columnHeaderTooltips.get());
+    if (text == null || text.length === 0) {
+      if (!tooltips.has(column)) return;
+      tooltips.delete(column);
+    } else {
+      if (tooltips.get(column) === text) return;
+      tooltips.set(column, text);
+    }
+    this.state.columnHeaderTooltips.set(tooltips);
+  }
+
+  /**
+   * Get the app-controlled tooltip for a column header, or `null` if unset.
+   */
+  getColumnHeaderTooltip(column: string): string | null {
+    return this.state.columnHeaderTooltips.get().get(column) ?? null;
+  }
+
   // =========================================
   // Derived Column Helpers
   // =========================================

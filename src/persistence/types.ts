@@ -138,4 +138,6 @@ export interface SessionSnapshot {
   filterPresets?: FilterPreset[];
   /** Saved annotations. Absent in pre-v5 snapshots. */
   annotations?: AnnotationFile;
+  /** App-controlled column-header tooltip overrides. Absent in pre-Phase-5 snapshots. */
+  columnHeaderTooltips?: Record<string, string>;
 }

@@ -55,6 +55,8 @@ export interface TableState {
   pinnedColumns: Signal<string[]>;
   /** Metadata for hidden columns — tracks neighbors at hide time for intelligent restore */
   hiddenColumnInfo: Signal<Map<string, HiddenColumnInfo>>;
+  /** App-controlled override for the native tooltip on column header name spans */
+  columnHeaderTooltips: Signal<Map<string, string>>;
 
   // Selection
   /** Set of selected row indices */
@@ -124,6 +126,7 @@ export function createTableState(): TableState {
     columnWidths: createSignal<Map<string, number>>(new Map()),
     pinnedColumns: createSignal<string[]>([]),
     hiddenColumnInfo: createSignal<Map<string, HiddenColumnInfo>>(new Map()),
+    columnHeaderTooltips: createSignal<Map<string, string>>(new Map()),
 
     // Selection
     selectedRows: createSignal<Set<number>>(new Set()),
@@ -163,6 +166,7 @@ export function resetTableState(state: TableState): void {
   state.columnWidths.set(new Map());
   state.pinnedColumns.set([]);
   state.hiddenColumnInfo.set(new Map());
+  state.columnHeaderTooltips.set(new Map());
   state.selectedRows.set(new Set());
   state.hoveredRow.set(null);
   state.hoveredColumn.set(null);
@@ -200,6 +204,7 @@ export function initializeColumnsFromSchema(
   state.columnWidths.set(new Map());
   state.pinnedColumns.set([]);
   state.hiddenColumnInfo.set(new Map());
+  state.columnHeaderTooltips.set(new Map());
 }
 
 /**

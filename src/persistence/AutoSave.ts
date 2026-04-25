@@ -86,6 +86,7 @@ export class AutoSave {
       this.state.pinnedColumns,
       this.state.hiddenColumnInfo,
       this.state.derivedColumns,
+      this.state.columnHeaderTooltips,
     ];
 
     for (const signal of signals) {

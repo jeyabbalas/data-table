@@ -64,3 +64,16 @@ When the app needs the real `__rowid__` value, call
 `table.actions.getColumnValues('__rowid__')`. That returns a `BigInt64Array`;
 convert with `Number(rowIds[i])` before passing to `add({ rowId: ... })`.
 Practical row counts stay well under `2⁵³`.
+
+## Phase 5 — Column header tooltips
+
+The "Column header tooltips" section uses
+`table.actions.setColumnHeaderTooltip(columnName, text | null)` to attach
+an app-controlled native browser tooltip to the column-name span. Pass
+`null` (or an empty string) to clear. Tooltips persist in the session
+snapshot alongside `columnWidths`.
+
+This is independent from annotation popovers (Phase 4): the popover
+shows on hover of the entire header, while the native tooltip shows on
+hover of the name span only. A column may have both at once — the
+tooltip text on the span and the popover on the surrounding header.

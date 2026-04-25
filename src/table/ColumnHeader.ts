@@ -61,6 +61,7 @@ export class ColumnHeader {
   private dragHandle: HTMLElement;
   private derivedIconBtn: HTMLElement | null = null;
   private statsEl: HTMLElement;
+  private nameEl!: HTMLElement;
   private resizer: ColumnResizer;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
@@ -163,7 +164,10 @@ export class ColumnHeader {
     const nameEl = document.createElement('div');
     nameEl.className = `${this.classPrefix}-col-name`;
     nameEl.textContent = this.column.name;
-    nameEl.setAttribute('title', this.column.name); // Tooltip for truncated names
+    // Tooltip text: app override via setColumnHeaderTooltip, else the column
+    // name (the existing fallback for truncated names).
+    this.nameEl = nameEl;
+    nameEl.setAttribute('title', this.resolveHeaderTooltip());
     if (this.column.isDerived) {
       nameEl.classList.add(`${this.classPrefix}-col-name--derived`);
     }
@@ -274,6 +278,28 @@ export class ColumnHeader {
     this.applyAnnotationClasses(el);
 
     return el;
+  }
+
+  /**
+   * Resolve the effective tooltip text for the header name span: the
+   * app-set override from `state.columnHeaderTooltips` if non-empty,
+   * else the column name (the default truncated-name tooltip).
+   */
+  private resolveHeaderTooltip(): string {
+    const override = this.state.columnHeaderTooltips
+      .get()
+      .get(this.column.name);
+    return override && override.length > 0 ? override : this.column.name;
+  }
+
+  /**
+   * Re-apply the resolved tooltip to the header name span. Called from the
+   * `columnHeaderTooltips` signal subscription so the title attribute stays
+   * in sync with app updates without rebuilding the header DOM.
+   */
+  private applyHeaderTooltip(): void {
+    if (this.destroyed || !this.nameEl) return;
+    this.nameEl.setAttribute('title', this.resolveHeaderTooltip());
   }
 
   /**
@@ -519,6 +545,14 @@ export class ColumnHeader {
       });
       this.unsubscribes.push(unsubAnn);
     }
+
+    // Column-header tooltip override — re-apply on every signal change.
+    // Cheap (one Map.get + one setAttribute per change); idempotent when
+    // unrelated columns' tooltips change.
+    const unsubTooltip = this.state.columnHeaderTooltips.subscribe(() => {
+      this.applyHeaderTooltip();
+    });
+    this.unsubscribes.push(unsubTooltip);
   }
 
   /**

@@ -152,6 +152,27 @@ let table: DataTable | undefined;
   wireFilter('filter-warning', 'warning');
   wireFilter('filter-info', 'info');
 
+  // =========================================
+  // Column header tooltips (Phase 5) — app-controlled native tooltip on the
+  // column-name span, independent from the Phase-4 annotation popover.
+  // =========================================
+  $<HTMLButtonElement>('btn-tooltip-set-total').onclick = () => {
+    table!.actions.setColumnHeaderTooltip(
+      'total_amount',
+      'Sum of fare, surcharge, mta_tax, tip, and tolls (USD).',
+    );
+  };
+  $<HTMLButtonElement>('btn-tooltip-set-passengers').onclick = () => {
+    table!.actions.setColumnHeaderTooltip(
+      'passenger_count',
+      'Number of passengers reported by the driver.',
+    );
+  };
+  $<HTMLButtonElement>('btn-tooltip-clear').onclick = () => {
+    table!.actions.setColumnHeaderTooltip('total_amount', null);
+    table!.actions.setColumnHeaderTooltip('passenger_count', null);
+  };
+
   // Clear session — full wipe (annotations + filters + sort + presets + IDB),
   // then reload the dataset so the example stays interactive.
   $<HTMLButtonElement>('btn-clear-session').onclick = async () => {

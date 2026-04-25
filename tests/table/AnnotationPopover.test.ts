@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnnotationPopover, maxSeverity, severityRank } from '@/table/AnnotationPopover';
+import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
 import type { Annotation } from '@/annotations/types';
 
 function makeAnn(overrides: Partial<Annotation> & Pick<Annotation, 'scope' | 'severity' | 'message'>): Annotation {
@@ -259,5 +260,72 @@ describe('AnnotationPopover', () => {
     const msgEl = root.querySelector('.dt-annotation-message') as HTMLElement;
     expect(msgEl.querySelector('img')).toBe(null);
     expect(msgEl.textContent).toBe('<img src=x onerror=alert(1)>');
+  });
+});
+
+describe('AnnotationPopover — modal-open dismissal', () => {
+  let popover: AnnotationPopover;
+  let portal: HTMLElement;
+  let anchor: HTMLElement;
+
+  beforeEach(() => {
+    __resetModalHostForTests();
+    portal = document.createElement('div');
+    document.body.appendChild(portal);
+    anchor = document.createElement('div');
+    anchor.setAttribute('tabindex', '0');
+    document.body.appendChild(anchor);
+    popover = new AnnotationPopover({ portalTarget: portal });
+  });
+
+  afterEach(() => {
+    popover.destroy();
+    portal.remove();
+    anchor.remove();
+    __resetModalHostForTests();
+  });
+
+  function makeCellAnn(message = 'msg'): Annotation {
+    return makeAnn({ scope: 'cell', rowId: 1, column: 'x', severity: 'info', message });
+  }
+
+  it('hides when any ModalHost opens (panel mode — e.g. FilterPanel)', () => {
+    popover.show(anchor, [makeCellAnn('p1')]);
+    expect(popover.isOpen()).toBe(true);
+
+    const panel = document.createElement('div');
+    document.body.appendChild(panel);
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel });
+
+    expect(popover.isOpen()).toBe(false);
+    host.close();
+    panel.remove();
+  });
+
+  it('hides when any ModalHost opens (modal mode — e.g. SQLFilterModal)', () => {
+    popover.show(anchor, [makeCellAnn('m1')]);
+    expect(popover.isOpen()).toBe(true);
+
+    const backdrop = document.createElement('div');
+    const dialog = document.createElement('div');
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    expect(popover.isOpen()).toBe(false);
+    host.close();
+    backdrop.remove();
+  });
+
+  it('unsubscribes on destroy — modal opens after destroy do not throw', () => {
+    popover.destroy();
+    const panel = document.createElement('div');
+    document.body.appendChild(panel);
+    const host = new ModalHost();
+    expect(() => host.open({ mode: 'panel', element: panel })).not.toThrow();
+    host.close();
+    panel.remove();
   });
 });

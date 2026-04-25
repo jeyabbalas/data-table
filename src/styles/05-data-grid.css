@@ -394,17 +394,20 @@
    family uses a descendant selector rooted at `.dt-row:hover` so every
    annotated cell in the hovered row darkens together, mirroring the
    existing row-hover semantics. Col and cell use direct `:hover` on the
-   cell. */
-.dt-row:hover .dt-cell--row-annotation-error,
-.dt-row--hover .dt-cell--row-annotation-error {
+   cell.
+
+   `:where(.dt-row:hover, .dt-row--hover)` flattens the row-hover
+   selector's specificity to (0,1,0) so the col/cell `:hover` rules
+   (0,2,0) outrank it on intersection cells. Without :where(), the
+   row-hover rule's natural specificity (0,3,0) would beat cell hover
+   and break the cell > col > row hierarchy at hover. */
+:where(.dt-row:hover, .dt-row--hover) .dt-cell--row-annotation-error {
   background-color: var(--dt-annotation-error-bg-hover);
 }
-.dt-row:hover .dt-cell--row-annotation-warning,
-.dt-row--hover .dt-cell--row-annotation-warning {
+:where(.dt-row:hover, .dt-row--hover) .dt-cell--row-annotation-warning {
   background-color: var(--dt-annotation-warning-bg-hover);
 }
-.dt-row:hover .dt-cell--row-annotation-info,
-.dt-row--hover .dt-cell--row-annotation-info {
+:where(.dt-row:hover, .dt-row--hover) .dt-cell--row-annotation-info {
   background-color: var(--dt-annotation-info-bg-hover);
 }
 

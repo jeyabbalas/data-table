@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
+import { ModalHost, __resetModalHostForTests, onAnyModalOpened } from '@/core/ModalHost';
 
 function makeModalPair(): { backdrop: HTMLElement; dialog: HTMLElement } {
   const backdrop = document.createElement('div');
@@ -397,5 +397,75 @@ describe('ModalHost — events', () => {
     host.close();
     expect(closed).toHaveBeenCalledOnce();
     expect(closed.mock.calls[0][0]).toHaveProperty('restoredFocus');
+  });
+});
+
+describe('ModalHost — onAnyModalOpened', () => {
+  it('fires the handler when any host opens (modal mode)', () => {
+    const handler = vi.fn();
+    const unsubscribe = onAnyModalOpened(handler);
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    expect(handler).toHaveBeenCalledOnce();
+    host.close();
+    unsubscribe();
+  });
+
+  it('fires the handler for panel mode opens too', () => {
+    const handler = vi.fn();
+    const unsubscribe = onAnyModalOpened(handler);
+    const panel = makePanel();
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel });
+    expect(handler).toHaveBeenCalledOnce();
+    host.close();
+    unsubscribe();
+  });
+
+  it('fires every subscribed handler on each open', () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const unA = onAnyModalOpened(a);
+    const unB = onAnyModalOpened(b);
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    expect(a).toHaveBeenCalledOnce();
+    expect(b).toHaveBeenCalledOnce();
+    host.close();
+    unA();
+    unB();
+  });
+
+  it('unsubscribed handler does not fire on subsequent opens', () => {
+    const handler = vi.fn();
+    const unsubscribe = onAnyModalOpened(handler);
+    unsubscribe();
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    expect(handler).not.toHaveBeenCalled();
+    host.close();
+  });
+
+  it('a throwing handler does not block other handlers', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const thrower = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const ok = vi.fn();
+    const unA = onAnyModalOpened(thrower);
+    const unB = onAnyModalOpened(ok);
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    expect(thrower).toHaveBeenCalledOnce();
+    expect(ok).toHaveBeenCalledOnce();
+    expect(errorSpy).toHaveBeenCalled();
+    host.close();
+    unA();
+    unB();
+    errorSpy.mockRestore();
   });
 });

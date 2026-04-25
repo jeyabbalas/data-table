@@ -170,6 +170,45 @@ const recentEvents: string[] = [];
     table!.annotations.addMany(batch);
   };
 
+  // Scenario E — multiple annotations of every scope piled at the same
+  // intersection. Demonstrates that AnnotationStore tolerates multiple
+  // annotations per (rowId, column) target and AnnotationPopover renders
+  // each one in its scope's section.
+  $<HTMLButtonElement>('btn-scenario-e').onclick = () => {
+    table!.annotations.clear('all');
+    const severities: AnnotationSeverity[] = ['error', 'warning', 'info'];
+    const batch: NewAnnotation[] = [];
+    for (const sev of severities) {
+      batch.push({
+        scope: 'row',
+        rowId: 5,
+        severity: sev,
+        message: `Scenario E — row ann (${sev}) on row 5`,
+        code: `SCENARIO_E_ROW_${sev.toUpperCase()}`,
+      });
+    }
+    for (const sev of severities) {
+      batch.push({
+        scope: 'column',
+        column: 'fare_amount',
+        severity: sev,
+        message: `Scenario E — column ann (${sev}) on fare_amount`,
+        code: `SCENARIO_E_COL_${sev.toUpperCase()}`,
+      });
+    }
+    for (const sev of severities) {
+      batch.push({
+        scope: 'cell',
+        rowId: 5,
+        column: 'fare_amount',
+        severity: sev,
+        message: `Scenario E — cell ann (${sev}) at (5, fare_amount)`,
+        code: `SCENARIO_E_CELL_${sev.toUpperCase()}`,
+      });
+    }
+    table!.annotations.addMany(batch);
+  };
+
   // =========================================
   // Severity filter — toggles visual opt-out via data attributes on .dt-root
   // =========================================

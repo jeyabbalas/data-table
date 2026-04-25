@@ -100,6 +100,21 @@ const openHosts: ModalHost[] = [];
 let scrollLockCount = 0;
 let scrollLockHandler: ((e: Event) => void) | null = null;
 
+type GlobalOpenListener = () => void;
+const globalOpenListeners = new Set<GlobalOpenListener>();
+
+function notifyGlobalOpen(): void {
+  for (const fn of globalOpenListeners) {
+    try {
+      fn();
+    } catch (err) {
+      if (typeof console !== 'undefined') {
+        console.error('[data-table] ModalHost open listener threw', err);
+      }
+    }
+  }
+}
+
 function readStackStep(): number {
   if (typeof window === 'undefined') return DEFAULT_STACK_STEP;
   try {
@@ -299,6 +314,7 @@ export class ModalHost {
     }
 
     this.events.emit('opened', { stackIndex });
+    notifyGlobalOpen();
   }
 
   close(): void {
@@ -517,6 +533,23 @@ export class ModalHost {
  */
 export function isAnyModalOpen(): boolean {
   return openHosts.length > 0;
+}
+
+/**
+ * Subscribe to "any ModalHost opened" events. The handler fires every time
+ * any {@link ModalHost.open} call completes, regardless of mode (modal or
+ * panel). Returns an unsubscribe function.
+ *
+ * Used by persistent floating surfaces (e.g. the annotation popover) so they
+ * can self-dismiss when a panel or modal opens that would otherwise visually
+ * occlude them. Surfaces that should NOT be dismissed (the modals themselves)
+ * simply don't subscribe.
+ */
+export function onAnyModalOpened(handler: () => void): () => void {
+  globalOpenListeners.add(handler);
+  return () => {
+    globalOpenListeners.delete(handler);
+  };
 }
 
 // ---------------------------------------------------------------------------

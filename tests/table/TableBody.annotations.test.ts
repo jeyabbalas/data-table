@@ -857,4 +857,88 @@ describe('TableBody — annotation overlay', () => {
 
     body.destroy();
   });
+
+  it('multi-ann at one cell — popover lists all 9 entries grouped Row→Column→Cell', () => {
+    const rows = buildFakeRows(10);
+    const { bridge } = createMockBridge(rows);
+    actions = new StateActions(state, bridge as never);
+    const body = new TableBody(container, state, bridge as never, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+
+    const visibleColumns = state.visibleColumns.get();
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const c of testSchema) schemaMap.set(c.name, c);
+
+    // 3 row anns on row 5, 3 col anns on price, 3 cell anns at (5, price).
+    const severities = ['error', 'warning', 'info'] as const;
+    for (const sev of severities) {
+      store.add({ scope: 'row', rowId: 5, severity: sev, message: `r-${sev}` });
+    }
+    for (const sev of severities) {
+      store.add({ scope: 'column', column: 'price', severity: sev, message: `c-${sev}` });
+    }
+    for (const sev of severities) {
+      store.add({
+        scope: 'cell',
+        rowId: 5,
+        column: 'price',
+        severity: sev,
+        message: `x-${sev}`,
+      });
+    }
+
+    const internal = body as unknown as {
+      getOrCreateRow(n: number): HTMLElement;
+      updateRowContent(
+        rowEl: HTMLElement,
+        index: number,
+        data: Record<string, unknown>,
+        columns: string[],
+        schemaMap: Map<string, ColumnSchema>,
+      ): void;
+    };
+    const rowEl = internal.getOrCreateRow(visibleColumns.length);
+    internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+    container.appendChild(rowEl);
+
+    // Cell carries all three class families.
+    const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
+    expect(priceCell.classList.contains('dt-cell--row-annotated')).toBe(true);
+    expect(priceCell.classList.contains('dt-cell--col-annotated')).toBe(true);
+    expect(priceCell.classList.contains('dt-cell--annotated')).toBe(true);
+    // dtAnnotationCount = 3 row + 3 col + 3 cell = 9.
+    expect(priceCell.dataset.dtAnnotationCount).toBe('9');
+
+    // Hover triggers the popover with all 9 anns.
+    const showSpy = vi.spyOn(popover, 'show');
+    priceCell.dispatchEvent(
+      new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
+    );
+    expect(showSpy).toHaveBeenCalledTimes(1);
+    const [anchorEl, anns] = showSpy.mock.calls[0] as [HTMLElement, Array<{ scope: string; message: string }>];
+    expect(anchorEl).toBe(priceCell);
+    expect(anns.length).toBe(9);
+    expect(anns.filter((a) => a.scope === 'row').length).toBe(3);
+    expect(anns.filter((a) => a.scope === 'column').length).toBe(3);
+    expect(anns.filter((a) => a.scope === 'cell').length).toBe(3);
+
+    // Verify the popover renders 9 list entries across 3 sections.
+    popover.show(anchorEl, anns as never);
+    const popoverEl = portal.querySelector('.dt-annotation-popover') as HTMLElement;
+    expect(popoverEl).toBeTruthy();
+    const sections = popoverEl.querySelectorAll('section.dt-annotation-popover__group');
+    expect(sections.length).toBe(3);
+    expect(popoverEl.querySelectorAll('.dt-annotation-entry').length).toBe(9);
+    // Section order: row → column → cell.
+    expect(sections[0].classList.contains('dt-annotation-popover__group--row')).toBe(true);
+    expect(sections[1].classList.contains('dt-annotation-popover__group--column')).toBe(true);
+    expect(sections[2].classList.contains('dt-annotation-popover__group--cell')).toBe(true);
+    expect(sections[0].querySelectorAll('.dt-annotation-entry').length).toBe(3);
+    expect(sections[1].querySelectorAll('.dt-annotation-entry').length).toBe(3);
+    expect(sections[2].querySelectorAll('.dt-annotation-entry').length).toBe(3);
+
+    body.destroy();
+  });
 });

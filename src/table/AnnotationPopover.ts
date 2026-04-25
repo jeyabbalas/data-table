@@ -33,6 +33,7 @@
  */
 
 import type { Annotation, AnnotationSeverity } from '../annotations/types';
+import { onAnyModalOpened } from '../core/ModalHost';
 
 /** Options accepted by {@link AnnotationPopover}. */
 export interface AnnotationPopoverOptions {
@@ -115,6 +116,7 @@ export class AnnotationPopover {
   private currentAnchor: HTMLElement | null = null;
   private hideTimer: number | null = null;
   private destroyed = false;
+  private unsubscribeModalOpen: (() => void) | null = null;
 
   private readonly onDocumentKeyDown: (e: KeyboardEvent) => void;
   private readonly onDocumentPointerDown: (e: MouseEvent) => void;
@@ -144,6 +146,12 @@ export class AnnotationPopover {
     this.onWindowResize = () => this.hide();
     this.onPopoverPointerEnter = () => this.cancelGraceHide();
     this.onPopoverPointerLeave = () => this.scheduleGraceHide();
+
+    // Self-dismiss whenever any ModalHost-backed panel or modal opens. The
+    // popover's outside-click logic does NOT fire when the user clicks an
+    // action button inside the anchor (e.g. the column header's filter
+    // button), so we rely on the modal's own open event to dismiss us.
+    this.unsubscribeModalOpen = onAnyModalOpened(() => this.hide());
   }
 
   /** Element id for the popover. Anchors write this into `aria-describedby`. */
@@ -243,6 +251,10 @@ export class AnnotationPopover {
     if (this.destroyed) return;
     this.hide();
     this.destroyed = true;
+    if (this.unsubscribeModalOpen) {
+      this.unsubscribeModalOpen();
+      this.unsubscribeModalOpen = null;
+    }
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }

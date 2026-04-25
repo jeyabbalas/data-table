@@ -27,17 +27,34 @@ export type AnnotationSeverity = 'error' | 'warning' | 'info';
 
 /**
  * Fields common to every annotation regardless of scope.
+ *
+ * XSS safety: the library renders every string field on this interface
+ * (`message`, `code`, `source`) via `.textContent` — HTML strings are NOT
+ * interpreted. This eliminates the XSS surface by construction; apps may
+ * pass arbitrary strings (including JSON-Schema validator output) without
+ * sanitization. `severity` is restricted by the {@link AnnotationSeverity}
+ * union and validated against that allow-list before being interpolated
+ * into a CSS class name.
  */
 export interface AnnotationBase {
   /** Stable identifier. Auto-generated if omitted at `add` time. */
   id: string;
   /** Severity level — drives CSS precedence and popover ordering in Phase 4. */
   severity: AnnotationSeverity;
-  /** Plain-text human-readable message. Do not pass HTML. */
+  /**
+   * Human-readable message. The library renders this via `.textContent` —
+   * HTML strings are NOT interpreted. Pass any string safely.
+   */
   message: string;
-  /** App-defined error / rule code (e.g. `JSON_SCHEMA_MAXIMUM`). */
+  /**
+   * App-defined error / rule code (e.g. `JSON_SCHEMA_MAXIMUM`). Rendered via
+   * `.textContent` — HTML strings are NOT interpreted.
+   */
   code?: string;
-  /** App-defined origin tag (e.g. `harmonization-validator`). */
+  /**
+   * App-defined origin tag (e.g. `harmonization-validator`). Rendered via
+   * `.textContent` — HTML strings are NOT interpreted.
+   */
   source?: string;
   /** App-defined structured metadata; round-tripped verbatim. */
   metadata?: Record<string, unknown>;

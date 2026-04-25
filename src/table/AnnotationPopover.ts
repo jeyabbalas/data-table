@@ -11,6 +11,17 @@
  * mounted to `portalTarget` (defaults to `document.body`). The same element
  * is reused for every subsequent show — never recreated per anchor.
  *
+ * XSS safety (load-bearing invariant):
+ * Every text-bearing node is set via `.textContent`. The single
+ * `el.innerHTML = ''` in `populate()` is a clear (no interpolation). The
+ * structure is built exclusively via `document.createElement` + `appendChild`.
+ * App-supplied annotation strings (`message`, `code`, `source`) are NEVER
+ * parsed as HTML. Class-name interpolation only ever consumes `severity`,
+ * which the {@link AnnotationStore} validates against the fixed allow-list
+ * `'error' | 'warning' | 'info'` at every input boundary (`add`, `update`,
+ * `loadJSON`). This eliminates the XSS surface by construction — apps can
+ * pass arbitrary strings without sanitization.
+ *
  * Visible lifecycle:
  * - Show on `pointerenter` / `focusin` of an annotated cell or header.
  * - Hide on `Escape`, click outside (both popover and anchor), viewport
@@ -49,8 +60,9 @@ const GRACE_MS = 120;
 const EDGE_PAD = 4;
 
 /**
- * Render one annotation entry's inner HTML. Keep message text-only (we
- * explicitly set `.textContent` to avoid HTML injection from the app).
+ * Render one annotation entry. All app-supplied strings (`severity`,
+ * `message`, `code`, `source`) are written via `.textContent`; structure is
+ * built with `createElement` + `appendChild`. No HTML parsing path exists.
  */
 function renderEntry(
   ann: Annotation,

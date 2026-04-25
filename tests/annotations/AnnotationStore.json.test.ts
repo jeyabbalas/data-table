@@ -164,4 +164,113 @@ describe('AnnotationStore — JSON I/O', () => {
       expect(store.get('y')).toBeNull();
     });
   });
+
+  // The store is the trust boundary's read side: malicious annotation JSON
+  // (e.g. tampered IndexedDB on a shared origin) flows through `loadJSON`.
+  // The store does NOT mutate or strip strings — that contract is enforced
+  // in the popover via `.textContent`. These tests certify the round-trip
+  // preserves the literal payload so the popover-side defence is the
+  // single, well-known load-bearing boundary.
+  describe('loadJSON — XSS resilience', () => {
+    it('preserves malicious strings in message/code/source verbatim through round-trip', () => {
+      const malicious = {
+        message: '<img src=x onerror=alert(1)>',
+        code: '<script>alert(2)</script>',
+        source: '<svg/><iframe src="javascript:alert(3)"></iframe>',
+      };
+      const file: AnnotationFile = {
+        version: 1,
+        annotations: [
+          {
+            id: 'mal-cell',
+            scope: 'cell',
+            rowId: 7,
+            column: 'fare_amount',
+            severity: 'error',
+            ...malicious,
+          },
+          {
+            id: 'mal-row',
+            scope: 'row',
+            rowId: 7,
+            severity: 'warning',
+            message: '<a href="javascript:alert(4)">click</a>',
+          },
+        ],
+      };
+
+      store.loadJSON(file, 'replace');
+      expect(store.count()).toBe(2);
+
+      const cell = store.get('mal-cell')!;
+      expect(cell.message).toBe(malicious.message);
+      expect(cell.code).toBe(malicious.code);
+      expect(cell.source).toBe(malicious.source);
+
+      // toJSON re-emits the same literal payload — no normalization /
+      // sanitization happens in the store.
+      const round = store.toJSON();
+      const cellOut = round.annotations.find((a) => a.id === 'mal-cell')!;
+      expect(cellOut.message).toBe(malicious.message);
+      expect(cellOut.code).toBe(malicious.code);
+      expect(cellOut.source).toBe(malicious.source);
+
+      // getByCell — the path the popover reads from — surfaces the literal
+      // strings unchanged. The popover then writes them via `.textContent`.
+      const atCell = store.getByCell(7, 'fare_amount');
+      const messages = atCell.map((a) => a.message);
+      expect(messages).toContain(malicious.message);
+      expect(messages).toContain('<a href="javascript:alert(4)">click</a>');
+    });
+
+    it('rejects an annotation whose severity is not in the allow-list', () => {
+      const file = {
+        version: 1,
+        annotations: [
+          {
+            id: 'sev-injection',
+            scope: 'cell',
+            rowId: 0,
+            column: 'col',
+            // Attacker tries to break out of the class-name interpolation.
+            severity: 'error onmouseover=alert(1)',
+            message: 'pwned',
+          },
+        ],
+      } as unknown as AnnotationFile;
+
+      try {
+        store.loadJSON(file, 'replace');
+        // If we get here, validation failed.
+        expect.fail('loadJSON should have rejected the injected severity');
+      } catch (e) {
+        expect(e).toBeInstanceOf(AnnotationError);
+        expect((e as AnnotationError).code).toBe('ANNOTATION_INVALID_SHAPE');
+        expect((e as AnnotationError).details).toMatchObject({ field: 'severity' });
+      }
+      // Replace mode: validation runs before wipe → store untouched.
+      expect(store.count()).toBe(0);
+    });
+
+    it('does not pollute Object.prototype via metadata keys', () => {
+      const file = {
+        version: 1,
+        annotations: [
+          {
+            id: 'proto',
+            scope: 'row',
+            rowId: 0,
+            severity: 'info',
+            message: 'm',
+            metadata: JSON.parse('{"__proto__": {"polluted": true}}'),
+          },
+        ],
+      } as unknown as AnnotationFile;
+
+      store.loadJSON(file, 'replace');
+      // Verify Object.prototype was not mutated.
+      const probe: Record<string, unknown> = {};
+      expect((probe as { polluted?: boolean }).polluted).toBeUndefined();
+    });
+  });
 });

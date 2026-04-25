@@ -246,20 +246,53 @@ describe('AnnotationPopover', () => {
     expect(root.querySelector('.dt-annotation-pill--info')).toBeTruthy();
   });
 
-  it('escapes HTML in messages (textContent, not innerHTML)', () => {
+  it('does not parse HTML in message, code, or source (textContent only)', () => {
     popover.show(anchor, [
       makeAnn({
         scope: 'cell',
         rowId: 1,
         column: 'x',
-        severity: 'info',
+        severity: 'error',
         message: '<img src=x onerror=alert(1)>',
+        code: '<script>alert(2)</script>',
+        source: '<svg/>',
+      }),
+      makeAnn({
+        scope: 'row',
+        rowId: 1,
+        severity: 'warning',
+        message: '<iframe src="javascript:alert(3)"></iframe>',
+        code: '<b>bold</b>',
+        source: '<i>italic</i>',
       }),
     ]);
     const root = portal.querySelector('.dt-annotation-popover') as HTMLElement;
-    const msgEl = root.querySelector('.dt-annotation-message') as HTMLElement;
-    expect(msgEl.querySelector('img')).toBe(null);
-    expect(msgEl.textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(root).toBeTruthy();
+
+    // No injected elements anywhere in the popover subtree.
+    for (const tag of ['img', 'script', 'b', 'i', 'svg', 'iframe']) {
+      expect(root.querySelectorAll(tag).length).toBe(0);
+    }
+
+    // Each malicious payload appears as literal text on the right node.
+    const messages = Array.from(root.querySelectorAll('.dt-annotation-message')).map(
+      (n) => n.textContent,
+    );
+    expect(messages).toContain('<img src=x onerror=alert(1)>');
+    expect(messages).toContain('<iframe src="javascript:alert(3)"></iframe>');
+
+    const meta = Array.from(root.querySelectorAll('.dt-annotation-meta')).map(
+      (n) => n.textContent,
+    );
+    expect(meta).toContain('<script>alert(2)</script> · <svg/>');
+    expect(meta).toContain('<b>bold</b> · <i>italic</i>');
+
+    // Severity pill is the validated enum value, not user input.
+    const pills = Array.from(root.querySelectorAll('.dt-annotation-pill')).map(
+      (n) => n.textContent,
+    );
+    expect(pills).toContain('error');
+    expect(pills).toContain('warning');
   });
 });
 

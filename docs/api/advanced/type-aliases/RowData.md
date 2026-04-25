@@ -8,6 +8,6 @@
 
 > **RowData** = `Record`\<`string`, `unknown`\>
 
-Defined in: [table/TableBody.ts:35](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableBody.ts#L35)
+Defined in: [table/TableBody.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableBody.ts#L50)
 
 Row data from query results

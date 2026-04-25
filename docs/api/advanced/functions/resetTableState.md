@@ -8,7 +8,7 @@
 
 > **resetTableState**(`state`): `void`
 
-Defined in: [core/State.ts:152](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/State.ts#L152)
+Defined in: [core/State.ts:160](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/State.ts#L160)
 
 Reset table state to initial values
 

@@ -6,7 +6,7 @@
 
 # Class: WorkerBridge
 
-Defined in: [data/WorkerBridge.ts:107](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L107)
+Defined in: [data/WorkerBridge.ts:107](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L107)
 
 Promise-based RPC layer between the main thread and the DuckDB Web Worker.
 
@@ -44,7 +44,7 @@ bridge.terminate();
 
 > **new WorkerBridge**(`options?`): `WorkerBridge`
 
-Defined in: [data/WorkerBridge.ts:118](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L118)
+Defined in: [data/WorkerBridge.ts:118](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L118)
 
 #### Parameters
 
@@ -62,7 +62,7 @@ Defined in: [data/WorkerBridge.ts:118](https://github.com/jeyabbalas/data-table/
 
 > **clearQueryCache**(): `void`
 
-Defined in: [data/WorkerBridge.ts:355](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L355)
+Defined in: [data/WorkerBridge.ts:355](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L355)
 
 Clear all cached query results
 
@@ -76,7 +76,7 @@ Clear all cached query results
 
 > **exportToBuffer**(`sql`, `format`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [data/WorkerBridge.ts:318](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L318)
+Defined in: [data/WorkerBridge.ts:318](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L318)
 
 Export data to a binary file format via DuckDB COPY TO.
 
@@ -107,7 +107,7 @@ Returns the file contents as a Uint8Array.
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:176](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L176)
+Defined in: [data/WorkerBridge.ts:176](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L176)
 
 Create the worker and wait for it to be ready.
 
@@ -124,7 +124,7 @@ or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
 
 > **isInitialized**(): `boolean`
 
-Defined in: [data/WorkerBridge.ts:362](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L362)
+Defined in: [data/WorkerBridge.ts:362](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L362)
 
 Check if the bridge is initialized
 
@@ -138,7 +138,7 @@ Check if the bridge is initialized
 
 > **loadData**(`source`, `options`, `onProgress?`, `signal?`): `Promise`\<`LoadDataResult`\>
 
-Defined in: [data/WorkerBridge.ts:284](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L284)
+Defined in: [data/WorkerBridge.ts:284](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L284)
 
 Load data into DuckDB
 
@@ -173,7 +173,7 @@ All metadata queries happen in the worker to avoid blocking the main thread.
 
 > **query**\<`T`\>(`sql`, `signal?`): `Promise`\<`T`[]\>
 
-Defined in: [data/WorkerBridge.ts:252](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L252)
+Defined in: [data/WorkerBridge.ts:252](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L252)
 
 Execute a SQL query
 
@@ -203,7 +203,7 @@ Execute a SQL query
 
 > **terminate**(): `void`
 
-Defined in: [data/WorkerBridge.ts:333](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L333)
+Defined in: [data/WorkerBridge.ts:333](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L333)
 
 Terminate the worker
 

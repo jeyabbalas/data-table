@@ -6,7 +6,7 @@
 
 # Interface: VectorValuePoolEntry
 
-Defined in: [persistence/types.ts:79](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L79)
+Defined in: [persistence/types.ts:80](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L80)
 
 Entry in the vector value pool.
 
@@ -16,7 +16,7 @@ Entry in the vector value pool.
 
 > **values**: `unknown`[]
 
-Defined in: [persistence/types.ts:81](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L81)
+Defined in: [persistence/types.ts:82](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L82)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: [persistence/types.ts:81](https://github.com/jeyabbalas/data-table/b
 
 > **vectorType**: `string`
 
-Defined in: [persistence/types.ts:80](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L80)
+Defined in: [persistence/types.ts:81](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L81)

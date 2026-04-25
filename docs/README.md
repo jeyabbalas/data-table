@@ -7,7 +7,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 ## Start here
 
 - [Quick start](../README.md#quick-start) — mount a table in ~10 lines
-- [Runnable examples](../examples/README.md) — ten focused single-feature examples, browsable from the demo via `npm run dev`
+- [Runnable examples](../examples/README.md) — twelve focused single-feature examples, browsable from the demo via `npm run dev`
 - [AGENTS.md](../AGENTS.md) — coding-agent orientation: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
 
 ## Reference
@@ -15,14 +15,16 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 - [API reference](./api-reference.md) — curated narrative: every option, event, action, error code, filter shape, derived-column type
 - [Generated API reference](./api/README.md) — exhaustive signatures auto-generated from source JSDoc (regenerate via `npm run docs:api`)
 - [Glossary](./glossary.md) — alphabetical index of domain terms with cross-links to the relevant guide or concept doc
-- [Troubleshooting](./troubleshooting.md) — 23 error codes and 15 common-issue FAQs with fix snippets
+- [Troubleshooting](./troubleshooting.md) — 34 error codes and 19 common-issue FAQs with fix snippets
 - [Performance](./performance.md) — architectural limits, self-benchmarking methodology
 
 ## Guides (task-oriented)
 
 - [Loading data](./guides/loading-data.md) — File / URL / Blob / ArrayBuffer, format detection, progress
 - [Filters](./guides/filters.md) — seven filter types, programmatic construction, serialization
-- [Derived columns](./guides/derived-columns.md) — SQL-expression and pre-computed vector columns
+- [Derived columns](./guides/derived-columns.md) — SQL-expression and pre-computed vector columns, dependency-aware replacement
+- [Annotations](./guides/annotations.md) — programmatic row/column/cell overlays, severity tiers, intersection popover, JSON round-trip
+- [Column-header tooltips](./guides/column-header-tooltips.md) — structured popover for column metadata, XSS-safe by construction
 - [Events](./guides/events.md) — event catalog, lifecycle ordering, error discrimination
 - [Visualizations](./guides/visualizations.md) — built-ins and custom class registration
 - [Session persistence](./guides/session-persistence.md) — IndexedDB lifecycle, sync-save, custom store

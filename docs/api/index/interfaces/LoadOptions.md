@@ -6,7 +6,7 @@
 
 # Interface: LoadOptions
 
-Defined in: [data/WorkerBridge.ts:26](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L26)
+Defined in: [data/WorkerBridge.ts:26](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L26)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [data/WorkerBridge.ts:26](https://github.com/jeyabbalas/data-table/b
 
 > **format**: `"csv"` \| `"json"` \| `"parquet"`
 
-Defined in: [data/WorkerBridge.ts:27](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L27)
+Defined in: [data/WorkerBridge.ts:27](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L27)
 
 ***
 
@@ -22,4 +22,4 @@ Defined in: [data/WorkerBridge.ts:27](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **tableName?**: `string`
 
-Defined in: [data/WorkerBridge.ts:28](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/data/WorkerBridge.ts#L28)
+Defined in: [data/WorkerBridge.ts:28](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L28)

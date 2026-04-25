@@ -6,7 +6,7 @@
 
 # Interface: HiddenColumnsGutterOptions
 
-Defined in: [table/HiddenColumnsGutter.ts:15](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/HiddenColumnsGutter.ts#L15)
+Defined in: [table/HiddenColumnsGutter.ts:15](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/HiddenColumnsGutter.ts#L15)
 
 Options for HiddenColumnsGutter
 
@@ -16,7 +16,7 @@ Options for HiddenColumnsGutter
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/HiddenColumnsGutter.ts:17](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/HiddenColumnsGutter.ts#L17)
+Defined in: [table/HiddenColumnsGutter.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/HiddenColumnsGutter.ts#L17)
 
 CSS class prefix (default: 'dt')
 
@@ -26,6 +26,6 @@ CSS class prefix (default: 'dt')
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/HiddenColumnsGutter.ts:19](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/HiddenColumnsGutter.ts#L19)
+Defined in: [table/HiddenColumnsGutter.ts:19](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/HiddenColumnsGutter.ts#L19)
 
 Resolved i18n strings. Defaults to English.

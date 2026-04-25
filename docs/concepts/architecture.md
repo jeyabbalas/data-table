@@ -40,8 +40,11 @@ createDataTable(options) ────► DataTable (facade)
                                ├─ DerivedColumnManager ─────────────┘
                                │
                                ├─ ModalHost    (body portal)
+                               ├─ AnnotationPopover           (singleton)
+                               ├─ ColumnHeaderTooltipPopover  (singleton)
                                ├─ SessionStore (IndexedDB)
                                ├─ UndoManager  (snapshot history)
+                               ├─ AnnotationStore             (overlay metadata)
                                └─ FilterPresetManager
 ```
 
@@ -234,6 +237,47 @@ current state onto the redo stack, and applies the popped snapshot.
 Derived-column changes add a wrinkle: the VIEW must be rebuilt before the
 snapshot's `visibleColumns` apply. `undo()` and `redo()` are `async`
 specifically to await that reconciliation.
+
+## Annotation overlay (`AnnotationStore`)
+
+[`AnnotationStore`](../../src/annotations/AnnotationStore.ts) holds
+app-authored overlay metadata — row, column, and cell annotations with a
+fixed three-level severity (`error` / `warning` / `info`). It is a
+sibling of `TableState` rather than a field on it, for two reasons:
+
+1. **No undo/redo.** Annotations come from app-side validators
+   (JSON-Schema, quality-control rules), not from user view edits. A
+   bulk-load of 10 000 annotations should not inflate the undo stack
+   with 10 000 entries.
+2. **Independent change channel.** The store emits its own
+   `change` event — `kind: 'added' | 'updated' | 'removed' | 'cleared'
+   | 'filterChanged'`, plus the affected `ids[]`. The rendering layer
+   (`TableBody` / `ColumnHeader`) subscribes to this event and
+   invalidates only the affected rows / cells / headers, never the
+   whole grid.
+
+Internally the store keeps four indexes — `byId`, `byRow`,
+`byColumn`, `byCell` — so `getByRow` / `getByColumn` / `getByCell` are
+O(1) regardless of total annotation count. `getByCell(rowId, column)`
+returns the union of row + column + cell annotations, sorted by
+severity → `createdAt` → insertion order, so the popover always shows
+the most-relevant entry first.
+
+The store auto-persists into [`SessionSnapshot`](#persistence-sessionstore--autosave)`.annotations`
+(v5+) via `AutoSave`. A single shared
+[`AnnotationPopover`](../../src/table/AnnotationPopover.ts) instance is
+reused across hover targets — created lazily, anchored on demand,
+dismissed on `Escape` / blur / scroll / click outside. The
+[`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts)
+is constructed and torn down alongside it but anchors on the
+column-name span and uses a higher z-index so both can be visible
+together.
+
+`setSeverityFilter` is a view concern, not a data concern — it flips
+flags that the rendering layer reads, but the underlying data is
+unchanged. `getAll` / `getByRow` / `getByColumn` / `getByCell` always
+return the full set; clearing a severity in the filter only changes
+what gets painted (or popped).
 
 ## Event bus: `EventEmitter`
 

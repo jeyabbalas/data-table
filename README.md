@@ -9,7 +9,14 @@ machine.
   with brush/click crossfilter
 - Manual filter UI per column + raw-SQL `WHERE` filters
 - Pin / hide / reorder / resize columns; virtual scrolling
-- Derived columns (SQL expressions or JS-provided value vectors)
+- Derived columns (SQL expressions or JS-provided value vectors), with
+  same-name dependency-aware replacement
+- Stable synthetic `__rowid__` + read-only column export
+  (`actions.getColumnValues`) for app-side row alignment and chart feeds
+- Programmatic row / column / cell annotations — severity tiers, intersection
+  popover, JSON round-trip, session-persisted
+- Programmatic column-header tooltips — XSS-safe structured popover
+  (title / description / items + enum chips)
 - Filter presets (import/export JSON)
 - Undo/redo and IndexedDB session persistence
 - CSV / JSON / Parquet export
@@ -59,12 +66,13 @@ Full documentation lives under [`docs/`](./docs/README.md). A quick index:
 
 **Reference**
 - [API reference](./docs/api-reference.md) — every option, event, action, error, filter shape, derived-column type
-- [Troubleshooting](./docs/troubleshooting.md) — 23 error codes and 15 common-issue FAQs with fix snippets
+- [Troubleshooting](./docs/troubleshooting.md) — 34 error codes and 19 common-issue FAQs with fix snippets
 
 **Guides**
 - [Loading data](./docs/guides/loading-data.md) · [Filters](./docs/guides/filters.md) · [Derived columns](./docs/guides/derived-columns.md) · [Events](./docs/guides/events.md)
-- [Visualizations](./docs/guides/visualizations.md) · [Session persistence](./docs/guides/session-persistence.md) · [Theming](./docs/guides/theming.md) · [i18n](./docs/guides/i18n.md)
-- [Accessibility](./docs/guides/accessibility.md) · [Multi-table dashboards](./docs/guides/multi-table.md) · [CSP and offline](./docs/guides/csp-and-offline.md) · [Filter presets](./docs/guides/filter-presets.md)
+- [Annotations](./docs/guides/annotations.md) · [Column-header tooltips](./docs/guides/column-header-tooltips.md) · [Visualizations](./docs/guides/visualizations.md) · [Session persistence](./docs/guides/session-persistence.md)
+- [Theming](./docs/guides/theming.md) · [i18n](./docs/guides/i18n.md) · [Accessibility](./docs/guides/accessibility.md) · [Multi-table dashboards](./docs/guides/multi-table.md)
+- [CSP and offline](./docs/guides/csp-and-offline.md) · [Filter presets](./docs/guides/filter-presets.md)
 
 **Concepts**
 - [Architecture](./docs/concepts/architecture.md) · [State model](./docs/concepts/state-model.md)
@@ -161,16 +169,20 @@ For the full options surface (mounting, worker, UI, customization), see
 Subscribe with `table.on(event, handler)` — returns an unsubscribe function.
 The event bus covers `ready`, `loadStart` / `loadProgress` / `loadComplete` /
 `loadError`, `filterChange`, `sortChange`, `selectionChange`, `columnChange`,
-`derivedChange`, `undoChange`, `destroy`, plus `error` and `warning` for
-recoverable failure modes. See
-[docs/api-reference.md#event-catalog](./docs/api-reference.md#event-catalog)
-for payload types.
+`derivedChange` (with a `kind: 'added' | 'removed' | 'replaced' | 'updated'`
+discriminator and the affected `columnName`), `undoChange`, `destroy`, plus
+`error` and `warning` for recoverable failure modes. Annotation mutations
+flow through a separate `table.annotations.on('change', …)` channel — see
+the [annotations guide](./docs/guides/annotations.md). For payload types
+see [docs/api-reference.md#event-catalog](./docs/api-reference.md#event-catalog).
 
 ## Theming
 
 All colors, spacing, typography, and z-indices are driven by CSS custom
-properties (60 `--dt-*` tokens in total). Override the ones you care about
-on `:root`, on a per-instance element, or at runtime.
+properties (74 `--dt-*` tokens — covering the full palette, sizing scale,
+z-index stacking ladder, annotation severity tints, and column-header
+tooltip layering). Override the ones you care about on `:root`, on a
+per-instance element, or at runtime.
 
 ```css
 :root {
@@ -216,7 +228,7 @@ table.on('error', ({ error, source }) => {
 });
 ```
 
-For the full list of 23 error codes with triggers and fixes, see
+For the full list of 34 error codes with triggers and fixes, see
 [docs/troubleshooting.md](./docs/troubleshooting.md).
 
 ## Multiple tables, CSP, and offline

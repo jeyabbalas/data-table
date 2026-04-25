@@ -6,7 +6,7 @@
 
 # Class: FilterPanel
 
-Defined in: [filters/FilterPanel.ts:56](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L56)
+Defined in: [filters/FilterPanel.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L56)
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: [filters/FilterPanel.ts:56](https://github.com/jeyabbalas/data-table
 
 > **new FilterPanel**(`state`, `actions`, `options?`): `FilterPanel`
 
-Defined in: [filters/FilterPanel.ts:76](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L76)
+Defined in: [filters/FilterPanel.ts:76](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L76)
 
 #### Parameters
 
@@ -40,7 +40,7 @@ Defined in: [filters/FilterPanel.ts:76](https://github.com/jeyabbalas/data-table
 
 > **close**(): `void`
 
-Defined in: [filters/FilterPanel.ts:263](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L263)
+Defined in: [filters/FilterPanel.ts:263](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L263)
 
 Close the panel
 
@@ -59,7 +59,7 @@ or when the panel itself is destroyed.
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterPanel.ts:313](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L313)
+Defined in: [filters/FilterPanel.ts:313](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L313)
 
 Destroy and clean up
 
@@ -73,7 +73,7 @@ Destroy and clean up
 
 > **getCurrentColumn**(): `string` \| `null`
 
-Defined in: [filters/FilterPanel.ts:306](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L306)
+Defined in: [filters/FilterPanel.ts:306](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L306)
 
 Get the currently focused column (if panel is open)
 
@@ -87,7 +87,7 @@ Get the currently focused column (if panel is open)
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterPanel.ts:292](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L292)
+Defined in: [filters/FilterPanel.ts:292](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L292)
 
 Get the panel's DOM element
 
@@ -101,7 +101,7 @@ Get the panel's DOM element
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/FilterPanel.ts:299](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L299)
+Defined in: [filters/FilterPanel.ts:299](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L299)
 
 Check if the panel is currently open
 
@@ -115,7 +115,7 @@ Check if the panel is currently open
 
 > **open**(`column`, `anchorElement`): `void`
 
-Defined in: [filters/FilterPanel.ts:208](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L208)
+Defined in: [filters/FilterPanel.ts:208](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L208)
 
 Open the panel for the given column
 
@@ -139,7 +139,7 @@ Open the panel for the given column
 
 > **toggle**(`column`, `anchorElement`): `void`
 
-Defined in: [filters/FilterPanel.ts:197](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPanel.ts#L197)
+Defined in: [filters/FilterPanel.ts:197](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L197)
 
 Toggle the panel open/closed for the given column
 

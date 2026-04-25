@@ -6,7 +6,7 @@
 
 # Interface: DateWrapper
 
-Defined in: [persistence/types.ts:18](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L18)
+Defined in: [persistence/types.ts:19](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L19)
 
 Marker object for serialized Date instances
 
@@ -16,4 +16,4 @@ Marker object for serialized Date instances
 
 > **\_\_date\_\_**: `string`
 
-Defined in: [persistence/types.ts:19](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L19)
+Defined in: [persistence/types.ts:20](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L20)

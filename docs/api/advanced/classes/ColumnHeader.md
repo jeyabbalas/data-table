@@ -6,7 +6,7 @@
 
 # Class: ColumnHeader
 
-Defined in: [table/ColumnHeader.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L48)
+Defined in: [table/ColumnHeader.ts:60](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L60)
 
 ColumnHeader component renders an interactive column header.
 
@@ -26,7 +26,7 @@ header.destroy();
 
 > **new ColumnHeader**(`column`, `state`, `actions`, `options?`): `ColumnHeader`
 
-Defined in: [table/ColumnHeader.ts:65](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L65)
+Defined in: [table/ColumnHeader.ts:78](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L78)
 
 #### Parameters
 
@@ -56,7 +56,7 @@ Defined in: [table/ColumnHeader.ts:65](https://github.com/jeyabbalas/data-table/
 
 > **destroy**(): `void`
 
-Defined in: [table/ColumnHeader.ts:656](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L656)
+Defined in: [table/ColumnHeader.ts:826](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L826)
 
 Destroy the column header and clean up resources
 
@@ -70,7 +70,7 @@ Destroy the column header and clean up resources
 
 > **getColumn**(): [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [table/ColumnHeader.ts:620](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L620)
+Defined in: [table/ColumnHeader.ts:790](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L790)
 
 Get the column schema
 
@@ -84,7 +84,7 @@ Get the column schema
 
 > **getDerivedIconBtn**(): `HTMLElement` \| `null`
 
-Defined in: [table/ColumnHeader.ts:649](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L649)
+Defined in: [table/ColumnHeader.ts:819](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L819)
 
 Get the derived column icon button (null for non-derived columns).
 
@@ -98,7 +98,7 @@ Get the derived column icon button (null for non-derived columns).
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/ColumnHeader.ts:613](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L613)
+Defined in: [table/ColumnHeader.ts:783](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L783)
 
 Get the DOM element
 
@@ -112,7 +112,7 @@ Get the DOM element
 
 > **getStatsElement**(): `HTMLElement`
 
-Defined in: [table/ColumnHeader.ts:642](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L642)
+Defined in: [table/ColumnHeader.ts:812](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L812)
 
 Get the stats element for external updates (e.g., histogram hover).
 
@@ -126,7 +126,7 @@ Get the stats element for external updates (e.g., histogram hover).
 
 > **getVizContainer**(): `HTMLElement`
 
-Defined in: [table/ColumnHeader.ts:635](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L635)
+Defined in: [table/ColumnHeader.ts:805](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L805)
 
 Get the visualization container element.
 This is where Phase 4 visualizations will be rendered.
@@ -141,7 +141,7 @@ This is where Phase 4 visualizations will be rendered.
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/ColumnHeader.ts:627](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L627)
+Defined in: [table/ColumnHeader.ts:797](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L797)
 
 Check if the header has been destroyed
 
@@ -155,7 +155,7 @@ Check if the header has been destroyed
 
 > **update**(): `void`
 
-Defined in: [table/ColumnHeader.ts:568](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnHeader.ts#L568)
+Defined in: [table/ColumnHeader.ts:738](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L738)
 
 Update the sort button visual state based on current sort state
 

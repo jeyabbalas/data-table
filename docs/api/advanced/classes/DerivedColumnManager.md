@@ -6,15 +6,15 @@
 
 # Class: DerivedColumnManager
 
-Defined in: [derived/DerivedColumnManager.ts:45](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L45)
+Defined in: [derived/DerivedColumnManager.ts:45](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L45)
 
 ## Constructors
 
 ### Constructor
 
-> **new DerivedColumnManager**(`bridge`, `baseTableName`): `DerivedColumnManager`
+> **new DerivedColumnManager**(`bridge`, `baseTableName`, `getTotalRows?`): `DerivedColumnManager`
 
-Defined in: [derived/DerivedColumnManager.ts:57](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L57)
+Defined in: [derived/DerivedColumnManager.ts:57](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L57)
 
 #### Parameters
 
@@ -26,6 +26,10 @@ Defined in: [derived/DerivedColumnManager.ts:57](https://github.com/jeyabbalas/d
 
 `string`
 
+##### getTotalRows?
+
+() => `number`
+
 #### Returns
 
 `DerivedColumnManager`
@@ -36,7 +40,7 @@ Defined in: [derived/DerivedColumnManager.ts:57](https://github.com/jeyabbalas/d
 
 > `readonly` **viewName**: `string`
 
-Defined in: [derived/DerivedColumnManager.ts:47](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L47)
+Defined in: [derived/DerivedColumnManager.ts:47](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L47)
 
 VIEW name: __dt_view_<baseTableName>__
 
@@ -46,7 +50,7 @@ VIEW name: __dt_view_<baseTableName>__
 
 > **addColumn**(`def`): `Promise`\<[`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md)\>
 
-Defined in: [derived/DerivedColumnManager.ts:80](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L80)
+Defined in: [derived/DerivedColumnManager.ts:81](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L81)
 
 Add a derived column. Validates expression (or creates helper table for vectors),
 detects type via DuckDB, recreates VIEW, returns ColumnSchema with isDerived: true.
@@ -67,7 +71,7 @@ detects type via DuckDB, recreates VIEW, returns ColumnSchema with isDerived: tr
 
 > **destroy**(): `Promise`\<`void`\>
 
-Defined in: [derived/DerivedColumnManager.ts:347](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L347)
+Defined in: [derived/DerivedColumnManager.ts:484](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L484)
 
 Clean up: drop VIEW, drop all helper tables
 
@@ -81,7 +85,7 @@ Clean up: drop VIEW, drop all helper tables
 
 > **getColumns**(): [`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md)[]
 
-Defined in: [derived/DerivedColumnManager.ts:72](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L72)
+Defined in: [derived/DerivedColumnManager.ts:73](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L73)
 
 Returns current derived column info list (copy)
 
@@ -95,7 +99,7 @@ Returns current derived column info list (copy)
 
 > **getCompletionContext**(`baseSchema`): [`CompletionContext`](../../index/interfaces/CompletionContext.md)
 
-Defined in: [derived/DerivedColumnManager.ts:295](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L295)
+Defined in: [derived/DerivedColumnManager.ts:432](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L432)
 
 Build completion context for editor autocompletion.
 Lists all base + derived column names with types.
@@ -116,7 +120,7 @@ Lists all base + derived column names with types.
 
 > **getDependents**(`columnName`): `string`[]
 
-Defined in: [derived/DerivedColumnManager.ts:478](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L478)
+Defined in: [derived/DerivedColumnManager.ts:615](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L615)
 
 Return names of expression columns that directly reference the given column.
 Used for deletion protection and rename blocking.
@@ -137,7 +141,7 @@ Used for deletion protection and rename blocking.
 
 > **getEffectiveTableName**(): `string`
 
-Defined in: [derived/DerivedColumnManager.ts:67](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L67)
+Defined in: [derived/DerivedColumnManager.ts:68](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L68)
 
 Returns VIEW name if derived columns exist, base table name otherwise
 
@@ -151,7 +155,7 @@ Returns VIEW name if derived columns exist, base table name otherwise
 
 > **removeColumn**(`name`): `Promise`\<`void`\>
 
-Defined in: [derived/DerivedColumnManager.ts:227](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L227)
+Defined in: [derived/DerivedColumnManager.ts:364](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L364)
 
 Remove a derived column. Drops helper table if vector.
 Recreates VIEW without column, or drops VIEW entirely if last derived column.
@@ -168,11 +172,41 @@ Recreates VIEW without column, or drops VIEW entirely if last derived column.
 
 ***
 
+### replaceColumn()
+
+> **replaceColumn**(`name`, `newDef`): `Promise`\<[`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md)\>
+
+Defined in: [derived/DerivedColumnManager.ts:235](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L235)
+
+Replace a derived column at the same name with a new definition.
+
+Same-name-only — does not support renaming (use [updateColumn](#updatecolumn) for that).
+Pre-flights every dependent against the proposed new def before touching the
+VIEW. On dependent incompatibility, throws a `DEPENDENTS_INCOMPATIBLE` error
+whose `details.dependentsAffected` lists the dependent names and
+`details.reasons` maps each name to the DuckDB error.
+
+#### Parameters
+
+##### name
+
+`string`
+
+##### newDef
+
+[`DerivedColumnDef`](../../index/type-aliases/DerivedColumnDef.md)
+
+#### Returns
+
+`Promise`\<[`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md)\>
+
+***
+
 ### restoreColumns()
 
 > **restoreColumns**(`defs`): `Promise`\<[`ColumnSchema`](../../index/interfaces/ColumnSchema.md)[]\>
 
-Defined in: [derived/DerivedColumnManager.ts:324](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L324)
+Defined in: [derived/DerivedColumnManager.ts:461](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L461)
 
 Recreate all derived columns from saved definitions (for session restore / undo).
 Creates helper tables for vectors, then creates VIEW.
@@ -194,7 +228,7 @@ Skips columns that fail with a warning.
 
 > **updateColumn**(`oldName`, `def`): `Promise`\<[`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md)\>
 
-Defined in: [derived/DerivedColumnManager.ts:132](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L132)
+Defined in: [derived/DerivedColumnManager.ts:134](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L134)
 
 Update a derived column's expression/name/values.
 Validates, recreates VIEW (and helper table if vector). Returns updated info.
@@ -219,7 +253,7 @@ Validates, recreates VIEW (and helper table if vector). Returns updated info.
 
 > **validateExpression**(`expression`, `alias?`): `Promise`\<\{ `error?`: `string`; `originalType?`: `string`; `type?`: [`DataType`](../../index/type-aliases/DataType.md); `valid`: `boolean`; \}\>
 
-Defined in: [derived/DerivedColumnManager.ts:269](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/DerivedColumnManager.ts#L269)
+Defined in: [derived/DerivedColumnManager.ts:406](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnManager.ts#L406)
 
 Validate an expression without adding it. For UI preview/validation button.
 

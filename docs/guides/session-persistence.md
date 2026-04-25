@@ -33,14 +33,17 @@ A session snapshot is a JSON-serializable object keyed by `tableName`:
 | `undoStack`, `redoStack` | Undo/redo history |
 | `vectorValuePool` | Deduplicated vector column values shared across undo entries |
 | `filterPresets` | Saved filter presets |
+| `annotations` | Full `AnnotationFile` written by `table.annotations.toJSON()` — every annotation (row / column / cell) plus unknown app-defined fields. See the [annotations guide](./annotations.md). |
+| `columnHeaderTooltips` | Per-column structured tooltip content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. See the [column-header tooltips guide](./column-header-tooltips.md). |
 
 Other state (hovered row, focused cell, row selection) is transient and not
 persisted.
 
-The snapshot schema version (`SNAPSHOT_VERSION`, currently `4`) sits at the
-top. On load, older versions are upgraded transparently; unknown filter
-types from a newer version are silently dropped with a warning to the
-console.
+The snapshot schema version (`SNAPSHOT_VERSION`, currently `5`) sits at the
+top. On load, older versions are upgraded transparently — pre-v5 snapshots
+load with empty `annotations` and absent `columnHeaderTooltips`, no error.
+Unknown filter types from a newer version are silently dropped with a warning
+to the console.
 
 ## Default behavior
 

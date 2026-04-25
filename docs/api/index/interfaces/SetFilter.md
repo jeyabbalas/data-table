@@ -6,7 +6,7 @@
 
 # Interface: SetFilter
 
-Defined in: [filters/FilterTypes.ts:27](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L27)
+Defined in: [filters/FilterTypes.ts:27](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L27)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [filters/FilterTypes.ts:27](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:29](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L29)
+Defined in: [filters/FilterTypes.ts:29](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L29)
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: [filters/FilterTypes.ts:29](https://github.com/jeyabbalas/data-table
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L32)
+Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L32)
 
 When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
@@ -32,7 +32,7 @@ When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
 > **type**: `"set"`
 
-Defined in: [filters/FilterTypes.ts:28](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L28)
+Defined in: [filters/FilterTypes.ts:28](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L28)
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: [filters/FilterTypes.ts:28](https://github.com/jeyabbalas/data-table
 
 > **values**: `unknown`[]
 
-Defined in: [filters/FilterTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L30)
+Defined in: [filters/FilterTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L30)

@@ -127,14 +127,84 @@ If the updated type differs from the old type (e.g., expression was
 `INTEGER`, now `VARCHAR`), filters on the column are dropped — they no longer
 make sense against the new type.
 
+## Replacing a derived column (same-name + dependent re-validation)
+
+When an end-user *edits* an existing expression, you usually want a
+same-name swap with three guarantees:
+
+1. The new expression is validated.
+2. Every column that depends on this one is re-validated against the
+   new definition.
+3. If anything fails, nothing is committed and you get a structured
+   list of the affected dependents.
+
+That's `replaceDerivedColumn` — sibling to `updateDerivedColumn`, with
+no rename and a discriminated return:
+
+```ts
+const result = await table.actions.replaceDerivedColumn('tip_pct', {
+  kind: 'expression',
+  name: 'tip_pct',                           // must equal the old name
+  expression: 'tip_amount / NULLIF(fare_amount, 0) * 100',
+});
+
+if (result.success) {
+  console.log('replaced', result.info);
+} else {
+  if (result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
+    // result.error.details.dependentsAffected: string[]
+    // result.error.details.reasons: Record<string, string>
+    console.warn('cannot replace tip_pct — would break:',
+      result.error.details?.dependentsAffected);
+  } else {
+    console.warn(result.error);
+  }
+}
+```
+
+Pre-flight order — every step must pass before any DuckDB state
+changes:
+
+1. Confirm the column exists (`NOT_FOUND` if not).
+2. Validate the new expression (`EXPRESSION_INVALID` on syntax errors).
+3. Detect the new result type.
+4. Re-validate every dependent against the proposed substitution
+   (`DEPENDENTS_INCOMPATIBLE` if any fail).
+5. Re-run cycle detection (`CIRCULAR_DEPENDENCY` if a cycle would
+   form).
+6. Commit — recreate the VIEW. If DuckDB still rejects (rare edge
+   case), the existing rollback restores the original state.
+
+For vector columns, the new vector's length must match the base table
+row count (`VECTOR_LENGTH_MISMATCH` otherwise). Vector columns are
+terminal in the dependency graph, so the dependent re-validation pass
+is a no-op for vector replaces.
+
+The `derivedChange` event fires on success with `kind: 'replaced'` and
+`columnName` set, so app code can react without diffing the previous
+list.
+
+### When to use which
+
+| Need | API |
+|---|---|
+| Edit an existing expression at the same name; want dependent re-validation. | `replaceDerivedColumn(name, newDef)` |
+| Rename a column. | `updateDerivedColumn(oldName, defWithNewName)` |
+| Add a brand-new column. | `addDerivedColumn(def)` |
+| Remove a column. | `removeDerivedColumn(name)` |
+
+`updateDerivedColumn` continues to handle the rename path. Calling
+`replaceDerivedColumn` with `newDef.name !== name` is rejected — the
+two APIs are intentionally split.
+
 ## Removing a derived column
 
 ```ts
 await table.actions.removeDerivedColumn('age_group');
 ```
 
-The VIEW is recreated without the column; `derivedChange` fires with the
-updated list.
+The VIEW is recreated without the column; `derivedChange` fires with
+`kind: 'removed'` and `columnName: 'age_group'`.
 
 ## How the VIEW works
 

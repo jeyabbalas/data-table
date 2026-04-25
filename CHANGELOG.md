@@ -13,6 +13,92 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 
 ### Added
 
+- **Stable synthetic `__rowid__` + read-only column export.** A
+  `BIGINT` `__rowid__` column is synthesized at load time on every CSV /
+  JSON / Parquet source (`row_number() OVER () - 1`) and survives sort,
+  filter, and derived-column add / remove. The column is reserved —
+  loading a source that already contains `__rowid__` rejects with
+  `LoadError('RESERVED_COLUMN_NAME')`. It is hidden from the grid by
+  default and excluded from default exports unless the user ticks
+  "Include system columns" in the export dialog. New
+  `table.actions.getColumnValues(name, opts?)` returns a column as a
+  typed JS array — `Int32Array` (INTEGER), `Float64Array` (FLOAT /
+  DECIMAL), `BigInt64Array` (BIGINT including `__rowid__`), or
+  `unknown[]` (strings / dates / booleans). Options: `scope: 'all' |
+  'filtered' | 'selected'`, `limit`, `offset`, `signal`. Throws
+  `QueryError` with `COLUMN_NOT_FOUND` / `INVALID_PAGINATION` /
+  `NO_TABLE`. Public exports: `ROWID_COLUMN` constant,
+  `RowId` type, `GetColumnValuesOptions` type. Example 10 (`examples/
+  10-column-export/`) demos every option and the `BigInt64Array`
+  ergonomics for `__rowid__`.
+- **`actions.replaceDerivedColumn` with dependent re-validation.** A
+  same-name replacement variant that pre-flight-validates every
+  dependent against the proposed new definition and reports affected
+  dependents on failure. Discriminated return: `{ success: true; info
+  } | { success: false; error: DerivedColumnError }`. New error code
+  `DEPENDENTS_INCOMPATIBLE` carries `details.dependentsAffected:
+  string[]` and `details.reasons: Record<string, string>`. The
+  `derivedChange` event payload widened to carry a `kind: 'added' |
+  'removed' | 'replaced' | 'updated'` discriminator and the affected
+  `columnName`. Use `replaceDerivedColumn` when an end-user edits an
+  expression whose dependents you want to re-validate atomically;
+  continue using `updateDerivedColumn` for renames.
+- **`table.annotations` namespace — programmatic CRUD + JSON I/O +
+  session persistence.** A new `AnnotationStore` exposed on
+  `table.annotations` (constructed by `createDataTable`; the class
+  itself lives on `/advanced`). Three scopes (`row` / `column` /
+  `cell`) discriminated by `scope`, three severities (`error` /
+  `warning` / `info`). Public surface: `add`, `addMany` (atomic),
+  `update` (`scope` / `rowId` / `column` immutable), `get`, `getAll`,
+  `getByRow`, `getByColumn`, `getByCell` (intersection sorted by
+  severity → `createdAt` → insertion), `remove`, `removeMany`,
+  `clear(scope?)`, `count`, `toJSON`, `loadJSON(file, mode?: 'replace'
+  | 'merge')`, `on('change', handler)`, `setSeverityFilter`,
+  `getSeverityFilter`. JSON file format documented at
+  `docs/api-reference.md#annotation-json-format` with
+  `ANNOTATION_FILE_VERSION = 1`; unknown top-level and per-annotation
+  fields round-trip verbatim. Auto-persisted into
+  `SessionSnapshot.annotations`; `SNAPSHOT_VERSION` bumped to 5
+  (back-compat — pre-v5 snapshots load with empty store). New
+  `AnnotationError` (codes `DUPLICATE_ID` / `NOT_FOUND` /
+  `INVALID_SHAPE` / `VERSION_UNSUPPORTED`). Annotations live outside
+  `TableState` and do **not** participate in undo/redo. Example 11
+  (`examples/11-annotations/`) demos full CRUD, JSON round-trip,
+  severity filter, and IndexedDB persistence.
+- **Annotation rendering — row / cell / header tint + intersection
+  popover.** DOM classes applied at render time:
+  `dt-row--annotated`, `dt-cell--annotated`, `dt-header--annotated`
+  with severity modifiers (`dt-*--annotation-error` / `-warning` /
+  `-info`). Highest-severity-wins per element. Shared
+  `AnnotationPopover` (single instance, anchored on hover / focus,
+  dismissed on Escape / blur / scroll / click outside; `role="tooltip"`
+  + `aria-live="polite"`) renders the `getByCell` intersection grouped
+  by scope. Severity filter (`setSeverityFilter`) is a view concern —
+  data is unchanged; the rendering layer reads the flags and hides
+  non-matching annotations. CSS tokens: `--dt-annotation-{error,
+  warning, info}-{fg,bg,bdr}` plus derived `-bg-hover` variants in
+  light + dark; new z-index `--dt-z-annotation-popover: 55` between
+  floating panels and CodeMirror autocomplete.
+- **Programmatic column-header tooltip popover.** New
+  `table.actions.setColumnHeaderTooltip(column, content | string |
+  null)` and `getColumnHeaderTooltip(column)`. Structured content
+  shape: `{ title?, description?, items?: Array<{ label, value:
+  string | string[] }> }`. String shorthand normalises to `{
+  description }`; `null` (or any input that normalises to empty)
+  clears the override. Every text field is rendered via
+  `.textContent` — HTML strings, DOM nodes, and render functions are
+  not accepted. Persisted into `SessionSnapshot.columnHeaderTooltips`
+  by default (legacy string entries from in-flight sessions are
+  normalised on restore). Anchored on the column-name span (distinct
+  DOM node from the annotation popover) with `tabindex="0"` added
+  only when an override is set, so the keyboard tab order stays
+  clean for tables that don't use the feature. New z-index
+  `--dt-z-col-tooltip: 56` above the annotation popover. Public type
+  exports: `ColumnHeaderTooltipContent`, `ColumnHeaderTooltipItem`.
+  Tier-2 export (`/advanced`): `ColumnHeaderTooltipPopover`. Example
+  12 (`examples/12-column-header-tooltips/`) demos rich, enum, string
+  shorthand, clearing, the XSS-safety contract, and the recommended
+  no-persistence pattern (`persistence: false`).
 - **Typed error model and event bus.** A new `DataTableError` base class plus
   focused subclasses (`WorkerInitError`, `WorkerTerminatedError`, `QueryError`,
   `LoadError`, `SQLValidationError`, `DerivedColumnError`, `PersistenceError`,
@@ -121,6 +207,14 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   subscriber no longer blocks the rest.
 - The `ConfigurationError` subclass now surfaces option-validation failures
   (`code: 'OPTIONS_INVALID'`) that previously threw plain `Error`s.
+- `derivedChange` event payload widened (additive) — now carries
+  `kind: 'added' | 'removed' | 'replaced' | 'updated'` and an optional
+  `columnName: string` alongside the existing `derivedColumns` array.
+  Existing handlers that only read `derivedColumns` keep working.
+- `SNAPSHOT_VERSION` bumped from 4 → 5 to accommodate the new
+  `annotations` and `columnHeaderTooltips` fields. Back-compat — older
+  snapshots load with empty `annotations` and absent
+  `columnHeaderTooltips`, no error.
 
 ### Fixed
 

@@ -8,7 +8,7 @@
 
 > **createTableState**(): [`TableState`](../interfaces/TableState.md)
 
-Defined in: [core/State.ts:87](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/State.ts#L87)
+Defined in: [core/State.ts:94](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/State.ts#L94)
 
 Create a new TableState with default values
 

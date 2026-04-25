@@ -6,7 +6,7 @@
 
 # Class: PersistenceError
 
-Defined in: [core/errors.ts:191](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L191)
+Defined in: [core/errors.ts:192](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L192)
 
 Session persistence (IndexedDB) error.
 
@@ -31,7 +31,7 @@ table.on('error', ({ error, source }) => {
 
 > **new PersistenceError**(`message`, `options?`): `PersistenceError`
 
-Defined in: [core/errors.ts:192](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L192)
+Defined in: [core/errors.ts:193](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L193)
 
 #### Parameters
 
@@ -57,7 +57,7 @@ Defined in: [core/errors.ts:192](https://github.com/jeyabbalas/data-table/blob/3
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L48)
+Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L49)
 
 #### Inherited from
 
@@ -69,7 +69,7 @@ Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/30
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L49)
+Defined in: [core/errors.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L50)
 
 #### Inherited from
 
@@ -81,7 +81,7 @@ Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/30
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:58](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L58)
+Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L59)
 
 #### Returns
 

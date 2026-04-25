@@ -6,7 +6,7 @@
 
 # Interface: DataTableErrorOptions
 
-Defined in: [core/errors.ts:29](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L29)
+Defined in: [core/errors.ts:30](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L30)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [core/errors.ts:29](https://github.com/jeyabbalas/data-table/blob/30
 
 > `optional` **cause?**: `unknown`
 
-Defined in: [core/errors.ts:31](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L31)
+Defined in: [core/errors.ts:32](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L32)
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: [core/errors.ts:31](https://github.com/jeyabbalas/data-table/blob/30
 
 > `optional` **code?**: `string`
 
-Defined in: [core/errors.ts:30](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L30)
+Defined in: [core/errors.ts:31](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L31)
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: [core/errors.ts:30](https://github.com/jeyabbalas/data-table/blob/30
 
 > `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:32](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L32)
+Defined in: [core/errors.ts:33](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L33)

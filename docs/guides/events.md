@@ -45,12 +45,28 @@ Every event is strongly typed. The full map lives at
 | `sortChange` | `{ sortColumns }` | Sort order changes. |
 | `selectionChange` | `{ selectedRows: Set<number> }` | User selects or deselects rows. |
 | `columnChange` | `{ visibleColumns, pinnedColumns, columnOrder }` | Column visibility, pin state, or order changes. |
-| `derivedChange` | `{ derivedColumns }` | Derived columns are added, updated, or removed. |
+| `derivedChange` | `{ derivedColumns, kind, columnName? }` | Derived-column list changed. `kind: 'added' \| 'removed' \| 'replaced' \| 'updated'`. `columnName` names the affected column (set on `'added'` / `'removed'` / `'replaced'`; not set when the whole list is replaced atomically). `'replaced'` fires for [`replaceDerivedColumn`](./derived-columns.md#replacing-a-derived-column-same-name--dependent-re-validation), `'updated'` for `updateDerivedColumn`. |
 | `undoChange` | `{ canUndo, canRedo }` | Undo/redo availability changes. |
 | `destroy` | `{}` | Emitted once, just before `destroy()` disposes signals. |
 
 `on` returns an unsubscribe function; `off` works too and accepts the original
 handler reference.
+
+### Annotation events (separate channel)
+
+Annotation mutations don't flow through the main event bus — they live on `table.annotations.on('change', handler)`. The payload is `{ kind: 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'; ids: string[] }`. Subscribe there for fine-grained reactions:
+
+```ts
+const off = table.annotations.on('change', ({ kind, ids }) => {
+  if (kind === 'filterChanged') {
+    // setSeverityFilter() flipped a flag; re-render whatever lists annotations.
+  } else {
+    // ids[] is the list of annotation IDs affected by this mutation.
+  }
+});
+```
+
+See the [annotations guide](./annotations.md) for the full lifecycle.
 
 ## Lifecycle ordering
 

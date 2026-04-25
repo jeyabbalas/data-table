@@ -1,6 +1,6 @@
 # @jeyabbalas/data-table
 
-> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
+> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), programmatic row/column/cell annotations with severity tiers + popover, structured XSS-safe column-header tooltips, stable synthetic `__rowid__` plus read-only column export, undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
 
 This file follows the [llms.txt](https://llmstxt.org) convention. It is a curated index for coding agents and LLM-driven tools. Human readers should start with [README.md](./README.md).
 
@@ -12,14 +12,16 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 ## Reference
 
 - [docs/api-reference.md](./docs/api-reference.md): Every public export, option, event, action, error code, filter shape, derived-column type.
-- [docs/troubleshooting.md](./docs/troubleshooting.md): 23 error codes and 15 common-issue FAQs with fix snippets.
+- [docs/troubleshooting.md](./docs/troubleshooting.md): 34 error codes and 19 common-issue FAQs with fix snippets.
 - [docs/performance.md](./docs/performance.md): Architectural limits, tuning guidance, self-benchmarking methodology.
 
 ## Guides (task-oriented walkthroughs)
 
 - [docs/guides/loading-data.md](./docs/guides/loading-data.md): File / URL / Blob / ArrayBuffer ingestion, format detection, progress events.
 - [docs/guides/filters.md](./docs/guides/filters.md): The seven filter types, programmatic filter construction, serialization.
-- [docs/guides/derived-columns.md](./docs/guides/derived-columns.md): SQL-expression vs vector derived columns, DuckDB VIEW reconciliation.
+- [docs/guides/derived-columns.md](./docs/guides/derived-columns.md): SQL-expression vs vector derived columns, DuckDB VIEW reconciliation, dependency-aware replacement.
+- [docs/guides/annotations.md](./docs/guides/annotations.md): Programmatic row/column/cell annotation CRUD, severity filtering, intersection popover, JSON round-trip, session persistence.
+- [docs/guides/column-header-tooltips.md](./docs/guides/column-header-tooltips.md): Structured popover for column-header metadata (title / description / items + enum chips), XSS-safe by construction.
 - [docs/guides/events.md](./docs/guides/events.md): Full event catalog, lifecycle ordering, error discrimination.
 - [docs/guides/visualizations.md](./docs/guides/visualizations.md): Built-in visualization classes and custom class registration.
 - [docs/guides/session-persistence.md](./docs/guides/session-persistence.md): IndexedDB lifecycle, `saveSync()` for page-exit, custom stores.
@@ -49,7 +51,7 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 
 ## Examples
 
-- [examples/](./examples/README.md): 10 runnable single-feature examples, each ≤80 LOC, browsable from the demo via `npm run dev`.
+- [examples/](./examples/README.md): 12 runnable single-feature examples, each ≤80 LOC, browsable from the demo via `npm run dev`.
 
 ## Source (authoritative)
 

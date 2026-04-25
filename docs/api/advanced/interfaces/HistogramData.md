@@ -6,7 +6,7 @@
 
 # Interface: HistogramData
 
-Defined in: [visualizations/histogram/HistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L40)
+Defined in: [visualizations/histogram/HistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L40)
 
 Complete histogram data including bins and metadata
 
@@ -16,7 +16,7 @@ Complete histogram data including bins and metadata
 
 > **bins**: [`HistogramBin`](HistogramBin.md)[]
 
-Defined in: [visualizations/histogram/HistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L42)
+Defined in: [visualizations/histogram/HistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L42)
 
 Array of histogram bins sorted by x0
 
@@ -26,7 +26,7 @@ Array of histogram bins sorted by x0
 
 > **distinctCount**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:58](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L58)
+Defined in: [visualizations/histogram/HistogramData.ts:58](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L58)
 
 Count of distinct non-null values
 
@@ -36,7 +36,7 @@ Count of distinct non-null values
 
 > **isDiscrete**: `boolean`
 
-Defined in: [visualizations/histogram/HistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L54)
+Defined in: [visualizations/histogram/HistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L54)
 
 True when using discrete binning (one bin per unique value, ≤ threshold)
 
@@ -46,7 +46,7 @@ True when using discrete binning (one bin per unique value, ≤ threshold)
 
 > **isSingleValue**: `boolean`
 
-Defined in: [visualizations/histogram/HistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L52)
+Defined in: [visualizations/histogram/HistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L52)
 
 True when all non-null values are identical (single value column)
 
@@ -56,7 +56,7 @@ True when all non-null values are identical (single value column)
 
 > **max**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L48)
+Defined in: [visualizations/histogram/HistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L48)
 
 Maximum non-null value
 
@@ -66,7 +66,7 @@ Maximum non-null value
 
 > **median**: `number` \| `null`
 
-Defined in: [visualizations/histogram/HistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L56)
+Defined in: [visualizations/histogram/HistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L56)
 
 Approximate median of non-null values
 
@@ -76,7 +76,7 @@ Approximate median of non-null values
 
 > **min**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L46)
+Defined in: [visualizations/histogram/HistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L46)
 
 Minimum non-null value
 
@@ -86,7 +86,7 @@ Minimum non-null value
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L44)
+Defined in: [visualizations/histogram/HistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L44)
 
 Count of null values in the column
 
@@ -96,6 +96,6 @@ Count of null values in the column
 
 > **total**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/visualizations/histogram/HistogramData.ts#L50)
+Defined in: [visualizations/histogram/HistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/histogram/HistogramData.ts#L50)
 
 Total count of all values (including nulls)

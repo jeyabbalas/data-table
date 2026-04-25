@@ -6,7 +6,7 @@
 
 # Class: AddColumnButton
 
-Defined in: [derived/AddColumnButton.ts:17](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/AddColumnButton.ts#L17)
+Defined in: [derived/AddColumnButton.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L17)
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: [derived/AddColumnButton.ts:17](https://github.com/jeyabbalas/data-t
 
 > **new AddColumnButton**(`options?`): `AddColumnButton`
 
-Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/AddColumnButton.ts#L23)
+Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L23)
 
 #### Parameters
 
@@ -32,7 +32,7 @@ Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [derived/AddColumnButton.ts:59](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/AddColumnButton.ts#L59)
+Defined in: [derived/AddColumnButton.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L59)
 
 #### Returns
 
@@ -44,7 +44,7 @@ Defined in: [derived/AddColumnButton.ts:59](https://github.com/jeyabbalas/data-t
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [derived/AddColumnButton.ts:55](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/AddColumnButton.ts#L55)
+Defined in: [derived/AddColumnButton.ts:55](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L55)
 
 #### Returns
 

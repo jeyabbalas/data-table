@@ -8,6 +8,7 @@
 
 ## Classes
 
+- [AnnotationError](classes/AnnotationError.md)
 - [ConfigurationError](classes/ConfigurationError.md)
 - [DataTableError](classes/DataTableError.md)
 - [DerivedColumnError](classes/DerivedColumnError.md)
@@ -26,7 +27,13 @@
 
 ## Interfaces
 
+- [AnnotationChangePayload](interfaces/AnnotationChangePayload.md)
+- [AnnotationFile](interfaces/AnnotationFile.md)
 - [BrowserSupport](interfaces/BrowserSupport.md)
+- [CellAnnotation](interfaces/CellAnnotation.md)
+- [ColumnAnnotation](interfaces/ColumnAnnotation.md)
+- [ColumnHeaderTooltipContent](interfaces/ColumnHeaderTooltipContent.md)
+- [ColumnHeaderTooltipItem](interfaces/ColumnHeaderTooltipItem.md)
 - [ColumnSchema](interfaces/ColumnSchema.md)
 - [CompletionContext](interfaces/CompletionContext.md)
 - [CreateDataTableOptions](interfaces/CreateDataTableOptions.md)
@@ -36,6 +43,7 @@
 - [ExpressionEditor](interfaces/ExpressionEditor.md)
 - [FilterPreset](interfaces/FilterPreset.md)
 - [FilterPresetCollection](interfaces/FilterPresetCollection.md)
+- [GetColumnValuesOptions](interfaces/GetColumnValuesOptions.md)
 - [LoadOptions](interfaces/LoadOptions.md)
 - [LoadResult](interfaces/LoadResult.md)
 - [NotSetFilter](interfaces/NotSetFilter.md)
@@ -45,7 +53,9 @@
 - [ProgressInfo](interfaces/ProgressInfo.md)
 - [RangeFilter](interfaces/RangeFilter.md)
 - [RawSQLFilter](interfaces/RawSQLFilter.md)
+- [RowAnnotation](interfaces/RowAnnotation.md)
 - [SetFilter](interfaces/SetFilter.md)
+- [SeverityFilter](interfaces/SeverityFilter.md)
 - [SortColumn](interfaces/SortColumn.md)
 - [Strings](interfaces/Strings.md)
 - [VectorColumnDef](interfaces/VectorColumnDef.md)
@@ -54,6 +64,10 @@
 
 ## Type Aliases
 
+- [Annotation](type-aliases/Annotation.md)
+- [AnnotationChangeHandler](type-aliases/AnnotationChangeHandler.md)
+- [AnnotationScope](type-aliases/AnnotationScope.md)
+- [AnnotationSeverity](type-aliases/AnnotationSeverity.md)
 - [ColorScheme](type-aliases/ColorScheme.md)
 - [DataFormat](type-aliases/DataFormat.md)
 - [DataType](type-aliases/DataType.md)
@@ -63,8 +77,10 @@
 - [ExpressionEditorFactory](type-aliases/ExpressionEditorFactory.md)
 - [Filter](type-aliases/Filter.md)
 - [FilterType](type-aliases/FilterType.md)
+- [NewAnnotation](type-aliases/NewAnnotation.md)
 - [ProgressCallback](type-aliases/ProgressCallback.md)
 - [ProgressStage](type-aliases/ProgressStage.md)
+- [RowId](type-aliases/RowId.md)
 - [SerializedFilter](type-aliases/SerializedFilter.md)
 - [SortDirection](type-aliases/SortDirection.md)
 - [TableErrorSource](type-aliases/TableErrorSource.md)
@@ -75,8 +91,10 @@
 
 ## Variables
 
+- [ANNOTATION\_FILE\_VERSION](variables/ANNOTATION_FILE_VERSION.md)
 - [defaultStrings](variables/defaultStrings.md)
 - [defaultVisualizationRegistry](variables/defaultVisualizationRegistry.md)
+- [ROWID\_COLUMN](variables/ROWID_COLUMN.md)
 - [VERSION](variables/VERSION.md)
 
 ## Functions

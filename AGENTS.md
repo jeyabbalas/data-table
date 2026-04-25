@@ -28,9 +28,12 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 - Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:129).
 - Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–63).
-- Derived columns — SQL-expression columns *and* precomputed vector columns (src/derived/types.ts).
+- Derived columns — SQL-expression columns *and* precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
+- Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`) (src/core/types.ts, src/core/Actions.ts).
+- Programmatic row / column / cell annotations on `table.annotations.*` — severity tiers, intersection lookup, JSON I/O, IndexedDB persistence, intersection popover (src/annotations/AnnotationStore.ts).
+- Programmatic column-header tooltips via `actions.setColumnHeaderTooltip` — XSS-safe structured popover for JSON-Schema-style metadata (src/core/Actions.ts, src/core/columnHeaderTooltip.ts).
 - Filter presets (save/load/export/import) — built-in UI + `FilterPresetManager` (src/index.ts:69–70).
-- Session persistence to IndexedDB (filters, sort, columns, derived columns, presets, undo/redo) (src/persistence/SessionStore.ts).
+- Session persistence to IndexedDB (filters, sort, columns, derived columns, presets, undo/redo, annotations, column-header tooltips) (src/persistence/SessionStore.ts).
 - Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts).
 - Histograms and value-counts in column headers; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
@@ -220,6 +223,92 @@ const tableB = await createDataTable({
 
 Distinct `tableName`s matter — `SessionStore` snapshots are keyed by table name.
 
+### (i) Read a column out as a typed JS array (`getColumnValues`)
+
+```ts
+// Float64Array for numeric, BigInt64Array for __rowid__ / BIGINT,
+// Int32Array for INTEGER, unknown[] for strings/dates/booleans.
+const fares = await table.actions.getColumnValues('fare_amount', {
+  scope: 'filtered',                                     // 'all' | 'filtered' | 'selected'
+  limit: 1000,
+});
+
+const ids = await table.actions.getColumnValues('__rowid__'); // BigInt64Array
+const idsAsNumbers = Array.from(ids, (v) => Number(v));        // safe up to 2^53 rows
+```
+
+`__rowid__` is reserved and synthesized at load — sources containing a column named `__rowid__` reject with `LoadError('RESERVED_COLUMN_NAME')`. The column is hidden in the grid by default; toggle with `actions.showColumn('__rowid__')`. Excluded from default exports unless the user ticks "Include system columns" in the export dialog.
+
+### (j) Replace a derived column with dependent re-validation
+
+```ts
+const result = await table.actions.replaceDerivedColumn('tip_pct', {
+  kind: 'expression',
+  name: 'tip_pct',
+  expression: 'tip_amount / NULLIF(fare_amount, 0) * 100',
+});
+if (!result.success) {
+  if (result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
+    console.warn('breaks:', result.error.details?.dependentsAffected);
+  } else {
+    console.warn(result.error);
+  }
+}
+```
+
+Use `replaceDerivedColumn` (no rename, structured error) when an end-user edits an existing expression. Use `updateDerivedColumn` for renames. The `derivedChange` event fires with `kind: 'replaced'` and `columnName: 'tip_pct'` on success.
+
+### (k) Annotations — CRUD, JSON round-trip, severity filter
+
+```ts
+table.annotations.add({
+  scope: 'cell', rowId: 0, column: 'age',
+  severity: 'error', message: 'value 200 exceeds maximum 150',
+  code: 'JSON_SCHEMA_MAXIMUM',
+});
+
+table.annotations.addMany([
+  { scope: 'row',    rowId: 5,                  severity: 'warning', message: '…' },
+  { scope: 'column', column: 'tip_amount',      severity: 'error',   message: '…' },
+]);
+
+// Intersection: row + column + cell at (rowId, column), sorted by severity.
+const here = table.annotations.getByCell(0, 'age');
+
+// Fires on every mutation including bulk operations and severity-filter flips.
+const off = table.annotations.on('change', ({ kind, ids }) => {
+  console.log(kind, ids.length);   // 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'
+});
+
+// Hide info-level annotations visually without touching the data.
+table.annotations.setSeverityFilter({ info: false });
+
+// JSON round-trip — preserves unknown top-level and per-annotation fields.
+const file = table.annotations.toJSON();
+table.annotations.loadJSON(file, 'replace');
+```
+
+Annotations live outside `TableState` (no undo/redo participation) but auto-persist into `SessionSnapshot.annotations` (v5+). For multi-table apps, the file's `tableName` is set automatically.
+
+### (l) Column-header tooltip — structured popover
+
+```ts
+// Rich structured content — title, description, label/value items including enum chips.
+table.actions.setColumnHeaderTooltip('total_amount', {
+  title: 'Total amount',
+  description: 'Final fare paid by the passenger.\nIncludes tip when paid by card.',
+  items: [
+    { label: 'Units',      value: 'USD' },
+    { label: 'Components', value: ['fare', 'tip', 'tolls', 'mta_tax'] },     // chips
+  ],
+});
+
+table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.');     // string shorthand
+table.actions.setColumnHeaderTooltip('total_amount', null);                   // clear
+```
+
+Every text field is rendered via `.textContent` — HTML strings are not parsed. Tooltips persist into `SessionSnapshot.columnHeaderTooltips` by default; pass `persistence: false` if the embedding app already owns its column catalogue (recommended pattern in `examples/12-column-header-tooltips/`).
+
 ---
 
 ## 4. Default config cheat-sheet
@@ -352,6 +441,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 **Guides (task-oriented walkthroughs)**
 - [`docs/guides/loading-data.md`](./docs/guides/loading-data.md), [`filters.md`](./docs/guides/filters.md), [`derived-columns.md`](./docs/guides/derived-columns.md), [`events.md`](./docs/guides/events.md), [`visualizations.md`](./docs/guides/visualizations.md), [`session-persistence.md`](./docs/guides/session-persistence.md)
+- [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md)
 - [`theming.md`](./docs/guides/theming.md), [`i18n.md`](./docs/guides/i18n.md), [`accessibility.md`](./docs/guides/accessibility.md)
 - [`multi-table.md`](./docs/guides/multi-table.md), [`csp-and-offline.md`](./docs/guides/csp-and-offline.md), [`filter-presets.md`](./docs/guides/filter-presets.md)
 
@@ -367,7 +457,10 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 - [`docs/performance.md`](./docs/performance.md)
 
 **Runnable code**
-- **Examples index** — [`examples/README.md`](./examples/README.md) (10 single-feature examples)
+- **Examples index** — [`examples/README.md`](./examples/README.md) (12 single-feature examples)
+  - [`10-column-export`](./examples/10-column-export/) — `getColumnValues` + synthetic `__rowid__`
+  - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter
+  - [`12-column-header-tooltips`](./examples/12-column-header-tooltips/) — structured tooltip popover, XSS-safe
 - **Demo app** (full consumer showcase) — [`demo/`](./demo/)
 
 **Source-of-truth (prefer these over the docs when they disagree)**

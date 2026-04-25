@@ -6,7 +6,7 @@
 
 # Class: KeyboardNavigator
 
-Defined in: [table/KeyboardNavigator.ts:39](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/KeyboardNavigator.ts#L39)
+Defined in: [table/KeyboardNavigator.ts:39](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L39)
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: [table/KeyboardNavigator.ts:39](https://github.com/jeyabbalas/data-t
 
 > **new KeyboardNavigator**(`opts`): `KeyboardNavigator`
 
-Defined in: [table/KeyboardNavigator.ts:50](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/KeyboardNavigator.ts#L50)
+Defined in: [table/KeyboardNavigator.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L50)
 
 #### Parameters
 
@@ -32,7 +32,7 @@ Defined in: [table/KeyboardNavigator.ts:50](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [table/KeyboardNavigator.ts:62](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/KeyboardNavigator.ts#L62)
+Defined in: [table/KeyboardNavigator.ts:62](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L62)
 
 #### Returns
 

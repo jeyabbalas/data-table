@@ -6,17 +6,41 @@
 
 # Interface: TableContainerOptions
 
-Defined in: [table/TableContainer.ts:61](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L61)
+Defined in: [table/TableContainer.ts:64](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L64)
 
 Options for configuring the TableContainer
 
 ## Properties
 
+### annotationPopover?
+
+> `optional` **annotationPopover?**: [`AnnotationPopover`](../classes/AnnotationPopover.md)
+
+Defined in: [table/TableContainer.ts:115](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L115)
+
+Shared popover singleton used by `TableBody` and `ColumnHeader` to
+display intersecting annotations on hover / focus. Owned by
+`createDataTable`; destroyed alongside the container.
+
+***
+
+### annotations?
+
+> `optional` **annotations?**: [`AnnotationStore`](../classes/AnnotationStore.md)
+
+Defined in: [table/TableContainer.ts:109](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L109)
+
+Shared annotation store. When provided, `TableBody` and every
+`ColumnHeader` subscribe to it so annotations render inline (tint +
+popover) without requiring a full `render()`.
+
+***
+
 ### classPrefix?
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/TableContainer.ts:67](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L67)
+Defined in: [table/TableContainer.ts:70](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L70)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +50,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colorScheme?**: `ContainerColorScheme`
 
-Defined in: [table/TableContainer.ts:98](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L98)
+Defined in: [table/TableContainer.ts:101](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L101)
 
 Initial light/dark theme. `'auto'` (default) follows the OS
 `prefers-color-scheme`; `'light'` / `'dark'` force the theme by writing
@@ -34,11 +58,23 @@ Initial light/dark theme. `'auto'` (default) follows the OS
 
 ***
 
+### columnHeaderTooltipPopover?
+
+> `optional` **columnHeaderTooltipPopover?**: [`ColumnHeaderTooltipPopover`](../classes/ColumnHeaderTooltipPopover.md)
+
+Defined in: [table/TableContainer.ts:121](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L121)
+
+Shared popover singleton used by `ColumnHeader` to display the app-set
+column-header tooltip on hover / focus of the column-name span. Owned
+by `createDataTable`; destroyed alongside the container.
+
+***
+
 ### editorFactory?
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../../index/type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [table/TableContainer.ts:79](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L79)
+Defined in: [table/TableContainer.ts:82](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L82)
 
 Custom expression editor factory for derived column panel/modal
 
@@ -48,7 +84,7 @@ Custom expression editor factory for derived column panel/modal
 
 > `optional` **headerHeight?**: `number`
 
-Defined in: [table/TableContainer.ts:65](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L65)
+Defined in: [table/TableContainer.ts:68](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L68)
 
 Fixed header height in pixels (default: 120 for visualizations)
 
@@ -58,7 +94,7 @@ Fixed header height in pixels (default: 120 for visualizations)
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [table/TableContainer.ts:73](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L73)
+Defined in: [table/TableContainer.ts:76](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L76)
 
 Unique per-instance identifier mixed into modal element IDs so two
 tables on the same page don't collide on `aria-labelledby` targets.
@@ -70,7 +106,7 @@ Auto-generated if omitted.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/TableContainer.ts:100](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L100)
+Defined in: [table/TableContainer.ts:103](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L103)
 
 Resolved i18n strings. Defaults to English.
 
@@ -80,7 +116,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onFilterRemove?**: (`column`) => `void`
 
-Defined in: [table/TableContainer.ts:77](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L77)
+Defined in: [table/TableContainer.ts:80](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L80)
 
 Called when a filter is removed via filter chip, for clearing visualization state
 
@@ -100,7 +136,7 @@ Called when a filter is removed via filter chip, for clearing visualization stat
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [table/TableContainer.ts:92](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L92)
+Defined in: [table/TableContainer.ts:95](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L95)
 
 Where to mount fixed-position modals (derived column editor, SQL filter
 modal). Defaults to `document.body`. Pass your app's modal root container
@@ -113,7 +149,7 @@ of at the top of the document.
 
 > `optional` **presetManager?**: [`FilterPresetManager`](../../index/classes/FilterPresetManager.md)
 
-Defined in: [table/TableContainer.ts:85](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L85)
+Defined in: [table/TableContainer.ts:88](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L88)
 
 FilterPresetManager instance — enables the Presets button and preset panel
 
@@ -123,7 +159,7 @@ FilterPresetManager instance — enables the Presets button and preset panel
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [table/TableContainer.ts:63](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L63)
+Defined in: [table/TableContainer.ts:66](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L66)
 
 Fixed row height in pixels (default: 32)
 
@@ -133,7 +169,7 @@ Fixed row height in pixels (default: 32)
 
 > `optional` **showAddColumnButton?**: `boolean`
 
-Defined in: [table/TableContainer.ts:81](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L81)
+Defined in: [table/TableContainer.ts:84](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L84)
 
 Show "+" add column button at right edge (default: true)
 
@@ -143,7 +179,7 @@ Show "+" add column button at right edge (default: true)
 
 > `optional` **showExpressionFilter?**: `boolean`
 
-Defined in: [table/TableContainer.ts:83](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L83)
+Defined in: [table/TableContainer.ts:86](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L86)
 
 Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true)
 
@@ -153,6 +189,6 @@ Show "Expression" filter button in filter bar for SQL WHERE conditions (default:
 
 > `optional` **showFilterBar?**: `boolean`
 
-Defined in: [table/TableContainer.ts:75](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/TableContainer.ts#L75)
+Defined in: [table/TableContainer.ts:78](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L78)
 
 Show filter bar between header and body (default: true)

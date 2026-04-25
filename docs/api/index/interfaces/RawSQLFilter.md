@@ -6,7 +6,7 @@
 
 # Interface: RawSQLFilter
 
-Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L55)
+Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L55)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L57)
+Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L57)
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table
 
 > **id**: `string`
 
-Defined in: [filters/FilterTypes.ts:60](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L60)
+Defined in: [filters/FilterTypes.ts:60](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L60)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [filters/FilterTypes.ts:60](https://github.com/jeyabbalas/data-table
 
 > `optional` **label?**: `string`
 
-Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L59)
+Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L59)
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table
 
 > **sql**: `string`
 
-Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L58)
+Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L58)
 
 ***
 
@@ -46,4 +46,4 @@ Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table
 
 > **type**: `"raw-sql"`
 
-Defined in: [filters/FilterTypes.ts:56](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L56)
+Defined in: [filters/FilterTypes.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L56)

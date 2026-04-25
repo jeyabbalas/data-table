@@ -6,7 +6,7 @@
 
 # Class: VirtualScroller
 
-Defined in: [table/VirtualScroller.ts:71](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L71)
+Defined in: [table/VirtualScroller.ts:71](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L71)
 
 ## Example
 
@@ -37,7 +37,7 @@ scroller.destroy();
 
 > **new VirtualScroller**(`container`, `options`): `VirtualScroller`
 
-Defined in: [table/VirtualScroller.ts:96](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L96)
+Defined in: [table/VirtualScroller.ts:96](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L96)
 
 #### Parameters
 
@@ -59,7 +59,7 @@ Defined in: [table/VirtualScroller.ts:96](https://github.com/jeyabbalas/data-tab
 
 > **destroy**(): `void`
 
-Defined in: [table/VirtualScroller.ts:467](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L467)
+Defined in: [table/VirtualScroller.ts:467](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L467)
 
 Destroy the virtual scroller and clean up resources
 
@@ -73,7 +73,7 @@ Destroy the virtual scroller and clean up resources
 
 > **getContentContainer**(): `HTMLElement`
 
-Defined in: [table/VirtualScroller.ts:422](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L422)
+Defined in: [table/VirtualScroller.ts:422](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L422)
 
 Get the content container element
 
@@ -89,7 +89,7 @@ This is the spacer element that sets the scrollable area size.
 
 > **getRowHeight**(): `number`
 
-Defined in: [table/VirtualScroller.ts:443](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L443)
+Defined in: [table/VirtualScroller.ts:443](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L443)
 
 Get the row height
 
@@ -103,7 +103,7 @@ Get the row height
 
 > **getScrollContainer**(): `HTMLElement`
 
-Defined in: [table/VirtualScroller.ts:413](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L413)
+Defined in: [table/VirtualScroller.ts:413](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L413)
 
 Get the scroll container element
 
@@ -120,7 +120,7 @@ In legacy mode, returns the internal scroll container.
 
 > **getScrollTop**(): `number`
 
-Defined in: [table/VirtualScroller.ts:429](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L429)
+Defined in: [table/VirtualScroller.ts:429](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L429)
 
 Get the current scroll top position
 
@@ -134,7 +134,7 @@ Get the current scroll top position
 
 > **getTotalRows**(): `number`
 
-Defined in: [table/VirtualScroller.ts:338](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L338)
+Defined in: [table/VirtualScroller.ts:338](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L338)
 
 Get the total number of rows
 
@@ -148,7 +148,7 @@ Get the total number of rows
 
 > **getViewportContainer**(): `HTMLElement`
 
-Defined in: [table/VirtualScroller.ts:403](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L403)
+Defined in: [table/VirtualScroller.ts:403](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L403)
 
 Get the viewport container element
 
@@ -164,7 +164,7 @@ This is where rows should be rendered.
 
 > **getViewportHeight**(): `number`
 
-Defined in: [table/VirtualScroller.ts:436](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L436)
+Defined in: [table/VirtualScroller.ts:436](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L436)
 
 Get the viewport height
 
@@ -178,7 +178,7 @@ Get the viewport height
 
 > **getVisibleRange**(): [`VisibleRange`](../interfaces/VisibleRange.md)
 
-Defined in: [table/VirtualScroller.ts:331](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L331)
+Defined in: [table/VirtualScroller.ts:331](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L331)
 
 Get the current visible range
 
@@ -192,7 +192,7 @@ Get the current visible range
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/VirtualScroller.ts:450](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L450)
+Defined in: [table/VirtualScroller.ts:450](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L450)
 
 Check if the scroller has been destroyed
 
@@ -206,7 +206,7 @@ Check if the scroller has been destroyed
 
 > **onScroll**(`callback`): () => `void`
 
-Defined in: [table/VirtualScroller.ts:385](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L385)
+Defined in: [table/VirtualScroller.ts:385](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L385)
 
 Subscribe to scroll events
 
@@ -230,7 +230,7 @@ Unsubscribe function
 
 > **refresh**(): `void`
 
-Defined in: [table/VirtualScroller.ts:459](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L459)
+Defined in: [table/VirtualScroller.ts:459](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L459)
 
 Force a recalculation of the visible range
 
@@ -246,7 +246,7 @@ Useful when the viewport size changes.
 
 > **scrollToRow**(`index`, `align?`): `void`
 
-Defined in: [table/VirtualScroller.ts:348](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L348)
+Defined in: [table/VirtualScroller.ts:348](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L348)
 
 Scroll to a specific row
 
@@ -274,7 +274,7 @@ Where to position the row in the viewport (default: 'start')
 
 > **setContentWidth**(`width`): `void`
 
-Defined in: [table/VirtualScroller.ts:320](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L320)
+Defined in: [table/VirtualScroller.ts:320](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L320)
 
 Set the content width for horizontal scrolling
 
@@ -299,7 +299,7 @@ Total width in pixels
 
 > **setTotalRows**(`count`): `void`
 
-Defined in: [table/VirtualScroller.ts:293](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/VirtualScroller.ts#L293)
+Defined in: [table/VirtualScroller.ts:293](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/VirtualScroller.ts#L293)
 
 Set the total number of rows
 

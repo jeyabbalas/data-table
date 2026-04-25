@@ -8,6 +8,6 @@
 
 > **VectorDataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"`
 
-Defined in: [derived/types.ts:14](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/derived/types.ts#L14)
+Defined in: [derived/types.ts:14](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/types.ts#L14)
 
 Supported types for pre-computed vector data (matches DataType)

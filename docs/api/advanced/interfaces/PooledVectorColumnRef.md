@@ -6,7 +6,7 @@
 
 # Interface: PooledVectorColumnRef
 
-Defined in: [persistence/types.ts:70](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L70)
+Defined in: [persistence/types.ts:71](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L71)
 
 A vector column stored by pool reference instead of inline values.
 
@@ -16,7 +16,7 @@ A vector column stored by pool reference instead of inline values.
 
 > **\_poolRef**: `string`
 
-Defined in: [persistence/types.ts:75](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L75)
+Defined in: [persistence/types.ts:76](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L76)
 
 Key into SessionSnapshot.vectorValuePool
 
@@ -26,7 +26,7 @@ Key into SessionSnapshot.vectorValuePool
 
 > **kind**: `"vector"`
 
-Defined in: [persistence/types.ts:71](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L71)
+Defined in: [persistence/types.ts:72](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L72)
 
 ***
 
@@ -34,7 +34,7 @@ Defined in: [persistence/types.ts:71](https://github.com/jeyabbalas/data-table/b
 
 > **name**: `string`
 
-Defined in: [persistence/types.ts:72](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L72)
+Defined in: [persistence/types.ts:73](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L73)
 
 ***
 
@@ -42,4 +42,4 @@ Defined in: [persistence/types.ts:72](https://github.com/jeyabbalas/data-table/b
 
 > **vectorType**: [`VectorDataType`](../../index/type-aliases/VectorDataType.md)
 
-Defined in: [persistence/types.ts:73](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L73)
+Defined in: [persistence/types.ts:74](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L74)

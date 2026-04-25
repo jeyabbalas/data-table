@@ -6,7 +6,7 @@
 
 # Interface: RangeFilter
 
-Defined in: [filters/FilterTypes.ts:8](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L8)
+Defined in: [filters/FilterTypes.ts:8](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L8)
 
 Discriminated union types for filters
 
@@ -19,7 +19,7 @@ per-type interfaces so consumers get type-safe property access.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:10](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L10)
+Defined in: [filters/FilterTypes.ts:10](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L10)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [filters/FilterTypes.ts:10](https://github.com/jeyabbalas/data-table
 
 > **max**: `string` \| `number` \| `Date`
 
-Defined in: [filters/FilterTypes.ts:12](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L12)
+Defined in: [filters/FilterTypes.ts:12](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L12)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [filters/FilterTypes.ts:12](https://github.com/jeyabbalas/data-table
 
 > `optional` **maxInclusive?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:14](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L14)
+Defined in: [filters/FilterTypes.ts:14](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L14)
 
 When true, upper bound uses <= instead of <. Used for last histogram bin.
 
@@ -45,7 +45,7 @@ When true, upper bound uses <= instead of <. Used for last histogram bin.
 
 > **min**: `string` \| `number` \| `Date`
 
-Defined in: [filters/FilterTypes.ts:11](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L11)
+Defined in: [filters/FilterTypes.ts:11](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L11)
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: [filters/FilterTypes.ts:11](https://github.com/jeyabbalas/data-table
 
 > `optional` **minExclusive?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:16](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L16)
+Defined in: [filters/FilterTypes.ts:16](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L16)
 
 When true, lower bound uses > instead of >=. Used for strict greater-than filters.
 
@@ -63,7 +63,7 @@ When true, lower bound uses > instead of >=. Used for strict greater-than filter
 
 > **type**: `"range"`
 
-Defined in: [filters/FilterTypes.ts:9](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L9)
+Defined in: [filters/FilterTypes.ts:9](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L9)
 
 ***
 
@@ -71,6 +71,6 @@ Defined in: [filters/FilterTypes.ts:9](https://github.com/jeyabbalas/data-table/
 
 > `optional` **valueType?**: `"interval"`
 
-Defined in: [filters/FilterTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L18)
+Defined in: [filters/FilterTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L18)
 
 Value type hint for SQL generation. When 'interval', values are prefixed with INTERVAL keyword.

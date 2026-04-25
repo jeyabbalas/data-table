@@ -14,10 +14,13 @@ Every row links back to the source of truth (`src/<file>:<line>`). When the sour
 - [`DataTable` interface](#datatable-interface)
 - [`state` signals (`TableState`)](#state-signals)
 - [`actions` methods (`StateActions`)](#actions-methods)
+- [`table.annotations` namespace](#tableannotations-namespace)
 - [Event catalog](#event-catalog)
 - [Error catalog](#error-catalog)
 - [Filter types](#filter-types)
 - [Derived columns](#derived-columns)
+- [Column-header tooltip content](#column-header-tooltip-content)
+- [Annotation JSON format](#annotation-json-format)
 - [Serialization helpers](#serialization-helpers)
 - [Browser support probe](#browser-support-probe)
 - [i18n (`Strings`)](#i18n-strings)
@@ -71,7 +74,8 @@ All extend `Error` and carry a `code: string` and optional `details: Record<stri
 | `QueryError` | DuckDB query failed at runtime or was aborted. |
 | `LoadError` | CSV/JSON/Parquet parse or fetch failure. |
 | `SQLValidationError` | Raw-SQL filter or derived-column expression had a syntax/validation error. |
-| `DerivedColumnError` | Derived-column lifecycle error (`EXPRESSION_INVALID`, `CIRCULAR_DEPENDENCY`, `NOT_FOUND`). |
+| `DerivedColumnError` | Derived-column lifecycle error (`EXPRESSION_INVALID`, `CIRCULAR_DEPENDENCY`, `DEPENDENTS_INCOMPATIBLE`, `NOT_FOUND`, `DUPLICATE_NAME`, `VECTOR_LENGTH_MISMATCH`). |
+| `AnnotationError` | Annotation lifecycle / JSON load error (`DUPLICATE_ID`, `NOT_FOUND`, `INVALID_SHAPE`, `VERSION_UNSUPPORTED`). |
 | `PersistenceError` | IndexedDB write failure. |
 | `ExportError` | Export pipeline failure (missing table, canvas unavailable, clipboard blocked). |
 | `ConfigurationError` | Invalid option, bad preset, internal invariant. |
@@ -82,11 +86,16 @@ All extend `Error` and carry a `code: string` and optional `details: Record<stri
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `DataType` | type | `'integer' \| 'float' \| 'decimal' \| 'string' \| 'boolean' \| 'uuid' \| 'date' \| 'timestamp' \| 'time' \| 'interval'`. |
-| `ColumnSchema` | interface | `{ name, type, nullable, originalType }`. |
+| `ColumnSchema` | interface | `{ name, type, nullable, originalType, system?: boolean }`. `system: true` marks library-injected columns (notably `__rowid__`). |
 | `Filter` | type | Discriminated union of 7 filter shapes. |
 | `FilterType` | type | `Filter['type']`. |
 | `SortColumn` | interface | `{ column: string; direction: SortDirection }`. |
 | `SortDirection` | type | `'asc' \| 'desc'`. |
+| `RowId` | type | Alias for `number`. The annotation API and `getColumnValues` consume / return this. |
+| `ROWID_COLUMN` | const string | The literal `'__rowid__'`. The reserved system-column name; sources containing it reject with `LoadError('RESERVED_COLUMN_NAME')`. |
+| `GetColumnValuesOptions` | type | Options for `actions.getColumnValues` — `{ scope?: 'all' \| 'filtered' \| 'selected'; limit?: number; offset?: number; signal?: AbortSignal }`. |
+| `ColumnHeaderTooltipContent` | interface | Structured popover content — `{ title?, description?, items? }`. See [Column-header tooltip content](#column-header-tooltip-content). |
+| `ColumnHeaderTooltipItem` | interface | `{ label: string; value: string \| string[] }`. `string[]` renders as wrapping enum chips. |
 
 ### Filter shapes
 
@@ -106,6 +115,26 @@ See [Filter types](#filter-types) for full fields. Union members: `RangeFilter`,
 | `FilterPresetManager` | class | Save/load/export/import named filter sets. |
 | `FilterPreset` | type | `{ id, name, description?, filters, sortColumns? }`. |
 | `FilterPresetCollection` | type | Exportable array of presets with version metadata. |
+
+### Annotations
+
+Types for the [`table.annotations`](#tableannotations-namespace) namespace and the JSON I/O round-trip. Source: `src/annotations/types.ts`.
+
+| Symbol | Kind | Purpose |
+|---|---|---|
+| `Annotation` | type | Discriminated union: `RowAnnotation \| ColumnAnnotation \| CellAnnotation`. |
+| `AnnotationScope` | type | `'row' \| 'column' \| 'cell'`. |
+| `AnnotationSeverity` | type | `'error' \| 'warning' \| 'info'`. |
+| `RowAnnotation` | interface | `AnnotationBase & { scope: 'row'; rowId: number }`. |
+| `ColumnAnnotation` | interface | `AnnotationBase & { scope: 'column'; column: string }`. |
+| `CellAnnotation` | interface | `AnnotationBase & { scope: 'cell'; rowId: number; column: string }`. |
+| `NewAnnotation` | type | Input for `add` / `addMany` — `Annotation` with optional `id` (the library generates one if missing). |
+| `AnnotationFile` | interface | JSON payload — `{ version, tableName?, createdAt?, updatedAt?, annotations[], …unknownFields }`. See [Annotation JSON format](#annotation-json-format). |
+| `AnnotationChangePayload` | type | `{ kind: 'added' \| 'updated' \| 'removed' \| 'cleared' \| 'filterChanged'; ids: string[] }`. |
+| `AnnotationChangeHandler` | type | `(p: AnnotationChangePayload) => void`. |
+| `SeverityFilter` | interface | `{ error: boolean; warning: boolean; info: boolean }` — view-layer flags read by the rendering layer; flipping them does not modify the underlying data. |
+| `ANNOTATION_FILE_VERSION` | const number | Currently `1`. Files with `version > ANNOTATION_FILE_VERSION` reject on load. |
+| `AnnotationError` | class | `DataTableError` subclass — codes `DUPLICATE_ID` / `NOT_FOUND` / `INVALID_SHAPE` / `VERSION_UNSUPPORTED`. |
 
 ### Data layer
 
@@ -223,6 +252,12 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `HiddenColumnsGutterOptions` | interface | Gutter ctor options. |
 | `KeyboardNavigator` | class | Roving-tabindex / arrow-key navigation for the grid. |
 | `KeyboardNavigatorOptions` | interface | Navigator ctor options. |
+| `AnnotationStore` | class | Programmatic annotation CRUD store. Exposed at Tier-1 via `table.annotations`; the class itself lives on `/advanced` for consumers that want to construct one independently. |
+| `AnnotationStoreOptions` | interface | Ctor options (`tableName`, `idGenerator`, `now`). |
+| `AnnotationPopover` | class | Single shared popover instance reused across hover / focus targets. Constructed by `createDataTable`; see [`docs/guides/annotations.md`](./guides/annotations.md). |
+| `AnnotationPopoverOptions` | interface | Popover ctor options. |
+| `ColumnHeaderTooltipPopover` | class | Single shared popover for `actions.setColumnHeaderTooltip`. Anchored on the column-name span (distinct DOM node from `AnnotationPopover`). |
+| `ColumnHeaderTooltipPopoverOptions` | interface | Popover ctor options. |
 
 ### Filter UI components
 
@@ -407,6 +442,7 @@ Returned by `createDataTable()`. Source: `src/DataTable.ts:228-312`.
 |---|---|---|
 | `state` | `TableState` | Reactive signals. See [state signals](#state-signals). |
 | `actions` | `StateActions` | Command/mutation layer. See [actions methods](#actions-methods). |
+| `annotations` | `AnnotationStore` | Programmatic row / column / cell annotation CRUD. See [`table.annotations` namespace](#tableannotations-namespace). The class itself lives on `/advanced`; the instance is created by `createDataTable` and torn down on `destroy()`. |
 | `bridge` | `WorkerBridge` | DuckDB worker bridge for custom SQL. |
 | `container` | `TableContainer` | UI container. Rarely needed directly. |
 | `instanceId` | `string` | Unique per-instance identifier (e.g., `'t1-a3f9'`). |
@@ -448,10 +484,13 @@ Source: `src/core/State.ts`. Access via `table.state.<name>.get()` / `.subscribe
 | `columnWidths` | `Signal<Map<string, number>>` | Custom widths (pixels). |
 | `pinnedColumns` | `Signal<string[]>` | Left-pinned column names. |
 | `hiddenColumnInfo` | `Signal<Map<string, HiddenColumnInfo>>` | Neighbor metadata for hidden columns. |
+| `columnHeaderTooltips` | `Signal<Map<string, ColumnHeaderTooltipContent>>` | Per-column structured popover content set via `actions.setColumnHeaderTooltip`. Empty map by default; persisted into `SessionSnapshot.columnHeaderTooltips`. |
 | `selectedRows` | `Signal<Set<number>>` | Selected row indices. |
 | `hoveredRow` | `Signal<number \| null>` | Hovered row index. |
 | `hoveredColumn` | `Signal<string \| null>` | Hovered column name. |
 | `focusedCell` | `Signal<{ row: number; column: string } \| null>` | Focused cell (keyboard nav). |
+
+The reserved synthetic [`__rowid__`](./glossary.md#__rowid__-synthetic-row-id) column appears in `schema` and `columnOrder` but is excluded from the default `visibleColumns`. The `ColumnSchema` entry carries `system: true`. Toggle visibility with `actions.showColumn('__rowid__')` / `actions.hideColumn('__rowid__')`.
 
 ---
 
@@ -547,10 +586,68 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 | Method | Signature | Notes |
 |---|---|---|
 | `addDerivedColumn` | `(def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>` | Expression or vector. |
-| `updateDerivedColumn` | `(oldName: string, def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>` | |
-| `removeDerivedColumn` | `(name: string) => Promise<void>` | |
+| `updateDerivedColumn` | `(oldName: string, def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>` | Handles renames; if `def.name !== oldName` the column is renamed and references are propagated. |
+| `replaceDerivedColumn` | `(name: string, newDef: DerivedColumnDef) => Promise<{ success: true; info: DerivedColumnInfo } \| { success: false; error: DerivedColumnError }>` | Same-name replacement with dependent re-validation. Pre-flight order: existence → expression validation → type detection → dependent re-validation → cycle check → commit. Errors: `NOT_FOUND`, `EXPRESSION_INVALID`, `DEPENDENTS_INCOMPATIBLE` (`details.dependentsAffected: string[]`, `details.reasons: Record<string,string>`), `CIRCULAR_DEPENDENCY`, `VECTOR_LENGTH_MISMATCH`. Fires `derivedChange` with `kind: 'replaced'` on success. See [Derived columns guide → Replacing](./guides/derived-columns.md#replacing-a-derived-column-same-name--dependent-re-validation). |
+| `removeDerivedColumn` | `(name: string) => Promise<void>` | Fires `derivedChange` with `kind: 'removed'` and `columnName` set. |
 | `validateExpression` | `(expression: string) => Promise<{ valid: boolean; type?: DataType; originalType?: string; error?: string }>` | Validate without committing. |
 | `getCompletionContext` | `() => CompletionContext` | For autocompletion in custom editors. |
+
+### Column values (read-only export)
+
+```ts
+async getColumnValues(
+  name: string,
+  opts?: GetColumnValuesOptions,
+): Promise<unknown[] | Int32Array | Float64Array | BigInt64Array>;
+
+interface GetColumnValuesOptions {
+  scope?: 'all' | 'filtered' | 'selected';   // default 'all'
+  limit?: number;                             // default no limit
+  offset?: number;                            // default 0
+  signal?: AbortSignal;
+}
+```
+
+Returns the named column's values in `__rowid__` order (or selection insertion order when `scope: 'selected'`). The return type narrows by data type:
+
+| `DataType` | Returned as |
+|---|---|
+| `'integer'` | `Int32Array` |
+| `'float'` / `'decimal'` | `Float64Array` |
+| `'integer'` BIGINT (incl. `__rowid__`) | `BigInt64Array` |
+| `'string'` / `'date'` / `'timestamp'` / `'time'` / `'boolean'` / `'uuid'` / `'interval'` | `unknown[]` |
+
+Notes:
+
+- Empty selection + `scope: 'selected'` returns `[]` (no throw).
+- `__rowid__` is queryable by name even though it's hidden in the grid by default.
+- Pagination is enforced by SQL (`LIMIT` / `OFFSET`) — not slicing afterwards.
+
+Errors (all `QueryError`):
+
+| Code | When |
+|---|---|
+| `NO_TABLE` | Called before data is loaded. |
+| `COLUMN_NOT_FOUND` | `name` is not in `state.schema`. |
+| `INVALID_PAGINATION` | `limit` or `offset` is negative or non-integer. |
+
+See [`examples/10-column-export/`](../examples/10-column-export/) for a runnable demo, including `BigInt64Array` ergonomics for `__rowid__`.
+
+### Column-header tooltips
+
+```ts
+setColumnHeaderTooltip(
+  columnName: string,
+  content: string | ColumnHeaderTooltipContent | null,
+): void;
+getColumnHeaderTooltip(columnName: string): ColumnHeaderTooltipContent | null;
+```
+
+Attach (or update) a structured popover anchored on the column-name span. A plain `string` is shorthand for `{ description: string }`. `null` (or any input that normalises to empty) clears the override.
+
+Every text field is rendered via `.textContent` — HTML strings, DOM nodes, and render functions are not accepted. Malformed `items` entries are dropped silently during normalization. Persisted into `SessionSnapshot.columnHeaderTooltips` by default; pass `persistence: false` if the embedding app already owns its column catalogue (recommended pattern).
+
+Type definitions inlined under [Column-header tooltip content](#column-header-tooltip-content); see also the [Column-header tooltips guide](./guides/column-header-tooltips.md).
 
 ### Selection
 
@@ -571,6 +668,56 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 
 ---
 
+## `table.annotations` namespace
+
+Access via `table.annotations`. Source: `src/annotations/AnnotationStore.ts`.
+
+Annotations are app-authored overlay metadata (typically validation results from a JSON Schema or quality-control rules). They live outside `TableState` and do **not** participate in undo/redo. Auto-persisted into `SessionSnapshot.annotations`. See the [annotations guide](./guides/annotations.md) for narrative and the [Annotation JSON format](#annotation-json-format) for the on-disk shape.
+
+### CRUD
+
+| Method | Signature | Notes |
+|---|---|---|
+| `add` | `(ann: NewAnnotation) => Annotation` | Stores one annotation. Generates an `id` if missing (`ann_` + 26-char Crockford base32). Throws `AnnotationError('DUPLICATE_ID')` if a caller-supplied `id` already exists. Sets `createdAt` if missing. |
+| `addMany` | `(anns: NewAnnotation[]) => Annotation[]` | Atomic batch — if any entry fails, none are stored. Fires a single `change` event. |
+| `update` | `(id: string, patch: Partial<AnnotationBase>) => Annotation` | Patch the message / severity / code / source / metadata. `scope`, `rowId`, and `column` are immutable — passing them in `patch` is a no-op. Throws `AnnotationError('NOT_FOUND')` if the id is unknown. Updates `updatedAt`. |
+| `remove` | `(id: string) => boolean` | Returns `true` if the annotation existed and was removed. |
+| `removeMany` | `(ids: string[]) => number` | Returns the number actually removed. |
+| `clear` | `(scope?: AnnotationScope \| 'all') => number` | Defaults to `'all'`. Returns the number removed. Single `cleared` event. |
+| `count` | `() => number` | Total annotations in the store. |
+
+### Lookups
+
+| Method | Signature | Notes |
+|---|---|---|
+| `get` | `(id: string) => Annotation \| null` | Single fetch by id. |
+| `getAll` | `() => Annotation[]` | Insertion order. |
+| `getByRow` | `(rowId: number) => Annotation[]` | Row-scope only — does not include cell-scope annotations on the same row. |
+| `getByColumn` | `(column: string) => Annotation[]` | Column-scope only. |
+| `getByCell` | `(rowId: number, column: string) => Annotation[]` | Intersection — returns the union of row + column + cell annotations applicable at `(rowId, column)`. Sorted by severity (`error` > `warning` > `info`), then `createdAt` ascending, then insertion order. This is the list rendered in the popover when a user hovers / focuses an annotated cell. |
+
+### Severity filter (view layer)
+
+| Method | Signature | Notes |
+|---|---|---|
+| `setSeverityFilter` | `(patch: Partial<SeverityFilter>) => void` | Toggle which severities the rendering layer paints. The store's data is unchanged — `getAll` / `getByRow` / `getByColumn` / `getByCell` always return the full set. Fires a `change` event with `kind: 'filterChanged'` and empty `ids`. |
+| `getSeverityFilter` | `() => SeverityFilter` | Returns the current `{ error, warning, info }` flags (default all `true`). |
+
+### JSON I/O
+
+| Method | Signature | Notes |
+|---|---|---|
+| `toJSON` | `() => AnnotationFile` | Snapshot of the store. Sets `version: ANNOTATION_FILE_VERSION`, `tableName` (from the owning table), `createdAt` / `updatedAt`. Preserves unknown top-level and per-annotation fields verbatim. |
+| `loadJSON` | `(file: AnnotationFile, mode?: 'replace' \| 'merge') => { added: number; skipped: number }` | Default mode is `'replace'`. `'merge'` adds without clearing — duplicate ids reject with `AnnotationError('DUPLICATE_ID')`. Files with `version > ANNOTATION_FILE_VERSION` reject with `AnnotationError('VERSION_UNSUPPORTED')`. Malformed entries reject with `AnnotationError('INVALID_SHAPE')`. |
+
+### Events
+
+| Method | Signature | Notes |
+|---|---|---|
+| `on` | `(event: 'change', handler: AnnotationChangeHandler) => () => void` | Returns an unsubscribe function. Payload: `{ kind: 'added' \| 'updated' \| 'removed' \| 'cleared' \| 'filterChanged'; ids: string[] }`. `'filterChanged'` fires with empty `ids` when `setSeverityFilter` flips a flag. Bulk operations fire one event with the full id list. |
+
+---
+
 ## Event catalog
 
 Source: `src/core/TableEvents.ts`. Subscribe via `table.on(name, handler)`.
@@ -588,9 +735,11 @@ Source: `src/core/TableEvents.ts`. Subscribe via `table.on(name, handler)`.
 | `sortChange` | `{ sortColumns }` | Sort changed. |
 | `selectionChange` | `{ selectedRows: Set<number> }` | Row selection changed. |
 | `columnChange` | `{ visibleColumns, pinnedColumns, columnOrder }` | Visibility, order, pin, or width change. |
-| `derivedChange` | `{ derivedColumns }` | Derived-column list added / updated / removed. |
+| `derivedChange` | `{ derivedColumns: DerivedColumnDef[]; kind: 'added' \| 'removed' \| 'replaced' \| 'updated'; columnName?: string }` | Derived-column list changed. `kind: 'replaced'` fires for [`replaceDerivedColumn`](#derived-columns); `'updated'` for `updateDerivedColumn`; `'added'` / `'removed'` for the matching APIs. `columnName` names the affected column when applicable. |
 | `undoChange` | `{ canUndo, canRedo }` | Undo-stack state changed. |
 | `destroy` | `Record<string, never>` | Library teardown, before signals are disposed. |
+
+> Annotation mutations don't flow through this bus — subscribe via [`table.annotations.on('change', …)`](#tableannotations-namespace) instead.
 
 ---
 
@@ -624,9 +773,17 @@ table.on('error', ({ error, source }) => {
 | `PARSE_FAILED` | `LoadError` | `src/DataTable.ts` | Generic parse fallback. |
 | `EXPRESSION_INVALID` | `DerivedColumnError` | `src/derived/DerivedColumnManager.ts` | Derived-column expression rejected by DuckDB. |
 | `CIRCULAR_DEPENDENCY` | `DerivedColumnError` | `src/derived/DerivedColumnManager.ts` | Derived column references itself (directly or transitively). |
-| `NOT_FOUND` | `DerivedColumnError` | `src/derived/DerivedColumnManager.ts`, `src/core/Actions.ts` | Derived column missing on update/remove. |
+| `DEPENDENTS_INCOMPATIBLE` | `DerivedColumnError` | `src/derived/DerivedColumnManager.ts`, `src/core/Actions.ts` | `replaceDerivedColumn` would break one or more dependent columns. `details.dependentsAffected: string[]`, `details.reasons: Record<string, string>`. |
+| `NOT_FOUND` | `DerivedColumnError` | `src/derived/DerivedColumnManager.ts`, `src/core/Actions.ts` | Derived column missing on update / replace / remove. |
 | `DUPLICATE_NAME` | `DerivedColumnError` | `src/core/Actions.ts` | A column with that name already exists. |
 | `VECTOR_LENGTH_MISMATCH` | `DerivedColumnError` | `src/core/Actions.ts` | Vector length doesn't match row count. |
+| `RESERVED_COLUMN_NAME` | `LoadError` | `src/worker/loaders/{csv,json,parquet}.ts` | Source contains a column named `__rowid__`, which is reserved for the synthetic row id. |
+| `COLUMN_NOT_FOUND` | `QueryError` | `src/core/Actions.ts` (`getColumnValues`) | Column does not exist on the loaded schema. |
+| `INVALID_PAGINATION` | `QueryError` | `src/core/Actions.ts` (`getColumnValues`) | `limit` or `offset` is negative or non-integer. |
+| `NO_TABLE` | `QueryError` | `src/core/Actions.ts` (`getColumnValues`) | Action invoked before data was loaded. |
+| `DUPLICATE_ID` | `AnnotationError` | `src/annotations/AnnotationStore.ts` | Annotation `id` already exists in the store (during `add`, `addMany`, or `loadJSON('merge')`). |
+| `INVALID_SHAPE` | `AnnotationError` | `src/annotations/AnnotationStore.ts` | `loadJSON` rejected a malformed entry — wrong scope, missing required field, wrong field type. |
+| `VERSION_UNSUPPORTED` | `AnnotationError` | `src/annotations/AnnotationStore.ts` | `loadJSON` was given a file whose `version > ANNOTATION_FILE_VERSION`. |
 | `NO_TABLE_LOADED` | `ExportError` | `src/export/{CSV,JSON,Parquet,Clipboard}Export.ts` | Export called before data loaded. |
 | `CANVAS_UNAVAILABLE` | `ExportError` | `src/visualizations/BaseVisualization.ts` | Canvas rendering unavailable (headless browsers). |
 | `CLIPBOARD_UNAVAILABLE` | `ExportError` | `src/export/Clipboard.ts` | Clipboard API blocked (non-secure context, permissions). |
@@ -789,6 +946,136 @@ await table.actions.addDerivedColumn({
 ```
 
 Vector columns materialize a helper table in DuckDB; the main table becomes a VIEW so existing queries transparently see the new column.
+
+---
+
+## Column-header tooltip content
+
+Source: `src/core/types.ts`, `src/core/columnHeaderTooltip.ts`. Set / clear via the [`Column-header tooltips` action](#column-header-tooltips); see also the [Column-header tooltips guide](./guides/column-header-tooltips.md).
+
+```ts
+interface ColumnHeaderTooltipContent {
+  /** Optional bold heading. */
+  title?: string;
+  /** Optional free-text body. Whitespace is preserved (`white-space: pre-wrap`). */
+  description?: string;
+  /** Optional label/value rows. */
+  items?: ColumnHeaderTooltipItem[];
+}
+
+interface ColumnHeaderTooltipItem {
+  label: string;
+  /** `string` renders inline; `string[]` renders as wrapping enum chips. */
+  value: string | string[];
+}
+```
+
+### Input shorthand
+
+| Input | Effect |
+|---|---|
+| `string` | Normalised to `{ description: <input> }`. |
+| `ColumnHeaderTooltipContent` | Validated field-by-field; malformed `items` are dropped silently. |
+| `null` | Removes the override. |
+| Empty after normalisation (e.g. `{}`, `''`) | Removes the override. |
+
+### XSS safety
+
+Every text field — `title`, `description`, `items[].label`, and `items[].value` (string or each chip in `string[]`) — is rendered via `.textContent`. The setter does not accept HTML strings, DOM nodes, or render functions. This eliminates the XSS surface by construction. See [`examples/12-column-header-tooltips/`](../examples/12-column-header-tooltips/) for a live demonstration including an "inject HTML" button that renders the literal string instead of parsing it.
+
+### Persistence
+
+Tooltip overrides are persisted into `SessionSnapshot.columnHeaderTooltips` and restored on subsequent loads. Legacy string entries from in-flight sessions are normalised to `{ description }` on restore. To opt out (recommended when the embedding app already owns its column registry), pass `persistence: false` to `createDataTable` and re-apply tooltips on every mount.
+
+---
+
+## Annotation JSON format
+
+Round-tripped via [`table.annotations.toJSON()`](#tableannotations-namespace) / `loadJSON()`. Source: `src/annotations/types.ts`. Current `ANNOTATION_FILE_VERSION` is `1`.
+
+### Top-level
+
+```ts
+interface AnnotationFile {
+  version: 1;                              // required; loadJSON refuses files with version > current
+  tableName?: string;                      // set by toJSON from the owning table
+  createdAt?: string;                      // ISO 8601, set by toJSON
+  updatedAt?: string;                      // ISO 8601, updated on every change
+  annotations: Annotation[];               // required
+  [unknownField: string]: unknown;         // unknown top-level fields are preserved verbatim
+}
+```
+
+### Per-annotation
+
+Discriminated by `scope`. All shapes share the base fields:
+
+```ts
+interface AnnotationBase {
+  id: string;                              // ann_ + 26-char Crockford base32 (auto-generated if missing)
+  severity: 'error' | 'warning' | 'info';
+  message: string;                         // plain text (no HTML)
+  code?: string;                           // app-defined error code (e.g. 'JSON_SCHEMA_MAXIMUM')
+  source?: string;                         // app-defined origin tag
+  metadata?: Record<string, unknown>;      // app-defined extras; round-tripped as-is
+  createdAt?: string;                      // ISO 8601
+  updatedAt?: string;                      // ISO 8601
+  [unknownField: string]: unknown;         // per-annotation unknown fields preserved verbatim
+}
+
+type RowAnnotation    = AnnotationBase & { scope: 'row';    rowId: number };
+type ColumnAnnotation = AnnotationBase & { scope: 'column'; column: string };
+type CellAnnotation   = AnnotationBase & { scope: 'cell';   rowId: number; column: string };
+
+type Annotation = RowAnnotation | ColumnAnnotation | CellAnnotation;
+```
+
+### Sample file
+
+```json
+{
+  "version": 1,
+  "tableName": "source",
+  "createdAt": "2026-04-23T12:34:56.789Z",
+  "updatedAt": "2026-04-23T12:35:10.123Z",
+  "annotations": [
+    {
+      "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWX",
+      "scope": "cell",
+      "rowId": 42,
+      "column": "age",
+      "severity": "error",
+      "message": "Value 200 exceeds maximum allowed 150",
+      "code": "JSON_SCHEMA_MAXIMUM",
+      "source": "harmonization-validator",
+      "metadata": { "keyword": "maximum", "expected": 150, "actual": 200 },
+      "createdAt": "2026-04-23T12:34:56.789Z"
+    },
+    {
+      "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWY",
+      "scope": "row",
+      "rowId": 10,
+      "severity": "warning",
+      "message": "Row violates dependency on (lastName, firstName, dob)"
+    },
+    {
+      "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWZ",
+      "scope": "column",
+      "column": "id",
+      "severity": "error",
+      "message": "Column violates uniqueness constraint"
+    }
+  ]
+}
+```
+
+### Round-trip rules
+
+- Unknown top-level and per-annotation fields are preserved verbatim across `toJSON` → `loadJSON`. Apps can store auxiliary data (tracking ids, reviewer notes) without negotiating schema changes with the library.
+- `id` round-trips. If a caller supplies an `id` to `add`, it is preserved; if not, the library generates `ann_` + 26-char Crockford base32.
+- The library writes `tableName` and `updatedAt` on every `toJSON` call; consumers may overwrite both before downloading the file.
+
+For semantics of the in-memory store and the rendering layer, see the [annotations guide](./guides/annotations.md).
 
 ---
 

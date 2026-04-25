@@ -6,7 +6,7 @@
 
 # Class: DerivedColumnError
 
-Defined in: [core/errors.ts:174](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L174)
+Defined in: [core/errors.ts:175](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L175)
 
 Derived-column expression / vector / lifecycle error.
 
@@ -31,7 +31,7 @@ catch (err) {
 
 > **new DerivedColumnError**(`message`, `options?`): `DerivedColumnError`
 
-Defined in: [core/errors.ts:175](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L175)
+Defined in: [core/errors.ts:176](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L176)
 
 #### Parameters
 
@@ -57,7 +57,7 @@ Defined in: [core/errors.ts:175](https://github.com/jeyabbalas/data-table/blob/3
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L48)
+Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L49)
 
 #### Inherited from
 
@@ -69,7 +69,7 @@ Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/30
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L49)
+Defined in: [core/errors.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L50)
 
 #### Inherited from
 
@@ -81,7 +81,7 @@ Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/30
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:58](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L58)
+Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L59)
 
 #### Returns
 

@@ -1,6 +1,6 @@
 # Examples
 
-Nine single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
+Twelve single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
 
 ## Run
 
@@ -10,7 +10,7 @@ From the repo root:
 npm run dev
 ```
 
-Then open `http://localhost:5173/data-table/` and click **ten focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
+Then open `http://localhost:5173/data-table/` and click **twelve focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
 
 No pre-build needed — Vite serves the library from source via aliases (see `vite.demo.config.ts`).
 
@@ -29,5 +29,8 @@ The same examples are also browsable on the deployed demo under [`/data-table/ex
 | 07 | [`07-i18n-french`](./07-i18n-french/) | Translate every UI label via a `messages` override | `messages: DeepPartial<Strings>` |
 | 08 | [`08-custom-visualization`](./08-custom-visualization/) | Subclass `BaseVisualization`; register via per-instance `VisualizationRegistry` | `BaseVisualization`, `VisualizationRegistry` |
 | 09 | [`09-multi-table`](./09-multi-table/) | Two tables sharing a `FilterPresetManager` and a `SessionStore` | shared `presets.manager`, shared `persistence.sessionStore` |
+| 10 | [`10-column-export`](./10-column-export/) | Read a column out as a typed array; toggle the synthetic `__rowid__` in the grid | `actions.getColumnValues`, `ROWID_COLUMN`, `actions.showColumn` |
+| 11 | [`11-annotations`](./11-annotations/) | Programmatic row / column / cell annotations with severity, JSON round-trip, IndexedDB persistence, intersection popover | `table.annotations.*` (`add`, `addMany`, `getByCell`, `setSeverityFilter`, `toJSON`, `loadJSON`, `on('change', …)`) |
+| 12 | [`12-column-header-tooltips`](./12-column-header-tooltips/) | Structured popover (title / description / items + enum chips) anchored on the column-name span; XSS-safe; stateless demo (`persistence: false`) | `actions.setColumnHeaderTooltip`, `actions.getColumnHeaderTooltip` |
 
 For the full API, see [`docs/api-reference.md`](../docs/api-reference.md).

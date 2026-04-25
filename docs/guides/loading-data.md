@@ -204,12 +204,37 @@ await createDataTable({
 const rows = await table.bridge.query('SELECT COUNT(*) AS n FROM trips_2024');
 ```
 
+## The reserved `__rowid__` column
+
+Every load synthesizes a `BIGINT` column called `__rowid__` on the base
+table — `row_number() OVER () - 1` (0-indexed) — so apps have a stable
+key for app-side row alignment, annotations, and read-only column
+export. It survives sort, filter, and derived-column add / remove;
+only a fresh `loadData()` reassigns it.
+
+If your source already contains a column named `__rowid__`, the loader
+rejects with `LoadError('RESERVED_COLUMN_NAME')`. Rename the source
+column (e.g. to `_rowid_orig`) and reload.
+
+The synthetic column is hidden from the rendered grid by default and
+excluded from default exports unless the user ticks "Include system
+columns" in the export dialog. It's queryable like any other column —
+useful in raw `bridge.query` calls and in `expression`-kind derived
+column expressions (e.g. `FLOOR(__rowid__ / 100) AS batch_id`). Read
+the values into a typed array via
+[`actions.getColumnValues('__rowid__')`](../api-reference.md#column-values-read-only-export)
+(returns `BigInt64Array`).
+
+See [`examples/10-column-export/`](../../examples/10-column-export/)
+for a runnable demo.
+
 ## Gotchas
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
 - **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are *not* auto-fetched — read them yourself and pass the bytes.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
+- **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
 - **Memory growth across loads.** Each `loadData()` keeps DuckDB's prior tables until they're overwritten. For large-to-large loads, `destroy()` + recreate is cleaner than `loadData()`.
 - **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
 

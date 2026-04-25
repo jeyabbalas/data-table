@@ -6,7 +6,7 @@
 
 # Interface: ColumnSchema
 
-Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L19)
+Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L19)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/307
 
 > `optional` **expression?**: `string`
 
-Defined in: [core/types.ts:25](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L25)
+Defined in: [core/types.ts:25](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L25)
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: [core/types.ts:25](https://github.com/jeyabbalas/data-table/blob/307
 
 > `optional` **isDerived?**: `boolean`
 
-Defined in: [core/types.ts:24](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L24)
+Defined in: [core/types.ts:24](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L24)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [core/types.ts:24](https://github.com/jeyabbalas/data-table/blob/307
 
 > **name**: `string`
 
-Defined in: [core/types.ts:20](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L20)
+Defined in: [core/types.ts:20](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L20)
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: [core/types.ts:20](https://github.com/jeyabbalas/data-table/blob/307
 
 > **nullable**: `boolean`
 
-Defined in: [core/types.ts:22](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L22)
+Defined in: [core/types.ts:22](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L22)
 
 ***
 
@@ -46,7 +46,21 @@ Defined in: [core/types.ts:22](https://github.com/jeyabbalas/data-table/blob/307
 
 > **originalType**: `string`
 
-Defined in: [core/types.ts:23](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L23)
+Defined in: [core/types.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L23)
+
+***
+
+### system?
+
+> `optional` **system?**: `boolean`
+
+Defined in: [core/types.ts:33](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L33)
+
+true for library-synthesized columns (e.g. `__rowid__`). System columns are
+excluded from the default rendered grid and from default exports, but remain
+first-class queryable columns in DuckDB and appear in the column chooser.
+Note: this flag is re-applied by loaders on each load; it is not persisted
+in the current session snapshot (schema is re-derived on restore).
 
 ***
 
@@ -54,4 +68,4 @@ Defined in: [core/types.ts:23](https://github.com/jeyabbalas/data-table/blob/307
 
 > **type**: [`DataType`](../type-aliases/DataType.md)
 
-Defined in: [core/types.ts:21](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L21)
+Defined in: [core/types.ts:21](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L21)

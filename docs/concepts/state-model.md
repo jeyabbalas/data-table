@@ -1,7 +1,7 @@
 # State model
 
 Every piece of observable state in `@jeyabbalas/data-table` lives on a
-`TableState` object — 15 fields in total (14 signals + 1 computed). This
+`TableState` object — 16 fields in total (15 signals + 1 computed). This
 doc is the field-by-field map. Use it when you want to read state
 directly (instead of via events) or subscribe to changes at the
 lowest level.
@@ -56,6 +56,11 @@ From [`src/core/State.ts:22-70`](../../src/core/State.ts). Grouped by role:
 | `columnWidths` | `Signal<Map<string, number>>` | Custom column widths (pixel values); columns without a key use `--dt-col-width` |
 | `pinnedColumns` | `Signal<string[]>` | Names of columns pinned to the left edge |
 | `hiddenColumnInfo` | `Signal<Map<string, HiddenColumnInfo>>` | Metadata for each hidden column — captures `leftNeighbor` / `rightNeighbor` so re-show can place the column back where it belonged |
+| `columnHeaderTooltips` | `Signal<Map<string, ColumnHeaderTooltipContent>>` | Per-column structured popover content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. Empty map by default; persisted into `SessionSnapshot.columnHeaderTooltips` |
+
+#### A note on `__rowid__`
+
+The reserved synthetic [`__rowid__`](../glossary.md#__rowid__-synthetic-row-id) column appears in `schema` and `columnOrder` but is excluded from `visibleColumns` by default. Toggle visibility with `actions.showColumn('__rowid__')` / `actions.hideColumn('__rowid__')`. The library marks the column with `system: true` on its `ColumnSchema` entry; consumers can detect system columns by reading that flag from `state.schema.get()`.
 
 ### Selection
 
@@ -72,6 +77,19 @@ From [`src/core/State.ts:22-70`](../../src/core/State.ts). Grouped by role:
 | `focusedCell` | `Signal<{ row: number; column: string } \| null>` | The one cell carrying `tabindex="0"` (roving focus); `null` when the table isn't focused |
 
 Transient UI fields don't participate in undo / redo and aren't persisted.
+
+## What's not in `TableState`
+
+A handful of subsystems live alongside `TableState` rather than on it. The split is deliberate — these stores have lifecycles or data-volume profiles that don't fit the per-mutation undo / persistence wiring that `TableState` enforces.
+
+| Subsystem | Where to find it | Why it's separate |
+|---|---|---|
+| **Annotations** ([`AnnotationStore`](../../src/annotations/AnnotationStore.ts)) | `table.annotations` (CRUD, JSON I/O, severity filter, change events) | App-injected validation overlay — not user-driven view state. Sits outside undo/redo so a 10 000-entry bulk-load doesn't inflate the undo stack. Auto-persists into `SessionSnapshot.annotations` (v5+) but is restored as a separate field, not as a signal. See [annotations guide](../guides/annotations.md). |
+| **Undo manager** ([`UndoManager`](../../src/core/UndoManager.ts)) | `actions.getUndoManager()` | Holds two stacks of `StateSnapshot`s. The signals it captures are in `TableState`, but the stacks themselves are not signals — they're synchronous arrays. |
+| **Filter presets** ([`FilterPresetManager`](../../src/filters/FilterPresets.ts)) | `presets` option / shared instance | Cross-table named view sets. Not part of any single table's state. |
+| **Session store** ([`SessionStore`](../../src/persistence/SessionStore.ts)) | `persistence.sessionStore` option | IndexedDB-backed persistence layer — written to, not subscribed to. |
+
+The two singletons that *render* against state but don't hold it — [`AnnotationPopover`](../../src/table/AnnotationPopover.ts) and [`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts) — read from `table.annotations` and `state.columnHeaderTooltips` respectively and re-render on the corresponding change channel.
 
 ## `Signal` vs `Computed`
 

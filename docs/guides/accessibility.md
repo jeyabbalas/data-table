@@ -111,6 +111,38 @@ and returns focus to the control that opened it.
   editor*, not in the grid.
 - **Close on Escape.** Every dialog listens for `Escape` and dismisses.
 
+## Popovers (annotation + column-header tooltip)
+
+Two non-modal popovers attach to header / cell elements. Both are
+keyboard-reachable and `Escape`-dismissable:
+
+- **Annotation popover** ([`AnnotationPopover`](../../src/table/AnnotationPopover.ts))
+  — anchored on row / cell / header elements that carry annotations.
+  `role="tooltip"` + `aria-live="polite"`. Opens on `pointerenter` /
+  `focusin`; dismisses on `pointerleave` (with a 120ms grace so users
+  can move into the popover content), `focusout`, `Escape`, scroll, or
+  click outside. Severity-filtered annotations remain in the
+  underlying store but are not painted or popped while their flag is
+  off.
+- **Column-header tooltip popover** ([`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts))
+  — anchored on the column-name span (`.dt-col-name`). The span
+  receives `tabindex="0"` only when an override is set via
+  `actions.setColumnHeaderTooltip`, so the keyboard tab order stays
+  uncluttered for tables that don't use the feature. Same lifecycle
+  primitives as the annotation popover (pointer / focus open, Escape
+  dismisses).
+
+The two popovers anchor on different DOM nodes (header container vs.
+name span) and can both be visible simultaneously. They use distinct
+z-indexes (annotation popover at `--dt-z-annotation-popover: 55`;
+column-header tooltip at `--dt-z-col-tooltip: 56`) so the tooltip
+renders in front when both are open.
+
+Every text field in the column-header tooltip is rendered via
+`.textContent` — HTML strings are not parsed. This is the recommended
+surface for JSON-Schema-style metadata (variable name, description,
+units, enum) without an XSS surface.
+
 ## High-contrast mode
 
 The library uses CSS custom properties for every colour (see the

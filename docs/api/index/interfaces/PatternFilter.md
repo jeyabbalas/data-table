@@ -6,7 +6,7 @@
 
 # Interface: PatternFilter
 
-Defined in: [filters/FilterTypes.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L48)
+Defined in: [filters/FilterTypes.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L48)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [filters/FilterTypes.ts:48](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:50](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L50)
+Defined in: [filters/FilterTypes.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L50)
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: [filters/FilterTypes.ts:50](https://github.com/jeyabbalas/data-table
 
 > **mode**: `"contains"` \| `"regex"` \| `"starts"` \| `"ends"`
 
-Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L52)
+Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L52)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table
 
 > **pattern**: `string`
 
-Defined in: [filters/FilterTypes.ts:51](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L51)
+Defined in: [filters/FilterTypes.ts:51](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L51)
 
 ***
 
@@ -38,4 +38,4 @@ Defined in: [filters/FilterTypes.ts:51](https://github.com/jeyabbalas/data-table
 
 > **type**: `"pattern"`
 
-Defined in: [filters/FilterTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterTypes.ts#L49)
+Defined in: [filters/FilterTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L49)

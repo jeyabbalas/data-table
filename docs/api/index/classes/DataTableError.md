@@ -6,7 +6,7 @@
 
 # Class: DataTableError
 
-Defined in: [core/errors.ts:47](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L47)
+Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L48)
 
 Base class for every error thrown by the library.
 
@@ -35,6 +35,7 @@ table.on('error', ({ error, source }) => {
 - [`SQLValidationError`](SQLValidationError.md)
 - [`DerivedColumnError`](DerivedColumnError.md)
 - [`PersistenceError`](PersistenceError.md)
+- [`AnnotationError`](AnnotationError.md)
 - [`ExportError`](ExportError.md)
 - [`ConfigurationError`](ConfigurationError.md)
 - [`DestroyedError`](DestroyedError.md)
@@ -45,7 +46,7 @@ table.on('error', ({ error, source }) => {
 
 > **new DataTableError**(`message`, `options?`): `DataTableError`
 
-Defined in: [core/errors.ts:51](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L51)
+Defined in: [core/errors.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L52)
 
 #### Parameters
 
@@ -71,7 +72,7 @@ Defined in: [core/errors.ts:51](https://github.com/jeyabbalas/data-table/blob/30
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L48)
+Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L49)
 
 ***
 
@@ -79,7 +80,7 @@ Defined in: [core/errors.ts:48](https://github.com/jeyabbalas/data-table/blob/30
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L49)
+Defined in: [core/errors.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L50)
 
 ## Methods
 
@@ -87,7 +88,7 @@ Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/30
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:58](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/errors.ts#L58)
+Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L59)
 
 #### Returns
 

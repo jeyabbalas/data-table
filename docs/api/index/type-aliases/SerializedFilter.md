@@ -8,4 +8,4 @@
 
 > **SerializedFilter** = `SerializedRangeFilter` \| `SerializedPointFilter` \| `SerializedSetFilter` \| `SerializedNotSetFilter` \| [`NullFilter`](../interfaces/NullFilter.md) \| [`PatternFilter`](../interfaces/PatternFilter.md) \| [`RawSQLFilter`](../interfaces/RawSQLFilter.md)
 
-Defined in: [persistence/types.ts:53](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/persistence/types.ts#L53)
+Defined in: [persistence/types.ts:54](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L54)

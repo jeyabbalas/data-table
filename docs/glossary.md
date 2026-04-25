@@ -9,6 +9,28 @@ grouped walkthroughs see the [guides](./README.md#guides-task-oriented) and
 
 ---
 
+### Annotation
+App-authored overlay metadata attached to a `row`, `column`, or `cell` of a
+loaded table. Each annotation carries a `severity` (`error` / `warning` /
+`info`), a `message`, and optional `code` / `source` / `metadata` /
+`createdAt` / `updatedAt`. Annotations live outside [`TableState`](#tablestate)
+and do not participate in undo/redo — they are app-injected validation /
+quality-control output, not user-driven view changes. JSON-serialisable;
+auto-persisted to the [`SessionSnapshot`](#sessionsnapshot).
+See: [Annotations](./guides/annotations.md) · Source: `src/annotations/types.ts`
+
+### AnnotationStore
+Programmatic CRUD store on `table.annotations`. Indexes annotations by id,
+row, column, and cell so `getByRow` / `getByColumn` / `getByCell` are O(1).
+`getByCell(rowId, column)` returns the union of row + column + cell
+annotations sorted by severity, then `createdAt`, then insertion order.
+Emits a single `change` event (`kind: 'added' | 'updated' | 'removed' |
+'cleared' | 'filterChanged'`) on every mutation; `setSeverityFilter` /
+`getSeverityFilter` toggle which severities the rendering layer paints
+without removing data. Round-trips via `toJSON` / `loadJSON('replace' |
+'merge')`; preserves unknown top-level and per-annotation fields.
+See: [Annotations](./guides/annotations.md) · Source: `src/annotations/AnnotationStore.ts`
+
 ### AutoSave
 Opt-in helper that writes a [`SessionSnapshot`](#sessionsnapshot) to a
 [`SessionStore`](#sessionstore) on a debounce timer and on `visibilitychange` /
@@ -37,6 +59,22 @@ or toggled at runtime via `table.setColorScheme()`. `'auto'` follows
 setting. Body-portalled modals observe the `data-dt-color-scheme` attribute via
 `MutationObserver` so theme flips stay in sync across portals.
 See: [Theming](./guides/theming.md) · [API reference](./api-reference.md)
+
+### Column Header Tooltip
+Library-rendered popover anchored on the column-name span (`.dt-col-name`).
+Holds structured content — optional `title`, optional `description` (whitespace
+preserved), and optional `items[]` with `{ label, value: string | string[] }`
+where a `string[]` value renders as wrapping enum chips. Set via
+`table.actions.setColumnHeaderTooltip(column, content | string | null)`; a
+plain string is shorthand for `{ description }`, and `null` (or any input that
+normalises to empty) removes the override. XSS-safe by construction — every
+text field is rendered via `.textContent`; HTML strings, DOM nodes, and render
+functions are not accepted. Persisted into
+[`SessionSnapshot`](#sessionsnapshot)`.columnHeaderTooltips` by default;
+embedding apps that already own a column registry typically opt out via
+`persistence: false`. Distinct DOM anchor and z-index from the annotation
+popover — both can be visible simultaneously.
+See: [Column-header tooltips](./guides/column-header-tooltips.md) · Source: `src/core/columnHeaderTooltip.ts`
 
 ### Computed
 A read-only reactive primitive derived from one or more [Signals](#signal).
@@ -172,6 +210,22 @@ filters / sorts whenever a [Derived Column](#derived-column) is added,
 removed, or edited. Reconciliation is what keeps the UI consistent when a
 user renames a derived column that a saved [Preset](#preset) references.
 See: [Derived columns](./guides/derived-columns.md)
+
+### `__rowid__` (synthetic row id)
+A reserved `BIGINT` column the loader synthesizes on every CSV / JSON /
+Parquet source as `row_number() OVER () - 1` (0-indexed). Stable across
+sort, filter, and derived-column add / remove — only a fresh load
+reassigns it. Hidden from the rendered grid by default (toggle with
+`actions.showColumn('__rowid__')`) and excluded from default exports
+(opt-in via the export-dialog "Include system columns" checkbox or by
+explicit `columns: ['__rowid__', …]`). Sources that already contain a
+column named `__rowid__` reject with `LoadError('RESERVED_COLUMN_NAME')`.
+The constant is exported as `ROWID_COLUMN`; the row-id type is `RowId =
+number`. Both [annotations](#annotation) and the read-only
+`actions.getColumnValues` API key on this column for app-side row
+alignment. `getColumnValues('__rowid__')` returns a `BigInt64Array`;
+convert with `Number(rowIds[i])` before passing back as a `rowId: number`.
+See: [`actions.getColumnValues`](./api-reference.md#column-values-read-only-export) · [Annotations](./guides/annotations.md) · Source: `src/core/types.ts`, `src/worker/loaders/`
 
 ### SessionSnapshot
 The JSON document written to the [SessionStore](#sessionstore) by

@@ -6,7 +6,7 @@
 
 # Class: ExportDialog
 
-Defined in: [export/ExportDialog.ts:52](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L52)
+Defined in: [export/ExportDialog.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L52)
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: [export/ExportDialog.ts:52](https://github.com/jeyabbalas/data-table
 
 > **new ExportDialog**(`state`, `bridge`, `options?`): `ExportDialog`
 
-Defined in: [export/ExportDialog.ts:95](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L95)
+Defined in: [export/ExportDialog.ts:100](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L100)
 
 #### Parameters
 
@@ -40,7 +40,7 @@ Defined in: [export/ExportDialog.ts:95](https://github.com/jeyabbalas/data-table
 
 > **close**(): `void`
 
-Defined in: [export/ExportDialog.ts:461](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L461)
+Defined in: [export/ExportDialog.ts:512](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L512)
 
 #### Returns
 
@@ -52,7 +52,7 @@ Defined in: [export/ExportDialog.ts:461](https://github.com/jeyabbalas/data-tabl
 
 > **destroy**(): `void`
 
-Defined in: [export/ExportDialog.ts:696](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L696)
+Defined in: [export/ExportDialog.ts:751](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L751)
 
 #### Returns
 
@@ -64,7 +64,7 @@ Defined in: [export/ExportDialog.ts:696](https://github.com/jeyabbalas/data-tabl
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [export/ExportDialog.ts:688](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L688)
+Defined in: [export/ExportDialog.ts:743](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L743)
 
 #### Returns
 
@@ -76,7 +76,7 @@ Defined in: [export/ExportDialog.ts:688](https://github.com/jeyabbalas/data-tabl
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [export/ExportDialog.ts:692](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L692)
+Defined in: [export/ExportDialog.ts:747](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L747)
 
 #### Returns
 
@@ -88,7 +88,7 @@ Defined in: [export/ExportDialog.ts:692](https://github.com/jeyabbalas/data-tabl
 
 > **open**(): `void`
 
-Defined in: [export/ExportDialog.ts:419](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L419)
+Defined in: [export/ExportDialog.ts:463](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L463)
 
 #### Returns
 
@@ -100,7 +100,7 @@ Defined in: [export/ExportDialog.ts:419](https://github.com/jeyabbalas/data-tabl
 
 > **setSourceName**(`name`): `void`
 
-Defined in: [export/ExportDialog.ts:682](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/export/ExportDialog.ts#L682)
+Defined in: [export/ExportDialog.ts:737](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L737)
 
 Set the source file name used as the base for exported file names.
 Pass the original filename (e.g. "sales_data.csv") — the extension

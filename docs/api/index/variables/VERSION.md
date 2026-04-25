@@ -8,7 +8,7 @@
 
 > `const` **VERSION**: `"0.1.0"` = `'0.1.0'`
 
-Defined in: [index.ts:13](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/index.ts#L13)
+Defined in: [index.ts:13](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/index.ts#L13)
 
 Interactive Data Table Library
 

@@ -6,7 +6,7 @@
 
 # Interface: SortColumn
 
-Defined in: [core/types.ts:45](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L45)
+Defined in: [core/types.ts:63](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L63)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [core/types.ts:45](https://github.com/jeyabbalas/data-table/blob/307
 
 > **column**: `string`
 
-Defined in: [core/types.ts:46](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L46)
+Defined in: [core/types.ts:64](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L64)
 
 ***
 
@@ -22,4 +22,4 @@ Defined in: [core/types.ts:46](https://github.com/jeyabbalas/data-table/blob/307
 
 > **direction**: [`SortDirection`](../type-aliases/SortDirection.md)
 
-Defined in: [core/types.ts:47](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/types.ts#L47)
+Defined in: [core/types.ts:65](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/types.ts#L65)

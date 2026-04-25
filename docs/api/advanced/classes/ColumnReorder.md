@@ -6,7 +6,7 @@
 
 # Class: ColumnReorder
 
-Defined in: [table/ColumnReorder.ts:46](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L46)
+Defined in: [table/ColumnReorder.ts:46](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L46)
 
 ColumnReorder manages drag-and-drop column reordering for a header row.
 
@@ -32,7 +32,7 @@ reorder.destroy();
 
 > **new ColumnReorder**(`headerRow`, `onReorder`, `options?`): `ColumnReorder`
 
-Defined in: [table/ColumnReorder.ts:72](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L72)
+Defined in: [table/ColumnReorder.ts:72](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L72)
 
 #### Parameters
 
@@ -58,7 +58,7 @@ Defined in: [table/ColumnReorder.ts:72](https://github.com/jeyabbalas/data-table
 
 > **destroy**(): `void`
 
-Defined in: [table/ColumnReorder.ts:434](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L434)
+Defined in: [table/ColumnReorder.ts:434](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L434)
 
 Destroy the reorder handler and clean up resources
 
@@ -72,7 +72,7 @@ Destroy the reorder handler and clean up resources
 
 > **disable**(): `void`
 
-Defined in: [table/ColumnReorder.ts:396](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L396)
+Defined in: [table/ColumnReorder.ts:396](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L396)
 
 Disable column reordering
 
@@ -86,7 +86,7 @@ Disable column reordering
 
 > **enable**(): `void`
 
-Defined in: [table/ColumnReorder.ts:387](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L387)
+Defined in: [table/ColumnReorder.ts:387](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L387)
 
 Enable column reordering
 
@@ -100,7 +100,7 @@ Enable column reordering
 
 > **isDraggingNow**(): `boolean`
 
-Defined in: [table/ColumnReorder.ts:420](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L420)
+Defined in: [table/ColumnReorder.ts:420](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L420)
 
 Check if currently dragging
 
@@ -114,7 +114,7 @@ Check if currently dragging
 
 > **isEnabled**(): `boolean`
 
-Defined in: [table/ColumnReorder.ts:427](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L427)
+Defined in: [table/ColumnReorder.ts:427](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L427)
 
 Check if reordering is enabled
 
@@ -128,7 +128,7 @@ Check if reordering is enabled
 
 > **refresh**(): `void`
 
-Defined in: [table/ColumnReorder.ts:405](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/table/ColumnReorder.ts#L405)
+Defined in: [table/ColumnReorder.ts:405](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnReorder.ts#L405)
 
 Refresh handlers after headers are recreated
 

@@ -8,6 +8,6 @@
 
 > **TableEventName** = keyof [`TableEvents`](TableEvents.md)
 
-Defined in: [core/TableEvents.ts:125](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/TableEvents.ts#L125)
+Defined in: [core/TableEvents.ts:137](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L137)
 
 Keys of the event map.

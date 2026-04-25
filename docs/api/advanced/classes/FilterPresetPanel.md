@@ -6,7 +6,7 @@
 
 # Class: FilterPresetPanel
 
-Defined in: [filters/FilterPresetPanel.ts:23](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L23)
+Defined in: [filters/FilterPresetPanel.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L23)
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: [filters/FilterPresetPanel.ts:23](https://github.com/jeyabbalas/data
 
 > **new FilterPresetPanel**(`presetManager`, `state`, `actions`, `options?`): `FilterPresetPanel`
 
-Defined in: [filters/FilterPresetPanel.ts:41](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L41)
+Defined in: [filters/FilterPresetPanel.ts:41](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L41)
 
 #### Parameters
 
@@ -44,7 +44,7 @@ Defined in: [filters/FilterPresetPanel.ts:41](https://github.com/jeyabbalas/data
 
 > **close**(): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:252](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L252)
+Defined in: [filters/FilterPresetPanel.ts:252](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L252)
 
 #### Returns
 
@@ -56,7 +56,7 @@ Defined in: [filters/FilterPresetPanel.ts:252](https://github.com/jeyabbalas/dat
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:497](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L497)
+Defined in: [filters/FilterPresetPanel.ts:497](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L497)
 
 #### Returns
 
@@ -68,7 +68,7 @@ Defined in: [filters/FilterPresetPanel.ts:497](https://github.com/jeyabbalas/dat
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterPresetPanel.ts:489](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L489)
+Defined in: [filters/FilterPresetPanel.ts:489](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L489)
 
 #### Returns
 
@@ -80,7 +80,7 @@ Defined in: [filters/FilterPresetPanel.ts:489](https://github.com/jeyabbalas/dat
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/FilterPresetPanel.ts:493](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L493)
+Defined in: [filters/FilterPresetPanel.ts:493](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L493)
 
 #### Returns
 
@@ -92,7 +92,7 @@ Defined in: [filters/FilterPresetPanel.ts:493](https://github.com/jeyabbalas/dat
 
 > **open**(`anchorElement`): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:231](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L231)
+Defined in: [filters/FilterPresetPanel.ts:231](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L231)
 
 #### Parameters
 
@@ -110,7 +110,7 @@ Defined in: [filters/FilterPresetPanel.ts:231](https://github.com/jeyabbalas/dat
 
 > **toggle**(`anchorElement`): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:223](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/filters/FilterPresetPanel.ts#L223)
+Defined in: [filters/FilterPresetPanel.ts:223](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L223)
 
 #### Parameters
 

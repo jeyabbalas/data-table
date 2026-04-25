@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L25)
+Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L25)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/3
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:323](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L323)
+Defined in: [core/Strings.ts:323](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L323)
 
 #### ascending
 
@@ -300,7 +300,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:29](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L29)
+Defined in: [core/Strings.ts:29](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L29)
 
 #### apply
 
@@ -364,7 +364,7 @@ Defined in: [core/Strings.ts:29](https://github.com/jeyabbalas/data-table/blob/3
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:266](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L266)
+Defined in: [core/Strings.ts:266](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L266)
 
 #### addButtonLabel
 
@@ -746,7 +746,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:398](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L398)
+Defined in: [core/Strings.ts:398](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L398)
 
 #### stylesheetMissing
 
@@ -758,7 +758,7 @@ Defined in: [core/Strings.ts:398](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L215)
+Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L215)
 
 #### cancelButton
 
@@ -902,7 +902,7 @@ Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:49](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L49)
+Defined in: [core/Strings.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L49)
 
 #### activeFiltersLabel
 
@@ -1542,7 +1542,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:193](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L193)
+Defined in: [core/Strings.ts:193](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L193)
 
 #### closeLabel
 
@@ -1652,7 +1652,7 @@ Defined in: [core/Strings.ts:193](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:377](https://github.com/jeyabbalas/data-table/blob/307a596f3fb6b910b08a4368057ff39f0817f309/src/core/Strings.ts#L377)
+Defined in: [core/Strings.ts:377](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L377)
 
 #### allNull
 

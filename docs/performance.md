@@ -62,12 +62,38 @@ length). Prefer expression columns when feasible.
 ### Session snapshots
 
 Snapshots persist to IndexedDB on a debounced save. A snapshot includes
-the filters, sort, columns, derived columns, undo stack, and vector
-value pool.
+the filters, sort, columns, derived columns, undo stack, vector
+value pool, and (in `SNAPSHOT_VERSION` 5+) the `annotations` overlay
+plus `columnHeaderTooltips`.
 
 **Implication:** large vector columns plus deep undo stacks can push
 snapshots into megabytes. IDB quotas vary by browser (Safari ≈ 1 GB,
 Chrome ≈ 60% of disk). For heavy use, monitor `navigator.storage.estimate()`.
+
+### Annotations
+
+`AnnotationStore` keeps four secondary indexes (`byId`, `byRow`,
+`byColumn`, `byCell`), so `getByRow` / `getByColumn` / `getByCell` are
+O(1) regardless of total annotation count. `getByCell(rowId, column)`
+returns the row + column + cell union and sorts in O(k log k) on the
+small intersection — not a bottleneck.
+
+Memory cost scales with the annotation count, not row × column count:
+each annotation is one small object (a few hundred bytes including
+indexes). Practical headroom up to ~50 000 annotations on commodity
+laptops; beyond that, `toJSON` size dominates and IndexedDB writes get
+heavier.
+
+**Implication:** annotation-heavy apps (e.g. row-level JSON-Schema
+validation across 100 000-row tables) should batch additions via
+`addMany` (single `change` event), audit the `toJSON` size before
+enabling persistence, and prefer `clear(scope?)` over individual
+removals when wiping a category.
+
+**View-only filtering is free.** `setSeverityFilter({ info: false })`
+flips a boolean — it does not touch the store's data, just changes
+what the rendering layer paints. Use it instead of removing-and-re-
+adding annotations to toggle visibility.
 
 ## Observable thresholds
 

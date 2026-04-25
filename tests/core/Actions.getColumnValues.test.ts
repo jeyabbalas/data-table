@@ -100,17 +100,37 @@ describe('StateActions.getColumnValues', () => {
   // SQL construction — scope 'all' (default)
   // -------------------------------------------------------------------------
 
-  it("issues ORDER BY __rowid__ and no WHERE for scope 'all'", async () => {
+  it("emits no WHERE for scope 'all' and skips redundant ORDER BY when there is no filter or sort", async () => {
     harness.setRowProducer(async () => [
       { val: 1 }, { val: 2 }, { val: 3 },
     ]);
     await actions.getColumnValues('id');
     expect(harness.queryCalls).toHaveLength(1);
     const sql = harness.queryCalls[0];
-    expect(sql).toContain('ORDER BY "__rowid__"');
+    // Skip optimization: the loaders inject __rowid__ in scan order, so
+    // the natural scan order already matches and the explicit ORDER BY
+    // would be a redundant pass for large tables.
+    expect(sql).not.toMatch(/ORDER BY/);
     expect(sql).not.toMatch(/\bWHERE\b/);
     expect(sql).toContain('"id"');
     expect(sql).toContain('FROM "t"');
+  });
+
+  it("issues ORDER BY __rowid__ for scope 'all' when a sort is active", async () => {
+    actions.setSort([{ column: 'qty', desc: false }]);
+    harness.setRowProducer(async () => []);
+    await actions.getColumnValues('id');
+    const sql = harness.queryCalls[0];
+    expect(sql).toContain('ORDER BY "__rowid__"');
+  });
+
+  it("issues ORDER BY __rowid__ for scope 'filtered' even with no filters", async () => {
+    // scope='filtered' always emits ORDER BY because the natural-order
+    // guarantee only applies to scope='all'.
+    harness.setRowProducer(async () => []);
+    await actions.getColumnValues('id', { scope: 'filtered' });
+    const sql = harness.queryCalls[0];
+    expect(sql).toContain('ORDER BY "__rowid__"');
   });
 
   it("appends LIMIT and OFFSET when provided", async () => {
@@ -176,6 +196,30 @@ describe('StateActions.getColumnValues', () => {
     expect(Array.from(result as Int32Array)).toEqual([10, 30]);
   });
 
+  it("throws INVALID_ROWID when scope='selected' and a rowId is negative", async () => {
+    state.selectedRows.set(new Set([-1, 2]));
+    await expect(
+      actions.getColumnValues('id', { scope: 'selected' }),
+    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    expect(harness.queryCalls).toHaveLength(0);
+  });
+
+  it("throws INVALID_ROWID when scope='selected' and a rowId is non-integer", async () => {
+    state.selectedRows.set(new Set([1.5]));
+    await expect(
+      actions.getColumnValues('id', { scope: 'selected' }),
+    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    expect(harness.queryCalls).toHaveLength(0);
+  });
+
+  it("throws INVALID_ROWID when scope='selected' and a rowId is NaN", async () => {
+    state.selectedRows.set(new Set([Number.NaN]));
+    await expect(
+      actions.getColumnValues('id', { scope: 'selected' }),
+    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    expect(harness.queryCalls).toHaveLength(0);
+  });
+
   // -------------------------------------------------------------------------
   // Typed-array materialization
   // -------------------------------------------------------------------------
@@ -199,6 +243,14 @@ describe('StateActions.getColumnValues', () => {
     const result = await actions.getColumnValues('big');
     expect(result).toBeInstanceOf(BigInt64Array);
     expect(Array.from(result as BigInt64Array)).toEqual([0n, 9_999_999_999n]);
+  });
+
+  it('preserves BIGINT values above Number.MAX_SAFE_INTEGER without precision loss', async () => {
+    const aboveSafe = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
+    harness.setRowProducer(async () => [{ val: aboveSafe }]);
+    const result = await actions.getColumnValues('big');
+    expect(result).toBeInstanceOf(BigInt64Array);
+    expect((result as BigInt64Array)[0]).toBe(aboveSafe);
   });
 
   it('returns Float64Array for float columns', async () => {

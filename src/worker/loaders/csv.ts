@@ -115,6 +115,13 @@ export async function loadCSV(
     }
 
     const tbl = quoteIdentifier(tableName);
+    // Always cast __rowid__ to BIGINT, regardless of row count. The original
+    // plan called for a conditional INTEGER/BIGINT cast based on row count,
+    // but the unconditional BIGINT keeps loaders symmetrical and lets every
+    // getColumnValues consumer rely on a single typed-array shape
+    // (BigInt64Array) for the rowid column. The reserved-name guard above
+    // is case-sensitive (DuckDB-correct): "__RowID__" would slip through
+    // and would not collide with our injected "__rowid__".
     const createSql = `CREATE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_csv_auto('${fileName}'${optionsStr})`;
     try {
       await conn.query(createSql);

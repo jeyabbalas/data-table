@@ -316,14 +316,29 @@ export class DerivedColumnManager {
       detectedType = mapDuckDBType(detectedOriginalType);
     }
 
-    // Clean up old vector helper table if the old column was a vector.
-    if (oldInfo.def.kind === 'vector') {
-      await this.dropVectorHelperTable(name);
-    }
-
-    // Create new helper table for vector replace.
-    if (newDef.kind === 'vector') {
-      await this.createVectorHelperTable(newDef);
+    // Helper-table swap. Both operations live in a try/catch so a failure
+    // here doesn't leave the store half-mutated (old helper dropped, new
+    // helper absent or partial). Bookkeeping locals capture which side of
+    // the swap completed so the rollback only undoes what actually happened.
+    let oldHelperDropped = false;
+    let newHelperCreated = false;
+    try {
+      if (oldInfo.def.kind === 'vector') {
+        await this.dropVectorHelperTable(name);
+        oldHelperDropped = true;
+      }
+      if (newDef.kind === 'vector') {
+        await this.createVectorHelperTable(newDef);
+        newHelperCreated = true;
+      }
+    } catch (helperErr) {
+      if (newHelperCreated) {
+        try { await this.dropVectorHelperTable(name); } catch { /* best-effort */ }
+      }
+      if (oldHelperDropped && oldInfo.def.kind === 'vector') {
+        try { await this.createVectorHelperTable(oldInfo.def); } catch { /* best-effort */ }
+      }
+      throw helperErr;
     }
 
     const newInfo: DerivedColumnInfo = {

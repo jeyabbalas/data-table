@@ -80,14 +80,46 @@ describe('AnnotationStore — session persistence integration', () => {
     autoSave.destroy();
   });
 
-  it('AutoSave ignores filterChanged events (severity filter is visual-only)', () => {
+  it('AutoSave persists severity-filter toggles via the snapshot', () => {
     const store = createMockStore();
     const autoSave = new AutoSave(state, store, { annotationStore });
     autoSave.enable();
     annotationStore.setSeverityFilter({ error: false });
-    vi.advanceTimersByTime(5000);
-    expect(store.save).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(store.save).toHaveBeenCalledTimes(1);
+    const snap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock.calls[0][0];
+    expect(snap.annotationSeverityFilter).toEqual({ error: false, warning: true, info: true });
     autoSave.destroy();
+  });
+
+  it('snapshotFromState omits annotationSeverityFilter at the all-true default', () => {
+    const snap = snapshotFromState(state, undefined, undefined, annotationStore);
+    expect(snap.annotationSeverityFilter).toBeUndefined();
+  });
+
+  it('snapshotFromState includes annotationSeverityFilter when any flag is off', () => {
+    annotationStore.setSeverityFilter({ warning: false, info: false });
+    const snap = snapshotFromState(state, undefined, undefined, annotationStore);
+    expect(snap.annotationSeverityFilter).toEqual({ error: true, warning: false, info: false });
+  });
+
+  it('restoreStateFromSnapshot applies annotationSeverityFilter when present', () => {
+    const baseSnap = snapshotFromState(state);
+    const withFilter: SessionSnapshot = {
+      ...baseSnap,
+      annotationSeverityFilter: { error: false, warning: true, info: false },
+    };
+    const fresh = new AnnotationStore({ tableName: state.baseTableName });
+    restoreStateFromSnapshot(state, withFilter, undefined, undefined, fresh);
+    expect(fresh.getSeverityFilter()).toEqual({ error: false, warning: true, info: false });
+  });
+
+  it('restoreStateFromSnapshot leaves filter at all-true when annotationSeverityFilter is absent', () => {
+    const baseSnap = snapshotFromState(state);
+    expect(baseSnap.annotationSeverityFilter).toBeUndefined();
+    const fresh = new AnnotationStore({ tableName: state.baseTableName });
+    restoreStateFromSnapshot(state, baseSnap, undefined, undefined, fresh);
+    expect(fresh.getSeverityFilter()).toEqual({ error: true, warning: true, info: true });
   });
 
   it('AutoSave passes the annotation store through to the snapshot', () => {

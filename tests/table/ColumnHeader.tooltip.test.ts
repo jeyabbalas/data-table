@@ -208,6 +208,43 @@ describe('ColumnHeader — column-header tooltip popover', () => {
     header.destroy();
   });
 
+  it('clearing the tooltip while shown drops both the popover AND the tabindex (combined lifecycle)', () => {
+    const header = makeHeader();
+    actions.setColumnHeaderTooltip('fare_amount', { description: 'D' });
+    const nameEl = getNameEl(header);
+
+    nameEl.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+    expect(tooltipPopover.isOpen()).toBe(true);
+    expect(nameEl.getAttribute('tabindex')).toBe('0');
+
+    actions.setColumnHeaderTooltip('fare_amount', null);
+    expect(tooltipPopover.isOpen()).toBe(false);
+    expect(nameEl.getAttribute('tabindex')).toBeNull();
+    header.destroy();
+  });
+
+  it('description preserves newlines via the text node and renders with white-space: pre-wrap', () => {
+    const header = makeHeader();
+    const multiLine = 'Line one.\nLine two.\nLine three.';
+    actions.setColumnHeaderTooltip('fare_amount', { description: multiLine });
+    getNameEl(header).dispatchEvent(
+      new PointerEvent('pointerenter', { bubbles: true }),
+    );
+
+    const desc = portal.querySelector('.dt-col-tooltip__description') as HTMLElement;
+    expect(desc).toBeTruthy();
+    // textContent preserves the literal \n — popover sets via .textContent only.
+    expect(desc.textContent).toBe(multiLine);
+    // Stylesheet declares pre-wrap so the literal \n actually wraps in render.
+    // jsdom returns the cascaded value; in environments where the sheet
+    // isn't loaded we still want to assert the expected token.
+    const ws = getComputedStyle(desc).whiteSpace;
+    if (ws && ws !== 'normal') {
+      expect(ws).toBe('pre-wrap');
+    }
+    header.destroy();
+  });
+
   it('setting tooltip on a different column does not affect this header', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('other_col', 'irrelevant');

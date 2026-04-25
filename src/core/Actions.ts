@@ -1559,8 +1559,11 @@ export class StateActions {
    * `unknown[]` regardless of declared type so that `null` is preserved (the
    * typed-array packed form would coerce `null` to `0`, which is ambiguous).
    *
-   * The reserved `__rowid__` column is retrievable by name; its values are
-   * BIGINT-backed and return as `BigInt64Array`. For plain-number
+   * The reserved `__rowid__` column is retrievable by name; the loaders
+   * always cast its synthesized `row_number()` to `BIGINT` (the conditional
+   * INTEGER/BIGINT cast described in the original spec was never wired up;
+   * the always-BIGINT shape is kept for simplicity and consistency across
+   * loaders). Values come back as `BigInt64Array`. For plain-number
    * consumption, coerce with `Number(bigint)` (lossless for rowids below
    * `Number.MAX_SAFE_INTEGER`).
    *
@@ -1576,6 +1579,8 @@ export class StateActions {
    *   in the current schema.
    * @throws `QueryError` with `code: 'INVALID_PAGINATION'` when `limit` or
    *   `offset` is present but not a non-negative integer.
+   * @throws `QueryError` with `code: 'INVALID_ROWID'` when `scope: 'selected'`
+   *   and any rowId in `state.selectedRows` is not a non-negative integer.
    * @throws `QueryError` with `code: 'NO_TABLE'` when called before any data
    *   is loaded.
    */
@@ -1624,6 +1629,14 @@ export class StateActions {
         return emptyTypedResult(entry);
       }
       const indices = Array.from(selected);
+      for (const idx of indices) {
+        if (!Number.isInteger(idx) || idx < 0) {
+          throw new QueryError(
+            `Invalid rowId in selectedRows: ${idx} (must be a non-negative integer)`,
+            { code: 'INVALID_ROWID', details: { rowId: idx } },
+          );
+        }
+      }
       const baseSql = buildSelectedRowsQuery(
         tbl,
         [name],
@@ -1639,7 +1652,15 @@ export class StateActions {
       const filtersFragment =
         scope === 'filtered' ? filtersToWhereClause(this.state.filters.get()) : '';
       const where = filtersFragment ? ` WHERE ${filtersFragment}` : '';
-      sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where} ORDER BY ${quoteIdentifier(ROWID_COLUMN)}${pagination}`;
+      // Skip ORDER BY when scope='all' has no filter and no sort: the loaders
+      // inject __rowid__ in scan order, so the natural scan order already
+      // matches and an explicit ORDER BY would be a redundant N log N pass.
+      const needsExplicitOrder =
+        scope !== 'all' || where !== '' || this.state.sortColumns.get().length > 0;
+      const orderBy = needsExplicitOrder
+        ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}`
+        : '';
+      sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
       valKey = 'val';
     }
 

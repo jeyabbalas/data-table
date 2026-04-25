@@ -10,7 +10,7 @@ import type { HiddenColumnInfo } from '../core/State';
 import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef, VectorDataType } from '../derived/types';
 import type { FilterPreset } from '../filters/FilterPresetTypes';
-import type { AnnotationFile } from '../annotations/types';
+import type { AnnotationFile, SeverityFilter } from '../annotations/types';
 
 /** Current snapshot schema version — bump when the shape changes */
 export const SNAPSHOT_VERSION = 5;
@@ -138,6 +138,13 @@ export interface SessionSnapshot {
   filterPresets?: FilterPreset[];
   /** Saved annotations. Absent in pre-v5 snapshots. */
   annotations?: AnnotationFile;
+  /**
+   * Annotation severity-filter state (visual-only). Present only when the
+   * user has toggled at least one severity off; the all-true default is
+   * omitted to keep snapshots clean. Back-compat by absence — pre-fix
+   * snapshots restore with the all-true default.
+   */
+  annotationSeverityFilter?: SeverityFilter;
   /**
    * App-controlled column-header tooltip overrides.
    *

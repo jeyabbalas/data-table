@@ -135,6 +135,9 @@ export async function loadJSON(
     }
 
     const tbl = quoteIdentifier(tableName);
+    // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
+    // the rationale (single typed-array shape on read, symmetry across
+    // loaders). The reserved-name guard above is case-sensitive.
     const createSql = `CREATE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_json_auto('${fileName}'${optionsStr})`;
     try {
       await conn.query(createSql);

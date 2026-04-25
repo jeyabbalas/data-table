@@ -179,7 +179,7 @@ describe('AnnotationStore — CRUD', () => {
       catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_COLUMN_IMMUTABLE'); }
 
       try { store.update(a.id, { id: 'different' } as unknown as { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_FAILED'); }
+      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_ID_IMMUTABLE'); }
     });
 
     it('throws NOT_FOUND on unknown id', () => {
@@ -191,6 +191,35 @@ describe('AnnotationStore — CRUD', () => {
       const a = store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'x' });
       expect(() => store.update(a.id, { severity: 'nope' as never })).toThrow(AnnotationError);
       expect(() => store.update(a.id, { message: '' })).toThrow(AnnotationError);
+    });
+
+    it('deep-clones a metadata patch so post-update mutation does not bleed into the store', () => {
+      const a = store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'x' });
+      const meta = { tags: ['one'], nested: { count: 1 } };
+      store.update(a.id, { metadata: meta });
+      meta.tags.push('two');
+      meta.nested.count = 99;
+      const stored = store.get(a.id)!;
+      expect(stored.metadata).toEqual({ tags: ['one'], nested: { count: 1 } });
+      expect((stored.metadata as { tags: string[] }).tags).not.toBe(meta.tags);
+    });
+  });
+
+  describe('add — metadata isolation', () => {
+    it('deep-clones metadata so post-add mutation does not bleed into the store', () => {
+      const meta = { tags: ['a'], nested: { ok: true } };
+      const ann = store.add({
+        scope: 'row',
+        rowId: 0,
+        severity: 'info',
+        message: 'x',
+        metadata: meta,
+      });
+      meta.tags.push('b');
+      meta.nested.ok = false;
+      const stored = store.get(ann.id)!;
+      expect(stored.metadata).toEqual({ tags: ['a'], nested: { ok: true } });
+      expect((stored.metadata as { tags: string[] }).tags).not.toBe(meta.tags);
     });
   });
 

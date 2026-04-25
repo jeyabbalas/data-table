@@ -194,6 +194,16 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     snapshot.annotations = annotationStore.toJSON();
   }
 
+  // Capture the severity filter only when the user has toggled at least one
+  // severity off — the all-true default stays implicit so untouched snapshots
+  // remain identical to pre-fix saves.
+  if (annotationStore) {
+    const filter = annotationStore.getSeverityFilter();
+    if (!filter.error || !filter.warning || !filter.info) {
+      snapshot.annotationSeverityFilter = filter;
+    }
+  }
+
   const tooltips = state.columnHeaderTooltips.get();
   if (tooltips.size > 0) {
     snapshot.columnHeaderTooltips = Object.fromEntries(tooltips);
@@ -369,6 +379,17 @@ export function restoreStateFromSnapshot(
       annotationStore.loadJSON(snapshot.annotations, 'replace');
     } catch {
       // Leave the store empty on any parse/shape failure.
+    }
+  }
+
+  // Restore severity filter after loadJSON so the renderer reapply triggered
+  // by loadJSON sees the right filter on the first paint. Same silent-failure
+  // posture: a malformed stored value must not block the rest of the restore.
+  if (annotationStore && snapshot.annotationSeverityFilter) {
+    try {
+      annotationStore.setSeverityFilter(snapshot.annotationSeverityFilter);
+    } catch {
+      // Leave the filter at all-true on any failure.
     }
   }
 }

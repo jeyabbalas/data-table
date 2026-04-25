@@ -20,7 +20,8 @@ import type { StateActions } from '../core/Actions';
 import { ColumnResizer } from './ColumnResizer';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { AnnotationPopover, maxSeverity } from './AnnotationPopover';
+import { AnnotationPopover } from './AnnotationPopover';
+import { maxSeverity } from '../annotations/severity';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 
 /**

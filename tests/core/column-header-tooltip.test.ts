@@ -202,3 +202,136 @@ describe('StateActions.setColumnHeaderTooltip / getColumnHeaderTooltip — struc
     expect(undoManager.canUndo).toBe(false);
   });
 });
+
+describe('Column header tooltip — derived-column lifecycle integration', () => {
+  let state: TableState;
+  let actions: StateActions;
+  let derivedBridge: WorkerBridge & {
+    getQueryCalls(): string[];
+  };
+
+  // Mock bridge that handles the SQL surface of addDerivedColumn,
+  // updateDerivedColumn, and removeDerivedColumn for integration testing.
+  function createDerivedMockBridge(): WorkerBridge & { getQueryCalls(): string[] } {
+    const queryCalls: string[] = [];
+    const query = vi.fn().mockImplementation(async (sql: string) => {
+      queryCalls.push(sql);
+      const trimmed = sql.trim();
+      if (sql.includes('typeof(')) return [{ t: 'INTEGER' }];
+      if (sql.includes('LIMIT 0')) return [];
+      if (/^(CREATE|DROP|INSERT|CREATE OR REPLACE)/i.test(trimmed)) return [];
+      return [];
+    });
+    return {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      query,
+      loadData: vi.fn().mockResolvedValue(undefined),
+      exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
+      terminate: vi.fn(),
+      isInitialized: vi.fn().mockReturnValue(true),
+      clearQueryCache: vi.fn(),
+      getQueryCalls: () => queryCalls,
+    } as unknown as WorkerBridge & { getQueryCalls(): string[] };
+  }
+
+  beforeEach(() => {
+    state = createTableState();
+    derivedBridge = createDerivedMockBridge();
+    actions = new StateActions(state, derivedBridge, new UndoManager());
+    initializeColumnsFromSchema(state, schema);
+    state.tableName.set('test_table');
+    state.baseTableName.set('test_table');
+    state.totalRows.set(10);
+    state.filteredRows.set(10);
+  });
+
+  it('migrates the tooltip key when a derived column is renamed via updateDerivedColumn', async () => {
+    const addRes = await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'tip_pct',
+      expression: 'age + 1',
+    });
+    expect(addRes.success).toBe(true);
+
+    actions.setColumnHeaderTooltip('tip_pct', {
+      title: 'Tip percentage',
+      description: 'Computed as age + 1.',
+    });
+    expect(actions.getColumnHeaderTooltip('tip_pct')).toMatchObject({
+      title: 'Tip percentage',
+    });
+
+    const updateRes = await actions.updateDerivedColumn('tip_pct', {
+      kind: 'expression',
+      name: 'tip_pct_v2',
+      expression: 'age + 1',
+    });
+    expect(updateRes.success).toBe(true);
+
+    expect(actions.getColumnHeaderTooltip('tip_pct_v2')).toMatchObject({
+      title: 'Tip percentage',
+      description: 'Computed as age + 1.',
+    });
+    expect(actions.getColumnHeaderTooltip('tip_pct')).toBeNull();
+    expect(state.columnHeaderTooltips.get().has('tip_pct')).toBe(false);
+  });
+
+  it('preserves the tooltip when the derived column is updated without rename', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'tip_pct',
+      expression: 'age + 1',
+    });
+    actions.setColumnHeaderTooltip('tip_pct', { description: 'Original tooltip' });
+
+    const updateRes = await actions.updateDerivedColumn('tip_pct', {
+      kind: 'expression',
+      name: 'tip_pct',
+      expression: 'age + 2',
+    });
+    expect(updateRes.success).toBe(true);
+    expect(actions.getColumnHeaderTooltip('tip_pct')).toMatchObject({
+      description: 'Original tooltip',
+    });
+  });
+
+  it('drops the tooltip when the derived column is removed via removeDerivedColumn', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'tip_pct',
+      expression: 'age + 1',
+    });
+    actions.setColumnHeaderTooltip('tip_pct', { description: 'goes away' });
+    expect(actions.getColumnHeaderTooltip('tip_pct')).not.toBeNull();
+
+    await actions.removeDerivedColumn('tip_pct');
+    expect(actions.getColumnHeaderTooltip('tip_pct')).toBeNull();
+    expect(state.columnHeaderTooltips.get().has('tip_pct')).toBe(false);
+  });
+
+  it('leaves unrelated tooltips intact when one derived column is renamed', async () => {
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'a',
+      expression: 'age + 1',
+    });
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'b',
+      expression: 'age + 2',
+    });
+    actions.setColumnHeaderTooltip('a', { description: 'A' });
+    actions.setColumnHeaderTooltip('b', { description: 'B' });
+
+    const updateRes = await actions.updateDerivedColumn('a', {
+      kind: 'expression',
+      name: 'a_renamed',
+      expression: 'age + 1',
+    });
+    expect(updateRes.success).toBe(true);
+
+    expect(actions.getColumnHeaderTooltip('a_renamed')).toMatchObject({ description: 'A' });
+    expect(actions.getColumnHeaderTooltip('b')).toMatchObject({ description: 'B' });
+    expect(actions.getColumnHeaderTooltip('a')).toBeNull();
+  });
+});

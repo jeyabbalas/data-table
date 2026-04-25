@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { AnnotationPopover, maxSeverity, severityRank } from '@/table/AnnotationPopover';
+import { AnnotationPopover } from '@/table/AnnotationPopover';
+import { maxSeverity, severityRank } from '@/annotations/severity';
 import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
 import type { Annotation } from '@/annotations/types';
 

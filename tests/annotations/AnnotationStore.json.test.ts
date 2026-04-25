@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AnnotationStore } from '@/annotations/AnnotationStore';
 import { AnnotationError } from '@/core/errors';
 import type { AnnotationFile } from '@/annotations/types';
@@ -162,6 +162,107 @@ describe('AnnotationStore — JSON I/O', () => {
       }
       expect(store.count()).toBe(1);
       expect(store.get('y')).toBeNull();
+    });
+  });
+
+  describe('loadJSON — tableName mismatch', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('warns and loads when file.tableName differs from the store table (no opt-in)', () => {
+      // store is configured with 'my_table' in the outer beforeEach.
+      const file: AnnotationFile = {
+        version: 1,
+        tableName: 'other_table',
+        annotations: [
+          { id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' },
+        ],
+      };
+      const result = store.loadJSON(file, 'replace');
+      expect(result).toEqual({ added: 1, skipped: 0 });
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(String(warnSpy.mock.calls[0][0])).toContain('other_table');
+      expect(String(warnSpy.mock.calls[0][0])).toContain('my_table');
+      expect(store.count()).toBe(1);
+    });
+
+    it('throws ANNOTATION_TABLENAME_MISMATCH when validateTableName=true and tables differ', () => {
+      store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'pre' });
+      const file: AnnotationFile = {
+        version: 1,
+        tableName: 'other_table',
+        annotations: [
+          { id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' },
+        ],
+      };
+      try {
+        store.loadJSON(file, { mode: 'replace', validateTableName: true });
+        expect.fail('expected throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(AnnotationError);
+        expect((e as AnnotationError).code).toBe('ANNOTATION_TABLENAME_MISMATCH');
+        expect((e as AnnotationError).details).toMatchObject({
+          fileTableName: 'other_table',
+          currentTableName: 'my_table',
+        });
+      }
+      // Pre-existing annotation untouched (validation runs before wipe).
+      expect(store.count()).toBe(1);
+      expect(warnSpy).toHaveBeenCalledOnce();
+    });
+
+    it('does not warn when tableNames match', () => {
+      const file: AnnotationFile = {
+        version: 1,
+        tableName: 'my_table',
+        annotations: [],
+      };
+      store.loadJSON(file, 'replace');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not warn when the file has no tableName', () => {
+      const file: AnnotationFile = {
+        version: 1,
+        annotations: [],
+      };
+      store.loadJSON(file, 'replace');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not warn when the store has no tableName', () => {
+      const nameless = new AnnotationStore({ tableName: null });
+      const file: AnnotationFile = {
+        version: 1,
+        tableName: 'some_table',
+        annotations: [],
+      };
+      nameless.loadJSON(file, 'replace');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('respects validateTableName via merge mode too', () => {
+      const file: AnnotationFile = {
+        version: 1,
+        tableName: 'other_table',
+        annotations: [
+          { id: 'm1', scope: 'row', rowId: 0, severity: 'info', message: 'm' },
+        ],
+      };
+      try {
+        store.loadJSON(file, { mode: 'merge', validateTableName: true });
+        expect.fail('expected throw');
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_TABLENAME_MISMATCH');
+      }
+      expect(store.count()).toBe(0);
     });
   });
 

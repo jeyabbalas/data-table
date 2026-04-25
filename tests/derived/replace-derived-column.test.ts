@@ -305,7 +305,74 @@ describe('replaceDerivedColumn', () => {
     }
   });
 
-  // 7. Atomicity — VIEW recreate failure rolls state back
+  // 7a. Atomicity — vector helper-table CREATE failure rolls state back (A2 regression)
+  it('rolls back when creating the new vector helper table fails during replacement', async () => {
+    state = createTableState();
+    mockBridge = createMockBridge();
+    actions = new StateActions(state, mockBridge as any, new UndoManager());
+    initializeColumnsFromSchema(state, baseSchema);
+    state.tableName.set('test_table');
+    state.baseTableName.set('test_table');
+    state.totalRows.set(5);
+    state.filteredRows.set(5);
+
+    const addRes = await actions.addDerivedColumn({
+      kind: 'vector',
+      name: 'v',
+      vectorType: 'integer',
+      values: new Uint8Array([1, 2, 3, 4, 5]),
+    });
+    expect(addRes.success).toBe(true);
+    const before = state.derivedColumns.get();
+
+    // Reset call history so the assertions below count only post-replace SQL.
+    mockBridge.query.mockClear();
+
+    // Throw on the first CREATE TABLE __dt_vec_ during replace, succeed
+    // on the second (the rollback restore of the old helper).
+    let helperCreateCount = 0;
+    mockBridge.query.mockImplementation(async (sql: string) => {
+      const trimmed = sql.trim();
+      if (sql.includes('typeof(')) return [{ t: 'INTEGER' }];
+      if (/^CREATE TABLE\s+"?__dt_vec_/i.test(trimmed)) {
+        helperCreateCount++;
+        if (helperCreateCount === 1) {
+          throw new Error('Simulated DuckDB failure on helper-table CREATE');
+        }
+        return [];
+      }
+      if (sql.includes('LIMIT 0')) return [];
+      if (/^(CREATE|DROP|INSERT)/i.test(trimmed)) return [];
+      return [];
+    });
+
+    const result = await actions.replaceDerivedColumn('v', {
+      kind: 'vector',
+      name: 'v',
+      vectorType: 'integer',
+      values: new Uint8Array([9, 9, 9, 9, 9]),
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(DerivedColumnError);
+    }
+    // Old definition preserved in state.
+    expect(state.derivedColumns.get()).toEqual(before);
+
+    // Rollback ran: a second CREATE TABLE __dt_vec_ was issued (the
+    // restore of the old helper). Without the A2 fix, only one CREATE
+    // TABLE __dt_vec_ would have been attempted before the throw
+    // propagated, leaving DuckDB in a broken state.
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
+      .map((args) => args[0] as string);
+    const helperCreates = calls.filter((sql) =>
+      /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim())
+    );
+    expect(helperCreates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // 7b. Atomicity — VIEW recreate failure rolls state back
   it('rolls back when VIEW recreate fails during replacement', async () => {
     // Pre-add the column; the replace call will be the 2nd VIEW recreate.
     const addMock = createMockBridge({
@@ -350,6 +417,118 @@ describe('replaceDerivedColumn', () => {
 
     // State rolled back to the pre-replace definition.
     expect(state.derivedColumns.get()).toEqual(before);
+  });
+
+  // 9. Kind change — vector → expression
+  it('replaces a vector column with an expression column (kind change)', async () => {
+    state = createTableState();
+    mockBridge = createMockBridge({ typeMap: { 'x + 1': 'INTEGER' } });
+    actions = new StateActions(state, mockBridge as any, new UndoManager());
+    initializeColumnsFromSchema(state, baseSchema);
+    state.tableName.set('test_table');
+    state.baseTableName.set('test_table');
+    state.totalRows.set(5);
+    state.filteredRows.set(5);
+
+    const addRes = await actions.addDerivedColumn({
+      kind: 'vector',
+      name: 'v',
+      vectorType: 'integer',
+      values: new Uint8Array([0, 1, 0, 1, 0]),
+    });
+    expect(addRes.success).toBe(true);
+
+    const result = await actions.replaceDerivedColumn('v', {
+      kind: 'expression',
+      name: 'v',
+      expression: 'x + 1',
+    });
+
+    expect(result.success).toBe(true);
+    const stored = state.derivedColumns.get().find(d => d.name === 'v');
+    expect(stored).toMatchObject({ kind: 'expression', name: 'v', expression: 'x + 1' });
+
+    // Verify the helper-table SQL surface: the old vector helper was dropped
+    // and no new helper was created (the new column is an expression).
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
+      .map((args) => args[0] as string);
+    const helperDrops = calls.filter((sql) => /^DROP TABLE.*__dt_vec_/i.test(sql.trim()));
+    expect(helperDrops.length).toBeGreaterThan(0);
+  });
+
+  // 10. Kind change — expression → vector
+  it('replaces an expression column with a vector column (kind change)', async () => {
+    state = createTableState();
+    mockBridge = createMockBridge({ typeMap: { 'x + 1': 'INTEGER' } });
+    actions = new StateActions(state, mockBridge as any, new UndoManager());
+    initializeColumnsFromSchema(state, baseSchema);
+    state.tableName.set('test_table');
+    state.baseTableName.set('test_table');
+    state.totalRows.set(5);
+    state.filteredRows.set(5);
+
+    await actions.addDerivedColumn({ kind: 'expression', name: 'e', expression: 'x + 1' });
+
+    const result = await actions.replaceDerivedColumn('e', {
+      kind: 'vector',
+      name: 'e',
+      vectorType: 'integer',
+      values: new Uint8Array([9, 9, 9, 9, 9]),
+    });
+
+    expect(result.success).toBe(true);
+    const stored = state.derivedColumns.get().find(d => d.name === 'e');
+    expect(stored).toMatchObject({ kind: 'vector', name: 'e', vectorType: 'integer' });
+
+    // Helper-table CREATE for the new vector should have run.
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
+      .map((args) => args[0] as string);
+    const helperCreates = calls.filter((sql) =>
+      /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim())
+    );
+    expect(helperCreates.length).toBeGreaterThan(0);
+  });
+
+  // 11. Same-name self-reference — documents current behavior.
+  it('allows same-name self-reference: replaceColumn("a", "a + 1") substitutes silently', async () => {
+    setup(createMockBridge({
+      typeMap: { 'x + 1': 'INTEGER', 'a + 1': 'INTEGER' },
+    }));
+
+    const addRes = await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'a',
+      expression: 'x + 1',
+    });
+    expect(addRes.success).toBe(true);
+
+    // The new expression "a + 1" textually references its own column name.
+    // Validation in step 1 happens against the current VIEW (where 'a'
+    // still resolves to the OLD expression "x + 1"), so DuckDB evaluates
+    // "a + 1" as "(x + 1) + 1" and the SQL passes. The topological-sort
+    // cycle check at step 3 does NOT flag this because the dependent
+    // analysis runs after the tentative swap, but the resulting SQL has
+    // already been rewritten and the new column's expression is captured
+    // as the literal text "a + 1" — when the VIEW is recreated, DuckDB's
+    // CREATE OR REPLACE VIEW resolves "a" to whatever the column refers
+    // to in the new VIEW, which DuckDB allows because the AS clause
+    // happens after the SELECT projection is parsed.
+    //
+    // The net behavior is "silent substitution": the new value is the
+    // OLD expression's evaluation + the modification. This test locks in
+    // that behavior so any future change requires an intentional update.
+    const result = await actions.replaceDerivedColumn('a', {
+      kind: 'expression',
+      name: 'a',
+      expression: 'a + 1',
+    });
+
+    expect(result.success).toBe(true);
+    expect(state.derivedColumns.get()[0]).toMatchObject({
+      kind: 'expression',
+      name: 'a',
+      expression: 'a + 1',
+    });
   });
 
   // 8. Event payload — derivedChange fires with kind='replaced'

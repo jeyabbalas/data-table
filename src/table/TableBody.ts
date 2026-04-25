@@ -14,7 +14,7 @@ import type { ColumnSchema, SortColumn, Filter } from '../core/types';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { AnnotationPopover } from './AnnotationPopover';
-import { maxSeverity } from './AnnotationPopover';
+import { maxSeverity } from '../annotations/severity';
 import type { Annotation } from '../annotations/types';
 
 /**
@@ -963,6 +963,13 @@ export class TableBody {
    * single source of truth for annotated-cell tooltips. Unannotated
    * cells keep the formatted title so hovering still reveals the
    * underlying value.
+   *
+   * Render-budget note: this runs once per visible cell on every render
+   * (~5000 calls/render at 100 cols × 50 rows). It calls `getByRow`,
+   * `getByColumn`, and `getByCell` — all O(1) on the AnnotationStore
+   * indexes. If those lookups ever change complexity, scroll perf will
+   * regress quietly; benchmarks live in
+   * `tests/annotations/AnnotationStore.scale.test.ts`.
    */
   private applyCellAnnotationClasses(
     cellEl: HTMLElement,
@@ -1045,10 +1052,20 @@ export class TableBody {
    * store. If the popover is currently open against an anchor whose
    * annotations disappeared, we close it — the list of annotations that
    * drove the original `show()` is no longer valid.
+   *
+   * Each cell is re-rendered through `cellRenderer.render` before the
+   * annotation classes are reapplied. The render call restores the
+   * formatted value to `cellEl.title`; `applyCellAnnotationClasses`
+   * re-clears it when annotations remain. Without this re-render, removing
+   * the last annotation from a cell would leave its native tooltip empty
+   * until the next virtualization render swap.
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;
     const visibleColumns = this.state.visibleColumns.get();
+    const schema = this.state.schema.get();
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const col of schema) schemaMap.set(col.name, col);
     for (const [index, rowEl] of this.rowElementMap) {
       const rowData = this.rowDataCache.get(index);
       if (!rowData) continue;
@@ -1063,7 +1080,9 @@ export class TableBody {
       const cells = rowEl.children;
       for (let c = 0; c < visibleColumns.length && c < cells.length; c++) {
         const cellEl = cells[c] as HTMLElement;
-        this.applyCellAnnotationClasses(cellEl, rowId, visibleColumns[c]);
+        const colName = visibleColumns[c];
+        this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
+        this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
     }
     // Popover auto-dismisses: its anchor may have lost its `dt-cell--annotated`

@@ -43,7 +43,7 @@
  * instantiate a `DataTable` in `node` env don't throw.
  */
 
-import type { Annotation, AnnotationSeverity } from '../annotations/types';
+import type { Annotation } from '../annotations/types';
 import { onAnyModalOpened } from '../core/ModalHost';
 
 /** Options accepted by {@link AnnotationPopover}. */
@@ -104,21 +104,8 @@ function titleFor(scope: 'row' | 'column' | 'cell'): string {
   return 'Cell';
 }
 
-/** Rank severities so the "highest" can be surfaced in a CSS class. */
-export function severityRank(sev: AnnotationSeverity): number {
-  return sev === 'error' ? 0 : sev === 'warning' ? 1 : 2;
-}
-
-/** Return the highest-severity value among `anns`, or `null` if empty. */
-export function maxSeverity(anns: readonly Annotation[]): AnnotationSeverity | null {
-  let best: AnnotationSeverity | null = null;
-  for (const a of anns) {
-    if (!best || severityRank(a.severity) < severityRank(best)) {
-      best = a.severity;
-    }
-  }
-  return best;
-}
+// `severityRank` and `maxSeverity` live in src/annotations/severity.ts so
+// renderers can consume them without importing from a popover module.
 
 export class AnnotationPopover {
   private readonly classPrefix: string;

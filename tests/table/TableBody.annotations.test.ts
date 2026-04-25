@@ -642,6 +642,62 @@ describe('TableBody — annotation overlay', () => {
     body.destroy();
   });
 
+  it('store "change" event restoring native cell title after the last annotation is removed (regression)', async () => {
+    const rows = buildFakeRows(5);
+    const { bridge } = createMockBridge(rows);
+    actions = new StateActions(state, bridge as never);
+    const body = new TableBody(container, state, bridge as never, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+
+    const visibleColumns = state.visibleColumns.get();
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const c of testSchema) schemaMap.set(c.name, c);
+
+    const internal = body as unknown as {
+      getOrCreateRow(n: number): HTMLElement;
+      updateRowContent(
+        rowEl: HTMLElement,
+        index: number,
+        data: Record<string, unknown>,
+        columns: string[],
+        schemaMap: Map<string, ColumnSchema>,
+      ): void;
+      rowDataCache: Map<number, Record<string, unknown>>;
+      rowElementMap: Map<number, HTMLElement>;
+    };
+    await body.initialize();
+
+    // Render row 0 and capture the formatted title before any annotation exists.
+    const rowEl = internal.getOrCreateRow(visibleColumns.length);
+    internal.updateRowContent(rowEl, 0, rows[0], visibleColumns, schemaMap);
+    internal.rowDataCache.set(0, rows[0]);
+    internal.rowElementMap.set(0, rowEl);
+    const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
+    const formattedTitle = priceCell.title;
+    expect(formattedTitle.length).toBeGreaterThan(0);
+
+    // Add an annotation: change event fires reapplyAnnotationsToVisibleRows.
+    const ann = store.add({
+      scope: 'cell',
+      rowId: 0,
+      column: 'price',
+      severity: 'error',
+      message: 'over limit',
+    });
+    expect(priceCell.title).toBe('');
+
+    // Remove it: change event fires reapplyAnnotationsToVisibleRows again.
+    // Without the per-cell render call inside reapply, the title would
+    // stay empty until the next virtualization render.
+    store.remove(ann.id);
+    expect(priceCell.title).toBe(formattedTitle);
+    expect(priceCell.classList.contains('dt-cell--annotated')).toBe(false);
+
+    body.destroy();
+  });
+
   it('annotations without a store wired (no options) are a total no-op', () => {
     const rows = buildFakeRows(5);
     const { bridge } = createMockBridge(rows);
@@ -1217,6 +1273,45 @@ describe('TableBody — annotation overlay', () => {
       (body as unknown as { reapplyAnnotationsToVisibleRows(): void }).reapplyAnnotationsToVisibleRows();
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
+
+      body.destroy();
+    });
+
+    it('end-to-end row-scope: error+warning+info on one row; toggling off error surfaces warning, not info', async () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      // Subscribe the body so setSeverityFilter triggers the change handler →
+      // reapplyAnnotationsToVisibleRows (the production path, not a manual call).
+      await body.initialize();
+
+      // All three severities on one row.
+      store.add({ scope: 'row', rowId: 6, severity: 'info', message: 'i' });
+      store.add({ scope: 'row', rowId: 6, severity: 'warning', message: 'w' });
+      store.add({ scope: 'row', rowId: 6, severity: 'error', message: 'e' });
+
+      // Render row 6 and seed the body's caches so the change handler can find it.
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 6, rows[6], visibleColumns, schemaMap);
+      (body as unknown as { rowElementMap: Map<number, HTMLElement> }).rowElementMap.set(6, rowEl);
+      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(6, rows[6]);
+
+      // Default — error wins.
+      expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);
+      expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(false);
+      expect(rowEl.classList.contains('dt-row--annotation-info')).toBe(false);
+
+      // Toggle off error via the public API. The body subscribes to 'change'
+      // events on construction, so this fires reapplyAnnotationsToVisibleRows.
+      store.setSeverityFilter({ error: false });
+
+      expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(false);
+      expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(true);
+      expect(rowEl.classList.contains('dt-row--annotation-info')).toBe(false);
+
+      // Toggle off warning too — falls through to info.
+      store.setSeverityFilter({ warning: false });
+      expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(false);
+      expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(false);
+      expect(rowEl.classList.contains('dt-row--annotation-info')).toBe(true);
 
       body.destroy();
     });

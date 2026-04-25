@@ -1535,9 +1535,6 @@ export class StateActions {
         return emptyTypedResult(entry);
       }
       const indices = Array.from(selected);
-      // Reuse the export "selected rows" pattern. TODO: when selection
-      // migrates to __rowid__ (Phase 3+), switch this branch to a direct
-      // `WHERE __rowid__ IN (...)` filter on the base table.
       const baseSql = buildSelectedRowsQuery(
         tbl,
         [name],

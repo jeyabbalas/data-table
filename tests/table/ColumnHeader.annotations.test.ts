@@ -222,4 +222,39 @@ describe('ColumnHeader — annotation overlay', () => {
     expect(popover.isOpen()).toBe(false);
     header.destroy();
   });
+
+  // Within-scope max-severity hierarchy (regression). The existing
+  // "severity class updates when a higher-severity annotation is added"
+  // test only covers monotonically-increasing severities. This test
+  // exercises mixed insertion orders to lock in maxSeverity routing
+  // against any future change that uses anns[0] / anns.at(-1).
+  it('column-scope multi-ann: highest severity wins regardless of insertion order', () => {
+    const header = new ColumnHeader(column, state, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+    const el = header.getElement();
+
+    // Phase 1: error added LAST (info → warning → error). Error must win.
+    for (const sev of ['info', 'warning', 'error'] as const) {
+      store.add({ scope: 'column', column: 'fare_amount', severity: sev, message: `c-${sev}` });
+    }
+    expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
+    expect(el.classList.contains('dt-col-header--annotation-error')).toBe(true);
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-info')).toBe(false);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    // Phase 2: error added FIRST (error → warning → info). Error must STILL win.
+    store.clear('all');
+    for (const sev of ['error', 'warning', 'info'] as const) {
+      store.add({ scope: 'column', column: 'fare_amount', severity: sev, message: `c-${sev}` });
+    }
+    expect(el.classList.contains('dt-col-header--annotation-error')).toBe(true);
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-info')).toBe(false);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    header.destroy();
+  });
 });

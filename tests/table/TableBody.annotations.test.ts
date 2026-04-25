@@ -941,4 +941,110 @@ describe('TableBody — annotation overlay', () => {
 
     body.destroy();
   });
+
+  // =========================================
+  // Within-scope max-severity hierarchy (regression).
+  // When multiple anns of the SAME scope pile on one target with mixed
+  // severities, the painted class must be the --error variant (error >
+  // warning > info), regardless of insertion order. Guards against any
+  // future change that swaps maxSeverity() for anns[0] / anns.at(-1).
+  // =========================================
+
+  it('cell-scope multi-ann: highest severity wins regardless of insertion order', () => {
+    const rows = buildFakeRows(10);
+    const { bridge } = createMockBridge(rows);
+    actions = new StateActions(state, bridge as never);
+    const body = new TableBody(container, state, bridge as never, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+
+    const visibleColumns = state.visibleColumns.get();
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const c of testSchema) schemaMap.set(c.name, c);
+
+    const internal = body as unknown as {
+      getOrCreateRow(n: number): HTMLElement;
+      updateRowContent(
+        rowEl: HTMLElement,
+        index: number,
+        data: Record<string, unknown>,
+        columns: string[],
+        schemaMap: Map<string, ColumnSchema>,
+      ): void;
+    };
+
+    // Phase 1: error added LAST (info → warning → error). Error must win.
+    for (const sev of ['info', 'warning', 'error'] as const) {
+      store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
+    }
+    const rowA = internal.getOrCreateRow(visibleColumns.length);
+    internal.updateRowContent(rowA, 5, rows[5], visibleColumns, schemaMap);
+    let priceCell = rowA.children[visibleColumns.indexOf('price')] as HTMLElement;
+    expect(priceCell.classList.contains('dt-cell--annotated')).toBe(true);
+    expect(priceCell.classList.contains('dt-cell--annotation-error')).toBe(true);
+    expect(priceCell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+    expect(priceCell.classList.contains('dt-cell--annotation-info')).toBe(false);
+    expect(priceCell.dataset.dtAnnotationCount).toBe('3');
+
+    // Phase 2: error added FIRST (error → info → warning). Error must STILL win.
+    store.clear('all');
+    for (const sev of ['error', 'info', 'warning'] as const) {
+      store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
+    }
+    const rowB = internal.getOrCreateRow(visibleColumns.length);
+    internal.updateRowContent(rowB, 5, rows[5], visibleColumns, schemaMap);
+    priceCell = rowB.children[visibleColumns.indexOf('price')] as HTMLElement;
+    expect(priceCell.classList.contains('dt-cell--annotation-error')).toBe(true);
+    expect(priceCell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+    expect(priceCell.classList.contains('dt-cell--annotation-info')).toBe(false);
+    expect(priceCell.dataset.dtAnnotationCount).toBe('3');
+
+    body.destroy();
+  });
+
+  it('row-scope multi-ann: row + every cell carry the error class with mixed insertion order', () => {
+    const rows = buildFakeRows(10);
+    const { bridge } = createMockBridge(rows);
+    actions = new StateActions(state, bridge as never);
+    const body = new TableBody(container, state, bridge as never, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+
+    const visibleColumns = state.visibleColumns.get();
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const c of testSchema) schemaMap.set(c.name, c);
+
+    const internal = body as unknown as {
+      getOrCreateRow(n: number): HTMLElement;
+      updateRowContent(
+        rowEl: HTMLElement,
+        index: number,
+        data: Record<string, unknown>,
+        columns: string[],
+        schemaMap: Map<string, ColumnSchema>,
+      ): void;
+    };
+
+    // Error sandwiched between warning and info — every position covered.
+    for (const sev of ['warning', 'error', 'info'] as const) {
+      store.add({ scope: 'row', rowId: 4, severity: sev, message: `r-${sev}` });
+    }
+    const rowEl = internal.getOrCreateRow(visibleColumns.length);
+    internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+
+    expect(rowEl.classList.contains('dt-row--annotated')).toBe(true);
+    expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);
+    expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(false);
+    expect(rowEl.classList.contains('dt-row--annotation-info')).toBe(false);
+    for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
+      expect(cell.classList.contains('dt-cell--row-annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(true);
+      expect(cell.classList.contains('dt-cell--row-annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--row-annotation-info')).toBe(false);
+    }
+
+    body.destroy();
+  });
 });

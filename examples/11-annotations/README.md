@@ -65,26 +65,9 @@ When the app needs the real `__rowid__` value, call
 convert with `Number(rowIds[i])` before passing to `add({ rowId: ... })`.
 Practical row counts stay well under `2⁵³`.
 
-## Phase 5 — Column header tooltips
+## See also
 
-The "Column header tooltips" section uses
-`table.actions.setColumnHeaderTooltip(columnName, content | string | null)`
-to attach a structured library-rendered popover to the column-name span:
-
-- `content.title` — optional bold heading.
-- `content.description` — optional free-text body. Whitespace preserved.
-- `content.items[]` — optional `{ label, value }` rows. `value: string`
-  renders inline; `value: string[]` renders as wrapping chips (a natural
-  fit for enum sets).
-
-Pass a plain `string` as a description-only shorthand. Pass `null` (or
-any input that normalizes to empty) to clear. Tooltips persist in the
-session snapshot alongside `columnWidths`.
-
-**XSS safety.** Every text field is rendered via `.textContent`. The
-setter does not accept HTML strings by design — caller-supplied content
-is safe by construction, suitable for enterprise client-side embeds.
-
-Independent from annotation popovers (Phase 4): annotations anchor to
-the entire header, tooltips anchor to the column-name span. A column may
-have both visible at once.
+For column-header tooltips (a structured popover anchored on the
+column-name span), see **example 12 — Column header tooltips**. The two
+features are independent: a column may have both an annotation overlay
+and a tooltip popover visible at once.

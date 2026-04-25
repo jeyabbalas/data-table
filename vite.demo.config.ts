@@ -16,6 +16,7 @@ const EXAMPLES = [
   '09-multi-table',
   '10-column-export',
   '11-annotations',
+  '12-column-header-tooltips',
 ];
 
 export default defineConfig({

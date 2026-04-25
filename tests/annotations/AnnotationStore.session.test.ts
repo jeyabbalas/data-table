@@ -80,6 +80,16 @@ describe('AnnotationStore — session persistence integration', () => {
     autoSave.destroy();
   });
 
+  it('AutoSave ignores filterChanged events (severity filter is visual-only)', () => {
+    const store = createMockStore();
+    const autoSave = new AutoSave(state, store, { annotationStore });
+    autoSave.enable();
+    annotationStore.setSeverityFilter({ error: false });
+    vi.advanceTimersByTime(5000);
+    expect(store.save).not.toHaveBeenCalled();
+    autoSave.destroy();
+  });
+
   it('AutoSave passes the annotation store through to the snapshot', () => {
     const store = createMockStore();
     const autoSave = new AutoSave(state, store, { annotationStore });

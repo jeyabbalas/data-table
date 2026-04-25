@@ -362,13 +362,14 @@ export class ColumnHeader {
       .getByColumn(this.column.name)
       .filter((a) => a.scope === 'column');
     if (anns.length === 0) return;
-    const sev = maxSeverity(anns);
-    if (!sev) return;
-    el.classList.add(
-      `${p}-col-header--annotated`,
-      `${p}-col-header--annotation-${sev}`,
-    );
+    // Marker class + count track unfiltered presence so the popover stays
+    // reachable even when every visible severity is hidden; the severity
+    // class falls back through error → warning → info per the filter.
+    el.classList.add(`${p}-col-header--annotated`);
     el.dataset.dtAnnotationCount = String(anns.length);
+    const filter = annotations.getSeverityFilter();
+    const sev = maxSeverity(anns.filter((a) => filter[a.severity]));
+    if (sev) el.classList.add(`${p}-col-header--annotation-${sev}`);
   }
 
   /**

@@ -115,9 +115,29 @@ export interface AnnotationFile {
 
 /** Event payload emitted by `AnnotationStore.on('change', …)`. */
 export interface AnnotationChangePayload {
-  kind: 'added' | 'removed' | 'updated' | 'cleared';
+  /**
+   * `'filterChanged'` is a visual-only signal — it fires when
+   * `setSeverityFilter` actually toggled at least one flag. The store's
+   * contents are unchanged and `ids` is empty. Persistence layers should
+   * skip this kind; renderers should reapply.
+   */
+  kind: 'added' | 'removed' | 'updated' | 'cleared' | 'filterChanged';
   ids: string[];
 }
 
 /** Handler function shape for `AnnotationStore.on('change', …)`. */
 export type AnnotationChangeHandler = (payload: AnnotationChangePayload) => void;
+
+/**
+ * Visual-only severity-filter flag set. Each flag controls whether tints for
+ * that severity appear; annotations themselves remain in the store regardless.
+ * When all three are enabled (the default), every annotation paints per the
+ * `error > warning > info` hierarchy. Disabling a flag drops it from the
+ * hierarchy at render time so the next-highest enabled severity shows
+ * through.
+ */
+export interface SeverityFilter {
+  error: boolean;
+  warning: boolean;
+  info: boolean;
+}

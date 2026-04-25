@@ -104,6 +104,7 @@ export type {
   AnnotationChangePayload,
   AnnotationChangeHandler,
   NewAnnotation,
+  SeverityFilter,
 } from './annotations/types';
 export { ANNOTATION_FILE_VERSION } from './annotations/types';
 

@@ -102,9 +102,13 @@ export class AutoSave {
 
     // Subscribe to annotation-store changes. The store's `on('change', …)`
     // API returns a plain unsubscribe function matching our signal contract.
+    // `filterChanged` is a visual-only signal (severity-filter toggle); skip
+    // it so toggling tints doesn't trigger a save.
     if (this.annotationStore) {
       this.unsubscribes.push(
-        this.annotationStore.on('change', () => this.scheduleSave()),
+        this.annotationStore.on('change', (payload) => {
+          if (payload.kind !== 'filterChanged') this.scheduleSave();
+        }),
       );
     }
 

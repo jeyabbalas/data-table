@@ -929,9 +929,13 @@ export class TableBody {
     if (!this.annotations || rowId === null) return;
     const anns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
     if (anns.length === 0) return;
-    const sev = maxSeverity(anns);
-    if (!sev) return;
-    rowEl.classList.add(`${p}-row--annotated`, `${p}-row--annotation-${sev}`);
+    // Marker class tracks unfiltered presence; severity class falls back
+    // through the hierarchy as the visual filter hides higher tiers.
+    rowEl.classList.add(`${p}-row--annotated`);
+    const filter = this.annotations.getSeverityFilter();
+    const visible = anns.filter((a) => filter[a.severity]);
+    const sev = maxSeverity(visible);
+    if (sev) rowEl.classList.add(`${p}-row--annotation-${sev}`);
   }
 
   /**
@@ -983,17 +987,21 @@ export class TableBody {
     delete cellEl.dataset.dtAnnotationCount;
     if (!this.annotations || rowId === null) return;
 
+    // Marker classes (`-annotated`) and the count badge track unfiltered
+    // presence so the popover anchor and a11y signals don't disappear when
+    // the visual filter hides a tier; the severity class is what falls
+    // back through error → warning → info as flags toggle.
+    const filter = this.annotations.getSeverityFilter();
+
     // Row-scope: `getByRow` also holds cell-scope anns at (rowId, any
     // col) via the shared index, so filter to scope === 'row' strictly.
     const rowAnns = this.annotations
       .getByRow(rowId)
       .filter((a) => a.scope === 'row');
-    const rowSev = maxSeverity(rowAnns);
-    if (rowSev) {
-      cellEl.classList.add(
-        `${p}-cell--row-annotated`,
-        `${p}-cell--row-annotation-${rowSev}`,
-      );
+    if (rowAnns.length > 0) {
+      cellEl.classList.add(`${p}-cell--row-annotated`);
+      const rowSev = maxSeverity(rowAnns.filter((a) => filter[a.severity]));
+      if (rowSev) cellEl.classList.add(`${p}-cell--row-annotation-${rowSev}`);
     }
 
     // Column-scope: same index-leak reasoning — `getByColumn` holds
@@ -1001,12 +1009,10 @@ export class TableBody {
     const colAnns = this.annotations
       .getByColumn(colName)
       .filter((a) => a.scope === 'column');
-    const colSev = maxSeverity(colAnns);
-    if (colSev) {
-      cellEl.classList.add(
-        `${p}-cell--col-annotated`,
-        `${p}-cell--col-annotation-${colSev}`,
-      );
+    if (colAnns.length > 0) {
+      cellEl.classList.add(`${p}-cell--col-annotated`);
+      const colSev = maxSeverity(colAnns.filter((a) => filter[a.severity]));
+      if (colSev) cellEl.classList.add(`${p}-cell--col-annotation-${colSev}`);
     }
 
     // Cell-scope: `getByCell` is a union across byRow ∪ byColumn ∪
@@ -1019,12 +1025,10 @@ export class TableBody {
       .filter(
         (a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName,
       );
-    const cellSev = maxSeverity(cellAnns);
-    if (cellSev) {
-      cellEl.classList.add(
-        `${p}-cell--annotated`,
-        `${p}-cell--annotation-${cellSev}`,
-      );
+    if (cellAnns.length > 0) {
+      cellEl.classList.add(`${p}-cell--annotated`);
+      const cellSev = maxSeverity(cellAnns.filter((a) => filter[a.severity]));
+      if (cellSev) cellEl.classList.add(`${p}-cell--annotation-${cellSev}`);
     }
 
     const total = rowAnns.length + colAnns.length + cellAnns.length;

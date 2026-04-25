@@ -134,19 +134,13 @@ let table: DataTable | undefined;
   };
 
   // =========================================
-  // Severity filter — toggles visual opt-out via data attributes on .dt-root
+  // Severity filter — visual-only toggle via the AnnotationStore API.
+  // Hiding a tier drops it from the error → warning → info hierarchy at
+  // render time so the next-highest enabled severity paints through.
   // =========================================
-  const root = container.querySelector('.dt-root') as HTMLElement | null;
-  const wireFilter = (id: string, severity: 'error' | 'warning' | 'info') => {
+  const wireFilter = (id: string, severity: AnnotationSeverity) => {
     const cb = $<HTMLInputElement>(id);
-    cb.onchange = () => {
-      if (!root) return;
-      if (cb.checked) {
-        root.removeAttribute(`data-dt-ann-filter-${severity}`);
-      } else {
-        root.setAttribute(`data-dt-ann-filter-${severity}`, 'off');
-      }
-    };
+    cb.onchange = () => table!.annotations.setSeverityFilter({ [severity]: cb.checked });
   };
   wireFilter('filter-error', 'error');
   wireFilter('filter-warning', 'warning');

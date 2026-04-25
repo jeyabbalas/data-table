@@ -1047,4 +1047,178 @@ describe('TableBody — annotation overlay', () => {
 
     body.destroy();
   });
+
+  describe('severity-filter fallback', () => {
+    type Internal = {
+      getOrCreateRow(n: number): HTMLElement;
+      updateRowContent(
+        rowEl: HTMLElement,
+        index: number,
+        data: Record<string, unknown>,
+        columns: string[],
+        schemaMap: Map<string, ColumnSchema>,
+      ): void;
+    };
+
+    function setup() {
+      const rows = buildFakeRows(10);
+      const { bridge } = createMockBridge(rows);
+      actions = new StateActions(state, bridge as never);
+      const body = new TableBody(container, state, bridge as never, actions, {
+        annotations: store,
+        annotationPopover: popover,
+      });
+      const visibleColumns = state.visibleColumns.get();
+      const schemaMap = new Map<string, ColumnSchema>();
+      for (const c of testSchema) schemaMap.set(c.name, c);
+      const internal = body as unknown as Internal;
+      return { body, rows, visibleColumns, schemaMap, internal };
+    }
+
+    it('cell-scope multi-severity falls back error → warning → info as the filter hides each tier', () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      for (const sev of ['error', 'warning', 'info'] as const) {
+        store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
+      }
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      const priceIdx = visibleColumns.indexOf('price');
+      const cell = rowEl.children[priceIdx] as HTMLElement;
+
+      // Default — error wins.
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
+      expect(cell.dataset.dtAnnotationCount).toBe('3');
+
+      // Hide error — warning falls through.
+      store.setSeverityFilter({ error: false });
+      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
+      expect(cell.dataset.dtAnnotationCount).toBe('3');
+
+      // Hide warning too — info falls through.
+      store.setSeverityFilter({ warning: false });
+      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(true);
+      expect(cell.dataset.dtAnnotationCount).toBe('3');
+
+      // Hide info too — only the marker class remains so the popover still anchors.
+      store.setSeverityFilter({ info: false });
+      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
+      expect(cell.dataset.dtAnnotationCount).toBe('3');
+
+      body.destroy();
+    });
+
+    it('row-scope multi-severity falls back through the hierarchy on row + per-cell row classes', () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      for (const sev of ['error', 'warning', 'info'] as const) {
+        store.add({ scope: 'row', rowId: 4, severity: sev, message: `r-${sev}` });
+      }
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+
+      store.setSeverityFilter({ error: false });
+      internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+      expect(rowEl.classList.contains('dt-row--annotated')).toBe(true);
+      expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(true);
+      expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(false);
+      for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
+        expect(cell.classList.contains('dt-cell--row-annotated')).toBe(true);
+        expect(cell.classList.contains('dt-cell--row-annotation-warning')).toBe(true);
+        expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(false);
+      }
+
+      body.destroy();
+    });
+
+    it('cross-scope: hiding the cell tier reveals the column tier; hiding both reveals the row tier', () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      store.add({ scope: 'row', rowId: 7, severity: 'error', message: 'row-err' });
+      store.add({ scope: 'column', column: 'price', severity: 'warning', message: 'col-warn' });
+      store.add({ scope: 'cell', rowId: 7, column: 'price', severity: 'info', message: 'cell-info' });
+
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      const priceIdx = visibleColumns.indexOf('price');
+      const cell = rowEl.children[priceIdx] as HTMLElement;
+
+      // Default — every scope's max enabled severity is its only severity.
+      expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(true);
+      expect(cell.classList.contains('dt-cell--col-annotation-warning')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(true);
+
+      // Hide info — cell scope loses its severity class but keeps the marker;
+      // col warning + row error are untouched.
+      store.setSeverityFilter({ info: false });
+      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
+      expect(cell.classList.contains('dt-cell--col-annotation-warning')).toBe(true);
+      expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(true);
+
+      // Hide warning too — col scope loses its severity class; row error remains.
+      store.setSeverityFilter({ warning: false });
+      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      expect(cell.classList.contains('dt-cell--col-annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--col-annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(true);
+
+      body.destroy();
+    });
+
+    it('all severities off leaves the marker classes + count intact for the popover anchor', () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      store.add({ scope: 'cell', rowId: 2, column: 'price', severity: 'error', message: 'm' });
+      store.setSeverityFilter({ error: false, warning: false, info: false });
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+      const priceIdx = visibleColumns.indexOf('price');
+      const cell = rowEl.children[priceIdx] as HTMLElement;
+
+      expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
+      expect(cell.dataset.dtAnnotationCount).toBe('1');
+
+      body.destroy();
+    });
+
+    it('reapplyAnnotationsToVisibleRows reflects the latest filter on every visible row', () => {
+      const { body, rows, visibleColumns, schemaMap, internal } = setup();
+      store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'error', message: 'e' });
+      store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'warning', message: 'w' });
+
+      const rowEl = internal.getOrCreateRow(visibleColumns.length);
+      internal.updateRowContent(rowEl, 3, rows[3], visibleColumns, schemaMap);
+      const priceIdx = visibleColumns.indexOf('price');
+      const cell = rowEl.children[priceIdx] as HTMLElement;
+
+      // Seed the body's internal row map so reapply has a row to walk.
+      (body as unknown as { rowElementMap: Map<number, HTMLElement> }).rowElementMap.set(3, rowEl);
+      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(3, rows[3]);
+
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(true);
+
+      store.setSeverityFilter({ error: false });
+      (body as unknown as { reapplyAnnotationsToVisibleRows(): void }).reapplyAnnotationsToVisibleRows();
+      expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
+      expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
+
+      body.destroy();
+    });
+  });
 });

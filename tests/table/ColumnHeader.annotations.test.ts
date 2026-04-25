@@ -257,4 +257,43 @@ describe('ColumnHeader — annotation overlay', () => {
 
     header.destroy();
   });
+
+  it('severity filter falls back through error → warning → info on the header', () => {
+    const header = new ColumnHeader(column, state, actions, {
+      annotations: store,
+      annotationPopover: popover,
+    });
+    const el = header.getElement();
+    for (const sev of ['error', 'warning', 'info'] as const) {
+      store.add({ scope: 'column', column: 'fare_amount', severity: sev, message: `c-${sev}` });
+    }
+
+    expect(el.classList.contains('dt-col-header--annotation-error')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    store.setSeverityFilter({ error: false });
+    expect(el.classList.contains('dt-col-header--annotation-error')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(true);
+    expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    store.setSeverityFilter({ warning: false });
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-info')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    // All severities off — marker class + count remain so the popover anchor is reachable.
+    store.setSeverityFilter({ info: false });
+    expect(el.classList.contains('dt-col-header--annotation-error')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotation-info')).toBe(false);
+    expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('3');
+
+    // Re-enable warning — fallback fires immediately on the filterChanged event.
+    store.setSeverityFilter({ warning: true });
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(true);
+
+    header.destroy();
+  });
 });

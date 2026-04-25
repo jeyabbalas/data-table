@@ -312,10 +312,12 @@
    marker classes on the row element for backward compat and DOM/CSS
    hooks, but no longer paint anything. All tint lives on cells.
 
-   Severity-hide data attributes (example 11): when the host sets
-   `data-dt-ann-filter-<severity>="off"` on `.dt-root`, the matching
-   severity's tint vanishes across every cell-level class family. Header
-   rules live in 03-columns.css. */
+   Severity filter (example 11): hosts call
+   `table.annotations.setSeverityFilter({ error?, warning?, info? })`
+   to suppress a tier's tint. The library drops the matching severity
+   class from cells / rows / headers at render time so the next-highest
+   enabled severity in the hierarchy paints through. No CSS opt-out
+   exists — the filter is purely a DOM-class decision in TS. */
 
 /* Row element marker — no paint. Kept as a DOM/CSS hook. */
 .dt-row--annotated {
@@ -461,31 +463,5 @@
   box-shadow:
     inset 0 0 0 2px var(--dt-primary),
     inset 3px 0 0 0 var(--dt-annotation-info-bdr);
-}
-
-/* Severity-filter opt-out — neutralise the matching severity across all
-   three cell-level class families. Header rules live in 03-columns.css.
-   Row-element selectors are intentionally omitted: `.dt-row--annotated`
-   carries no paint, so the row-cell rules are sufficient. */
-[data-dt-ann-filter-error="off"] .dt-cell--row-annotation-error,
-[data-dt-ann-filter-error="off"] .dt-cell--col-annotation-error,
-[data-dt-ann-filter-error="off"] .dt-cell--annotation-error {
-  background-color: transparent;
-  box-shadow: none;
-  color: inherit;
-}
-[data-dt-ann-filter-warning="off"] .dt-cell--row-annotation-warning,
-[data-dt-ann-filter-warning="off"] .dt-cell--col-annotation-warning,
-[data-dt-ann-filter-warning="off"] .dt-cell--annotation-warning {
-  background-color: transparent;
-  box-shadow: none;
-  color: inherit;
-}
-[data-dt-ann-filter-info="off"] .dt-cell--row-annotation-info,
-[data-dt-ann-filter-info="off"] .dt-cell--col-annotation-info,
-[data-dt-ann-filter-info="off"] .dt-cell--annotation-info {
-  background-color: transparent;
-  box-shadow: none;
-  color: inherit;
 }
 

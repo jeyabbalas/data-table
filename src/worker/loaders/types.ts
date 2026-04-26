@@ -23,19 +23,19 @@ export interface LoadResult {
  */
 export interface CSVLoadOptions {
   /** Table name to create (auto-generated if not provided) */
-  tableName?: string;
+  tableName?: string | undefined;
   /** Delimiter character (auto-detected if not provided) */
-  delimiter?: string;
+  delimiter?: string | undefined;
   /** Whether the first row is a header (default: true) */
-  header?: boolean;
+  header?: boolean | undefined;
   /** Number of sample rows for type detection (default: 1000) */
-  sampleSize?: number;
+  sampleSize?: number | undefined;
   /** Skip N rows at the start */
-  skip?: number;
+  skip?: number | undefined;
   /** Null value strings (default: ['', 'NULL', 'null', 'NA', 'N/A']) */
-  nullValues?: string[];
+  nullValues?: string[] | undefined;
   /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
-  timezone?: string;
+  timezone?: string | undefined;
 }
 
 /**
@@ -43,15 +43,15 @@ export interface CSVLoadOptions {
  */
 export interface JSONLoadOptions {
   /** Table name to create (auto-generated if not provided) */
-  tableName?: string;
+  tableName?: string | undefined;
   /** JSON format: 'array' (array of objects) or 'ndjson' (newline-delimited) */
-  format?: 'array' | 'ndjson';
+  format?: 'array' | 'ndjson' | undefined;
   /** Number of sample rows for type detection (default: 1000) */
-  sampleSize?: number;
+  sampleSize?: number | undefined;
   /** Maximum depth for nested objects (default: unlimited) */
-  maxDepth?: number;
+  maxDepth?: number | undefined;
   /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
-  timezone?: string;
+  timezone?: string | undefined;
 }
 
 /**
@@ -59,9 +59,9 @@ export interface JSONLoadOptions {
  */
 export interface ParquetLoadOptions {
   /** Table name to create (auto-generated if not provided) */
-  tableName?: string;
+  tableName?: string | undefined;
   /** Columns to load (default: all columns) */
-  columns?: string[];
+  columns?: string[] | undefined;
   /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
-  timezone?: string;
+  timezone?: string | undefined;
 }

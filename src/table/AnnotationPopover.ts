@@ -49,9 +49,9 @@ import { onAnyModalOpened } from '../core/ModalHost';
 /** Options accepted by {@link AnnotationPopover}. */
 export interface AnnotationPopoverOptions {
   /** CSS class prefix (default: `'dt'`). */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Where to mount the popover element. Defaults to `document.body`. */
-  portalTarget?: HTMLElement;
+  portalTarget?: HTMLElement | undefined;
 }
 
 let popoverInstanceCounter = 0;

@@ -39,7 +39,7 @@ export interface QueryPayload {
 export interface LoadPayload {
   data: ArrayBuffer | string;
   format: 'csv' | 'json' | 'parquet';
-  tableName?: string;
+  tableName?: string | undefined;
 }
 
 export interface ExportPayload {

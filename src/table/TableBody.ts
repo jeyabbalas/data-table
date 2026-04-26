@@ -22,26 +22,26 @@ import { VirtualScroller, type VisibleRange } from './VirtualScroller';
  */
 export interface TableBodyOptions {
   /** Fixed height per row in pixels (default: 32) */
-  rowHeight?: number;
+  rowHeight?: number | undefined;
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /**
    * External scroll container for unified scrolling.
    * When provided, VirtualScroller will use this container for scroll events
    * instead of creating its own scroll container.
    */
-  scrollContainer?: HTMLElement;
+  scrollContainer?: HTMLElement | undefined;
   /**
    * Shared annotation store. When provided, the body applies
    * `dt-row--annotated` / `dt-cell--annotated` classes at render time and
    * subscribes to `change` events to keep visible rows in sync.
    */
-  annotations?: AnnotationStore;
+  annotations?: AnnotationStore | undefined;
   /**
    * Shared popover singleton used to display cell-scope annotations on
    * hover / focus of an annotated cell.
    */
-  annotationPopover?: AnnotationPopover;
+  annotationPopover?: AnnotationPopover | undefined;
 }
 
 /**

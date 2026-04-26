@@ -133,8 +133,8 @@ interface RenderSegment {
   count: number;
   isOther: boolean;
   isNull: boolean;
-  isAllUnique?: boolean;
-  otherCount?: number;
+  isAllUnique?: boolean | undefined;
+  otherCount?: number | undefined;
 }
 
 // =========================================

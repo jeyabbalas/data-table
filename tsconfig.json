@@ -16,6 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "useUnknownInCatchVariables": true,
+    "exactOptionalPropertyTypes": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

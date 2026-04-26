@@ -46,7 +46,7 @@ export interface CategoricalColumnStats extends BaseColumnStats {
   kind: 'categorical';
   distinctCount: number;
   /** Count of true values (boolean columns only) */
-  trueCount?: number;
+  trueCount?: number | undefined;
 }
 
 /**

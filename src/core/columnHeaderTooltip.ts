@@ -83,9 +83,11 @@ export function tooltipContentEquals(
   const bi = b.items ?? [];
   if (ai.length !== bi.length) return false;
   for (let i = 0; i < ai.length; i++) {
-    if (ai[i].label !== bi[i].label) return false;
-    const av = ai[i].value;
-    const bv = bi[i].value;
+    const aItem = ai[i]!;
+    const bItem = bi[i]!;
+    if (aItem.label !== bItem.label) return false;
+    const av = aItem.value;
+    const bv = bItem.value;
     if (Array.isArray(av) !== Array.isArray(bv)) return false;
     if (Array.isArray(av) && Array.isArray(bv)) {
       if (av.length !== bv.length) return false;

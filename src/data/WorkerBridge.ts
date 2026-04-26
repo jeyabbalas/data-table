@@ -30,7 +30,7 @@ export type { ProgressInfo, ProgressCallback } from '../core/Progress';
  */
 export interface LoadOptions {
   format: 'csv' | 'json' | 'parquet';
-  tableName?: string;
+  tableName?: string | undefined;
 }
 
 /**
@@ -50,13 +50,13 @@ export interface LoadDataResult {
  */
 export interface WorkerBridgeOptions {
   /** Query cache configuration (LRU size, TTL). */
-  cache?: Partial<QueryCacheOptions>;
+  cache?: Partial<QueryCacheOptions> | undefined;
   /**
    * Maximum time (ms) to wait for the worker to signal ready and for
    * DuckDB to initialize. Rejects `initialize()` with a descriptive
    * error if exceeded. Default: 30000.
    */
-  initializeTimeoutMs?: number;
+  initializeTimeoutMs?: number | undefined;
   /**
    * Custom worker factory. Takes precedence over {@link workerUrl} and the
    * built-in default. Useful for strict-CSP / bundler-specific deployments
@@ -68,7 +68,7 @@ export interface WorkerBridgeOptions {
    * developer-controlled — never invoke the factory with values derived
    * from end-user input.
    */
-  workerFactory?: () => Worker;
+  workerFactory?: (() => Worker) | undefined;
   /**
    * Custom URL/path for the worker script. Instantiated via
    * `new Worker(workerUrl, { type: 'module' })`. Ignored if
@@ -79,7 +79,7 @@ export interface WorkerBridgeOptions {
    * an attacker run arbitrary JavaScript in your origin. Pin to a static
    * same-origin URL (or one served with appropriate CORS headers).
    */
-  workerUrl?: string | URL;
+  workerUrl?: string | URL | undefined;
   /**
    * DuckDB WASM bundles override for offline / self-hosted deployments.
    * Forwarded to the worker on init; when omitted the worker falls back
@@ -91,15 +91,15 @@ export interface WorkerBridgeOptions {
    * end-user input. See `docs/integrations/csp-and-offline.md` for the
    * recommended self-hosting pattern.
    */
-  duckdbBundles?: DuckDBBundles;
+  duckdbBundles?: DuckDBBundles | undefined;
 }
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  onProgress?: ProgressCallback;
-  signal?: AbortSignal;
-  abortHandler?: (() => void) | null;
+  onProgress?: ProgressCallback | undefined;
+  signal?: AbortSignal | undefined;
+  abortHandler?: (() => void) | null | undefined;
 }
 
 const DEFAULT_INIT_TIMEOUT_MS = 30_000;
@@ -137,9 +137,9 @@ export class WorkerBridge {
   private initPromise: Promise<void> | null = null;
   private queryCache: QueryCache;
   private initializeTimeoutMs: number;
-  private workerFactory?: () => Worker;
-  private workerUrl?: string | URL;
-  private duckdbBundles?: DuckDBBundles;
+  private workerFactory?: (() => Worker) | undefined;
+  private workerUrl?: string | URL | undefined;
+  private duckdbBundles?: DuckDBBundles | undefined;
 
   constructor(options?: WorkerBridgeOptions) {
     this.queryCache = new QueryCache(options?.cache);

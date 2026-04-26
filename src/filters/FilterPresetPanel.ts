@@ -14,11 +14,11 @@ import type { FilterPreset } from './FilterPresetTypes';
 
 /** Construction options for {@link FilterPresetPanel}. */
 export interface FilterPresetPanelOptions {
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
-  colorSchemeSource?: HTMLElement;
+  colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**
@@ -36,7 +36,7 @@ export class FilterPresetPanel {
   private importStatusEl!: HTMLElement;
   private fileInput!: HTMLInputElement;
   private readonly prefix: string;
-  private readonly colorSchemeSource?: HTMLElement;
+  private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
   private isOpen = false;
   private destroyed = false;

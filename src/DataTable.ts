@@ -994,7 +994,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // -------- Public loadData --------
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
-    loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat },
+    loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
   ): Promise<void> {
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
@@ -1004,6 +1004,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     autoSave?.disable();
     try {
       const normalized = await normalizeSource(source);
+      if (destroyed) {
+        throw new DestroyedError('DataTable is destroyed; load aborted.');
+      }
       const mergedOpts: LoadDataOptions = {
         ...(loadOpts ?? {}),
         format: loadOpts?.sourceFormat ?? loadOpts?.format,
@@ -1014,6 +1017,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         annotationStore,
       };
       await actions.loadData(normalized, mergedOpts);
+      if (destroyed) {
+        // Tearing down — skip the loadComplete emit on a dead emitter and
+        // surface a destroy error so consumers know the load was aborted.
+        throw new DestroyedError('DataTable is destroyed; load aborted.');
+      }
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),
@@ -1027,11 +1035,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
               code: 'PARSE_FAILED',
               cause: error,
             });
-      emitter.emit('loadError', { error: typed });
-      emitter.emit('error', { error: typed, source: 'load' });
+      // Skip event emission on a dead emitter — destroy() has already cleared
+      // the listener map and consumers no longer expect notifications.
+      if (!destroyed) {
+        emitter.emit('loadError', { error: typed });
+        emitter.emit('error', { error: typed, source: 'load' });
+      }
       throw typed;
     } finally {
-      autoSave?.enable();
+      if (!destroyed) autoSave?.enable();
     }
   }
 
@@ -1053,6 +1065,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function destroy(): Promise<void> {
     if (destroyed) return;
     destroyed = true;
+    // Mark the action layer destroyed first so any in-flight async action
+    // (e.g. addDerivedColumn awaiting the worker) drops its post-await state
+    // mutation rather than writing into the dead table.
+    actions.markDestroyed();
     emitter.emit('destroy', {});
 
     autoSave?.disable();
@@ -1118,13 +1134,19 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         const key = state.baseTableName.get() ?? state.tableName.get();
         if (key) await sessionStore.delete(key);
       }
+      // If destroy() raced ahead while we were awaiting the IDB delete, drop
+      // the in-memory reset — the state slices are about to be torn down and
+      // mutating them now would emit on a dying emitter.
+      if (destroyed) {
+        throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
+      }
       resetTableState(state);
       undoManager?.clear();
       presetManager?.presets.set([]);
       annotationStore.clear('all');
       bridge.clearQueryCache();
     } finally {
-      autoSave?.enable();
+      if (!destroyed) autoSave?.enable();
     }
   }
 

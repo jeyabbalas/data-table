@@ -98,7 +98,12 @@ export interface RawSQLFilter {
    * at the host application layer if end users author the SQL.
    */
   sql: string;
-  label?: string; // Human-readable label for filter chip
+  /**
+   * Human-readable label for the filter chip. Widened to allow explicit
+   * `undefined` so call sites that pass through an optional caller-supplied
+   * label don't have to conditionally spread.
+   */
+  label?: string | undefined;
   id: string; // Unique identifier (crypto.randomUUID())
 }
 

@@ -9,10 +9,10 @@ import { type Strings, defaultStrings } from '../core/Strings';
 
 /** Construction options for {@link AddColumnButton}. */
 export interface AddColumnButtonOptions {
-  classPrefix?: string;
-  onClick?: () => void;
+  classPrefix?: string | undefined;
+  onClick?: (() => void) | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**

@@ -15,16 +15,16 @@ export interface VirtualScrollerOptions {
   /** Fixed height per row in pixels */
   rowHeight: number;
   /** Number of buffer rows above/below viewport (default: 5) */
-  bufferRows?: number;
+  bufferRows?: number | undefined;
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /**
    * External scroll container to use for scroll events.
    * If provided, VirtualScroller won't create its own scroll container.
    * This enables unified scrolling where both horizontal and vertical
    * scrollbars appear on a single outer container.
    */
-  externalScrollContainer?: HTMLElement;
+  externalScrollContainer?: HTMLElement | undefined;
 }
 
 /**

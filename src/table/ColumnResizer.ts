@@ -16,15 +16,15 @@
  */
 export interface ColumnResizerOptions {
   /** Minimum column width in pixels (default: 50) */
-  minWidth?: number;
+  minWidth?: number | undefined;
   /** Maximum column width in pixels (default: 500) */
-  maxWidth?: number;
+  maxWidth?: number | undefined;
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Called when a resize drag begins (mousedown on handle) */
-  onDragStart?: () => void;
+  onDragStart?: (() => void) | undefined;
   /** Called when a resize drag ends (mouseup after drag) */
-  onDragEnd?: () => void;
+  onDragEnd?: (() => void) | undefined;
 }
 
 /**
@@ -62,8 +62,8 @@ export class ColumnResizer {
   private readonly minWidth: number;
   private readonly maxWidth: number;
   private readonly classPrefix: string;
-  private readonly onDragStart?: () => void;
-  private readonly onDragEnd?: () => void;
+  private readonly onDragStart?: (() => void) | undefined;
+  private readonly onDragEnd?: (() => void) | undefined;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseDown: (e: MouseEvent) => void;

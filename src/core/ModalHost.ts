@@ -36,38 +36,38 @@ export interface ModalOptions {
    * Inner dialog that receives role/aria attributes and is the focus-trap
    * scope. Defaults to `element` when omitted (panel mode typically omits).
    */
-  dialog?: HTMLElement;
+  dialog?: HTMLElement | undefined;
   /** Optional id for aria-labelledby. */
-  labelledBy?: string;
+  labelledBy?: string | undefined;
   /** Optional id for aria-describedby. */
-  describedBy?: string;
+  describedBy?: string | undefined;
   /** Callback invoked after close completes (focus restored). */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Close on Escape (default true). */
-  closeOnEscape?: boolean;
+  closeOnEscape?: boolean | undefined;
   /** Close on click on the backdrop. Default true for modal mode. */
-  closeOnBackdropClick?: boolean;
+  closeOnBackdropClick?: boolean | undefined;
   /** Close on click outside the panel. Default true for panel mode. */
-  closeOnOutsideClick?: boolean;
+  closeOnOutsideClick?: boolean | undefined;
   /** Install Tab/Shift+Tab focus trap on the dialog (default true). */
-  trapFocus?: boolean;
+  trapFocus?: boolean | undefined;
   /** Restore focus to the opener on close (default true). */
-  restoreFocus?: boolean;
+  restoreFocus?: boolean | undefined;
   /**
    * Element to focus after open. `null` (or omitted) focuses the first
    * focusable descendant of the dialog.
    */
-  initialFocus?: HTMLElement | null;
+  initialFocus?: HTMLElement | null | undefined;
   /**
    * Predicate invoked on Escape keydown. Return `true` to skip close (the
    * Escape is then left for another handler — e.g. CodeMirror autocomplete).
    */
-  escapeGuard?: (e: KeyboardEvent) => boolean;
+  escapeGuard?: ((e: KeyboardEvent) => boolean) | undefined;
   /**
    * Elements or CSS selectors whose clicks should NOT count as "outside"
    * the panel. Typical use: the anchor button that toggles the panel.
    */
-  outsideClickIgnore?: (HTMLElement | string)[];
+  outsideClickIgnore?: (HTMLElement | string)[] | undefined;
   /**
    * Element whose `data-dt-color-scheme` attribute should be mirrored onto
    * this modal/panel on open. Typically the owning table's `.dt-root`
@@ -76,7 +76,7 @@ export interface ModalOptions {
    * MutationObserver watches the source and re-applies when the attribute
    * changes while the modal is open.
    */
-  colorSchemeSource?: HTMLElement;
+  colorSchemeSource?: HTMLElement | undefined;
 }
 
 export type ModalHostEvents = {
@@ -450,7 +450,7 @@ export class ModalHost {
     const dialog = this.dialogEl;
     if (!dialog) return null;
     const focusables = focusableDescendants(dialog);
-    if (focusables.length > 0) return focusables[0];
+    if (focusables.length > 0) return focusables[0] ?? dialog;
     // Fall back to the dialog itself (tabindex="-1" was set in open()).
     return dialog;
   }
@@ -476,8 +476,9 @@ export class ModalHost {
         e.preventDefault();
         return;
       }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
+      // Bounds-checked above; non-null asserts encode the invariant.
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
       const active = document.activeElement as HTMLElement | null;
       if (e.shiftKey) {
         if (!active || active === first || !dialog.contains(active)) {

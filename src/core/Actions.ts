@@ -18,7 +18,13 @@ import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
-import { ConfigurationError, DerivedColumnError, QueryError, SQLValidationError } from './errors';
+import {
+  ConfigurationError,
+  DerivedColumnError,
+  DestroyedError,
+  QueryError,
+  SQLValidationError,
+} from './errors';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
@@ -61,11 +67,11 @@ export interface GetColumnValuesOptions {
  */
 export interface LoadDataOptions extends DataLoaderOptions {
   /** If provided, restores saved session state after loading */
-  sessionStore?: SessionStore;
+  sessionStore?: SessionStore | undefined;
   /** If provided, restores saved filter presets after loading */
-  presetManager?: FilterPresetManager;
+  presetManager?: FilterPresetManager | undefined;
   /** If provided, restores saved annotations after loading */
-  annotationStore?: AnnotationStore;
+  annotationStore?: AnnotationStore | undefined;
 }
 
 /**
@@ -106,14 +112,17 @@ export class StateActions {
   private suppressUndoCapture = false;
   private undoRedoInProgress = false;
   private widthDragSnapshot: StateSnapshot | null = null;
-  private onFilterRemoveCallback?: (column: string) => void;
-  private onDerivedChangeCallback?: (payload: {
-    derivedColumns: DerivedColumnDef[];
-    kind: 'added' | 'removed' | 'updated' | 'replaced';
-    columnName?: string;
-  }) => void;
+  private onFilterRemoveCallback?: ((column: string) => void) | undefined;
+  private onDerivedChangeCallback?:
+    | ((payload: {
+        derivedColumns: DerivedColumnDef[];
+        kind: 'added' | 'removed' | 'updated' | 'replaced';
+        columnName?: string | undefined;
+      }) => void)
+    | undefined;
   private initialSnapshot: StateSnapshot | null = null;
   private derivedManager: DerivedColumnManager | null = null;
+  private destroyed = false;
 
   constructor(
     private state: TableState,
@@ -124,6 +133,41 @@ export class StateActions {
     this.loader = new DataLoader(bridge);
     this.undoManager = undoManager;
     attachCacheInvalidation(bridge, state);
+  }
+
+  // =========================================
+  // Lifecycle
+  // =========================================
+
+  /**
+   * Mark this action layer as destroyed. After this call every public mutator
+   * throws `DestroyedError`; result-shaped async methods
+   * (add/update/replaceDerivedColumn) return `{ success: false, error: ... }`
+   * with a "destroyed" message; pure getters keep working so consumers can
+   * still read the last-known state during teardown. Idempotent.
+   *
+   * Wired by the `DataTable` facade as the very first step of `destroy()` so
+   * that any in-flight async action resolving after destroy sees the flag and
+   * drops its post-await state mutation.
+   *
+   * @internal
+   */
+  markDestroyed(): void {
+    this.destroyed = true;
+  }
+
+  /**
+   * @internal
+   * For tests only — observe destroyed state.
+   */
+  isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  private throwIfDestroyed(method: string): void {
+    if (this.destroyed) {
+      throw new DestroyedError(`DataTable is destroyed; cannot call actions.${method}().`);
+    }
   }
 
   // =========================================
@@ -142,6 +186,7 @@ export class StateActions {
    * lives outside the signal-driven state.
    */
   setOnFilterRemove(callback: (column: string) => void): void {
+    this.throwIfDestroyed('setOnFilterRemove');
     this.onFilterRemoveCallback = callback;
   }
 
@@ -154,9 +199,10 @@ export class StateActions {
     callback: (payload: {
       derivedColumns: DerivedColumnDef[];
       kind: 'added' | 'removed' | 'updated' | 'replaced';
-      columnName?: string;
+      columnName?: string | undefined;
     }) => void,
   ): void {
+    this.throwIfDestroyed('setOnDerivedChange');
     this.onDerivedChangeCallback = callback;
   }
 
@@ -187,8 +233,12 @@ export class StateActions {
   /**
    * Undo the last undoable action. Returns true if state was restored.
    * Async because derived column changes require DuckDB VIEW reconciliation.
+   *
+   * @throws `DestroyedError` if the table was destroyed before or during
+   *   the call.
    */
   async undo(): Promise<boolean> {
+    this.throwIfDestroyed('undo');
     if (this.undoRedoInProgress) return false;
     if (!this.undoManager?.canUndo) return false;
     this.undoRedoInProgress = true;
@@ -207,6 +257,7 @@ export class StateActions {
       if (derivedChanged) {
         await this.reconcileDerivedColumns(snapshot);
       }
+      this.throwIfDestroyed('undo');
 
       // Apply view-state signals + tableName atomically in a single batch
       batch(() => {
@@ -232,8 +283,12 @@ export class StateActions {
   /**
    * Redo the last undone action. Returns true if state was restored.
    * Async because derived column changes require DuckDB VIEW reconciliation.
+   *
+   * @throws `DestroyedError` if the table was destroyed before or during
+   *   the call.
    */
   async redo(): Promise<boolean> {
+    this.throwIfDestroyed('redo');
     if (this.undoRedoInProgress) return false;
     if (!this.undoManager?.canRedo) return false;
     this.undoRedoInProgress = true;
@@ -250,6 +305,7 @@ export class StateActions {
       if (derivedChanged) {
         await this.reconcileDerivedColumns(snapshot);
       }
+      this.throwIfDestroyed('redo');
 
       batch(() => {
         applySnapshot(this.state, snapshot);
@@ -276,6 +332,7 @@ export class StateActions {
    * Captures state once at drag start for undo.
    */
   beginColumnWidthChange(): void {
+    this.throwIfDestroyed('beginColumnWidthChange');
     if (!this.undoManager) return;
     this.widthDragSnapshot = captureSnapshot(this.state);
   }
@@ -285,6 +342,7 @@ export class StateActions {
    * Pushes the pre-drag snapshot to the undo stack.
    */
   endColumnWidthChange(): void {
+    this.throwIfDestroyed('endColumnWidthChange');
     if (!this.undoManager || !this.widthDragSnapshot) return;
     this.undoManager.push(this.widthDragSnapshot);
     this.widthDragSnapshot = null;
@@ -299,8 +357,12 @@ export class StateActions {
    * Reset to the original state captured at data-load time.
    * Clears all filters, sorts, column customizations, derived columns,
    * and the undo/redo stacks. Returns true if state was restored.
+   *
+   * @throws `DestroyedError` if the table was destroyed before or during
+   *   the call.
    */
   async resetToInitial(): Promise<boolean> {
+    this.throwIfDestroyed('resetToInitial');
     if (!this.initialSnapshot) return false;
     this.suppressUndoCapture = true;
     try {
@@ -315,6 +377,7 @@ export class StateActions {
         }
         this.derivedManager = null;
       }
+      this.throwIfDestroyed('resetToInitial');
 
       // Collect derived column names from snapshot to strip after restore.
       // The initial snapshot may include derived columns from session restore.
@@ -367,12 +430,14 @@ export class StateActions {
     source: File | string | ArrayBuffer,
     options: LoadDataOptions = {},
   ): Promise<void> {
+    this.throwIfDestroyed('loadData');
     // Reset state for new data
     resetTableState(this.state);
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
     const result = await this.loader.load(source, options);
+    this.throwIfDestroyed('loadData');
 
     // Clean up any previous derived column manager
     if (this.derivedManager) {
@@ -396,6 +461,7 @@ export class StateActions {
     // Restore session if a store is provided and a snapshot exists
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
+      this.throwIfDestroyed('loadData');
       if (snapshot) {
         restoreStateFromSnapshot(
           this.state,
@@ -410,6 +476,7 @@ export class StateActions {
           try {
             const manager = this.ensureDerivedManager();
             const restoredSchemas = await manager.restoreColumns(this.state.derivedColumns.get());
+            this.throwIfDestroyed('loadData');
 
             if (restoredSchemas.length > 0) {
               // Compute values needed for the batch
@@ -458,6 +525,7 @@ export class StateActions {
    * If a filter for the same column exists, it will be replaced.
    */
   addFilter(filter: Filter): void {
+    this.throwIfDestroyed('addFilter');
     this.captureForUndo();
     const current = this.state.filters.get();
     const existingIndex = current.findIndex((f) => f.column === filter.column);
@@ -479,6 +547,7 @@ export class StateActions {
    * @param type - Optional filter type to remove (if not specified, removes all filters for column)
    */
   removeFilter(column: string, type?: FilterType): void {
+    this.throwIfDestroyed('removeFilter');
     this.captureForUndo();
     const current = this.state.filters.get();
     const updated = current.filter((f) =>
@@ -491,6 +560,7 @@ export class StateActions {
    * Clear all filters
    */
   clearFilters(): void {
+    this.throwIfDestroyed('clearFilters');
     this.captureForUndo();
     this.state.filters.set([]);
     this.state.filteredRows.set(this.state.totalRows.get());
@@ -502,6 +572,7 @@ export class StateActions {
    * entire pre-load state atomically.
    */
   loadFilterPreset(filters: Filter[], sortColumns?: SortColumn[]): void {
+    this.throwIfDestroyed('loadFilterPreset');
     this.captureForUndo();
     this.suppressUndoCapture = true;
     try {
@@ -538,6 +609,7 @@ export class StateActions {
    * @returns The filter's unique id
    */
   addRawSQLFilter(sql: string, label?: string): string {
+    this.throwIfDestroyed('addRawSQLFilter');
     if (!sql.trim()) {
       throw new SQLValidationError('SQL expression must not be empty', {
         code: 'SQL_SYNTAX',
@@ -563,6 +635,7 @@ export class StateActions {
    * Captures undo snapshot before mutation. No-op if filter not found.
    */
   updateRawSQLFilter(id: string, sql: string, label?: string): void {
+    this.throwIfDestroyed('updateRawSQLFilter');
     if (!sql.trim()) {
       throw new SQLValidationError('SQL expression must not be empty', {
         code: 'SQL_SYNTAX',
@@ -589,6 +662,7 @@ export class StateActions {
    * Captures undo snapshot before mutation.
    */
   removeRawSQLFilter(id: string): void {
+    this.throwIfDestroyed('removeRawSQLFilter');
     const syntheticKey = `__raw_sql_${id}__`;
     this.removeFilter(syntheticKey);
   }
@@ -613,6 +687,7 @@ export class StateActions {
     matchCount?: number;
     error?: string;
   }> {
+    this.throwIfDestroyed('validateSQLFilter');
     const tableName = this.state.tableName.get();
     if (!tableName) return { valid: false, error: 'No table loaded' };
     try {
@@ -620,10 +695,13 @@ export class StateActions {
         `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(tableName)} WHERE (${sql})`,
         signal,
       );
-      return { valid: true, matchCount: Number(result[0].cnt) };
+      this.throwIfDestroyed('validateSQLFilter');
+      return { valid: true, matchCount: Number(result[0]?.cnt ?? 0) };
     } catch (e) {
       // Silently return for aborted requests — the caller has moved on
       if (signal?.aborted) return { valid: false, error: 'Validation cancelled' };
+      // Re-throw destroy errors so callers see the lifecycle signal.
+      if (e instanceof DestroyedError) throw e;
       return { valid: false, error: e instanceof Error ? e.message : String(e) };
     }
   }
@@ -644,6 +722,7 @@ export class StateActions {
    * Set sort columns directly
    */
   setSort(columns: SortColumn[]): void {
+    this.throwIfDestroyed('setSort');
     this.captureForUndo();
     this.state.sortColumns.set(columns);
   }
@@ -654,6 +733,7 @@ export class StateActions {
    * Replaces any existing sort with the new column.
    */
   toggleSort(column: string): void {
+    this.throwIfDestroyed('toggleSort');
     this.captureForUndo();
     const current = this.state.sortColumns.get();
     const existing = current.find((s) => s.column === column);
@@ -676,6 +756,7 @@ export class StateActions {
    * If column is already in sort, toggles its direction or removes it.
    */
   addToSort(column: string): void {
+    this.throwIfDestroyed('addToSort');
     this.captureForUndo();
     const current = this.state.sortColumns.get();
     const existingIndex = current.findIndex((s) => s.column === column);
@@ -685,7 +766,8 @@ export class StateActions {
       this.state.sortColumns.set([...current, { column, direction: 'asc' }]);
     } else {
       const updated = [...current];
-      const existing = updated[existingIndex];
+      // existingIndex >= 0 from findIndex, so updated[existingIndex] is defined.
+      const existing = updated[existingIndex]!;
       if (existing.direction === 'asc') {
         // Toggle to descending
         updated[existingIndex] = { column, direction: 'desc' };
@@ -701,6 +783,7 @@ export class StateActions {
    * Clear all sorting
    */
   clearSort(): void {
+    this.throwIfDestroyed('clearSort');
     this.captureForUndo();
     this.state.sortColumns.set([]);
   }
@@ -713,6 +796,7 @@ export class StateActions {
    * Hide a column, recording its neighbors for intelligent restore
    */
   hideColumn(column: string): void {
+    this.throwIfDestroyed('hideColumn');
     const visible = this.state.visibleColumns.get();
     if (!visible.includes(column)) return;
 
@@ -721,10 +805,11 @@ export class StateActions {
 
     this.captureForUndo();
 
-    // Record neighbor info before hiding
+    // Record neighbor info before hiding. Bounds checks above guarantee both
+    // accesses are in-range; the `?? null` lambda placates noUncheckedIndexedAccess.
     const colIndex = visible.indexOf(column);
-    const leftNeighbor = colIndex > 0 ? visible[colIndex - 1] : null;
-    const rightNeighbor = colIndex < visible.length - 1 ? visible[colIndex + 1] : null;
+    const leftNeighbor = colIndex > 0 ? (visible[colIndex - 1] ?? null) : null;
+    const rightNeighbor = colIndex < visible.length - 1 ? (visible[colIndex + 1] ?? null) : null;
 
     const info: HiddenColumnInfo = { column, leftNeighbor, rightNeighbor };
     const hiddenMap = new Map(this.state.hiddenColumnInfo.get());
@@ -739,6 +824,7 @@ export class StateActions {
    * Show a hidden column using neighbor-aware restore logic
    */
   showColumn(column: string): void {
+    this.throwIfDestroyed('showColumn');
     const visible = this.state.visibleColumns.get();
     const order = this.state.columnOrder.get();
 
@@ -774,6 +860,7 @@ export class StateActions {
    * Show all hidden columns, restoring them in columnOrder
    */
   showAllColumns(): void {
+    this.throwIfDestroyed('showAllColumns');
     this.captureForUndo();
     const order = this.state.columnOrder.get();
     this.state.visibleColumns.set([...order]);
@@ -787,7 +874,8 @@ export class StateActions {
     const orderIndex = order.indexOf(column);
     let insertIndex = 0;
     for (let i = 0; i < orderIndex; i++) {
-      if (visible.includes(order[i])) {
+      // i < orderIndex < order.length, so order[i] is defined.
+      if (visible.includes(order[i]!)) {
         insertIndex++;
       }
     }
@@ -836,7 +924,7 @@ export class StateActions {
     for (let dist = 1; dist < order.length; dist++) {
       // Check right
       if (colOrderIdx + dist < order.length) {
-        const candidate = order[colOrderIdx + dist];
+        const candidate = order[colOrderIdx + dist]!;
         const candidateIdx = visible.indexOf(candidate);
         if (candidateIdx !== -1) {
           return candidateIdx; // Insert before this visible column
@@ -844,7 +932,7 @@ export class StateActions {
       }
       // Check left
       if (colOrderIdx - dist >= 0) {
-        const candidate = order[colOrderIdx - dist];
+        const candidate = order[colOrderIdx - dist]!;
         const candidateIdx = visible.indexOf(candidate);
         if (candidateIdx !== -1) {
           return candidateIdx + 1; // Insert after this visible column
@@ -863,6 +951,7 @@ export class StateActions {
    * Preserves hidden columns in columnOrder at their relative positions.
    */
   setColumnOrder(columns: string[]): void {
+    this.throwIfDestroyed('setColumnOrder');
     this.captureForUndo();
     const currentOrder = this.state.columnOrder.get();
     const columnsSet = new Set(columns);
@@ -878,7 +967,7 @@ export class StateActions {
         // Find the nearest column to the right in currentOrder that is in fullOrder
         let insertIndex = fullOrder.length; // default: append at end
         for (let i = oldIndex + 1; i < currentOrder.length; i++) {
-          const idx = fullOrder.indexOf(currentOrder[i]);
+          const idx = fullOrder.indexOf(currentOrder[i]!);
           if (idx !== -1) {
             insertIndex = idx;
             break;
@@ -906,6 +995,7 @@ export class StateActions {
    * Also updates columnOrder and visibleColumns to reflect the new position.
    */
   toggleColumnPin(column: string): void {
+    this.throwIfDestroyed('toggleColumnPin');
     this.captureForUndo();
     const pinned = this.state.pinnedColumns.get();
     const order = this.state.columnOrder.get();
@@ -944,6 +1034,7 @@ export class StateActions {
    * Set column width
    */
   setColumnWidth(column: string, width: number): void {
+    this.throwIfDestroyed('setColumnWidth');
     const widths = new Map(this.state.columnWidths.get());
     widths.set(column, width);
     this.state.columnWidths.set(widths);
@@ -953,6 +1044,7 @@ export class StateActions {
    * Reset column width to default
    */
   resetColumnWidth(column: string): void {
+    this.throwIfDestroyed('resetColumnWidth');
     this.captureForUndo();
     const widths = new Map(this.state.columnWidths.get());
     widths.delete(column);
@@ -1003,6 +1095,7 @@ export class StateActions {
     column: string,
     content: string | ColumnHeaderTooltipContent | null,
   ): void {
+    this.throwIfDestroyed('setColumnHeaderTooltip');
     const next = normalizeColumnHeaderTooltip(content);
     const map = this.state.columnHeaderTooltips.get();
     const current = map.get(column) ?? null;
@@ -1123,6 +1216,9 @@ export class StateActions {
    * Validates name uniqueness, creates VIEW, updates state.
    */
   async addDerivedColumn(def: DerivedColumnDef): Promise<{ success: boolean; error?: string }> {
+    if (this.destroyed) {
+      return { success: false, error: 'DataTable is destroyed' };
+    }
     // Validate name uniqueness against all columns
     const allColumnNames = this.state.schema.get().map((c) => c.name);
     if (allColumnNames.includes(def.name)) {
@@ -1140,6 +1236,12 @@ export class StateActions {
     try {
       const manager = this.ensureDerivedManager();
       const info = await manager.addColumn(def);
+
+      // Drop the result if the table was destroyed during the await — do not
+      // touch state and do not push to the undo stack.
+      if (this.destroyed) {
+        return { success: false, error: 'DataTable is destroyed' };
+      }
 
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
       if (preSnapshot && this.undoManager) {
@@ -1188,6 +1290,9 @@ export class StateActions {
     oldName: string,
     def: DerivedColumnDef,
   ): Promise<{ success: boolean; error?: string }> {
+    if (this.destroyed) {
+      return { success: false, error: 'DataTable is destroyed' };
+    }
     // Validate target is derived
     const currentSchema = this.state.schema.get();
     const oldEntry = currentSchema.find((c) => c.name === oldName);
@@ -1215,6 +1320,11 @@ export class StateActions {
     try {
       const manager = this.ensureDerivedManager();
       const info = await manager.updateColumn(oldName, def);
+
+      // Drop the result if the table was destroyed during the await.
+      if (this.destroyed) {
+        return { success: false, error: 'DataTable is destroyed' };
+      }
 
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
       if (preSnapshot && this.undoManager) {
@@ -1357,6 +1467,12 @@ export class StateActions {
   ): Promise<
     { success: true; info: DerivedColumnInfo } | { success: false; error: DerivedColumnError }
   > {
+    if (this.destroyed) {
+      return {
+        success: false,
+        error: new DerivedColumnError('DataTable is destroyed', { code: 'DESTROYED' }),
+      };
+    }
     const currentSchema = this.state.schema.get();
     const oldEntry = currentSchema.find((c) => c.name === name);
     if (!oldEntry?.isDerived) {
@@ -1396,6 +1512,14 @@ export class StateActions {
               cause: err,
             });
       return { success: false, error: typedError };
+    }
+
+    // Drop the result if the table was destroyed during the await.
+    if (this.destroyed) {
+      return {
+        success: false,
+        error: new DerivedColumnError('DataTable is destroyed', { code: 'DESTROYED' }),
+      };
     }
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation.
@@ -1439,6 +1563,7 @@ export class StateActions {
    * Cleans up filters, sorts, pins, then delegates to manager.
    */
   async removeDerivedColumn(name: string): Promise<void> {
+    this.throwIfDestroyed('removeDerivedColumn');
     const currentSchema = this.state.schema.get();
     const entry = currentSchema.find((c) => c.name === name);
     if (!entry?.isDerived) {
@@ -1454,6 +1579,7 @@ export class StateActions {
 
     const manager = this.ensureDerivedManager();
     await manager.removeColumn(name);
+    this.throwIfDestroyed('removeDerivedColumn');
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation
     if (preSnapshot && this.undoManager) {
@@ -1558,6 +1684,7 @@ export class StateActions {
     name: string,
     opts: GetColumnValuesOptions = {},
   ): Promise<unknown[] | Int32Array | Float64Array | BigInt64Array> {
+    this.throwIfDestroyed('getColumnValues');
     const schema = this.state.schema.get();
     const entry = schema.find((c) => c.name === name);
     if (!entry) {
@@ -1633,11 +1760,15 @@ export class StateActions {
     }
 
     const rows = await this.bridge.query<Record<string, unknown>>(sql, signal);
+    this.throwIfDestroyed('getColumnValues');
     return materializeColumn(rows, valKey, entry);
   }
 
   /**
    * Validate an expression without adding it. For UI preview.
+   *
+   * @throws `DestroyedError` if the table was destroyed before or during
+   *   the call.
    */
   async validateExpression(expression: string): Promise<{
     valid: boolean;
@@ -1645,8 +1776,11 @@ export class StateActions {
     originalType?: string;
     error?: string;
   }> {
+    this.throwIfDestroyed('validateExpression');
     const manager = this.ensureDerivedManager();
-    return manager.validateExpression(expression);
+    const result = await manager.validateExpression(expression);
+    this.throwIfDestroyed('validateExpression');
+    return result;
   }
 
   /**
@@ -1680,6 +1814,7 @@ export class StateActions {
    *   - 'range': Select range from last selected to this row (Shift+click)
    */
   selectRow(index: number, mode: 'replace' | 'toggle' | 'range' = 'replace'): void {
+    this.throwIfDestroyed('selectRow');
     const current = this.state.selectedRows.get();
 
     switch (mode) {
@@ -1729,6 +1864,7 @@ export class StateActions {
    * Clear all row selection
    */
   clearSelection(): void {
+    this.throwIfDestroyed('clearSelection');
     this.state.selectedRows.set(new Set());
     this.lastSelectedIndex = null;
   }
@@ -1737,6 +1873,7 @@ export class StateActions {
    * Select all rows
    */
   selectAll(): void {
+    this.throwIfDestroyed('selectAll');
     const total = this.state.totalRows.get();
     const allRows = new Set<number>();
     for (let i = 0; i < total; i++) {
@@ -1753,6 +1890,7 @@ export class StateActions {
    * Set hovered row
    */
   setHoveredRow(index: number | null): void {
+    this.throwIfDestroyed('setHoveredRow');
     this.state.hoveredRow.set(index);
   }
 
@@ -1760,6 +1898,7 @@ export class StateActions {
    * Set hovered column
    */
   setHoveredColumn(column: string | null): void {
+    this.throwIfDestroyed('setHoveredColumn');
     this.state.hoveredColumn.set(column);
   }
 
@@ -1771,6 +1910,7 @@ export class StateActions {
    * Set focused cell for keyboard navigation. Not undoable.
    */
   setFocusedCell(cell: { row: number; column: string } | null): void {
+    this.throwIfDestroyed('setFocusedCell');
     this.state.focusedCell.set(cell);
   }
 
@@ -1778,6 +1918,7 @@ export class StateActions {
    * Clear focused cell.
    */
   clearFocusedCell(): void {
+    this.throwIfDestroyed('clearFocusedCell');
     this.state.focusedCell.set(null);
   }
 }
@@ -1812,9 +1953,10 @@ function materializeColumn(
   // Detect NULLs (DuckDB's JS layer surfaces SQL NULL as JS null/undefined).
   // Typed arrays cannot represent null, so any NULL forces a fallback to
   // unknown[] to keep the semantic distinction intact.
+  // i < len, so rows[i] is defined; assertions encode the invariant.
   let hasNull = false;
   for (let i = 0; i < len; i++) {
-    if (rows[i][key] == null) {
+    if (rows[i]![key] == null) {
       hasNull = true;
       break;
     }
@@ -1827,14 +1969,14 @@ function materializeColumn(
     if (isBigIntOriginalType(schema.originalType)) {
       const arr = new BigInt64Array(len);
       for (let i = 0; i < len; i++) {
-        const v = rows[i][key];
+        const v = rows[i]![key];
         arr[i] = typeof v === 'bigint' ? v : BigInt(v as number | string);
       }
       return arr;
     }
     const arr = new Int32Array(len);
     for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i][key]);
+      arr[i] = Number(rows[i]![key]);
     }
     return arr;
   }
@@ -1842,7 +1984,7 @@ function materializeColumn(
   if (schema.type === 'float' || schema.type === 'decimal') {
     const arr = new Float64Array(len);
     for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i][key]);
+      arr[i] = Number(rows[i]![key]);
     }
     return arr;
   }

@@ -42,16 +42,16 @@ import { FilterPanelField } from './FilterPanelField';
  */
 export interface FilterPanelOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /**
    * Element to mirror `data-dt-color-scheme` from (typically the owning
    * table's `.dt-root`). Keeps the panel's theming in sync when the table's
    * color scheme changes at runtime (see `DataTable.setColorScheme` on the
    * facade).
    */
-  colorSchemeSource?: HTMLElement;
+  colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**
@@ -71,7 +71,7 @@ export class FilterPanel {
   private isOpen = false;
   private destroyed = false;
   private readonly prefix: string;
-  private readonly colorSchemeSource?: HTMLElement;
+  private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
 
   // Focus trap / Escape / outside-click delegated to ModalHost.

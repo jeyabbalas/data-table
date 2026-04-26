@@ -16,19 +16,19 @@ import type { Filter } from './FilterTypes';
  */
 export interface FilterBarOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Called when a filter chip is removed, for clearing visualization state */
-  onFilterRemove?: (column: string) => void;
+  onFilterRemove?: ((column: string) => void) | undefined;
   /** Called when a raw-sql filter chip body is clicked (for editing). Receives the filter id. */
-  onRawSQLEdit?: (id: string) => void;
+  onRawSQLEdit?: ((id: string) => void) | undefined;
   /** When true, the filter bar is always visible (shows expression filter button even with no filters). Default: false. */
-  alwaysShow?: boolean;
+  alwaysShow?: boolean | undefined;
   /** Callback when the "Expression" filter button is clicked */
-  onAddSQLFilter?: () => void;
+  onAddSQLFilter?: (() => void) | undefined;
   /** Callback when the "Presets" button is clicked */
-  onPresetsClick?: () => void;
+  onPresetsClick?: (() => void) | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**

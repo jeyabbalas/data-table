@@ -26,21 +26,21 @@ import { ColumnResizer } from './ColumnResizer';
  */
 export interface ColumnHeaderOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Called when the filter button is clicked, with column name and button element for positioning */
-  onFilterClick?: (column: string, buttonElement: HTMLElement) => void;
+  onFilterClick?: ((column: string, buttonElement: HTMLElement) => void) | undefined;
   /** Called when the f(x) icon on a derived column is clicked */
-  onDerivedIconClick?: (columnName: string, buttonElement: HTMLElement) => void;
+  onDerivedIconClick?: ((columnName: string, buttonElement: HTMLElement) => void) | undefined;
   /** 1-based column index in the full schema (for aria-colindex) */
-  colIndex?: number;
+  colIndex?: number | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
   /** Shared annotation store for column-scope annotation classes + popover. */
-  annotations?: AnnotationStore;
+  annotations?: AnnotationStore | undefined;
   /** Shared popover singleton used to display column-scope annotations on hover / focus. */
-  annotationPopover?: AnnotationPopover;
+  annotationPopover?: AnnotationPopover | undefined;
   /** Shared singleton used to display the app-controlled column-name tooltip popover. */
-  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover;
+  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover | undefined;
 }
 
 /**

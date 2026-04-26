@@ -22,8 +22,8 @@ export interface LoadResult {
 }
 
 export interface DataLoaderOptions {
-  tableName?: string;
-  format?: DataFormat; // Override auto-detection
+  tableName?: string | undefined;
+  format?: DataFormat | undefined; // Override auto-detection
 }
 
 export class DataLoader {

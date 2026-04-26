@@ -131,7 +131,7 @@ export type TableEvents = {
   derivedChange: {
     derivedColumns: DerivedColumnDef[];
     kind: 'added' | 'removed' | 'updated' | 'replaced';
-    columnName?: string;
+    columnName?: string | undefined;
   };
 
   /** Fired whenever canUndo/canRedo changes (e.g., after any action or an undo/redo). */

@@ -14,9 +14,9 @@ import { type Strings, defaultStrings } from '../core/Strings';
  */
 export interface HiddenColumnsGutterOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**

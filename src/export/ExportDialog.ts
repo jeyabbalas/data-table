@@ -66,22 +66,22 @@ export function sanitizeFilenameStem(name: string): string {
 /** Construction options for {@link ExportDialog}. */
 export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /**
    * Unique per-instance identifier mixed into element IDs so two tables on
    * the same page don't collide on `aria-labelledby` targets. Normally
    * supplied by `createDataTable()`; defaults to `''` for standalone/test
    * construction.
    */
-  instanceId?: string;
+  instanceId?: string | undefined;
   /**
    * Element to mirror `data-dt-color-scheme` from. The dialog backdrop
    * portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
    * pass the `.dt-root` element here to keep it theme-synced.
    */
-  colorSchemeSource?: HTMLElement;
+  colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**
@@ -95,7 +95,7 @@ export class ExportDialog {
   private isOpen = false;
   private readonly prefix: string;
   private readonly instanceId: string;
-  private readonly colorSchemeSource?: HTMLElement;
+  private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
 
   // Source file base name (without extension) for export filenames

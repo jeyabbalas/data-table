@@ -15,9 +15,9 @@
  */
 export interface ColumnReorderOptions {
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Movement threshold in pixels to start drag (default: 5) */
-  dragThreshold?: number;
+  dragThreshold?: number | undefined;
 }
 
 /**

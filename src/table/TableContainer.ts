@@ -58,62 +58,62 @@ import { TableBody } from './TableBody';
  */
 export interface TableContainerOptions {
   /** Fixed row height in pixels (default: 32) */
-  rowHeight?: number;
+  rowHeight?: number | undefined;
   /** Fixed header height in pixels (default: 120 for visualizations) */
-  headerHeight?: number;
+  headerHeight?: number | undefined;
   /** CSS class prefix (default: 'dt') */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /**
    * Unique per-instance identifier mixed into modal element IDs so two
    * tables on the same page don't collide on `aria-labelledby` targets.
    * Auto-generated if omitted.
    */
-  instanceId?: string;
+  instanceId?: string | undefined;
   /** Show filter bar between header and body (default: true) */
-  showFilterBar?: boolean;
+  showFilterBar?: boolean | undefined;
   /** Called when a filter is removed via filter chip, for clearing visualization state */
-  onFilterRemove?: (column: string) => void;
+  onFilterRemove?: ((column: string) => void) | undefined;
   /** Custom expression editor factory for derived column panel/modal */
-  editorFactory?: ExpressionEditorFactory;
+  editorFactory?: ExpressionEditorFactory | undefined;
   /** Show "+" add column button at right edge (default: true) */
-  showAddColumnButton?: boolean;
+  showAddColumnButton?: boolean | undefined;
   /** Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true) */
-  showExpressionFilter?: boolean;
+  showExpressionFilter?: boolean | undefined;
   /** FilterPresetManager instance — enables the Presets button and preset panel */
-  presetManager?: FilterPresetManager;
+  presetManager?: FilterPresetManager | undefined;
   /**
    * Where to mount fixed-position modals (derived column editor, SQL filter
    * modal). Defaults to `document.body`. Pass your app's modal root container
    * to keep the library's modals inside your stacking/portal hierarchy instead
    * of at the top of the document.
    */
-  portalTarget?: HTMLElement;
+  portalTarget?: HTMLElement | undefined;
   /**
    * Initial light/dark theme. `'auto'` (default) follows the OS
    * `prefers-color-scheme`; `'light'` / `'dark'` force the theme by writing
    * `data-dt-color-scheme` onto the root element.
    */
-  colorScheme?: ColorScheme;
+  colorScheme?: ColorScheme | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
   /**
    * Shared annotation store. When provided, `TableBody` and every
    * `ColumnHeader` subscribe to it so annotations render inline (tint +
    * popover) without requiring a full `render()`.
    */
-  annotations?: AnnotationStore;
+  annotations?: AnnotationStore | undefined;
   /**
    * Shared popover singleton used by `TableBody` and `ColumnHeader` to
    * display intersecting annotations on hover / focus. Owned by
    * `createDataTable`; destroyed alongside the container.
    */
-  annotationPopover?: AnnotationPopover;
+  annotationPopover?: AnnotationPopover | undefined;
   /**
    * Shared popover singleton used by `ColumnHeader` to display the app-set
    * column-header tooltip on hover / focus of the column-name span. Owned
    * by `createDataTable`; destroyed alongside the container.
    */
-  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover;
+  columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover | undefined;
 }
 
 /**
@@ -217,6 +217,10 @@ export class TableContainer {
     if (!this.resolvedOptions.instanceId) {
       this.resolvedOptions.instanceId = nextInstanceId();
     }
+    // Spread above writes `undefined` over the defaults if the caller passed
+    // `messages: undefined` / `colorScheme: undefined` explicitly. Restore.
+    this.resolvedOptions.messages ??= defaultStrings;
+    this.resolvedOptions.colorScheme ??= 'auto';
     this.messages = this.resolvedOptions.messages;
 
     // Create DOM structure
@@ -365,7 +369,7 @@ export class TableContainer {
     el.setAttribute('aria-rowcount', '0');
     el.setAttribute('aria-colcount', '0');
     el.setAttribute('tabindex', '0');
-    this.applyColorSchemeAttribute(el, this.resolvedOptions.colorScheme);
+    this.applyColorSchemeAttribute(el, this.resolvedOptions.colorScheme ?? 'auto');
     return el;
   }
 
@@ -409,7 +413,7 @@ export class TableContainer {
 
   /** Returns the currently-applied color scheme. */
   getColorScheme(): ColorScheme {
-    return this.resolvedOptions.colorScheme;
+    return this.resolvedOptions.colorScheme ?? 'auto';
   }
 
   /**

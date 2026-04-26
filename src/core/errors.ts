@@ -35,9 +35,9 @@ import type { ErrorPayload } from '../worker/types';
  * read off `err.details` after narrowing on `err.code`.
  */
 export interface DataTableErrorOptions {
-  code?: string;
+  code?: string | undefined;
   cause?: unknown;
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -54,7 +54,7 @@ export interface DataTableErrorOptions {
  */
 export class DataTableError extends Error {
   readonly code: string;
-  readonly details?: Record<string, unknown>;
+  readonly details?: Record<string, unknown> | undefined;
 
   constructor(message: string, options: DataTableErrorOptions = {}) {
     super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
@@ -67,7 +67,7 @@ export class DataTableError extends Error {
     name: string;
     code: string;
     message: string;
-    details?: Record<string, unknown>;
+    details?: Record<string, unknown> | undefined;
     cause?: unknown;
   } {
     const cause = this.cause;

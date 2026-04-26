@@ -44,7 +44,7 @@ export type ListenerErrorHandler<Events extends Record<string, unknown>> = (
  */
 export class EventEmitter<Events extends Record<string, unknown>> {
   private listeners = new Map<keyof Events, Set<EventCallback<unknown>>>();
-  private onListenerError?: ListenerErrorHandler<Events>;
+  private onListenerError?: ListenerErrorHandler<Events> | undefined;
 
   constructor(onListenerError?: ListenerErrorHandler<Events>) {
     this.onListenerError = onListenerError;

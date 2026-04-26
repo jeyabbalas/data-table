@@ -18,9 +18,9 @@ import type { SerializedFilter } from '../persistence/types';
 export interface FilterPreset {
   id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   filters: SerializedFilter[];
-  sortColumns?: SortColumn[];
+  sortColumns?: SortColumn[] | undefined;
   createdAt: number;
   updatedAt: number;
 }

@@ -12,11 +12,11 @@ import type { Filter } from './FilterTypes';
  * Options for FilterChip
  */
 export interface FilterChipOptions {
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Called when the chip body is clicked (for editing). Used by raw-sql filter chips. */
-  onEdit?: () => void;
+  onEdit?: (() => void) | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**
@@ -146,7 +146,7 @@ export class FilterChip {
   private element: HTMLElement;
   private destroyed = false;
   private readonly prefix: string;
-  private readonly onEdit?: () => void;
+  private readonly onEdit?: (() => void) | undefined;
   private readonly messages: Strings;
 
   constructor(

@@ -55,7 +55,9 @@ function stringArraysEqual(a: string[], b: string[]): boolean {
 function sortColumnsEqual(a: SortColumn[], b: SortColumn[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].column !== b[i].column || a[i].direction !== b[i].direction) return false;
+    const ai = a[i]!;
+    const bi = b[i]!;
+    if (ai.column !== bi.column || ai.direction !== bi.direction) return false;
   }
   return true;
 }
@@ -103,7 +105,7 @@ function filterEqual(a: Filter, b: Filter): boolean {
 function filtersEqual(a: Filter[], b: Filter[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (!filterEqual(a[i], b[i])) return false;
+    if (!filterEqual(a[i]!, b[i]!)) return false;
   }
   return true;
 }
@@ -145,14 +147,16 @@ function hiddenInfoMapsEqual(
 export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].name !== b[i].name || a[i].kind !== b[i].kind) return false;
-    if (a[i].kind === 'expression' && b[i].kind === 'expression') {
-      if ((a[i] as ExpressionColumnDef).expression !== (b[i] as ExpressionColumnDef).expression)
+    const ai = a[i]!;
+    const bi = b[i]!;
+    if (ai.name !== bi.name || ai.kind !== bi.kind) return false;
+    if (ai.kind === 'expression' && bi.kind === 'expression') {
+      if ((ai as ExpressionColumnDef).expression !== (bi as ExpressionColumnDef).expression)
         return false;
     }
-    if (a[i].kind === 'vector' && b[i].kind === 'vector') {
-      const av = a[i] as VectorColumnDef;
-      const bv = b[i] as VectorColumnDef;
+    if (ai.kind === 'vector' && bi.kind === 'vector') {
+      const av = ai as VectorColumnDef;
+      const bv = bi as VectorColumnDef;
       if (av.vectorType !== bv.vectorType) return false;
       if (av.values === bv.values) continue; // reference fast-path (common after captureSnapshot)
       if (av.values.length !== bv.values.length) return false;

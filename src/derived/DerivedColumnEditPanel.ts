@@ -16,13 +16,13 @@ import type { DerivedColumnDef } from './types';
 
 /** Construction options for {@link DerivedColumnEditPanel}. */
 export interface DerivedColumnEditPanelOptions {
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Custom editor factory. If omitted, uses DefaultExpressionEditor. */
-  editorFactory?: ExpressionEditorFactory;
+  editorFactory?: ExpressionEditorFactory | undefined;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
-  colorSchemeSource?: HTMLElement;
+  colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
-  messages?: Strings;
+  messages?: Strings | undefined;
 }
 
 /**
@@ -47,8 +47,8 @@ export class DerivedColumnEditPanel {
 
   private prefix: string;
   private readonly messages: Strings;
-  private editorFactory?: ExpressionEditorFactory;
-  private colorSchemeSource?: HTMLElement;
+  private editorFactory?: ExpressionEditorFactory | undefined;
+  private colorSchemeSource?: HTMLElement | undefined;
   private currentEditor: ExpressionEditor | null = null;
   private currentColumn: string | null = null;
   private currentDef: DerivedColumnDef | null = null;

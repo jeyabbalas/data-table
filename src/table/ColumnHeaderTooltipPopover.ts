@@ -40,9 +40,9 @@ import type { ColumnHeaderTooltipContent, ColumnHeaderTooltipItem } from '../cor
 /** Options accepted by {@link ColumnHeaderTooltipPopover}. */
 export interface ColumnHeaderTooltipPopoverOptions {
   /** CSS class prefix (default: `'dt'`). */
-  classPrefix?: string;
+  classPrefix?: string | undefined;
   /** Where to mount the popover element. Defaults to `document.body`. */
-  portalTarget?: HTMLElement;
+  portalTarget?: HTMLElement | undefined;
 }
 
 let popoverInstanceCounter = 0;

@@ -36,16 +36,16 @@ const DEFAULT_DEBOUNCE_MS = 1000;
  * default to sensible values matching the facade's wiring.
  */
 export interface AutoSaveOptions {
-  debounceMs?: number;
-  undoManager?: UndoManager;
-  presetManager?: FilterPresetManager;
-  annotationStore?: AnnotationStore;
+  debounceMs?: number | undefined;
+  undoManager?: UndoManager | undefined;
+  presetManager?: FilterPresetManager | undefined;
+  annotationStore?: AnnotationStore | undefined;
   /**
    * Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
    * transaction aborted). If omitted, save failures are swallowed —
    * the facade wires this to emit an `error` event with `source: 'persistence'`.
    */
-  onError?: (error: PersistenceError) => void;
+  onError?: ((error: PersistenceError) => void) | undefined;
 }
 
 /**

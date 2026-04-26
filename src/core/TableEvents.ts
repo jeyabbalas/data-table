@@ -9,10 +9,10 @@
  * unsubscribes. `dataTable.off(event, handler)` also works.
  */
 
-import type { Filter, SortColumn, ColumnSchema } from './types';
-import type { ProgressInfo } from './Progress';
 import type { DerivedColumnDef } from '../derived/types';
 import type { DataTableError } from './errors';
+import type { ProgressInfo } from './Progress';
+import type { Filter, SortColumn, ColumnSchema } from './types';
 
 /** Origin of an `error` event — which subsystem surfaced the failure. */
 export type TableErrorSource =

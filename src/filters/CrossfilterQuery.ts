@@ -18,15 +18,10 @@ export interface CrossfilterSplit {
  * background array (`f.column !== column` is always true for synthetic keys), which
  * is the desired behavior — SQL filters are global conditions that apply everywhere.
  */
-export function splitCrossfilterFilters(
-  filters: Filter[],
-  column: string
-): CrossfilterSplit {
+export function splitCrossfilterFilters(filters: Filter[], column: string): CrossfilterSplit {
   const hasOwnFilter = filters.some((f) => f.column === column);
   return {
-    background: hasOwnFilter
-      ? filters.filter((f) => f.column !== column)
-      : [],
+    background: hasOwnFilter ? filters.filter((f) => f.column !== column) : [],
     foreground: filters,
     hasOwnFilter,
   };

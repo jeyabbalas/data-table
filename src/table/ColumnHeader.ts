@@ -11,18 +11,15 @@
  * Supports click to sort and Shift+click for multi-column sort.
  */
 
-import type {
-  ColumnSchema,
-  ColumnHeaderTooltipContent,
-} from '../core/types';
-import type { TableState } from '../core/State';
-import type { StateActions } from '../core/Actions';
-import { ColumnResizer } from './ColumnResizer';
-import { type Strings, defaultStrings } from '../core/Strings';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { AnnotationPopover } from './AnnotationPopover';
 import { maxSeverity } from '../annotations/severity';
+import type { StateActions } from '../core/Actions';
+import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
+import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
+import type { AnnotationPopover } from './AnnotationPopover';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
+import { ColumnResizer } from './ColumnResizer';
 
 /**
  * Options for configuring the ColumnHeader
@@ -80,7 +77,7 @@ export class ColumnHeader {
     private column: ColumnSchema,
     private state: TableState,
     private actions: StateActions,
-    options: ColumnHeaderOptions = {}
+    options: ColumnHeaderOptions = {},
   ) {
     this.options = options;
     this.classPrefix = options.classPrefix ?? 'dt';
@@ -104,7 +101,7 @@ export class ColumnHeader {
         classPrefix: this.classPrefix,
         onDragStart: () => this.actions.beginColumnWidthChange(),
         onDragEnd: () => this.actions.endColumnWidthChange(),
-      }
+      },
     );
 
     this.attachEventListeners();
@@ -293,9 +290,7 @@ export class ColumnHeader {
    * override is set.
    */
   private resolveTooltipContent(): ColumnHeaderTooltipContent | null {
-    return (
-      this.state.columnHeaderTooltips.get().get(this.column.name) ?? null
-    );
+    return this.state.columnHeaderTooltips.get().get(this.column.name) ?? null;
   }
 
   /**
@@ -359,9 +354,7 @@ export class ColumnHeader {
     );
     delete el.dataset.dtAnnotationCount;
     if (!annotations) return;
-    const anns = annotations
-      .getByColumn(this.column.name)
-      .filter((a) => a.scope === 'column');
+    const anns = annotations.getByColumn(this.column.name).filter((a) => a.scope === 'column');
     if (anns.length === 0) return;
     // Marker class + count track unfiltered presence so the popover stays
     // reachable even when every visible severity is hidden; the severity
@@ -619,15 +612,9 @@ export class ColumnHeader {
    */
   private updateFilterIndicator(): void {
     const hasFilter = this.state.filtersByColumn.get().has(this.column.name);
-    this.element.classList.toggle(
-      `${this.classPrefix}-col-header--filtered`,
-      hasFilter
-    );
+    this.element.classList.toggle(`${this.classPrefix}-col-header--filtered`, hasFilter);
     // Toggle active class on the filter button itself
-    this.filterButton.classList.toggle(
-      `${this.classPrefix}-col-action-btn--active`,
-      hasFilter
-    );
+    this.filterButton.classList.toggle(`${this.classPrefix}-col-action-btn--active`, hasFilter);
 
     // Update aria-label to reflect current sort/filter state
     this.element.setAttribute('aria-label', this.buildAriaLabel());
@@ -638,21 +625,20 @@ export class ColumnHeader {
    */
   private updatePinState(): void {
     const isPinned = this.state.pinnedColumns.get().includes(this.column.name);
-    this.pinButton.classList.toggle(
-      `${this.classPrefix}-col-action-btn--active`,
-      isPinned
+    this.pinButton.classList.toggle(`${this.classPrefix}-col-action-btn--active`, isPinned);
+    this.pinButton.setAttribute(
+      'title',
+      isPinned ? this.messages.a11y.unpinColumnTitle : this.messages.a11y.pinColumnTitle,
     );
-    this.pinButton.setAttribute('title', isPinned ? this.messages.a11y.unpinColumnTitle : this.messages.a11y.pinColumnTitle);
     this.pinButton.setAttribute(
       'aria-label',
-      isPinned ? this.messages.a11y.unpinButtonLabel(this.column.name) : this.messages.a11y.pinButtonLabel(this.column.name)
+      isPinned
+        ? this.messages.a11y.unpinButtonLabel(this.column.name)
+        : this.messages.a11y.pinButtonLabel(this.column.name),
     );
 
     // Disable drag-to-reorder for pinned columns
-    this.dragHandle.classList.toggle(
-      `${this.classPrefix}-col-drag-handle--disabled`,
-      isPinned
-    );
+    this.dragHandle.classList.toggle(`${this.classPrefix}-col-drag-handle--disabled`, isPinned);
     this.dragHandle.setAttribute('aria-disabled', String(isPinned));
   }
 
@@ -664,15 +650,11 @@ export class ColumnHeader {
     if (isLastColumn) {
       this.hideButton.setAttribute('disabled', '');
       this.hideButton.setAttribute('title', this.messages.a11y.cannotHideLastColumn);
-      this.hideButton.classList.add(
-        `${this.classPrefix}-col-action-btn--disabled`
-      );
+      this.hideButton.classList.add(`${this.classPrefix}-col-action-btn--disabled`);
     } else {
       this.hideButton.removeAttribute('disabled');
       this.hideButton.setAttribute('title', this.messages.a11y.hideColumnTitle);
-      this.hideButton.classList.remove(
-        `${this.classPrefix}-col-action-btn--disabled`
-      );
+      this.hideButton.classList.remove(`${this.classPrefix}-col-action-btn--disabled`);
     }
   }
 
@@ -689,7 +671,7 @@ export class ColumnHeader {
 
     // Query all cells at this column index (nth-child is 1-based)
     const cells = root.querySelectorAll(
-      `.${this.classPrefix}-row > .${this.classPrefix}-cell:nth-child(${columnIndex + 1})`
+      `.${this.classPrefix}-row > .${this.classPrefix}-cell:nth-child(${columnIndex + 1})`,
     );
     return Array.from(cells) as HTMLElement[];
   }
@@ -745,7 +727,7 @@ export class ColumnHeader {
     // Remove existing state classes
     this.sortButton.classList.remove(
       `${this.classPrefix}-col-sort-btn--asc`,
-      `${this.classPrefix}-col-sort-btn--desc`
+      `${this.classPrefix}-col-sort-btn--desc`,
     );
 
     if (sortIndex === -1) {
@@ -758,9 +740,7 @@ export class ColumnHeader {
       const isAsc = sortConfig.direction === 'asc';
 
       // Add appropriate class for arrow styling
-      this.sortButton.classList.add(
-        `${this.classPrefix}-col-sort-btn--${isAsc ? 'asc' : 'desc'}`
-      );
+      this.sortButton.classList.add(`${this.classPrefix}-col-sort-btn--${isAsc ? 'asc' : 'desc'}`);
 
       // For multi-sort, show position badge
       if (sortColumns.length > 1) {
@@ -771,7 +751,10 @@ export class ColumnHeader {
       }
 
       this.element.setAttribute('aria-sort', isAsc ? 'ascending' : 'descending');
-      this.sortButton.setAttribute('title', isAsc ? this.messages.a11y.sortDescendingTitle : this.messages.a11y.sortRemoveTitle);
+      this.sortButton.setAttribute(
+        'title',
+        isAsc ? this.messages.a11y.sortDescendingTitle : this.messages.a11y.sortRemoveTitle,
+      );
     }
 
     // Update aria-label to reflect current sort/filter state

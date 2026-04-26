@@ -67,7 +67,7 @@ export interface ModalOptions {
    * Elements or CSS selectors whose clicks should NOT count as "outside"
    * the panel. Typical use: the anchor button that toggles the panel.
    */
-  outsideClickIgnore?: Array<HTMLElement | string>;
+  outsideClickIgnore?: (HTMLElement | string)[];
   /**
    * Element whose `data-dt-color-scheme` attribute should be mirrored onto
    * this modal/panel on open. Typically the owning table's `.dt-root`
@@ -119,10 +119,7 @@ function readStackStep(): number {
   if (typeof window === 'undefined') return DEFAULT_STACK_STEP;
   try {
     const root = document.documentElement;
-    const raw = window
-      .getComputedStyle(root)
-      .getPropertyValue('--dt-z-modal-stack-step')
-      .trim();
+    const raw = window.getComputedStyle(root).getPropertyValue('--dt-z-modal-stack-step').trim();
     if (!raw) return DEFAULT_STACK_STEP;
     const n = parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_STACK_STEP;
@@ -215,7 +212,7 @@ function focusableDescendants(root: HTMLElement): HTMLElement[] {
 // ---------------------------------------------------------------------------
 
 export class ModalHost {
-  readonly events: EventEmitter<ModalHostEvents> = new EventEmitter();
+  readonly events = new EventEmitter<ModalHostEvents>();
 
   private opts: ModalOptions | null = null;
   private _isOpen = false;
@@ -245,8 +242,7 @@ export class ModalHost {
 
     // Capture opener for focus restore.
     const active = document.activeElement;
-    this.opener =
-      active instanceof HTMLElement && active !== document.body ? active : null;
+    this.opener = active instanceof HTMLElement && active !== document.body ? active : null;
 
     // Push onto the stack and compute z-index.
     openHosts.push(this);
@@ -386,7 +382,6 @@ export class ModalHost {
       try {
         opts.onClose();
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error('[data-table] ModalHost onClose threw', err);
       }
     }

@@ -44,7 +44,10 @@ describe('RawSQLFilter type', () => {
 describe('RawSQLFilter SQL generation', () => {
   it('wraps sql in parentheses', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_a__', sql: 'x = 1', id: 'a',
+      type: 'raw-sql',
+      column: '__raw_sql_a__',
+      sql: 'x = 1',
+      id: 'a',
     };
     expect(filterToSQL(filter)).toBe('(x = 1)');
   });
@@ -52,7 +55,10 @@ describe('RawSQLFilter SQL generation', () => {
   it('preserves complex SQL with subqueries', () => {
     const sql = 'id IN (SELECT id FROM other_table WHERE flag = true)';
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_b__', sql, id: 'b',
+      type: 'raw-sql',
+      column: '__raw_sql_b__',
+      sql,
+      id: 'b',
     };
     expect(filterToSQL(filter)).toBe(`(${sql})`);
   });
@@ -79,14 +85,21 @@ describe('RawSQLFilter crossfilter behavior', () => {
 describe('RawSQLFilter formatFilter', () => {
   it('returns "SQL" as column name', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_a__', sql: 'age > 30', id: 'a',
+      type: 'raw-sql',
+      column: '__raw_sql_a__',
+      sql: 'age > 30',
+      id: 'a',
     };
     expect(formatFilter(filter).column).toBe('SQL');
   });
 
   it('uses label when provided', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_a__', sql: 'age > 30', id: 'a', label: 'Adults',
+      type: 'raw-sql',
+      column: '__raw_sql_a__',
+      sql: 'age > 30',
+      id: 'a',
+      label: 'Adults',
     };
     expect(formatFilter(filter).description).toBe('Adults');
   });
@@ -94,7 +107,10 @@ describe('RawSQLFilter formatFilter', () => {
   it('truncates long SQL without label', () => {
     const longSQL = 'a'.repeat(50);
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_a__', sql: longSQL, id: 'a',
+      type: 'raw-sql',
+      column: '__raw_sql_a__',
+      sql: longSQL,
+      id: 'a',
     };
     const result = formatFilter(filter);
     expect(result.description.length).toBeLessThanOrEqual(40);
@@ -103,7 +119,10 @@ describe('RawSQLFilter formatFilter', () => {
 
   it('does not truncate short SQL', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_a__', sql: 'x = 1', id: 'a',
+      type: 'raw-sql',
+      column: '__raw_sql_a__',
+      sql: 'x = 1',
+      id: 'a',
     };
     expect(formatFilter(filter).description).toBe('x = 1');
   });

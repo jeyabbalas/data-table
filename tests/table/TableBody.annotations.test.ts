@@ -16,16 +16,27 @@ import type { ColumnSchema } from '@/core/types';
 
 class MockResizeObserver implements ResizeObserver {
   private callback: ResizeObserverCallback;
-  constructor(callback: ResizeObserverCallback) { this.callback = callback; }
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
   observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  triggerResize(_entries: unknown[]): void { /* no-op */ }
+
+  triggerResize(_entries: unknown[]): void {
+    /* no-op */
+  }
 }
 
 const testSchema: ColumnSchema[] = [
-  { name: '__rowid__', type: 'integer', nullable: false, originalType: 'INTEGER', system: true, hidden: true },
+  {
+    name: '__rowid__',
+    type: 'integer',
+    nullable: false,
+    originalType: 'INTEGER',
+    system: true,
+    hidden: true,
+  },
   { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
   { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
   { name: 'price', type: 'float', nullable: false, originalType: 'DOUBLE' },
@@ -112,10 +123,16 @@ describe('TableBody — annotation overlay', () => {
   it('buildRowQuery prepends __rowid__ to every fetch', async () => {
     const rows = buildFakeRows(10);
     const { bridge, queries } = createMockBridge(rows);
-    const body = new TableBody(container, state, bridge as never, actions = new StateActions(state, bridge as never), {
-      annotations: store,
-      annotationPopover: popover,
-    });
+    const body = new TableBody(
+      container,
+      state,
+      bridge as never,
+      (actions = new StateActions(state, bridge as never)),
+      {
+        annotations: store,
+        annotationPopover: popover,
+      },
+    );
 
     // Force a fetch by directly triggering internal rendering.
     await (body as unknown as { fetchRows(s: number, e: number): Promise<void> }).fetchRows(0, 5);
@@ -822,12 +839,10 @@ describe('TableBody — annotation overlay', () => {
     const showSpy = vi.spyOn(popover, 'show');
 
     const idCell = rowEl.children[visibleColumns.indexOf('id')] as HTMLElement;
-    idCell.dispatchEvent(
-      new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
-    );
+    idCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
 
     expect(showSpy).toHaveBeenCalledTimes(1);
-    const [, anns] = showSpy.mock.calls[0] as [HTMLElement, typeof rowAnn[]];
+    const [, anns] = showSpy.mock.calls[0] as [HTMLElement, (typeof rowAnn)[]];
     expect(anns.length).toBe(1);
     expect(anns[0].id).toBe(rowAnn.id);
     expect(anns[0].scope).toBe('row');
@@ -851,7 +866,12 @@ describe('TableBody — annotation overlay', () => {
     // A column-scope ann at 'price' AND a cell-scope ann at (3, 'price').
     // The col-scope ann gets picked up for every cell in the column; the
     // cell-scope ann must stay local to (3, 'price').
-    const colAnn = store.add({ scope: 'column', column: 'price', severity: 'warning', message: 'col' });
+    const colAnn = store.add({
+      scope: 'column',
+      column: 'price',
+      severity: 'warning',
+      message: 'col',
+    });
     const cellAnn = store.add({
       scope: 'cell',
       rowId: 3,
@@ -884,11 +904,9 @@ describe('TableBody — annotation overlay', () => {
 
     // Hover row-1 price cell (col-only).
     const colOnlyCell = rowA.children[visibleColumns.indexOf('price')] as HTMLElement;
-    colOnlyCell.dispatchEvent(
-      new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
-    );
+    colOnlyCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
     expect(showSpy).toHaveBeenCalledTimes(1);
-    const [, colOnlyAnns] = showSpy.mock.calls[0] as [HTMLElement, typeof colAnn[]];
+    const [, colOnlyAnns] = showSpy.mock.calls[0] as [HTMLElement, (typeof colAnn)[]];
     expect(colOnlyAnns.map((a) => a.id)).toEqual([colAnn.id]);
     expect(colOnlyAnns.map((a) => a.id)).not.toContain(cellAnn.id);
 
@@ -896,7 +914,11 @@ describe('TableBody — annotation overlay', () => {
     // a new anchor. pointerout with relatedTarget outside mimics the
     // real pointer leaving the first cell.
     colOnlyCell.dispatchEvent(
-      new PointerEvent('pointerout', { bubbles: true, cancelable: true, relatedTarget: document.body }),
+      new PointerEvent('pointerout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: document.body,
+      }),
     );
 
     // Hover row-3 price cell (intersection).
@@ -905,7 +927,7 @@ describe('TableBody — annotation overlay', () => {
       new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
     );
     expect(showSpy).toHaveBeenCalledTimes(2);
-    const [, intersectionAnns] = showSpy.mock.calls[1] as [HTMLElement, typeof colAnn[]];
+    const [, intersectionAnns] = showSpy.mock.calls[1] as [HTMLElement, (typeof colAnn)[]];
     const ids = intersectionAnns.map((a) => a.id);
     expect(ids).toContain(colAnn.id);
     expect(ids).toContain(cellAnn.id);
@@ -969,11 +991,12 @@ describe('TableBody — annotation overlay', () => {
 
     // Hover triggers the popover with all 9 anns.
     const showSpy = vi.spyOn(popover, 'show');
-    priceCell.dispatchEvent(
-      new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
-    );
+    priceCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
     expect(showSpy).toHaveBeenCalledTimes(1);
-    const [anchorEl, anns] = showSpy.mock.calls[0] as [HTMLElement, Array<{ scope: string; message: string }>];
+    const [anchorEl, anns] = showSpy.mock.calls[0] as [
+      HTMLElement,
+      Array<{ scope: string; message: string }>,
+    ];
     expect(anchorEl).toBe(priceCell);
     expect(anns.length).toBe(9);
     expect(anns.filter((a) => a.scope === 'row').length).toBe(3);
@@ -1204,7 +1227,13 @@ describe('TableBody — annotation overlay', () => {
       const { body, rows, visibleColumns, schemaMap, internal } = setup();
       store.add({ scope: 'row', rowId: 7, severity: 'error', message: 'row-err' });
       store.add({ scope: 'column', column: 'price', severity: 'warning', message: 'col-warn' });
-      store.add({ scope: 'cell', rowId: 7, column: 'price', severity: 'info', message: 'cell-info' });
+      store.add({
+        scope: 'cell',
+        rowId: 7,
+        column: 'price',
+        severity: 'info',
+        message: 'cell-info',
+      });
 
       const rowEl = internal.getOrCreateRow(visibleColumns.length);
       internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
@@ -1265,12 +1294,17 @@ describe('TableBody — annotation overlay', () => {
 
       // Seed the body's internal row map so reapply has a row to walk.
       (body as unknown as { rowElementMap: Map<number, HTMLElement> }).rowElementMap.set(3, rowEl);
-      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(3, rows[3]);
+      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(
+        3,
+        rows[3],
+      );
 
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(true);
 
       store.setSeverityFilter({ error: false });
-      (body as unknown as { reapplyAnnotationsToVisibleRows(): void }).reapplyAnnotationsToVisibleRows();
+      (
+        body as unknown as { reapplyAnnotationsToVisibleRows(): void }
+      ).reapplyAnnotationsToVisibleRows();
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
 
@@ -1292,7 +1326,10 @@ describe('TableBody — annotation overlay', () => {
       const rowEl = internal.getOrCreateRow(visibleColumns.length);
       internal.updateRowContent(rowEl, 6, rows[6], visibleColumns, schemaMap);
       (body as unknown as { rowElementMap: Map<number, HTMLElement> }).rowElementMap.set(6, rowEl);
-      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(6, rows[6]);
+      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(
+        6,
+        rows[6],
+      );
 
       // Default — error wins.
       expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);

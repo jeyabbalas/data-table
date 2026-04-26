@@ -2,9 +2,9 @@
  * Unified data loader with format detection
  */
 
-import type { WorkerBridge } from './WorkerBridge';
-import type { ColumnSchema } from '../core/types';
 import { LoadError } from '../core/errors';
+import type { ColumnSchema } from '../core/types';
+import type { WorkerBridge } from './WorkerBridge';
 
 export type DataFormat = 'csv' | 'json' | 'parquet';
 
@@ -31,7 +31,7 @@ export class DataLoader {
    */
   async load(
     source: File | string | ArrayBuffer,
-    options: DataLoaderOptions = {}
+    options: DataLoaderOptions = {},
   ): Promise<LoadResult> {
     let data: ArrayBuffer | string;
     let format: DataFormat;
@@ -39,31 +39,22 @@ export class DataLoader {
     if (source instanceof File) {
       // File upload
       format = options.format || this.detectFormatFromFile(source);
-      data =
-        format === 'parquet'
-          ? await source.arrayBuffer()
-          : await source.text();
+      data = format === 'parquet' ? await source.arrayBuffer() : await source.text();
     } else if (typeof source === 'string' && source.startsWith('http')) {
       // URL fetch
       format = options.format || this.detectFormatFromURL(source);
       const response = await fetch(source);
       if (!response.ok) {
-        throw new LoadError(
-          `Failed to fetch URL: ${response.status} ${response.statusText}`,
-          {
-            code: 'FETCH_FAILED',
-            details: {
-              status: response.status,
-              statusText: response.statusText,
-              url: source,
-            },
+        throw new LoadError(`Failed to fetch URL: ${response.status} ${response.statusText}`, {
+          code: 'FETCH_FAILED',
+          details: {
+            status: response.status,
+            statusText: response.statusText,
+            url: source,
           },
-        );
+        });
       }
-      data =
-        format === 'parquet'
-          ? await response.arrayBuffer()
-          : await response.text();
+      data = format === 'parquet' ? await response.arrayBuffer() : await response.text();
     } else {
       // Raw data (string or ArrayBuffer)
       format = options.format || this.detectFormatFromContent(source);

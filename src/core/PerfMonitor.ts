@@ -64,8 +64,6 @@ export class PerfMonitor {
   /** Format all results as a human-readable summary. */
   formatSummary(): string {
     if (this.results.length === 0) return 'No measurements recorded.';
-    return this.results
-      .map((r) => `${r.name}: ${r.durationMs.toFixed(2)}ms`)
-      .join('\n');
+    return this.results.map((r) => `${r.name}: ${r.durationMs.toFixed(2)}ms`).join('\n');
   }
 }

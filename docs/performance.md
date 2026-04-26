@@ -99,13 +99,13 @@ adding annotations to toggle visibility.
 
 Approximate ranges from architectural reasoning — not measured:
 
-| Dataset scale | Expected experience |
-|---|---|
-| < 100 K rows | Fully interactive, all features snappy. Filter changes < 50 ms |
-| 100 K – 1 M rows | Interactive with faint cost on filter changes (100–300 ms). Virtualized scroll remains smooth. This is the design target |
-| 1 M – 10 M rows | Filter/sort latency becomes noticeable (300 ms – 2 s). Initial load takes seconds. Still workable for analytics, not for live dashboards |
-| 10 M – 100 M rows | Outside the design target. Consider server-side aggregation; use this library for the summary layer |
-| > 100 M rows | Don't |
+| Dataset scale     | Expected experience                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| < 100 K rows      | Fully interactive, all features snappy. Filter changes < 50 ms                                                                           |
+| 100 K – 1 M rows  | Interactive with faint cost on filter changes (100–300 ms). Virtualized scroll remains smooth. This is the design target                 |
+| 1 M – 10 M rows   | Filter/sort latency becomes noticeable (300 ms – 2 s). Initial load takes seconds. Still workable for analytics, not for live dashboards |
+| 10 M – 100 M rows | Outside the design target. Consider server-side aggregation; use this library for the summary layer                                      |
+| > 100 M rows      | Don't                                                                                                                                    |
 
 Memory usage grows roughly linearly with row count × column count. A
 useful rule of thumb: expect ~50–100 bytes per cell in DuckDB, plus the
@@ -148,10 +148,10 @@ Feature toggles reduce mount cost and memory:
 await createDataTable({
   container,
   source,
-  visualizations: false,     // no column-header charts
-  presets: false,            // no preset panel
-  exportDialog: false,       // no export modal
-  expressionFilter: false,   // no raw-SQL filter (drops CodeMirror)
+  visualizations: false, // no column-header charts
+  presets: false, // no preset panel
+  exportDialog: false, // no export modal
+  expressionFilter: false, // no raw-SQL filter (drops CodeMirror)
 });
 ```
 
@@ -177,9 +177,13 @@ any SQL-driving code.
 ```ts
 table.on('filterChange', () => {
   const t = performance.now();
-  table.on('filterChange', () => {
-    console.log(`Filter change rendered in ${(performance.now() - t).toFixed(1)} ms`);
-  }, { once: true });
+  table.on(
+    'filterChange',
+    () => {
+      console.log(`Filter change rendered in ${(performance.now() - t).toFixed(1)} ms`);
+    },
+    { once: true },
+  );
 });
 ```
 

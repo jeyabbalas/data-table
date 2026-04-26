@@ -141,7 +141,14 @@ describe('BaseVisualization — color-scheme MutationObserver', () => {
     // without throwing and never re-render on unrelated body mutations.
     const container = document.createElement('div');
     vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-      width: 100, height: 40, top: 0, left: 0, bottom: 40, right: 100, x: 0, y: 0,
+      width: 100,
+      height: 40,
+      top: 0,
+      left: 0,
+      bottom: 40,
+      right: 100,
+      x: 0,
+      y: 0,
       toJSON: () => ({}),
     });
     document.body.appendChild(container);

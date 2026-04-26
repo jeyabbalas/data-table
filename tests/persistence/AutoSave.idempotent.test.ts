@@ -58,12 +58,8 @@ describe('AutoSave.enable() — idempotency (Phase 2)', () => {
     autoSave.enable();
     autoSave.enable();
 
-    const visCalls = docAdd.mock.calls.filter(
-      ([ev]) => ev === 'visibilitychange',
-    );
-    const unloadCalls = winAdd.mock.calls.filter(
-      ([ev]) => ev === 'beforeunload',
-    );
+    const visCalls = docAdd.mock.calls.filter(([ev]) => ev === 'visibilitychange');
+    const unloadCalls = winAdd.mock.calls.filter(([ev]) => ev === 'beforeunload');
     expect(visCalls.length).toBe(1);
     expect(unloadCalls.length).toBe(1);
 
@@ -75,15 +71,11 @@ describe('AutoSave.enable() — idempotency (Phase 2)', () => {
     autoSave.enable();
     autoSave.disable();
 
-    const beforeReEnable = docAdd.mock.calls.filter(
-      ([ev]) => ev === 'visibilitychange',
-    ).length;
+    const beforeReEnable = docAdd.mock.calls.filter(([ev]) => ev === 'visibilitychange').length;
 
     autoSave.enable();
 
-    const afterReEnable = docAdd.mock.calls.filter(
-      ([ev]) => ev === 'visibilitychange',
-    ).length;
+    const afterReEnable = docAdd.mock.calls.filter(([ev]) => ev === 'visibilitychange').length;
 
     expect(afterReEnable).toBe(beforeReEnable + 1);
     autoSave.destroy();

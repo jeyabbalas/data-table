@@ -358,10 +358,7 @@ describe('StateActions — Undo/Redo Integration', () => {
 
   describe('Backward compatibility (no UndoManager)', () => {
     it('StateActions without UndoManager works for all operations', () => {
-      const noUndoActions = new StateActions(
-        state,
-        createMockBridge() as any
-      );
+      const noUndoActions = new StateActions(state, createMockBridge() as any);
 
       // All operations should work without errors
       noUndoActions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
@@ -378,20 +375,14 @@ describe('StateActions — Undo/Redo Integration', () => {
     });
 
     it('undo/redo return false without UndoManager', async () => {
-      const noUndoActions = new StateActions(
-        state,
-        createMockBridge() as any
-      );
+      const noUndoActions = new StateActions(state, createMockBridge() as any);
 
       expect(await noUndoActions.undo()).toBe(false);
       expect(await noUndoActions.redo()).toBe(false);
     });
 
     it('getUndoManager returns undefined without UndoManager', () => {
-      const noUndoActions = new StateActions(
-        state,
-        createMockBridge() as any
-      );
+      const noUndoActions = new StateActions(state, createMockBridge() as any);
 
       expect(noUndoActions.getUndoManager()).toBeUndefined();
     });
@@ -592,7 +583,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('addDerivedColumn creates an undo point', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
     expect(undoManager.undoDepth).toBe(1);
   });
@@ -600,7 +593,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
   it('failed addDerivedColumn does NOT push to undo stack', async () => {
     // Empty name → validation failure
     const result = await actions.addDerivedColumn({
-      kind: 'expression', name: '', expression: 'price * quantity',
+      kind: 'expression',
+      name: '',
+      expression: 'price * quantity',
     });
     expect(result.success).toBe(false);
     expect(undoManager.undoDepth).toBe(0);
@@ -608,7 +603,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('duplicate name failure does NOT push to undo stack', async () => {
     const result = await actions.addDerivedColumn({
-      kind: 'expression', name: 'id', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'id',
+      expression: 'price * quantity',
     });
     expect(result.success).toBe(false);
     expect(undoManager.undoDepth).toBe(0);
@@ -616,7 +613,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('addDerivedColumn → undo → column removed, tableName reverts', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
     expect(state.derivedColumns.get()).toHaveLength(1);
     expect(state.tableName.get()).toContain('__dt_view_');
@@ -627,12 +626,14 @@ describe('StateActions — Derived Column Undo/Redo', () => {
     expect(state.derivedColumns.get()).toHaveLength(0);
     expect(state.tableName.get()).toBe('test_table');
     expect(state.visibleColumns.get()).not.toContain('total');
-    expect(state.schema.get().find(c => c.name === 'total')).toBeUndefined();
+    expect(state.schema.get().find((c) => c.name === 'total')).toBeUndefined();
   });
 
   it('addDerivedColumn → undo → redo → column re-added', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
 
     await actions.undo();
@@ -642,12 +643,14 @@ describe('StateActions — Derived Column Undo/Redo', () => {
     expect(state.derivedColumns.get()).toHaveLength(1);
     expect(state.tableName.get()).toContain('__dt_view_');
     expect(state.visibleColumns.get()).toContain('total');
-    expect(state.schema.get().find(c => c.name === 'total')?.isDerived).toBe(true);
+    expect(state.schema.get().find((c) => c.name === 'total')?.isDerived).toBe(true);
   });
 
   it('removeDerivedColumn creates an undo point', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
     const depthBefore = undoManager.undoDepth;
 
@@ -657,7 +660,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('removeDerivedColumn → undo → column restored', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
 
     await actions.removeDerivedColumn('total');
@@ -672,10 +677,14 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('add col A, add col B, undo twice, redo once → correct states', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'colA', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'colA',
+      expression: 'price * quantity',
     });
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'colB', expression: 'UPPER(name)',
+      kind: 'expression',
+      name: 'colB',
+      expression: 'UPPER(name)',
     });
     expect(state.derivedColumns.get()).toHaveLength(2);
 
@@ -698,19 +707,25 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('updateDerivedColumn creates an undo point', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
     const depthBefore = undoManager.undoDepth;
 
     await actions.updateDerivedColumn('total', {
-      kind: 'expression', name: 'total', expression: 'quantity + 1',
+      kind: 'expression',
+      name: 'total',
+      expression: 'quantity + 1',
     });
     expect(undoManager.undoDepth).toBe(depthBefore + 1);
   });
 
   it('mixed undo: add derived col, add filter, undo twice → both reversed', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
     actions.addFilter({ column: 'price', type: 'range', min: 0, max: 100 });
 
@@ -730,7 +745,9 @@ describe('StateActions — Derived Column Undo/Redo', () => {
 
   it('undoRedoInProgress guard prevents re-entrant calls', async () => {
     await actions.addDerivedColumn({
-      kind: 'expression', name: 'total', expression: 'price * quantity',
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * quantity',
     });
 
     // Start first undo (creates a promise but we don't await yet)

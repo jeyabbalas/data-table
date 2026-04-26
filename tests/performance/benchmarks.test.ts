@@ -128,7 +128,9 @@ describe('Performance Benchmarks', () => {
 
       // Subscribe 100 listeners
       for (let i = 0; i < 100; i++) {
-        const unsub = signal.subscribe(() => { callCount++; });
+        const unsub = signal.subscribe(() => {
+          callCount++;
+        });
         callbacks.push(unsub);
       }
 

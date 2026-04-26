@@ -14,9 +14,7 @@ let conn: duckdb.AsyncDuckDBConnection | null = null;
  * @param bundles Optional bundle override for self-hosted / offline deployments.
  *                When omitted, falls back to `getJsDelivrBundles()`.
  */
-export async function initializeDuckDB(
-  bundles?: duckdb.DuckDBBundles,
-): Promise<void> {
+export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<void> {
   if (db !== null) {
     return; // Already initialized
   }
@@ -31,7 +29,7 @@ export async function initializeDuckDB(
   const worker_url = URL.createObjectURL(
     new Blob([`importScripts("${bundle.mainWorker!}");`], {
       type: 'text/javascript',
-    })
+    }),
   );
 
   // Instantiate the async DuckDB
@@ -92,7 +90,8 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
   const years = Math.floor(Math.abs(months) / 12);
   const remainingMonths = Math.abs(months) % 12;
   if (years > 0) parts.push(`${monthSign}${years} year${years > 1 ? 's' : ''}`);
-  if (remainingMonths > 0) parts.push(`${monthSign}${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`);
+  if (remainingMonths > 0)
+    parts.push(`${monthSign}${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`);
 
   // Days (independently signed)
   const absDays = Math.abs(days);
@@ -160,14 +159,11 @@ export function convertBigInts(obj: unknown): unknown {
 /**
  * Execute a SQL query and return results as an array of objects
  */
-export async function executeQuery<T = Record<string, unknown>>(
-  sql: string
-): Promise<T[]> {
+export async function executeQuery<T = Record<string, unknown>>(sql: string): Promise<T[]> {
   if (!conn) {
-    throw Object.assign(
-      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
-      { code: 'BRIDGE_NOT_READY' },
-    );
+    throw Object.assign(new Error('DuckDB not initialized. Call initializeDuckDB() first.'), {
+      code: 'BRIDGE_NOT_READY',
+    });
   }
 
   const result = await conn.query(sql);
@@ -179,10 +175,9 @@ export async function executeQuery<T = Record<string, unknown>>(
  */
 export function getConnection(): duckdb.AsyncDuckDBConnection {
   if (!conn) {
-    throw Object.assign(
-      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
-      { code: 'BRIDGE_NOT_READY' },
-    );
+    throw Object.assign(new Error('DuckDB not initialized. Call initializeDuckDB() first.'), {
+      code: 'BRIDGE_NOT_READY',
+    });
   }
   return conn;
 }
@@ -192,10 +187,9 @@ export function getConnection(): duckdb.AsyncDuckDBConnection {
  */
 export function getDatabase(): duckdb.AsyncDuckDB {
   if (!db) {
-    throw Object.assign(
-      new Error('DuckDB not initialized. Call initializeDuckDB() first.'),
-      { code: 'BRIDGE_NOT_READY' },
-    );
+    throw Object.assign(new Error('DuckDB not initialized. Call initializeDuckDB() first.'), {
+      code: 'BRIDGE_NOT_READY',
+    });
   }
   return db;
 }

@@ -1,6 +1,6 @@
 # SQL editor primitives
 
-Build a CodeMirror SQL editor *outside* the data table — for a filter-preset
+Build a CodeMirror SQL editor _outside_ the data table — for a filter-preset
 composer, a derived-column wizard, or a query-template form mounted in your
 own UI shell — using the same DuckDB-aware grammar, schema/function
 autocomplete, and theme the bundled `CodeMirrorExpressionEditor` uses
@@ -39,7 +39,7 @@ an ad-hoc `[{name, type}, …]` once and you're done.
 - Choose between the library's bundled theme and your own — both can use
   the `--dt-*` CSS variables
 - Add the `autocompletion()` UI extension yourself (the helpers ship the
-  autocomplete *source*, not the dropdown UI)
+  autocomplete _source_, not the dropdown UI)
 
 ## Prerequisites
 
@@ -54,10 +54,7 @@ an ad-hoc `[{name, type}, …]` once and you're done.
 ## Minimal example (literal schema)
 
 ```ts
-import {
-  buildCompletionContext,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { buildCompletionContext, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -71,8 +68,8 @@ const ctx = buildCompletionContext([
 const view = new EditorView({
   state: EditorState.create({
     extensions: [
-      createSqlExtensions(ctx),     // SQL grammar + autocomplete source + library theme
-      autocompletion(),             // the dropdown UI — host owns this (see Gotchas)
+      createSqlExtensions(ctx), // SQL grammar + autocomplete source + library theme
+      autocompletion(), // the dropdown UI — host owns this (see Gotchas)
     ],
   }),
   parent: document.querySelector('#editor')!,
@@ -86,9 +83,9 @@ one-line description in the side panel).
 
 ## Two paths at a glance
 
-| Path | When to use | Schema source | How to refresh |
-|---|---|---|---|
-| **Live-schema** | The editor sits next to a real `DataTable` | `table.actions.getCompletionContext()` | `Compartment.reconfigure()` on every `loadComplete` / `derivedChange` |
+| Path               | When to use                                                        | Schema source                                           | How to refresh                                                                  |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Live-schema**    | The editor sits next to a real `DataTable`                         | `table.actions.getCompletionContext()`                  | `Compartment.reconfigure()` on every `loadComplete` / `derivedChange`           |
 | **Literal-schema** | No `DataTable` (template UI, settings form, remote schema preview) | Ad-hoc `[{name, type}, …]` via `buildCompletionContext` | Manually rebuild the context and dispatch a `reconfigure` (or `reset` the view) |
 
 Both paths use the same `createSqlExtensions(ctx, options?)` call — they
@@ -195,10 +192,7 @@ When both `originalType` and `type` are present `originalType` wins
 an empty string.
 
 ```ts
-import {
-  buildCompletionContext,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { buildCompletionContext, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -206,7 +200,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 const ctx = buildCompletionContext([
   { name: 'price', type: 'DOUBLE' },
   { name: 'qty', type: 'BIGINT' },
-  { name: 'sku' },                         // type unknown — autocomplete still works
+  { name: 'sku' }, // type unknown — autocomplete still works
 ]);
 
 const view = new EditorView({
@@ -238,12 +232,12 @@ By default `createSqlExtensions` populates function autocomplete from the
 overrides that list with three distinct behaviors, in this precedence
 order ([`src/sql-editor/extensions.ts:140-142`](../../src/sql-editor/extensions.ts)):
 
-| `options.functions` | Effect |
-|---|---|
-| `undefined` (default) | Falls through to `context.functions` (if set), then to `DUCKDB_FUNCTION_DETAILS`. |
-| `[]` (empty array) | **Disables** function autocomplete entirely; only column completions are surfaced. Does **not** fall through — `??` only treats `null` / `undefined` as missing. |
-| `DuckDBFunctionInfo[]` | Replaces the list. Each completion gets `detail` (the category chip) and `info` (the description shown in the side panel on focus). |
-| `string[]` | Replaces the list with names only. No category chip, no description side panel. |
+| `options.functions`    | Effect                                                                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `undefined` (default)  | Falls through to `context.functions` (if set), then to `DUCKDB_FUNCTION_DETAILS`.                                                                                |
+| `[]` (empty array)     | **Disables** function autocomplete entirely; only column completions are surfaced. Does **not** fall through — `??` only treats `null` / `undefined` as missing. |
+| `DuckDBFunctionInfo[]` | Replaces the list. Each completion gets `detail` (the category chip) and `info` (the description shown in the side panel on focus).                              |
+| `string[]`             | Replaces the list with names only. No category chip, no description side panel.                                                                                  |
 
 ```ts
 import {
@@ -253,10 +247,9 @@ import {
 } from '@jeyabbalas/data-table/advanced';
 
 // (a) Filter by category — keep aggregate + numeric only.
-const aggregateAndNumeric: readonly DuckDBFunctionInfo[] =
-  DUCKDB_FUNCTION_DETAILS.filter(
-    (f) => f.category === 'aggregate' || f.category === 'numeric',
-  );
+const aggregateAndNumeric: readonly DuckDBFunctionInfo[] = DUCKDB_FUNCTION_DETAILS.filter(
+  (f) => f.category === 'aggregate' || f.category === 'numeric',
+);
 const ext = createSqlExtensions(ctx, { functions: aggregateAndNumeric });
 
 // (b) Names only — no category chip / description tooltip.
@@ -270,9 +263,16 @@ createSqlExtensions(ctx, { functions: [] });
 
 ```ts
 type DuckDBFunctionCategory =
-  | 'aggregate' | 'numeric' | 'string' | 'date/time'
-  | 'casting'   | 'conditional' | 'list' | 'struct'
-  | 'window'    | 'utility';
+  | 'aggregate'
+  | 'numeric'
+  | 'string'
+  | 'date/time'
+  | 'casting'
+  | 'conditional'
+  | 'list'
+  | 'struct'
+  | 'window'
+  | 'utility';
 ```
 
 For a names-only-but-fixed surface that matches the existing
@@ -280,10 +280,7 @@ For a names-only-but-fixed surface that matches the existing
 from `DUCKDB_FUNCTION_DETAILS` so the two cannot drift:
 
 ```ts
-import {
-  DUCKDB_FUNCTIONS,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { DUCKDB_FUNCTIONS, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 
 createSqlExtensions(ctx, { functions: DUCKDB_FUNCTIONS });
 ```
@@ -315,10 +312,7 @@ const myTheme = EditorView.theme({
   },
   '.cm-editor.cm-focused': { borderColor: 'var(--dt-primary)' },
 });
-const exts = [
-  createSqlExtensions(ctx, { includeTheme: false }),
-  myTheme,
-];
+const exts = [createSqlExtensions(ctx, { includeTheme: false }), myTheme];
 
 // (c) Apply the library theme, but outside the Compartment so it survives
 //     schema reconfiguration without flicker. This is what the bundled
@@ -348,13 +342,13 @@ editor tracks the table's color scheme without copying any colors.
 ### Sharing a single context across multiple editors
 
 When two editors live next to the same `DataTable` (a filter SQL composer
-*and* a derived-column composer, say), they should pull from the same
+_and_ a derived-column composer, say), they should pull from the same
 thunk and refresh together. Example 14 wires this up explicitly:
 
 ```ts
 const getContext = () => table.actions.getCompletionContext();
 const filterEditor = new HostSqlEditor(filterEl, { placeholder: 'WHERE …', getContext });
-const exprEditor   = new HostSqlEditor(exprEl,   { placeholder: 'expr',   getContext });
+const exprEditor = new HostSqlEditor(exprEl, { placeholder: 'expr', getContext });
 
 function refreshAll() {
   filterEditor.refreshContext();
@@ -422,8 +416,8 @@ createSqlExtensions(ctx, { upperCaseKeywords: false });
 ## Gotchas
 
 - **You must add `autocompletion()` yourself.** `createSqlExtensions` ships
-  the autocomplete *source* (a `PostgreSQL.language.data.of({ autocomplete:
-  ... })` extension), not the autocomplete UI extension. Without
+  the autocomplete _source_ (a `PostgreSQL.language.data.of({ autocomplete:
+... })` extension), not the autocomplete UI extension. Without
   `autocompletion()` from `@codemirror/autocomplete` in your extension
   array, no dropdown ever appears — even though the source is wired
   correctly. The bundled `CodeMirrorExpressionEditor` adds it explicitly

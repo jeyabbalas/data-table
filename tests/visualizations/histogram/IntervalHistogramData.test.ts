@@ -102,17 +102,15 @@ describe('parseIntervalToSeconds', () => {
   });
 
   it('should handle Arrow MonthDayNano interval objects', () => {
-    expect(parseIntervalToSeconds({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 }))
-      .toBe(3600);
-    expect(parseIntervalToSeconds({ months: 0, days: 1, nanoseconds: 0 }))
-      .toBe(86400);
-    expect(parseIntervalToSeconds({ months: 1, days: 0, nanoseconds: 0 }))
-      .toBe(MONTH_SECONDS);
+    expect(parseIntervalToSeconds({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 })).toBe(
+      3600,
+    );
+    expect(parseIntervalToSeconds({ months: 0, days: 1, nanoseconds: 0 })).toBe(86400);
+    expect(parseIntervalToSeconds({ months: 1, days: 0, nanoseconds: 0 })).toBe(MONTH_SECONDS);
   });
 
   it('should handle DuckDB internal interval objects with micros', () => {
-    expect(parseIntervalToSeconds({ months: 0, days: 0, micros: 3_600_000_000 }))
-      .toBe(3600);
+    expect(parseIntervalToSeconds({ months: 0, days: 0, micros: 3_600_000_000 })).toBe(3600);
   });
 });
 
@@ -267,13 +265,15 @@ describe('fetchIntervalColumnStats', () => {
   }
 
   it('should parse stats from DuckDB VARCHAR output', async () => {
-    const bridge = mockBridge([{
-      min_val: '01:00:00',
-      max_val: '1 day 02:30:00',
-      median_val: '12:00:00',
-      count: 100,
-      null_count: 5,
-    }]);
+    const bridge = mockBridge([
+      {
+        min_val: '01:00:00',
+        max_val: '1 day 02:30:00',
+        median_val: '12:00:00',
+        count: 100,
+        null_count: 5,
+      },
+    ]);
 
     const stats = await fetchIntervalColumnStats('t', 'dur', [], bridge);
     expect(stats.minSeconds).toBe(3600);
@@ -284,9 +284,15 @@ describe('fetchIntervalColumnStats', () => {
   });
 
   it('should handle all-null column', async () => {
-    const bridge = mockBridge([{
-      min_val: null, max_val: null, median_val: null, count: 0, null_count: 10,
-    }]);
+    const bridge = mockBridge([
+      {
+        min_val: null,
+        max_val: null,
+        median_val: null,
+        count: 0,
+        null_count: 10,
+      },
+    ]);
 
     const stats = await fetchIntervalColumnStats('t', 'dur', [], bridge);
     expect(stats.minSeconds).toBeNull();
@@ -348,9 +354,15 @@ describe('fetchIntervalNumericBins', () => {
 describe('fetchIntervalHistogramData', () => {
   it('should return empty bins for all-null data', async () => {
     const bridge = {
-      query: async () => [{
-        min_val: null, max_val: null, median_val: null, count: 0, null_count: 10,
-      }],
+      query: async () => [
+        {
+          min_val: null,
+          max_val: null,
+          median_val: null,
+          count: 0,
+          null_count: 10,
+        },
+      ],
     } as unknown as WorkerBridge;
 
     const data = await fetchIntervalHistogramData('t', 'dur', [], bridge, 10);
@@ -363,10 +375,15 @@ describe('fetchIntervalHistogramData', () => {
 
   it('should handle single value', async () => {
     const bridge = {
-      query: async () => [{
-        min_val: '01:00:00', max_val: '01:00:00', median_val: '01:00:00',
-        count: 50, null_count: 0,
-      }],
+      query: async () => [
+        {
+          min_val: '01:00:00',
+          max_val: '01:00:00',
+          median_val: '01:00:00',
+          count: 50,
+          null_count: 0,
+        },
+      ],
     } as unknown as WorkerBridge;
 
     const data = await fetchIntervalHistogramData('t', 'dur', [], bridge, 10);
@@ -384,10 +401,15 @@ describe('fetchIntervalHistogramData', () => {
         callCount++;
         if (callCount === 1) {
           // Stats query
-          return [{
-            min_val: '00:00:00', max_val: '01:00:00', median_val: '00:30:00',
-            count: 100, null_count: 5,
-          }];
+          return [
+            {
+              min_val: '00:00:00',
+              max_val: '01:00:00',
+              median_val: '00:30:00',
+              count: 100,
+              null_count: 5,
+            },
+          ];
         }
         // Bin query
         return [

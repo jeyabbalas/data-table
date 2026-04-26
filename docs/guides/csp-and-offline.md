@@ -34,12 +34,12 @@ createDataTable()
 Three extension points are exposed via `bridgeOptions` (forwarded to
 `WorkerBridge`):
 
-| Option | Purpose |
-|---|---|
-| `workerFactory: () => Worker` | Take full control of Worker construction. Used for blob-URL workers under strict CSP |
-| `workerUrl: string \| URL` | Supply a URL/path for the worker script (bundler-emitted, static file) |
-| `duckdbBundles: DuckDBBundles` | Supply custom WASM bundle URLs — crucial for self-hosted / offline setups |
-| `initializeTimeoutMs: number` | Raise the init timeout (default 30 s) for slow networks |
+| Option                         | Purpose                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| `workerFactory: () => Worker`  | Take full control of Worker construction. Used for blob-URL workers under strict CSP |
+| `workerUrl: string \| URL`     | Supply a URL/path for the worker script (bundler-emitted, static file)               |
+| `duckdbBundles: DuckDBBundles` | Supply custom WASM bundle URLs — crucial for self-hosted / offline setups            |
+| `initializeTimeoutMs: number`  | Raise the init timeout (default 30 s) for slow networks                              |
 
 Priority: `workerFactory` > `workerUrl` > built-in default.
 
@@ -58,8 +58,8 @@ await createDataTable({
     workerUrl: '/static/data-table-worker.js',
     duckdbBundles: {
       // Self-hosted WASM; see next section
-      mvp:  { mainModule: '/static/duckdb-mvp.wasm',  mainWorker: '/static/duckdb-mvp.worker.js' },
-      eh:   { mainModule: '/static/duckdb-eh.wasm',   mainWorker: '/static/duckdb-eh.worker.js' },
+      mvp: { mainModule: '/static/duckdb-mvp.wasm', mainWorker: '/static/duckdb-mvp.worker.js' },
+      eh: { mainModule: '/static/duckdb-eh.wasm', mainWorker: '/static/duckdb-eh.worker.js' },
     },
   },
 });

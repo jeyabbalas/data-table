@@ -124,9 +124,7 @@ describe('copyRowsToClipboard', () => {
   });
 
   it('should use all columns', async () => {
-    mockBridge.query.mockResolvedValueOnce([
-      { id: 1, name: 'Alice', price: 9.99 },
-    ]);
+    mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 9.99 }]);
 
     await copyRowsToClipboard([0], state, mockBridge);
 
@@ -136,9 +134,7 @@ describe('copyRowsToClipboard', () => {
   });
 
   it('should handle null values as empty strings', async () => {
-    mockBridge.query.mockResolvedValueOnce([
-      { id: 1, name: null, price: null },
-    ]);
+    mockBridge.query.mockResolvedValueOnce([{ id: 1, name: null, price: null }]);
 
     await copyRowsToClipboard([0], state, mockBridge);
 
@@ -148,9 +144,7 @@ describe('copyRowsToClipboard', () => {
   });
 
   it('should pass selected rows in the query', async () => {
-    mockBridge.query.mockResolvedValueOnce([
-      { id: 5, name: 'Eve', price: 50 },
-    ]);
+    mockBridge.query.mockResolvedValueOnce([{ id: 5, name: 'Eve', price: 50 }]);
 
     await copyRowsToClipboard([4], state, mockBridge);
 
@@ -174,9 +168,7 @@ describe('copyRowsToClipboard', () => {
   });
 
   it('should escape fields containing tabs', async () => {
-    mockBridge.query.mockResolvedValueOnce([
-      { id: 1, name: 'has\ttab', price: 10 },
-    ]);
+    mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'has\ttab', price: 10 }]);
 
     await copyRowsToClipboard([0], state, mockBridge);
 

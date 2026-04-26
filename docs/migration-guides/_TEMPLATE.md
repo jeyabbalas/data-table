@@ -36,6 +36,7 @@ to judge whether the break was worth it._
 ```
 
 **Automated migration.** _One of:_
+
 - `None — mechanical replace-all on the symbol name.`
 - _A `jscodeshift`, `ast-grep`, or regex snippet the reader can run._
 - `N/A — manual review required because <reason>.`

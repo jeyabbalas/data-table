@@ -35,68 +35,68 @@
 :root,
 .dt-root {
   /* Primary — terracotta family */
-  --dt-primary:         #c2410c;   /* orange-700 */
-  --dt-primary-hover:   #9a3412;   /* orange-800 */
-  --dt-primary-light:   #ffedd5;   /* orange-100 */
-  --dt-primary-lighter: #fff7ed;   /* orange-50  */
+  --dt-primary: #c2410c; /* orange-700 */
+  --dt-primary-hover: #9a3412; /* orange-800 */
+  --dt-primary-light: #ffedd5; /* orange-100 */
+  --dt-primary-lighter: #fff7ed; /* orange-50  */
 
   /* Accent — drives the null bar / missing-values segment. Warm magenta:
      striking contrast against terracotta without re-using red; reads
      instantly as "not-blue". */
-  --dt-accent:          #be185d;   /* rose-700 */
-  --dt-accent-hover:    #9f1239;   /* rose-800 */
+  --dt-accent: #be185d; /* rose-700 */
+  --dt-accent-hover: #9f1239; /* rose-800 */
 
   /* Neutral — stones replace slate so "Other" chips feel earthy. */
-  --dt-neutral:         #78716c;   /* stone-500 */
-  --dt-neutral-hover:   #57534e;   /* stone-600 */
+  --dt-neutral: #78716c; /* stone-500 */
+  --dt-neutral-hover: #57534e; /* stone-600 */
 
   /* Syntax tokens in the SQL editor — no purple or blue. */
-  --dt-syntax-string:   #15803d;   /* green-700 */
-  --dt-syntax-type:     #9a3412;   /* orange-800 */
+  --dt-syntax-string: #15803d; /* green-700 */
+  --dt-syntax-type: #9a3412; /* orange-800 */
 
   /* Tinted backgrounds + borders so rows feel warm without overpowering data. */
-  --dt-bg:              #fffbf5;
-  --dt-bg-secondary:    #fef3e2;
-  --dt-bg-tertiary:     #fde4c8;
-  --dt-border:          #e7d8c3;
-  --dt-border-light:    #f5ead8;
+  --dt-bg: #fffbf5;
+  --dt-bg-secondary: #fef3e2;
+  --dt-bg-tertiary: #fde4c8;
+  --dt-border: #e7d8c3;
+  --dt-border-light: #f5ead8;
 
   /* Sizing — compact variant so the recolor reads denser. */
-  --dt-row-height:      28px;
-  --dt-header-height:   104px;
-  --dt-radius:          3px;
+  --dt-row-height: 28px;
+  --dt-header-height: 104px;
+  --dt-radius: 3px;
 }
 
 /* ---- Dark via OS preference (auto mode + system dark) ------------------ */
 @media (prefers-color-scheme: dark) {
   :root,
   .dt-root {
-    --dt-primary:         #fb923c;   /* orange-400 */
-    --dt-primary-hover:   #fdba74;   /* orange-300 */
-    --dt-primary-light:   #431407;   /* orange-950 */
-    --dt-primary-lighter: #7c2d12;   /* orange-900 */
+    --dt-primary: #fb923c; /* orange-400 */
+    --dt-primary-hover: #fdba74; /* orange-300 */
+    --dt-primary-light: #431407; /* orange-950 */
+    --dt-primary-lighter: #7c2d12; /* orange-900 */
 
-    --dt-accent:          #f472b6;   /* pink-400 */
-    --dt-accent-hover:    #ec4899;   /* pink-500 */
+    --dt-accent: #f472b6; /* pink-400 */
+    --dt-accent-hover: #ec4899; /* pink-500 */
 
-    --dt-neutral:         #a8a29e;   /* stone-400 */
-    --dt-neutral-hover:   #78716c;   /* stone-500 */
+    --dt-neutral: #a8a29e; /* stone-400 */
+    --dt-neutral-hover: #78716c; /* stone-500 */
 
-    --dt-syntax-string:   #86efac;   /* green-300 */
-    --dt-syntax-type:     #fdba74;   /* orange-300 */
+    --dt-syntax-string: #86efac; /* green-300 */
+    --dt-syntax-type: #fdba74; /* orange-300 */
 
-    --dt-bg:              #1c1917;   /* stone-950 — warm black */
-    --dt-bg-secondary:    #292524;   /* stone-900 */
-    --dt-bg-tertiary:     #44403c;   /* stone-800 */
-    --dt-border:          #44403c;
-    --dt-border-light:    #292524;
+    --dt-bg: #1c1917; /* stone-950 — warm black */
+    --dt-bg-secondary: #292524; /* stone-900 */
+    --dt-bg-tertiary: #44403c; /* stone-800 */
+    --dt-border: #44403c;
+    --dt-border-light: #292524;
 
-    --dt-text:            #fafaf9;   /* stone-50  */
-    --dt-text-secondary:  #d6d3d1;   /* stone-300 */
-    --dt-text-tertiary:   #a8a29e;   /* stone-400 */
+    --dt-text: #fafaf9; /* stone-50  */
+    --dt-text-secondary: #d6d3d1; /* stone-300 */
+    --dt-text-tertiary: #a8a29e; /* stone-400 */
 
-    --dt-arrow-default:   #57534e;
-    --dt-arrow-hover:     #a8a29e;
+    --dt-arrow-default: #57534e;
+    --dt-arrow-hover: #a8a29e;
   }
 
   /* Restore the light palette for instances (and their mirrored portal
@@ -106,62 +106,62 @@
      specificity, earlier in source order doesn't matter once it's
      unopposed). --dt-text family + arrow tokens use the library's light
      defaults because the example's light palette doesn't customize them. */
-  [data-dt-color-scheme="light"] {
-    --dt-primary:         #c2410c;
-    --dt-primary-hover:   #9a3412;
-    --dt-primary-light:   #ffedd5;
+  [data-dt-color-scheme='light'] {
+    --dt-primary: #c2410c;
+    --dt-primary-hover: #9a3412;
+    --dt-primary-light: #ffedd5;
     --dt-primary-lighter: #fff7ed;
 
-    --dt-accent:          #be185d;
-    --dt-accent-hover:    #9f1239;
+    --dt-accent: #be185d;
+    --dt-accent-hover: #9f1239;
 
-    --dt-neutral:         #78716c;
-    --dt-neutral-hover:   #57534e;
+    --dt-neutral: #78716c;
+    --dt-neutral-hover: #57534e;
 
-    --dt-syntax-string:   #15803d;
-    --dt-syntax-type:     #9a3412;
+    --dt-syntax-string: #15803d;
+    --dt-syntax-type: #9a3412;
 
-    --dt-bg:              #fffbf5;
-    --dt-bg-secondary:    #fef3e2;
-    --dt-bg-tertiary:     #fde4c8;
-    --dt-border:          #e7d8c3;
-    --dt-border-light:    #f5ead8;
+    --dt-bg: #fffbf5;
+    --dt-bg-secondary: #fef3e2;
+    --dt-bg-tertiary: #fde4c8;
+    --dt-border: #e7d8c3;
+    --dt-border-light: #f5ead8;
 
-    --dt-text:            #111827;   /* gray-900 — library light default */
-    --dt-text-secondary:  #6b7280;   /* gray-500 */
-    --dt-text-tertiary:   #9ca3af;   /* gray-400 */
+    --dt-text: #111827; /* gray-900 — library light default */
+    --dt-text-secondary: #6b7280; /* gray-500 */
+    --dt-text-tertiary: #9ca3af; /* gray-400 */
 
-    --dt-arrow-default:   #d1d5db;   /* gray-300 */
-    --dt-arrow-hover:     #9ca3af;   /* gray-400 */
+    --dt-arrow-default: #d1d5db; /* gray-300 */
+    --dt-arrow-hover: #9ca3af; /* gray-400 */
   }
 }
 
 /* ---- Dark via explicit attribute — reaches both .dt-root and portaled modals. -- */
-[data-dt-color-scheme="dark"] {
-  --dt-primary:         #fb923c;   /* orange-400 */
-  --dt-primary-hover:   #fdba74;   /* orange-300 */
-  --dt-primary-light:   #431407;   /* orange-950 */
-  --dt-primary-lighter: #7c2d12;   /* orange-900 */
+[data-dt-color-scheme='dark'] {
+  --dt-primary: #fb923c; /* orange-400 */
+  --dt-primary-hover: #fdba74; /* orange-300 */
+  --dt-primary-light: #431407; /* orange-950 */
+  --dt-primary-lighter: #7c2d12; /* orange-900 */
 
-  --dt-accent:          #f472b6;   /* pink-400 */
-  --dt-accent-hover:    #ec4899;   /* pink-500 */
+  --dt-accent: #f472b6; /* pink-400 */
+  --dt-accent-hover: #ec4899; /* pink-500 */
 
-  --dt-neutral:         #a8a29e;   /* stone-400 */
-  --dt-neutral-hover:   #78716c;   /* stone-500 */
+  --dt-neutral: #a8a29e; /* stone-400 */
+  --dt-neutral-hover: #78716c; /* stone-500 */
 
-  --dt-syntax-string:   #86efac;   /* green-300 */
-  --dt-syntax-type:     #fdba74;   /* orange-300 */
+  --dt-syntax-string: #86efac; /* green-300 */
+  --dt-syntax-type: #fdba74; /* orange-300 */
 
-  --dt-bg:              #1c1917;   /* stone-950 — warm black */
-  --dt-bg-secondary:    #292524;   /* stone-900 */
-  --dt-bg-tertiary:     #44403c;   /* stone-800 */
-  --dt-border:          #44403c;
-  --dt-border-light:    #292524;
+  --dt-bg: #1c1917; /* stone-950 — warm black */
+  --dt-bg-secondary: #292524; /* stone-900 */
+  --dt-bg-tertiary: #44403c; /* stone-800 */
+  --dt-border: #44403c;
+  --dt-border-light: #292524;
 
-  --dt-text:            #fafaf9;   /* stone-50  */
-  --dt-text-secondary:  #d6d3d1;   /* stone-300 */
-  --dt-text-tertiary:   #a8a29e;   /* stone-400 */
+  --dt-text: #fafaf9; /* stone-50  */
+  --dt-text-secondary: #d6d3d1; /* stone-300 */
+  --dt-text-tertiary: #a8a29e; /* stone-400 */
 
-  --dt-arrow-default:   #57534e;
-  --dt-arrow-hover:     #a8a29e;
+  --dt-arrow-default: #57534e;
+  --dt-arrow-hover: #a8a29e;
 }

@@ -8,11 +8,11 @@
  * Boolean checkboxes and null radio apply immediately (single-click toggles).
  */
 
-import type { ColumnSchema } from '../core/types';
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
-import type { Filter } from './FilterTypes';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { ColumnSchema } from '../core/types';
+import type { Filter } from './FilterTypes';
 
 /**
  * Options for FilterPanelField
@@ -46,17 +46,13 @@ export class FilterPanelField {
     private column: ColumnSchema,
     private state: TableState,
     private actions: StateActions,
-    options: FilterPanelFieldOptions = {}
+    options: FilterPanelFieldOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
-    this.controlsContainer = this.element.querySelector(
-      `.${this.prefix}-filter-field-controls`
-    )!;
-    this.nullGroup = this.element.querySelector(
-      `.${this.prefix}-filter-field-null`
-    )!;
+    this.controlsContainer = this.element.querySelector(`.${this.prefix}-filter-field-controls`)!;
+    this.nullGroup = this.element.querySelector(`.${this.prefix}-filter-field-null`)!;
 
     this.createControls();
     this.syncFromState();
@@ -90,10 +86,13 @@ export class FilterPanelField {
     const nullGroup = document.createElement('div');
     nullGroup.className = `${this.prefix}-filter-field-null`;
     nullGroup.setAttribute('role', 'radiogroup');
-    nullGroup.setAttribute('aria-label', this.messages.filters.ariaLabels.nullFilter(this.column.name));
+    nullGroup.setAttribute(
+      'aria-label',
+      this.messages.filters.ariaLabels.nullFilter(this.column.name),
+    );
 
     const radioName = `null-${this.column.name}-${Math.random().toString(36).slice(2, 8)}`;
-    const nullOptions: Array<{ value: string; label: string }> = [
+    const nullOptions: { value: string; label: string }[] = [
       { value: 'any', label: this.messages.filters.nullToggle.any },
       { value: 'null', label: this.messages.filters.nullToggle.isNull },
       { value: 'not-null', label: this.messages.filters.nullToggle.isNotNull },
@@ -258,7 +257,7 @@ export class FilterPanelField {
     const group = document.createElement('div');
     group.className = `${this.prefix}-filter-bool-group`;
 
-    const options: Array<{ value: string; label: string }> = [
+    const options: { value: string; label: string }[] = [
       { value: 'true', label: this.messages.filters.booleanOptions.true },
       { value: 'false', label: this.messages.filters.booleanOptions.false },
       { value: 'null', label: this.messages.filters.booleanOptions.null },
@@ -399,7 +398,10 @@ export class FilterPanelField {
     input.type = 'text';
     input.className = `${this.prefix}-filter-input`;
     input.placeholder = this.messages.filters.placeholders.intervalFilter;
-    input.setAttribute('aria-label', this.messages.filters.ariaLabels.intervalFilter(this.column.name));
+    input.setAttribute(
+      'aria-label',
+      this.messages.filters.ariaLabels.intervalFilter(this.column.name),
+    );
 
     c.appendChild(input);
 
@@ -436,17 +438,23 @@ export class FilterPanelField {
   private setFilter(filter: Filter): void {
     this.isSelfUpdate = true;
     this.actions.addFilter(filter);
-    queueMicrotask(() => { this.isSelfUpdate = false; });
+    queueMicrotask(() => {
+      this.isSelfUpdate = false;
+    });
   }
 
   private removeFilter(): void {
     this.isSelfUpdate = true;
     this.actions.removeFilter(this.column.name);
-    queueMicrotask(() => { this.isSelfUpdate = false; });
+    queueMicrotask(() => {
+      this.isSelfUpdate = false;
+    });
   }
 
   private getNullToggleValue(): string {
-    const radios = this.nullGroup.querySelectorAll('input[type="radio"]') as NodeListOf<HTMLInputElement>;
+    const radios = this.nullGroup.querySelectorAll(
+      'input[type="radio"]',
+    ) as NodeListOf<HTMLInputElement>;
     for (const radio of radios) {
       if (radio.checked) return radio.value;
     }
@@ -476,7 +484,9 @@ export class FilterPanelField {
 
   private buildNumericFilter(): Filter | null {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
-    const inputs = this.controlsContainer.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
+    const inputs = this.controlsContainer.querySelectorAll(
+      'input[type="number"]',
+    ) as NodeListOf<HTMLInputElement>;
     const mode = select.value;
     const val1 = inputs[0]?.value.trim();
     const val2 = inputs[1]?.value.trim();
@@ -560,7 +570,7 @@ export class FilterPanelField {
 
   private buildBooleanFilter(): Filter | null {
     const checkboxes = this.controlsContainer.querySelectorAll(
-      'input[type="checkbox"]'
+      'input[type="checkbox"]',
     ) as NodeListOf<HTMLInputElement>;
     const trueChecked = checkboxes[0]?.checked ?? false;
     const falseChecked = checkboxes[1]?.checked ?? false;
@@ -569,7 +579,10 @@ export class FilterPanelField {
     const col = this.column.name;
 
     // All checked or none checked = no filter
-    if ((trueChecked && falseChecked && nullChecked) || (!trueChecked && !falseChecked && !nullChecked)) {
+    if (
+      (trueChecked && falseChecked && nullChecked) ||
+      (!trueChecked && !falseChecked && !nullChecked)
+    ) {
       return null;
     }
 
@@ -603,7 +616,7 @@ export class FilterPanelField {
   private buildDateFilter(): Filter | null {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
     const inputs = this.controlsContainer.querySelectorAll(
-      'input[type="date"], input[type="datetime-local"]'
+      'input[type="date"], input[type="datetime-local"]',
     ) as NodeListOf<HTMLInputElement>;
     const mode = select.value;
     const val1 = inputs[0]?.value;
@@ -622,7 +635,13 @@ export class FilterPanelField {
         if (this.column.type === 'timestamp') {
           // datetime-local may include seconds in some browsers; truncate to minute
           const base = val1.length <= 16 ? val1 : val1.slice(0, 16); // YYYY-MM-DDTHH:MM
-          return { type: 'range', column: col, min: base + ':00', max: base + ':59.999999', maxInclusive: true };
+          return {
+            type: 'range',
+            column: col,
+            min: base + ':00',
+            max: base + ':59.999999',
+            maxInclusive: true,
+          };
         }
         return { type: 'point', column: col, value: val1 };
       case 'before':
@@ -640,7 +659,7 @@ export class FilterPanelField {
 
   private buildTimeFilter(): Filter | null {
     const inputs = this.controlsContainer.querySelectorAll(
-      'input[type="time"]'
+      'input[type="time"]',
     ) as NodeListOf<HTMLInputElement>;
     const val1 = inputs[0]?.value;
     const val2 = inputs[1]?.value;
@@ -757,7 +776,9 @@ export class FilterPanelField {
   }
 
   private setNullToggle(value: string): void {
-    const radios = this.nullGroup.querySelectorAll('input[type="radio"]') as NodeListOf<HTMLInputElement>;
+    const radios = this.nullGroup.querySelectorAll(
+      'input[type="radio"]',
+    ) as NodeListOf<HTMLInputElement>;
     for (const radio of radios) {
       radio.checked = radio.value === value;
     }
@@ -765,7 +786,9 @@ export class FilterPanelField {
 
   private populateNumericFromFilter(filter: Filter): void {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
-    const inputs = this.controlsContainer.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
+    const inputs = this.controlsContainer.querySelectorAll(
+      'input[type="number"]',
+    ) as NodeListOf<HTMLInputElement>;
     if (!select || inputs.length < 2) return;
     const ph = this.messages.filters.placeholders;
 
@@ -819,7 +842,7 @@ export class FilterPanelField {
 
   private populateBooleanFromFilter(filter: Filter): void {
     const checkboxes = this.controlsContainer.querySelectorAll(
-      'input[type="checkbox"]'
+      'input[type="checkbox"]',
     ) as NodeListOf<HTMLInputElement>;
     if (checkboxes.length < 3) return;
 
@@ -858,7 +881,7 @@ export class FilterPanelField {
   private populateDateFromFilter(filter: Filter): void {
     const select = this.controlsContainer.querySelector('select') as HTMLSelectElement;
     const inputs = this.controlsContainer.querySelectorAll(
-      'input[type="date"], input[type="datetime-local"]'
+      'input[type="date"], input[type="datetime-local"]',
     ) as NodeListOf<HTMLInputElement>;
     if (!select || inputs.length < 2) return;
 
@@ -870,8 +893,11 @@ export class FilterPanelField {
         // Detect timestamp equality pattern: same base minute with :59.999999 suffix
         const minStr = String(filter.min);
         const maxStr = String(filter.max);
-        if (this.column.type === 'timestamp' && maxStr.endsWith(':59.999999')
-            && minStr.slice(0, 16) === maxStr.slice(0, 16)) {
+        if (
+          this.column.type === 'timestamp' &&
+          maxStr.endsWith(':59.999999') &&
+          minStr.slice(0, 16) === maxStr.slice(0, 16)
+        ) {
           select.value = 'eq';
           inputs[0].value = minStr.slice(0, 16); // Show the base minute
           inputs[1].style.display = 'none';
@@ -899,7 +925,7 @@ export class FilterPanelField {
 
   private populateTimeFromFilter(filter: Filter): void {
     const inputs = this.controlsContainer.querySelectorAll(
-      'input[type="time"]'
+      'input[type="time"]',
     ) as NodeListOf<HTMLInputElement>;
     if (inputs.length < 2) return;
 
@@ -953,14 +979,22 @@ export class FilterPanelField {
     }
 
     // Reset selects to first option
-    const selects = this.controlsContainer.querySelectorAll('select') as NodeListOf<HTMLSelectElement>;
+    const selects = this.controlsContainer.querySelectorAll(
+      'select',
+    ) as NodeListOf<HTMLSelectElement>;
     for (const select of selects) {
       select.selectedIndex = 0;
     }
 
     // Reset numeric layout (show second input for 'between')
-    if (this.column.type === 'integer' || this.column.type === 'float' || this.column.type === 'decimal') {
-      const numInputs = this.controlsContainer.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
+    if (
+      this.column.type === 'integer' ||
+      this.column.type === 'float' ||
+      this.column.type === 'decimal'
+    ) {
+      const numInputs = this.controlsContainer.querySelectorAll(
+        'input[type="number"]',
+      ) as NodeListOf<HTMLInputElement>;
       if (numInputs[0]) numInputs[0].placeholder = this.messages.filters.placeholders.min;
       if (numInputs[1]) numInputs[1].style.display = '';
     }
@@ -968,7 +1002,7 @@ export class FilterPanelField {
     // Reset date layout
     if (this.column.type === 'date' || this.column.type === 'timestamp') {
       const dateInputs = this.controlsContainer.querySelectorAll(
-        'input[type="date"], input[type="datetime-local"]'
+        'input[type="date"], input[type="datetime-local"]',
       ) as NodeListOf<HTMLInputElement>;
       if (dateInputs[1]) dateInputs[1].style.display = '';
     }

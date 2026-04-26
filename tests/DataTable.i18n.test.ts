@@ -97,9 +97,7 @@ describe('DataTable — i18n messages hook', () => {
     expect(title?.textContent).toBe('Exporter');
 
     // Siblings remain English (cancel button text and download button).
-    const downloadBtn = document.querySelector(
-      '.dt-export-btn',
-    ) as HTMLButtonElement | null;
+    const downloadBtn = document.querySelector('.dt-export-btn') as HTMLButtonElement | null;
     expect(downloadBtn?.textContent).toBe('Download');
 
     await table.destroy();
@@ -119,8 +117,7 @@ describe('DataTable — i18n messages hook', () => {
 
   it('function-valued templates like a11y.filtersActive are replaced wholesale', async () => {
     const custom = vi.fn(
-      (n: number, shown: number, total: number) =>
-        `fr: ${n} filtres, ${shown}/${total}`,
+      (n: number, shown: number, total: number) => `fr: ${n} filtres, ${shown}/${total}`,
     );
     const { table } = await createTable({
       a11y: { filtersActive: custom },

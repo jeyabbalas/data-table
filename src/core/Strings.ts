@@ -660,8 +660,7 @@ export const defaultStrings: Strings = {
       `Line ${lineNum}: "${value}" is not a valid UUID (use xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx format)`,
     vectorInvalidInteger: (lineNum, value) =>
       `Line ${lineNum}: "${value}" is not a valid integer (use whole numbers only)`,
-    vectorInvalidFloat: (lineNum, value) =>
-      `Line ${lineNum}: "${value}" is not a valid float`,
+    vectorInvalidFloat: (lineNum, value) => `Line ${lineNum}: "${value}" is not a valid float`,
 
     createButton: 'Create',
     createFailed: 'Failed to create column',
@@ -765,20 +764,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * helper is type-erased internally because the recursion mirrors runtime
  * shape rather than the compile-time type.
  */
-export function mergeStrings(
-  base: Strings,
-  overrides?: DeepPartial<Strings>
-): Strings {
+export function mergeStrings(base: Strings, overrides?: DeepPartial<Strings>): Strings {
   if (!overrides) return base;
-  return mergeDeep(
-    base as unknown as Record<string, unknown>,
-    overrides as unknown as Record<string, unknown>,
-  ) as unknown as Strings;
+  return mergeDeep(base as unknown as Record<string, unknown>, overrides) as unknown as Strings;
 }
 
 function mergeDeep(
   base: Record<string, unknown>,
-  overrides: Record<string, unknown>
+  overrides: Record<string, unknown>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...base };
   for (const key of Object.keys(overrides)) {

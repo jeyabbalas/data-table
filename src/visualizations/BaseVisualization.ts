@@ -33,14 +33,10 @@
  * @see VisualizationRegistry for registering custom subclasses.
  */
 
+import { DataTableError, ExportError, QueryError } from '../core/errors';
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
-import {
-  DataTableError,
-  ExportError,
-  QueryError,
-} from '../core/errors';
 import { resolveScope } from './palette';
 
 /**
@@ -148,8 +144,8 @@ export interface VisualizationOptions {
 export abstract class BaseVisualization {
   protected canvas: HTMLCanvasElement;
   protected ctx: CanvasRenderingContext2D;
-  protected width: number = 0;
-  protected height: number = 0;
+  protected width = 0;
+  protected height = 0;
   protected dpr: number;
   protected destroyed = false;
   protected isFilterUpdate = false;
@@ -165,7 +161,7 @@ export abstract class BaseVisualization {
   constructor(
     protected container: HTMLElement,
     protected column: ColumnSchema,
-    protected options: VisualizationOptions
+    protected options: VisualizationOptions,
   ) {
     // Device pixel ratio for crisp rendering on high-DPI displays
     this.dpr = window.devicePixelRatio || 1;
@@ -444,10 +440,10 @@ export abstract class BaseVisualization {
       const typed =
         err instanceof DataTableError
           ? err
-          : new QueryError(
-              err instanceof Error ? err.message : String(err),
-              { code: 'QUERY_RUNTIME', cause: err },
-            );
+          : new QueryError(err instanceof Error ? err.message : String(err), {
+              code: 'QUERY_RUNTIME',
+              cause: err,
+            });
       this.options.onError?.(typed, {
         columnName: this.column.name,
         stage: 'filter',

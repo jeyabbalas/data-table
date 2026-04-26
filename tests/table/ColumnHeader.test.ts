@@ -153,7 +153,7 @@ describe('ColumnHeader', () => {
       const header = new ColumnHeader(column, state, actions);
 
       // Initially empty (0 rows)
-      let statsEl = header.getElement().querySelector('.dt-col-stats');
+      const statsEl = header.getElement().querySelector('.dt-col-stats');
       expect(statsEl?.textContent).toBe('');
 
       // Update row count - subscription triggers update

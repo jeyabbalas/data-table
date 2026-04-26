@@ -21,7 +21,9 @@ class MockResizeObserver implements ResizeObserver {
   observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
-  static clearInstances(): void { MockResizeObserver.instances = []; }
+  static clearInstances(): void {
+    MockResizeObserver.instances = [];
+  }
 }
 
 // Mock WorkerBridge
@@ -125,7 +127,12 @@ describe('Accessibility: ARIA attributes', () => {
 
   describe('aria-colindex on ColumnHeader', () => {
     it('should set aria-colindex when colIndex option is provided', () => {
-      const column: ColumnSchema = { name: 'name', type: 'text', nullable: true, originalType: 'VARCHAR' };
+      const column: ColumnSchema = {
+        name: 'name',
+        type: 'text',
+        nullable: true,
+        originalType: 'VARCHAR',
+      };
       const header = new ColumnHeader(column, state, actions, { colIndex: 3 });
 
       expect(header.getElement().getAttribute('aria-colindex')).toBe('3');
@@ -134,7 +141,12 @@ describe('Accessibility: ARIA attributes', () => {
     });
 
     it('should not set aria-colindex when colIndex is omitted', () => {
-      const column: ColumnSchema = { name: 'name', type: 'text', nullable: true, originalType: 'VARCHAR' };
+      const column: ColumnSchema = {
+        name: 'name',
+        type: 'text',
+        nullable: true,
+        originalType: 'VARCHAR',
+      };
       const header = new ColumnHeader(column, state, actions);
 
       expect(header.getElement().hasAttribute('aria-colindex')).toBe(false);
@@ -189,7 +201,9 @@ describe('Accessibility: ARIA attributes', () => {
     it('should include sort descending in label', () => {
       state.sortColumns.set([{ column: 'score', direction: 'desc' }]);
       const header = new ColumnHeader(column, state, actions);
-      expect(header.getElement().getAttribute('aria-label')).toBe('score, float, sorted descending');
+      expect(header.getElement().getAttribute('aria-label')).toBe(
+        'score, float, sorted descending',
+      );
       header.destroy();
     });
 
@@ -199,7 +213,9 @@ describe('Accessibility: ARIA attributes', () => {
         { column: 'score', direction: 'desc' },
       ]);
       const header = new ColumnHeader(column, state, actions);
-      expect(header.getElement().getAttribute('aria-label')).toBe('score, float, sorted descending (priority 2)');
+      expect(header.getElement().getAttribute('aria-label')).toBe(
+        'score, float, sorted descending (priority 2)',
+      );
       header.destroy();
     });
 
@@ -230,7 +246,9 @@ describe('Accessibility: ARIA attributes', () => {
       state.filters.set([filter]);
 
       const header = new ColumnHeader(column, state, actions);
-      expect(header.getElement().getAttribute('aria-label')).toBe('score, float, sorted ascending, filtered');
+      expect(header.getElement().getAttribute('aria-label')).toBe(
+        'score, float, sorted ascending, filtered',
+      );
       header.destroy();
     });
 
@@ -470,14 +488,19 @@ describe('Accessibility: ARIA attributes', () => {
 
   describe('header keyboard sort activation', () => {
     it('Enter on a header toggles single-column sort', () => {
-      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const column: ColumnSchema = {
+        name: 'score',
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+      };
       const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
       const header = new ColumnHeader(column, state, actions);
       document.body.appendChild(header.getElement());
 
-      header.getElement().dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
-      );
+      header
+        .getElement()
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
       expect(toggleSortSpy).toHaveBeenCalledWith('score');
 
@@ -485,14 +508,21 @@ describe('Accessibility: ARIA attributes', () => {
     });
 
     it('Shift+Enter on a header adds to multi-sort', () => {
-      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const column: ColumnSchema = {
+        name: 'score',
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+      };
       const addToSortSpy = vi.spyOn(actions, 'addToSort');
       const header = new ColumnHeader(column, state, actions);
       document.body.appendChild(header.getElement());
 
-      header.getElement().dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true })
-      );
+      header
+        .getElement()
+        .dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }),
+        );
 
       expect(addToSortSpy).toHaveBeenCalledWith('score');
 
@@ -500,16 +530,19 @@ describe('Accessibility: ARIA attributes', () => {
     });
 
     it('keyboard on a child button does not trigger header-level sort', () => {
-      const column: ColumnSchema = { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' };
+      const column: ColumnSchema = {
+        name: 'score',
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+      };
       const toggleSortSpy = vi.spyOn(actions, 'toggleSort');
       const addToSortSpy = vi.spyOn(actions, 'addToSort');
       const header = new ColumnHeader(column, state, actions);
       document.body.appendChild(header.getElement());
 
       const sortBtn = header.getElement().querySelector('button.dt-col-sort-btn')!;
-      sortBtn.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
-      );
+      sortBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
       // Header-level handler should have bailed via e.target !== element
       expect(toggleSortSpy).not.toHaveBeenCalled();

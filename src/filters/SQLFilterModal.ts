@@ -6,13 +6,13 @@
  * Escape/backdrop-click close, lazy CodeMirror editor lifecycle.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
+import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
 import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { RawSQLFilter } from './FilterTypes';
-import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface SQLFilterModalOptions {
   classPrefix?: string;
@@ -69,7 +69,7 @@ export class SQLFilterModal {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    options?: SQLFilterModalOptions
+    options?: SQLFilterModalOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.instanceId = options?.instanceId ?? '';
@@ -179,7 +179,7 @@ export class SQLFilterModal {
     this.validateBtn.className = `${p}-sql-filter-modal-validate`;
     this.validateBtn.type = 'button';
     this.validateBtn.textContent = this.messages.common.validate;
-    this.validateBtn.addEventListener('click', () => this.handleValidate());
+    this.validateBtn.addEventListener('click', () => void this.handleValidate());
 
     this.previewEl = document.createElement('span');
     this.previewEl.className = `${p}-sql-filter-modal-preview`;
@@ -260,7 +260,7 @@ export class SQLFilterModal {
     this.applyBtn.type = 'button';
     this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
     this.applyBtn.disabled = true;
-    this.applyBtn.addEventListener('click', () => this.handleApply());
+    this.applyBtn.addEventListener('click', () => void this.handleApply());
     footer.appendChild(this.applyBtn);
 
     return footer;
@@ -281,7 +281,7 @@ export class SQLFilterModal {
         this.editorContainer,
         context,
         this.prefix,
-        { placeholder: this.messages.filters.sqlFilter.editorPlaceholder }
+        { placeholder: this.messages.filters.sqlFilter.editorPlaceholder },
       );
     }
 
@@ -305,10 +305,7 @@ export class SQLFilterModal {
 
   private removeEditorInputListener(): void {
     if (this.editorInputHandler && this.currentEditor) {
-      this.currentEditor.element.removeEventListener(
-        'input',
-        this.editorInputHandler
-      );
+      this.currentEditor.element.removeEventListener('input', this.editorInputHandler);
       this.editorInputHandler = null;
     }
   }
@@ -345,10 +342,15 @@ export class SQLFilterModal {
     this.currentEditor.setError(null);
 
     try {
-      const result = await this.actions.validateSQLFilter(sql, this.validationAbortController.signal);
+      const result = await this.actions.validateSQLFilter(
+        sql,
+        this.validationAbortController.signal,
+      );
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.previewEl.textContent = this.messages.filters.sqlFilter.validationResult(result.matchCount!);
+        this.previewEl.textContent = this.messages.filters.sqlFilter.validationResult(
+          result.matchCount!,
+        );
         this.previewEl.style.color = 'var(--dt-success)';
         this.validated = true;
       } else {
@@ -438,7 +440,7 @@ export class SQLFilterModal {
     const filters = this.state.filters.get();
     const syntheticKey = `__raw_sql_${filterId}__`;
     const filter = filters.find(
-      (f): f is RawSQLFilter => f.type === 'raw-sql' && f.column === syntheticKey
+      (f): f is RawSQLFilter => f.type === 'raw-sql' && f.column === syntheticKey,
     );
     if (!filter) return;
 

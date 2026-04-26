@@ -5,8 +5,8 @@
  * Used when no custom ExpressionEditorFactory is provided.
  */
 
-import type { CompletionContext } from './types';
 import type { ExpressionEditor } from './ExpressionEditorTypes';
+import type { CompletionContext } from './types';
 
 export class DefaultExpressionEditor implements ExpressionEditor {
   readonly element: HTMLElement;
@@ -15,11 +15,7 @@ export class DefaultExpressionEditor implements ExpressionEditor {
   private contextDiv: HTMLElement;
   private prefix: string;
 
-  constructor(
-    container: HTMLElement,
-    context: CompletionContext,
-    classPrefix = 'dt'
-  ) {
+  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt') {
     this.prefix = classPrefix;
 
     // Root container
@@ -89,9 +85,7 @@ export class DefaultExpressionEditor implements ExpressionEditor {
       this.contextDiv.textContent = '';
       return;
     }
-    const cols = context.columns
-      .map((c) => `${c.name} (${c.type})`)
-      .join(', ');
+    const cols = context.columns.map((c) => `${c.name} (${c.type})`).join(', ');
     this.contextDiv.textContent = `Available columns: ${cols}`;
   }
 }

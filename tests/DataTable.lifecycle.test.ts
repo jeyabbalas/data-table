@@ -8,15 +8,7 @@
  *   - Double-destroy is a no-op (no duplicate destroy events).
  *   - Listener errors surface as `error` events with source: 'listener'.
  */
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
 import { DestroyedError } from '@/core/errors';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -68,9 +60,11 @@ function makeFailingSessionStore(): SessionStore {
   } as unknown as SessionStore;
 }
 
-async function createTable(overrides: {
-  persistence?: boolean | { sessionStore?: SessionStore };
-} = {}): Promise<{ table: DataTable; container: HTMLElement; bridge: WorkerBridge }> {
+async function createTable(
+  overrides: {
+    persistence?: boolean | { sessionStore?: SessionStore };
+  } = {},
+): Promise<{ table: DataTable; container: HTMLElement; bridge: WorkerBridge }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const bridge = makeBridge();
@@ -154,9 +148,7 @@ describe('DataTable — lifecycle (Phase 2)', () => {
     it('loadData throws DestroyedError', async () => {
       const { table } = await createTable();
       await table.destroy();
-      await expect(
-        table.loadData(new File([''], 'x.csv')),
-      ).rejects.toBeInstanceOf(DestroyedError);
+      await expect(table.loadData(new File([''], 'x.csv'))).rejects.toBeInstanceOf(DestroyedError);
     });
 
     it('on throws DestroyedError', async () => {

@@ -233,9 +233,7 @@ describe('FilterBar', () => {
     actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
 
     // Flush double-rAF (jsdom implements rAF as setTimeout(cb, 0))
-    await new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    );
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     expect(scrollToMock).toHaveBeenCalledWith({
       left: 500,
@@ -256,9 +254,7 @@ describe('FilterBar', () => {
 
     actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
 
-    await new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    );
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     expect(scrollToMock).not.toHaveBeenCalled();
 

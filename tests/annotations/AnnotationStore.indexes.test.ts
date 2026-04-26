@@ -46,7 +46,13 @@ describe('AnnotationStore — indexes & intersection', () => {
   it('getByCell sorts by severity (error > warning > info) first', () => {
     const a = store.add({ scope: 'row', rowId: 1, severity: 'info', message: 'info' });
     const b = store.add({ scope: 'column', column: 'x', severity: 'error', message: 'error' });
-    const c = store.add({ scope: 'cell', rowId: 1, column: 'x', severity: 'warning', message: 'warn' });
+    const c = store.add({
+      scope: 'cell',
+      rowId: 1,
+      column: 'x',
+      severity: 'warning',
+      message: 'warn',
+    });
     const out = store.getByCell(1, 'x');
     expect(out.map((x) => x.id)).toEqual([b.id, c.id, a.id]);
   });
@@ -62,7 +68,13 @@ describe('AnnotationStore — indexes & intersection', () => {
     });
     const a = ticking.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
     const b = ticking.add({ scope: 'column', column: 'x', severity: 'error', message: 'b' });
-    const c = ticking.add({ scope: 'cell', rowId: 1, column: 'x', severity: 'error', message: 'c' });
+    const c = ticking.add({
+      scope: 'cell',
+      rowId: 1,
+      column: 'x',
+      severity: 'error',
+      message: 'c',
+    });
     const out = ticking.getByCell(1, 'x');
     expect(out.map((x) => x.id)).toEqual([a.id, b.id, c.id]);
   });
@@ -76,7 +88,13 @@ describe('AnnotationStore — indexes & intersection', () => {
   });
 
   it('indexes stay clean after remove and clear', () => {
-    const a = store.add({ scope: 'cell', rowId: 3, column: 'age', severity: 'error', message: 'a' });
+    const a = store.add({
+      scope: 'cell',
+      rowId: 3,
+      column: 'age',
+      severity: 'error',
+      message: 'a',
+    });
     expect(store.getByRow(3)).toHaveLength(1);
     expect(store.getByColumn('age')).toHaveLength(1);
     expect(store.getByCell(3, 'age')).toHaveLength(1);

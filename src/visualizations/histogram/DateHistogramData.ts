@@ -7,11 +7,11 @@
  * - Filter to SQL conversion (shared with numeric histogram)
  */
 
+import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
-import { QueryError } from '../../core/errors';
 
 // Re-export TimeInterval for convenience
 export type { TimeInterval } from './DateFormatters';
@@ -128,7 +128,7 @@ export function adjustIntervalForMaxBins(
   min: Date,
   max: Date,
   initialInterval: TimeInterval,
-  maxBins: number
+  maxBins: number,
 ): TimeInterval {
   let idx = TIME_INTERVALS.indexOf(initialInterval);
   let interval = initialInterval;
@@ -263,7 +263,8 @@ function parseDate(value: string | null): Date | null {
   let dateStr = value;
 
   // Check if the string already has timezone info (Z, +, or - after position 10)
-  const hasTimezone = value.includes('Z') ||
+  const hasTimezone =
+    value.includes('Z') ||
     value.includes('+') ||
     (value.length > 10 && value.lastIndexOf('-') > 10);
 
@@ -291,7 +292,7 @@ export async function fetchDateStats(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<{
   min: Date | null;
   max: Date | null;
@@ -335,7 +336,7 @@ function buildDateHistogramSQL(
   tableName: string,
   column: string,
   interval: TimeInterval,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -380,7 +381,7 @@ function buildNumericDateHistogramSQL(
   numBins: number,
   minMs: number,
   maxMs: number,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -417,20 +418,13 @@ async function fetchDateHistogramWithNumericBinning(
   numBins: number,
   stats: { min: Date; max: Date; count: number; nullCount: number },
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<DateHistogramData> {
   const minMs = stats.min.getTime();
   const maxMs = stats.max.getTime();
   const binWidth = (maxMs - minMs) / numBins;
 
-  const sql = buildNumericDateHistogramSQL(
-    tableName,
-    column,
-    numBins,
-    minMs,
-    maxMs,
-    filters
-  );
+  const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
   const binResults = await bridge.query<NumericBinResult>(sql);
 
   // Create all bins (even empty ones) for consistent visualization
@@ -482,7 +476,7 @@ export async function fetchDateHistogramBins(
   column: string,
   interval: TimeInterval,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<DateHistogramBin[]> {
   const sql = buildDateHistogramSQL(tableName, column, interval, filters);
   const binResults = await bridge.query<DateBinResult>(sql);
@@ -525,18 +519,11 @@ export async function fetchDateNumericBins(
   minMs: number,
   maxMs: number,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<DateHistogramBin[]> {
   const binWidth = (maxMs - minMs) / numBins;
 
-  const sql = buildNumericDateHistogramSQL(
-    tableName,
-    column,
-    numBins,
-    minMs,
-    maxMs,
-    filters
-  );
+  const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
   const binResults = await bridge.query<NumericBinResult>(sql);
 
   // Create all bins (even empty ones) for consistent visualization
@@ -578,7 +565,7 @@ export async function fetchDateHistogramData(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
-  maxBins: number = 15
+  maxBins = 15,
 ): Promise<DateHistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -600,12 +587,7 @@ export async function fetchDateHistogramData(
 
     // Step 2: Detect optimal time interval, then adjust for maxBins
     const initialInterval = detectTimeInterval(stats.min, stats.max);
-    const interval = adjustIntervalForMaxBins(
-      stats.min,
-      stats.max,
-      initialInterval,
-      maxBins
-    );
+    const interval = adjustIntervalForMaxBins(stats.min, stats.max, initialInterval, maxBins);
 
     // Step 2.5: Check if even the adjusted interval exceeds maxBins
     // If so, fall back to numeric binning
@@ -618,7 +600,7 @@ export async function fetchDateHistogramData(
         maxBins,
         { min: stats.min, max: stats.max, count: stats.count, nullCount: stats.nullCount },
         filters,
-        bridge
+        bridge,
       );
     }
 

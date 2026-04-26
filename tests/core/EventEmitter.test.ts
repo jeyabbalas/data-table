@@ -5,7 +5,7 @@ import { EventEmitter } from '@/core/EventEmitter';
 interface TestEvents {
   'data:loaded': { count: number };
   'filter:changed': { column: string; value: unknown };
-  'error': Error;
+  error: Error;
 }
 
 describe('EventEmitter', () => {

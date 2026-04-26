@@ -21,15 +21,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -234,7 +241,9 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const nameInput = panel.getElement().querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
       expect(nameInput.value).toBe('total');
 
       panel.destroy();
@@ -249,11 +258,15 @@ describe('DerivedColumnEditPanel', () => {
       expect(getEditorValue(panel.getElement())).toBe('price * quantity');
 
       // Expression section should be visible
-      const exprSection = panel.getElement().querySelector('.dt-derived-edit-expr-section') as HTMLElement;
+      const exprSection = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-expr-section') as HTMLElement;
       expect(exprSection.style.display).not.toBe('none');
 
       // Vector section should be hidden
-      const vectorSection = panel.getElement().querySelector('.dt-derived-edit-vector-section') as HTMLElement;
+      const vectorSection = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-vector-section') as HTMLElement;
       expect(vectorSection.style.display).toBe('none');
 
       panel.destroy();
@@ -283,20 +296,28 @@ describe('DerivedColumnEditPanel', () => {
       panel.open('flags', anchorEl);
 
       // Expression section should be hidden
-      const exprSection = panel.getElement().querySelector('.dt-derived-edit-expr-section') as HTMLElement;
+      const exprSection = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-expr-section') as HTMLElement;
       expect(exprSection.style.display).toBe('none');
 
       // Vector section should be visible
-      const vectorSection = panel.getElement().querySelector('.dt-derived-edit-vector-section') as HTMLElement;
+      const vectorSection = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-vector-section') as HTMLElement;
       expect(vectorSection.style.display).toBe('');
 
       // Vector text should show info
-      const vectorText = panel.getElement().querySelector('.dt-derived-edit-vector-text') as HTMLElement;
+      const vectorText = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-vector-text') as HTMLElement;
       expect(vectorText.textContent).toContain('Vector column');
       expect(vectorText.textContent).toContain('3 values');
 
       // Validate button should be hidden
-      const validateBtn = panel.getElement().querySelector('.dt-derived-edit-validate') as HTMLElement;
+      const validateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-validate') as HTMLElement;
       expect(validateBtn.style.display).toBe('none');
 
       panel.destroy();
@@ -318,11 +339,15 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const nameInput = panel.getElement().querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
       nameInput.value = '';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const nameError = panel.getElement().querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
       expect(nameError.style.display).not.toBe('none');
       expect(nameError.textContent).toContain('required');
 
@@ -333,11 +358,15 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const nameInput = panel.getElement().querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
       nameInput.value = 'price';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const nameError = panel.getElement().querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
       expect(nameError.style.display).not.toBe('none');
       expect(nameError.textContent).toContain('already exists');
 
@@ -348,7 +377,9 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const nameInput = panel.getElement().querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
 
       // First set a duplicate
       nameInput.value = 'price';
@@ -358,7 +389,9 @@ describe('DerivedColumnEditPanel', () => {
       nameInput.value = 'total_new';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const nameError = panel.getElement().querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
       expect(nameError.style.display).toBe('none');
 
       panel.destroy();
@@ -368,12 +401,16 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const nameInput = panel.getElement().querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
       // Name is already 'total' — re-enter it
       nameInput.value = 'total';
       nameInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const nameError = panel.getElement().querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
       expect(nameError.style.display).toBe('none');
 
       panel.destroy();
@@ -385,7 +422,9 @@ describe('DerivedColumnEditPanel', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);
 
-      const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+      const updateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
       expect(updateBtn.disabled).toBe(true);
 
       panel.destroy();
@@ -414,7 +453,9 @@ describe('DerivedColumnEditPanel', () => {
       panel.open('flags', anchorEl);
 
       // Vector columns don't need expression validation
-      const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+      const updateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
       expect(updateBtn.disabled).toBe(false);
 
       panel.destroy();
@@ -433,7 +474,9 @@ describe('DerivedColumnEditPanel', () => {
         originalType: 'DOUBLE',
       });
 
-      const validateBtn = panel.getElement().querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
+      const validateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
       validateBtn.click();
 
       // Wait for async
@@ -442,11 +485,15 @@ describe('DerivedColumnEditPanel', () => {
       });
 
       // Type preview should show result
-      const typePreview = panel.getElement().querySelector('.dt-derived-edit-type-preview') as HTMLElement;
+      const typePreview = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-type-preview') as HTMLElement;
       expect(typePreview.textContent).toContain('float');
 
       // Update button should now be enabled
-      const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+      const updateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
       expect(updateBtn.disabled).toBe(false);
 
       panel.destroy();
@@ -461,16 +508,22 @@ describe('DerivedColumnEditPanel', () => {
         error: 'Column "nonexistent" not found',
       });
 
-      const validateBtn = panel.getElement().querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
+      const validateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
       validateBtn.click();
 
       await vi.waitFor(() => {
-        const typePreview = panel.getElement().querySelector('.dt-derived-edit-type-preview') as HTMLElement;
+        const typePreview = panel
+          .getElement()
+          .querySelector('.dt-derived-edit-type-preview') as HTMLElement;
         expect(typePreview.textContent).toContain('not found');
       });
 
       // Update button should remain disabled
-      const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+      const updateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
       expect(updateBtn.disabled).toBe(true);
 
       panel.destroy();
@@ -489,11 +542,15 @@ describe('DerivedColumnEditPanel', () => {
         originalType: 'DOUBLE',
       });
 
-      const validateBtn = panel.getElement().querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
+      const validateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-validate') as HTMLButtonElement;
       validateBtn.click();
 
       await vi.waitFor(() => {
-        const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+        const updateBtn = panel
+          .getElement()
+          .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
         expect(updateBtn.disabled).toBe(false);
       });
 
@@ -508,11 +565,15 @@ describe('DerivedColumnEditPanel', () => {
       // Re-validate since expression changed
       validateBtn.click();
       await vi.waitFor(() => {
-        const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+        const updateBtn = panel
+          .getElement()
+          .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
         expect(updateBtn.disabled).toBe(false);
       });
 
-      const updateBtn = panel.getElement().querySelector('.dt-derived-edit-update') as HTMLButtonElement;
+      const updateBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-update') as HTMLButtonElement;
       updateBtn.click();
 
       await vi.waitFor(() => {
@@ -536,7 +597,9 @@ describe('DerivedColumnEditPanel', () => {
       panel.open('total', anchorEl);
 
       const deleteBtn = panel.getElement().querySelector('.dt-derived-edit-delete') as HTMLElement;
-      const confirmDiv = panel.getElement().querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
 
       expect(confirmDiv.style.display).toBe('none');
 
@@ -559,7 +622,9 @@ describe('DerivedColumnEditPanel', () => {
       deleteBtn.click();
 
       // Click confirm
-      const confirmBtn = panel.getElement().querySelector('.dt-derived-edit-delete-confirm-yes') as HTMLElement;
+      const confirmBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-delete-confirm-yes') as HTMLElement;
       confirmBtn.click();
 
       await vi.waitFor(() => {
@@ -578,10 +643,14 @@ describe('DerivedColumnEditPanel', () => {
       deleteBtn.click();
 
       // Click cancel
-      const cancelBtn = panel.getElement().querySelector('.dt-derived-edit-delete-confirm-no') as HTMLElement;
+      const cancelBtn = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-delete-confirm-no') as HTMLElement;
       cancelBtn.click();
 
-      const confirmDiv = panel.getElement().querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
       expect(confirmDiv.style.display).toBe('none');
       expect(deleteBtn.style.display).toBe('');
 
@@ -697,7 +766,9 @@ describe('DerivedColumnEditPanel', () => {
       panel.open('total', anchorEl);
 
       // Confirm div should be hidden again
-      const confirmDiv = panel.getElement().querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-delete-confirm') as HTMLElement;
       expect(confirmDiv.style.display).toBe('none');
       expect(deleteBtn.style.display).toBe('');
 

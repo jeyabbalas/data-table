@@ -36,9 +36,7 @@ const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButt
 const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const themeRadios = Array.from(
-  document.querySelectorAll<HTMLInputElement>('input[name="theme"]'),
-);
+const themeRadios = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="theme"]'));
 
 versionEl.textContent = VERSION;
 
@@ -84,7 +82,11 @@ function openDataCache(): Promise<IDBDatabase | null> {
   });
 }
 
-async function cacheTableData(tableName: string, buffer: Uint8Array, sourceName: string): Promise<void> {
+async function cacheTableData(
+  tableName: string,
+  buffer: Uint8Array,
+  sourceName: string,
+): Promise<void> {
   const db = await openDataCache();
   if (!db) return;
   await new Promise<void>((resolve) => {
@@ -96,7 +98,9 @@ async function cacheTableData(tableName: string, buffer: Uint8Array, sourceName:
   db.close();
 }
 
-async function loadCachedData(tableName: string): Promise<{ buffer: Uint8Array; sourceName: string } | null> {
+async function loadCachedData(
+  tableName: string,
+): Promise<{ buffer: Uint8Array; sourceName: string } | null> {
   const db = await openDataCache();
   if (!db) return null;
   return new Promise((resolve) => {
@@ -162,8 +166,9 @@ function updateTableInfo(): void {
   const sort = state.sortColumns.get();
   if (sort.length > 0) {
     const desc = sort
-      .map((s, i) =>
-        `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sort.length > 1 ? ` #${i + 1}` : ''})`
+      .map(
+        (s, i) =>
+          `${s.column} (${s.direction === 'asc' ? '\u25B2' : '\u25BC'}${sort.length > 1 ? ` #${i + 1}` : ''})`,
       )
       .join(', ');
     info += ` | <strong>Sort:</strong> ${desc}`;
@@ -212,7 +217,9 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
           ? { type: 'file', source: source.name, tableName }
           : { type: 'url', source: source as string, tableName };
       localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session));
-    } catch { /* unavailable in some browsers */ }
+    } catch {
+      /* unavailable in some browsers */
+    }
 
     // Cache the loaded table as Parquet so a refresh restores without a prompt.
     // Export only original source columns — excluding system columns
@@ -228,12 +235,11 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
         .join(', ');
       if (cacheCols) {
         table.bridge
-          .exportToBuffer(
-            `SELECT ${cacheCols} FROM ${quoteIdentifier(baseTable)}`,
-            'parquet',
-          )
+          .exportToBuffer(`SELECT ${cacheCols} FROM ${quoteIdentifier(baseTable)}`, 'parquet')
           .then((buffer) => cacheTableData(currentTableName, buffer, sourceName))
-          .catch(() => { /* caching is best-effort */ });
+          .catch(() => {
+            /* caching is best-effort */
+          });
       }
     }
 
@@ -246,11 +252,17 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
     // fresh load instead of repeating the failing restore.
     const code = (error as { code?: string }).code;
     if (code === 'LOAD_RESERVED_COLUMN_NAME') {
-      try { await clearCachedData(tableName); } catch { /* ignore */ }
-      try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
-      updateInfo(
-        'Cached session was stale and has been cleared. Load a file or URL to continue.',
-      );
+      try {
+        await clearCachedData(tableName);
+      } catch {
+        /* ignore */
+      }
+      try {
+        localStorage.removeItem(LAST_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+      updateInfo('Cached session was stale and has been cleared. Load a file or URL to continue.');
       return;
     }
     updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -291,7 +303,11 @@ clearSessionBtn.addEventListener('click', async () => {
   const tableName = table?.state.baseTableName.get() ?? table?.state.tableName.get() ?? null;
   if (table) await table.clearSession();
   if (tableName) await clearCachedData(tableName);
-  try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(LAST_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
   fileInput.value = '';
   urlInput.value = '';
   updateInfo('Session cleared. Load a file or URL to start fresh.');
@@ -338,13 +354,19 @@ urlInput.addEventListener('keydown', (e) => {
       updateInfo(
         `Previous session: <strong>${session.source}</strong> — ` +
           `load the same file to restore your state, or ` +
-          `<a href="#" id="dismiss-session">dismiss</a>.`
+          `<a href="#" id="dismiss-session">dismiss</a>.`,
       );
       document.getElementById('dismiss-session')?.addEventListener('click', (e) => {
         e.preventDefault();
-        try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+        try {
+          localStorage.removeItem(LAST_SESSION_KEY);
+        } catch {
+          /* ignore */
+        }
         updateInfo('Load a file or URL to get started.');
       });
     }
-  } catch { /* localStorage unavailable */ }
+  } catch {
+    /* localStorage unavailable */
+  }
 })();

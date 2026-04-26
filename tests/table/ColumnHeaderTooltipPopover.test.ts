@@ -54,24 +54,16 @@ describe('ColumnHeaderTooltipPopover — structure & lifecycle', () => {
     const titleEl = root.querySelector('.dt-col-tooltip__title') as HTMLElement;
     expect(titleEl?.textContent).toBe('Total fare');
 
-    const descEl = root.querySelector(
-      '.dt-col-tooltip__description',
-    ) as HTMLElement;
+    const descEl = root.querySelector('.dt-col-tooltip__description') as HTMLElement;
     expect(descEl?.textContent).toBe('Sum of fare components.');
 
     const items = root.querySelectorAll('.dt-col-tooltip__item');
     expect(items.length).toBe(2);
 
-    expect(items[0].querySelector('.dt-col-tooltip__item-label')?.textContent).toBe(
-      'Units',
-    );
-    expect(items[0].querySelector('.dt-col-tooltip__item-value')?.textContent).toBe(
-      'USD',
-    );
+    expect(items[0].querySelector('.dt-col-tooltip__item-label')?.textContent).toBe('Units');
+    expect(items[0].querySelector('.dt-col-tooltip__item-value')?.textContent).toBe('USD');
 
-    expect(items[1].querySelector('.dt-col-tooltip__item-label')?.textContent).toBe(
-      'Components',
-    );
+    expect(items[1].querySelector('.dt-col-tooltip__item-label')?.textContent).toBe('Components');
     const chips = items[1].querySelectorAll('.dt-col-tooltip__chip');
     expect(chips.length).toBe(2);
     expect(chips[0].textContent).toBe('fare');
@@ -81,9 +73,7 @@ describe('ColumnHeaderTooltipPopover — structure & lifecycle', () => {
   it('show() with only title renders only the title', () => {
     popover.show(anchor, { title: 'Only title' });
     const root = portal.querySelector('.dt-col-tooltip') as HTMLElement;
-    expect(root.querySelector('.dt-col-tooltip__title')?.textContent).toBe(
-      'Only title',
-    );
+    expect(root.querySelector('.dt-col-tooltip__title')?.textContent).toBe('Only title');
     expect(root.querySelector('.dt-col-tooltip__description')).toBe(null);
     expect(root.querySelector('.dt-col-tooltip__items')).toBe(null);
   });
@@ -114,16 +104,12 @@ describe('ColumnHeaderTooltipPopover — structure & lifecycle', () => {
   it('refresh() updates DOM in place when shown for the same anchor', () => {
     popover.show(anchor, { description: 'first' });
     const elFirst = popover.getElement();
-    expect(elFirst?.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
-      'first',
-    );
+    expect(elFirst?.querySelector('.dt-col-tooltip__description')?.textContent).toBe('first');
 
     popover.refresh(anchor, { description: 'second' });
     const elSecond = popover.getElement();
     expect(elSecond).toBe(elFirst); // same element instance
-    expect(elSecond?.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
-      'second',
-    );
+    expect(elSecond?.querySelector('.dt-col-tooltip__description')?.textContent).toBe('second');
   });
 
   it('refresh() with empty content hides; refresh() against a different anchor is a no-op', () => {
@@ -135,9 +121,9 @@ describe('ColumnHeaderTooltipPopover — structure & lifecycle', () => {
     popover.refresh(otherAnchor, { description: 'never' });
     // Still showing the original anchor's content
     expect(popover.isOpen()).toBe(true);
-    expect(
-      popover.getElement()?.querySelector('.dt-col-tooltip__description')?.textContent,
-    ).toBe('first');
+    expect(popover.getElement()?.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
+      'first',
+    );
 
     popover.refresh(anchor, {});
     expect(popover.isOpen()).toBe(false);
@@ -190,9 +176,7 @@ describe('ColumnHeaderTooltipPopover — structure & lifecycle', () => {
     wrapper.appendChild(anchor);
 
     popover.show(anchor, { description: 'D' });
-    expect(popover.getElement()?.getAttribute('data-dt-color-scheme')).toBe(
-      'dark',
-    );
+    expect(popover.getElement()?.getAttribute('data-dt-color-scheme')).toBe('dark');
 
     wrapper.remove();
     document.body.appendChild(anchor); // reattach for cleanup
@@ -253,9 +237,7 @@ describe('ColumnHeaderTooltipPopover — XSS safety (textContent only)', () => {
     const labels = root.querySelectorAll('.dt-col-tooltip__item-label');
     expect(labels[0].textContent).toBe('<b>label</b>');
     expect(labels[1].textContent).toBe('enum');
-    expect(
-      root.querySelector('.dt-col-tooltip__item-value')?.textContent,
-    ).toBe('<i>val</i>');
+    expect(root.querySelector('.dt-col-tooltip__item-value')?.textContent).toBe('<i>val</i>');
     const chips = root.querySelectorAll('.dt-col-tooltip__chip');
     expect(chips[0].textContent).toBe('<svg/>');
     expect(chips[1].textContent).toBe('<iframe>');

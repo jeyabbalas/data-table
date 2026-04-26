@@ -94,11 +94,15 @@ vi.mock('../../src/visualizations/histogram/IntervalHistogramData', () => ({
     isSingleValue: false,
   }),
   fetchIntervalColumnStats: vi.fn().mockResolvedValue({
-    minSeconds: 0, maxSeconds: 3600, medianSeconds: 1800, count: 5, nullCount: 0,
+    minSeconds: 0,
+    maxSeconds: 3600,
+    medianSeconds: 1800,
+    count: 5,
+    nullCount: 0,
   }),
-  fetchIntervalNumericBins: vi.fn().mockResolvedValue([
-    { binStartSeconds: 0, binEndSeconds: 3600, count: 5 },
-  ]),
+  fetchIntervalNumericBins: vi
+    .fn()
+    .mockResolvedValue([{ binStartSeconds: 0, binEndSeconds: 3600, count: 5 }]),
   secondsToIntervalString: vi.fn((s: number) => `${s}s`),
   secondsToIntervalSQL: vi.fn((s: number) => `${s} seconds`),
   parseIntervalToSeconds: vi.fn((s: string) => parseInt(s, 10) || 0),
@@ -217,10 +221,15 @@ describe('VisualizationFactory', () => {
   // =============================================
   describe('isApplicable', () => {
     const supportedTypes: DataType[] = [
-      'integer', 'float', 'decimal',
-      'date', 'timestamp',
+      'integer',
+      'float',
+      'decimal',
+      'date',
+      'timestamp',
       'time',
-      'string', 'boolean', 'uuid',
+      'string',
+      'boolean',
+      'uuid',
     ];
 
     it.each(supportedTypes)('returns true for %s', (type) => {
@@ -462,10 +471,15 @@ describe('VisualizationFactory', () => {
     describe('needsVisualization', () => {
       it('returns true for all 9 supported types', () => {
         const supported: DataType[] = [
-          'integer', 'float', 'decimal',
-          'date', 'timestamp',
+          'integer',
+          'float',
+          'decimal',
+          'date',
+          'timestamp',
           'time',
-          'string', 'boolean', 'uuid',
+          'string',
+          'boolean',
+          'uuid',
         ];
         for (const type of supported) {
           expect(needsVisualization(type)).toBe(true);

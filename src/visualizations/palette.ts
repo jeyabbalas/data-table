@@ -8,11 +8,7 @@
  * per token.
  */
 
-export function resolveColor(
-  scope: HTMLElement,
-  cssVar: string,
-  fallback: string,
-): string {
+export function resolveColor(scope: HTMLElement, cssVar: string, fallback: string): string {
   const value = getComputedStyle(scope).getPropertyValue(cssVar).trim();
   return value || fallback;
 }
@@ -23,5 +19,5 @@ export function resolveColor(
  * safe under custom `classPrefix` values.
  */
 export function resolveScope(canvas: HTMLCanvasElement): HTMLElement {
-  return (canvas.closest('.dt-root') as HTMLElement | null) ?? canvas;
+  return canvas.closest('.dt-root') ?? canvas;
 }

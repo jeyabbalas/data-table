@@ -21,7 +21,7 @@ const mockBridge = {
 function createField(
   column: ColumnSchema,
   state: TableState,
-  actions: StateActions
+  actions: StateActions,
 ): FilterPanelField {
   const field = new FilterPanelField(column, state, actions);
   document.body.appendChild(field.getElement());
@@ -43,7 +43,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('numeric filters', () => {
-    const intColumn: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+    const intColumn: ColumnSchema = {
+      name: 'price',
+      type: 'integer',
+      nullable: true,
+      originalType: 'INTEGER',
+    };
 
     it('should build a range filter for "between" mode', () => {
       const field = createField(intColumn, state, actions);
@@ -60,7 +65,11 @@ describe('FilterPanelField', () => {
       const filters = state.filters.get();
       expect(filters).toHaveLength(1);
       expect(filters[0]).toEqual({
-        type: 'range', column: 'price', min: 10, max: 100, maxInclusive: true,
+        type: 'range',
+        column: 'price',
+        min: 10,
+        max: 100,
+        maxInclusive: true,
       });
 
       field.destroy();
@@ -98,7 +107,10 @@ describe('FilterPanelField', () => {
       const filters = state.filters.get();
       expect(filters).toHaveLength(1);
       expect(filters[0]).toEqual({
-        type: 'not-set', column: 'price', values: [5], includeNull: true,
+        type: 'not-set',
+        column: 'price',
+        values: [5],
+        includeNull: true,
       });
 
       field.destroy();
@@ -117,7 +129,11 @@ describe('FilterPanelField', () => {
 
       const filters = state.filters.get();
       expect(filters[0]).toEqual({
-        type: 'range', column: 'price', min: 10, max: Infinity, minExclusive: true,
+        type: 'range',
+        column: 'price',
+        min: 10,
+        max: Infinity,
+        minExclusive: true,
       });
 
       field.destroy();
@@ -135,7 +151,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'price', min: 10, max: Infinity,
+        type: 'range',
+        column: 'price',
+        min: 10,
+        max: Infinity,
       });
 
       field.destroy();
@@ -153,7 +172,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'price', min: -Infinity, max: 50,
+        type: 'range',
+        column: 'price',
+        min: -Infinity,
+        max: 50,
       });
 
       field.destroy();
@@ -171,7 +193,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'price', min: -Infinity, max: 50, maxInclusive: true,
+        type: 'range',
+        column: 'price',
+        min: -Infinity,
+        max: 50,
+        maxInclusive: true,
       });
 
       field.destroy();
@@ -207,7 +233,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('string filters', () => {
-    const strColumn: ColumnSchema = { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' };
+    const strColumn: ColumnSchema = {
+      name: 'name',
+      type: 'string',
+      nullable: true,
+      originalType: 'VARCHAR',
+    };
 
     it('should build pattern filter for "contains" mode', () => {
       const field = createField(strColumn, state, actions);
@@ -221,7 +252,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'name', pattern: 'hello', mode: 'contains',
+        type: 'pattern',
+        column: 'name',
+        pattern: 'hello',
+        mode: 'contains',
       });
 
       field.destroy();
@@ -239,7 +273,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'name', pattern: 'hello', mode: 'starts',
+        type: 'pattern',
+        column: 'name',
+        pattern: 'hello',
+        mode: 'starts',
       });
 
       field.destroy();
@@ -257,7 +294,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'name', pattern: 'hello', mode: 'ends',
+        type: 'pattern',
+        column: 'name',
+        pattern: 'hello',
+        mode: 'ends',
       });
 
       field.destroy();
@@ -275,7 +315,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'name', pattern: '^test.*$', mode: 'regex',
+        type: 'pattern',
+        column: 'name',
+        pattern: '^test.*$',
+        mode: 'regex',
       });
 
       field.destroy();
@@ -342,7 +385,10 @@ describe('FilterPanelField', () => {
 
       expect(state.filters.get()).toHaveLength(1);
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'name', pattern: '^test[0-9]+$', mode: 'regex',
+        type: 'pattern',
+        column: 'name',
+        pattern: '^test[0-9]+$',
+        mode: 'regex',
       });
 
       field.destroy();
@@ -360,7 +406,9 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'point', column: 'name', value: 'hello world',
+        type: 'point',
+        column: 'name',
+        value: 'hello world',
       });
 
       field.destroy();
@@ -382,11 +430,16 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('boolean filters', () => {
-    const boolColumn: ColumnSchema = { name: 'active', type: 'boolean', nullable: true, originalType: 'BOOLEAN' };
+    const boolColumn: ColumnSchema = {
+      name: 'active',
+      type: 'boolean',
+      nullable: true,
+      originalType: 'BOOLEAN',
+    };
 
     function getCheckboxes(field: FilterPanelField): HTMLInputElement[] {
       return Array.from(
-        field.getElement().querySelectorAll('input[type="checkbox"]')
+        field.getElement().querySelectorAll('input[type="checkbox"]'),
       ) as HTMLInputElement[];
     }
 
@@ -415,7 +468,9 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'point', column: 'active', value: true,
+        type: 'point',
+        column: 'active',
+        value: true,
       });
 
       field.destroy();
@@ -431,7 +486,9 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'point', column: 'active', value: false,
+        type: 'point',
+        column: 'active',
+        value: false,
       });
 
       field.destroy();
@@ -447,7 +504,8 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'null', column: 'active',
+        type: 'null',
+        column: 'active',
       });
 
       field.destroy();
@@ -462,7 +520,8 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'not-null', column: 'active',
+        type: 'not-null',
+        column: 'active',
       });
 
       field.destroy();
@@ -477,7 +536,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'not-set', column: 'active', values: [false], includeNull: true,
+        type: 'not-set',
+        column: 'active',
+        values: [false],
+        includeNull: true,
       });
 
       field.destroy();
@@ -492,7 +554,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'not-set', column: 'active', values: [true], includeNull: true,
+        type: 'not-set',
+        column: 'active',
+        values: [true],
+        includeNull: true,
       });
 
       field.destroy();
@@ -528,7 +593,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('date filters', () => {
-    const dateColumn: ColumnSchema = { name: 'created', type: 'date', nullable: true, originalType: 'DATE' };
+    const dateColumn: ColumnSchema = {
+      name: 'created',
+      type: 'date',
+      nullable: true,
+      originalType: 'DATE',
+    };
 
     it('should build range filter for "between" mode', () => {
       const field = createField(dateColumn, state, actions);
@@ -543,7 +613,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'created', min: '2024-01-01', max: '2024-12-31', maxInclusive: true,
+        type: 'range',
+        column: 'created',
+        min: '2024-01-01',
+        max: '2024-12-31',
+        maxInclusive: true,
       });
 
       field.destroy();
@@ -561,7 +635,9 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'point', column: 'created', value: '2024-06-15',
+        type: 'point',
+        column: 'created',
+        value: '2024-06-15',
       });
 
       field.destroy();
@@ -579,7 +655,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'created', min: -Infinity, max: '2024-06-15',
+        type: 'range',
+        column: 'created',
+        min: -Infinity,
+        max: '2024-06-15',
       });
 
       field.destroy();
@@ -597,7 +676,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'created', min: '2024-06-15', max: Infinity, minExclusive: true,
+        type: 'range',
+        column: 'created',
+        min: '2024-06-15',
+        max: Infinity,
+        minExclusive: true,
       });
 
       field.destroy();
@@ -619,14 +702,21 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('timestamp filters', () => {
-    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+    const tsColumn: ColumnSchema = {
+      name: 'created_at',
+      type: 'timestamp',
+      nullable: true,
+      originalType: 'TIMESTAMP',
+    };
 
     it('should expand "=" mode to a 1-minute range for timestamp columns', () => {
       const field = createField(tsColumn, state, actions);
       const el = field.getElement();
 
       const select = el.querySelector('select') as HTMLSelectElement;
-      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      const inputs = el.querySelectorAll(
+        'input[type="datetime-local"]',
+      ) as NodeListOf<HTMLInputElement>;
       select.value = 'eq';
       inputs[0].value = '2024-06-15T10:30';
 
@@ -646,7 +736,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should use point filter for "=" mode on date (not timestamp) columns', () => {
-      const dateCol: ColumnSchema = { name: 'birthday', type: 'date', nullable: true, originalType: 'DATE' };
+      const dateCol: ColumnSchema = {
+        name: 'birthday',
+        type: 'date',
+        nullable: true,
+        originalType: 'DATE',
+      };
       const field = createField(dateCol, state, actions);
       const el = field.getElement();
 
@@ -674,7 +769,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('time filters', () => {
-    const timeColumn: ColumnSchema = { name: 'start_time', type: 'time', nullable: true, originalType: 'TIME' };
+    const timeColumn: ColumnSchema = {
+      name: 'start_time',
+      type: 'time',
+      nullable: true,
+      originalType: 'TIME',
+    };
 
     it('should build range filter with both inputs', () => {
       const field = createField(timeColumn, state, actions);
@@ -687,7 +787,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'start_time', min: '09:00', max: '17:00', maxInclusive: true,
+        type: 'range',
+        column: 'start_time',
+        min: '09:00',
+        max: '17:00',
+        maxInclusive: true,
       });
 
       field.destroy();
@@ -703,7 +807,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'start_time', min: '09:00', max: Infinity,
+        type: 'range',
+        column: 'start_time',
+        min: '09:00',
+        max: Infinity,
       });
 
       field.destroy();
@@ -719,7 +826,11 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'range', column: 'start_time', min: -Infinity, max: '17:00', maxInclusive: true,
+        type: 'range',
+        column: 'start_time',
+        min: -Infinity,
+        max: '17:00',
+        maxInclusive: true,
       });
 
       field.destroy();
@@ -741,7 +852,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('uuid filters', () => {
-    const uuidColumn: ColumnSchema = { name: 'id', type: 'uuid', nullable: false, originalType: 'UUID' };
+    const uuidColumn: ColumnSchema = {
+      name: 'id',
+      type: 'uuid',
+      nullable: false,
+      originalType: 'UUID',
+    };
 
     it('should build pattern filter for "contains" mode', () => {
       const field = createField(uuidColumn, state, actions);
@@ -755,7 +871,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'id', pattern: 'abc-123', mode: 'contains',
+        type: 'pattern',
+        column: 'id',
+        pattern: 'abc-123',
+        mode: 'contains',
       });
 
       field.destroy();
@@ -773,7 +892,9 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'point', column: 'id', value: '550e8400-e29b-41d4-a716-446655440000',
+        type: 'point',
+        column: 'id',
+        value: '550e8400-e29b-41d4-a716-446655440000',
       });
 
       field.destroy();
@@ -824,7 +945,10 @@ describe('FilterPanelField', () => {
 
       expect(state.filters.get()).toHaveLength(1);
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'id', pattern: '550e', mode: 'contains',
+        type: 'pattern',
+        column: 'id',
+        pattern: '550e',
+        mode: 'contains',
       });
 
       field.destroy();
@@ -836,7 +960,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('interval filters', () => {
-    const intervalColumn: ColumnSchema = { name: 'duration', type: 'interval', nullable: true, originalType: 'INTERVAL' };
+    const intervalColumn: ColumnSchema = {
+      name: 'duration',
+      type: 'interval',
+      nullable: true,
+      originalType: 'INTERVAL',
+    };
 
     it('should build pattern filter', () => {
       const field = createField(intervalColumn, state, actions);
@@ -848,7 +977,10 @@ describe('FilterPanelField', () => {
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'pattern', column: 'duration', pattern: '1 hour', mode: 'contains',
+        type: 'pattern',
+        column: 'duration',
+        pattern: '1 hour',
+        mode: 'contains',
       });
 
       field.destroy();
@@ -860,20 +992,28 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('null toggle', () => {
-    const intColumn: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+    const intColumn: ColumnSchema = {
+      name: 'price',
+      type: 'integer',
+      nullable: true,
+      originalType: 'INTEGER',
+    };
 
     it('should apply null filter when "Is null" radio is selected', () => {
       const field = createField(intColumn, state, actions);
       const el = field.getElement();
 
-      const radios = el.querySelectorAll('.dt-filter-field-null input[type="radio"]') as NodeListOf<HTMLInputElement>;
+      const radios = el.querySelectorAll(
+        '.dt-filter-field-null input[type="radio"]',
+      ) as NodeListOf<HTMLInputElement>;
       // radios: [any, null, not-null]
       radios[1].checked = true;
 
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'null', column: 'price',
+        type: 'null',
+        column: 'price',
       });
 
       field.destroy();
@@ -883,13 +1023,16 @@ describe('FilterPanelField', () => {
       const field = createField(intColumn, state, actions);
       const el = field.getElement();
 
-      const radios = el.querySelectorAll('.dt-filter-field-null input[type="radio"]') as NodeListOf<HTMLInputElement>;
+      const radios = el.querySelectorAll(
+        '.dt-filter-field-null input[type="radio"]',
+      ) as NodeListOf<HTMLInputElement>;
       radios[2].checked = true;
 
       field.applyFilter();
 
       expect(state.filters.get()[0]).toEqual({
-        type: 'not-null', column: 'price',
+        type: 'not-null',
+        column: 'price',
       });
 
       field.destroy();
@@ -920,7 +1063,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('clear()', () => {
-    const intColumn: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+    const intColumn: ColumnSchema = {
+      name: 'price',
+      type: 'integer',
+      nullable: true,
+      originalType: 'INTEGER',
+    };
 
     it('should remove filter and reset controls', () => {
       const field = createField(intColumn, state, actions);
@@ -950,7 +1098,12 @@ describe('FilterPanelField', () => {
 
   describe('syncFromState', () => {
     it('should populate numeric controls from external range filter', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       // Add filter externally
@@ -971,7 +1124,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should populate string controls from external pattern filter', () => {
-      const col: ColumnSchema = { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' };
+      const col: ColumnSchema = {
+        name: 'name',
+        type: 'string',
+        nullable: true,
+        originalType: 'VARCHAR',
+      };
       const field = createField(col, state, actions);
 
       actions.addFilter({ type: 'pattern', column: 'name', pattern: 'hello', mode: 'contains' });
@@ -988,14 +1146,21 @@ describe('FilterPanelField', () => {
     });
 
     it('should populate boolean controls from external point filter', () => {
-      const col: ColumnSchema = { name: 'active', type: 'boolean', nullable: true, originalType: 'BOOLEAN' };
+      const col: ColumnSchema = {
+        name: 'active',
+        type: 'boolean',
+        nullable: true,
+        originalType: 'BOOLEAN',
+      };
       const field = createField(col, state, actions);
 
       actions.addFilter({ type: 'point', column: 'active', value: true });
       field.syncFromState();
 
-      const checkboxes = field.getElement().querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-      expect(checkboxes[0].checked).toBe(true);  // True
+      const checkboxes = field
+        .getElement()
+        .querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+      expect(checkboxes[0].checked).toBe(true); // True
       expect(checkboxes[1].checked).toBe(false); // False
       expect(checkboxes[2].checked).toBe(false); // Null
 
@@ -1003,22 +1168,36 @@ describe('FilterPanelField', () => {
     });
 
     it('should set null toggle for external null filter', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       actions.addFilter({ type: 'null', column: 'price' });
       field.syncFromState();
 
-      const radios = field.getElement().querySelectorAll('.dt-filter-field-null input[type="radio"]') as NodeListOf<HTMLInputElement>;
+      const radios = field
+        .getElement()
+        .querySelectorAll(
+          '.dt-filter-field-null input[type="radio"]',
+        ) as NodeListOf<HTMLInputElement>;
       expect(radios[0].checked).toBe(false); // Any
-      expect(radios[1].checked).toBe(true);  // Is null
+      expect(radios[1].checked).toBe(true); // Is null
       expect(radios[2].checked).toBe(false); // Is not null
 
       field.destroy();
     });
 
     it('should clear controls when filter is removed externally', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       // Add and then remove filter
@@ -1042,7 +1221,12 @@ describe('FilterPanelField', () => {
 
   describe('destroy', () => {
     it('should remove element from DOM', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       expect(document.body.contains(field.getElement())).toBe(true);
@@ -1053,7 +1237,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should not apply filter after destroy', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
       const el = field.getElement();
 
@@ -1073,7 +1262,12 @@ describe('FilterPanelField', () => {
 
   describe('public API', () => {
     it('should return the column name', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       expect(field.getColumnName()).toBe('price');
@@ -1082,7 +1276,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should return the element with data-column attribute', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       expect(field.getElement().getAttribute('data-column')).toBe('price');
@@ -1091,7 +1290,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should have an Apply button for non-boolean types', () => {
-      const col: ColumnSchema = { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' };
+      const col: ColumnSchema = {
+        name: 'price',
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      };
       const field = createField(col, state, actions);
 
       const applyBtn = field.getElement().querySelector('.dt-filter-field-apply');
@@ -1101,7 +1305,12 @@ describe('FilterPanelField', () => {
     });
 
     it('should NOT have an Apply button for boolean type', () => {
-      const col: ColumnSchema = { name: 'active', type: 'boolean', nullable: true, originalType: 'BOOLEAN' };
+      const col: ColumnSchema = {
+        name: 'active',
+        type: 'boolean',
+        nullable: true,
+        originalType: 'BOOLEAN',
+      };
       const field = createField(col, state, actions);
 
       const applyBtn = field.getElement().querySelector('.dt-filter-field-apply');
@@ -1116,14 +1325,21 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('timestamp equality with seconds in input', () => {
-    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+    const tsColumn: ColumnSchema = {
+      name: 'created_at',
+      type: 'timestamp',
+      nullable: true,
+      originalType: 'TIMESTAMP',
+    };
 
     it('should truncate to minute when browser provides seconds', () => {
       const field = createField(tsColumn, state, actions);
       const el = field.getElement();
 
       const select = el.querySelector('select') as HTMLSelectElement;
-      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      const inputs = el.querySelectorAll(
+        'input[type="datetime-local"]',
+      ) as NodeListOf<HTMLInputElement>;
       select.value = 'eq';
       // Some browsers return seconds in datetime-local value
       inputs[0].value = '2024-06-15T10:30:00';
@@ -1148,7 +1364,9 @@ describe('FilterPanelField', () => {
       const el = field.getElement();
 
       const select = el.querySelector('select') as HTMLSelectElement;
-      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      const inputs = el.querySelectorAll(
+        'input[type="datetime-local"]',
+      ) as NodeListOf<HTMLInputElement>;
       select.value = 'eq';
       inputs[0].value = '2024-06-15T10:30:45.123';
 
@@ -1173,7 +1391,12 @@ describe('FilterPanelField', () => {
   // =========================================
 
   describe('timestamp equality round-trip', () => {
-    const tsColumn: ColumnSchema = { name: 'created_at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' };
+    const tsColumn: ColumnSchema = {
+      name: 'created_at',
+      type: 'timestamp',
+      nullable: true,
+      originalType: 'TIMESTAMP',
+    };
 
     it('should restore "eq" mode when syncing a minute-range timestamp filter', () => {
       const field = createField(tsColumn, state, actions);
@@ -1190,7 +1413,9 @@ describe('FilterPanelField', () => {
 
       const el = field.getElement();
       const select = el.querySelector('select') as HTMLSelectElement;
-      const inputs = el.querySelectorAll('input[type="datetime-local"]') as NodeListOf<HTMLInputElement>;
+      const inputs = el.querySelectorAll(
+        'input[type="datetime-local"]',
+      ) as NodeListOf<HTMLInputElement>;
 
       expect(select.value).toBe('eq');
       expect(inputs[0].value).toBe('2024-06-15T10:30');
@@ -1226,7 +1451,12 @@ describe('FilterPanelField', () => {
 
   describe('clearControls resets custom validity', () => {
     it('should clear custom validity on text inputs after regex validation failure', () => {
-      const col: ColumnSchema = { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' };
+      const col: ColumnSchema = {
+        name: 'name',
+        type: 'string',
+        nullable: true,
+        originalType: 'VARCHAR',
+      };
       const field = createField(col, state, actions);
       const el = field.getElement();
 

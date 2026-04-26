@@ -157,9 +157,7 @@ describe('exportToJSON', () => {
     });
 
     it('should pretty-print when pretty is true', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', active: true },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', active: true }]);
 
       const json = await exportToJSON('test', { format: 'array', pretty: true }, baseContext);
 
@@ -185,9 +183,7 @@ describe('exportToJSON', () => {
     });
 
     it('should preserve native JSON types', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: null, active: true },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: null, active: true }]);
 
       const json = await exportToJSON('test', { format: 'array' }, baseContext);
       const parsed = JSON.parse(json);
@@ -261,9 +257,7 @@ describe('exportToJSON', () => {
     });
 
     it('should handle selected rows with CTE', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', active: true },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', active: true }]);
 
       const context = {
         ...baseContext,
@@ -301,9 +295,7 @@ describe('exportToJSON', () => {
     });
 
     it('should export all columns when columns is "all"', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', active: true },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', active: true }]);
 
       const json = await exportToJSON('test', { columns: 'all', format: 'array' }, baseContext);
       const parsed = JSON.parse(json);
@@ -326,22 +318,22 @@ describe('exportToJSON', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        exportToJSON('test', {}, baseContext, controller.signal)
-      ).rejects.toThrow('Export aborted');
+      await expect(exportToJSON('test', {}, baseContext, controller.signal)).rejects.toThrow(
+        'Export aborted',
+      );
     });
   });
 
   describe('batching', () => {
     it('should fetch multiple batches', async () => {
       const batch1 = Array.from({ length: 10000 }, (_, i) => ({
-        id: i, name: `r${i}`, active: true,
+        id: i,
+        name: `r${i}`,
+        active: true,
       }));
       const batch2 = [{ id: 10000, name: 'last', active: false }];
 
-      mockBridge.query
-        .mockResolvedValueOnce(batch1)
-        .mockResolvedValueOnce(batch2);
+      mockBridge.query.mockResolvedValueOnce(batch1).mockResolvedValueOnce(batch2);
 
       const json = await exportToJSON('test', { format: 'array' }, baseContext);
       const parsed = JSON.parse(json);
@@ -365,15 +357,13 @@ describe('exportJSONFromState', () => {
     await expect(
       exportJSONFromState(
         mockState as unknown as import('@/core/State').TableState,
-        {} as unknown as import('@/data/WorkerBridge').WorkerBridge
-      )
+        {} as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      ),
     ).rejects.toThrow('No table loaded');
   });
 
   it('should read signals and delegate to exportToJSON', async () => {
-    const mockQuery = vi.fn().mockResolvedValueOnce([
-      { id: 1, name: 'Alice' },
-    ]);
+    const mockQuery = vi.fn().mockResolvedValueOnce([{ id: 1, name: 'Alice' }]);
 
     const mockState = {
       tableName: { get: () => 'my_table' },
@@ -394,7 +384,7 @@ describe('exportJSONFromState', () => {
     const json = await exportJSONFromState(
       mockState as unknown as import('@/core/State').TableState,
       mockBridge as unknown as import('@/data/WorkerBridge').WorkerBridge,
-      { format: 'array' }
+      { format: 'array' },
     );
 
     const parsed = JSON.parse(json);

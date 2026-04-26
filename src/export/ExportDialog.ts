@@ -18,14 +18,14 @@
  * dialog.open();
  */
 
-import type { TableState } from '../core/State';
-import type { WorkerBridge } from '../data/WorkerBridge';
 import { ModalHost } from '../core/ModalHost';
+import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
+import type { WorkerBridge } from '../data/WorkerBridge';
+import { copyToClipboard } from './Clipboard';
 import { exportFromState } from './CSVExport';
 import { exportJSONFromState } from './JSONExport';
 import { exportParquetFromState } from './ParquetExport';
-import { copyToClipboard } from './Clipboard';
-import { type Strings, defaultStrings } from '../core/Strings';
 
 export type ExportFormat = 'csv' | 'json' | 'parquet';
 export type ExportScope = 'all' | 'filtered' | 'selected';
@@ -100,7 +100,7 @@ export class ExportDialog {
   constructor(
     private state: TableState,
     private bridge: WorkerBridge,
-    options: ExportDialogOptions = {}
+    options: ExportDialogOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.instanceId = options.instanceId ?? '';
@@ -175,13 +175,13 @@ export class ExportDialog {
     this.copyBtn.className = `${p}-export-copy-btn`;
     this.copyBtn.type = 'button';
     this.copyBtn.textContent = this.messages.export.copyButton;
-    this.copyBtn.addEventListener('click', () => this.handleCopy());
+    this.copyBtn.addEventListener('click', () => void this.handleCopy());
 
     this.exportBtn = document.createElement('button');
     this.exportBtn.className = `${p}-export-btn`;
     this.exportBtn.type = 'button';
     this.exportBtn.textContent = this.messages.export.downloadButton;
-    this.exportBtn.addEventListener('click', () => this.handleExport());
+    this.exportBtn.addEventListener('click', () => void this.handleExport());
 
     footer.appendChild(this.copyBtn);
     footer.appendChild(this.exportBtn);
@@ -273,7 +273,9 @@ export class ExportDialog {
     this.selectedCountEl = document.createElement('span');
     this.selectedCountEl.className = `${p}-export-count`;
     this.selectedOption.appendChild(this.selectedRadio);
-    this.selectedOption.appendChild(document.createTextNode(` ${this.messages.export.scopes.selected} `));
+    this.selectedOption.appendChild(
+      document.createTextNode(` ${this.messages.export.scopes.selected} `),
+    );
     this.selectedOption.appendChild(this.selectedCountEl);
     fieldset.appendChild(this.selectedOption);
 
@@ -293,9 +295,7 @@ export class ExportDialog {
     this.systemColumnsCheckbox.type = 'checkbox';
     this.systemColumnsCheckbox.checked = false;
     label.appendChild(this.systemColumnsCheckbox);
-    label.appendChild(
-      document.createTextNode(' Include system columns (e.g. __rowid__)'),
-    );
+    label.appendChild(document.createTextNode(' Include system columns (e.g. __rowid__)'));
 
     container.appendChild(label);
     this.systemColumnsSection = container;
@@ -444,10 +444,7 @@ export class ExportDialog {
 
     const disabled = selected === 0;
     this.selectedRadio.disabled = disabled;
-    this.selectedOption.classList.toggle(
-      `${this.prefix}-export-option--disabled`,
-      disabled
-    );
+    this.selectedOption.classList.toggle(`${this.prefix}-export-option--disabled`, disabled);
 
     // Auto-fallback if selected scope is active but no rows are selected
     if (disabled && this.selectedRadio.checked) {
@@ -470,17 +467,17 @@ export class ExportDialog {
     this.unsubscribes.push(
       this.state.totalRows.subscribe(() => {
         if (this.isOpen) this.updateScopeCounts();
-      })
+      }),
     );
     this.unsubscribes.push(
       this.state.filteredRows.subscribe(() => {
         if (this.isOpen) this.updateScopeCounts();
-      })
+      }),
     );
     this.unsubscribes.push(
       this.state.selectedRows.subscribe(() => {
         if (this.isOpen) this.updateScopeCounts();
-      })
+      }),
     );
 
     // Initial count update
@@ -540,14 +537,14 @@ export class ExportDialog {
 
   private getFormat(): ExportFormat {
     const checked = this.element.querySelector(
-      `input[name="${this.prefix}-export-format"]:checked`
+      `input[name="${this.prefix}-export-format"]:checked`,
     ) as HTMLInputElement | null;
     return (checked?.value as ExportFormat) ?? 'csv';
   }
 
   private getScope(): ExportScope {
     const checked = this.element.querySelector(
-      `input[name="${this.prefix}-export-scope"]:checked`
+      `input[name="${this.prefix}-export-scope"]:checked`,
     ) as HTMLInputElement | null;
     return (checked?.value as ExportScope) ?? 'all';
   }
@@ -578,34 +575,49 @@ export class ExportDialog {
       const columns = this.getColumnsForExport();
 
       if (format === 'csv') {
-        const result = await exportFromState(this.state, this.bridge, {
-          scope,
-          columns,
-          delimiter: this.delimiterSelect.value,
-          includeHeaders: this.headersCheckbox.checked,
-          nullValue: this.nullValueInput.value,
-        }, signal);
+        const result = await exportFromState(
+          this.state,
+          this.bridge,
+          {
+            scope,
+            columns,
+            delimiter: this.delimiterSelect.value,
+            includeHeaders: this.headersCheckbox.checked,
+            nullValue: this.nullValueInput.value,
+          },
+          signal,
+        );
 
         const blob = new Blob([result], { type: 'text/csv;charset=utf-8' });
         this.triggerDownload(blob, this.getExportFilename('csv'));
       } else if (format === 'json') {
         const jsonFormat = this.jsonFormatSelect.value as 'array' | 'ndjson';
-        const result = await exportJSONFromState(this.state, this.bridge, {
-          scope,
-          columns,
-          format: jsonFormat,
-          pretty: this.jsonPrettyCheckbox.checked,
-        }, signal);
+        const result = await exportJSONFromState(
+          this.state,
+          this.bridge,
+          {
+            scope,
+            columns,
+            format: jsonFormat,
+            pretty: this.jsonPrettyCheckbox.checked,
+          },
+          signal,
+        );
 
         const mimeType = jsonFormat === 'ndjson' ? 'application/x-ndjson' : 'application/json';
         const ext = jsonFormat === 'ndjson' ? 'ndjson' : 'json';
         const blob = new Blob([result], { type: mimeType });
         this.triggerDownload(blob, this.getExportFilename(ext));
       } else {
-        const result = await exportParquetFromState(this.state, this.bridge, {
-          scope,
-          columns,
-        }, signal);
+        const result = await exportParquetFromState(
+          this.state,
+          this.bridge,
+          {
+            scope,
+            columns,
+          },
+          signal,
+        );
 
         const blob = new Blob([result.buffer as ArrayBuffer], { type: 'application/octet-stream' });
         this.triggerDownload(blob, this.getExportFilename('parquet'));
@@ -617,7 +629,9 @@ export class ExportDialog {
       if (error instanceof DOMException && error.name === 'AbortError') {
         // Silently reset on cancel
       } else {
-        this.showError(error instanceof Error ? error.message : this.messages.export.exportFailedFallback);
+        this.showError(
+          error instanceof Error ? error.message : this.messages.export.exportFailedFallback,
+        );
       }
     } finally {
       this.abortController = null;
@@ -646,20 +660,30 @@ export class ExportDialog {
       const columns = this.getColumnsForExport();
 
       if (format === 'csv') {
-        result = await exportFromState(this.state, this.bridge, {
-          scope,
-          columns,
-          delimiter: this.delimiterSelect.value,
-          includeHeaders: this.headersCheckbox.checked,
-          nullValue: this.nullValueInput.value,
-        }, signal);
+        result = await exportFromState(
+          this.state,
+          this.bridge,
+          {
+            scope,
+            columns,
+            delimiter: this.delimiterSelect.value,
+            includeHeaders: this.headersCheckbox.checked,
+            nullValue: this.nullValueInput.value,
+          },
+          signal,
+        );
       } else {
-        result = await exportJSONFromState(this.state, this.bridge, {
-          scope,
-          columns,
-          format: this.jsonFormatSelect.value as 'array' | 'ndjson',
-          pretty: this.jsonPrettyCheckbox.checked,
-        }, signal);
+        result = await exportJSONFromState(
+          this.state,
+          this.bridge,
+          {
+            scope,
+            columns,
+            format: this.jsonFormatSelect.value as 'array' | 'ndjson',
+            pretty: this.jsonPrettyCheckbox.checked,
+          },
+          signal,
+        );
       }
 
       await copyToClipboard(result, 'text');
@@ -668,7 +692,9 @@ export class ExportDialog {
       if (error instanceof DOMException && error.name === 'AbortError') {
         // Silently reset on cancel
       } else {
-        this.showError(error instanceof Error ? error.message : this.messages.export.copyFailedFallback);
+        this.showError(
+          error instanceof Error ? error.message : this.messages.export.copyFailedFallback,
+        );
       }
     } finally {
       this.abortController = null;
@@ -698,7 +724,9 @@ export class ExportDialog {
 
   private setExportingState(exporting: boolean): void {
     this.exporting = exporting;
-    this.exportBtn.textContent = exporting ? this.messages.export.cancelButton : this.messages.export.downloadButton;
+    this.exportBtn.textContent = exporting
+      ? this.messages.export.cancelButton
+      : this.messages.export.downloadButton;
     this.exportBtn.classList.toggle(`${this.prefix}-export-btn--loading`, exporting);
     this.copyBtn.disabled = exporting;
   }

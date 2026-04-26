@@ -295,13 +295,32 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
   if (code.startsWith('LOAD_')) return new LoadError(message, options);
   if (code.startsWith('QUERY_')) return new QueryError(message, options);
   if (code.startsWith('SQL_')) return new SQLValidationError(message, options);
-  if (code.startsWith('EXPORT_') || code === 'NO_TABLE_LOADED' || code === 'CLIPBOARD_UNAVAILABLE' || code === 'CANVAS_UNAVAILABLE') {
+  if (
+    code.startsWith('EXPORT_') ||
+    code === 'NO_TABLE_LOADED' ||
+    code === 'CLIPBOARD_UNAVAILABLE' ||
+    code === 'CANVAS_UNAVAILABLE'
+  ) {
     return new ExportError(message, options);
   }
-  if (code.startsWith('DERIVED_') || code === 'EXPRESSION_INVALID' || code === 'DUPLICATE_NAME' || code === 'VECTOR_LENGTH_MISMATCH' || code === 'CIRCULAR_DEPENDENCY' || code === 'NOT_FOUND' || code === 'DEPENDENTS_INCOMPATIBLE') {
+  if (
+    code.startsWith('DERIVED_') ||
+    code === 'EXPRESSION_INVALID' ||
+    code === 'DUPLICATE_NAME' ||
+    code === 'VECTOR_LENGTH_MISMATCH' ||
+    code === 'CIRCULAR_DEPENDENCY' ||
+    code === 'NOT_FOUND' ||
+    code === 'DEPENDENTS_INCOMPATIBLE'
+  ) {
     return new DerivedColumnError(message, options);
   }
-  if (code.startsWith('PERSIST_') || code.startsWith('IDB_') || code === 'SNAPSHOT_INVALID' || code === 'VERSION_MISMATCH' || code === 'SAVE_FAILED') {
+  if (
+    code.startsWith('PERSIST_') ||
+    code.startsWith('IDB_') ||
+    code === 'SNAPSHOT_INVALID' ||
+    code === 'VERSION_MISMATCH' ||
+    code === 'SAVE_FAILED'
+  ) {
     return new PersistenceError(message, options);
   }
   if (code.startsWith('ANNOTATION_')) {

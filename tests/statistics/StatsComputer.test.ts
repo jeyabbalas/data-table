@@ -62,7 +62,7 @@ describe('fetchIntervalStats', () => {
       'duration',
       [],
       bridge,
-      100 // unfilteredTotal
+      100, // unfilteredTotal
     );
 
     expect(stats.totalRows).toBe(100);

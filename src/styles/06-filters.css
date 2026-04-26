@@ -56,7 +56,9 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   border-radius: var(--dt-radius-sm);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-panel-clear:hover {
@@ -81,7 +83,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   color: var(--dt-text-secondary);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-panel-close:hover {
@@ -155,11 +159,11 @@
   color: var(--dt-text-tertiary);
 }
 
-.dt-filter-input[type="date"] {
+.dt-filter-input[type='date'] {
   min-width: 130px;
 }
 
-.dt-filter-input[type="datetime-local"] {
+.dt-filter-input[type='datetime-local'] {
   min-width: 11rem;
 }
 
@@ -198,7 +202,7 @@
   cursor: pointer;
 }
 
-.dt-filter-null-option input[type="radio"] {
+.dt-filter-null-option input[type='radio'] {
   margin: 0;
   accent-color: var(--dt-primary);
 }
@@ -218,7 +222,7 @@
   cursor: pointer;
 }
 
-.dt-filter-bool-option input[type="checkbox"] {
+.dt-filter-bool-option input[type='checkbox'] {
   margin: 0;
   accent-color: var(--dt-primary);
 }
@@ -237,7 +241,9 @@
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-filter-field-apply:hover {
@@ -252,20 +258,20 @@
 
 /* Dark mode adjustments for filter panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-panel {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
 
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-input:focus,
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-select:focus {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-input:focus,
+  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-select:focus {
     box-shadow: 0 0 0 2px var(--dt-primary-alpha-30);
   }
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-filter-panel {
+.dt-root[data-dt-color-scheme='dark'] .dt-filter-panel {
   box-shadow: 0 4px 16px var(--dt-shadow-md);
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-filter-input:focus,
-.dt-root[data-dt-color-scheme="dark"] .dt-filter-select:focus {
+.dt-root[data-dt-color-scheme='dark'] .dt-filter-input:focus,
+.dt-root[data-dt-color-scheme='dark'] .dt-filter-select:focus {
   box-shadow: 0 0 0 2px var(--dt-primary-alpha-30);
 }
 
@@ -287,7 +293,10 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+  transition:
+    border-color var(--dt-transition),
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-presets-btn:hover {
@@ -350,7 +359,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   color: var(--dt-text-secondary);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-preset-close:hover {
@@ -394,7 +405,10 @@
   font-weight: 500;
   font-family: var(--dt-font-family);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition), opacity var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition),
+    opacity var(--dt-transition);
 }
 
 .dt-filter-preset-save-btn:hover:not(:disabled) {
@@ -502,7 +516,10 @@
   font-weight: 500;
   font-family: var(--dt-font-family);
   cursor: pointer;
-  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+  transition:
+    border-color var(--dt-transition),
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-preset-action-btn--load {
@@ -559,7 +576,10 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+  transition:
+    border-color var(--dt-transition),
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-filter-preset-io-btn:hover:not(:disabled) {
@@ -594,18 +614,18 @@
 
 /* Dark mode for preset panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-preset-panel {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-preset-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
 
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-filter-preset-action-btn--delete:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-preset-action-btn--delete:hover {
     background: var(--dt-error-soft);
   }
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-filter-preset-panel {
+.dt-root[data-dt-color-scheme='dark'] .dt-filter-preset-panel {
   box-shadow: 0 4px 16px var(--dt-shadow-md);
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-filter-preset-action-btn--delete:hover {
+.dt-root[data-dt-color-scheme='dark'] .dt-filter-preset-action-btn--delete:hover {
   background: var(--dt-error-soft);
 }
 
@@ -626,4 +646,3 @@
   color: var(--dt-text-secondary);
   font-size: var(--dt-font-size);
 }
-

@@ -20,11 +20,13 @@ interface StubPanel extends BaseStatsPanel {
   calls: Filter[][];
 }
 
-function makeStubPanel(opts: {
-  destroyed?: boolean;
-  delayMs?: number;
-  throwOnUpdate?: boolean;
-} = {}): StubPanel {
+function makeStubPanel(
+  opts: {
+    destroyed?: boolean;
+    delayMs?: number;
+    throwOnUpdate?: boolean;
+  } = {},
+): StubPanel {
   const calls: Filter[][] = [];
   const panel = {
     calls,

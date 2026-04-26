@@ -93,7 +93,9 @@ describe('AnnotationStore — events', () => {
 
   it('continues firing other handlers if one throws', () => {
     const spy1 = vi.fn();
-    const spy2 = vi.fn().mockImplementation(() => { throw new Error('handler boom'); });
+    const spy2 = vi.fn().mockImplementation(() => {
+      throw new Error('handler boom');
+    });
     const spy3 = vi.fn();
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     store.on('change', spy1);

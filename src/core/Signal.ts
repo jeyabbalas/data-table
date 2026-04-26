@@ -99,7 +99,7 @@ class ComputedImpl<T> implements Computed<T> {
 
   constructor(
     private fn: () => T,
-    deps: Signal<unknown>[]
+    deps: Signal<unknown>[],
   ) {
     // Initial computation
     this.value = fn();

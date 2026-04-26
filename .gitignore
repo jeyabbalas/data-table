@@ -31,3 +31,8 @@ coverage/
 .cache/
 .parcel-cache/
 .vite/
+.eslintcache
+
+# Review
+review-plan.md
+review/

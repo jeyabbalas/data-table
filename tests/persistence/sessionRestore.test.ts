@@ -27,9 +27,7 @@ function createMockBridge() {
   };
 }
 
-function createMockStore(
-  snapshot: SessionSnapshot | null = null,
-): SessionStore {
+function createMockStore(snapshot: SessionSnapshot | null = null): SessionStore {
   return {
     open: vi.fn().mockResolvedValue(true),
     save: vi.fn().mockResolvedValue(undefined),
@@ -40,9 +38,7 @@ function createMockStore(
   } as unknown as SessionStore;
 }
 
-function createTestSnapshot(
-  overrides: Partial<SessionSnapshot> = {},
-): SessionSnapshot {
+function createTestSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -97,9 +93,7 @@ describe('Session Restore on Load', () => {
     });
 
     expect(store.load).toHaveBeenCalledWith('test_table');
-    expect(state.sortColumns.get()).toEqual([
-      { column: 'name', direction: 'desc' },
-    ]);
+    expect(state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
     expect(state.visibleColumns.get()).toEqual(['id', 'name']);
     expect(state.columnOrder.get()).toEqual(['name', 'id', 'age']);
     expect(state.pinnedColumns.get()).toEqual(['id']);
@@ -275,12 +269,8 @@ describe('Session Restore on Load', () => {
     });
 
     // Verify restored state
-    expect(state.filters.get()).toEqual([
-      { type: 'range', column: 'age', min: 10, max: 50 },
-    ]);
-    expect(state.sortColumns.get()).toEqual([
-      { column: 'id', direction: 'asc' },
-    ]);
+    expect(state.filters.get()).toEqual([{ type: 'range', column: 'age', min: 10, max: 50 }]);
+    expect(state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
     expect(state.pinnedColumns.get()).toEqual(['id']);
     expect(state.columnWidths.get().get('name')).toBe(300);
   });

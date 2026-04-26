@@ -3,16 +3,6 @@
  * Handles all DuckDB operations in a separate thread
  */
 
-import type {
-  WorkerMessage,
-  WorkerResponse,
-  WorkerResponseType,
-  ErrorPayload,
-  InitPayload,
-  QueryPayload,
-  LoadPayload,
-  ExportPayload,
-} from './types';
 import {
   initializeDuckDB,
   executeQuery,
@@ -23,6 +13,16 @@ import {
 import { loadCSV } from './loaders/csv';
 import { loadJSON } from './loaders/json';
 import { loadParquet } from './loaders/parquet';
+import type {
+  WorkerMessage,
+  WorkerResponse,
+  WorkerResponseType,
+  ErrorPayload,
+  InitPayload,
+  QueryPayload,
+  LoadPayload,
+  ExportPayload,
+} from './types';
 
 // Send response back to main thread
 function respond(id: string, type: WorkerResponseType, payload: unknown): void {
@@ -144,10 +144,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             });
 
             // Parquet requires ArrayBuffer
-            const buffer =
-              typeof data === 'string'
-                ? new TextEncoder().encode(data).buffer
-                : data;
+            const buffer = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
             result = await loadParquet(buffer, { tableName });
 
             respond(id, 'progress', {
@@ -171,11 +168,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             schema: result.schema,
           });
         } catch (error) {
-          respond(
-            id,
-            'error',
-            toErrorPayload(error, 'Failed to load data', 'LOAD_PARSE_FAILED'),
-          );
+          respond(id, 'error', toErrorPayload(error, 'Failed to load data', 'LOAD_PARSE_FAILED'));
         }
         break;
       }
@@ -197,7 +190,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
           const exportDb = getDatabase();
 
           await exportConn.query(
-            `COPY (${exportSql}) TO '${exportFileName}' (FORMAT ${exportFormat.toUpperCase()})`
+            `COPY (${exportSql}) TO '${exportFileName}' (FORMAT ${exportFormat.toUpperCase()})`,
           );
 
           const fileBuffer = await exportDb.copyFileToBuffer(exportFileName);
@@ -211,11 +204,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
           } catch {
             // Ignore cleanup errors
           }
-          respond(
-            id,
-            'error',
-            toErrorPayload(error, 'Export failed', 'EXPORT_FAILED'),
-          );
+          respond(id, 'error', toErrorPayload(error, 'Export failed', 'EXPORT_FAILED'));
         }
         break;
       }

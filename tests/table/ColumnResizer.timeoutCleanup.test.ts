@@ -89,9 +89,7 @@ describe('ColumnResizer — setTimeout cleanup on detach (Phase 2)', () => {
 
     vi.advanceTimersByTime(500);
 
-    const finalCount = removeSpy.mock.calls.filter(
-      ([cls]) => cls === 'dt-col-resetting',
-    ).length;
+    const finalCount = removeSpy.mock.calls.filter(([cls]) => cls === 'dt-col-resetting').length;
     // The setTimeout fallback was canceled by the transitionend cleanup,
     // so no additional removes occur.
     expect(finalCount).toBe(afterTransitionCount);

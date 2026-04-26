@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StateActions } from '@/core/Actions';
-import {
-  createTableState,
-  initializeColumnsFromSchema,
-  type TableState,
-} from '@/core/State';
+import { createTableState, initializeColumnsFromSchema, type TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import {
   DataTableError,
@@ -33,7 +29,7 @@ const createMockBridge = () =>
     isInitialized: vi.fn().mockReturnValue(true),
     clearQueryCache: vi.fn(),
     exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
-  } as unknown as WorkerBridge);
+  }) as unknown as WorkerBridge;
 
 const schema: ColumnSchema[] = [
   { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
@@ -72,9 +68,7 @@ describe('SQL validation errors (Actions)', () => {
   });
 
   it('removeDerivedColumn throws DerivedColumnError when column is not derived', async () => {
-    await expect(actions.removeDerivedColumn('id')).rejects.toBeInstanceOf(
-      DerivedColumnError,
-    );
+    await expect(actions.removeDerivedColumn('id')).rejects.toBeInstanceOf(DerivedColumnError);
   });
 });
 
@@ -97,9 +91,9 @@ describe('Export errors', () => {
   it('copyRowsToClipboard throws ExportError when no table loaded', async () => {
     const state = setupState();
     // Leave tableName unset
-    await expect(
-      copyRowsToClipboard([0, 1, 2], state, createMockBridge()),
-    ).rejects.toBeInstanceOf(ExportError);
+    await expect(copyRowsToClipboard([0, 1, 2], state, createMockBridge())).rejects.toBeInstanceOf(
+      ExportError,
+    );
   });
 });
 

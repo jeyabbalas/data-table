@@ -32,14 +32,9 @@
  * ```
  */
 
-import type { TableState } from './core/State';
-import { createTableState, resetTableState } from './core/State';
+import { AnnotationStore } from './annotations/AnnotationStore';
 import { StateActions, type LoadDataOptions } from './core/Actions';
-import { UndoManager } from './core/UndoManager';
-import { nextInstanceId } from './core/instanceId';
-import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
-import { EventEmitter } from './core/EventEmitter';
-import type { TableEvents } from './core/TableEvents';
+import { checkBrowserSupport } from './core/checkBrowserSupport';
 import {
   ConfigurationError,
   DataTableError,
@@ -47,48 +42,41 @@ import {
   LoadError,
   WorkerInitError,
 } from './core/errors';
-import { checkBrowserSupport } from './core/checkBrowserSupport';
-import type { DataFormat } from './data/DataLoader';
-import type { Filter, SortColumn } from './core/types';
-import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
-import {
-  type Strings,
-  type DeepPartial,
-  defaultStrings,
-  mergeStrings,
-} from './core/Strings';
+import { EventEmitter } from './core/EventEmitter';
+import { nextInstanceId } from './core/instanceId';
+import type { TableState } from './core/State';
+import { createTableState, resetTableState } from './core/State';
+import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
-import { AnnotationStore } from './annotations/AnnotationStore';
+import type { TableEvents } from './core/TableEvents';
+import type { Filter, SortColumn } from './core/types';
+import { UndoManager } from './core/UndoManager';
+import type { DataFormat } from './data/DataLoader';
+import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
+import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+import { ExportDialog } from './export/ExportDialog';
+import { FilterPresetManager } from './filters/FilterPresets';
+import { AutoSave } from './persistence/AutoSave';
+import { SessionStore } from './persistence/SessionStore';
+import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
+import { formatDefaultStats } from './statistics/StatsFormatters';
 import { AnnotationPopover } from './table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
-
 import { TableContainer } from './table/TableContainer';
-import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
-import { InteractionManager } from './visualizations/InteractionManager';
-import {
-  VisualizationRegistry,
-  defaultVisualizationRegistry,
-} from './visualizations/VisualizationRegistry';
-import {
-  StatsPanelRegistry,
-  defaultStatsPanelRegistry,
-} from './visualizations/StatsPanelRegistry';
-import { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
 import type { BaseStatsPanel, StatsPanelOptions } from './visualizations/BaseStatsPanel';
 import type { BaseVisualization } from './visualizations/BaseVisualization';
-import { Histogram } from './visualizations/histogram/Histogram';
+import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 import { DateHistogram } from './visualizations/histogram/DateHistogram';
-import { TimeHistogram } from './visualizations/histogram/TimeHistogram';
+import { Histogram } from './visualizations/histogram/Histogram';
 import { IntervalHistogram } from './visualizations/histogram/IntervalHistogram';
+import { TimeHistogram } from './visualizations/histogram/TimeHistogram';
+import { InteractionManager } from './visualizations/InteractionManager';
+import { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
+import type { StatsPanelRegistry } from './visualizations/StatsPanelRegistry';
+import { defaultStatsPanelRegistry } from './visualizations/StatsPanelRegistry';
 import { ValueCounts } from './visualizations/valuecounts/ValueCounts';
-import { formatDefaultStats } from './statistics/StatsFormatters';
-import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
-
-import { SessionStore } from './persistence/SessionStore';
-import { AutoSave } from './persistence/AutoSave';
-import { FilterPresetManager } from './filters/FilterPresets';
-
-import { ExportDialog } from './export/ExportDialog';
+import type { VisualizationRegistry } from './visualizations/VisualizationRegistry';
+import { defaultVisualizationRegistry } from './visualizations/VisualizationRegistry';
 
 // Emitted once per page lifetime when the library stylesheet is missing —
 // detected via the `--dt-stylesheet-loaded` marker declared on `:root` in
@@ -109,14 +97,11 @@ let stylesheetWarningEmitted = false;
  */
 export type ColorScheme = 'light' | 'dark' | 'auto';
 
-const VALID_COLOR_SCHEMES: ReadonlyArray<ColorScheme> = ['light', 'dark', 'auto'];
+const VALID_COLOR_SCHEMES: readonly ColorScheme[] = ['light', 'dark', 'auto'];
 
 function validateColorScheme(value: unknown, origin: string): ColorScheme {
   if (value === undefined) return 'auto';
-  if (
-    typeof value === 'string' &&
-    (VALID_COLOR_SCHEMES as ReadonlyArray<string>).includes(value)
-  ) {
+  if (typeof value === 'string' && (VALID_COLOR_SCHEMES as readonly string[]).includes(value)) {
     return value as ColorScheme;
   }
   throw new ConfigurationError(
@@ -277,19 +262,13 @@ export interface DataTable {
    */
   loadData(
     source: File | string | ArrayBuffer | Blob,
-    opts?: LoadDataOptions & { sourceFormat?: DataFormat }
+    opts?: LoadDataOptions & { sourceFormat?: DataFormat },
   ): Promise<void>;
 
   /** Subscribe to an event. Returns an unsubscribe function. */
-  on<K extends keyof TableEvents>(
-    event: K,
-    handler: (payload: TableEvents[K]) => void
-  ): () => void;
+  on<K extends keyof TableEvents>(event: K, handler: (payload: TableEvents[K]) => void): () => void;
   /** Alternative to the return value of `on`. */
-  off<K extends keyof TableEvents>(
-    event: K,
-    handler: (payload: TableEvents[K]) => void
-  ): void;
+  off<K extends keyof TableEvents>(event: K, handler: (payload: TableEvents[K]) => void): void;
 
   /** Open the export dialog. No-op if `exportDialog: false`. */
   openExportDialog(): void;
@@ -347,10 +326,7 @@ type VisualizationType =
   | IntervalHistogram
   | ValueCounts;
 
-interface BrushState {
-  // Opaque per-visualization — we don't need to type it at this level.
-  [key: string]: unknown;
-}
+type BrushState = Record<string, unknown>;
 
 interface SelectionStateSnapshot {
   selectedBin?: number | null;
@@ -363,7 +339,7 @@ interface SelectionStateSnapshot {
  * It natively handles File/string/ArrayBuffer; we convert Blob to ArrayBuffer.
  */
 async function normalizeSource(
-  source: File | string | ArrayBuffer | Blob
+  source: File | string | ArrayBuffer | Blob,
 ): Promise<File | string | ArrayBuffer> {
   if (source instanceof Blob && !(source instanceof File)) {
     return source.arrayBuffer();
@@ -378,17 +354,15 @@ async function normalizeSource(
  * `loadData()` or rely on `state.schema` being populated (if `source` was
  * provided).
  */
-export async function createDataTable(
-  opts: CreateDataTableOptions
-): Promise<DataTable> {
+export async function createDataTable(opts: CreateDataTableOptions): Promise<DataTable> {
   // -------- Options validation --------
   if (opts.strictBrowserCheck) {
     const check = checkBrowserSupport();
     if (!check.supported) {
-      throw new WorkerInitError(
-        `Browser is missing required APIs: ${check.missing.join(', ')}.`,
-        { code: 'WORKER_UNSUPPORTED', details: { missing: check.missing } },
-      );
+      throw new WorkerInitError(`Browser is missing required APIs: ${check.missing.join(', ')}.`, {
+        code: 'WORKER_UNSUPPORTED',
+        details: { missing: check.missing },
+      });
     }
   }
 
@@ -399,8 +373,7 @@ export async function createDataTable(
 
   // -------- Worker bridge --------
   const ownsBridge = !opts.bridge;
-  const bridge =
-    opts.bridge ?? new WorkerBridge(opts.bridgeOptions);
+  const bridge = opts.bridge ?? new WorkerBridge(opts.bridgeOptions);
   await bridge.initialize();
 
   // -------- Reactive state + actions --------
@@ -410,29 +383,23 @@ export async function createDataTable(
 
   // -------- Event bus --------
   // Constructed early so the persistence and stylesheet checks below can
-  // emit `warning` events instead of silently degrading.
-  // Forward-declared so the listener-error handler can reference `emitter`
-  // in its closure (the handler only fires after construction completes).
-  let emitter!: EventEmitter<TableEvents>;
-  emitter = new EventEmitter<TableEvents>((err, event) => {
+  // emit `warning` events instead of silently degrading. The listener-error
+  // handler references `emitter` in its closure; the handler only fires
+  // after construction completes, so the lexical binding is always live.
+  const emitter: EventEmitter<TableEvents> = new EventEmitter<TableEvents>((err, event) => {
     if (event === 'error' || event === 'warning') {
       // Do not re-emit — would recurse infinitely.
-      // eslint-disable-next-line no-console
-      console.error(
-        '[data-table] listener threw inside',
-        String(event),
-        'handler',
-        err,
-      );
+
+      console.error('[data-table] listener threw inside', String(event), 'handler', err);
       return;
     }
     const typed =
       err instanceof DataTableError
         ? err
-        : new ConfigurationError(
-            err instanceof Error ? err.message : String(err),
-            { code: 'OPTIONS_INVALID', cause: err },
-          );
+        : new ConfigurationError(err instanceof Error ? err.message : String(err), {
+            code: 'OPTIONS_INVALID',
+            cause: err,
+          });
     emitter.emit('error', { error: typed, source: 'listener' });
   });
 
@@ -441,8 +408,7 @@ export async function createDataTable(
   let ownsSessionStore = false;
   let autoSave: AutoSave | null = null;
   if (opts.persistence !== false) {
-    const persistConfig =
-      typeof opts.persistence === 'object' ? opts.persistence : {};
+    const persistConfig = typeof opts.persistence === 'object' ? opts.persistence : {};
     if (persistConfig.sessionStore) {
       sessionStore = persistConfig.sessionStore;
     } else {
@@ -454,8 +420,7 @@ export async function createDataTable(
     } catch (cause) {
       emitter.emit('warning', {
         code: 'PERSISTENCE_UNAVAILABLE',
-        message:
-          'IndexedDB is unavailable; session persistence is disabled.',
+        message: 'IndexedDB is unavailable; session persistence is disabled.',
         details: {
           reason: cause instanceof Error ? cause.message : String(cause),
         },
@@ -490,27 +455,21 @@ export async function createDataTable(
   });
 
   // -------- UI container --------
-  const tableContainer = new TableContainer(
-    opts.container,
-    state,
-    actions,
-    bridge,
-    {
-      rowHeight: opts.rowHeight,
-      headerHeight: opts.headerHeight,
-      classPrefix: opts.classPrefix ?? 'dt',
-      instanceId,
-      showExpressionFilter: opts.expressionFilter !== false,
-      editorFactory: opts.editorFactory,
-      presetManager: presetManager ?? undefined,
-      portalTarget: opts.portalTarget,
-      colorScheme,
-      messages,
-      annotations: annotationStore,
-      annotationPopover,
-      columnHeaderTooltipPopover,
-    }
-  );
+  const tableContainer = new TableContainer(opts.container, state, actions, bridge, {
+    rowHeight: opts.rowHeight,
+    headerHeight: opts.headerHeight,
+    classPrefix: opts.classPrefix ?? 'dt',
+    instanceId,
+    showExpressionFilter: opts.expressionFilter !== false,
+    editorFactory: opts.editorFactory,
+    presetManager: presetManager ?? undefined,
+    portalTarget: opts.portalTarget,
+    colorScheme,
+    messages,
+    annotations: annotationStore,
+    annotationPopover,
+    columnHeaderTooltipPopover,
+  });
 
   // -------- Stylesheet presence check --------
   if (!stylesheetWarningEmitted && !isStylesheetLoaded()) {
@@ -529,8 +488,7 @@ export async function createDataTable(
   }
 
   // -------- Visualizations (auto-attach) --------
-  const interactionManager =
-    opts.visualizations === false ? null : new InteractionManager();
+  const interactionManager = opts.visualizations === false ? null : new InteractionManager();
   let coordinator: CrossfilterCoordinator | null = null;
   let activeVisualizations: BaseVisualization[] = [];
   const brushStates = new Map<string, BrushState>();
@@ -554,10 +512,11 @@ export async function createDataTable(
     const typed =
       err instanceof DataTableError
         ? err
-        : new ConfigurationError(
-            err instanceof Error ? err.message : String(err),
-            { code: 'INVARIANT', cause: err, details: { column, phase } },
-          );
+        : new ConfigurationError(err instanceof Error ? err.message : String(err), {
+            code: 'INVARIANT',
+            cause: err,
+            details: { column, phase },
+          });
     emitter.emit('error', { error: typed, source: 'stats-panel' });
   };
 
@@ -589,7 +548,7 @@ export async function createDataTable(
         viz instanceof IntervalHistogram
       ) {
         const brush = viz.getBrushState();
-        if (brush) brushStates.set(column.name, brush as BrushState);
+        if (brush) brushStates.set(column.name, brush);
         const sel = viz.getSelectionState();
         if (sel.selectedBin !== null || sel.selectedNull) {
           selectionStates.set(column.name, sel);
@@ -766,7 +725,7 @@ export async function createDataTable(
             viz instanceof IntervalHistogram
           ) {
             const bs = viz.getBrushState();
-            if (bs) brushStates.set(colName, bs as BrushState);
+            if (bs) brushStates.set(colName, bs);
           }
         },
         onBrushClear: (colName: string) => {
@@ -801,11 +760,7 @@ export async function createDataTable(
         },
       };
 
-      const created = vizRegistry.create(
-        vizContainer,
-        column,
-        vizOptions
-      );
+      const created = vizRegistry.create(vizContainer, column, vizOptions);
       if (!created) continue;
       viz = created as VisualizationType;
       activeVisualizations.push(viz);
@@ -895,7 +850,7 @@ export async function createDataTable(
   };
 
   // -------- Re-emit signals as typed events --------
-  const unsubscribes: Array<() => void> = [];
+  const unsubscribes: (() => void)[] = [];
   let destroyed = false;
   // Sticky-replay payload for the `ready` lifecycle event. Set once when
   // `ready` fires; late subscribers via `table.on('ready', …)` receive a
@@ -910,17 +865,17 @@ export async function createDataTable(
         filteredRowCount: state.filteredRows.get(),
         totalRowCount: state.totalRows.get(),
       });
-    })
+    }),
   );
   unsubscribes.push(
     state.sortColumns.subscribe((sortColumns: SortColumn[]) => {
       emitter.emit('sortChange', { sortColumns });
-    })
+    }),
   );
   unsubscribes.push(
     state.selectedRows.subscribe((selectedRows: Set<number>) => {
       emitter.emit('selectionChange', { selectedRows });
-    })
+    }),
   );
   unsubscribes.push(
     state.visibleColumns.subscribe(() => {
@@ -929,7 +884,7 @@ export async function createDataTable(
         pinnedColumns: state.pinnedColumns.get(),
         columnOrder: state.columnOrder.get(),
       });
-    })
+    }),
   );
   unsubscribes.push(
     state.pinnedColumns.subscribe(() => {
@@ -938,7 +893,7 @@ export async function createDataTable(
         pinnedColumns: state.pinnedColumns.get(),
         columnOrder: state.columnOrder.get(),
       });
-    })
+    }),
   );
   // derivedChange is emitted explicitly from the action call sites (see
   // src/core/Actions.ts) so the payload can carry the `kind` discriminator
@@ -954,7 +909,7 @@ export async function createDataTable(
           canUndo: undoManager.canUndo,
           canRedo: undoManager.canRedo,
         });
-      })
+      }),
     );
     unsubscribes.push(
       undoManager.canRedoSignal.subscribe(() => {
@@ -962,7 +917,7 @@ export async function createDataTable(
           canUndo: undoManager.canUndo,
           canRedo: undoManager.canRedo,
         });
-      })
+      }),
     );
   }
 
@@ -1035,14 +990,10 @@ export async function createDataTable(
   // -------- Public loadData --------
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
-    loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat }
+    loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat },
   ): Promise<void> {
     const sourceLabel =
-      typeof source === 'string'
-        ? source
-        : source instanceof File
-          ? source.name
-          : 'in-memory';
+      typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
     emitter.emit('loadStart', { source: sourceLabel });
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
@@ -1055,8 +1006,7 @@ export async function createDataTable(
         // Always pass store/presetManager if we have them, so session +
         // preset restore happens as part of loadData.
         sessionStore: loadOpts?.sessionStore ?? sessionStore ?? undefined,
-        presetManager:
-          loadOpts?.presetManager ?? presetManager ?? undefined,
+        presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
       };
       await actions.loadData(normalized, mergedOpts);
@@ -1069,10 +1019,10 @@ export async function createDataTable(
       const typed =
         error instanceof DataTableError
           ? error
-          : new LoadError(
-              error instanceof Error ? error.message : String(error),
-              { code: 'PARSE_FAILED', cause: error },
-            );
+          : new LoadError(error instanceof Error ? error.message : String(error), {
+              code: 'PARSE_FAILED',
+              cause: error,
+            });
       emitter.emit('loadError', { error: typed });
       emitter.emit('error', { error: typed, source: 'load' });
       throw typed;
@@ -1177,9 +1127,7 @@ export async function createDataTable(
   // -------- Public DataTable --------
   const throwIfDestroyed = (method: string): void => {
     if (destroyed) {
-      throw new DestroyedError(
-        `DataTable is destroyed; cannot call ${method}().`,
-      );
+      throw new DestroyedError(`DataTable is destroyed; cannot call ${method}().`);
     }
   };
 

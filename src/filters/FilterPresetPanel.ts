@@ -5,12 +5,12 @@
  * Follows the same positioning and close-handler patterns as FilterPanel.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
+import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
 import type { FilterPresetManager } from './FilterPresets';
 import type { FilterPreset } from './FilterPresetTypes';
-import { type Strings, defaultStrings } from '../core/Strings';
 
 export interface FilterPresetPanelOptions {
   classPrefix?: string;
@@ -42,7 +42,7 @@ export class FilterPresetPanel {
     private presetManager: FilterPresetManager,
     private state: TableState,
     private actions: StateActions,
-    options?: FilterPresetPanelOptions
+    options?: FilterPresetPanelOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.colorSchemeSource = options?.colorSchemeSource;
@@ -284,7 +284,7 @@ export class FilterPresetPanel {
       name,
       filters,
       sortColumns.length > 0 ? sortColumns : undefined,
-      description
+      description,
     );
 
     // Clear inputs after successful save
@@ -327,7 +327,7 @@ export class FilterPresetPanel {
       if (result.errors.length > 0) {
         this.showImportStatus(
           this.messages.presets.importPartial(result.imported, result.errors.length),
-          'warning'
+          'warning',
         );
       } else if (result.imported > 0) {
         this.showImportStatus(this.messages.presets.importSuccess(result.imported), 'success');

@@ -80,7 +80,6 @@ export class EventEmitter<Events extends Record<string, unknown>> {
             });
           }
         } else {
-          // eslint-disable-next-line no-console
           console.error('[data-table] listener threw for event', String(event), err);
           queueMicrotask(() => {
             throw err;

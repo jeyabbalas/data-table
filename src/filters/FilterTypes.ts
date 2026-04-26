@@ -54,11 +54,18 @@ export interface PatternFilter {
 
 export interface RawSQLFilter {
   type: 'raw-sql';
-  column: string;     // Synthetic key: '__raw_sql_<id>__'
-  sql: string;        // WHERE clause fragment (no WHERE keyword)
-  label?: string;     // Human-readable label for filter chip
-  id: string;         // Unique identifier (crypto.randomUUID())
+  column: string; // Synthetic key: '__raw_sql_<id>__'
+  sql: string; // WHERE clause fragment (no WHERE keyword)
+  label?: string; // Human-readable label for filter chip
+  id: string; // Unique identifier (crypto.randomUUID())
 }
 
-export type Filter = RangeFilter | PointFilter | SetFilter | NotSetFilter | NullFilter | PatternFilter | RawSQLFilter;
+export type Filter =
+  | RangeFilter
+  | PointFilter
+  | SetFilter
+  | NotSetFilter
+  | NullFilter
+  | PatternFilter
+  | RawSQLFilter;
 export type FilterType = Filter['type'];

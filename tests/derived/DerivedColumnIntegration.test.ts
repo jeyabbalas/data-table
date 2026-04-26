@@ -201,7 +201,9 @@ describe('TableContainer modal close on schema change', () => {
   it('closes derived modal when schema changes (simulating data reload)', () => {
     const mockActions = {
       addDerivedColumn: vi.fn().mockResolvedValue({ success: true }),
-      validateExpression: vi.fn().mockResolvedValue({ valid: true, type: 'float', originalType: 'DOUBLE' }),
+      validateExpression: vi
+        .fn()
+        .mockResolvedValue({ valid: true, type: 'float', originalType: 'DOUBLE' }),
       getCompletionContext: vi.fn().mockReturnValue({ columns: [] }),
     } as any;
 
@@ -218,9 +220,7 @@ describe('TableContainer modal close on schema change', () => {
     expect(backdrop!.classList.contains('dt-derived-modal-backdrop--open')).toBe(true);
 
     // Simulate schema change (data reload)
-    state.schema.set([
-      { name: 'col_a', type: 'string', nullable: false, originalType: 'VARCHAR' },
-    ]);
+    state.schema.set([{ name: 'col_a', type: 'string', nullable: false, originalType: 'VARCHAR' }]);
 
     // Modal should be closed
     expect(backdrop!.classList.contains('dt-derived-modal-backdrop--open')).toBe(false);

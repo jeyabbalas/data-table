@@ -1,5 +1,5 @@
 import '@jeyabbalas/data-table/styles';
-import './theme.css';  // must come AFTER library styles so cascade order favors our overrides
+import './theme.css'; // must come AFTER library styles so cascade order favors our overrides
 import { createDataTable, type ColorScheme, type DataTable } from '@jeyabbalas/data-table';
 
 const DATA_URL =

@@ -85,13 +85,13 @@ export class CellRenderer {
 
     if (value === null || value === undefined) {
       cellEl.textContent = 'null';
-      cellEl.title = '';  // No tooltip for null values
+      cellEl.title = ''; // No tooltip for null values
       cellEl.classList.add(nullClass);
       cellEl.classList.remove(numberClass);
     } else {
       const formatted = this.formatValue(value, schema?.type, schema?.originalType);
       cellEl.textContent = formatted;
-      cellEl.title = formatted;  // Tooltip shows full text on hover
+      cellEl.title = formatted; // Tooltip shows full text on hover
       cellEl.classList.remove(nullClass);
 
       // Apply number class for right-alignment
@@ -234,7 +234,8 @@ export class CellRenderer {
    * Handles: Date objects, ISO strings, and BigInt/number/string (milliseconds from DuckDB-WASM).
    */
   private formatTimestamp(value: unknown, originalType?: string): string {
-    const isTimestampTz = originalType?.toUpperCase().includes('TIMESTAMPTZ') ||
+    const isTimestampTz =
+      originalType?.toUpperCase().includes('TIMESTAMPTZ') ||
       originalType?.toUpperCase().includes('WITH TIME ZONE');
 
     // Helper to format the result with optional timezone
@@ -272,8 +273,9 @@ export class CellRenderer {
         const parsed = new Date(value);
         if (!isNaN(parsed.getTime())) {
           const formatted = this.formatTimestampCore(parsed);
-          const normalizedOffset = offset.includes(':') ? offset :
-            `${offset.slice(0, 3)}:${offset.slice(3)}`;
+          const normalizedOffset = offset.includes(':')
+            ? offset
+            : `${offset.slice(0, 3)}:${offset.slice(3)}`;
           return `${formatted} ${normalizedOffset}`;
         }
       }
@@ -337,15 +339,30 @@ export class CellRenderer {
       const parts: string[] = [];
 
       const y = Math.floor(remaining / YEAR_SECONDS);
-      if (y > 0) { parts.push(`${y}y`); remaining -= y * YEAR_SECONDS; }
+      if (y > 0) {
+        parts.push(`${y}y`);
+        remaining -= y * YEAR_SECONDS;
+      }
       const mo = Math.floor(remaining / MONTH_SECONDS);
-      if (mo > 0) { parts.push(`${mo}mo`); remaining -= mo * MONTH_SECONDS; }
+      if (mo > 0) {
+        parts.push(`${mo}mo`);
+        remaining -= mo * MONTH_SECONDS;
+      }
       const d = Math.floor(remaining / DAY_SEC);
-      if (d > 0) { parts.push(`${d}d`); remaining -= d * DAY_SEC; }
+      if (d > 0) {
+        parts.push(`${d}d`);
+        remaining -= d * DAY_SEC;
+      }
       const h = Math.floor(remaining / 3600);
-      if (h > 0) { parts.push(`${h}h`); remaining -= h * 3600; }
+      if (h > 0) {
+        parts.push(`${h}h`);
+        remaining -= h * 3600;
+      }
       const m = Math.floor(remaining / 60);
-      if (m > 0) { parts.push(`${m}m`); remaining -= m * 60; }
+      if (m > 0) {
+        parts.push(`${m}m`);
+        remaining -= m * 60;
+      }
       if (remaining > 0 || parts.length === 0) {
         const secs = Math.round(remaining * 1000) / 1000;
         if (Number.isInteger(secs)) {

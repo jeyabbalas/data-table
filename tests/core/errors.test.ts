@@ -119,33 +119,27 @@ describe('reconstructError', () => {
   });
 
   it('maps SQL_* to SQLValidationError', () => {
-    expect(
-      reconstructError({ code: 'SQL_SYNTAX', message: 'bad' }),
-    ).toBeInstanceOf(SQLValidationError);
-  });
-
-  it('maps EXPORT / NO_TABLE_LOADED / CANVAS_UNAVAILABLE to ExportError', () => {
-    expect(
-      reconstructError({ code: 'NO_TABLE_LOADED', message: 'x' }),
-    ).toBeInstanceOf(ExportError);
-    expect(
-      reconstructError({ code: 'EXPORT_FAILED', message: 'x' }),
-    ).toBeInstanceOf(ExportError);
-  });
-
-  it('maps DESTROYED to DestroyedError', () => {
-    expect(reconstructError({ code: 'DESTROYED', message: 'd' })).toBeInstanceOf(
-      DestroyedError,
+    expect(reconstructError({ code: 'SQL_SYNTAX', message: 'bad' })).toBeInstanceOf(
+      SQLValidationError,
     );
   });
 
+  it('maps EXPORT / NO_TABLE_LOADED / CANVAS_UNAVAILABLE to ExportError', () => {
+    expect(reconstructError({ code: 'NO_TABLE_LOADED', message: 'x' })).toBeInstanceOf(ExportError);
+    expect(reconstructError({ code: 'EXPORT_FAILED', message: 'x' })).toBeInstanceOf(ExportError);
+  });
+
+  it('maps DESTROYED to DestroyedError', () => {
+    expect(reconstructError({ code: 'DESTROYED', message: 'd' })).toBeInstanceOf(DestroyedError);
+  });
+
   it('maps BRIDGE_NOT_READY / INVARIANT to ConfigurationError', () => {
-    expect(
-      reconstructError({ code: 'BRIDGE_NOT_READY', message: 'x' }),
-    ).toBeInstanceOf(ConfigurationError);
-    expect(
-      reconstructError({ code: 'INVARIANT', message: 'x' }),
-    ).toBeInstanceOf(ConfigurationError);
+    expect(reconstructError({ code: 'BRIDGE_NOT_READY', message: 'x' })).toBeInstanceOf(
+      ConfigurationError,
+    );
+    expect(reconstructError({ code: 'INVARIANT', message: 'x' })).toBeInstanceOf(
+      ConfigurationError,
+    );
   });
 
   it('falls back to QueryError/QUERY_RUNTIME on missing code', () => {

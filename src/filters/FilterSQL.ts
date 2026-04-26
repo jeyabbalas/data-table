@@ -52,8 +52,8 @@ export function formatSQLValue(value: unknown): string {
 function escapeLikePattern(pattern: string): string {
   return pattern
     .replace(/\\/g, '\\\\') // \ → \\  (must be first)
-    .replace(/%/g, '\\%')   // % → \%
-    .replace(/_/g, '\\_');   // _ → \_
+    .replace(/%/g, '\\%') // % → \%
+    .replace(/_/g, '\\_'); // _ → \_
 }
 
 /**
@@ -73,9 +73,10 @@ export function filterToSQL(filter: Filter): string {
       const maxOp = filter.maxInclusive ? '<=' : '<';
 
       // Interval values need INTERVAL prefix for DuckDB comparison
-      const formatVal = filter.valueType === 'interval'
-        ? (v: unknown) => `INTERVAL ${formatSQLValue(v)}`
-        : formatSQLValue;
+      const formatVal =
+        filter.valueType === 'interval'
+          ? (v: unknown) => `INTERVAL ${formatSQLValue(v)}`
+          : formatSQLValue;
 
       if (minIsOpen && maxIsOpen) {
         return 'TRUE'; // No bounds — matches everything
@@ -170,10 +171,7 @@ export function filterToSQL(filter: Filter): string {
  *                        (used for crossfilter behavior)
  * @returns SQL WHERE clause (without the WHERE keyword), or empty string if no filters
  */
-export function filtersToWhereClause(
-  filters: Filter[],
-  excludeColumn?: string
-): string {
+export function filtersToWhereClause(filters: Filter[], excludeColumn?: string): string {
   // Filter out excluded column if specified.
   // Raw SQL filters are never excluded — they are global conditions that apply
   // to all crossfilter views (their synthetic column keys never match real columns).

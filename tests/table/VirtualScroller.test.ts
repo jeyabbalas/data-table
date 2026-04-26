@@ -339,7 +339,9 @@ describe('VirtualScroller', () => {
       let lastScrollTop = 0;
       Object.defineProperty(scrollContainer, 'scrollTop', {
         get: () => lastScrollTop,
-        set: (val) => { lastScrollTop = val; },
+        set: (val) => {
+          lastScrollTop = val;
+        },
         configurable: true,
       });
 
@@ -370,7 +372,9 @@ describe('VirtualScroller', () => {
       let lastScrollTop = 0;
       Object.defineProperty(scrollContainer, 'scrollTop', {
         get: () => lastScrollTop,
-        set: (val) => { lastScrollTop = val; },
+        set: (val) => {
+          lastScrollTop = val;
+        },
         configurable: true,
       });
 
@@ -402,7 +406,9 @@ describe('VirtualScroller', () => {
       let lastScrollTop = 0;
       Object.defineProperty(scrollContainer, 'scrollTop', {
         get: () => lastScrollTop,
-        set: (val) => { lastScrollTop = val; },
+        set: (val) => {
+          lastScrollTop = val;
+        },
         configurable: true,
       });
 
@@ -434,7 +440,9 @@ describe('VirtualScroller', () => {
       let lastScrollTop = 0;
       Object.defineProperty(scrollContainer, 'scrollTop', {
         get: () => lastScrollTop,
-        set: (val) => { lastScrollTop = val; },
+        set: (val) => {
+          lastScrollTop = val;
+        },
         configurable: true,
       });
 
@@ -476,7 +484,9 @@ describe('VirtualScroller', () => {
       let lastScrollTop = 0;
       Object.defineProperty(scrollContainer, 'scrollTop', {
         get: () => lastScrollTop,
-        set: (val) => { lastScrollTop = val; },
+        set: (val) => {
+          lastScrollTop = val;
+        },
         configurable: true,
       });
 

@@ -36,13 +36,17 @@ visualization (e.g. `uuid`) can still host a stats panel.
 
 ```ts
 import { createDataTable, StatsPanelRegistry } from '@jeyabbalas/data-table';
-import { BaseStatsPanel, type StatsPanelOptions, type ColumnStatsData } from '@jeyabbalas/data-table/advanced';
+import {
+  BaseStatsPanel,
+  type StatsPanelOptions,
+  type ColumnStatsData,
+} from '@jeyabbalas/data-table/advanced';
 import type { ColumnSchema } from '@jeyabbalas/data-table';
 
 class CountPanel extends BaseStatsPanel {
   constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
     super(container, column, options);
-    this.update(null);                        // initial paint before any stats land
+    this.update(null); // initial paint before any stats land
   }
 
   update(stats: ColumnStatsData | null): void {
@@ -80,14 +84,14 @@ registration, so the library renders its built-in formatter for them.
 The library guarantees the following call ordering on every panel instance.
 Subclasses can rely on every step happening exactly as described.
 
-| Stage | Method | Notes |
-|---|---|---|
-| Mount | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Build any persistent DOM here so later updates are simple `textContent` writes. |
-| Initial paint | `update(null)` | Fires once on mount before any visualization stats have landed. Render a "loading" or empty state. |
-| Stats from viz | `update(stats)` | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload). Columns without a visualization receive `update(null)` only. |
-| Filter change | `updateFilters(filters)` | Fires on every filter-array change, **before** any subsequent `update(stats)` from a viz refetch. The default implementation only refreshes `this.options.filters`; override to issue your own query. |
-| Viz hover | `setHoverStats(html \| null)` | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this. |
-| Teardown | `destroy()` | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`. |
+| Stage          | Method                                    | Notes                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mount          | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Build any persistent DOM here so later updates are simple `textContent` writes.                                             |
+| Initial paint  | `update(null)`                            | Fires once on mount before any visualization stats have landed. Render a "loading" or empty state.                                                                                                    |
+| Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload). Columns without a visualization receive `update(null)` only.                      |
+| Filter change  | `updateFilters(filters)`                  | Fires on every filter-array change, **before** any subsequent `update(stats)` from a viz refetch. The default implementation only refreshes `this.options.filters`; override to issue your own query. |
+| Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.      |
+| Teardown       | `destroy()`                               | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                          |
 
 Lifecycle quoted from `BaseStatsPanel`'s JSDoc
 ([`src/visualizations/BaseStatsPanel.ts:108-127`](../../src/visualizations/BaseStatsPanel.ts)).
@@ -109,7 +113,7 @@ statsPanelRegistry.register({
   name: 'mean-std',
   isApplicable: (type) => type === 'integer' || type === 'float' || type === 'decimal',
   constructor: MeanStdPanel,
-  priority: 10,                           // higher wins on multi-match
+  priority: 10, // higher wins on multi-match
 });
 
 await createDataTable({ container, source, statsPanelRegistry });
@@ -125,7 +129,9 @@ unrelated tables.
 ```ts
 import { defaultStatsPanelRegistry } from '@jeyabbalas/data-table';
 
-defaultStatsPanelRegistry.register({ /* … */ });
+defaultStatsPanelRegistry.register({
+  /* … */
+});
 // Every table that omits `statsPanelRegistry` will use this registration.
 ```
 
@@ -140,10 +146,10 @@ where `options` is:
 
 ```ts
 interface StatsPanelOptions {
-  tableName: string;        // DuckDB table to query
-  bridge: WorkerBridge;     // run your own SELECTs against the worker
-  filters: Filter[];        // refreshed on every updateFilters call
-  messages: Strings;        // resolved i18n strings — use these to localize text
+  tableName: string; // DuckDB table to query
+  bridge: WorkerBridge; // run your own SELECTs against the worker
+  filters: Filter[]; // refreshed on every updateFilters call
+  messages: Strings; // resolved i18n strings — use these to localize text
   onError?: (error: DataTableError, context: StatsPanelErrorContext) => void;
 }
 ```
@@ -172,7 +178,7 @@ class MeanStdPanel extends BaseStatsPanel {
 
   constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
     super(container, column, options);
-    void this.fetch();                            // kick off the initial query
+    void this.fetch(); // kick off the initial query
   }
 
   update(_stats: ColumnStatsData | null): void {
@@ -180,7 +186,7 @@ class MeanStdPanel extends BaseStatsPanel {
   }
 
   async updateFilters(filters: Filter[]): Promise<void> {
-    await super.updateFilters(filters);           // refresh this.options.filters
+    await super.updateFilters(filters); // refresh this.options.filters
     await this.fetch();
   }
 
@@ -191,7 +197,7 @@ class MeanStdPanel extends BaseStatsPanel {
 
   private async fetch(): Promise<void> {
     if (this.isDestroyed()) return;
-    const seq = ++this.fetchSeq;                  // stale-result guard, see below
+    const seq = ++this.fetchSeq; // stale-result guard, see below
     const colId = quoteIdentifier(this.column.name);
     const tableId = quoteIdentifier(this.options.tableName);
     const where = filtersToWhereClause(this.options.filters);
@@ -202,26 +208,29 @@ class MeanStdPanel extends BaseStatsPanel {
     `;
     try {
       const [row] = await this.options.bridge.query<{ m: number | null; s: number | null }>(sql);
-      if (this.isDestroyed() || seq !== this.fetchSeq) return;   // dropped
+      if (this.isDestroyed() || seq !== this.fetchSeq) return; // dropped
       this.paint(row);
     } catch (err) {
       this.options.onError?.(
         new QueryError(err instanceof Error ? err.message : String(err), {
-          code: 'QUERY_RUNTIME', cause: err,
+          code: 'QUERY_RUNTIME',
+          cause: err,
         }),
         { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
       );
     }
   }
 
-  private paint(row: { m: number | null; s: number | null } | undefined): void { /* … */ }
+  private paint(row: { m: number | null; s: number | null } | undefined): void {
+    /* … */
+  }
 }
 ```
 
 ### Stale-result guard
 
 Filter changes can arrive faster than DuckDB queries return. Without
-defense, a query for filter set F1 that resolves *after* F2's query has
+defense, a query for filter set F1 that resolves _after_ F2's query has
 painted will overwrite the new render with stale numbers. The library
 guards the **broadcast** side — `StatsPanelCoordinator` stamps a
 monotonically-increasing `filterSequence` on each broadcast and
@@ -301,13 +310,13 @@ table.on('error', ({ error, source }) => {
 The phase enum lets you distinguish where in the lifecycle the failure
 landed:
 
-| `phase` | When |
-|---|---|
+| `phase`       | When                                                                  |
+| ------------- | --------------------------------------------------------------------- |
 | `'construct'` | Inside the constructor (after `super(...)` has wired the base state). |
-| `'update'` | Inside `update(stats)`. |
-| `'hover'` | Inside `setHoverStats(html)`. |
-| `'fetch'` | Inside a panel-authored DuckDB query (most common). |
-| `'destroy'` | Inside `destroy()`. |
+| `'update'`    | Inside `update(stats)`.                                               |
+| `'hover'`     | Inside `setHoverStats(html)`.                                         |
+| `'fetch'`     | Inside a panel-authored DuckDB query (most common).                   |
+| `'destroy'`   | Inside `destroy()`.                                                   |
 
 The library's `StatsPanelCoordinator` deliberately swallows per-panel
 `updateFilters` rejections so one panel's failure can't cascade across
@@ -322,10 +331,14 @@ column **name**, subclass `StatsPanelRegistry` and override `create`:
 
 ```ts
 class NameAwareRegistry extends StatsPanelRegistry {
-  create(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions): BaseStatsPanel | null {
+  create(
+    container: HTMLElement,
+    column: ColumnSchema,
+    options: StatsPanelOptions,
+  ): BaseStatsPanel | null {
     if (column.name === 'order_total_usd') return new RevenuePanel(container, column, options);
-    if (column.name === '__rowid__')       return null;          // skip the synthetic row id
-    return super.create(container, column, options);             // fall through to type-keyed lookup
+    if (column.name === '__rowid__') return null; // skip the synthetic row id
+    return super.create(container, column, options); // fall through to type-keyed lookup
   }
 }
 ```

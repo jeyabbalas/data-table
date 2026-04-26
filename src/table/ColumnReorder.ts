@@ -72,7 +72,7 @@ export class ColumnReorder {
   constructor(
     private headerRow: HTMLElement,
     private onReorder: ReorderCallback,
-    options: ColumnReorderOptions = {}
+    options: ColumnReorderOptions = {},
   ) {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.dragThreshold = options.dragThreshold ?? 5;
@@ -291,7 +291,12 @@ export class ColumnReorder {
 
     // Calculate new order
     const draggedIndex = currentOrder.indexOf(this.draggedColumn);
-    if (draggedIndex !== -1 && this.dropIndex !== -1 && this.dropIndex !== draggedIndex && this.dropIndex !== draggedIndex + 1) {
+    if (
+      draggedIndex !== -1 &&
+      this.dropIndex !== -1 &&
+      this.dropIndex !== draggedIndex &&
+      this.dropIndex !== draggedIndex + 1
+    ) {
       // Remove from current position
       const newOrder = [...currentOrder];
       newOrder.splice(draggedIndex, 1);

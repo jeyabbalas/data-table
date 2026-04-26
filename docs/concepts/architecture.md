@@ -14,7 +14,7 @@ small number of coordinated components.
 
 Not a task-oriented guide. If you just want to use the library, skip to
 the [guides index](../README.md#guides-task-oriented). Read this when you
-want to understand *why* the code is organized the way it is.
+want to understand _why_ the code is organized the way it is.
 
 ## 10-second summary
 
@@ -135,7 +135,7 @@ is a thin Promise-based RPC wrapper:
   [CSP and offline guide](../guides/csp-and-offline.md) for construction
   customization.
 
-The bridge is the *only* place the main thread talks to DuckDB. Every
+The bridge is the _only_ place the main thread talks to DuckDB. Every
 derived column, every visualization fetch, every export goes through it.
 
 ## Crossfilter: `CrossfilterCoordinator`
@@ -154,7 +154,7 @@ The coordinator batches rapid-fire filter changes (histogram brushes can
 fire continuously during a drag) so the expensive count query runs only
 on settle.
 
-Visualizations can *own* a filter: `Histogram`'s brush selection is a
+Visualizations can _own_ a filter: `Histogram`'s brush selection is a
 `range` filter on its column. When the user drags the brush, the viz
 emits a filter through the `onFilterChange` callback; the coordinator
 feeds it back into `state.filters`; the signal fires; all other viz
@@ -204,7 +204,7 @@ transparently routes through the combined view.
 
 [`DerivedColumnManager`](../../src/derived/DerivedColumnManager.ts) owns
 the VIEW lifecycle. Each mutation (add / update / remove) drops and
-recreates the VIEW; undo/redo must reconcile the VIEW *before* applying
+recreates the VIEW; undo/redo must reconcile the VIEW _before_ applying
 the snapshot signals (otherwise `visibleColumns` could reference a column
 the VIEW hasn't been rebuilt with yet).
 
@@ -252,7 +252,7 @@ sibling of `TableState` rather than a field on it, for two reasons:
    with 10 000 entries.
 2. **Independent change channel.** The store emits its own
    `change` event — `kind: 'added' | 'updated' | 'removed' | 'cleared'
-   | 'filterChanged'`, plus the affected `ids[]`. The rendering layer
+| 'filterChanged'`, plus the affected `ids[]`. The rendering layer
    (`TableBody` / `ColumnHeader`) subscribes to this event and
    invalidates only the affected rows / cells / headers, never the
    whole grid.
@@ -305,7 +305,7 @@ sync deliberately. The rationale is captured in
 
 Fan-out is bounded — `DEFAULT_PANEL_CONCURRENCY = 4` — sized
 independently of the visualization fan-out cap because a panel may issue
-its *own* DuckDB queries (mean+stddev, top-value, custom aggregates) and
+its _own_ DuckDB queries (mean+stddev, top-value, custom aggregates) and
 flooding the single-threaded worker on a 200-column table is the
 dominant failure mode. Per-panel rejections are swallowed at the
 coordinator boundary so one panel's failure does not cascade across
@@ -337,7 +337,7 @@ User drags a histogram brush:
    - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE → re-renders
    - `AutoSave` → debounce → save snapshot to IDB
    - `filterChange` event → notifies the facade → runs host-app handlers
-   - `UndoManager` (via `captureForUndo()` *before* the set) → records undoable snapshot
+   - `UndoManager` (via `captureForUndo()` _before_ the set) → records undoable snapshot
 
 Every step is either a signal notification (main thread, synchronous) or a
 DuckDB query (worker thread, Promise). No global state, no hidden

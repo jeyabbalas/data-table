@@ -9,11 +9,11 @@
  * than converting everything to strings as CSV does.
  */
 
-import type { WorkerBridge } from '../data/WorkerBridge';
+import { ExportError } from '../core/errors';
 import type { TableState } from '../core/State';
+import type { WorkerBridge } from '../data/WorkerBridge';
 import { resolveColumns, fetchAllRows } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
-import { ExportError } from '../core/errors';
 
 export type { ExportContext } from './ExportQuery';
 
@@ -79,7 +79,7 @@ export function formatValueForJSON(value: unknown): unknown {
  */
 export function formatRowForJSON(
   row: Record<string, unknown>,
-  columns: string[]
+  columns: string[],
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const col of columns) {
@@ -105,7 +105,7 @@ export async function exportToJSON(
   tableName: string,
   options: Partial<JSONExportOptions>,
   context: ExportContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!tableName) {
     throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
@@ -133,7 +133,7 @@ async function exportArray(
   columns: string[],
   opts: JSONExportOptions,
   context: ExportContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   const rowStrings: string[] = [];
   const indent = opts.pretty ? '  ' : '';
@@ -157,7 +157,7 @@ async function exportArray(
         }
       }
     },
-    signal
+    signal,
   );
 
   if (rowStrings.length === 0) {
@@ -175,7 +175,7 @@ async function exportNDJSON(
   columns: string[],
   opts: JSONExportOptions,
   context: ExportContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   const lines: string[] = [];
 
@@ -190,7 +190,7 @@ async function exportNDJSON(
         lines.push(JSON.stringify(formatted));
       }
     },
-    signal
+    signal,
   );
 
   return lines.join('\n');
@@ -204,7 +204,7 @@ export async function exportJSONFromState(
   state: TableState,
   bridge: WorkerBridge,
   options?: Partial<JSONExportOptions>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   const tableName = state.tableName.get();
   if (!tableName) {

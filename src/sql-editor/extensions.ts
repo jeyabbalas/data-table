@@ -32,13 +32,13 @@
  * });
  */
 
-import { sql, PostgreSQL } from '@codemirror/lang-sql';
-import type { Extension } from '@codemirror/state';
 import type {
   CompletionContext as CMCompletionContext,
   CompletionResult,
   Completion,
 } from '@codemirror/autocomplete';
+import { sql, PostgreSQL } from '@codemirror/lang-sql';
+import type { Extension } from '@codemirror/state';
 import type { CompletionContext } from '../derived/types';
 import { DUCKDB_FUNCTION_DETAILS, type DuckDBFunctionInfo } from './duckdbFunctionDetails';
 import { dataTableTheme, dataTableHighlighting } from './theme';
@@ -94,12 +94,12 @@ export interface SqlExtensionOptions {
  *          `CodeMirrorExpressionEditor`.
  */
 export function buildCompletionContext(
-  columns: ReadonlyArray<{
+  columns: readonly {
     name: string;
     type?: string | null;
     originalType?: string | null;
     isDerived?: boolean | null;
-  }>,
+  }[],
   options: { functions?: readonly string[] } = {},
 ): CompletionContext {
   const result: CompletionContext = {

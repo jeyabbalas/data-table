@@ -8,10 +8,10 @@
  * - Bin range formatting
  */
 
-import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { IntervalColumnStats } from '../../statistics/ColumnStatsTypes';
+import type { VisualizationOptions } from '../BaseVisualization';
 import {
   fetchIntervalHistogramData,
   fetchIntervalColumnStats,
@@ -21,12 +21,7 @@ import {
   parseIntervalToSeconds,
 } from './IntervalHistogramData';
 import type { IntervalHistogramData } from './IntervalHistogramData';
-import {
-  SharedHistogramBase,
-  FONTS,
-  PADDING,
-  LAYOUT,
-} from './SharedHistogramBase';
+import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
 
 // =========================================
 // IntervalHistogram Class
@@ -38,11 +33,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
   /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
   private initialDataPromise: Promise<void> | null = null;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
   }
 
@@ -63,8 +54,12 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
       const col = this.column.name;
 
       this.initialDataPromise = fetchIntervalHistogramData(tableName, col, [], bridge, maxBins)
-        .then(data => { this.initialData = data; })
-        .finally(() => { this.initialDataPromise = null; });
+        .then((data) => {
+          this.initialData = data;
+        })
+        .finally(() => {
+          this.initialDataPromise = null;
+        });
     }
 
     await this.initialDataPromise;
@@ -78,7 +73,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
    */
   private async fetchAlignedForeground(
     filters: Filter[],
-    seq: number
+    seq: number,
   ): Promise<IntervalHistogramData | null> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
@@ -91,8 +86,13 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
     const [fgBins, fgStats] = await Promise.all([
       fetchIntervalNumericBins(
-        tableName, col, initial.bins.length,
-        initial.minSeconds, initial.maxSeconds, filters, bridge
+        tableName,
+        col,
+        initial.bins.length,
+        initial.minSeconds,
+        initial.maxSeconds,
+        filters,
+        bridge,
       ),
       fetchIntervalColumnStats(tableName, col, filters, bridge),
     ]);
@@ -144,7 +144,11 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
         this.data = await fetchIntervalHistogramData(
-          this.options.tableName, this.column.name, allFilters, this.options.bridge, maxBins
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          maxBins,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
@@ -182,12 +186,12 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
       nonNullCount: this.data.total - this.data.nullCount,
       nullCount: this.data.nullCount,
       filteredTotalRows: bgTotal !== null ? this.data.total : null,
-      minDisplay: this.data.minSeconds !== null
-        ? secondsToIntervalString(this.data.minSeconds) : null,
-      maxDisplay: this.data.maxSeconds !== null
-        ? secondsToIntervalString(this.data.maxSeconds) : null,
-      medianDisplay: this.data.medianSeconds !== null
-        ? secondsToIntervalString(this.data.medianSeconds) : null,
+      minDisplay:
+        this.data.minSeconds !== null ? secondsToIntervalString(this.data.minSeconds) : null,
+      maxDisplay:
+        this.data.maxSeconds !== null ? secondsToIntervalString(this.data.maxSeconds) : null,
+      medianDisplay:
+        this.data.medianSeconds !== null ? secondsToIntervalString(this.data.medianSeconds) : null,
     };
     this.options.onDefaultStatsChange(stats);
   }
@@ -202,9 +206,8 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
   protected drawAxisLabels(): void {
     if (!this.data) return;
 
-    const maxX = this.data.nullCount > 0
-      ? this.nullBarArea.x - LAYOUT.nullBarGap
-      : this.width - PADDING.right;
+    const maxX =
+      this.data.nullCount > 0 ? this.nullBarArea.x - LAYOUT.nullBarGap : this.width - PADDING.right;
 
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
@@ -276,14 +279,8 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
   protected emitBrushFilter(): void {
     if (!this.data) return;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startBin = this.data.bins[startIdx];
     const endBin = this.data.bins[endIdx];
 
@@ -304,9 +301,9 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
   // Filter → Visual State Sync (Interval-aware)
   // =========================================
 
-  protected syncVisualStateFromFilter(): void {
+  protected override syncVisualStateFromFilter(): void {
     const filters = this.options.filters;
-    const ownFilter = filters.find(f => f.column === this.column.name);
+    const ownFilter = filters.find((f) => f.column === this.column.name);
     const data = this.backgroundData ?? this.data;
 
     if (!ownFilter || !data || data.bins.length === 0) {
@@ -320,7 +317,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
     switch (ownFilter.type) {
       case 'range':
-        this.syncBrushFromIntervalRangeFilter(ownFilter as RangeFilter, data.bins);
+        this.syncBrushFromIntervalRangeFilter(ownFilter, data.bins);
         break;
       case 'null':
         this.clearBrushStateOnly();
@@ -357,7 +354,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
    */
   private syncBrushFromIntervalRangeFilter(
     filter: RangeFilter,
-    bins: Array<{ binStartSeconds: number; binEndSeconds: number }>
+    bins: { binStartSeconds: number; binEndSeconds: number }[],
   ): void {
     const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
     const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);

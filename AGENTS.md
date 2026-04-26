@@ -28,7 +28,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 - Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:129).
 - Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–63).
-- Derived columns — SQL-expression columns *and* precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
+- Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
 - Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`) (src/core/types.ts, src/core/Actions.ts).
 - Programmatic row / column / cell annotations on `table.annotations.*` — severity tiers, intersection lookup, JSON I/O, IndexedDB persistence, intersection popover (src/annotations/AnnotationStore.ts).
 - Programmatic column-header tooltips via `actions.setColumnHeaderTooltip` — XSS-safe structured popover for JSON-Schema-style metadata (src/core/Actions.ts, src/core/columnHeaderTooltip.ts).
@@ -108,7 +108,7 @@ table.actions.addFilter({ type: 'range', column: 'age', min: 18, max: 65, maxInc
 table.actions.addFilter({ type: 'point', column: 'sku', value: 'A-42' });
 table.actions.addFilter({ type: 'set', column: 'country', values: ['US', 'CA'] });
 table.actions.addFilter({ type: 'not-set', column: 'status', values: ['archived'] });
-table.actions.addFilter({ type: 'null', column: 'deleted_at' });        // or 'not-null'
+table.actions.addFilter({ type: 'null', column: 'deleted_at' }); // or 'not-null'
 table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mode: 'contains' });
 const rawId = table.actions.addRawSQLFilter(`price > 100 AND quantity > 0`, 'Premium in-stock');
 ```
@@ -147,7 +147,7 @@ const offFilter = table.on('filterChange', ({ filters, filteredRowCount, totalRo
   console.log(`${filters.length} filters; ${filteredRowCount}/${totalRowCount} rows`);
 });
 // Later:
-offFilter();                                             // returned function
+offFilter(); // returned function
 // or: table.off('filterChange', handler);
 ```
 
@@ -158,8 +158,14 @@ import { VisualizationRegistry } from '@jeyabbalas/data-table';
 import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
 
 class BoxPlot extends BaseVisualization {
-  protected async fetchData() { /* query this.bridge */ return { /* ... */ }; }
-  protected render(_data: unknown) { /* draw on this.ctx */ }
+  protected async fetchData() {
+    /* query this.bridge */ return {
+      /* ... */
+    };
+  }
+  protected render(_data: unknown) {
+    /* draw on this.ctx */
+  }
   protected handleMouseMove() {}
   protected handleClick() {}
   protected handleMouseLeave() {}
@@ -170,7 +176,7 @@ registry.register({
   name: 'boxplot',
   isApplicable: (type) => type === 'float' || type === 'integer',
   constructor: BoxPlot as any,
-  priority: 10,                                          // beats built-in Histogram (priority 0)
+  priority: 10, // beats built-in Histogram (priority 0)
 });
 const table = await createDataTable({ container, source, visualizationRegistry: registry });
 ```
@@ -185,10 +191,16 @@ useEffect(() => {
   let table: DataTable | undefined;
   (async () => {
     const t = await createDataTable({ container: ref.current!, source: '/data.csv' });
-    if (cancelled) { await t.destroy(); return; }
+    if (cancelled) {
+      await t.destroy();
+      return;
+    }
     table = t;
   })();
-  return () => { cancelled = true; table?.destroy(); };
+  return () => {
+    cancelled = true;
+    table?.destroy();
+  };
 }, []);
 ```
 
@@ -196,8 +208,12 @@ useEffect(() => {
 
 ```ts
 let table: DataTable | undefined;
-onMounted(async () => { table = await createDataTable({ container: el.value, source }); });
-onBeforeUnmount(async () => { await table?.destroy(); });
+onMounted(async () => {
+  table = await createDataTable({ container: el.value, source });
+});
+onBeforeUnmount(async () => {
+  await table?.destroy();
+});
 ```
 
 ### (h) Sharing a worker / store / presets across two tables
@@ -214,12 +230,20 @@ await store.open();
 const presets = new FilterPresetManager();
 
 const tableA = await createDataTable({
-  container: aEl, source: '/a.csv', tableName: 'set_a',
-  bridge, persistence: { sessionStore: store }, presets: { manager: presets },
+  container: aEl,
+  source: '/a.csv',
+  tableName: 'set_a',
+  bridge,
+  persistence: { sessionStore: store },
+  presets: { manager: presets },
 });
 const tableB = await createDataTable({
-  container: bEl, source: '/b.csv', tableName: 'set_b',
-  bridge, persistence: { sessionStore: store }, presets: { manager: presets },
+  container: bEl,
+  source: '/b.csv',
+  tableName: 'set_b',
+  bridge,
+  persistence: { sessionStore: store },
+  presets: { manager: presets },
 });
 ```
 
@@ -231,12 +255,12 @@ Distinct `tableName`s matter — `SessionStore` snapshots are keyed by table nam
 // Float64Array for numeric, BigInt64Array for __rowid__ / BIGINT,
 // Int32Array for INTEGER, unknown[] for strings/dates/booleans.
 const fares = await table.actions.getColumnValues('fare_amount', {
-  scope: 'filtered',                                     // 'all' | 'filtered' | 'selected'
+  scope: 'filtered', // 'all' | 'filtered' | 'selected'
   limit: 1000,
 });
 
 const ids = await table.actions.getColumnValues('__rowid__'); // BigInt64Array
-const idsAsNumbers = Array.from(ids, (v) => Number(v));        // safe up to 2^53 rows
+const idsAsNumbers = Array.from(ids, (v) => Number(v)); // safe up to 2^53 rows
 ```
 
 `__rowid__` is reserved and synthesized at load — sources containing a column named `__rowid__` reject with `LoadError('RESERVED_COLUMN_NAME')`. The column is hidden in the grid by default; toggle with `actions.showColumn('__rowid__')`. Excluded from default exports unless the user ticks "Include system columns" in the export dialog.
@@ -264,14 +288,17 @@ Use `replaceDerivedColumn` (no rename, structured error) when an end-user edits 
 
 ```ts
 table.annotations.add({
-  scope: 'cell', rowId: 0, column: 'age',
-  severity: 'error', message: 'value 200 exceeds maximum 150',
+  scope: 'cell',
+  rowId: 0,
+  column: 'age',
+  severity: 'error',
+  message: 'value 200 exceeds maximum 150',
   code: 'JSON_SCHEMA_MAXIMUM',
 });
 
 table.annotations.addMany([
-  { scope: 'row',    rowId: 5,                  severity: 'warning', message: '…' },
-  { scope: 'column', column: 'tip_amount',      severity: 'error',   message: '…' },
+  { scope: 'row', rowId: 5, severity: 'warning', message: '…' },
+  { scope: 'column', column: 'tip_amount', severity: 'error', message: '…' },
 ]);
 
 // Intersection: row + column + cell at (rowId, column), sorted by severity.
@@ -279,7 +306,7 @@ const here = table.annotations.getByCell(0, 'age');
 
 // Fires on every mutation including bulk operations and severity-filter flips.
 const off = table.annotations.on('change', ({ kind, ids }) => {
-  console.log(kind, ids.length);   // 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'
+  console.log(kind, ids.length); // 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'
 });
 
 // Hide info-level annotations visually without touching the data.
@@ -300,13 +327,13 @@ table.actions.setColumnHeaderTooltip('total_amount', {
   title: 'Total amount',
   description: 'Final fare paid by the passenger.\nIncludes tip when paid by card.',
   items: [
-    { label: 'Units',      value: 'USD' },
-    { label: 'Components', value: ['fare', 'tip', 'tolls', 'mta_tax'] },     // chips
+    { label: 'Units', value: 'USD' },
+    { label: 'Components', value: ['fare', 'tip', 'tolls', 'mta_tax'] }, // chips
   ],
 });
 
-table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.');     // string shorthand
-table.actions.setColumnHeaderTooltip('total_amount', null);                   // clear
+table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.'); // string shorthand
+table.actions.setColumnHeaderTooltip('total_amount', null); // clear
 ```
 
 Every text field is rendered via `.textContent` — HTML strings are not parsed. Tooltips persist into `SessionSnapshot.columnHeaderTooltips` by default; pass `persistence: false` if the embedding app already owns its column catalogue (recommended pattern in `examples/12-column-header-tooltips/`).
@@ -314,8 +341,18 @@ Every text field is rendered via `.textContent` — HTML strings are not parsed.
 ### (m) Custom stats panel — replace the column-stats slot
 
 ```ts
-import { createDataTable, StatsPanelRegistry, filtersToWhereClause, quoteIdentifier, QueryError } from '@jeyabbalas/data-table';
-import { BaseStatsPanel, type StatsPanelOptions, type ColumnStatsData } from '@jeyabbalas/data-table/advanced';
+import {
+  createDataTable,
+  StatsPanelRegistry,
+  filtersToWhereClause,
+  quoteIdentifier,
+  QueryError,
+} from '@jeyabbalas/data-table';
+import {
+  BaseStatsPanel,
+  type StatsPanelOptions,
+  type ColumnStatsData,
+} from '@jeyabbalas/data-table/advanced';
 import type { ColumnSchema, Filter } from '@jeyabbalas/data-table';
 
 class MeanStdPanel extends BaseStatsPanel {
@@ -326,18 +363,23 @@ class MeanStdPanel extends BaseStatsPanel {
     void this.refresh();
   }
 
-  update(_stats: ColumnStatsData | null): void { /* paint from stats if you want */ }
+  update(_stats: ColumnStatsData | null): void {
+    /* paint from stats if you want */
+  }
 
   async updateFilters(filters: Filter[]): Promise<void> {
-    await super.updateFilters(filters);   // refresh this.options.filters
+    await super.updateFilters(filters); // refresh this.options.filters
     await this.refresh();
   }
 
-  destroy(): void { this.container.replaceChildren(); super.destroy(); }
+  destroy(): void {
+    this.container.replaceChildren();
+    super.destroy();
+  }
 
   private async refresh(): Promise<void> {
     if (this.isDestroyed()) return;
-    const seq = ++this.fetchSeq;          // stale-result guard
+    const seq = ++this.fetchSeq; // stale-result guard
     const colId = quoteIdentifier(this.column.name);
     const tableId = quoteIdentifier(this.options.tableName);
     const where = filtersToWhereClause(this.options.filters);
@@ -345,11 +387,14 @@ class MeanStdPanel extends BaseStatsPanel {
                  FROM ${tableId} ${where ? 'WHERE ' + where : ''}`;
     try {
       const [row] = await this.options.bridge.query<{ m: number | null; s: number | null }>(sql);
-      if (this.isDestroyed() || seq !== this.fetchSeq) return;   // dropped
+      if (this.isDestroyed() || seq !== this.fetchSeq) return; // dropped
       this.container.textContent = `μ ${row?.m ?? '—'} · σ ${row?.s ?? '—'}`;
     } catch (err) {
       this.options.onError?.(
-        new QueryError(err instanceof Error ? err.message : String(err), { code: 'QUERY_RUNTIME', cause: err }),
+        new QueryError(err instanceof Error ? err.message : String(err), {
+          code: 'QUERY_RUNTIME',
+          cause: err,
+        }),
         { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
       );
     }
@@ -372,10 +417,7 @@ The registry is empty by default — leaving a column type unregistered falls ba
 ### (n) Standalone SQL editor — host-app embedded, schema-aware
 
 ```ts
-import {
-  buildCompletionContext,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { buildCompletionContext, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 import type { CompletionContext, DataTable } from '@jeyabbalas/data-table';
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
@@ -385,7 +427,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 // ----- Live-schema path (paired with a DataTable) -----
 
 const sqlCompartment = new Compartment();
-const getContext = () => table.actions.getCompletionContext();   // thunk, not snapshot
+const getContext = () => table.actions.getCompletionContext(); // thunk, not snapshot
 
 const view = new EditorView({
   state: EditorState.create({
@@ -431,7 +473,7 @@ table.on('derivedChange', refresh);
 // });
 ```
 
-`createSqlExtensions` ships the autocomplete *source* — add `autocompletion()` yourself or no dropdown appears (`src/sql-editor/extensions.ts:156-158`). For the in-table case, use the bundled `CodeMirrorExpressionEditor` (also exported from `/advanced`), which wraps these primitives and adds the UI, keymap, and theme. Function-list precedence: `options.functions` ▶ `context.functions` ▶ `DUCKDB_FUNCTION_DETAILS`; `[]` disables function autocomplete and does *not* fall through. See [`docs/guides/sql-editor-primitives.md`](./docs/guides/sql-editor-primitives.md) for the full walk-through and [`examples/14-standalone-sql-editor/`](./examples/14-standalone-sql-editor/) for a runnable demo.
+`createSqlExtensions` ships the autocomplete _source_ — add `autocompletion()` yourself or no dropdown appears (`src/sql-editor/extensions.ts:156-158`). For the in-table case, use the bundled `CodeMirrorExpressionEditor` (also exported from `/advanced`), which wraps these primitives and adds the UI, keymap, and theme. Function-list precedence: `options.functions` ▶ `context.functions` ▶ `DUCKDB_FUNCTION_DETAILS`; `[]` disables function autocomplete and does _not_ fall through. See [`docs/guides/sql-editor-primitives.md`](./docs/guides/sql-editor-primitives.md) for the full walk-through and [`examples/14-standalone-sql-editor/`](./examples/14-standalone-sql-editor/) for a runnable demo.
 
 ---
 
@@ -439,20 +481,20 @@ table.on('derivedChange', refresh);
 
 All values source `src/DataTable.ts:124-223`.
 
-| Option | Default | Notes |
-|---|---|---|
-| `persistence` | `true` | IndexedDB session snapshot. |
-| `presets` | `true` | Filter preset UI + storage. |
-| `undoRedo` | `true` | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z. |
-| `expressionFilter` | `true` | Raw-SQL filter button. |
-| `visualizations` | `true` | Column header histograms / value counts. |
-| `exportDialog` | `true` | CSV/JSON/Parquet export dialog. |
-| `rowHeight` | `32` | Pixels. |
-| `headerHeight` | `120` | Pixels — ≥ 96 recommended when visualizations are on. |
-| `classPrefix` | `'dt'` | CSS class prefix. |
-| `colorScheme` | `'auto'` | Follow `prefers-color-scheme`. |
-| `portalTarget` | `document.body` | Where modals mount. |
-| `strictBrowserCheck` | `false` | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
+| Option               | Default         | Notes                                                                                            |
+| -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
+| `persistence`        | `true`          | IndexedDB session snapshot.                                                                      |
+| `presets`            | `true`          | Filter preset UI + storage.                                                                      |
+| `undoRedo`           | `true`          | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z.                                                                    |
+| `expressionFilter`   | `true`          | Raw-SQL filter button.                                                                           |
+| `visualizations`     | `true`          | Column header histograms / value counts.                                                         |
+| `exportDialog`       | `true`          | CSV/JSON/Parquet export dialog.                                                                  |
+| `rowHeight`          | `32`            | Pixels.                                                                                          |
+| `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on.                                            |
+| `classPrefix`        | `'dt'`          | CSS class prefix.                                                                                |
+| `colorScheme`        | `'auto'`        | Follow `prefers-color-scheme`.                                                                   |
+| `portalTarget`       | `document.body` | Where modals mount.                                                                              |
+| `strictBrowserCheck` | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
 
 ---
 
@@ -463,6 +505,7 @@ All values source `src/DataTable.ts:124-223`.
 2. **Calling `loadData` before `await createDataTable()` resolves.** Symptom: filters/sort don't apply as expected. The facade already handles `options.source` for the first load. Use `loadData()` only for subsequent swaps.
 
 3. **Forgetting `isDestroyed()` in async callbacks.** After `destroy()`, every public method throws `DestroyedError`. Always guard:
+
    ```ts
    setTimeout(() => {
      if (table.isDestroyed()) return;
@@ -515,11 +558,11 @@ Detailed symbol-by-symbol list: [`docs/api-reference.md#tier-2-exports`](./docs/
 
 Use this library when the user asks for:
 
-- *"A privacy-preserving in-browser analytics / exploratory table."*
-- *"A table with cross-filter histograms and click-to-filter on column headers."*
-- *"Load a CSV / Parquet and let users slice it."*
-- *"Users should be able to add computed columns with a SQL expression."*
-- *"Filters, derived columns, and session state should persist across reloads."*
+- _"A privacy-preserving in-browser analytics / exploratory table."_
+- _"A table with cross-filter histograms and click-to-filter on column headers."_
+- _"Load a CSV / Parquet and let users slice it."_
+- _"Users should be able to add computed columns with a SQL expression."_
+- _"Filters, derived columns, and session state should persist across reloads."_
 
 Recommend a different library when the user asks for:
 
@@ -560,28 +603,34 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 ## 9. Pointers
 
 **Reference (for lookup during code-gen)**
+
 - **API reference** — [`docs/api-reference.md`](./docs/api-reference.md)
 - **Troubleshooting** — [`docs/troubleshooting.md`](./docs/troubleshooting.md)
 - **llms.txt** — [`llms.txt`](./llms.txt) (index of this doc, api-reference, troubleshooting, guides)
 
 **Guides (task-oriented walkthroughs)**
+
 - [`docs/guides/loading-data.md`](./docs/guides/loading-data.md), [`filters.md`](./docs/guides/filters.md), [`derived-columns.md`](./docs/guides/derived-columns.md), [`events.md`](./docs/guides/events.md), [`visualizations.md`](./docs/guides/visualizations.md), [`session-persistence.md`](./docs/guides/session-persistence.md)
 - [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md), [`stats-panels.md`](./docs/guides/stats-panels.md), [`sql-editor-primitives.md`](./docs/guides/sql-editor-primitives.md)
 - [`theming.md`](./docs/guides/theming.md), [`i18n.md`](./docs/guides/i18n.md), [`accessibility.md`](./docs/guides/accessibility.md)
 - [`multi-table.md`](./docs/guides/multi-table.md), [`csp-and-offline.md`](./docs/guides/csp-and-offline.md), [`filter-presets.md`](./docs/guides/filter-presets.md)
 
 **Concepts (deep dives on architecture)**
+
 - [`docs/concepts/architecture.md`](./docs/concepts/architecture.md)
 - [`docs/concepts/state-model.md`](./docs/concepts/state-model.md)
 
 **Integrations (framework / bundler recipes)**
+
 - [`docs/integrations/react.md`](./docs/integrations/react.md), [`vue.md`](./docs/integrations/vue.md), [`svelte.md`](./docs/integrations/svelte.md), [`solid.md`](./docs/integrations/solid.md), [`nextjs.md`](./docs/integrations/nextjs.md), [`nuxt.md`](./docs/integrations/nuxt.md)
 - [`docs/integrations/vite.md`](./docs/integrations/vite.md), [`webpack.md`](./docs/integrations/webpack.md), [`cdn.md`](./docs/integrations/cdn.md)
 
 **Performance**
+
 - [`docs/performance.md`](./docs/performance.md)
 
 **Runnable code**
+
 - **Examples index** — [`examples/README.md`](./examples/README.md) (14 single-feature examples)
   - [`10-column-export`](./examples/10-column-export/) — `getColumnValues` + synthetic `__rowid__`
   - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter
@@ -591,6 +640,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 - **Demo app** (full consumer showcase) — [`demo/`](./demo/)
 
 **Source-of-truth (prefer these over the docs when they disagree)**
+
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
 - **Options definition** — `src/DataTable.ts:124-223`
 - **Event payloads** — `src/core/TableEvents.ts`

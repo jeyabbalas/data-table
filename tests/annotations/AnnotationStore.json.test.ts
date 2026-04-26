@@ -23,7 +23,13 @@ describe('AnnotationStore — JSON I/O', () => {
     it('emits version 1, the table name, timestamps, and annotations in insertion order', () => {
       const a = store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'a' });
       const b = store.add({ scope: 'column', column: 'age', severity: 'error', message: 'b' });
-      const c = store.add({ scope: 'cell', rowId: 2, column: 'age', severity: 'warning', message: 'c' });
+      const c = store.add({
+        scope: 'cell',
+        rowId: 2,
+        column: 'age',
+        severity: 'warning',
+        message: 'c',
+      });
       const file = store.toJSON();
       expect(file.version).toBe(1);
       expect(file.tableName).toBe('my_table');
@@ -100,8 +106,9 @@ describe('AnnotationStore — JSON I/O', () => {
 
     it('throws VERSION_UNSUPPORTED for a newer file version', () => {
       const file = { version: 2, annotations: [] } as unknown as AnnotationFile;
-      try { store.loadJSON(file); }
-      catch (e) {
+      try {
+        store.loadJSON(file);
+      } catch (e) {
         expect(e).toBeInstanceOf(AnnotationError);
         expect((e as AnnotationError).code).toBe('ANNOTATION_VERSION_UNSUPPORTED');
         expect((e as AnnotationError).details).toMatchObject({ requested: 2, current: 1 });
@@ -111,9 +118,9 @@ describe('AnnotationStore — JSON I/O', () => {
     it('throws INVALID_SHAPE for bad top-level', () => {
       expect(() => store.loadJSON(null as unknown as AnnotationFile)).toThrow(AnnotationError);
       expect(() => store.loadJSON({} as unknown as AnnotationFile)).toThrow(AnnotationError);
-      expect(() =>
-        store.loadJSON({ version: 1 } as unknown as AnnotationFile),
-      ).toThrow(AnnotationError);
+      expect(() => store.loadJSON({ version: 1 } as unknown as AnnotationFile)).toThrow(
+        AnnotationError,
+      );
       expect(() =>
         store.loadJSON({ version: 1, annotations: 'not an array' } as unknown as AnnotationFile),
       ).toThrow(AnnotationError);
@@ -124,8 +131,9 @@ describe('AnnotationStore — JSON I/O', () => {
         version: 1,
         annotations: [{} as unknown as AnnotationFile['annotations'][number]],
       };
-      try { store.loadJSON(file); }
-      catch (e) {
+      try {
+        store.loadJSON(file);
+      } catch (e) {
         expect((e as AnnotationError).code).toBe('ANNOTATION_INVALID_SHAPE');
         expect((e as AnnotationError).details).toMatchObject({ index: 0 });
       }
@@ -155,8 +163,9 @@ describe('AnnotationStore — JSON I/O', () => {
           { id: 'x', scope: 'row', rowId: 2, severity: 'info', message: 'dup' },
         ],
       };
-      try { store.loadJSON(file, 'merge'); }
-      catch (e) {
+      try {
+        store.loadJSON(file, 'merge');
+      } catch (e) {
         expect((e as AnnotationError).code).toBe('ANNOTATION_DUPLICATE_ID');
         expect((e as AnnotationError).details).toMatchObject({ id: 'x' });
       }
@@ -181,9 +190,7 @@ describe('AnnotationStore — JSON I/O', () => {
       const file: AnnotationFile = {
         version: 1,
         tableName: 'other_table',
-        annotations: [
-          { id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' },
-        ],
+        annotations: [{ id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' }],
       };
       const result = store.loadJSON(file, 'replace');
       expect(result).toEqual({ added: 1, skipped: 0 });
@@ -198,9 +205,7 @@ describe('AnnotationStore — JSON I/O', () => {
       const file: AnnotationFile = {
         version: 1,
         tableName: 'other_table',
-        annotations: [
-          { id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' },
-        ],
+        annotations: [{ id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' }],
       };
       try {
         store.loadJSON(file, { mode: 'replace', validateTableName: true });
@@ -252,9 +257,7 @@ describe('AnnotationStore — JSON I/O', () => {
       const file: AnnotationFile = {
         version: 1,
         tableName: 'other_table',
-        annotations: [
-          { id: 'm1', scope: 'row', rowId: 0, severity: 'info', message: 'm' },
-        ],
+        annotations: [{ id: 'm1', scope: 'row', rowId: 0, severity: 'info', message: 'm' }],
       };
       try {
         store.loadJSON(file, { mode: 'merge', validateTableName: true });

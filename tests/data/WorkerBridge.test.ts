@@ -35,9 +35,9 @@ describe('WorkerBridge', () => {
 
   it('should throw if loadData called before initialize', async () => {
     const bridge = new WorkerBridge();
-    await expect(
-      bridge.loadData('test data', { format: 'csv' })
-    ).rejects.toThrow('not initialized');
+    await expect(bridge.loadData('test data', { format: 'csv' })).rejects.toThrow(
+      'not initialized',
+    );
   });
 
   it('should report not initialized before initialize is called', () => {

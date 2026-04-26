@@ -17,7 +17,9 @@
   padding: 0.5rem 0.75rem; /* Symmetric padding - no extra left padding */
   border-right: 1px solid var(--dt-border);
   cursor: default; /* No grab cursor - use drag handle instead */
-  transition: background var(--dt-transition), box-shadow var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    box-shadow var(--dt-transition);
   background: var(--dt-bg-secondary);
 }
 
@@ -26,8 +28,12 @@
 }
 
 @keyframes dt-col-restore-flash {
-  0% { background-color: var(--dt-primary-alpha-10); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: var(--dt-primary-alpha-10);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 .dt-col-header--restored {
@@ -146,7 +152,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: grab;
   opacity: 0.3;
-  transition: opacity var(--dt-transition), background var(--dt-transition);
+  transition:
+    opacity var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-col-drag-handle:hover {
@@ -182,13 +190,13 @@
 /* Dark mode adjustments for drag handle. Dual-scoped: OS-dark unless the
    subtree opts out, OR explicit `data-dt-color-scheme="dark"`. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-drag-handle:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-col-drag-handle:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.1);
   }
 }
-[data-dt-color-scheme="dark"] .dt-col-drag-handle:hover,
-.dt-root[data-dt-color-scheme="dark"] .dt-col-drag-handle:hover {
+[data-dt-color-scheme='dark'] .dt-col-drag-handle:hover,
+.dt-root[data-dt-color-scheme='dark'] .dt-col-drag-handle:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -216,7 +224,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   color: var(--dt-arrow-default);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 
 .dt-col-action-btn:hover {
@@ -246,21 +256,21 @@
 
 /* Dark mode adjustments for action buttons. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-action-btn:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-col-action-btn:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-col-action-btn--active:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-col-action-btn--active:hover {
     background: var(--dt-primary-alpha-20);
   }
 }
-[data-dt-color-scheme="dark"] .dt-col-action-btn:hover,
-.dt-root[data-dt-color-scheme="dark"] .dt-col-action-btn:hover {
+[data-dt-color-scheme='dark'] .dt-col-action-btn:hover,
+.dt-root[data-dt-color-scheme='dark'] .dt-col-action-btn:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-[data-dt-color-scheme="dark"] .dt-col-action-btn--active:hover,
-.dt-root[data-dt-color-scheme="dark"] .dt-col-action-btn--active:hover {
+[data-dt-color-scheme='dark'] .dt-col-action-btn--active:hover,
+.dt-root[data-dt-color-scheme='dark'] .dt-col-action-btn--active:hover {
   background: var(--dt-primary-alpha-20);
 }
 
@@ -381,7 +391,6 @@
   background: color-mix(in srgb, var(--dt-primary-light) 60%, var(--dt-primary-lighter));
 }
 
-
 /* ===========================================
    Derived Column Edit Panel
    =========================================== */
@@ -491,7 +500,10 @@
   background: var(--dt-bg);
   color: var(--dt-primary);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-derived-edit-validate:hover {
@@ -529,7 +541,9 @@
   background: var(--dt-primary);
   color: var(--dt-on-error);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-derived-edit-update:hover:not(:disabled) {
@@ -570,7 +584,9 @@
   background: var(--dt-error-dark);
   color: var(--dt-on-error);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-derived-edit-delete:hover {
@@ -602,7 +618,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   border: 1px solid;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-derived-edit-delete-confirm-btn:focus {
@@ -735,26 +753,26 @@
     box-shadow: 0 4px 12px var(--dt-shadow-md);
   }
 }
-[data-dt-color-scheme="dark"] .dt-cm-autocomplete.cm-tooltip-autocomplete {
+[data-dt-color-scheme='dark'] .dt-cm-autocomplete.cm-tooltip-autocomplete {
   box-shadow: 0 4px 12px var(--dt-shadow-md);
 }
 
 /* Dark mode — derived-column edit panel. Lives inside .dt-root. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-derived-edit-panel {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-derived-edit-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-derived-edit-close:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-derived-edit-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-derived-edit-panel,
-[data-dt-color-scheme="dark"] .dt-derived-edit-panel {
+.dt-root[data-dt-color-scheme='dark'] .dt-derived-edit-panel,
+[data-dt-color-scheme='dark'] .dt-derived-edit-panel {
   box-shadow: 0 4px 16px var(--dt-shadow-md);
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-derived-edit-close:hover,
-[data-dt-color-scheme="dark"] .dt-derived-edit-close:hover {
+.dt-root[data-dt-color-scheme='dark'] .dt-derived-edit-close:hover,
+[data-dt-color-scheme='dark'] .dt-derived-edit-close:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -793,7 +811,10 @@
   cursor: pointer;
   border-radius: 0 var(--dt-radius) var(--dt-radius) 0;
   box-shadow: inset 1px 0 0 0 var(--dt-border);
-  transition: background var(--dt-transition), color var(--dt-transition), box-shadow var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition),
+    box-shadow var(--dt-transition);
 }
 
 .dt-add-column-btn:hover {
@@ -862,4 +883,3 @@
     inset 0 3px 0 0 var(--dt-primary),
     inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
 }
-

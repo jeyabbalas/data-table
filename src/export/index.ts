@@ -22,11 +22,7 @@ export {
 export type { JSONExportOptions } from './JSONExport';
 
 // Parquet export
-export {
-  exportToParquet,
-  exportParquetFromState,
-  buildParquetQuery,
-} from './ParquetExport';
+export { exportToParquet, exportParquetFromState, buildParquetQuery } from './ParquetExport';
 export type { ParquetExportOptions } from './ParquetExport';
 
 // Clipboard utilities

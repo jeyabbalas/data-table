@@ -6,8 +6,8 @@
  * format for downstream applications (e.g., DQ rules).
  */
 
-import type { SerializedFilter } from '../persistence/types';
 import type { SortColumn } from '../core/types';
+import type { SerializedFilter } from '../persistence/types';
 
 export interface FilterPreset {
   id: string;

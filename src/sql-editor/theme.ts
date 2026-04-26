@@ -1,5 +1,5 @@
-import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 
 /**
@@ -41,14 +41,16 @@ export const dataTableTheme = EditorView.theme({
  * All colors resolve via --dt-* CSS custom properties, so overriding a
  * variable on :root or .dt-root retheme the editor at paint time.
  */
-export const dataTableHighlighting = syntaxHighlighting(HighlightStyle.define([
-  { tag: tags.keyword, color: 'var(--dt-primary)', fontWeight: 'bold' },
-  { tag: tags.string, color: 'var(--dt-syntax-string)' },
-  { tag: tags.number, color: 'var(--dt-primary)' },
-  { tag: tags.comment, color: 'var(--dt-text-tertiary)', fontStyle: 'italic' },
-  { tag: tags.function(tags.variableName), fontWeight: 'bold' },
-  { tag: tags.operator, color: 'var(--dt-text-secondary)' },
-  { tag: tags.typeName, color: 'var(--dt-syntax-type)' },
-  { tag: tags.null, color: 'var(--dt-text-tertiary)' },
-  { tag: tags.bool, color: 'var(--dt-primary)' },
-]));
+export const dataTableHighlighting = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: 'var(--dt-primary)', fontWeight: 'bold' },
+    { tag: tags.string, color: 'var(--dt-syntax-string)' },
+    { tag: tags.number, color: 'var(--dt-primary)' },
+    { tag: tags.comment, color: 'var(--dt-text-tertiary)', fontStyle: 'italic' },
+    { tag: tags.function(tags.variableName), fontWeight: 'bold' },
+    { tag: tags.operator, color: 'var(--dt-text-secondary)' },
+    { tag: tags.typeName, color: 'var(--dt-syntax-type)' },
+    { tag: tags.null, color: 'var(--dt-text-tertiary)' },
+    { tag: tags.bool, color: 'var(--dt-primary)' },
+  ]),
+);

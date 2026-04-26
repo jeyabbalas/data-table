@@ -5,12 +5,17 @@
  * Serialized forms replace Date objects with DateWrapper for JSON round-trip fidelity.
  */
 
-import type { SortColumn, ColumnHeaderTooltipContent } from '../core/types';
-import type { HiddenColumnInfo } from '../core/State';
-import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
-import type { DerivedColumnDef as _DerivedColumnDef, ExpressionColumnDef as _ExpressionColumnDef, VectorColumnDef as _VectorColumnDef, VectorDataType } from '../derived/types';
-import type { FilterPreset } from '../filters/FilterPresetTypes';
 import type { AnnotationFile, SeverityFilter } from '../annotations/types';
+import type { HiddenColumnInfo } from '../core/State';
+import type { SortColumn, ColumnHeaderTooltipContent } from '../core/types';
+import type {
+  DerivedColumnDef as _DerivedColumnDef,
+  ExpressionColumnDef as _ExpressionColumnDef,
+  VectorColumnDef as _VectorColumnDef,
+  VectorDataType,
+} from '../derived/types';
+import type { FilterPreset } from '../filters/FilterPresetTypes';
+import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
 
 /** Current snapshot schema version — bump when the shape changes */
 export const SNAPSHOT_VERSION = 5;

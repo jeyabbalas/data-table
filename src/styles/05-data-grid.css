@@ -59,11 +59,11 @@
 
 /* Dark mode — pinned column demarcation line. */
 @media (prefers-color-scheme: dark) {
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-pinned-demarcation {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-pinned-demarcation {
     background: var(--dt-primary-alpha-30);
   }
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-pinned-demarcation {
+.dt-root[data-dt-color-scheme='dark'] .dt-pinned-demarcation {
   background: var(--dt-primary-alpha-30);
 }
 
@@ -464,4 +464,3 @@
     inset 0 0 0 2px var(--dt-primary),
     inset 3px 0 0 0 var(--dt-annotation-info-bdr);
 }
-

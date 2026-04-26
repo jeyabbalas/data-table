@@ -33,8 +33,8 @@ function encodeRandomness(bytes: Uint8Array): string {
   let out = '';
   let bitBuffer = 0;
   let bitCount = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    bitBuffer = (bitBuffer << 8) | bytes[i];
+  for (const byte of bytes) {
+    bitBuffer = (bitBuffer << 8) | byte;
     bitCount += 8;
     while (bitCount >= 5) {
       bitCount -= 5;

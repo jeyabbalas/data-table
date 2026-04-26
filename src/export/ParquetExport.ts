@@ -5,15 +5,15 @@
  * entirely within the Web Worker. Returns the binary file as a Uint8Array.
  */
 
-import type { WorkerBridge } from '../data/WorkerBridge';
+import { ExportError } from '../core/errors';
 import type { TableState } from '../core/State';
+import type { WorkerBridge } from '../data/WorkerBridge';
 import {
   resolveColumns,
   isContiguousRange,
   buildSelectQuery,
   buildSelectedRowsQuery,
 } from './ExportQuery';
-import { ExportError } from '../core/errors';
 import type { ExportContext } from './ExportQuery';
 
 export type { ExportContext } from './ExportQuery';
@@ -41,7 +41,7 @@ export function buildParquetQuery(
   tableName: string,
   columns: string[],
   opts: ParquetExportOptions,
-  context: ExportContext
+  context: ExportContext,
 ): string {
   const filters = opts.scope === 'filtered' ? context.filters : [];
 
@@ -67,7 +67,7 @@ export function buildParquetQuery(
       columns,
       context.filters,
       context.sortColumns,
-      sortedIndices
+      sortedIndices,
     );
   }
 
@@ -88,7 +88,7 @@ export async function exportToParquet(
   tableName: string,
   options: Partial<ParquetExportOptions>,
   context: ExportContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   if (!tableName) {
     throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
@@ -119,7 +119,7 @@ export async function exportParquetFromState(
   state: TableState,
   bridge: WorkerBridge,
   options?: Partial<ParquetExportOptions>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const tableName = state.tableName.get();
   if (!tableName) {

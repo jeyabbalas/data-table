@@ -1,9 +1,9 @@
+import { autocompletion } from '@codemirror/autocomplete';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { autocompletion } from '@codemirror/autocomplete';
-import type { CompletionContext } from '../derived/types';
 import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
+import type { CompletionContext } from '../derived/types';
 import { createSqlExtensions } from './extensions';
 import { dataTableTheme, dataTableHighlighting } from './theme';
 
@@ -36,7 +36,12 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
   private sqlCompartment: Compartment;
   private prefix: string;
 
-  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt', config?: { placeholder?: string }) {
+  constructor(
+    container: HTMLElement,
+    context: CompletionContext,
+    classPrefix = 'dt',
+    config?: { placeholder?: string },
+  ) {
     this.prefix = classPrefix;
     this.sqlCompartment = new Compartment();
 

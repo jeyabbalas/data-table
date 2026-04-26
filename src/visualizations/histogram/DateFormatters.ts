@@ -145,7 +145,7 @@ export function analyzeDateContext(min: Date, max: Date): DateFormatContext {
 export function formatDateLabel(
   date: Date,
   interval: TimeInterval,
-  context: DateFormatContext
+  context: DateFormatContext,
 ): string {
   // Use UTC methods to avoid timezone shifts at date boundaries
   const month = MONTHS_SHORT[date.getUTCMonth()];
@@ -192,11 +192,12 @@ export function formatDateLabel(
       // Different year: "Jan '24"
       return context.sameYear ? month : `${month} ${yearSuffix}`;
 
-    case 'quarter':
+    case 'quarter': {
       // Same year: "Q1"
       // Different year: "Q1 '24"
       const quarter = getQuarter(date.getUTCMonth());
       return context.sameYear ? `Q${quarter}` : `Q${quarter} ${yearSuffix}`;
+    }
 
     case 'year':
       // Always show full year
@@ -217,7 +218,7 @@ export function formatDateRange(
   start: Date,
   end: Date,
   interval: TimeInterval,
-  context: DateFormatContext
+  context: DateFormatContext,
 ): string {
   const startStr = formatDateLabel(start, interval, context);
 
@@ -344,7 +345,7 @@ export function formatTimeOnlyLabel(seconds: number, interval: TimeInterval): st
 export function formatTimeOnlyRange(
   startSec: number,
   endSec: number,
-  interval: TimeInterval
+  interval: TimeInterval,
 ): string {
   const startStr = formatTimeOnlyLabel(startSec, interval);
 

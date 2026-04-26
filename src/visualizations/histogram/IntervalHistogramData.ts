@@ -8,10 +8,10 @@
  * and must be converted to numeric seconds for histogram binning.
  */
 
+import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
-import { QueryError } from '../../core/errors';
 
 // =========================================
 // Constants
@@ -116,7 +116,9 @@ export function intervalToSecondsSQL(col: string): string {
  *
  * @returns Total seconds (can be negative), or null if input is null/empty
  */
-export function parseIntervalToSeconds(value: string | Record<string, unknown> | null): number | null {
+export function parseIntervalToSeconds(
+  value: string | Record<string, unknown> | null,
+): number | null {
   if (value === null || value === undefined) return null;
 
   // Handle Arrow MonthDayNano interval objects from DuckDB WASM
@@ -307,7 +309,7 @@ export async function fetchIntervalColumnStats(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<{
   minSeconds: number | null;
   maxSeconds: number | null;
@@ -376,7 +378,7 @@ function buildIntervalHistogramSQL(
   numBins: number,
   minSec: number,
   maxSec: number,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -415,13 +417,11 @@ export async function fetchIntervalNumericBins(
   minSec: number,
   maxSec: number,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<IntervalHistogramBin[]> {
   const binWidth = (maxSec - minSec) / numBins;
 
-  const sql = buildIntervalHistogramSQL(
-    tableName, column, numBins, minSec, maxSec, filters
-  );
+  const sql = buildIntervalHistogramSQL(tableName, column, numBins, minSec, maxSec, filters);
   const binResults = await bridge.query<IntervalBinResult>(sql);
 
   // Create all bins (even empty ones)
@@ -458,7 +458,7 @@ export async function fetchIntervalHistogramData(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
-  maxBins: number = 15
+  maxBins = 15,
 ): Promise<IntervalHistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -480,11 +480,13 @@ export async function fetchIntervalHistogramData(
     // Handle edge case: single value (all identical intervals)
     if (stats.minSeconds === stats.maxSeconds) {
       return {
-        bins: [{
-          binStartSeconds: stats.minSeconds,
-          binEndSeconds: stats.minSeconds,
-          count: stats.count,
-        }],
+        bins: [
+          {
+            binStartSeconds: stats.minSeconds,
+            binEndSeconds: stats.minSeconds,
+            count: stats.count,
+          },
+        ],
         nullCount: stats.nullCount,
         minSeconds: stats.minSeconds,
         maxSeconds: stats.maxSeconds,
@@ -496,7 +498,13 @@ export async function fetchIntervalHistogramData(
 
     // Step 2: Fetch equal-width bins
     const bins = await fetchIntervalNumericBins(
-      tableName, column, maxBins, stats.minSeconds, stats.maxSeconds, filters, bridge
+      tableName,
+      column,
+      maxBins,
+      stats.minSeconds,
+      stats.maxSeconds,
+      filters,
+      bridge,
     );
 
     return {

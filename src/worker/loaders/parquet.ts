@@ -2,16 +2,16 @@
  * Parquet data loader using DuckDB's native Parquet support
  */
 
-import { getDatabase, getConnection } from '../duckdb';
-import type { LoadResult, ParquetLoadOptions } from './types';
+import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
+import { getDatabase, getConnection } from '../duckdb';
 import {
   enhanceSchemaTypes,
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
 } from './common';
-import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
+import type { LoadResult, ParquetLoadOptions } from './types';
 
 let tableCounter = 0;
 
@@ -31,7 +31,7 @@ function generateTableName(): string {
  */
 export async function loadParquet(
   data: ArrayBuffer,
-  options: ParquetLoadOptions = {}
+  options: ParquetLoadOptions = {},
 ): Promise<LoadResult> {
   const db = getDatabase();
   const conn = getConnection();
@@ -74,12 +74,8 @@ export async function loadParquet(
     // rejected __rowid__ there above, and an unrelated __rowid__ in the
     // Parquet file itself won't reach the projection.
     if (!options.columns?.length) {
-      const probeResult = await conn.query(
-        `DESCRIBE SELECT * FROM read_parquet('${fileName}')`,
-      );
-      const probeColumns = probeResult
-        .toArray()
-        .map((row) => String(row.toJSON().column_name));
+      const probeResult = await conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`);
+      const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
       if (probeColumns.includes(ROWID_COLUMN)) {
         throw makeReservedColumnError();
       }
@@ -97,9 +93,7 @@ export async function loadParquet(
     }
 
     // Get row count
-    const countResult = await conn.query(
-      `SELECT COUNT(*) as count FROM ${tbl}`
-    );
+    const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
     // Get full schema info from DESCRIBE

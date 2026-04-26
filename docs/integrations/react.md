@@ -20,7 +20,10 @@ export function Table({ source }: { source: File | string }) {
     let instance: DataTable | undefined;
 
     void createDataTable({ container: hostRef.current, source }).then((t) => {
-      if (cancelled) { void t.destroy(); return; }
+      if (cancelled) {
+        void t.destroy();
+        return;
+      }
       instance = t;
     });
 
@@ -114,11 +117,14 @@ const onExportClick = () => tableRef.current?.openExportDialog();
 ### Memoize expensive props
 
 ```tsx
-const options = useMemo(() => ({
-  container: hostRef.current!,
-  source,
-  messages: myFrenchMessages,   // stable reference
-}), [source]);
+const options = useMemo(
+  () => ({
+    container: hostRef.current!,
+    source,
+    messages: myFrenchMessages, // stable reference
+  }),
+  [source],
+);
 ```
 
 Passing inline object literals to an effect dep list causes re-mounts; use

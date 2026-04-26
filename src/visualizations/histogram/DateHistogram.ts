@@ -8,17 +8,10 @@
  * - Bin range formatting
  */
 
-import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TemporalColumnStats } from '../../statistics/ColumnStatsTypes';
-import {
-  fetchDateHistogramData,
-  fetchDateStats,
-  fetchDateHistogramBins,
-  fetchDateNumericBins,
-} from './DateHistogramData';
-import type { DateHistogramData } from './DateHistogramData';
+import type { VisualizationOptions } from '../BaseVisualization';
 import {
   analyzeDateContext,
   formatDateLabel,
@@ -28,11 +21,13 @@ import {
 } from './DateFormatters';
 import type { DateFormatContext } from './DateFormatters';
 import {
-  SharedHistogramBase,
-  FONTS,
-  PADDING,
-  LAYOUT,
-} from './SharedHistogramBase';
+  fetchDateHistogramData,
+  fetchDateStats,
+  fetchDateHistogramBins,
+  fetchDateNumericBins,
+} from './DateHistogramData';
+import type { DateHistogramData } from './DateHistogramData';
+import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
 
 // =========================================
 // DateHistogram Class
@@ -47,11 +42,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
   private initialDataPromise: Promise<void> | null = null;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
   }
 
@@ -72,8 +63,12 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const col = this.column.name;
 
       this.initialDataPromise = fetchDateHistogramData(tableName, col, [], bridge, maxBins)
-        .then(data => { this.initialData = data; })
-        .finally(() => { this.initialDataPromise = null; });
+        .then((data) => {
+          this.initialData = data;
+        })
+        .finally(() => {
+          this.initialDataPromise = null;
+        });
     }
 
     await this.initialDataPromise;
@@ -87,7 +82,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
    */
   private async fetchAlignedForeground(
     filters: Filter[],
-    seq: number
+    seq: number,
   ): Promise<DateHistogramData | null> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
@@ -130,7 +125,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       for (const bin of rawFgBins) {
         fgBinMap.set(bin.binStart.getTime(), bin.count);
       }
-      const fgBins = initial.bins.map(bgBin => ({
+      const fgBins = initial.bins.map((bgBin) => ({
         binStart: bgBin.binStart,
         binEnd: bgBin.binEnd,
         count: fgBinMap.get(bgBin.binStart.getTime()) ?? 0,
@@ -184,7 +179,11 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
         this.data = await fetchDateHistogramData(
-          this.options.tableName, this.column.name, allFilters, this.options.bridge, maxBins
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          maxBins,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
@@ -246,9 +245,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   protected drawAxisLabels(): void {
     if (!this.data || !this.formatContext) return;
 
-    const maxX = this.data.nullCount > 0
-      ? this.nullBarArea.x - LAYOUT.nullBarGap
-      : this.width - PADDING.right;
+    const maxX =
+      this.data.nullCount > 0 ? this.nullBarArea.x - LAYOUT.nullBarGap : this.width - PADDING.right;
 
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
@@ -258,13 +256,10 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
-      const label = this.data.isNumericBinning && this.data.min
-        ? formatDateForType(this.data.min, this.column.type)
-        : formatDateLabel(
-            this.data.bins[0].binStart,
-            this.data.interval,
-            this.formatContext
-          );
+      const label =
+        this.data.isNumericBinning && this.data.min
+          ? formatDateForType(this.data.min, this.column.type)
+          : formatDateLabel(this.data.bins[0].binStart, this.data.interval, this.formatContext);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0 && this.data.min && this.data.max) {
@@ -273,18 +268,10 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
       const minLabel = this.data.isNumericBinning
         ? formatDateForType(this.data.min, this.column.type)
-        : formatDateLabel(
-            firstBin.binStart,
-            this.data.interval,
-            this.formatContext
-          );
+        : formatDateLabel(firstBin.binStart, this.data.interval, this.formatContext);
       const maxLabel = this.data.isNumericBinning
         ? formatDateForType(this.data.max, this.column.type)
-        : formatDateLabel(
-            lastBin.binStart,
-            this.data.interval,
-            this.formatContext
-          );
+        : formatDateLabel(lastBin.binStart, this.data.interval, this.formatContext);
       this.drawMinMaxLabels(minLabel, maxLabel, maxX);
     }
 
@@ -308,12 +295,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
     return this.data.isNumericBinning
       ? formatDateRangeForType(bin.binStart, bin.binEnd, this.column.type)
-      : formatDateRange(
-          bin.binStart,
-          bin.binEnd,
-          this.data.interval,
-          this.formatContext
-        );
+      : formatDateRange(bin.binStart, bin.binEnd, this.data.interval, this.formatContext);
   }
 
   /**
@@ -335,7 +317,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
             startBin.binStart,
             startBin.binEnd,
             this.data.interval,
-            this.formatContext
+            this.formatContext,
           )
         : `${formatDateLabel(startBin.binStart, this.data.interval, this.formatContext)} – ${formatDateLabel(endBin.binStart, this.data.interval, this.formatContext)}`;
     }
@@ -351,14 +333,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   protected emitBrushFilter(): void {
     if (!this.data) return;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startBin = this.data.bins[startIdx];
     const endBin = this.data.bins[endIdx];
 
@@ -378,9 +354,9 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   // Filter → Visual State Sync (Date-aware)
   // =========================================
 
-  protected syncVisualStateFromFilter(): void {
+  protected override syncVisualStateFromFilter(): void {
     const filters = this.options.filters;
-    const ownFilter = filters.find(f => f.column === this.column.name);
+    const ownFilter = filters.find((f) => f.column === this.column.name);
     const data = this.backgroundData ?? this.data;
 
     if (!ownFilter || !data || data.bins.length === 0) {
@@ -394,7 +370,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
     switch (ownFilter.type) {
       case 'range':
-        this.syncBrushFromDateRangeFilter(ownFilter as RangeFilter, data.bins);
+        this.syncBrushFromDateRangeFilter(ownFilter, data.bins);
         break;
       case 'point': {
         const val = ownFilter.value;
@@ -433,16 +409,22 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
   private syncBrushFromDateRangeFilter(
     filter: RangeFilter,
-    bins: Array<{ binStart: Date; binEnd: Date }>
+    bins: { binStart: Date; binEnd: Date }[],
   ): void {
     // Parse filter bounds — can be Date, string, or number (Infinity for open-ended)
     const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
     const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
 
-    const filterMinMs = minIsOpen ? -Infinity
-      : (filter.min instanceof Date ? filter.min.getTime() : new Date(String(filter.min)).getTime());
-    const filterMaxMs = maxIsOpen ? Infinity
-      : (filter.max instanceof Date ? filter.max.getTime() : new Date(String(filter.max)).getTime());
+    const filterMinMs = minIsOpen
+      ? -Infinity
+      : filter.min instanceof Date
+        ? filter.min.getTime()
+        : new Date(String(filter.min)).getTime();
+    const filterMaxMs = maxIsOpen
+      ? Infinity
+      : filter.max instanceof Date
+        ? filter.max.getTime()
+        : new Date(String(filter.max)).getTime();
 
     let startIdx = -1;
     let endIdx = -1;

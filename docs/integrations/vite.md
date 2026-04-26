@@ -164,7 +164,7 @@ just feels like a full remount.
 ## Gotchas
 
 - **Forgetting `import '@jeyabbalas/data-table/styles'`.** The table mounts but has no colors or layout. The library emits a `STYLESHEET_MISSING` warning to the console.
-- **Linking dev dependencies into published packages.** If you're building a library *on top of* `@jeyabbalas/data-table`, don't list it as a direct dep — the consumer app should install it. Mark it as a peer dep.
+- **Linking dev dependencies into published packages.** If you're building a library _on top of_ `@jeyabbalas/data-table`, don't list it as a direct dep — the consumer app should install it. Mark it as a peer dep.
 - **`build.rollupOptions.external`.** Don't externalize `@jeyabbalas/data-table` unless you're intentionally doing CDN-driven delivery. Vite doesn't handle WASM well in externalized packages.
 - **Worker fetch fails only in production.** If dev works but the built app can't find the worker, check that `vite build` emits worker chunks next to the main bundle. The default is `dist/assets/worker-*.js`.
 

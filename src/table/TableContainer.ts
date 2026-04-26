@@ -29,28 +29,28 @@
  * @see KeyboardNavigator
  */
 
-import type { TableState } from '../core/State';
-import type { StateActions } from '../core/Actions';
-import type { WorkerBridge } from '../data/WorkerBridge';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { AnnotationPopover } from './AnnotationPopover';
-import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
-import { ColumnHeader } from './ColumnHeader';
-import { ColumnReorder } from './ColumnReorder';
-import { TableBody } from './TableBody';
-import { FilterBar } from '../filters/FilterBar';
-import { FilterPanel } from '../filters/FilterPanel';
-import { HiddenColumnsGutter } from './HiddenColumnsGutter';
+import type { StateActions } from '../core/Actions';
+import { nextInstanceId } from '../core/instanceId';
+import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
+import type { WorkerBridge } from '../data/WorkerBridge';
+import { AddColumnButton } from '../derived/AddColumnButton';
 import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
 import { DerivedColumnModal } from '../derived/DerivedColumnModal';
-import { AddColumnButton } from '../derived/AddColumnButton';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
-import { SQLFilterModal } from '../filters/SQLFilterModal';
+import { FilterBar } from '../filters/FilterBar';
+import { FilterPanel } from '../filters/FilterPanel';
 import { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import { SQLFilterModal } from '../filters/SQLFilterModal';
+import type { AnnotationPopover } from './AnnotationPopover';
+import { ColumnHeader } from './ColumnHeader';
+import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
+import { ColumnReorder } from './ColumnReorder';
+import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { KeyboardNavigator } from './KeyboardNavigator';
-import { nextInstanceId } from '../core/instanceId';
-import { type Strings, defaultStrings } from '../core/Strings';
+import { TableBody } from './TableBody';
 
 /**
  * Light/dark theme selector accepted by {@link TableContainerOptions.colorScheme}
@@ -150,7 +150,7 @@ export class TableContainer {
   private resizeObserver: ResizeObserver;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
-  private resizeCallbacks: Set<ResizeCallback> = new Set();
+  private resizeCallbacks = new Set<ResizeCallback>();
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
   private columnHeaders: ColumnHeader[] = [];
   private tableBody: TableBody | null = null;
@@ -169,7 +169,7 @@ export class TableContainer {
   private savedColumnPositions: Map<string, DOMRect> | null = null;
 
   // Track previous visible columns for restore-highlight detection
-  private previousVisibleColumns: Set<string> = new Set();
+  private previousVisibleColumns = new Set<string>();
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -197,7 +197,7 @@ export class TableContainer {
     private state: TableState,
     private actions?: StateActions,
     private bridge?: WorkerBridge,
-    options: TableContainerOptions = {}
+    options: TableContainerOptions = {},
   ) {
     // Apply defaults
     this.resolvedOptions = {
@@ -247,10 +247,13 @@ export class TableContainer {
       this.filterBar = new FilterBar(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
         onFilterRemove: this.resolvedOptions.onFilterRemove,
-        alwaysShow: this.resolvedOptions.showExpressionFilter !== false || !!this.resolvedOptions.presetManager,
-        onAddSQLFilter: this.resolvedOptions.showExpressionFilter !== false
-          ? () => this.openSQLFilterModal()
-          : undefined,
+        alwaysShow:
+          this.resolvedOptions.showExpressionFilter !== false ||
+          !!this.resolvedOptions.presetManager,
+        onAddSQLFilter:
+          this.resolvedOptions.showExpressionFilter !== false
+            ? () => this.openSQLFilterModal()
+            : undefined,
         onRawSQLEdit: (id: string) => this.openSQLFilterModalForEdit(id),
         onPresetsClick: this.resolvedOptions.presetManager
           ? () => this.handlePresetsClick()
@@ -291,10 +294,7 @@ export class TableContainer {
       this.wrapperElement.className = `${this.resolvedOptions.classPrefix}-table-wrapper`;
       // Mirror the color-scheme attribute onto the wrapper so the add-column
       // button (a sibling of `.dt-root`) inherits the attribute-scoped vars.
-      this.applyColorSchemeAttribute(
-        this.wrapperElement,
-        this.resolvedOptions.colorScheme,
-      );
+      this.applyColorSchemeAttribute(this.wrapperElement, this.resolvedOptions.colorScheme);
       this.wrapperElement.appendChild(this.element);
       this.wrapperElement.appendChild(this.addColumnButton.getElement());
       this.container.appendChild(this.wrapperElement);
@@ -309,9 +309,9 @@ export class TableContainer {
     if (this.container.getBoundingClientRect().height === 0) {
       console.warn(
         '[@jeyabbalas/data-table] Mount container has height 0 at initialization. ' +
-        'No rows will render until the container has a computed height. ' +
-        'Typical fix: make it a flex/grid child with `flex: 1; min-height: 0` ' +
-        '(see examples/01-minimal) or set an explicit height.',
+          'No rows will render until the container has a computed height. ' +
+          'Typical fix: make it a flex/grid child with `flex: 1; min-height: 0` ' +
+          '(see examples/01-minimal) or set an explicit height.',
       );
     }
 
@@ -326,7 +326,7 @@ export class TableContainer {
       this.columnReorder = new ColumnReorder(
         this.headerRow,
         (newOrder) => this.actions?.setColumnOrder(newOrder),
-        { classPrefix: this.resolvedOptions.classPrefix }
+        { classPrefix: this.resolvedOptions.classPrefix },
       );
     }
 
@@ -606,7 +606,7 @@ export class TableContainer {
 
     if (sortColumns.length > 0) {
       const sortDescriptions = sortColumns.map(
-        (s) => `${s.column} ${s.direction === 'asc' ? a.ascending : a.descending}`
+        (s) => `${s.column} ${s.direction === 'asc' ? a.ascending : a.descending}`,
       );
       parts.push(a.sortedBy(sortDescriptions));
     }
@@ -676,7 +676,7 @@ export class TableContainer {
           for (const header of this.columnHeaders) {
             this.savedColumnPositions.set(
               header.getColumn().name,
-              header.getElement().getBoundingClientRect()
+              header.getElement().getBoundingClientRect(),
             );
           }
         }
@@ -830,9 +830,8 @@ export class TableContainer {
     const columnWidths = this.state.columnWidths.get();
     const prefix = this.resolvedOptions.classPrefix;
 
-    const baseZ = Number(
-      getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()
-    ) || 20;
+    const baseZ =
+      Number(getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
 
     // Compute cumulative left offsets for pinned columns
     const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
@@ -975,21 +974,17 @@ export class TableContainer {
           const colSchema = schema.find((s) => s.name === colName);
           if (colSchema) {
             const schemaIndex = schema.findIndex((s) => s.name === colName);
-            const columnHeader = new ColumnHeader(
-              colSchema,
-              this.state,
-              this.actions,
-              {
-                classPrefix: this.resolvedOptions.classPrefix,
-                onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
-                onDerivedIconClick: (column, buttonEl) => this.handleDerivedIconClick(column, buttonEl),
-                colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
-                messages: this.messages,
-                annotations: this.resolvedOptions.annotations,
-                annotationPopover: this.resolvedOptions.annotationPopover,
-                columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
-              }
-            );
+            const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
+              classPrefix: this.resolvedOptions.classPrefix,
+              onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
+              onDerivedIconClick: (column, buttonEl) =>
+                this.handleDerivedIconClick(column, buttonEl),
+              colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
+              messages: this.messages,
+              annotations: this.resolvedOptions.annotations,
+              annotationPopover: this.resolvedOptions.annotationPopover,
+              columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
+            });
             this.columnHeaders.push(columnHeader);
 
             // Apply dynamic width from state (default to 150px)
@@ -1033,20 +1028,14 @@ export class TableContainer {
         }
 
         // Create new table body
-        this.tableBody = new TableBody(
-          this.bodyContainer,
-          this.state,
-          this.bridge,
-          this.actions,
-          {
-            rowHeight: this.resolvedOptions.rowHeight,
-            classPrefix: this.resolvedOptions.classPrefix,
-            scrollContainer: this.bodyScroll,
-            // headerHeight no longer needed - body scroll only contains body
-            annotations: this.resolvedOptions.annotations,
-            annotationPopover: this.resolvedOptions.annotationPopover,
-          }
-        );
+        this.tableBody = new TableBody(this.bodyContainer, this.state, this.bridge, this.actions, {
+          rowHeight: this.resolvedOptions.rowHeight,
+          classPrefix: this.resolvedOptions.classPrefix,
+          scrollContainer: this.bodyScroll,
+          // headerHeight no longer needed - body scroll only contains body
+          annotations: this.resolvedOptions.annotations,
+          annotationPopover: this.resolvedOptions.annotationPopover,
+        });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
         // initialize() sets this later via async DuckDB fetch, but scrollToRightEnd()
@@ -1315,15 +1304,15 @@ export class TableContainer {
           classPrefix: this.resolvedOptions.classPrefix,
           colorSchemeSource: this.element,
           messages: this.messages,
-        }
+        },
       );
       this.element.appendChild(this.presetPanel.getElement());
     }
 
     // Find the presets button as anchor for positioning
-    const presetsBtn = this.filterBar?.getElement().querySelector(
-      `.${this.resolvedOptions.classPrefix}-filter-presets-btn`
-    ) as HTMLElement;
+    const presetsBtn = this.filterBar
+      ?.getElement()
+      .querySelector(`.${this.resolvedOptions.classPrefix}-filter-presets-btn`) as HTMLElement;
 
     if (presetsBtn) {
       this.presetPanel.toggle(presetsBtn);

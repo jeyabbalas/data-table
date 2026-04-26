@@ -21,8 +21,8 @@ export interface ColumnSchema {
   type: DataType;
   nullable: boolean;
   originalType: string; // Original DuckDB type
-  isDerived?: boolean;  // true for derived columns (expression or vector)
-  expression?: string;  // SQL expression (expression columns only)
+  isDerived?: boolean; // true for derived columns (expression or vector)
+  expression?: string; // SQL expression (expression columns only)
   /**
    * true for library-synthesized columns (e.g. `__rowid__`). System columns are
    * excluded from the default rendered grid and from default exports, but remain

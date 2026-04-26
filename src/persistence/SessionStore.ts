@@ -6,11 +6,7 @@
  */
 
 import type { Filter } from '../filters/FilterTypes';
-import type {
-  DateWrapper,
-  SerializedFilter,
-  SessionSnapshot,
-} from './types';
+import type { DateWrapper, SerializedFilter, SessionSnapshot } from './types';
 
 // --- IndexedDB constants ---
 
@@ -79,7 +75,7 @@ export function serializeFilter(filter: Filter): SerializedFilter {
         ...filter,
         min: serializeValue(filter.min) as SerializedFilter extends { min: infer M } ? M : never,
         max: serializeValue(filter.max) as SerializedFilter extends { max: infer M } ? M : never,
-      } as SerializedFilter;
+      };
     case 'point':
       return {
         ...filter,
@@ -90,7 +86,7 @@ export function serializeFilter(filter: Filter): SerializedFilter {
       return {
         ...filter,
         values: filter.values.map(serializeValue),
-      } as SerializedFilter;
+      };
     case 'null':
     case 'not-null':
     case 'pattern':
@@ -120,14 +116,17 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
       return {
         ...filter,
         values: filter.values.map(deserializeValue),
-      } as Filter;
+      };
     case 'null':
     case 'not-null':
     case 'pattern':
     case 'raw-sql':
       return { ...filter };
     default:
-      console.warn('Unknown filter type during deserialization:', (filter as Record<string, unknown>).type);
+      console.warn(
+        'Unknown filter type during deserialization:',
+        (filter as Record<string, unknown>).type,
+      );
       return null;
   }
 }

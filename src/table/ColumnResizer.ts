@@ -76,7 +76,7 @@ export class ColumnResizer {
     private onResize: ResizeCallback,
     private onReset?: () => void,
     private onBeforeReset?: () => HTMLElement[],
-    options: ColumnResizerOptions = {}
+    options: ColumnResizerOptions = {},
   ) {
     this.minWidth = options.minWidth ?? 50;
     this.maxWidth = options.maxWidth ?? 500;

@@ -234,7 +234,9 @@ describe('ExportDialog', () => {
     });
 
     it('should show JSON options when JSON format selected', () => {
-      const jsonRadio = dialog.getElement().querySelector('input[value="json"]') as HTMLInputElement;
+      const jsonRadio = dialog
+        .getElement()
+        .querySelector('input[value="json"]') as HTMLInputElement;
       jsonRadio.checked = true;
       jsonRadio.dispatchEvent(new Event('change'));
 
@@ -244,7 +246,9 @@ describe('ExportDialog', () => {
     });
 
     it('should hide both option panels and Copy button for Parquet', () => {
-      const parquetRadio = dialog.getElement().querySelector('input[value="parquet"]') as HTMLInputElement;
+      const parquetRadio = dialog
+        .getElement()
+        .querySelector('input[value="parquet"]') as HTMLInputElement;
       parquetRadio.checked = true;
       parquetRadio.dispatchEvent(new Event('change'));
 
@@ -258,7 +262,9 @@ describe('ExportDialog', () => {
 
     it('should show Copy button when switching back to CSV', () => {
       // Switch to Parquet
-      const parquetRadio = dialog.getElement().querySelector('input[value="parquet"]') as HTMLInputElement;
+      const parquetRadio = dialog
+        .getElement()
+        .querySelector('input[value="parquet"]') as HTMLInputElement;
       parquetRadio.checked = true;
       parquetRadio.dispatchEvent(new Event('change'));
 
@@ -287,14 +293,16 @@ describe('ExportDialog', () => {
 
       const counts = dialog.getElement().querySelectorAll('.dt-export-count');
       expect(counts[0].textContent).toContain('1,000'); // all
-      expect(counts[1].textContent).toContain('500');    // filtered
-      expect(counts[2].textContent).toContain('0');      // selected
+      expect(counts[1].textContent).toContain('500'); // filtered
+      expect(counts[2].textContent).toContain('0'); // selected
     });
 
     it('should disable selected radio when no rows selected', () => {
       dialog.open();
 
-      const selectedRadio = dialog.getElement().querySelector('input[value="selected"]') as HTMLInputElement;
+      const selectedRadio = dialog
+        .getElement()
+        .querySelector('input[value="selected"]') as HTMLInputElement;
       expect(selectedRadio.disabled).toBe(true);
 
       const selectedLabel = selectedRadio.closest('.dt-export-option');
@@ -305,7 +313,9 @@ describe('ExportDialog', () => {
       state.selectedRows.set(new Set([0, 1, 2]));
       dialog.open();
 
-      const selectedRadio = dialog.getElement().querySelector('input[value="selected"]') as HTMLInputElement;
+      const selectedRadio = dialog
+        .getElement()
+        .querySelector('input[value="selected"]') as HTMLInputElement;
       expect(selectedRadio.disabled).toBe(false);
 
       const counts = dialog.getElement().querySelectorAll('.dt-export-count');
@@ -316,7 +326,9 @@ describe('ExportDialog', () => {
       state.selectedRows.set(new Set([0, 1]));
       dialog.open();
 
-      const selectedRadio = dialog.getElement().querySelector('input[value="selected"]') as HTMLInputElement;
+      const selectedRadio = dialog
+        .getElement()
+        .querySelector('input[value="selected"]') as HTMLInputElement;
       const allRadio = dialog.getElement().querySelector('input[value="all"]') as HTMLInputElement;
 
       selectedRadio.checked = true;
@@ -386,7 +398,7 @@ describe('ExportDialog', () => {
           includeHeaders: true,
           nullValue: '',
         }),
-        expect.any(AbortSignal)
+        expect.any(AbortSignal),
       );
     });
 
@@ -394,7 +406,9 @@ describe('ExportDialog', () => {
       dialog.open();
 
       // Switch to JSON
-      const jsonRadio = dialog.getElement().querySelector('input[value="json"]') as HTMLInputElement;
+      const jsonRadio = dialog
+        .getElement()
+        .querySelector('input[value="json"]') as HTMLInputElement;
       jsonRadio.checked = true;
       jsonRadio.dispatchEvent(new Event('change'));
 
@@ -414,14 +428,16 @@ describe('ExportDialog', () => {
           format: 'array',
           pretty: false,
         }),
-        expect.any(AbortSignal)
+        expect.any(AbortSignal),
       );
     });
 
     it('should call exportParquetFromState for Parquet format', async () => {
       dialog.open();
 
-      const parquetRadio = dialog.getElement().querySelector('input[value="parquet"]') as HTMLInputElement;
+      const parquetRadio = dialog
+        .getElement()
+        .querySelector('input[value="parquet"]') as HTMLInputElement;
       parquetRadio.checked = true;
       parquetRadio.dispatchEvent(new Event('change'));
 
@@ -450,7 +466,9 @@ describe('ExportDialog', () => {
       dialog.open();
 
       // Select filtered scope
-      const filteredRadio = dialog.getElement().querySelector('input[value="filtered"]') as HTMLInputElement;
+      const filteredRadio = dialog
+        .getElement()
+        .querySelector('input[value="filtered"]') as HTMLInputElement;
       filteredRadio.checked = true;
 
       const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
@@ -464,7 +482,7 @@ describe('ExportDialog', () => {
             scope: 'filtered',
             columns: 'all',
           }),
-          expect.any(AbortSignal)
+          expect.any(AbortSignal),
         );
       });
     });
@@ -472,7 +490,7 @@ describe('ExportDialog', () => {
     it('should show loading state during export', async () => {
       // Make export slow
       (exportFromState as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve('data'), 100))
+        () => new Promise((resolve) => setTimeout(() => resolve('data'), 100)),
       );
 
       dialog.open();
@@ -496,7 +514,9 @@ describe('ExportDialog', () => {
     });
 
     it('should show error on export failure', async () => {
-      (exportFromState as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Query failed'));
+      (exportFromState as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Query failed'),
+      );
 
       dialog.open();
       const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
@@ -511,7 +531,7 @@ describe('ExportDialog', () => {
 
     it('should silently handle abort errors', async () => {
       (exportFromState as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new DOMException('Export aborted', 'AbortError')
+        new DOMException('Export aborted', 'AbortError'),
       );
 
       dialog.open();
@@ -533,15 +553,15 @@ describe('ExportDialog', () => {
       delimiterSelect.value = '\t';
 
       // Uncheck headers
-      const headersCheckbox = dialog.getElement().querySelector(
-        '.dt-export-format-options input[type="checkbox"]'
-      ) as HTMLInputElement;
+      const headersCheckbox = dialog
+        .getElement()
+        .querySelector('.dt-export-format-options input[type="checkbox"]') as HTMLInputElement;
       headersCheckbox.checked = false;
 
       // Set null value
-      const nullInput = dialog.getElement().querySelector(
-        '.dt-export-format-options input[type="text"]'
-      ) as HTMLInputElement;
+      const nullInput = dialog
+        .getElement()
+        .querySelector('.dt-export-format-options input[type="text"]') as HTMLInputElement;
       nullInput.value = 'N/A';
 
       const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
@@ -556,7 +576,7 @@ describe('ExportDialog', () => {
             includeHeaders: false,
             nullValue: 'N/A',
           }),
-          expect.any(AbortSignal)
+          expect.any(AbortSignal),
         );
       });
     });
@@ -596,7 +616,9 @@ describe('ExportDialog', () => {
     it('should call clipboard writeText for JSON', async () => {
       dialog.open();
 
-      const jsonRadio = dialog.getElement().querySelector('input[value="json"]') as HTMLInputElement;
+      const jsonRadio = dialog
+        .getElement()
+        .querySelector('input[value="json"]') as HTMLInputElement;
       jsonRadio.checked = true;
       jsonRadio.dispatchEvent(new Event('change'));
 
@@ -622,7 +644,9 @@ describe('ExportDialog', () => {
     it('should not copy for Parquet format', async () => {
       dialog.open();
 
-      const parquetRadio = dialog.getElement().querySelector('input[value="parquet"]') as HTMLInputElement;
+      const parquetRadio = dialog
+        .getElement()
+        .querySelector('input[value="parquet"]') as HTMLInputElement;
       parquetRadio.checked = true;
       parquetRadio.dispatchEvent(new Event('change'));
 

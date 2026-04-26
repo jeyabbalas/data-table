@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { formatStatValue, formatCount, formatDefaultStats } from '../../src/statistics/StatsFormatters';
+import {
+  formatStatValue,
+  formatCount,
+  formatDefaultStats,
+} from '../../src/statistics/StatsFormatters';
 import type {
   NumericColumnStats,
   CategoricalColumnStats,
@@ -68,16 +72,16 @@ describe('formatStatValue', () => {
 
   // Values from numeric-stress-tests.json
   it('handles extreme_large values from test fixture', () => {
-    expect(formatStatValue(1000000000)).toBe('1.00e+9');       // 1e9
+    expect(formatStatValue(1000000000)).toBe('1.00e+9'); // 1e9
     expect(formatStatValue(100000000000000)).toBe('1.00e+14'); // 1e14
-    expect(formatStatValue(1000000000000000)).toBe('1.00e+15');// 1e15
+    expect(formatStatValue(1000000000000000)).toBe('1.00e+15'); // 1e15
   });
 
   it('handles tiny_values from test fixture', () => {
-    expect(formatStatValue(0.1)).toBe('0.1');       // normal range
-    expect(formatStatValue(0.05)).toBe('0.05');      // normal range
-    expect(formatStatValue(0.01)).toBe('0.01');      // boundary
-    expect(formatStatValue(0.005)).toBe('5.00e-3');  // scientific
+    expect(formatStatValue(0.1)).toBe('0.1'); // normal range
+    expect(formatStatValue(0.05)).toBe('0.05'); // normal range
+    expect(formatStatValue(0.01)).toBe('0.01'); // boundary
+    expect(formatStatValue(0.005)).toBe('5.00e-3'); // scientific
     expect(formatStatValue(0.00001)).toBe('1.00e-5');
     expect(formatStatValue(0.0000000001)).toBe('1.00e-10');
   });
@@ -109,9 +113,7 @@ describe('formatCount', () => {
 // =========================================
 
 describe('formatDefaultStats - Line 1', () => {
-  const makeNumericStats = (
-    overrides: Partial<NumericColumnStats> = {}
-  ): NumericColumnStats => ({
+  const makeNumericStats = (overrides: Partial<NumericColumnStats> = {}): NumericColumnStats => ({
     kind: 'numeric',
     totalRows: 1234,
     nonNullCount: 1234,
@@ -133,7 +135,7 @@ describe('formatDefaultStats - Line 1', () => {
   it('shows null count when nulls present', () => {
     const result = formatDefaultStats(
       makeNumericStats({ nullCount: 5, nonNullCount: 1229 }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('1,234 rows');
     expect(result).toContain('5 null');
@@ -148,7 +150,7 @@ describe('formatDefaultStats - Line 1', () => {
         max: null,
         median: null,
       }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('all null');
     // Should not have a line 2
@@ -156,10 +158,7 @@ describe('formatDefaultStats - Line 1', () => {
   });
 
   it('shows filtered / total format', () => {
-    const result = formatDefaultStats(
-      makeNumericStats({ filteredTotalRows: 892 }),
-      'integer'
-    );
+    const result = formatDefaultStats(makeNumericStats({ filteredTotalRows: 892 }), 'integer');
     expect(result).toContain('892');
     expect(result).toContain('1,234');
     expect(result).toContain('/');
@@ -172,7 +171,7 @@ describe('formatDefaultStats - Line 1', () => {
         nullCount: 3,
         nonNullCount: 889,
       }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('892');
     expect(result).toContain('1,234');
@@ -187,7 +186,7 @@ describe('formatDefaultStats - Line 1', () => {
         nullCount: 0,
         distinctCount: 1,
       }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('1 row');
     expect(result).not.toContain('1 rows');
@@ -203,7 +202,7 @@ describe('formatDefaultStats - Line 1', () => {
         max: null,
         median: null,
       }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('0 rows');
     expect(result).not.toContain('dt-stats-line2');
@@ -215,9 +214,7 @@ describe('formatDefaultStats - Line 1', () => {
 // =========================================
 
 describe('formatDefaultStats - Numeric Line 2', () => {
-  const makeNumeric = (
-    overrides: Partial<NumericColumnStats> = {}
-  ): NumericColumnStats => ({
+  const makeNumeric = (overrides: Partial<NumericColumnStats> = {}): NumericColumnStats => ({
     kind: 'numeric',
     totalRows: 1000,
     nonNullCount: 1000,
@@ -241,7 +238,7 @@ describe('formatDefaultStats - Numeric Line 2', () => {
   it('shows "all values" for single value', () => {
     const result = formatDefaultStats(
       makeNumeric({ min: 42, max: 42, median: 42, distinctCount: 1 }),
-      'integer'
+      'integer',
     );
     expect(result).toContain('all values: 42');
   });
@@ -249,7 +246,7 @@ describe('formatDefaultStats - Numeric Line 2', () => {
   it('uses scientific notation for large values', () => {
     const result = formatDefaultStats(
       makeNumeric({ min: 0, max: 1200000, median: 50000 }),
-      'float'
+      'float',
     );
     expect(result).toContain('1.20e+6');
     // 50,000 is < 1e6, so locale-formatted as integer
@@ -265,7 +262,7 @@ describe('formatDefaultStats - Numeric Line 2', () => {
         nonNullCount: 0,
         nullCount: 1000,
       }),
-      'integer'
+      'integer',
     );
     expect(result).not.toContain('dt-stats-line2');
   });
@@ -277,7 +274,7 @@ describe('formatDefaultStats - Numeric Line 2', () => {
 
 describe('formatDefaultStats - Categorical Line 2', () => {
   const makeCategorical = (
-    overrides: Partial<CategoricalColumnStats> = {}
+    overrides: Partial<CategoricalColumnStats> = {},
   ): CategoricalColumnStats => ({
     kind: 'categorical',
     totalRows: 1000,
@@ -294,10 +291,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   });
 
   it('shows "all unique" when all values are distinct', () => {
-    const result = formatDefaultStats(
-      makeCategorical({ distinctCount: 1000 }),
-      'string'
-    );
+    const result = formatDefaultStats(makeCategorical({ distinctCount: 1000 }), 'string');
     expect(result).toContain('all unique');
   });
 
@@ -308,7 +302,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
         nonNullCount: 1,
         distinctCount: 1,
       }),
-      'string'
+      'string',
     );
     // Single value doesn't qualify as "all unique" (need > 1)
     expect(result).not.toContain('all unique');
@@ -318,7 +312,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   it('shows percentage true for booleans', () => {
     const result = formatDefaultStats(
       makeCategorical({ trueCount: 670, nonNullCount: 1000 }),
-      'boolean'
+      'boolean',
     );
     expect(result).toContain('67% true');
   });
@@ -326,7 +320,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   it('shows 0% true for all-false boolean', () => {
     const result = formatDefaultStats(
       makeCategorical({ trueCount: 0, nonNullCount: 1000 }),
-      'boolean'
+      'boolean',
     );
     expect(result).toContain('0% true');
   });
@@ -334,7 +328,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   it('shows 100% true for all-true boolean', () => {
     const result = formatDefaultStats(
       makeCategorical({ trueCount: 1000, nonNullCount: 1000 }),
-      'boolean'
+      'boolean',
     );
     expect(result).toContain('100% true');
   });
@@ -343,21 +337,21 @@ describe('formatDefaultStats - Categorical Line 2', () => {
     // 999/1000 = 99.9% → rounds to 100% (Math.round behavior)
     const result = formatDefaultStats(
       makeCategorical({ trueCount: 999, nonNullCount: 1000 }),
-      'boolean'
+      'boolean',
     );
     expect(result).toContain('100% true');
 
     // 1/3 = 33.33% → rounds to 33%
     const result2 = formatDefaultStats(
       makeCategorical({ trueCount: 1, nonNullCount: 3 }),
-      'boolean'
+      'boolean',
     );
     expect(result2).toContain('33% true');
 
     // 2/3 = 66.67% → rounds to 67%
     const result3 = formatDefaultStats(
       makeCategorical({ trueCount: 2, nonNullCount: 3 }),
-      'boolean'
+      'boolean',
     );
     expect(result3).toContain('67% true');
   });
@@ -369,10 +363,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   });
 
   it('shows "all unique" for uuid when all distinct', () => {
-    const result = formatDefaultStats(
-      makeCategorical({ distinctCount: 1000 }),
-      'uuid'
-    );
+    const result = formatDefaultStats(makeCategorical({ distinctCount: 1000 }), 'uuid');
     expect(result).toContain('all unique');
   });
 });
@@ -382,9 +373,7 @@ describe('formatDefaultStats - Categorical Line 2', () => {
 // =========================================
 
 describe('formatDefaultStats - Temporal Line 2', () => {
-  const makeTemporal = (
-    overrides: Partial<TemporalColumnStats> = {}
-  ): TemporalColumnStats => ({
+  const makeTemporal = (overrides: Partial<TemporalColumnStats> = {}): TemporalColumnStats => ({
     kind: 'temporal',
     totalRows: 1000,
     nonNullCount: 1000,
@@ -406,7 +395,7 @@ describe('formatDefaultStats - Temporal Line 2', () => {
   it('shows "all values" for single date', () => {
     const result = formatDefaultStats(
       makeTemporal({ min: '2024-01-01', max: '2024-01-01' }),
-      'date'
+      'date',
     );
     expect(result).toContain('all values: 2024-01-01');
   });
@@ -417,7 +406,7 @@ describe('formatDefaultStats - Temporal Line 2', () => {
         min: '2020-01-01 08:00:00',
         max: '2024-12-31 23:59:59',
       }),
-      'timestamp'
+      'timestamp',
     );
     expect(result).toContain('2020-01-01');
     expect(result).toContain('2024-12-31');
@@ -431,7 +420,7 @@ describe('formatDefaultStats - Temporal Line 2', () => {
         nonNullCount: 0,
         nullCount: 1000,
       }),
-      'date'
+      'date',
     );
     expect(result).not.toContain('dt-stats-line2');
   });
@@ -442,9 +431,7 @@ describe('formatDefaultStats - Temporal Line 2', () => {
 // =========================================
 
 describe('formatDefaultStats - Time Line 2', () => {
-  const makeTime = (
-    overrides: Partial<TimeColumnStats> = {}
-  ): TimeColumnStats => ({
+  const makeTime = (overrides: Partial<TimeColumnStats> = {}): TimeColumnStats => ({
     kind: 'time',
     totalRows: 1000,
     nonNullCount: 1000,
@@ -463,10 +450,7 @@ describe('formatDefaultStats - Time Line 2', () => {
   });
 
   it('shows "all values" for single time', () => {
-    const result = formatDefaultStats(
-      makeTime({ minSeconds: 3600, maxSeconds: 3600 }),
-      'time'
-    );
+    const result = formatDefaultStats(makeTime({ minSeconds: 3600, maxSeconds: 3600 }), 'time');
     expect(result).toContain('all values: 01:00:00');
   });
 
@@ -478,7 +462,7 @@ describe('formatDefaultStats - Time Line 2', () => {
         nonNullCount: 0,
         nullCount: 1000,
       }),
-      'time'
+      'time',
     );
     expect(result).not.toContain('dt-stats-line2');
   });
@@ -489,9 +473,7 @@ describe('formatDefaultStats - Time Line 2', () => {
 // =========================================
 
 describe('formatDefaultStats - Interval Line 2', () => {
-  const makeInterval = (
-    overrides: Partial<IntervalColumnStats> = {}
-  ): IntervalColumnStats => ({
+  const makeInterval = (overrides: Partial<IntervalColumnStats> = {}): IntervalColumnStats => ({
     kind: 'interval',
     totalRows: 1000,
     nonNullCount: 1000,
@@ -517,7 +499,7 @@ describe('formatDefaultStats - Interval Line 2', () => {
         maxDisplay: '1h',
         medianDisplay: '1h',
       }),
-      'interval'
+      'interval',
     );
     expect(result).toContain('all values: 1h');
   });
@@ -529,7 +511,7 @@ describe('formatDefaultStats - Interval Line 2', () => {
         maxDisplay: '&danger',
         medianDisplay: '"quoted"',
       }),
-      'interval'
+      'interval',
     );
     expect(result).toContain('&lt;script&gt;');
     expect(result).toContain('&amp;danger');

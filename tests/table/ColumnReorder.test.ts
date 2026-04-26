@@ -237,7 +237,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Move past threshold
@@ -246,7 +246,7 @@ describe('ColumnReorder', () => {
           clientX: 85, // +10 pixels
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       expect(reorder.isDraggingNow()).toBe(true);
@@ -274,7 +274,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Should not start potential drag
@@ -301,7 +301,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Should not start potential drag
@@ -325,7 +325,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Move past threshold
@@ -334,7 +334,7 @@ describe('ColumnReorder', () => {
           clientX: 200, // +125 pixels
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Should NOT start drag (only drag handle triggers drag)
@@ -362,7 +362,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Move past threshold to start drag
@@ -371,7 +371,7 @@ describe('ColumnReorder', () => {
           clientX: 85,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Move to position after col2 (around x=300)
@@ -380,7 +380,7 @@ describe('ColumnReorder', () => {
           clientX: 300,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Drop
@@ -407,7 +407,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       // Move past threshold
@@ -416,7 +416,7 @@ describe('ColumnReorder', () => {
           clientX: 85,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Move back to same position (still in col1's area)
@@ -425,7 +425,7 @@ describe('ColumnReorder', () => {
           clientX: 75,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Drop
@@ -452,7 +452,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       document.dispatchEvent(
@@ -460,7 +460,7 @@ describe('ColumnReorder', () => {
           clientX: 85,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       expect(reorder.isDraggingNow()).toBe(true);
@@ -489,7 +489,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       document.dispatchEvent(
@@ -497,7 +497,7 @@ describe('ColumnReorder', () => {
           clientX: 85,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       expect(container.classList.contains('dt-column-dragging')).toBe(true);
@@ -527,7 +527,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       document.dispatchEvent(
@@ -535,7 +535,7 @@ describe('ColumnReorder', () => {
           clientX: 85,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       expect(header.classList.contains('dt-col-header--dragging')).toBe(true);
@@ -565,7 +565,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       document.dispatchEvent(
@@ -573,7 +573,7 @@ describe('ColumnReorder', () => {
           clientX: 200,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // Should not be dragging
@@ -594,7 +594,7 @@ describe('ColumnReorder', () => {
           clientY: 16,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
 
       document.dispatchEvent(
@@ -602,7 +602,7 @@ describe('ColumnReorder', () => {
           clientX: 200,
           clientY: 16,
           bubbles: true,
-        })
+        }),
       );
 
       // End drag and destroy

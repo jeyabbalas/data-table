@@ -101,9 +101,7 @@ describe('StateActions.getColumnValues', () => {
   // -------------------------------------------------------------------------
 
   it("emits no WHERE for scope 'all' and skips redundant ORDER BY when there is no filter or sort", async () => {
-    harness.setRowProducer(async () => [
-      { val: 1 }, { val: 2 }, { val: 3 },
-    ]);
+    harness.setRowProducer(async () => [{ val: 1 }, { val: 2 }, { val: 3 }]);
     await actions.getColumnValues('id');
     expect(harness.queryCalls).toHaveLength(1);
     const sql = harness.queryCalls[0];
@@ -133,7 +131,7 @@ describe('StateActions.getColumnValues', () => {
     expect(sql).toContain('ORDER BY "__rowid__"');
   });
 
-  it("appends LIMIT and OFFSET when provided", async () => {
+  it('appends LIMIT and OFFSET when provided', async () => {
     harness.setRowProducer(async () => []);
     await actions.getColumnValues('id', { limit: 10, offset: 5 });
     const sql = harness.queryCalls[0];
@@ -166,25 +164,27 @@ describe('StateActions.getColumnValues', () => {
   // SQL construction — scope 'selected'
   // -------------------------------------------------------------------------
 
-  it("returns an empty typed array without querying when selection is empty", async () => {
+  it('returns an empty typed array without querying when selection is empty', async () => {
     const result = await actions.getColumnValues('price', { scope: 'selected' });
     expect(harness.queryCalls).toHaveLength(0);
     expect(result).toBeInstanceOf(Float64Array);
     expect((result as Float64Array).length).toBe(0);
   });
 
-  it("returns an empty typed array of the right shape for each type", async () => {
+  it('returns an empty typed array of the right shape for each type', async () => {
     expect(await actions.getColumnValues('id', { scope: 'selected' })).toBeInstanceOf(Int32Array);
-    expect(await actions.getColumnValues('big', { scope: 'selected' })).toBeInstanceOf(BigInt64Array);
-    expect(await actions.getColumnValues('price', { scope: 'selected' })).toBeInstanceOf(Float64Array);
+    expect(await actions.getColumnValues('big', { scope: 'selected' })).toBeInstanceOf(
+      BigInt64Array,
+    );
+    expect(await actions.getColumnValues('price', { scope: 'selected' })).toBeInstanceOf(
+      Float64Array,
+    );
     expect(await actions.getColumnValues('name', { scope: 'selected' })).toEqual([]);
   });
 
-  it("delegates to buildSelectedRowsQuery when selection is non-empty", async () => {
+  it('delegates to buildSelectedRowsQuery when selection is non-empty', async () => {
     state.selectedRows.set(new Set([0, 2]));
-    harness.setRowProducer(async () => [
-      { id: 10 }, { id: 30 },
-    ]);
+    harness.setRowProducer(async () => [{ id: 10 }, { id: 30 }]);
     const result = await actions.getColumnValues('id', { scope: 'selected' });
     expect(harness.queryCalls).toHaveLength(1);
     const sql = harness.queryCalls[0];
@@ -198,25 +198,28 @@ describe('StateActions.getColumnValues', () => {
 
   it("throws INVALID_ROWID when scope='selected' and a rowId is negative", async () => {
     state.selectedRows.set(new Set([-1, 2]));
-    await expect(
-      actions.getColumnValues('id', { scope: 'selected' }),
-    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    await expect(actions.getColumnValues('id', { scope: 'selected' })).rejects.toMatchObject({
+      name: 'QueryError',
+      code: 'INVALID_ROWID',
+    });
     expect(harness.queryCalls).toHaveLength(0);
   });
 
   it("throws INVALID_ROWID when scope='selected' and a rowId is non-integer", async () => {
     state.selectedRows.set(new Set([1.5]));
-    await expect(
-      actions.getColumnValues('id', { scope: 'selected' }),
-    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    await expect(actions.getColumnValues('id', { scope: 'selected' })).rejects.toMatchObject({
+      name: 'QueryError',
+      code: 'INVALID_ROWID',
+    });
     expect(harness.queryCalls).toHaveLength(0);
   });
 
   it("throws INVALID_ROWID when scope='selected' and a rowId is NaN", async () => {
     state.selectedRows.set(new Set([Number.NaN]));
-    await expect(
-      actions.getColumnValues('id', { scope: 'selected' }),
-    ).rejects.toMatchObject({ name: 'QueryError', code: 'INVALID_ROWID' });
+    await expect(actions.getColumnValues('id', { scope: 'selected' })).rejects.toMatchObject({
+      name: 'QueryError',
+      code: 'INVALID_ROWID',
+    });
     expect(harness.queryCalls).toHaveLength(0);
   });
 

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  createTableState,
-  initializeColumnsFromSchema,
-} from '@/core/State';
+import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { RangeFilter, SetFilter } from '@/filters/FilterTypes';
@@ -40,9 +37,7 @@ function setupState(schema: ColumnSchema[] = sampleSchema): TableState {
   return state;
 }
 
-function createTestSnapshot(
-  overrides: Partial<SessionSnapshot> = {},
-): SessionSnapshot {
+function createTestSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -80,9 +75,7 @@ describe('snapshotFromState', () => {
     const state = setupState();
     const d1 = new Date('2024-01-15T00:00:00.000Z');
     const d2 = new Date('2024-06-30T23:59:59.999Z');
-    state.filters.set([
-      { type: 'range', column: 'created', min: d1, max: d2 },
-    ]);
+    state.filters.set([{ type: 'range', column: 'created', min: d1, max: d2 }]);
 
     const snapshot = snapshotFromState(state);
     expect(snapshot.filters).toHaveLength(1);
@@ -107,12 +100,7 @@ describe('snapshotFromState', () => {
   it('converts hiddenColumnInfo Map to Record', () => {
     const state = setupState();
     state.hiddenColumnInfo.set(
-      new Map([
-        [
-          'age',
-          { column: 'age', leftNeighbor: 'name', rightNeighbor: 'created' },
-        ],
-      ]),
+      new Map([['age', { column: 'age', leftNeighbor: 'name', rightNeighbor: 'created' }]]),
     );
 
     const snapshot = snapshotFromState(state);
@@ -155,9 +143,7 @@ describe('snapshotFromState', () => {
   it('deep-copies vector derived column values', () => {
     const state = setupState();
     const values = [1, 2, 3];
-    state.derivedColumns.set([
-      { kind: 'vector', name: 'scores', vectorType: 'float', values },
-    ]);
+    state.derivedColumns.set([{ kind: 'vector', name: 'scores', vectorType: 'float', values }]);
 
     const snapshot = snapshotFromState(state);
     expect(snapshot.derivedColumns).toHaveLength(1);
@@ -196,9 +182,7 @@ describe('snapshotFromState', () => {
 describe('restoreStateFromSnapshot — round-trip', () => {
   it('round-trips all signal types', () => {
     const stateA = setupState();
-    stateA.filters.set([
-      { type: 'range', column: 'age', min: 18, max: 65, maxInclusive: true },
-    ]);
+    stateA.filters.set([{ type: 'range', column: 'age', min: 18, max: 65, maxInclusive: true }]);
     stateA.sortColumns.set([{ column: 'name', direction: 'desc' }]);
     stateA.visibleColumns.set(['id', 'name', 'age']);
     stateA.columnOrder.set(['name', 'id', 'age', 'created']);
@@ -233,18 +217,14 @@ describe('restoreStateFromSnapshot — round-trip', () => {
     expect(stateB.columnOrder.get()).toEqual(stateA.columnOrder.get());
     expect(stateB.columnWidths.get()).toEqual(stateA.columnWidths.get());
     expect(stateB.pinnedColumns.get()).toEqual(stateA.pinnedColumns.get());
-    expect(stateB.hiddenColumnInfo.get()).toEqual(
-      stateA.hiddenColumnInfo.get(),
-    );
+    expect(stateB.hiddenColumnInfo.get()).toEqual(stateA.hiddenColumnInfo.get());
   });
 
   it('round-trips Date-containing filters', () => {
     const state = setupState();
     const d1 = new Date('2024-01-15T00:00:00.000Z');
     const d2 = new Date('2024-12-31T23:59:59.999Z');
-    state.filters.set([
-      { type: 'range', column: 'created', min: d1, max: d2 },
-    ]);
+    state.filters.set([{ type: 'range', column: 'created', min: d1, max: d2 }]);
 
     const snapshot = snapshotFromState(state);
 
@@ -262,9 +242,7 @@ describe('restoreStateFromSnapshot — round-trip', () => {
     const state = setupState();
     state.columnWidths.set(new Map([['id', 150]]));
     state.hiddenColumnInfo.set(
-      new Map([
-        ['age', { column: 'age', leftNeighbor: 'name', rightNeighbor: 'created' }],
-      ]),
+      new Map([['age', { column: 'age', leftNeighbor: 'name', rightNeighbor: 'created' }]]),
     );
 
     const snapshot = snapshotFromState(state);
@@ -327,9 +305,7 @@ describe('restoreStateFromSnapshot — schema validation', () => {
     });
 
     restoreStateFromSnapshot(state, snapshot);
-    expect(state.sortColumns.get()).toEqual([
-      { column: 'id', direction: 'asc' },
-    ]);
+    expect(state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
   });
 
   it('filters visibleColumns to only schema columns', () => {
@@ -349,12 +325,7 @@ describe('restoreStateFromSnapshot — schema validation', () => {
     });
 
     restoreStateFromSnapshot(state, snapshot);
-    expect(state.visibleColumns.get()).toEqual([
-      'id',
-      'name',
-      'age',
-      'created',
-    ]);
+    expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'created']);
   });
 
   it('appends new schema columns to columnOrder', () => {
@@ -374,12 +345,7 @@ describe('restoreStateFromSnapshot — schema validation', () => {
     });
 
     restoreStateFromSnapshot(state, snapshot);
-    expect(state.columnOrder.get()).toEqual([
-      'name',
-      'id',
-      'age',
-      'created',
-    ]);
+    expect(state.columnOrder.get()).toEqual(['name', 'id', 'age', 'created']);
   });
 
   it('drops columnWidths for columns not in schema', () => {
@@ -477,19 +443,9 @@ describe('restoreStateFromSnapshot — edge cases', () => {
 
     restoreStateFromSnapshot(state, snapshot);
     // visibleColumns should fall back to all schema columns
-    expect(state.visibleColumns.get()).toEqual([
-      'id',
-      'name',
-      'age',
-      'created',
-    ]);
+    expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'created']);
     // columnOrder should contain all schema columns (appended)
-    expect(state.columnOrder.get()).toEqual([
-      'id',
-      'name',
-      'age',
-      'created',
-    ]);
+    expect(state.columnOrder.get()).toEqual(['id', 'name', 'age', 'created']);
     expect(state.filters.get()).toEqual([]);
     expect(state.sortColumns.get()).toEqual([]);
     expect(state.pinnedColumns.get()).toEqual([]);
@@ -528,9 +484,7 @@ describe('restoreStateFromSnapshot — derivedColumns', () => {
   it('restores expression derived columns to state signal', () => {
     const state = setupState();
     const snapshot = createTestSnapshot({
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     });
 
     restoreStateFromSnapshot(state, snapshot);
@@ -547,9 +501,7 @@ describe('restoreStateFromSnapshot — derivedColumns', () => {
     const values = [10, 20, 30];
     const state = setupState();
     const snapshot = createTestSnapshot({
-      derivedColumns: [
-        { kind: 'vector', name: 'scores', vectorType: 'float', values },
-      ],
+      derivedColumns: [{ kind: 'vector', name: 'scores', vectorType: 'float', values }],
     });
 
     restoreStateFromSnapshot(state, snapshot);
@@ -565,9 +517,7 @@ describe('restoreStateFromSnapshot — derivedColumns', () => {
 
   it('leaves derivedColumns empty when snapshot has none', () => {
     const state = setupState();
-    state.derivedColumns.set([
-      { kind: 'expression', name: 'old', expression: 'id + 1' },
-    ]);
+    state.derivedColumns.set([{ kind: 'expression', name: 'old', expression: 'id + 1' }]);
 
     const snapshot = createTestSnapshot({ derivedColumns: [] });
     restoreStateFromSnapshot(state, snapshot);
@@ -597,21 +547,17 @@ describe('restoreStateFromSnapshot — derived column state preservation', () =>
       columnWidths: { total: 200, id: 100 },
       pinnedColumns: ['id', 'total'],
       hiddenColumnInfo: {},
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     });
 
     restoreStateFromSnapshot(state, snapshot);
 
     // Derived column filter preserved
     expect(state.filters.get()).toHaveLength(2);
-    expect(state.filters.get().find(f => f.column === 'total')).toBeDefined();
+    expect(state.filters.get().find((f) => f.column === 'total')).toBeDefined();
 
     // Derived column sort preserved
-    expect(state.sortColumns.get()).toEqual([
-      { column: 'total', direction: 'desc' },
-    ]);
+    expect(state.sortColumns.get()).toEqual([{ column: 'total', direction: 'desc' }]);
 
     // Derived column in visibleColumns at correct position
     expect(state.visibleColumns.get()).toEqual(['id', 'total', 'name', 'age', 'created']);
@@ -638,9 +584,7 @@ describe('restoreStateFromSnapshot — derived column state preservation', () =>
           rightNeighbor: 'name',
         },
       },
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     });
 
     restoreStateFromSnapshot(state, snapshot);
@@ -667,9 +611,7 @@ describe('restoreStateFromSnapshot — derived column state preservation', () =>
         { type: 'range', column: 'nonexistent', min: 0, max: 50 },
       ],
       pinnedColumns: ['total', 'nonexistent'],
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     });
 
     restoreStateFromSnapshot(state, snapshot);
@@ -708,23 +650,21 @@ describe('serializeStateSnapshot — derivedColumns', () => {
 
   it('serializes expression derived columns', () => {
     const snap = createRuntimeSnapshot({
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'a * b' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'a * b' }],
     });
     const serialized = serializeStateSnapshot(snap);
     expect(serialized.derivedColumns).toHaveLength(1);
     expect(serialized.derivedColumns![0]).toEqual({
-      kind: 'expression', name: 'total', expression: 'a * b',
+      kind: 'expression',
+      name: 'total',
+      expression: 'a * b',
     });
   });
 
   it('deep-copies vector values for IndexedDB independence', () => {
     const values = [1, 2, 3];
     const snap = createRuntimeSnapshot({
-      derivedColumns: [
-        { kind: 'vector', name: 'v', vectorType: 'float', values },
-      ],
+      derivedColumns: [{ kind: 'vector', name: 'v', vectorType: 'float', values }],
     });
     const serialized = serializeStateSnapshot(snap);
     // Mutating original should not affect serialized
@@ -746,16 +686,16 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
       columnWidths: {},
       pinnedColumns: [],
       hiddenColumnInfo: {},
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     };
     const validColumns = new Set(['id', 'name']);
     const result = deserializeStateSnapshot(serialized, validColumns);
 
     expect(result.derivedColumns).toHaveLength(1);
     expect(result.derivedColumns[0]).toEqual({
-      kind: 'expression', name: 'total', expression: 'id * 2',
+      kind: 'expression',
+      name: 'total',
+      expression: 'id * 2',
     });
   });
 
@@ -768,9 +708,7 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
       columnWidths: { total: 200 },
       pinnedColumns: ['total'],
       hiddenColumnInfo: {},
-      derivedColumns: [
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     };
     const validColumns = new Set(['id', 'name']);
     const result = deserializeStateSnapshot(serialized, validColumns);
@@ -823,7 +761,9 @@ describe('deserializeStateSnapshot — derivedColumns', () => {
 
     expect(deserialized.derivedColumns).toHaveLength(2);
     expect(deserialized.derivedColumns[0]).toEqual({
-      kind: 'expression', name: 'total', expression: 'id * 2',
+      kind: 'expression',
+      name: 'total',
+      expression: 'id * 2',
     });
     expect(deserialized.derivedColumns[1].kind).toBe('vector');
     if (deserialized.derivedColumns[1].kind === 'vector') {
@@ -919,9 +859,7 @@ describe('snapshotFromState — vector value pool deduplication', () => {
   it('deduplicates shared vector values across undo entries by reference', () => {
     const state = setupState();
     const values = [10, 20, 30, 40, 50];
-    state.derivedColumns.set([
-      { kind: 'vector', name: 'v', vectorType: 'integer', values },
-    ]);
+    state.derivedColumns.set([{ kind: 'vector', name: 'v', vectorType: 'integer', values }]);
 
     const undoManager = new UndoManager();
 
@@ -976,9 +914,7 @@ describe('snapshotFromState — vector value pool deduplication', () => {
 
   it('does not create pool when no vector columns exist', () => {
     const state = setupState();
-    state.derivedColumns.set([
-      { kind: 'expression', name: 'total', expression: 'id * 2' },
-    ]);
+    state.derivedColumns.set([{ kind: 'expression', name: 'total', expression: 'id * 2' }]);
 
     const undoManager = new UndoManager();
     undoManager.push(captureSnapshot(state));
@@ -1026,9 +962,7 @@ describe('snapshotFromState — vector value pool deduplication', () => {
   it('pool values are independent copies (mutating original does not affect pool)', () => {
     const state = setupState();
     const values = [1, 2, 3];
-    state.derivedColumns.set([
-      { kind: 'vector', name: 'v', vectorType: 'float', values },
-    ]);
+    state.derivedColumns.set([{ kind: 'vector', name: 'v', vectorType: 'float', values }]);
 
     const undoManager = new UndoManager();
     undoManager.push(captureSnapshot(state));
@@ -1132,22 +1066,20 @@ describe('vector value pool — round-trip', () => {
 
     // Simulate a pre-v4 snapshot with inline values and no pool
     const preV4Snapshot = createTestSnapshot({
-      derivedColumns: [
-        { kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] },
-      ],
+      derivedColumns: [{ kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] }],
       // These have inline values (no _poolRef) — pre-v4 format
-      undoStack: [{
-        filters: [],
-        sortColumns: [],
-        visibleColumns: ['id', 'name', 'v'],
-        columnOrder: ['id', 'name', 'v'],
-        columnWidths: {},
-        pinnedColumns: [],
-        hiddenColumnInfo: {},
-        derivedColumns: [
-          { kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] },
-        ],
-      }],
+      undoStack: [
+        {
+          filters: [],
+          sortColumns: [],
+          visibleColumns: ['id', 'name', 'v'],
+          columnOrder: ['id', 'name', 'v'],
+          columnWidths: {},
+          pinnedColumns: [],
+          hiddenColumnInfo: {},
+          derivedColumns: [{ kind: 'vector', name: 'v', vectorType: 'float', values: [7, 8, 9] }],
+        },
+      ],
       // No vectorValuePool — pre-v4
     }) as SessionSnapshot;
 
@@ -1169,19 +1101,21 @@ describe('vector value pool — round-trip', () => {
     // Snapshot with a _poolRef that doesn't exist in the pool
     const snapshot = createTestSnapshot({
       derivedColumns: [],
-      undoStack: [{
-        filters: [],
-        sortColumns: [],
-        visibleColumns: ['id', 'name'],
-        columnOrder: ['id', 'name'],
-        columnWidths: {},
-        pinnedColumns: [],
-        hiddenColumnInfo: {},
-        derivedColumns: [
-          { kind: 'vector', name: 'v', vectorType: 'float', _poolRef: 'nonexistent' } as any,
-        ],
-      }],
-      vectorValuePool: {},  // empty pool — ref won't resolve
+      undoStack: [
+        {
+          filters: [],
+          sortColumns: [],
+          visibleColumns: ['id', 'name'],
+          columnOrder: ['id', 'name'],
+          columnWidths: {},
+          pinnedColumns: [],
+          hiddenColumnInfo: {},
+          derivedColumns: [
+            { kind: 'vector', name: 'v', vectorType: 'float', _poolRef: 'nonexistent' } as any,
+          ],
+        },
+      ],
+      vectorValuePool: {}, // empty pool — ref won't resolve
     }) as SessionSnapshot;
 
     // Should not throw — graceful degradation

@@ -67,18 +67,15 @@ describe('checkBrowserSupport', () => {
     expect(result.missing).toEqual([]);
   });
 
-  it.each(PROBES)(
-    'reports $label missing when the $key global is absent',
-    ({ key, label }) => {
-      for (const { key: k } of PROBES) restores.push(ensureStub(k));
-      restores.push(removeGlobal(key));
+  it.each(PROBES)('reports $label missing when the $key global is absent', ({ key, label }) => {
+    for (const { key: k } of PROBES) restores.push(ensureStub(k));
+    restores.push(removeGlobal(key));
 
-      const result = checkBrowserSupport();
+    const result = checkBrowserSupport();
 
-      expect(result.supported).toBe(false);
-      expect(result.missing).toEqual([label]);
-    },
-  );
+    expect(result.supported).toBe(false);
+    expect(result.missing).toEqual([label]);
+  });
 
   it('aggregates multiple missing APIs in a single report', () => {
     for (const { key } of PROBES) restores.push(ensureStub(key));
@@ -88,9 +85,7 @@ describe('checkBrowserSupport', () => {
     const result = checkBrowserSupport();
 
     expect(result.supported).toBe(false);
-    expect(result.missing).toEqual(
-      expect.arrayContaining(['ResizeObserver', 'structuredClone']),
-    );
+    expect(result.missing).toEqual(expect.arrayContaining(['ResizeObserver', 'structuredClone']));
     expect(result.missing).toHaveLength(2);
   });
 });

@@ -5,14 +5,7 @@
  * of the browser APIs the library actually requires. When off (default),
  * the probe is not called.
  */
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  afterEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { createDataTable } from '@/index';
 import { WorkerInitError } from '@/core/errors';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -123,9 +116,7 @@ describe('createDataTable — strictBrowserCheck (Phase 9)', () => {
     expect(caught).toBeInstanceOf(WorkerInitError);
     const typed = caught as WorkerInitError;
     expect(typed.code).toBe('WORKER_UNSUPPORTED');
-    expect((typed.details as { missing: string[] }).missing).toContain(
-      'ResizeObserver',
-    );
+    expect((typed.details as { missing: string[] }).missing).toContain('ResizeObserver');
     // Fail-fast: the bridge must not have been initialized.
     expect(bridge.initialize).not.toHaveBeenCalled();
   });

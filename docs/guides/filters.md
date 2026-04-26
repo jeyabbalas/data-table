@@ -109,7 +109,7 @@ Use `addRawSQLFilter` rather than constructing this by hand:
 ```ts
 const id = table.actions.addRawSQLFilter(
   `price > 100 AND category IN ('A', 'B')`,
-  'Expensive in A/B'   // optional chip label
+  'Expensive in A/B', // optional chip label
 );
 // Later:
 table.actions.updateRawSQLFilter(id, `price > 200`, 'Very expensive');
@@ -123,9 +123,7 @@ way same-column filters do.
 Validate a fragment before applying it:
 
 ```ts
-const { valid, matchCount, error } = await table.actions.validateSQLFilter(
-  `price > 100`
-);
+const { valid, matchCount, error } = await table.actions.validateSQLFilter(`price > 100`);
 if (valid) {
   console.log(`${matchCount} rows would match`);
 }
@@ -136,10 +134,10 @@ if (valid) {
 `table.actions` exposes the write path:
 
 ```ts
-table.actions.addFilter(filter);             // add or replace same-column filter
-table.actions.removeFilter('age');            // remove all filters on column
-table.actions.removeFilter('age', 'range');   // remove only range filter on column
-table.actions.clearFilters();                 // remove all
+table.actions.addFilter(filter); // add or replace same-column filter
+table.actions.removeFilter('age'); // remove all filters on column
+table.actions.removeFilter('age', 'range'); // remove only range filter on column
+table.actions.clearFilters(); // remove all
 ```
 
 Each call updates the `filters` signal, recomputes filtered row count, emits
@@ -153,9 +151,9 @@ Use `loadFilterPreset` to replace everything in one undo step:
 table.actions.loadFilterPreset(
   [
     { type: 'range', column: 'age', min: 18, max: 65 },
-    { type: 'set',   column: 'country', values: ['US', 'CA'] },
+    { type: 'set', column: 'country', values: ['US', 'CA'] },
   ],
-  [{ column: 'signup_date', direction: 'desc' }],   // optional sort
+  [{ column: 'signup_date', direction: 'desc' }], // optional sort
 );
 ```
 
@@ -208,7 +206,7 @@ the current filters atomically:
 ```ts
 table.actions.loadFilterPreset([
   { type: 'range', column: 'age', min: 18, max: 65 },
-  { type: 'set',   column: 'country', values: ['US'] },
+  { type: 'set', column: 'country', values: ['US'] },
 ]);
 // One `filterChange` event, one undo step.
 ```
@@ -243,7 +241,7 @@ if (params.has('country')) {
 ## Gotchas
 
 - **`addFilter` replaces per column.** Two `range` filters on `age` can't coexist — the second one wins. Use `raw-sql` if you need an `AND` across the same column.
-- **`includeNull: true` adds `OR col IS NULL` to `not-set` filters.** That makes the filter *looser*, not tighter. Read it as "anything except these values, OR a NULL."
+- **`includeNull: true` adds `OR col IS NULL` to `not-set` filters.** That makes the filter _looser_, not tighter. Read it as "anything except these values, OR a NULL."
 - **Regex patterns don't support backreferences or lookarounds.** DuckDB uses RE2-style semantics.
 - **Date matching is exact.** `{ type: 'point', column: 'created_at', value: new Date(...) }` matches the exact timestamp including milliseconds. Use a `range` filter for day-granularity matching.
 - **Raw-SQL filters aren't auto-validated.** The library will happily let you add a syntactically broken fragment; queries will then fail with `QueryError`. Call `validateSQLFilter()` first.

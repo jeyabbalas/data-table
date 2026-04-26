@@ -34,11 +34,8 @@
  * `DataTable` in a `node` env don't throw.
  */
 
-import type {
-  ColumnHeaderTooltipContent,
-  ColumnHeaderTooltipItem,
-} from '../core/types';
 import { onAnyModalOpened } from '../core/ModalHost';
+import type { ColumnHeaderTooltipContent, ColumnHeaderTooltipItem } from '../core/types';
 
 /** Options accepted by {@link ColumnHeaderTooltipPopover}. */
 export interface ColumnHeaderTooltipPopoverOptions {
@@ -89,10 +86,7 @@ function populateInto(
   }
 }
 
-function renderItem(
-  item: ColumnHeaderTooltipItem,
-  classPrefix: string,
-): HTMLLIElement {
+function renderItem(item: ColumnHeaderTooltipItem, classPrefix: string): HTMLLIElement {
   const li = document.createElement('li');
   li.className = `${classPrefix}-col-tooltip__item`;
 
@@ -149,9 +143,7 @@ export class ColumnHeaderTooltipPopover {
   constructor(options: ColumnHeaderTooltipPopoverOptions = {}) {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.portalTarget =
-      typeof document === 'undefined'
-        ? null
-        : (options.portalTarget ?? document.body);
+      typeof document === 'undefined' ? null : (options.portalTarget ?? document.body);
     this.popoverId = `${this.classPrefix}-col-tooltip-${++popoverInstanceCounter}`;
 
     this.onDocumentKeyDown = (e: KeyboardEvent) => {
@@ -188,9 +180,7 @@ export class ColumnHeaderTooltipPopover {
   /** `true` if the popover is currently anchored to `anchor`. */
   isOpenFor(anchor: HTMLElement): boolean {
     return (
-      !this.destroyed &&
-      this.currentAnchor === anchor &&
-      this.element?.style.display !== 'none'
+      !this.destroyed && this.currentAnchor === anchor && this.element?.style.display !== 'none'
     );
   }
 

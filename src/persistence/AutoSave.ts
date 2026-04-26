@@ -21,13 +21,13 @@
  * save.destroy();
  */
 
+import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { PersistenceError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
-import type { AnnotationStore } from '../annotations/AnnotationStore';
-import type { SessionStore } from './SessionStore';
 import { snapshotFromState } from './serialization';
-import { PersistenceError } from '../core/errors';
+import type { SessionStore } from './SessionStore';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
@@ -95,9 +95,7 @@ export class AutoSave {
 
     // Subscribe to preset changes
     if (this.presetManager) {
-      this.unsubscribes.push(
-        this.presetManager.presets.subscribe(() => this.scheduleSave()),
-      );
+      this.unsubscribes.push(this.presetManager.presets.subscribe(() => this.scheduleSave()));
     }
 
     // Subscribe to annotation-store changes. The store's `on('change', …)`
@@ -105,21 +103,15 @@ export class AutoSave {
     // `filterChanged` toggles are visual-only but persisted in the snapshot
     // (annotationSeverityFilter), so they need to schedule a save too.
     if (this.annotationStore) {
-      this.unsubscribes.push(
-        this.annotationStore.on('change', () => this.scheduleSave()),
-      );
+      this.unsubscribes.push(this.annotationStore.on('change', () => this.scheduleSave()));
     }
 
     // Subscribe to undo/redo stack changes so stacks are saved even when
     // an undo/redo happens to produce the same state (equality guards skip
     // signal notifications, but the stacks themselves have changed).
     if (this.undoManager) {
-      this.unsubscribes.push(
-        this.undoManager.canUndoSignal.subscribe(() => this.scheduleSave()),
-      );
-      this.unsubscribes.push(
-        this.undoManager.canRedoSignal.subscribe(() => this.scheduleSave()),
-      );
+      this.unsubscribes.push(this.undoManager.canUndoSignal.subscribe(() => this.scheduleSave()));
+      this.unsubscribes.push(this.undoManager.canRedoSignal.subscribe(() => this.scheduleSave()));
     }
 
     // If the undo/redo stacks already have entries (e.g., restored from a
@@ -216,11 +208,16 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager, this.annotationStore);
+    const snapshot = snapshotFromState(
+      this.state,
+      this.undoManager,
+      this.presetManager,
+      this.annotationStore,
+    );
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        (result as Promise<void>).catch((cause) => {
+      if (result && typeof result.then === 'function') {
+        result.catch((cause) => {
           this.reportError(cause);
         });
       }
@@ -237,7 +234,12 @@ export class AutoSave {
     if (this.destroyed) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(this.state, this.undoManager, this.presetManager, this.annotationStore);
+    const snapshot = snapshotFromState(
+      this.state,
+      this.undoManager,
+      this.presetManager,
+      this.annotationStore,
+    );
     try {
       this.store.saveSync(snapshot);
     } catch (cause) {
@@ -250,10 +252,10 @@ export class AutoSave {
     const err =
       cause instanceof PersistenceError
         ? cause
-        : new PersistenceError(
-            cause instanceof Error ? cause.message : String(cause),
-            { code: 'SAVE_FAILED', cause },
-          );
+        : new PersistenceError(cause instanceof Error ? cause.message : String(cause), {
+            code: 'SAVE_FAILED',
+            cause,
+          });
     this.onError(err);
   }
 }

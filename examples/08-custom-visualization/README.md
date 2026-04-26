@@ -48,7 +48,7 @@ destroy() {
 
 ## Per-column registration — subclass the registry
 
-`VisualizationRegistration.isApplicable(type)` only receives the column's DataType — it cannot see the column name. To restrict the choropleth to *just* the `state` column (so `product_category` keeps `ValueCounts`), subclass `VisualizationRegistry` and override `create`:
+`VisualizationRegistration.isApplicable(type)` only receives the column's DataType — it cannot see the column name. To restrict the choropleth to _just_ the `state` column (so `product_category` keeps `ValueCounts`), subclass `VisualizationRegistry` and override `create`:
 
 ```ts
 class StateAwareRegistry extends VisualizationRegistry {

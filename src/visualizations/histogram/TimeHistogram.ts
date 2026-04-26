@@ -8,10 +8,17 @@
  * - Bin range formatting
  */
 
-import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TimeColumnStats } from '../../statistics/ColumnStatsTypes';
+import type { VisualizationOptions } from '../BaseVisualization';
+import {
+  formatTimeOnlyLabel,
+  formatTimeOnlyLabelNumeric,
+  formatTimeOnlyRange,
+  formatTimeOnlyRangeNumeric,
+} from './DateFormatters';
+import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
 import {
   fetchTimeHistogramData,
   secondsToTimeString,
@@ -20,13 +27,6 @@ import {
   fetchTimeNumericBins,
 } from './TimeHistogramData';
 import type { TimeHistogramData } from './TimeHistogramData';
-import { formatTimeOnlyLabel, formatTimeOnlyLabelNumeric, formatTimeOnlyRange, formatTimeOnlyRangeNumeric } from './DateFormatters';
-import {
-  SharedHistogramBase,
-  FONTS,
-  PADDING,
-  LAYOUT,
-} from './SharedHistogramBase';
 
 // =========================================
 // TimeHistogram Class
@@ -38,11 +38,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
   private initialDataPromise: Promise<void> | null = null;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
   }
 
@@ -63,8 +59,12 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       const col = this.column.name;
 
       this.initialDataPromise = fetchTimeHistogramData(tableName, col, [], bridge, maxBins)
-        .then(data => { this.initialData = data; })
-        .finally(() => { this.initialDataPromise = null; });
+        .then((data) => {
+          this.initialData = data;
+        })
+        .finally(() => {
+          this.initialDataPromise = null;
+        });
     }
 
     await this.initialDataPromise;
@@ -78,7 +78,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
    */
   private async fetchAlignedForeground(
     filters: Filter[],
-    seq: number
+    seq: number,
   ): Promise<TimeHistogramData | null> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
@@ -91,7 +91,15 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
     if (initial.isNumericBinning && initial.minSeconds !== null && initial.maxSeconds !== null) {
       const [fgBins, fgStats] = await Promise.all([
-        fetchTimeNumericBins(tableName, col, initial.bins.length, initial.minSeconds, initial.maxSeconds, filters, bridge),
+        fetchTimeNumericBins(
+          tableName,
+          col,
+          initial.bins.length,
+          initial.minSeconds,
+          initial.maxSeconds,
+          filters,
+          bridge,
+        ),
         fetchTimeStats(tableName, col, filters, bridge),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
@@ -118,7 +126,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       for (const bin of rawFgBins) {
         fgBinMap.set(bin.binStartSeconds, bin.count);
       }
-      const fgBins = initial.bins.map(bgBin => ({
+      const fgBins = initial.bins.map((bgBin) => ({
         binStartSeconds: bgBin.binStartSeconds,
         binEndSeconds: bgBin.binEndSeconds,
         count: fgBinMap.get(bgBin.binStartSeconds) ?? 0,
@@ -172,7 +180,11 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
         this.data = await fetchTimeHistogramData(
-          this.options.tableName, this.column.name, allFilters, this.options.bridge, maxBins
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          maxBins,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
@@ -226,9 +238,8 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   protected drawAxisLabels(): void {
     if (!this.data) return;
 
-    const maxX = this.data.nullCount > 0
-      ? this.nullBarArea.x - LAYOUT.nullBarGap
-      : this.width - PADDING.right;
+    const maxX =
+      this.data.nullCount > 0 ? this.nullBarArea.x - LAYOUT.nullBarGap : this.width - PADDING.right;
 
     // Handle single value case
     if (this.data.isSingleValue && this.data.bins.length > 0) {
@@ -240,10 +251,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       ctx.textAlign = 'center';
       const label = this.data.isNumericBinning
         ? formatTimeOnlyLabelNumeric(this.data.bins[0].binStartSeconds)
-        : formatTimeOnlyLabel(
-            this.data.bins[0].binStartSeconds,
-            this.data.interval
-          );
+        : formatTimeOnlyLabel(this.data.bins[0].binStartSeconds, this.data.interval);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0) {
@@ -252,16 +260,10 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
       const minLabel = this.data.isNumericBinning
         ? formatTimeOnlyLabelNumeric(firstBin.binStartSeconds)
-        : formatTimeOnlyLabel(
-            firstBin.binStartSeconds,
-            this.data.interval
-          );
+        : formatTimeOnlyLabel(firstBin.binStartSeconds, this.data.interval);
       const maxLabel = this.data.isNumericBinning
         ? formatTimeOnlyLabelNumeric(lastBin.binEndSeconds)
-        : formatTimeOnlyLabel(
-            lastBin.binStartSeconds,
-            this.data.interval
-          );
+        : formatTimeOnlyLabel(lastBin.binStartSeconds, this.data.interval);
       this.drawMinMaxLabels(minLabel, maxLabel, maxX);
     }
 
@@ -285,11 +287,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
     return this.data.isNumericBinning
       ? formatTimeOnlyRangeNumeric(bin.binStartSeconds, bin.binEndSeconds)
-      : formatTimeOnlyRange(
-          bin.binStartSeconds,
-          bin.binEndSeconds,
-          this.data.interval
-        );
+      : formatTimeOnlyRange(bin.binStartSeconds, bin.binEndSeconds, this.data.interval);
   }
 
   /**
@@ -307,11 +305,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         : formatTimeOnlyRangeNumeric(startBin.binStartSeconds, endBin.binEndSeconds);
     } else {
       return startIdx === endIdx
-        ? formatTimeOnlyRange(
-            startBin.binStartSeconds,
-            startBin.binEndSeconds,
-            this.data.interval
-          )
+        ? formatTimeOnlyRange(startBin.binStartSeconds, startBin.binEndSeconds, this.data.interval)
         : `${formatTimeOnlyLabel(startBin.binStartSeconds, this.data.interval)} – ${formatTimeOnlyLabel(endBin.binStartSeconds, this.data.interval)}`;
     }
   }
@@ -326,14 +320,8 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   protected emitBrushFilter(): void {
     if (!this.data) return;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startBin = this.data.bins[startIdx];
     const endBin = this.data.bins[endIdx];
 
@@ -370,9 +358,9 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   // Filter → Visual State Sync (Time-aware)
   // =========================================
 
-  protected syncVisualStateFromFilter(): void {
+  protected override syncVisualStateFromFilter(): void {
     const filters = this.options.filters;
-    const ownFilter = filters.find(f => f.column === this.column.name);
+    const ownFilter = filters.find((f) => f.column === this.column.name);
     const data = this.backgroundData ?? this.data;
 
     if (!ownFilter || !data || data.bins.length === 0) {
@@ -386,7 +374,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
     switch (ownFilter.type) {
       case 'range':
-        this.syncBrushFromTimeRangeFilter(ownFilter as RangeFilter, data.bins);
+        this.syncBrushFromTimeRangeFilter(ownFilter, data.bins);
         break;
       case 'null':
         this.clearBrushStateOnly();
@@ -423,7 +411,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
   private syncBrushFromTimeRangeFilter(
     filter: RangeFilter,
-    bins: Array<{ binStartSeconds: number; binEndSeconds: number }>
+    bins: { binStartSeconds: number; binEndSeconds: number }[],
   ): void {
     const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
     const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);

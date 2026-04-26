@@ -21,15 +21,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -79,9 +86,7 @@ describe('SQLFilterModal — focus + escape-guard', () => {
 
   it('applies ARIA on open and restores focus on Escape', () => {
     modal.open();
-    const dialog = modal
-      .getElement()
-      .querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
+    const dialog = modal.getElement().querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
     expect(dialog.getAttribute('role')).toBe('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.getAttribute('aria-labelledby')).toBe('dt-q-sql-filter-modal-title');
@@ -99,9 +104,7 @@ describe('SQLFilterModal — focus + escape-guard', () => {
     tip.className = 'cm-tooltip-autocomplete';
     document.body.appendChild(tip);
 
-    const dialog = modal
-      .getElement()
-      .querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
+    const dialog = modal.getElement().querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
     dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     expect(modal.getIsOpen()).toBe(true);

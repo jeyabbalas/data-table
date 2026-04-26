@@ -59,7 +59,9 @@
   background: transparent;
   color: var(--dt-text-secondary);
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-export-close:hover {
@@ -99,8 +101,8 @@
   pointer-events: none;
 }
 
-.dt-export-option input[type="radio"],
-.dt-export-option input[type="checkbox"] {
+.dt-export-option input[type='radio'],
+.dt-export-option input[type='checkbox'] {
   margin: 0;
   accent-color: var(--dt-primary);
 }
@@ -133,7 +135,7 @@
 }
 
 .dt-export-field > select,
-.dt-export-field > input[type="text"] {
+.dt-export-field > input[type='text'] {
   flex: 1;
   min-width: 0;
 }
@@ -157,7 +159,9 @@
   font-weight: 500;
   cursor: pointer;
   min-width: 100px;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-export-btn:hover {
@@ -190,7 +194,9 @@
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-export-copy-btn:hover {
@@ -216,25 +222,24 @@
 /* Dark mode — export dialog. Portalled to <body>; ModalHost copies the
    `data-dt-color-scheme` attribute onto the backdrop on open. */
 @media (prefers-color-scheme: dark) {
-  .dt-export-backdrop:not([data-dt-color-scheme="light"]) {
+  .dt-export-backdrop:not([data-dt-color-scheme='light']) {
     background: var(--dt-backdrop);
   }
 
-  .dt-export-backdrop:not([data-dt-color-scheme="light"]) .dt-export-dialog {
+  .dt-export-backdrop:not([data-dt-color-scheme='light']) .dt-export-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
 
-  .dt-export-backdrop:not([data-dt-color-scheme="light"]) .dt-export-error {
+  .dt-export-backdrop:not([data-dt-color-scheme='light']) .dt-export-error {
     color: var(--dt-error-text-strong);
   }
 }
-.dt-export-backdrop[data-dt-color-scheme="dark"] {
+.dt-export-backdrop[data-dt-color-scheme='dark'] {
   background: var(--dt-backdrop);
 }
-.dt-export-backdrop[data-dt-color-scheme="dark"] .dt-export-dialog {
+.dt-export-backdrop[data-dt-color-scheme='dark'] .dt-export-dialog {
   box-shadow: 0 8px 32px var(--dt-shadow-md);
 }
-.dt-export-backdrop[data-dt-color-scheme="dark"] .dt-export-error {
+.dt-export-backdrop[data-dt-color-scheme='dark'] .dt-export-error {
   color: var(--dt-error-text-strong);
 }
-

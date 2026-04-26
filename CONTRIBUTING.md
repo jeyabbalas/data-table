@@ -43,10 +43,25 @@ Use the **Feature request** issue template. Before proposing:
 3. Make your change.
    - Add or update tests under `tests/`, mirroring the `src/` layout.
    - Keep public-API changes minimal; extend rather than replace where possible.
-4. Run the local checks — both must pass:
-   - `npm test`
+4. Run the local checks — all must pass:
+   - `npm run lint`
+   - `npm run format:check`
+   - `npm run typecheck`
+   - `npm run test:coverage`
    - `npm run build`
-5. Update the changelog. Add an entry under the `## [Unreleased]` block in [`CHANGELOG.md`](./CHANGELOG.md) using the existing `### Added` / `### Changed` / `### Fixed` / `### Changed (breaking)` / `### Migration` headings ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format).
+
+   `npm run lint:fix` and `npm run format` can fix most mechanical issues.
+
+5. Add a changeset describing the change:
+   ```bash
+   npx changeset
+   ```
+   The CLI prompts for the bump (`patch` / `minor` / `major`) and writes a
+   markdown file under `.changeset/`. Commit it alongside your code; the
+   release workflow rolls it forward into [`CHANGELOG.md`](./CHANGELOG.md)
+   on version. Match the existing
+   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) headings
+   (`Added` / `Changed` / `Fixed` / `Changed (breaking)` / `Migration`).
 6. Update documentation that is affected:
    - Public-API changes → [`docs/api-reference.md`](./docs/api-reference.md), and [`AGENTS.md`](./AGENTS.md) if the change alters agent-facing guidance.
    - User-visible behavior changes → the relevant guide under [`docs/guides/`](./docs/guides/).
@@ -60,7 +75,7 @@ Match the existing project style (check `git log`):
 - Imperative mood, sentence case.
 - No `feat:` / `fix:` / `chore:` prefixes.
 - Subject line under 72 characters.
-- Optional body, wrapped near 72 columns, explaining *why* rather than *what*.
+- Optional body, wrapped near 72 columns, explaining _why_ rather than _what_.
 - One logical change per commit; rebase to tidy up before opening the PR.
 
 Good examples, taken from the actual history:

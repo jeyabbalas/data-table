@@ -185,7 +185,9 @@ describe('CellRenderer', () => {
       });
 
       it('should format full interval', () => {
-        expect(renderer.formatValue('1 year 2 months 3 days 04:05:06', 'interval')).toBe('1y 2mo 3d 4h 5m 6s');
+        expect(renderer.formatValue('1 year 2 months 3 days 04:05:06', 'interval')).toBe(
+          '1y 2mo 3d 4h 5m 6s',
+        );
       });
 
       it('should return 0s for zero interval', () => {
@@ -199,8 +201,15 @@ describe('CellRenderer', () => {
 
       it('should handle Arrow MonthDayNano interval objects', () => {
         expect(renderer.formatValue({ months: 0, days: 1, nanoseconds: 0 }, 'interval')).toBe('1d');
-        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 }, 'interval')).toBe('1h');
-        expect(renderer.formatValue({ months: 14, days: 3, nanoseconds: 14_706_000_000_000 }, 'interval')).toBe('1y 2mo 3d 4h 5m 6s');
+        expect(
+          renderer.formatValue({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 }, 'interval'),
+        ).toBe('1h');
+        expect(
+          renderer.formatValue(
+            { months: 14, days: 3, nanoseconds: 14_706_000_000_000 },
+            'interval',
+          ),
+        ).toBe('1y 2mo 3d 4h 5m 6s');
       });
 
       it('should handle zero interval object', () => {
@@ -208,15 +217,30 @@ describe('CellRenderer', () => {
       });
 
       it('should handle negative interval objects', () => {
-        expect(renderer.formatValue({ months: 0, days: -1, nanoseconds: 0 }, 'interval')).toBe('-1d');
-        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: -3_600_000_000_000 }, 'interval')).toBe('-1h');
-        expect(renderer.formatValue({ months: -14, days: -3, nanoseconds: -14_706_000_000_000 }, 'interval')).toBe('-1y 2mo 3d 4h 5m 6s');
+        expect(renderer.formatValue({ months: 0, days: -1, nanoseconds: 0 }, 'interval')).toBe(
+          '-1d',
+        );
+        expect(
+          renderer.formatValue({ months: 0, days: 0, nanoseconds: -3_600_000_000_000 }, 'interval'),
+        ).toBe('-1h');
+        expect(
+          renderer.formatValue(
+            { months: -14, days: -3, nanoseconds: -14_706_000_000_000 },
+            'interval',
+          ),
+        ).toBe('-1y 2mo 3d 4h 5m 6s');
       });
 
       it('should handle fractional seconds from interval objects', () => {
-        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 1_500_000_000 }, 'interval')).toBe('1.5s');
-        expect(renderer.formatValue({ months: 0, days: 0, nanoseconds: 500_000_000 }, 'interval')).toBe('0.5s');
-        expect(renderer.formatValue({ months: 0, days: 0, micros: 1_500_000 }, 'interval')).toBe('1.5s');
+        expect(
+          renderer.formatValue({ months: 0, days: 0, nanoseconds: 1_500_000_000 }, 'interval'),
+        ).toBe('1.5s');
+        expect(
+          renderer.formatValue({ months: 0, days: 0, nanoseconds: 500_000_000 }, 'interval'),
+        ).toBe('0.5s');
+        expect(renderer.formatValue({ months: 0, days: 0, micros: 1_500_000 }, 'interval')).toBe(
+          '1.5s',
+        );
       });
     });
 
@@ -436,7 +460,8 @@ describe('CellRenderer', () => {
       });
 
       it('should set title for long strings', () => {
-        const longText = 'This is a very long string that would be truncated in the cell display but should show fully in the tooltip';
+        const longText =
+          'This is a very long string that would be truncated in the cell display but should show fully in the tooltip';
         schema.type = 'string';
         renderer.render(cellEl, longText, schema);
         expect(cellEl.title).toBe(longText);

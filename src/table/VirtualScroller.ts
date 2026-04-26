@@ -73,11 +73,11 @@ export class VirtualScroller {
   private contentContainer: HTMLElement;
   private viewportContainer: HTMLElement;
   private widthSpacer: HTMLElement;
-  private scrollSource: HTMLElement;  // Element to listen for scroll events (parent or self)
-  private totalRows: number = 0;
+  private scrollSource: HTMLElement; // Element to listen for scroll events (parent or self)
+  private totalRows = 0;
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
-  private scrollCallbacks: Set<ScrollCallback> = new Set();
-  private destroyed: boolean = false;
+  private scrollCallbacks = new Set<ScrollCallback>();
+  private destroyed = false;
 
   private readonly rowHeight: number;
   private readonly bufferRows: number;
@@ -221,10 +221,7 @@ export class VirtualScroller {
     const newRange = this.calculateVisibleRange();
 
     // Only notify if range actually changed
-    if (
-      newRange.start !== this.currentRange.start ||
-      newRange.end !== this.currentRange.end
-    ) {
+    if (newRange.start !== this.currentRange.start || newRange.end !== this.currentRange.end) {
       this.currentRange = newRange;
       this.updateViewportPosition();
       this.notifyScrollCallbacks();
@@ -359,7 +356,7 @@ export class VirtualScroller {
         scrollTop = rowTop;
         break;
       case 'center':
-        scrollTop = rowTop - (viewportHeight / 2) + (this.rowHeight / 2);
+        scrollTop = rowTop - viewportHeight / 2 + this.rowHeight / 2;
         break;
       case 'end':
         scrollTop = rowTop - viewportHeight + this.rowHeight;

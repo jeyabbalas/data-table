@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  buildParquetQuery,
-  exportToParquet,
-  exportParquetFromState,
-} from '@/export/ParquetExport';
+import { buildParquetQuery, exportToParquet, exportParquetFromState } from '@/export/ParquetExport';
 import type { ExportContext } from '@/export/ExportQuery';
 import type { ColumnSchema } from '@/core/types';
 
@@ -36,7 +32,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name', 'price'],
       { scope: 'all', columns: 'all' },
-      baseContext
+      baseContext,
     );
 
     expect(sql).toBe('SELECT "id", "name", "price" FROM "test_table"');
@@ -54,7 +50,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'all', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('ORDER BY "name" ASC');
@@ -70,7 +66,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name', 'price'],
       { scope: 'filtered', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('WHERE');
@@ -88,7 +84,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'all', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).not.toContain('WHERE');
@@ -99,7 +95,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'selected', columns: 'all' },
-      baseContext
+      baseContext,
     );
 
     expect(sql).toContain('WHERE FALSE');
@@ -115,7 +111,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'selected', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('LIMIT 4 OFFSET 3');
@@ -132,7 +128,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'selected', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('ROW_NUMBER');
@@ -151,7 +147,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'selected', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" DESC)');
@@ -168,7 +164,7 @@ describe('buildParquetQuery', () => {
       'test_table',
       ['id', 'name'],
       { scope: 'selected', columns: 'all' },
-      context
+      context,
     );
 
     expect(sql).toContain('WHERE');
@@ -282,9 +278,9 @@ describe('exportToParquet', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
-      exportToParquet('test', {}, baseContext, controller.signal)
-    ).rejects.toThrow('Export aborted');
+    await expect(exportToParquet('test', {}, baseContext, controller.signal)).rejects.toThrow(
+      'Export aborted',
+    );
   });
 
   it('should pass signal to exportToBuffer', async () => {
@@ -295,7 +291,7 @@ describe('exportToParquet', () => {
     expect(mockBridge.exportToBuffer).toHaveBeenCalledWith(
       expect.any(String),
       'parquet',
-      controller.signal
+      controller.signal,
     );
   });
 });
@@ -313,8 +309,8 @@ describe('exportParquetFromState', () => {
     await expect(
       exportParquetFromState(
         mockState as unknown as import('@/core/State').TableState,
-        {} as unknown as import('@/data/WorkerBridge').WorkerBridge
-      )
+        {} as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      ),
     ).rejects.toThrow('No table loaded');
   });
 
@@ -341,7 +337,7 @@ describe('exportParquetFromState', () => {
     const result = await exportParquetFromState(
       mockState as unknown as import('@/core/State').TableState,
       mockBridge as unknown as import('@/data/WorkerBridge').WorkerBridge,
-      { scope: 'all' }
+      { scope: 'all' },
     );
 
     expect(result).toEqual(dummyBuffer);

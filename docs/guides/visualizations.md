@@ -23,13 +23,13 @@ column type.
 
 Five classes are registered by default:
 
-| Class | Applicable column types | Description |
-|---|---|---|
-| `Histogram` | `integer`, `float`, `decimal` | Bucketed bars with brushable range selection |
-| `DateHistogram` | `date`, `timestamp` | Adaptive bin widths (day/week/month/quarter/year) |
-| `TimeHistogram` | `time` | Hour/minute/second bins |
-| `IntervalHistogram` | `interval` | Bucketed by interval unit |
-| `ValueCounts` | `string`, `boolean`, `uuid` | Top-N bars plus an "Other" bucket |
+| Class               | Applicable column types       | Description                                       |
+| ------------------- | ----------------------------- | ------------------------------------------------- |
+| `Histogram`         | `integer`, `float`, `decimal` | Bucketed bars with brushable range selection      |
+| `DateHistogram`     | `date`, `timestamp`           | Adaptive bin widths (day/week/month/quarter/year) |
+| `TimeHistogram`     | `time`                        | Hour/minute/second bins                           |
+| `IntervalHistogram` | `interval`                    | Bucketed by interval unit                         |
+| `ValueCounts`       | `string`, `boolean`, `uuid`   | Top-N bars plus an "Other" bucket                 |
 
 All five support crossfilter — brushing a range or clicking a category emits
 a filter that's applied to the underlying data and propagated to every other
@@ -76,7 +76,11 @@ import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
 class BoxPlot extends BaseVisualization {
   protected async fetchData() {
     const [{ q1, median, q3, min, max }] = await this.bridge.query<{
-      q1: number; median: number; q3: number; min: number; max: number;
+      q1: number;
+      median: number;
+      q3: number;
+      min: number;
+      max: number;
     }>(`
       SELECT
         quantile(${this.columnName}, 0.25) AS q1,
@@ -94,9 +98,15 @@ class BoxPlot extends BaseVisualization {
     // Draw on this.ctx using this.width, this.height
   }
 
-  protected handleMouseMove(_event: MouseEvent) { /* hover tooltip */ }
-  protected handleClick(_event: MouseEvent)     { /* optional: set a filter */ }
-  protected handleMouseLeave()                  { /* clear hover state */ }
+  protected handleMouseMove(_event: MouseEvent) {
+    /* hover tooltip */
+  }
+  protected handleClick(_event: MouseEvent) {
+    /* optional: set a filter */
+  }
+  protected handleMouseLeave() {
+    /* clear hover state */
+  }
 }
 
 const registry = new VisualizationRegistry();
@@ -104,7 +114,7 @@ registry.register({
   name: 'box-plot',
   isApplicable: (type) => type === 'float' || type === 'integer',
   constructor: BoxPlot,
-  priority: 10,   // higher than built-ins (priority 0)
+  priority: 10, // higher than built-ins (priority 0)
 });
 
 await createDataTable({ container, source, visualizationRegistry: registry });
@@ -112,12 +122,12 @@ await createDataTable({ container, source, visualizationRegistry: registry });
 
 ### Registration fields
 
-| Field | Meaning |
-|---|---|
-| `name` | Unique identifier; registering a second time with the same name replaces the previous registration |
-| `isApplicable(type)` | Return `true` if this viz can render the column type (`integer`, `string`, `date`, etc.) |
-| `constructor` | Class to instantiate. Must extend `BaseVisualization` |
-| `priority` | Higher priority wins when multiple registrations match. Built-ins use `0`; custom classes commonly use `10` or higher |
+| Field                | Meaning                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `name`               | Unique identifier; registering a second time with the same name replaces the previous registration                    |
+| `isApplicable(type)` | Return `true` if this viz can render the column type (`integer`, `string`, `date`, etc.)                              |
+| `constructor`        | Class to instantiate. Must extend `BaseVisualization`                                                                 |
+| `priority`           | Higher priority wins when multiple registrations match. Built-ins use `0`; custom classes commonly use `10` or higher |
 
 ## Overriding a built-in
 
@@ -128,7 +138,7 @@ registry.register({
   name: 'my-numeric-viz',
   isApplicable: (type) => type === 'integer' || type === 'float' || type === 'decimal',
   constructor: MyNumericViz,
-  priority: 100,   // beats the built-in Histogram (priority 0)
+  priority: 100, // beats the built-in Histogram (priority 0)
 });
 ```
 
@@ -142,13 +152,13 @@ registry.unregister('histogram');
 
 Subclasses implement five methods:
 
-| Method | Purpose |
-|---|---|
-| `async fetchData()` | Query DuckDB via `this.bridge.query(...)`. Return arbitrary data the renderer consumes |
-| `render(data)` | Draw on `this.ctx` (the 2D context). Use `this.width` and `this.height` — canvas high-DPI scaling is already handled |
-| `handleMouseMove(event)` | Called on hover. Typically updates a tooltip |
-| `handleClick(event)` | Called on click. Typically emits a filter via `this.emitFilter(filter)` |
-| `handleMouseLeave()` | Clear hover state |
+| Method                   | Purpose                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `async fetchData()`      | Query DuckDB via `this.bridge.query(...)`. Return arbitrary data the renderer consumes                               |
+| `render(data)`           | Draw on `this.ctx` (the 2D context). Use `this.width` and `this.height` — canvas high-DPI scaling is already handled |
+| `handleMouseMove(event)` | Called on hover. Typically updates a tooltip                                                                         |
+| `handleClick(event)`     | Called on click. Typically emits a filter via `this.emitFilter(filter)`                                              |
+| `handleMouseLeave()`     | Clear hover state                                                                                                    |
 
 ### Emitting a filter from a visualization
 
@@ -219,10 +229,10 @@ Check the column name inside `isApplicable`:
 ```ts
 registry.register({
   name: 'spark-line-for-revenue',
-  isApplicable: (type) => type === 'float',   // coarse matcher
+  isApplicable: (type) => type === 'float', // coarse matcher
   constructor: class extends SparkLine {
     static shouldApply(column: { name: string; type: string }) {
-      return column.name === 'revenue';       // fine-grained
+      return column.name === 'revenue'; // fine-grained
     }
   },
   priority: 10,
@@ -249,7 +259,7 @@ registry.unregister('date-histogram');
 
 - **Shared `defaultVisualizationRegistry` is global.** A registration done without a per-instance registry affects every subsequent table on the page. Use a dedicated `VisualizationRegistry` if you need scoped behavior.
 - **Priority ties pick the first-registered.** Two registrations with the same priority are iterated in registration order. Be explicit about priority.
-- **`updateFilters` is called on *every* filter change.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
+- **`updateFilters` is called on _every_ filter change.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
 - **Don't call `this.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
 - **`BaseVisualization.destroy()` is called by the library on table destroy.** Override it to clean up your own resources, but always call `super.destroy()`.
 - **Canvas size can't be set directly.** Use `this.width` / `this.height`; the library recomputes them on resize. If you must override, do it inside `render()` and respect the DPR scaling.

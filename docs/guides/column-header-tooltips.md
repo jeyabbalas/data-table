@@ -31,7 +31,7 @@ table.actions.setColumnHeaderTooltip('total_amount', {
   title: 'Total amount',
   description: 'Final fare paid by the passenger.\nIncludes tip when paid by card.',
   items: [
-    { label: 'Units',      value: 'USD' },
+    { label: 'Units', value: 'USD' },
     { label: 'Components', value: ['fare', 'tip', 'tolls', 'mta_tax'] },
   ],
 });
@@ -69,16 +69,16 @@ You can subscribe directly or rely on the popover to read it.
 
 ## Input shorthand
 
-| Input | Effect |
-|---|---|
-| `string` | Normalised to `{ description: <input> }`. |
-| `ColumnHeaderTooltipContent` | Validated field-by-field; malformed `items` are dropped silently. |
-| `null` | Removes the override. |
-| Empty after normalisation (e.g. `{}`, `''`, `{ items: [] }` with all malformed entries) | Removes the override. |
+| Input                                                                                   | Effect                                                            |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `string`                                                                                | Normalised to `{ description: <input> }`.                         |
+| `ColumnHeaderTooltipContent`                                                            | Validated field-by-field; malformed `items` are dropped silently. |
+| `null`                                                                                  | Removes the override.                                             |
+| Empty after normalisation (e.g. `{}`, `''`, `{ items: [] }` with all malformed entries) | Removes the override.                                             |
 
 ```ts
-table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.');     // string shorthand
-table.actions.setColumnHeaderTooltip('total_amount', null);                   // clear
+table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.'); // string shorthand
+table.actions.setColumnHeaderTooltip('total_amount', null); // clear
 ```
 
 ## XSS safety contract
@@ -91,8 +91,7 @@ is suitable for enterprise client-side embeds.
 
 ```ts
 // Literal angle brackets render as text — no HTML is parsed, no script runs.
-table.actions.setColumnHeaderTooltip('fare_amount',
-  `<img src=x onerror=alert(1)> raw text only`);
+table.actions.setColumnHeaderTooltip('fare_amount', `<img src=x onerror=alert(1)> raw text only`);
 ```
 
 Verifying it: open DevTools, inspect the popover element
@@ -123,10 +122,16 @@ const table = await createDataTable({
 });
 
 const catalogue: Record<string, ColumnHeaderTooltipContent | string> = {
-  total_amount:        { title: 'Total amount', description: '…', items: [/* … */] },
-  fare_amount:         'Base fare in USD.',
-  passenger_count:     { title: 'Passenger count', description: '…' },
-  payment_type:        { items: [{ label: 'Allowed', value: ['cash', 'card', 'no_charge'] }] },
+  total_amount: {
+    title: 'Total amount',
+    description: '…',
+    items: [
+      /* … */
+    ],
+  },
+  fare_amount: 'Base fare in USD.',
+  passenger_count: { title: 'Passenger count', description: '…' },
+  payment_type: { items: [{ label: 'Allowed', value: ['cash', 'card', 'no_charge'] }] },
 };
 
 for (const [col, content] of Object.entries(catalogue)) {
@@ -190,10 +195,10 @@ for (const [col, def] of Object.entries(schema.properties)) {
     title: def.title,
     description: def.description,
     items: [
-      def.units      && { label: 'Units',   value: String(def.units) },
-      def.minimum    !== undefined && { label: 'Minimum', value: String(def.minimum) },
-      def.maximum    !== undefined && { label: 'Maximum', value: String(def.maximum) },
-      def.enum       && { label: 'Allowed', value: def.enum.map(String) },
+      def.units && { label: 'Units', value: String(def.units) },
+      def.minimum !== undefined && { label: 'Minimum', value: String(def.minimum) },
+      def.maximum !== undefined && { label: 'Maximum', value: String(def.maximum) },
+      def.enum && { label: 'Allowed', value: def.enum.map(String) },
     ].filter(Boolean) as ColumnHeaderTooltipItem[],
   });
 }

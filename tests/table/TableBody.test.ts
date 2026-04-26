@@ -134,9 +134,11 @@ describe('TableBody', () => {
       // getOrCreateRow is internal; exercise it through the private accessor
       // so we can verify the attributes on the construction path used during
       // render without needing a materialized viewport.
-      const rowEl = (tableBody as unknown as {
-        getOrCreateRow(n: number): HTMLElement;
-      }).getOrCreateRow(5);
+      const rowEl = (
+        tableBody as unknown as {
+          getOrCreateRow(n: number): HTMLElement;
+        }
+      ).getOrCreateRow(5);
 
       expect(rowEl.getAttribute('role')).toBe('row');
       expect(rowEl.children.length).toBe(5);

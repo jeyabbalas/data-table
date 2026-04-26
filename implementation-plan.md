@@ -5,6 +5,7 @@
 A client-side TypeScript library for browser-based interactive, explorable data tables. Uses DuckDB WASM for in-browser analytics with complete privacy (no server-side processing).
 
 **Key Architecture Decisions:**
+
 - TypeScript with Vite bundling (ESM + UMD output)
 - DuckDB WASM running in a Web Worker for non-blocking queries
 - Canvas-based visualizations in column headers
@@ -22,6 +23,7 @@ Everything below is fully implemented and working. These summaries describe what
 Established the project structure, TypeScript + Vite build config, and Vitest testing infrastructure.
 
 **Key files:**
+
 - `src/core/types.ts` — `DataType` union (`'integer' | 'float' | 'decimal' | 'string' | 'boolean' | 'uuid' | 'date' | 'timestamp' | 'time' | 'interval'`), `ColumnSchema` interface (`name`, `type`, `nullable`, `originalType`), `SortColumn`, and base `Filter`/`FilterType` re-exports
 - `src/core/EventEmitter.ts` — Generic typed event emitter with `on()`, `off()`, `emit()`, `once()`
 
@@ -30,6 +32,7 @@ Established the project structure, TypeScript + Vite build config, and Vitest te
 DuckDB WASM runs in a Web Worker. A `WorkerBridge` provides async RPC from the main thread. Data loaders support CSV, JSON, and Parquet with automatic format detection, progress reporting, and cancellation.
 
 **Key files:**
+
 - `src/worker/worker.ts` — Web Worker entry point, routes messages to handlers
 - `src/worker/duckdb.ts` — Initializes DuckDB WASM, provides `executeQuery()` and `getConnection()`
 - `src/worker/loaders/csv.ts`, `json.ts`, `parquet.ts` — Format-specific loaders that create DuckDB tables
@@ -42,6 +45,7 @@ DuckDB WASM runs in a Web Worker. A `WorkerBridge` provides async RPC from the m
 Schema detection maps DuckDB native types to simplified `DataType`. Smart type inference detects dates, numbers, booleans hiding in string columns. Reactive state uses signals with computed values.
 
 **Key files:**
+
 - `src/data/SchemaDetector.ts` — `detectSchema(tableName, bridge)` → `ColumnSchema[]`; `mapDuckDBType()` converts DuckDB types
 - `src/data/TypeInference.ts` — `inferStringColumnType()` samples values, detects patterns with 95% confidence threshold
 - `src/data/PatternDetector.ts` — Detects email, URL, UUID, phone, IP patterns in string columns
@@ -54,6 +58,7 @@ Schema detection maps DuckDB native types to simplified `DataType`. Smart type i
 Virtualized table with column headers, body rows, sorting, column resizing, and drag-and-drop column reordering. Header and body scroll are synchronized horizontally.
 
 **Key files:**
+
 - `src/table/TableContainer.ts` — Main container. DOM: `.dt-root > .dt-header-area > (.dt-header-scroll > .dt-header-row) + .dt-scrollbar-gutter`, then `.dt-filter-bar`, then `.dt-body-scroll > .dt-body`. Manages column headers, filter bar, table body, column reorder, scroll sync, resize observer. Subscribes to `schema`, `columnWidths`, `sortColumns`.
 - `src/table/ColumnHeader.ts` — Per-column header component. DOM: `.dt-col-header > .dt-col-name-row (name + sort button + drag handle) + .dt-col-type + .dt-col-stats + .dt-col-viz`. Handles sort click (regular = cycle, Cmd/Ctrl = multi-sort), subscribes to `sortColumns` and `filtersByColumn`.
 - `src/table/VirtualScroller.ts` — Fixed-row-height virtual scrolling with buffer rows
@@ -67,6 +72,7 @@ Virtualized table with column headers, body rows, sorting, column resizing, and 
 Interactive mini-visualizations in column headers with crossfilter coordination. Canvas-based rendering. Each visualization supports brush/click filtering, hover stats, and ghost bars for crossfilter context.
 
 **Key files:**
+
 - `src/visualizations/BaseVisualization.ts` — Abstract base: canvas setup, mouse interaction, `fetchData()`, `render()`, `updateFilters()`, `onFilterChange` and `onStatsChange` callbacks, `onDefaultStatsChange` callback for structured stats
 - `src/visualizations/histogram/Histogram.ts` — Numeric columns. Dual-fetch: background (exclude own filter) + foreground (all filters). Brush selection creates `RangeFilter`. Ghost bars show crossfilter context.
 - `src/visualizations/histogram/HistogramData.ts` — `fetchHistogramData()`, `fetchColumnStats()` (min, max, Q1, Q3, median, distinct count), `calculateOptimalBins()` (Freedman-Diaconis / Sturges), `fetchHistogramBins()`, `fetchDiscreteBins()`
@@ -81,6 +87,7 @@ Interactive mini-visualizations in column headers with crossfilter coordination.
 Formal filter types, SQL generation, filter bar UI with removable chips, and filter indicators on column headers.
 
 **Key files:**
+
 - `src/filters/FilterTypes.ts` — Discriminated union: `RangeFilter` (min/max, `maxInclusive`), `PointFilter`, `SetFilter`, `NotSetFilter`, `NullFilter`, `PatternFilter` (contains/starts/ends/regex)
 - `src/filters/FilterSQL.ts` — `filterToSQL(filter)`, `filtersToWhereClause(filters)` (AND across filters), `formatValue()` with SQL-safe escaping
 - `src/filters/FilterChip.ts` — Pill-shaped chip showing filter description + remove button
@@ -106,6 +113,7 @@ Column headers gained a rich stats panel and an action panel with pin, hide, sor
 **Manual filter panel**: A floating `FilterPanel` (320px, positioned below the clicked filter button) shows type-specific controls via `FilterPanelField`. Numeric: comparison dropdown + number inputs → `RangeFilter`/`PointFilter`. String: mode dropdown (contains/starts/ends/regex/exact) + text input → `PatternFilter`/`PointFilter`. Boolean: three checkboxes (true/false/null). Date/timestamp: comparison dropdown + date inputs. Time: two time inputs. UUID: contains/exact + text input. All types include a null toggle (any/is null/is not null). Filters apply on button click (with regex validation for strings, UUID format validation). Panel syncs bidirectionally with `state.filtersByColumn` — external filter changes update controls, and panel-created filters appear as chips in the FilterBar.
 
 **Key files:**
+
 - `src/statistics/ColumnStatsTypes.ts` — Discriminated union: `NumericColumnStats`, `CategoricalColumnStats`, `TemporalColumnStats`, `TimeColumnStats`, `IntervalColumnStats`
 - `src/statistics/StatsFormatters.ts` — `formatDefaultStats()` produces two-line HTML with compact number formatting
 - `src/statistics/StatsComputer.ts` — `fetchIntervalStats()` for columns without visualizations
@@ -121,7 +129,6 @@ Column headers gained a rich stats panel and an action panel with pin, hide, sor
 - `src/filters/FilterChip.ts` — Pill-shaped chips with human-readable filter descriptions and remove button
 - `src/styles/data-table.css` — Styles for `.dt-col-action-panel`, `.dt-col-action-btn`, pinned column sticky/demarcation, `.dt-hidden-gutter`, `.dt-filter-panel` and field controls
 
-
 ### Phase 7: Export & Persistence (Completed)
 
 Data export in three formats (CSV, JSON, Parquet) with configurable scope (all/filtered/selected rows) and column selection. A modal export dialog provides format selection, scope options, and download. Clipboard copy supports TSV format. Session persistence via IndexedDB stores filter, sort, column visibility/order/width, and pin state. Debounced auto-save captures state changes. Session restore validates against current schema (drops filters referencing removed columns).
@@ -131,6 +138,7 @@ Data export in three formats (CSV, JSON, Parquet) with configurable scope (all/f
 **Persistence architecture:** `SessionSnapshot` captures all UI state (filters with Date wrapping as `{ __date__: isoString }`, sort, columns, widths, pins, hidden info, derived column defs). `SessionStore` uses IndexedDB (`dt-sessions` database, keyed by table name) with graceful fallback. `AutoSave` subscribes to state signals with 1000ms debounce. `restoreStateFromSnapshot()` validates against current schema, silently dropping stale references.
 
 **Key files:**
+
 - `src/export/CSVExport.ts` — `exportToCSV()` with configurable delimiter, null value formatting
 - `src/export/JSONExport.ts` — `exportToJSON()` supporting array and NDJSON formats
 - `src/export/ParquetExport.ts` — `exportToParquet()` returns `Uint8Array` via DuckDB COPY TO virtual FS
@@ -159,6 +167,7 @@ Derived column definitions (including vector values) are included in `StateSnaps
 **Integration fixes (Task 8.7):** `CrossfilterCoordinator` reads `state.tableName.get()` dynamically (no longer caches tableName from constructor). Visualizations reattach on `tableName` change. Demo sidebar derived column card removed (all management via in-table UI). Library exports consolidated. Snapshot version backward compatibility (v1 snapshots treated as having empty `derivedColumns`).
 
 **Key files:**
+
 - `src/core/UndoManager.ts` — `UndoManager` class with `StateSnapshot`, `captureSnapshot()`, `applySnapshot()`, `derivedColumnsEqual()`, per-type `filterEqual()`
 - `src/core/Actions.ts` — `captureForUndo()` before mutations, async `undo()`/`redo()`, `reconcileDerivedColumns()`, derived column CRUD (`addDerivedColumn`, `updateDerivedColumn`, `removeDerivedColumn`, `validateExpression`, `getCompletionContext`)
 - `src/core/State.ts` — Added `derivedColumns: Signal<DerivedColumnDef[]>`, `baseTableName: Signal<string | null>`
@@ -188,6 +197,7 @@ Derived column definitions (including vector values) are included in `StateSnaps
 **Filter Presets — Core Logic and UI (Task 8.10):** `FilterPreset` interface (id, name, description?, filters as `SerializedFilter[]`, sortColumns?, createdAt, updatedAt) and `FilterPresetCollection` (version + presets array) define the data model and JSON handoff format for downstream apps. `FilterPresetManager` maintains a reactive Signal-based preset list with `save()` (serializes via `serializeFilter()` from `SessionStore.ts`), `load()` (deserializes and calls `actions.loadFilterPreset()` for atomic undo via `suppressUndoCapture`), `delete()`, `rename()`, `update()`, `exportToJSON()` (returns `FilterPresetCollection` JSON string), `importFromJSON()` (comprehensive validation with filter type whitelist and per-type field checks, new UUIDs for collision avoidance, returns `{imported, errors[]}`), and `loadPresets()` for session restore. `FilterPresetPanel` is a 320px floating panel anchored below a "Presets" button with save section (name + description + "Save Current Filters" disabled when no filters), scrollable preset list (max 240px, items with name/meta/description, Load + Delete with inline confirmation), and Import/Export section ("Export All" downloads `.json`, "Import" validates with status feedback auto-hiding after 4s). Reactive updates from `presetManager.presets` and `state.filters` signals; outside click and Escape close; viewport clamping. `FilterBar` shows a "Presets" button with bookmark icon when a `presetManager` is provided. `AutoSave` subscribes to `presetManager.presets`, includes presets in session snapshots via `snapshotFromState()`, and restores them via `presetManager.loadPresets()` in `restoreStateFromSnapshot()`.
 
 **Key files (Tasks 8.8–8.10):**
+
 - `src/filters/FilterTypes.ts` — `RawSQLFilter` interface added to `Filter` discriminated union; re-exported from `core/types.ts` and `index.ts`
 - `src/filters/FilterSQL.ts` — `filterToSQL()` raw-sql case (parenthesized SQL); `filtersToWhereClause()` never excludes raw SQL filters by column
 - `src/filters/CrossfilterQuery.ts` — Documented that synthetic keys naturally never match real columns in crossfilter exclusion
@@ -221,6 +231,7 @@ LRU cache with configurable max entries (default 100) and TTL (default 30s). Int
 Invalidation triggers: filter change, sort change, new data load, derived column add/edit/remove.
 
 **Verification:**
+
 - Cache hit returns fast
 - TTL expiry works
 - LRU eviction works
@@ -233,12 +244,14 @@ Modify `src/table/TableContainer.ts` and `src/table/TableBody.ts`.
 Track focused cell `{ row, col }`. Arrow keys move focus. Tab moves to next cell. Home/End for first/last column. Ctrl+Home/End for first/last row. PageUp/PageDown scroll by viewport height. Scroll to row when focus leaves viewport. `.dt-cell--focused` with blue outline.
 
 **Verification:**
+
 - Arrow key navigation works
 - Scroll-into-view on focus move
 
 ### Task 9.3: ARIA Labels and Accessibility
 
 Modify table components for screen reader support:
+
 - Table: `aria-rowcount`, `aria-colcount`
 - Headers: `aria-colindex`, improved `aria-label` with sort/filter state
 - Rows: `aria-rowindex` (absolute index)
@@ -247,6 +260,7 @@ Modify table components for screen reader support:
 - Add `aria-live="polite"` region announcing filter changes (e.g., "3 filters active, showing 1,234 of 5,000 rows")
 
 **Verification:**
+
 - Lighthouse accessibility audit
 - Screen reader testing
 
@@ -255,6 +269,7 @@ Modify table components for screen reader support:
 CSS `@container` queries or `ResizeObserver` for narrow widths. Reduce column widths, collapse chip descriptions, hide secondary action buttons at small sizes.
 
 **Verification:**
+
 - Visual testing at various widths
 
 ### Task 9.5: Performance Testing
@@ -262,6 +277,7 @@ CSS `@container` queries or `ResizeObserver` for narrow widths. Reduce column wi
 Manual benchmarks: 1M row load, scroll FPS, filter apply latency, export speed, 50-column visualization render. Identify and fix bottlenecks. Target: <100ms filter apply, 60fps scroll, <2s for 1M row load.
 
 **Verification:**
+
 - All performance targets met
 - No memory leaks detected
 
@@ -284,6 +300,7 @@ table cleanly. Addressed in five tranches:
 **Tranche 5 — Documentation (`README.md`, JSDoc on `createDataTable`, this section):** New consumer-facing README with quickstart, feature toggle table, event list, theming via CSS variables, multi-instance example (sharing a `WorkerBridge`), and an "Advanced: modular API" section that lists all building blocks for power users. JSDoc on the facade includes a working `createDataTable(…)` example that appears in VS Code autocomplete.
 
 **Key files (Phase 10):**
+
 - `src/DataTable.ts` — `createDataTable(opts)` factory and `DataTable` interface
 - `src/core/TableEvents.ts` — typed event map (defined as `type`, not `interface`, to satisfy `EventEmitter<Record<string, unknown>>` constraint)
 - `src/data/WorkerBridge.ts` — `WorkerBridgeOptions` with `cache` + `initializeTimeoutMs`; `initialize()` wraps ready-wait in `Promise.race` with timeout + worker teardown
@@ -331,6 +348,7 @@ Phase 10 (Library API Hardening — 2026-04-18):
 ```
 
 **Recommended execution order:**
+
 1. **7.5 → 7.6 → 7.7 → 7.8** (Persistence foundation — auto-save captures all future state additions)
 2. **8.1 → 8.2 → 8.3** (Undo/redo — all subsequent features are undoable from the start)
 3. **8.4 → (8.5 + 8.6 in parallel) → 8.7** (Derived columns — full virtual layer with expression + vector modes, undo/redo, CodeMirror 6 SQL editor with schema-aware autocomplete)
@@ -343,24 +361,24 @@ Phase 10 (Library API Hardening — 2026-04-18):
 
 ## What Changed from Original Plan
 
-| Original Task | Status | Rationale |
-|---|---|---|
-| 8.1–8.3 Undo/Redo | **Kept** | Essential for EDA workflow |
-| 8.4–8.5 Filter Presets | **Kept, moved to 8.9–8.10** | Reordered after raw SQL filters so presets can serialize them |
-| 8.6–8.7 Derived Columns | **Kept, expanded to 8.4–8.7** | Virtual layer with two modes (SQL expression + pre-computed vector), DuckDB VIEW mechanism, async undo/redo, visual differentiation, edit/rename/delete |
-| **New: CodeMirror 6 SQL Editor** | **Added as Subtask 8.6.4** | Replaces plain textarea with CodeMirror 6 — SQL syntax highlighting, schema-aware column autocomplete, DuckDB function completion, automatic light/dark theming via CSS custom properties |
-| 8.8–8.9 SQL Editor (original) | **Removed, then partially reinstated** | Original SQL editor removed as out of scope; later reinstated as SQL filter expression editor (8.9) for DQ use case |
-| **New: Raw SQL Filter API** | **Added as 8.8, completed** | `RawSQLFilter` type with synthetic column keys, `addRawSQLFilter`/`updateRawSQLFilter`/`removeRawSQLFilter` API, `validateSQLFilter` with match count, `getFiltersSQL` convenience method. Critical fixes for undo/redo (`filterEqual`) and session restore (column validation bypass for synthetic keys). Clickable chip with `onEdit` |
-| **New: SQL Filter Expression Editor UI** | **Added as 8.9, completed** | Modal with CodeMirror SQL editor for composing complex WHERE conditions. Filter bar always-visible mode with "Expression" button. SQL filter chips clickable to edit. Supports downstream DQ rule creation |
-| 8.4–8.5 Filter Presets (original) | **Kept as 8.10, completed** | Original 8.9 (preset core) + 8.10 (preset UI) combined into single task 8.10. Serializes all filter types including `RawSQLFilter` |
-| 9.1 Query Caching | **Kept** | |
-| 9.2 Query Batching | **Removed** | Over-engineering; DuckDB handles query execution efficiently |
-| 9.3 Keyboard Nav | **Kept as 9.2** | |
-| 9.4 ARIA Labels | **Kept as 9.3** | |
-| 9.5 Dark Mode | **Removed** | Already implemented via CSS `@media (prefers-color-scheme: dark)` |
-| 9.6 Responsive | **Kept as 9.4, downgraded** | Nice-to-have |
-| 9.7 Performance Testing | **Kept as 9.5** | |
-| 9.8 Integration Testing | **Merged into 9.5** | Combined with performance testing |
+| Original Task                            | Status                                 | Rationale                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.1–8.3 Undo/Redo                        | **Kept**                               | Essential for EDA workflow                                                                                                                                                                                                                                                                                                              |
+| 8.4–8.5 Filter Presets                   | **Kept, moved to 8.9–8.10**            | Reordered after raw SQL filters so presets can serialize them                                                                                                                                                                                                                                                                           |
+| 8.6–8.7 Derived Columns                  | **Kept, expanded to 8.4–8.7**          | Virtual layer with two modes (SQL expression + pre-computed vector), DuckDB VIEW mechanism, async undo/redo, visual differentiation, edit/rename/delete                                                                                                                                                                                 |
+| **New: CodeMirror 6 SQL Editor**         | **Added as Subtask 8.6.4**             | Replaces plain textarea with CodeMirror 6 — SQL syntax highlighting, schema-aware column autocomplete, DuckDB function completion, automatic light/dark theming via CSS custom properties                                                                                                                                               |
+| 8.8–8.9 SQL Editor (original)            | **Removed, then partially reinstated** | Original SQL editor removed as out of scope; later reinstated as SQL filter expression editor (8.9) for DQ use case                                                                                                                                                                                                                     |
+| **New: Raw SQL Filter API**              | **Added as 8.8, completed**            | `RawSQLFilter` type with synthetic column keys, `addRawSQLFilter`/`updateRawSQLFilter`/`removeRawSQLFilter` API, `validateSQLFilter` with match count, `getFiltersSQL` convenience method. Critical fixes for undo/redo (`filterEqual`) and session restore (column validation bypass for synthetic keys). Clickable chip with `onEdit` |
+| **New: SQL Filter Expression Editor UI** | **Added as 8.9, completed**            | Modal with CodeMirror SQL editor for composing complex WHERE conditions. Filter bar always-visible mode with "Expression" button. SQL filter chips clickable to edit. Supports downstream DQ rule creation                                                                                                                              |
+| 8.4–8.5 Filter Presets (original)        | **Kept as 8.10, completed**            | Original 8.9 (preset core) + 8.10 (preset UI) combined into single task 8.10. Serializes all filter types including `RawSQLFilter`                                                                                                                                                                                                      |
+| 9.1 Query Caching                        | **Kept**                               |                                                                                                                                                                                                                                                                                                                                         |
+| 9.2 Query Batching                       | **Removed**                            | Over-engineering; DuckDB handles query execution efficiently                                                                                                                                                                                                                                                                            |
+| 9.3 Keyboard Nav                         | **Kept as 9.2**                        |                                                                                                                                                                                                                                                                                                                                         |
+| 9.4 ARIA Labels                          | **Kept as 9.3**                        |                                                                                                                                                                                                                                                                                                                                         |
+| 9.5 Dark Mode                            | **Removed**                            | Already implemented via CSS `@media (prefers-color-scheme: dark)`                                                                                                                                                                                                                                                                       |
+| 9.6 Responsive                           | **Kept as 9.4, downgraded**            | Nice-to-have                                                                                                                                                                                                                                                                                                                            |
+| 9.7 Performance Testing                  | **Kept as 9.5**                        |                                                                                                                                                                                                                                                                                                                                         |
+| 9.8 Integration Testing                  | **Merged into 9.5**                    | Combined with performance testing                                                                                                                                                                                                                                                                                                       |
 
 ---
 
@@ -368,16 +386,16 @@ Phase 10 (Library API Hardening — 2026-04-18):
 
 ### Unit Test Coverage Targets
 
-| Module | Target Coverage |
-|--------|-----------------|
-| Core (types, events, signals) | 95% |
-| Data (loaders, schema) | 90% |
-| Filters (incl. raw SQL) | 95% |
-| SQL Generation | 95% |
-| Persistence | 90% |
-| Derived Columns | 90% |
-| Visualizations | 80% |
-| UI Components | 70% |
+| Module                        | Target Coverage |
+| ----------------------------- | --------------- |
+| Core (types, events, signals) | 95%             |
+| Data (loaders, schema)        | 90%             |
+| Filters (incl. raw SQL)       | 95%             |
+| SQL Generation                | 95%             |
+| Persistence                   | 90%             |
+| Derived Columns               | 90%             |
+| Visualizations                | 80%             |
+| UI Components                 | 70%             |
 
 ---
 
@@ -460,7 +478,7 @@ Each task is complete when:
 
 ```sql
 -- Histogram
-SELECT 
+SELECT
   FLOOR(column / bin_width) * bin_width as bin_start,
   COUNT(*) as count
 FROM table
@@ -493,23 +511,23 @@ EXPLAIN SELECT * FROM table WHERE (user_provided_sql);
 
 ```typescript
 // Lifecycle
-'loading:start' | 'loading:progress' | 'loading:complete' | 'loading:error'
+'loading:start' | 'loading:progress' | 'loading:complete' | 'loading:error';
 
 // Data
-'schema:detected' | 'schema:enhanced'
+'schema:detected' | 'schema:enhanced';
 
 // Filtering
-'filter:add' | 'filter:remove' | 'filter:clear' | 'filter:change'
+'filter:add' | 'filter:remove' | 'filter:clear' | 'filter:change';
 
 // Interaction
-'sort:change' | 'selection:change' | 'hover:cell' | 'hover:bar'
+'sort:change' | 'selection:change' | 'hover:cell' | 'hover:bar';
 
 // Columns
-'column:hide' | 'column:show' | 'column:reorder' | 'column:resize'
+'column:hide' | 'column:show' | 'column:reorder' | 'column:resize';
 
 // Derived columns
-'derived:add' | 'derived:update' | 'derived:remove'
+'derived:add' | 'derived:update' | 'derived:remove';
 
 // State
-'state:save' | 'state:restore' | 'undo' | 'redo'
+'state:save' | 'state:restore' | 'undo' | 'redo';
 ```

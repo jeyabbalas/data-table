@@ -59,9 +59,7 @@ export class StatsPanelCoordinator {
 
   constructor(state: TableState, concurrency: number = DEFAULT_PANEL_CONCURRENCY) {
     this.concurrency = Math.max(1, concurrency);
-    this.unsubscribe = state.filters.subscribe((filters) =>
-      this.onFiltersChanged(filters),
-    );
+    this.unsubscribe = state.filters.subscribe((filters) => void this.onFiltersChanged(filters));
   }
 
   /** Register a panel for filter-broadcast updates. Same-column re-register replaces. */
@@ -130,7 +128,7 @@ export class StatsPanelCoordinator {
    * Mirrors the implementation in `CrossfilterCoordinator` so behavior
    * stays consistent across the two coordinators.
    */
-  private async runLimited(tasks: Array<() => Promise<void>>): Promise<void> {
+  private async runLimited(tasks: (() => Promise<void>)[]): Promise<void> {
     if (tasks.length === 0) return;
     let cursor = 0;
     const workerCount = Math.min(this.concurrency, tasks.length);

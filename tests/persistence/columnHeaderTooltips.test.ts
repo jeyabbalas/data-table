@@ -1,17 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  createTableState,
-  initializeColumnsFromSchema,
-} from '@/core/State';
+import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
-import type {
-  ColumnSchema,
-  ColumnHeaderTooltipContent,
-} from '@/core/types';
-import {
-  snapshotFromState,
-  restoreStateFromSnapshot,
-} from '@/persistence/serialization';
+import type { ColumnSchema, ColumnHeaderTooltipContent } from '@/core/types';
+import { snapshotFromState, restoreStateFromSnapshot } from '@/persistence/serialization';
 import { SNAPSHOT_VERSION } from '@/persistence/types';
 import type { SessionSnapshot } from '@/persistence/types';
 import { AutoSave } from '@/persistence/AutoSave';
@@ -44,9 +35,7 @@ function createMockStore(): SessionStore {
   } as unknown as SessionStore;
 }
 
-function bareSnapshot(
-  overrides: Partial<SessionSnapshot> = {},
-): SessionSnapshot {
+function bareSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -84,9 +73,7 @@ describe('snapshotFromState — columnHeaderTooltips', () => {
     const state = setupState();
     const snapshot = snapshotFromState(state);
     expect(snapshot.columnHeaderTooltips).toBeUndefined();
-    expect(
-      Object.prototype.hasOwnProperty.call(snapshot, 'columnHeaderTooltips'),
-    ).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(snapshot, 'columnHeaderTooltips')).toBe(false);
   });
 });
 
@@ -194,9 +181,7 @@ describe('restoreStateFromSnapshot — columnHeaderTooltips', () => {
 
   it('pre-Phase-5 snapshot (no columnHeaderTooltips field) restores cleanly with empty map', () => {
     const state = setupState();
-    state.columnHeaderTooltips.set(
-      new Map([['age', { description: 'should be wiped' }]]),
-    );
+    state.columnHeaderTooltips.set(new Map([['age', { description: 'should be wiped' }]]));
 
     const snapshot = bareSnapshot();
     restoreStateFromSnapshot(state, snapshot);
@@ -252,9 +237,7 @@ describe('AutoSave — columnHeaderTooltips subscription', () => {
     const autoSave = new AutoSave(state, store);
     autoSave.enable();
 
-    state.columnHeaderTooltips.set(
-      new Map([['age', { description: 'Age in years' }]]),
-    );
+    state.columnHeaderTooltips.set(new Map([['age', { description: 'Age in years' }]]));
     expect(store.save).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1000);

@@ -10,6 +10,7 @@ grouped walkthroughs see the [guides](./README.md#guides-task-oriented) and
 ---
 
 ### Annotation
+
 App-authored overlay metadata attached to a `row`, `column`, or `cell` of a
 loaded table. Each annotation carries a `severity` (`error` / `warning` /
 `info`), a `message`, and optional `code` / `source` / `metadata` /
@@ -20,6 +21,7 @@ auto-persisted to the [`SessionSnapshot`](#sessionsnapshot).
 See: [Annotations](./guides/annotations.md) · Source: `src/annotations/types.ts`
 
 ### AnnotationStore
+
 Programmatic CRUD store on `table.annotations`. Indexes annotations by id,
 row, column, and cell so `getByRow` / `getByColumn` / `getByCell` are O(1).
 `getByCell(rowId, column)` returns the union of row + column + cell
@@ -32,6 +34,7 @@ without removing data. Round-trips via `toJSON` / `loadJSON('replace' |
 See: [Annotations](./guides/annotations.md) · Source: `src/annotations/AnnotationStore.ts`
 
 ### AutoSave
+
 Opt-in helper that writes a [`SessionSnapshot`](#sessionsnapshot) to a
 [`SessionStore`](#sessionstore) on a debounce timer and on `visibilitychange` /
 `beforeunload`. Enabled by default when `persistence: true`; can be constructed
@@ -39,6 +42,7 @@ manually from `/advanced` for apps that manage their own save cadence.
 See: [Session persistence](./guides/session-persistence.md) · Source: `src/persistence/AutoSave.ts`
 
 ### BaseStatsPanel
+
 Abstract class for custom column-stats panels (Tier-2,
 `@jeyabbalas/data-table/advanced`). Mounts in the `.dt-col-stats` slot
 inside a column header and replaces the library's built-in
@@ -58,6 +62,7 @@ filter-broadcast plumbed by [`StatsPanelCoordinator`](#statspanelcoordinator).
 See: [Stats panels](./guides/stats-panels.md) · [API reference](./api-reference.md#stats-panels) · Source: `src/visualizations/BaseStatsPanel.ts`
 
 ### BrowserSupport
+
 Result shape returned by `checkBrowserSupport()` — `{ supported: boolean, missing: string[] }`.
 Probes `Worker`, `WebAssembly`, `indexedDB`, `ResizeObserver`, `BigInt`, and
 `structuredClone`. Pair with `strictBrowserCheck: true` on `createDataTable` for
@@ -65,6 +70,7 @@ fail-fast initialisation on unsupported browsers.
 See: [API reference](./api-reference.md) · Source: `src/core/checkBrowserSupport.ts`
 
 ### Class Prefix
+
 The `dt-` prefix on every CSS class the library emits (e.g. `.dt-table`,
 `.dt-filter-chip`). Keeps styles isolated from host-app CSS and namespaces the
 [`--dt-*` CSS variables](./guides/theming.md) that drive theming. Not user-overridable —
@@ -72,6 +78,7 @@ downstream themes override CSS variables, not class names.
 See: [Theming](./guides/theming.md)
 
 ### Color Scheme
+
 One of `'light' | 'dark' | 'auto'`, passed as `createDataTable({ colorScheme })`
 or toggled at runtime via `table.setColorScheme()`. `'auto'` follows
 `prefers-color-scheme`; the explicit values pin the theme regardless of OS
@@ -80,6 +87,7 @@ setting. Body-portalled modals observe the `data-dt-color-scheme` attribute via
 See: [Theming](./guides/theming.md) · [API reference](./api-reference.md)
 
 ### Column Header Tooltip
+
 Library-rendered popover anchored on the column-name span (`.dt-col-name`).
 Holds structured content — optional `title`, optional `description` (whitespace
 preserved), and optional `items[]` with `{ label, value: string | string[] }`
@@ -96,6 +104,7 @@ popover — both can be visible simultaneously.
 See: [Column-header tooltips](./guides/column-header-tooltips.md) · Source: `src/core/columnHeaderTooltip.ts`
 
 ### CompletionContext
+
 The schema-and-functions snapshot that drives autocomplete in the SQL
 expression / filter editors. Shape: `{ columns: Array<{ name, type,
 isDerived }>; functions?: string[] }`. Two canonical entry points: the
@@ -104,13 +113,14 @@ synthetic `__rowid__`; the Tier-2 `buildCompletionContext(columns,
 options?)` (from `/advanced`) normalizes any column-like input
 (`ColumnSchema[]`, ad-hoc `[{name, type, originalType?, isDerived?}, …]`,
 …) into the same shape — `originalType` wins over `type` when both are
-present, unknown types fall back to `''`, system columns are *not*
+present, unknown types fall back to `''`, system columns are _not_
 filtered automatically. Consumed by the bundled
 `CodeMirrorExpressionEditor` and by the public
 [`createSqlExtensions`](#sql-editor-primitives) helper.
 See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/derived/types.ts`, `src/sql-editor/extensions.ts`
 
 ### Computed
+
 A read-only reactive primitive derived from one or more [Signals](#signal).
 Recomputes lazily when a dependency changes and caches the result until the
 next invalidation. Used throughout `TableState` for derived views like
@@ -118,14 +128,16 @@ filtered-row counts; not exposed at the root entry.
 See: [State model](./concepts/state-model.md) · [Architecture](./concepts/architecture.md) · Source: `src/core/Signal.ts`
 
 ### Crossfilter
+
 The coordination pattern in which a click on one visualization installs a
-filter that every *other* visualization immediately respects. The library
+filter that every _other_ visualization immediately respects. The library
 implements this via a `CrossfilterCoordinator` (on `/advanced`) that drives
 `fetchData()` across registered visualizations whenever the active filter set
 changes.
 See: [Visualizations](./guides/visualizations.md) · [Architecture](./concepts/architecture.md) · Source: `src/visualizations/CrossfilterCoordinator.ts`
 
 ### DataTableError
+
 Base class for every error the library throws. Subclasses (`WorkerInitError`,
 `LoadError`, `QueryError`, `DerivedColumnError`, `PersistenceError`,
 `ExportError`, `ConfigurationError`, `DestroyedError`, …) carry a
@@ -134,6 +146,7 @@ chaining. Also emitted as the `error` event with a `source` discriminator.
 See: [API reference](./api-reference.md) · [Troubleshooting](./troubleshooting.md) · Source: `src/core/errors.ts`
 
 ### Derived Column
+
 A user-added column whose values are computed from existing columns. Comes in
 two shapes: [`ExpressionColumnDef`](#expressioncolumndef) — a SQL expression
 evaluated by DuckDB as a VIEW; [`VectorColumnDef`](#vectorcolumndef) — a
@@ -143,6 +156,7 @@ underlying view.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
 
 ### DuckDBFunctionInfo / DuckDBFunctionCategory
+
 Curated metadata used by the [SQL editor primitives](#sql-editor-primitives)
 (Tier-2, `@jeyabbalas/data-table/advanced`) to populate function
 autocomplete. `DuckDBFunctionInfo` is `{ name; category; description }`;
@@ -159,6 +173,7 @@ older names-only `DUCKDB_FUNCTIONS` constant is now derived from
 See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/sql-editor/duckdbFunctionDetails.ts`
 
 ### ExpressionColumnDef
+
 A [Derived Column](#derived-column) definition whose values come from a SQL
 expression (`ax + b`, `CASE WHEN …`, `REGEXP_EXTRACT(url, …)`). Evaluated by
 DuckDB inside the worker — no JavaScript round-trip per row. Shapes: `{ kind:
@@ -166,6 +181,7 @@ DuckDB inside the worker — no JavaScript round-trip per row. Shapes: `{ kind:
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
 
 ### Filter
+
 A discriminated-union object describing an active constraint on the dataset.
 Seven variants — [RangeFilter](#rangefilter), [PointFilter](#pointfilter),
 [SetFilter](#setfilter--notsetfilter), [NotSetFilter](#setfilter--notsetfilter),
@@ -176,6 +192,7 @@ Seven variants — [RangeFilter](#rangefilter), [PointFilter](#pointfilter),
 See: [Filters](./guides/filters.md) · [API reference](./api-reference.md) · Source: `src/filters/FilterTypes.ts`
 
 ### FilterPreset
+
 A named, JSON-serialisable snapshot of a [Filter](#filter) array plus optional
 sort / visibility / derived-column state. Managed by
 [FilterPresetManager](#filterpresetmanager); saved to the
@@ -184,6 +201,7 @@ browsers.
 See: [Filter presets](./guides/filter-presets.md) · Source: `src/filters/FilterPresetTypes.ts`
 
 ### FilterPresetManager
+
 Root-entry class that owns the list of saved [FilterPresets](#filterpreset):
 `save()`, `load()`, `delete()`, `list()`, `import()`, `export()`. Instances can
 be shared across multiple tables — useful for dashboards where every panel
@@ -191,6 +209,7 @@ should surface the same named views.
 See: [Filter presets](./guides/filter-presets.md) · [Multi-table dashboards](./guides/multi-table.md) · Source: `src/filters/FilterPresets.ts`
 
 ### Instance ID
+
 A short unique string stamped on every `DataTable` instance. Prefixes the
 DuckDB catalogue names, the [IndexedDB](./guides/session-persistence.md) keys,
 and the CSS custom-property scope (`[data-dt-instance="<id>"]`) so multiple
@@ -200,6 +219,7 @@ across reloads.
 See: [Multi-table dashboards](./guides/multi-table.md) · [API reference](./api-reference.md)
 
 ### ModalHost
+
 Shared primitive (on `/advanced`) that every modal and side panel uses:
 focus-trap, Escape to close, scroll-lock (modals only, reference-counted),
 focus-restore to the opener, and stack-index-aware z-indexes. `ModalHost` is
@@ -208,23 +228,27 @@ and the preset panel coexist without fighting over focus or layering.
 See: [Architecture](./concepts/architecture.md) · Source: `src/table/ModalHost.ts`
 
 ### NullFilter
+
 [Filter](#filter) variant matching rows where a column is `NULL` (or
 non-`NULL`, when `mode: 'notnull'`). Use for "show me the missing-data rows" or
 the inverse.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### PatternFilter
+
 [Filter](#filter) variant matching a column against a string pattern — `contains`,
 `startsWith`, `endsWith`, or a regex. Case-insensitive by default; pass
 `caseSensitive: true` to opt in.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### PointFilter
+
 [Filter](#filter) variant matching rows where a column equals a single value.
 Use for a dashboard drill-down where the user clicked one bar of a histogram.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### Portal Target
+
 Where body-portalled UI (modals, dropdowns, tooltips) is appended. Defaults to
 `document.body`; override via `createDataTable({ portalTarget })` when the table
 lives inside a shadow root, a scroll-locked dialog, or a route-scoped mount.
@@ -233,6 +257,7 @@ in sync with the owning table's [Color Scheme](#color-scheme).
 See: [Theming](./guides/theming.md) · [API reference](./api-reference.md)
 
 ### Preset
+
 Informal shorthand for [FilterPreset](#filterpreset) throughout the
 documentation and UI copy ("Save preset", "Load preset", "Presets"). The
 concrete type is `FilterPreset`; the manager is
@@ -240,12 +265,14 @@ concrete type is `FilterPreset`; the manager is
 See: [Filter presets](./guides/filter-presets.md)
 
 ### RangeFilter
+
 [Filter](#filter) variant matching rows where a numeric, date, or time column
 falls within `[min, max]`. Bounds are inclusive; `null` on either side means
 unbounded.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### RawSQLFilter
+
 [Filter](#filter) variant carrying a user-authored SQL `WHERE` fragment.
 Powerful escape hatch for constraints the other filter types cannot express
 (window functions, correlated subqueries, `JOIN` conditions). Validated by the
@@ -255,6 +282,7 @@ to build the fragment safely.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### Reconciliation
+
 The async process that rebuilds DuckDB VIEWs and re-validates dependent
 filters / sorts whenever a [Derived Column](#derived-column) is added,
 removed, or edited. Reconciliation is what keeps the UI consistent when a
@@ -262,6 +290,7 @@ user renames a derived column that a saved [Preset](#preset) references.
 See: [Derived columns](./guides/derived-columns.md)
 
 ### `__rowid__` (synthetic row id)
+
 A reserved `BIGINT` column the loader synthesizes on every CSV / JSON /
 Parquet source as `row_number() OVER () - 1` (0-indexed). Stable across
 sort, filter, and derived-column add / remove — only a fresh load
@@ -278,6 +307,7 @@ convert with `Number(rowIds[i])` before passing back as a `rowId: number`.
 See: [`actions.getColumnValues`](./api-reference.md#column-values-read-only-export) · [Annotations](./guides/annotations.md) · Source: `src/core/types.ts`, `src/worker/loaders/`
 
 ### SessionSnapshot
+
 The JSON document written to the [SessionStore](#sessionstore) by
 [AutoSave](#autosave). Captures [Filters](#filter), sort columns, column
 visibility / order / widths / pinning, hidden-column metadata, and
@@ -288,6 +318,7 @@ used for undo/redo.
 See: [Session persistence](./guides/session-persistence.md) · Source: `src/persistence/types.ts`
 
 ### SessionStore
+
 The persistence layer. Default implementation wraps IndexedDB keyed by
 [Instance ID](#instance-id); callers can inject any object implementing the
 `SessionStore` contract (save / load / delete) via
@@ -297,13 +328,15 @@ environments.
 See: [Session persistence](./guides/session-persistence.md) · Source: `src/persistence/SessionStore.ts`
 
 ### SetFilter / NotSetFilter
+
 Companion [Filter](#filter) variants. `SetFilter` matches rows where a column
 value is in a set of allowed values; `NotSetFilter` matches rows where it is
-*not* in a set of excluded values. Used for categorical "select many" UIs and
+_not_ in a set of excluded values. Used for categorical "select many" UIs and
 their inverses.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### Signal
+
 Reactive primitive that holds a mutable value and notifies subscribers on
 change. Underpins `TableState` — every public field (`filters`, `sortColumns`,
 `visibleColumns`, …) is a signal that UI components read and `actions.*`
@@ -311,20 +344,21 @@ methods write. Batched writes use `batch(() => { … })` to coalesce notificatio
 See: [State model](./concepts/state-model.md) · [Architecture](./concepts/architecture.md) · Source: `src/core/Signal.ts`
 
 ### SQL editor primitives
+
 Building blocks (Tier-2, `@jeyabbalas/data-table/advanced`) for assembling
-a CodeMirror SQL editor *outside* the data table — for filter-preset
+a CodeMirror SQL editor _outside_ the data table — for filter-preset
 composers, derived-column wizards, query-template forms.
 `createSqlExtensions(context, options?)` returns a CodeMirror
 `Extension[]` carrying the PostgreSQL grammar, the schema/function
-autocomplete *source*, and (optionally) the library's theme;
+autocomplete _source_, and (optionally) the library's theme;
 `buildCompletionContext(columns, options?)` normalizes any column-like
 array into the [`CompletionContext`](#completioncontext) shape. Function
 autocomplete defaults to the curated 176-entry `DUCKDB_FUNCTION_DETAILS`
 list (see [DuckDBFunctionInfo](#duckdbfunctioninfo--duckdbfunctioncategory))
-— `options.functions` overrides; `[]` disables (does *not* fall through).
+— `options.functions` overrides; `[]` disables (does _not_ fall through).
 The bundled `CodeMirrorExpressionEditor` uses the same primitives
 internally for the in-table case. The helper ships the autocomplete
-*source*, not the autocomplete UI — hosts must add `autocompletion()`
+_source_, not the autocomplete UI — hosts must add `autocompletion()`
 from `@codemirror/autocomplete` themselves
 (`src/sql-editor/extensions.ts:156-158`). Live-schema refresh uses
 CodeMirror `Compartment.reconfigure()` so undo history, focus, and
@@ -332,6 +366,7 @@ scroll position survive schema swaps.
 See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/sql-editor/extensions.ts`, `src/sql-editor/duckdbFunctionDetails.ts`, `src/sql-editor/theme.ts`
 
 ### StateSnapshot
+
 The lightweight in-memory capture of user-manipulable view state (filters,
 sorts, column order / widths / pinning, derived columns) used by
 [UndoManager](#undomanager). Stores values in their native
@@ -340,6 +375,7 @@ which is the serialised JSON form used for persistence.
 See: [State model](./concepts/state-model.md) · Source: `src/core/UndoManager.ts`
 
 ### StatsPanelCoordinator
+
 Filter-broadcast coordinator for [`BaseStatsPanel`](#basestatspanel)
 instances. Composed by `createDataTable`; subscribes to `state.filters` and
 calls `panel.updateFilters(filters)` on every registered, non-destroyed
@@ -357,6 +393,7 @@ power users orchestrating panels manually outside the facade.
 See: [Architecture concepts](./concepts/architecture.md#stats-panel-coordination-statspanelcoordinator) · Source: `src/visualizations/StatsPanelCoordinator.ts`
 
 ### StatsPanelRegistry
+
 Per-instance registry of [`BaseStatsPanel`](#basestatspanel) subclasses
 scoped by `DataType`. Mirrors [`VisualizationRegistry`](#visualizationregistry)
 for the column-stats slot. Empty by default; when no registration matches a
@@ -374,13 +411,15 @@ type).
 See: [Stats panels](./guides/stats-panels.md) · Source: `src/visualizations/StatsPanelRegistry.ts`
 
 ### TableState
+
 The root reactive store — a record of [Signals](#signal) holding every piece
 of user-manipulable view state: filters, sort columns, column visibility,
 widths, pinning, hidden-column metadata, derived columns, selection. Exposed
-as `table.state` for *reads*; mutations go through `table.actions`.
+as `table.state` for _reads_; mutations go through `table.actions`.
 See: [State model](./concepts/state-model.md) · Source: `src/core/State.ts`
 
 ### UndoManager
+
 The undo/redo history stack on `/advanced`. Stores up to 50
 [StateSnapshots](#statesnapshot) by default; `captureSnapshot()` / `applySnapshot()`
 bridge between `TableState` signals and the snapshot shape. Instantiated
@@ -388,6 +427,7 @@ automatically by `createDataTable({ undoRedo: true })` (default).
 See: [State model](./concepts/state-model.md) · Source: `src/core/UndoManager.ts`
 
 ### VectorColumnDef
+
 A [Derived Column](#derived-column) definition whose values are supplied as a
 pre-computed array matching the row order. Useful when a column's value comes
 from JavaScript logic (a geocoding lookup, a cached ML score) that DuckDB SQL
@@ -396,6 +436,7 @@ internally; it behaves like any other column afterwards.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
 
 ### Visualization
+
 A per-column summary widget — histogram, date histogram, value-counts bar,
 time histogram — rendered in the column header. Implements `BaseVisualization`
 (on `/advanced`); participates in [Crossfilter](#crossfilter) via
@@ -404,6 +445,7 @@ time histogram — rendered in the column header. Implements `BaseVisualization`
 See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations/BaseVisualization.ts`
 
 ### VisualizationRegistry
+
 Per-instance registry for [Visualizations](#visualization). Construct via `new
 VisualizationRegistry()` and pass to `createDataTable({ visualizationRegistry })`,
 or use `defaultVisualizationRegistry` for a shared default across tables.
@@ -412,6 +454,7 @@ Replaces the deprecated static `VisualizationFactory` (still reachable on
 See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations/VisualizationRegistry.ts`
 
 ### WorkerBridge
+
 The RPC layer between the main thread and the DuckDB Web Worker.
 Promise-based (`initialize()`, `load()`, `query()`, `export()`,
 `terminate()`); supports abort signals, progress callbacks, and query

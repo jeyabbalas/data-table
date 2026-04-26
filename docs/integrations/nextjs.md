@@ -26,7 +26,10 @@ export function DataTableView({ source }: { source: string }) {
     let instance: DataTable | undefined;
 
     void createDataTable({ container: hostRef.current, source }).then((t) => {
-      if (cancelled) { void t.destroy(); return; }
+      if (cancelled) {
+        void t.destroy();
+        return;
+      }
       instance = t;
     });
 
@@ -67,7 +70,7 @@ import dynamic from 'next/dynamic';
 
 const DataTableView = dynamic(
   () => import('@/components/DataTableView').then((m) => m.DataTableView),
-  { ssr: false }
+  { ssr: false },
 );
 
 export default function Page() {
@@ -85,10 +88,7 @@ renders the real component.
 // pages/dashboard.tsx
 import dynamic from 'next/dynamic';
 
-const DataTableView = dynamic(
-  () => import('../components/DataTableView'),
-  { ssr: false }
-);
+const DataTableView = dynamic(() => import('../components/DataTableView'), { ssr: false });
 
 export default function DashboardPage() {
   return <DataTableView source="/data/trips.csv" />;

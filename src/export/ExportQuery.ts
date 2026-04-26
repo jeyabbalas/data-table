@@ -41,12 +41,10 @@ type RowData = Record<string, unknown>;
  */
 export function resolveColumns(
   option: 'all' | string[],
-  context: Pick<ExportContext, 'columnOrder' | 'schema'>
+  context: Pick<ExportContext, 'columnOrder' | 'schema'>,
 ): string[] {
   if (option === 'all') {
-    const systemNames = new Set(
-      context.schema.filter((c) => c.system === true).map((c) => c.name),
-    );
+    const systemNames = new Set(context.schema.filter((c) => c.system === true).map((c) => c.name));
     return systemNames.size === 0
       ? context.columnOrder
       : context.columnOrder.filter((n) => !systemNames.has(n));
@@ -64,7 +62,7 @@ export function resolveColumns(
  * The input must already be sorted ascending.
  */
 export function isContiguousRange(
-  sortedIndices: number[]
+  sortedIndices: number[],
 ): { start: number; length: number } | null {
   if (sortedIndices.length === 0) return null;
   const start = sortedIndices[0];
@@ -81,9 +79,7 @@ export function isContiguousRange(
 
 export function buildOrderByClause(sortColumns: SortColumn[]): string {
   if (sortColumns.length === 0) return '';
-  const parts = sortColumns.map(
-    (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`
-  );
+  const parts = sortColumns.map((s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`);
   return ` ORDER BY ${parts.join(', ')}`;
 }
 
@@ -95,7 +91,7 @@ export function buildSelectQuery(
   tableName: string,
   columns: string[],
   filters: Filter[],
-  sortColumns: SortColumn[]
+  sortColumns: SortColumn[],
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
   let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
@@ -117,7 +113,7 @@ export function buildBaseQuery(
   filters: Filter[],
   sortColumns: SortColumn[],
   limit: number,
-  offset: number
+  offset: number,
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
   let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
@@ -139,14 +135,14 @@ export function buildSelectedRowsQuery(
   columns: string[],
   filters: Filter[],
   sortColumns: SortColumn[],
-  indices: number[]
+  indices: number[],
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
 
   let overClause: string;
   if (sortColumns.length > 0) {
     const orderParts = sortColumns.map(
-      (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`
+      (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
     );
     overClause = `ORDER BY ${orderParts.join(', ')}`;
   } else {
@@ -181,7 +177,7 @@ export async function fetchAllRows(
   scope: 'all' | 'filtered' | 'selected',
   context: ExportContext,
   onBatch: (rows: RowData[]) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   if (scope === 'selected') {
     await fetchSelectedRows(tableName, columns, context, onBatch, signal);
@@ -196,7 +192,7 @@ async function fetchBatchedRows(
   scope: 'all' | 'filtered',
   context: ExportContext,
   onBatch: (rows: RowData[]) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   const filters = scope === 'filtered' ? context.filters : [];
   let offset = 0;
@@ -212,7 +208,7 @@ async function fetchBatchedRows(
       filters,
       context.sortColumns,
       BATCH_SIZE,
-      offset
+      offset,
     );
 
     const rows = await context.bridge.query<RowData>(sql, signal);
@@ -230,7 +226,7 @@ async function fetchSelectedRows(
   columns: string[],
   context: ExportContext,
   onBatch: (rows: RowData[]) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   if (context.selectedRows.size === 0) return;
 
@@ -248,14 +244,7 @@ async function fetchSelectedRows(
       }
 
       const limit = Math.min(remaining, BATCH_SIZE);
-      const sql = buildBaseQuery(
-        tableName,
-        columns,
-        filters,
-        context.sortColumns,
-        limit,
-        offset
-      );
+      const sql = buildBaseQuery(tableName, columns, filters, context.sortColumns, limit, offset);
 
       const rows = await context.bridge.query<RowData>(sql, signal);
       if (rows.length > 0) {
@@ -279,7 +268,7 @@ async function fetchSelectedRows(
         columns,
         context.filters,
         context.sortColumns,
-        chunk
+        chunk,
       );
 
       const rows = await context.bridge.query<RowData>(sql, signal);

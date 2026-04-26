@@ -5,8 +5,8 @@
  * a human-readable description, with a remove button.
  */
 
-import type { Filter } from './FilterTypes';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { Filter } from './FilterTypes';
 
 /**
  * Options for FilterChip
@@ -68,7 +68,7 @@ function truncateSQL(sql: string, maxLen: number): string {
  */
 export function formatFilter(
   filter: Filter,
-  messages: Strings = defaultStrings
+  messages: Strings = defaultStrings,
 ): { column: string; description: string } {
   const d = messages.filters.chipDescriptions;
   switch (filter.type) {
@@ -92,22 +92,23 @@ export function formatFilter(
       return { column: filter.column, description: `${min} ${d.rangeSeparator} ${max}` };
     }
     case 'point': {
-      return { column: filter.column, description: `${d.pointPrefix} ${formatDisplayValue(filter.value)}` };
+      return {
+        column: filter.column,
+        description: `${d.pointPrefix} ${formatDisplayValue(filter.value)}`,
+      };
     }
     case 'set': {
       const maxShow = 3;
       const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
-      const list =
-        rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
+      const list = rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
       return { column: filter.column, description: d.inSet(list, !!filter.includeNull) };
     }
     case 'not-set': {
       const maxShow = 3;
       const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
       const rest = filter.values.length - maxShow;
-      const list =
-        rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
+      const list = rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
       return { column: filter.column, description: d.notInSet(list, !!filter.includeNull) };
     }
     case 'null': {
@@ -125,8 +126,7 @@ export function formatFilter(
             : filter.mode === 'regex'
               ? d.patternModes.regex
               : d.patternModes.contains;
-      const quote =
-        filter.mode === 'regex' ? `/${filter.pattern}/` : `"${filter.pattern}"`;
+      const quote = filter.mode === 'regex' ? `/${filter.pattern}/` : `"${filter.pattern}"`;
       return {
         column: filter.column,
         description: `${modeLabel} ${quote}`,
@@ -152,7 +152,7 @@ export class FilterChip {
   constructor(
     private filter: Filter,
     private onRemove: () => void,
-    options: FilterChipOptions = {}
+    options: FilterChipOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.onEdit = options.onEdit;

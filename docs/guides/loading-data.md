@@ -68,12 +68,12 @@ means JSON; anything else is CSV.
 
 Detection order:
 
-| Source | Signal used |
-|--------|-------------|
-| `File` | File extension (`.csv` / `.json` / `.parquet`) |
-| URL | `URL(source).pathname` extension |
-| `ArrayBuffer` | Assumed Parquet |
-| Raw string | First non-whitespace character — `[`/`{` → JSON, else CSV |
+| Source        | Signal used                                               |
+| ------------- | --------------------------------------------------------- |
+| `File`        | File extension (`.csv` / `.json` / `.parquet`)            |
+| URL           | `URL(source).pathname` extension                          |
+| `ArrayBuffer` | Assumed Parquet                                           |
+| Raw string    | First non-whitespace character — `[`/`{` → JSON, else CSV |
 
 An unknown extension falls back to CSV. Override detection with `sourceFormat`
 in `createDataTable`, or the `format` option in `loadData`:
@@ -98,9 +98,9 @@ type ProgressStage = 'reading' | 'parsing' | 'indexing' | 'analyzing';
 
 interface ProgressInfo {
   stage: ProgressStage;
-  percent: number;             // 0–100
-  loaded?: number;             // bytes or rows seen so far
-  total?: number;              // expected bytes or rows (may be undefined for streams)
+  percent: number; // 0–100
+  loaded?: number; // bytes or rows seen so far
+  total?: number; // expected bytes or rows (may be undefined for streams)
   estimatedRemaining?: number; // ms
   cancelable: boolean;
 }
@@ -111,7 +111,9 @@ Wire it up like a typical progress bar:
 ```ts
 const progressEl = document.getElementById('progress')!;
 
-table.on('loadStart', () => { progressEl.style.display = 'block'; });
+table.on('loadStart', () => {
+  progressEl.style.display = 'block';
+});
 
 table.on('loadProgress', ({ percent, stage }) => {
   progressEl.textContent = `${stage} — ${Math.round(percent)}%`;
@@ -231,7 +233,7 @@ for a runnable demo.
 ## Gotchas
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
-- **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are *not* auto-fetched — read them yourself and pass the bytes.
+- **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are _not_ auto-fetched — read them yourself and pass the bytes.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.

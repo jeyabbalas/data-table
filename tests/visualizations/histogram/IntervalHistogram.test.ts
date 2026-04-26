@@ -67,7 +67,11 @@ vi.mock('../../../src/visualizations/histogram/IntervalHistogramData', () => ({
     isSingleValue: false,
   }),
   fetchIntervalColumnStats: vi.fn().mockResolvedValue({
-    minSeconds: 0, maxSeconds: 3600, medianSeconds: 1800, count: 58, nullCount: 3,
+    minSeconds: 0,
+    maxSeconds: 3600,
+    medianSeconds: 1800,
+    count: 58,
+    nullCount: 3,
   }),
   fetchIntervalNumericBins: vi.fn().mockResolvedValue([
     { binStartSeconds: 0, binEndSeconds: 720, count: 5 },
@@ -101,9 +105,15 @@ describe('IntervalHistogram', () => {
     document.body.appendChild(container);
 
     vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-      width: 150, height: 60,
-      top: 0, left: 0, bottom: 60, right: 150,
-      x: 0, y: 0, toJSON: () => ({}),
+      width: 150,
+      height: 60,
+      top: 0,
+      left: 0,
+      bottom: 60,
+      right: 150,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
     });
 
     column = {
@@ -145,7 +155,11 @@ describe('IntervalHistogram', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(fetchIntervalHistogramData).toHaveBeenCalledWith(
-        'test_table', 'duration', [], options.bridge, 15
+        'test_table',
+        'duration',
+        [],
+        options.bridge,
+        15,
       );
     });
   });
@@ -239,9 +253,8 @@ describe('IntervalHistogram', () => {
     it('does not include extra bin when filter min drifts below bin boundary', async () => {
       // Simulate the round-trip precision loss: filter min is slightly below
       // the bin boundary at 720, which could falsely include bin 0 ([0, 720)).
-      const { parseIntervalToSeconds } = await import(
-        '../../../src/visualizations/histogram/IntervalHistogramData'
-      );
+      const { parseIntervalToSeconds } =
+        await import('../../../src/visualizations/histogram/IntervalHistogramData');
       vi.mocked(parseIntervalToSeconds).mockImplementation((s: unknown) => {
         const str = String(s);
         // Simulate drift: "720 seconds" parses to 719.9999 (just below bin edge)
@@ -251,20 +264,26 @@ describe('IntervalHistogram', () => {
       });
 
       // Set up filter selecting bins 1-2 (720–2160)
-      options.filters = [{
-        column: 'duration',
-        type: 'range' as const,
-        min: '720 seconds',
-        max: '2160 seconds',
-        valueType: 'interval' as const,
-      }];
+      options.filters = [
+        {
+          column: 'duration',
+          type: 'range' as const,
+          min: '720 seconds',
+          max: '2160 seconds',
+          valueType: 'interval' as const,
+        },
+      ];
 
       histogram = new IntervalHistogram(container, column, options);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Access private brushState to verify correct bin range
-      const state = (histogram as unknown as Record<string, unknown>);
-      const brushState = state.brushState as { startBinIndex: number; endBinIndex: number; committed: boolean };
+      const state = histogram as unknown as Record<string, unknown>;
+      const brushState = state.brushState as {
+        startBinIndex: number;
+        endBinIndex: number;
+        committed: boolean;
+      };
 
       expect(brushState.committed).toBe(true);
       // Should select bins 1-2, NOT bins 0-2 (the epsilon guard prevents bin 0)
@@ -273,9 +292,8 @@ describe('IntervalHistogram', () => {
     });
 
     it('does not include extra bin when filter max drifts above bin boundary', async () => {
-      const { parseIntervalToSeconds } = await import(
-        '../../../src/visualizations/histogram/IntervalHistogramData'
-      );
+      const { parseIntervalToSeconds } =
+        await import('../../../src/visualizations/histogram/IntervalHistogramData');
       vi.mocked(parseIntervalToSeconds).mockImplementation((s: unknown) => {
         const str = String(s);
         if (str === '720 seconds') return 720;
@@ -284,19 +302,25 @@ describe('IntervalHistogram', () => {
         return parseInt(str, 10) || 0;
       });
 
-      options.filters = [{
-        column: 'duration',
-        type: 'range' as const,
-        min: '720 seconds',
-        max: '2160 seconds',
-        valueType: 'interval' as const,
-      }];
+      options.filters = [
+        {
+          column: 'duration',
+          type: 'range' as const,
+          min: '720 seconds',
+          max: '2160 seconds',
+          valueType: 'interval' as const,
+        },
+      ];
 
       histogram = new IntervalHistogram(container, column, options);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const state = (histogram as unknown as Record<string, unknown>);
-      const brushState = state.brushState as { startBinIndex: number; endBinIndex: number; committed: boolean };
+      const state = histogram as unknown as Record<string, unknown>;
+      const brushState = state.brushState as {
+        startBinIndex: number;
+        endBinIndex: number;
+        committed: boolean;
+      };
 
       expect(brushState.committed).toBe(true);
       // Should select bins 1-2, NOT bins 1-3 (the epsilon guard prevents bin 3)

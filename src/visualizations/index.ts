@@ -18,11 +18,7 @@ export type { HistogramBin, HistogramData } from './histogram';
 
 // Date/timestamp histogram visualization
 export { DateHistogram } from './histogram';
-export type {
-  DateHistogramBin,
-  DateHistogramData,
-  TimeInterval,
-} from './histogram';
+export type { DateHistogramBin, DateHistogramData, TimeInterval } from './histogram';
 
 // Time histogram visualization
 export { TimeHistogram } from './histogram';
@@ -35,7 +31,13 @@ export type { CategorySegment, ValueCountsData } from './valuecounts';
 // Visualization factory for centralized creation
 export { VisualizationFactory } from './VisualizationFactory';
 export type { VisualizationRegistration, VisualizationConstructor } from './VisualizationFactory';
-export { isNumericType, isDateType, isTimeType, isCategoricalType, needsVisualization } from './VisualizationFactory';
+export {
+  isNumericType,
+  isDateType,
+  isTimeType,
+  isCategoricalType,
+  needsVisualization,
+} from './VisualizationFactory';
 
 // Crossfilter coordinator
 export { CrossfilterCoordinator } from './CrossfilterCoordinator';

@@ -126,10 +126,7 @@ export type {
 // per-instance isolation semantics as `visualizationRegistry`. Empty by
 // default — when no registration matches a column's type, the library
 // falls back to its built-in HTML formatter.
-export {
-  StatsPanelRegistry,
-  defaultStatsPanelRegistry,
-} from './visualizations/StatsPanelRegistry';
+export { StatsPanelRegistry, defaultStatsPanelRegistry } from './visualizations/StatsPanelRegistry';
 export type {
   StatsPanelRegistration,
   StatsPanelConstructor,
@@ -146,26 +143,16 @@ export type {
   DerivedColumnDef,
   CompletionContext,
 } from './derived/types';
-export type {
-  ExpressionEditor,
-  ExpressionEditorFactory,
-} from './derived/ExpressionEditorTypes';
+export type { ExpressionEditor, ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 
 // ---- Progress reporting ----
-export type {
-  ProgressInfo,
-  ProgressCallback,
-  ProgressStage,
-} from './core/Progress';
+export type { ProgressInfo, ProgressCallback, ProgressStage } from './core/Progress';
 
 // ---- Internationalization ----
 // Pass `messages: DeepPartial<Strings>` to `createDataTable` to override any
 // user-facing string. `defaultStrings` holds the English defaults;
 // `mergeStrings` applies overrides recursively (functions replace wholesale).
-export {
-  defaultStrings,
-  mergeStrings,
-} from './core/Strings';
+export { defaultStrings, mergeStrings } from './core/Strings';
 export type { Strings, DeepPartial } from './core/Strings';
 
 // ---- Stylesheet presence detection ----

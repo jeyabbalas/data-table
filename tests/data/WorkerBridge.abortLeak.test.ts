@@ -19,9 +19,9 @@ describe('WorkerBridge — AbortSignal listener cleanup (Phase 2)', () => {
       terminate: vi.fn(),
     };
     // Bypass real init: inject a fake worker and pretend init resolved.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (bridge as any).worker = fakeWorker;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (bridge as any).initPromise = Promise.resolve();
   });
 

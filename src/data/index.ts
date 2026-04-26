@@ -3,7 +3,12 @@
  */
 
 export { WorkerBridge } from './WorkerBridge';
-export type { LoadOptions, ProgressInfo, ProgressCallback, WorkerBridgeOptions } from './WorkerBridge';
+export type {
+  LoadOptions,
+  ProgressInfo,
+  ProgressCallback,
+  WorkerBridgeOptions,
+} from './WorkerBridge';
 
 export { DataLoader } from './DataLoader';
 export type { DataFormat, LoadResult, DataLoaderOptions } from './DataLoader';
@@ -17,4 +22,8 @@ export { inferStringColumnType, inferAllStringColumnTypes } from './TypeInferenc
 export type { TypeInferenceResult, TypeInferenceOptions } from './TypeInference';
 
 export { detectPattern, detectColumnPattern, detectAllColumnPatterns } from './PatternDetector';
-export type { DetectedPattern, PatternDetectionResult, PatternDetectionOptions } from './PatternDetector';
+export type {
+  DetectedPattern,
+  PatternDetectionResult,
+  PatternDetectionOptions,
+} from './PatternDetector';

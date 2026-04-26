@@ -105,10 +105,7 @@ export class QueryCache {
  * Subscribe to state signals that should invalidate the query cache.
  * Returns an unsubscribe function to tear down all subscriptions.
  */
-export function attachCacheInvalidation(
-  bridge: WorkerBridge,
-  state: TableState
-): () => void {
+export function attachCacheInvalidation(bridge: WorkerBridge, state: TableState): () => void {
   const clear = () => bridge.clearQueryCache();
 
   const unsubs = [

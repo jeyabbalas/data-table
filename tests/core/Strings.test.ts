@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  defaultStrings,
-  mergeStrings,
-  type Strings,
-  type DeepPartial,
-} from '@/core/Strings';
+import { defaultStrings, mergeStrings, type Strings, type DeepPartial } from '@/core/Strings';
 
 describe('Strings', () => {
   describe('defaultStrings', () => {
@@ -17,9 +12,7 @@ describe('Strings', () => {
       expect(defaultStrings.derived.newColumnTitle).toBe('New Derived Column');
       expect(defaultStrings.a11y.ascending).toBe('ascending');
       expect(defaultStrings.statistics.allNull).toBe('all null');
-      expect(defaultStrings.errors.stylesheetMissing).toMatch(
-        /Stylesheet missing/,
-      );
+      expect(defaultStrings.errors.stylesheetMissing).toMatch(/Stylesheet missing/);
     });
 
     it('templates accept runtime args and return sensible English', () => {
@@ -30,14 +23,12 @@ describe('Strings', () => {
         '1 filter active, showing 5 of 10 rows',
       );
       expect(defaultStrings.a11y.noFilters(1234)).toBe('Showing all 1,234 rows');
-      expect(
-        defaultStrings.a11y.sortedBy(['Price ascending', 'Name descending']),
-      ).toBe('sorted by Price ascending, then Name descending');
+      expect(defaultStrings.a11y.sortedBy(['Price ascending', 'Name descending'])).toBe(
+        'sorted by Price ascending, then Name descending',
+      );
       expect(defaultStrings.statistics.rowCount(1234)).toBe('1,234 rows');
       expect(defaultStrings.statistics.rowCount(1)).toBe('1 row');
-      expect(defaultStrings.filters.panelTitleForColumn('price')).toBe(
-        'Filter: price',
-      );
+      expect(defaultStrings.filters.panelTitleForColumn('price')).toBe('Filter: price');
       expect(defaultStrings.derived.vectorInfoText('integer', 42)).toBe(
         'Vector column (integer), 42 values',
       );
@@ -79,9 +70,7 @@ describe('Strings', () => {
       });
       expect(merged.export.csv.delimiters.tab).toBe('Tabulator');
       expect(merged.export.csv.delimiters.comma).toBe('Comma (,)');
-      expect(merged.export.csv.headersLabel).toBe(
-        defaultStrings.export.csv.headersLabel,
-      );
+      expect(merged.export.csv.headersLabel).toBe(defaultStrings.export.csv.headersLabel);
     });
 
     it('replaces function-valued templates wholesale', () => {

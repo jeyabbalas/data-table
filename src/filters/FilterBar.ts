@@ -5,11 +5,11 @@
  * Sits between the table header and body, collapsing when no filters are active.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
-import type { Filter } from './FilterTypes';
-import { FilterChip, type FilterChipOptions } from './FilterChip';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { FilterChip, type FilterChipOptions } from './FilterChip';
+import type { Filter } from './FilterTypes';
 
 /**
  * Options for FilterBar
@@ -68,17 +68,13 @@ export class FilterBar {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    private options: FilterBarOptions = {}
+    private options: FilterBarOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
-    this.chipsContainer = this.element.querySelector(
-      `.${this.prefix}-filter-chips`
-    )!;
-    this.clearAllButton = this.element.querySelector(
-      `.${this.prefix}-filter-clear-all`
-    )! as HTMLButtonElement;
+    this.chipsContainer = this.element.querySelector(`.${this.prefix}-filter-chips`)!;
+    this.clearAllButton = this.element.querySelector(`.${this.prefix}-filter-clear-all`)!;
 
     // Subscribe to filter changes
     this.unsubscribe = this.state.filters.subscribe((filters) => {
@@ -196,11 +192,7 @@ export class FilterBar {
         chipOptions.onEdit = () => this.options.onRawSQLEdit!(filterId);
       }
 
-      const chip = new FilterChip(
-        filter,
-        () => this.handleRemove(filter.column),
-        chipOptions
-      );
+      const chip = new FilterChip(filter, () => this.handleRemove(filter.column), chipOptions);
       this.chips.push(chip);
       this.chipsContainer.appendChild(chip.getElement());
     }
@@ -208,10 +200,7 @@ export class FilterBar {
     // Smooth-scroll to the rightmost chip so the latest addition is visible
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (
-          !this.destroyed &&
-          this.chipsContainer.scrollWidth > this.chipsContainer.clientWidth
-        ) {
+        if (!this.destroyed && this.chipsContainer.scrollWidth > this.chipsContainer.clientWidth) {
           this.chipsContainer.scrollTo({
             left: this.chipsContainer.scrollWidth,
             behavior: 'smooth',

@@ -38,9 +38,12 @@ onMounted(async () => {
   }
 });
 
-watch(() => props.source, async (next) => {
-  if (table && !table.isDestroyed()) await table.loadData(next);
-});
+watch(
+  () => props.source,
+  async (next) => {
+    if (table && !table.isDestroyed()) await table.loadData(next);
+  },
+);
 
 onBeforeUnmount(async () => {
   if (table && !table.isDestroyed()) await table.destroy();
@@ -83,10 +86,7 @@ create it in a client-only plugin:
 
 ```ts
 // plugins/data-table.client.ts
-import {
-  FilterPresetManager,
-  SessionStore,
-} from '@jeyabbalas/data-table';
+import { FilterPresetManager, SessionStore } from '@jeyabbalas/data-table';
 
 export default defineNuxtPlugin(() => {
   const presets = new FilterPresetManager();

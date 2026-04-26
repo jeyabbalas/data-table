@@ -10,10 +10,10 @@
  * - applySnapshot(state, snapshot) — writes a snapshot back to signals
  */
 
+import type { DerivedColumnDef, ExpressionColumnDef, VectorColumnDef } from '../derived/types';
 import { createSignal, batch, type Signal } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import type { Filter, SortColumn } from './types';
-import type { DerivedColumnDef, ExpressionColumnDef, VectorColumnDef } from '../derived/types';
 
 /**
  * A lightweight snapshot of user-manipulable table view state.
@@ -65,10 +65,12 @@ function filterEqual(a: Filter, b: Filter): boolean {
   switch (a.type) {
     case 'range': {
       const br = b as typeof a;
-      return valueEqual(a.min, br.min)
-        && valueEqual(a.max, br.max)
-        && (a.maxInclusive ?? false) === (br.maxInclusive ?? false)
-        && (a.minExclusive ?? false) === (br.minExclusive ?? false);
+      return (
+        valueEqual(a.min, br.min) &&
+        valueEqual(a.max, br.max) &&
+        (a.maxInclusive ?? false) === (br.maxInclusive ?? false) &&
+        (a.minExclusive ?? false) === (br.minExclusive ?? false)
+      );
     }
     case 'point':
       return valueEqual(a.value, (b as typeof a).value);
@@ -123,10 +125,11 @@ function hiddenInfoMapsEqual(
     const infoB = b.get(key);
     if (!infoB) return false;
     if (
-      infoA.column !== infoB.column
-      || infoA.leftNeighbor !== infoB.leftNeighbor
-      || infoA.rightNeighbor !== infoB.rightNeighbor
-    ) return false;
+      infoA.column !== infoB.column ||
+      infoA.leftNeighbor !== infoB.leftNeighbor ||
+      infoA.rightNeighbor !== infoB.rightNeighbor
+    )
+      return false;
   }
   return true;
 }
@@ -144,7 +147,8 @@ export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]
   for (let i = 0; i < a.length; i++) {
     if (a[i].name !== b[i].name || a[i].kind !== b[i].kind) return false;
     if (a[i].kind === 'expression' && b[i].kind === 'expression') {
-      if ((a[i] as ExpressionColumnDef).expression !== (b[i] as ExpressionColumnDef).expression) return false;
+      if ((a[i] as ExpressionColumnDef).expression !== (b[i] as ExpressionColumnDef).expression)
+        return false;
     }
     if (a[i].kind === 'vector' && b[i].kind === 'vector') {
       const av = a[i] as VectorColumnDef;
@@ -170,8 +174,8 @@ export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]
  */
 export function captureSnapshot(state: TableState): StateSnapshot {
   return {
-    filters: state.filters.get().map(f => ({ ...f })),
-    sortColumns: state.sortColumns.get().map(s => ({ ...s })),
+    filters: state.filters.get().map((f) => ({ ...f })),
+    sortColumns: state.sortColumns.get().map((s) => ({ ...s })),
     visibleColumns: [...state.visibleColumns.get()],
     columnOrder: [...state.columnOrder.get()],
     columnWidths: new Map(state.columnWidths.get()),
@@ -183,9 +187,9 @@ export function captureSnapshot(state: TableState): StateSnapshot {
     ),
     // Shallow-copy defs. Vector values arrays are never mutated in place
     // (signal is always set to a new array), so reference sharing is safe.
-    derivedColumns: state.derivedColumns.get().map(d => {
+    derivedColumns: state.derivedColumns.get().map((d) => {
       if (d.kind === 'expression') return { ...d };
-      return { ...d } as typeof d;
+      return { ...d };
     }),
   };
 }
@@ -200,10 +204,10 @@ export function captureSnapshot(state: TableState): StateSnapshot {
 export function applySnapshot(state: TableState, snapshot: StateSnapshot): void {
   batch(() => {
     if (!filtersEqual(state.filters.get(), snapshot.filters)) {
-      state.filters.set(snapshot.filters.map(f => ({ ...f })));
+      state.filters.set(snapshot.filters.map((f) => ({ ...f })));
     }
     if (!sortColumnsEqual(state.sortColumns.get(), snapshot.sortColumns)) {
-      state.sortColumns.set(snapshot.sortColumns.map(s => ({ ...s })));
+      state.sortColumns.set(snapshot.sortColumns.map((s) => ({ ...s })));
     }
     if (!stringArraysEqual(state.visibleColumns.get(), snapshot.visibleColumns)) {
       state.visibleColumns.set([...snapshot.visibleColumns]);
@@ -339,9 +343,10 @@ export class UndoManager {
 
   /** Replace both stacks with deserialized data. Enforces maxDepth. */
   loadStacks(undoStack: StateSnapshot[], redoStack: StateSnapshot[]): void {
-    this.undoStack = undoStack.length > this.maxDepth
-      ? undoStack.slice(undoStack.length - this.maxDepth)
-      : [...undoStack];
+    this.undoStack =
+      undoStack.length > this.maxDepth
+        ? undoStack.slice(undoStack.length - this.maxDepth)
+        : [...undoStack];
     this.redoStack = [...redoStack];
     this.updateSignals();
   }

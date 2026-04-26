@@ -11,19 +11,15 @@
  * in subsequent tasks.
  */
 
+import type { ColumnSchema } from '../core/types';
 import { BaseVisualization } from './BaseVisualization';
 import type { VisualizationOptions } from './BaseVisualization';
-import type { ColumnSchema } from '../core/types';
 
 export class PlaceholderVisualization extends BaseVisualization {
   private hovered = false;
   private mouseX = 0;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
     // Initial render
     this.render();
@@ -67,10 +63,7 @@ export class PlaceholderVisualization extends BaseVisualization {
       const y = padding + barHeight - height;
 
       // Highlight bar under mouse
-      const isHovered =
-        this.hovered &&
-        this.mouseX >= x &&
-        this.mouseX <= x + singleBarWidth;
+      const isHovered = this.hovered && this.mouseX >= x && this.mouseX <= x + singleBarWidth;
 
       ctx.fillStyle = isHovered ? '#3b82f6' : '#93c5fd';
       ctx.fillRect(x, y, singleBarWidth, height);

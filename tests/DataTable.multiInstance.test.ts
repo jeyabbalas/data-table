@@ -123,19 +123,19 @@ describe('multi-instance ID isolation', () => {
     // lazy-create two derived modals with the instanceId each container
     // actually used, and confirm their DOM IDs differ.
     const m1 = new DerivedColumnModal(state1, actions1, {
-      instanceId: (tc1 as unknown as { resolvedOptions: { instanceId: string } })
-        .resolvedOptions.instanceId,
+      instanceId: (tc1 as unknown as { resolvedOptions: { instanceId: string } }).resolvedOptions
+        .instanceId,
     });
     const m2 = new DerivedColumnModal(state2, actions2, {
-      instanceId: (tc2 as unknown as { resolvedOptions: { instanceId: string } })
-        .resolvedOptions.instanceId,
+      instanceId: (tc2 as unknown as { resolvedOptions: { instanceId: string } }).resolvedOptions
+        .instanceId,
     });
     document.body.appendChild(m1.getElement());
     document.body.appendChild(m2.getElement());
 
-    const ids = Array.from(
-      document.querySelectorAll('[id$="-derived-modal-title"]')
-    ).map((el) => el.id);
+    const ids = Array.from(document.querySelectorAll('[id$="-derived-modal-title"]')).map(
+      (el) => el.id,
+    );
     expect(new Set(ids).size).toBe(2);
     for (const id of ids) {
       expect(id).toMatch(/^dt-t\d+-[0-9a-f]{4}-derived-modal-title$/);

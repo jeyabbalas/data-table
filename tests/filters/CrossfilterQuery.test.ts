@@ -29,9 +29,7 @@ describe('splitCrossfilterFilters', () => {
       { type: 'range', column: 'age', min: 18, max: 65 },
     ];
     const result = splitCrossfilterFilters(filters, 'price');
-    expect(result.background).toEqual([
-      { type: 'range', column: 'age', min: 18, max: 65 },
-    ]);
+    expect(result.background).toEqual([{ type: 'range', column: 'age', min: 18, max: 65 }]);
     expect(result.foreground).toEqual(filters);
     expect(result.hasOwnFilter).toBe(true);
   });
@@ -58,9 +56,7 @@ describe('splitCrossfilterFilters', () => {
       { type: 'range', column: 'price', min: 60, max: 100 },
     ];
     const result = splitCrossfilterFilters(filters, 'price');
-    expect(result.background).toEqual([
-      { type: 'range', column: 'age', min: 18, max: 65 },
-    ]);
+    expect(result.background).toEqual([{ type: 'range', column: 'age', min: 18, max: 65 }]);
     expect(result.hasOwnFilter).toBe(true);
   });
 

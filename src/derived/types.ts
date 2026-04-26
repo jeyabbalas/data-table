@@ -53,6 +53,6 @@ export interface DerivedColumnInfo {
  * Downstream apps can use this with CodeMirror or similar editors.
  */
 export interface CompletionContext {
-  columns: Array<{ name: string; type: string; isDerived: boolean }>;
+  columns: { name: string; type: string; isDerived: boolean }[];
   functions?: string[];
 }

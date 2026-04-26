@@ -5,14 +5,9 @@
  * Provides type-safe state containers for all table data, UI state, and configuration.
  */
 
-import { createSignal, computed, type Signal, type Computed } from './Signal';
-import type {
-  ColumnSchema,
-  Filter,
-  SortColumn,
-  ColumnHeaderTooltipContent,
-} from './types';
 import type { DerivedColumnDef } from '../derived/types';
+import { createSignal, computed, type Signal, type Computed } from './Signal';
+import type { ColumnSchema, Filter, SortColumn, ColumnHeaderTooltipContent } from './types';
 
 /** Metadata for a hidden column — tracks neighbors at hide time for intelligent restore */
 export interface HiddenColumnInfo {
@@ -93,21 +88,18 @@ export interface TableState {
  */
 export function createTableState(): TableState {
   const filters = createSignal<Filter[]>([]);
-  const filtersByColumn = computed(
-    () => {
-      const map = new Map<string, Filter[]>();
-      for (const f of filters.get()) {
-        const existing = map.get(f.column);
-        if (existing) {
-          existing.push(f);
-        } else {
-          map.set(f.column, [f]);
-        }
+  const filtersByColumn = computed(() => {
+    const map = new Map<string, Filter[]>();
+    for (const f of filters.get()) {
+      const existing = map.get(f.column);
+      if (existing) {
+        existing.push(f);
+      } else {
+        map.set(f.column, [f]);
       }
-      return map;
-    },
-    [filters]
-  );
+    }
+    return map;
+  }, [filters]);
 
   return {
     // Data
@@ -193,10 +185,7 @@ export function resetTableState(state: TableState): void {
  * initializeColumnsFromSchema(state, schema);
  * ```
  */
-export function initializeColumnsFromSchema(
-  state: TableState,
-  schema: ColumnSchema[]
-): void {
+export function initializeColumnsFromSchema(state: TableState, schema: ColumnSchema[]): void {
   const columnNames = schema.map((col) => col.name);
   // System columns (e.g. synthetic __rowid__) stay in columnOrder and schema
   // so they remain queryable and listable in the column chooser, but are

@@ -4,20 +4,13 @@
  * Detects common patterns like emails, URLs, phone numbers, UUIDs, and IP addresses.
  */
 
-import type { WorkerBridge } from './WorkerBridge';
 import { quoteIdentifier } from '../filters/FilterSQL';
+import type { WorkerBridge } from './WorkerBridge';
 
 /**
  * Detected pattern types
  */
-export type DetectedPattern =
-  | 'email'
-  | 'url'
-  | 'phone'
-  | 'uuid'
-  | 'ip'
-  | 'identifier'
-  | null;
+export type DetectedPattern = 'email' | 'url' | 'phone' | 'uuid' | 'ip' | 'identifier' | null;
 
 /**
  * Result of pattern detection
@@ -44,7 +37,7 @@ export interface PatternDetectionOptions {
 }
 
 // Pattern definitions with regex
-const PATTERNS: Array<{ name: DetectedPattern; regex: RegExp; priority: number }> = [
+const PATTERNS: { name: DetectedPattern; regex: RegExp; priority: number }[] = [
   // UUID - most specific, check first
   {
     name: 'uuid',
@@ -66,7 +59,8 @@ const PATTERNS: Array<{ name: DetectedPattern; regex: RegExp; priority: number }
   // IPv4 address
   {
     name: 'ip',
-    regex: /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
+    regex:
+      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
     priority: 4,
   },
   // Phone number (international formats)
@@ -163,9 +157,9 @@ export async function detectColumnPattern(
   tableName: string,
   columnName: string,
   bridge: WorkerBridge,
-  options: PatternDetectionOptions = {}
+  options: PatternDetectionOptions = {},
 ): Promise<PatternDetectionResult> {
-  const { sampleSize = 1000, minConfidence = 0.90 } = options;
+  const { sampleSize = 1000, minConfidence = 0.9 } = options;
 
   // Sample distinct non-null values from the column
   const quotedCol = quoteIdentifier(columnName);
@@ -214,7 +208,7 @@ export async function detectColumnPattern(
 export async function detectAllColumnPatterns(
   tableName: string,
   bridge: WorkerBridge,
-  options: PatternDetectionOptions = {}
+  options: PatternDetectionOptions = {},
 ): Promise<Map<string, PatternDetectionResult>> {
   // Get schema to find string columns
   const schemaQuery = `DESCRIBE ${quoteIdentifier(tableName)}`;
@@ -232,12 +226,7 @@ export async function detectAllColumnPatterns(
   });
 
   for (const col of stringColumns) {
-    const result = await detectColumnPattern(
-      tableName,
-      col.column_name,
-      bridge,
-      options
-    );
+    const result = await detectColumnPattern(tableName, col.column_name, bridge, options);
     results.set(col.column_name, result);
   }
 

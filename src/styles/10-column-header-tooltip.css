@@ -96,7 +96,7 @@
 }
 
 .dt-col-tooltip__item-label::after {
-  content: ":";
+  content: ':';
   margin-left: 0;
   color: var(--dt-text-tertiary);
 }

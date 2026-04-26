@@ -11,9 +11,9 @@
  * and must be converted to numeric seconds for histogram binning.
  */
 
+import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { QueryError } from '../../core/errors';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
 import type { TimeInterval } from './DateFormatters';
 
@@ -164,7 +164,7 @@ const TIME_INTERVALS: TimeInterval[] = ['second', 'minute', 'hour'];
 export function estimateBinCountForTime(
   minSec: number,
   maxSec: number,
-  interval: TimeInterval
+  interval: TimeInterval,
 ): number {
   const rangeSec = maxSec - minSec;
 
@@ -190,7 +190,7 @@ export function adjustIntervalForMaxBinsTime(
   minSec: number,
   maxSec: number,
   initialInterval: TimeInterval,
-  maxBins: number
+  maxBins: number,
 ): TimeInterval {
   let idx = TIME_INTERVALS.indexOf(initialInterval);
   let interval = initialInterval;
@@ -266,7 +266,7 @@ export async function fetchTimeStats(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<{
   minSeconds: number | null;
   maxSeconds: number | null;
@@ -311,7 +311,7 @@ function buildTimeHistogramSQL(
   tableName: string,
   column: string,
   interval: TimeInterval,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -356,7 +356,7 @@ function buildNumericTimeHistogramSQL(
   numBins: number,
   minSec: number,
   maxSec: number,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -393,7 +393,7 @@ async function fetchTimeHistogramWithNumericBinning(
   numBins: number,
   stats: { minSeconds: number; maxSeconds: number; count: number; nullCount: number },
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<TimeHistogramData> {
   const binWidth = (stats.maxSeconds - stats.minSeconds) / numBins;
 
@@ -403,7 +403,7 @@ async function fetchTimeHistogramWithNumericBinning(
     numBins,
     stats.minSeconds,
     stats.maxSeconds,
-    filters
+    filters,
   );
   const binResults = await bridge.query<NumericBinResult>(sql);
 
@@ -411,7 +411,8 @@ async function fetchTimeHistogramWithNumericBinning(
   const bins: TimeHistogramBin[] = [];
   for (let i = 0; i < numBins; i++) {
     const binStartSeconds = stats.minSeconds + i * binWidth;
-    const binEndSeconds = i === numBins - 1 ? stats.maxSeconds : stats.minSeconds + (i + 1) * binWidth;
+    const binEndSeconds =
+      i === numBins - 1 ? stats.maxSeconds : stats.minSeconds + (i + 1) * binWidth;
     bins.push({
       binStartSeconds,
       binEndSeconds,
@@ -456,7 +457,7 @@ export async function fetchTimeHistogramBins(
   column: string,
   interval: TimeInterval,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<TimeHistogramBin[]> {
   const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
   const binResults = await bridge.query<TimeBinResult>(sql);
@@ -496,18 +497,11 @@ export async function fetchTimeNumericBins(
   minSec: number,
   maxSec: number,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<TimeHistogramBin[]> {
   const binWidth = (maxSec - minSec) / numBins;
 
-  const sql = buildNumericTimeHistogramSQL(
-    tableName,
-    column,
-    numBins,
-    minSec,
-    maxSec,
-    filters
-  );
+  const sql = buildNumericTimeHistogramSQL(tableName, column, numBins, minSec, maxSec, filters);
   const binResults = await bridge.query<NumericBinResult>(sql);
 
   // Create all bins (even empty ones) for consistent visualization
@@ -549,7 +543,7 @@ export async function fetchTimeHistogramData(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
-  maxBins: number = 15
+  maxBins = 15,
 ): Promise<TimeHistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -575,7 +569,7 @@ export async function fetchTimeHistogramData(
       stats.minSeconds,
       stats.maxSeconds,
       initialInterval,
-      maxBins
+      maxBins,
     );
 
     // Step 2.5: Check if even the adjusted interval exceeds maxBins
@@ -587,9 +581,14 @@ export async function fetchTimeHistogramData(
         tableName,
         column,
         maxBins,
-        { minSeconds: stats.minSeconds, maxSeconds: stats.maxSeconds, count: stats.count, nullCount: stats.nullCount },
+        {
+          minSeconds: stats.minSeconds,
+          maxSeconds: stats.maxSeconds,
+          count: stats.count,
+          nullCount: stats.nullCount,
+        },
         filters,
-        bridge
+        bridge,
       );
     }
 

@@ -1,6 +1,6 @@
 # Filter presets
 
-A *preset* is a named collection of filters (plus optional sort state) that
+A _preset_ is a named collection of filters (plus optional sort state) that
 can be saved, loaded, renamed, deleted, exported to JSON, and imported
 back. The built-in preset panel in the filter bar handles the common UI,
 but the `FilterPresetManager` API is also directly accessible if you want
@@ -57,13 +57,13 @@ convenience `manager.getPresets()`.
 
 ```ts
 interface FilterPreset {
-  id: string;           // UUID
+  id: string; // UUID
   name: string;
   description?: string;
-  filters: SerializedFilter[];    // Dates wrapped as { __date__: ISO8601 }
+  filters: SerializedFilter[]; // Dates wrapped as { __date__: ISO8601 }
   sortColumns?: SortColumn[];
-  createdAt: number;    // Unix ms
-  updatedAt: number;    // Unix ms
+  createdAt: number; // Unix ms
+  updatedAt: number; // Unix ms
 }
 ```
 
@@ -78,8 +78,8 @@ filters are deserialized back to live `Date` objects.
 const preset = manager.save(
   'Weekend trips',
   table.state.filters.get(),
-  table.state.sortColumns.get(),   // optional
-  'Filters for weekend traffic',   // optional description
+  table.state.sortColumns.get(), // optional
+  'Filters for weekend traffic', // optional description
 );
 
 // Load — replaces current filters and optional sort, as one undo step
@@ -118,7 +118,7 @@ const unsub = manager.presets.subscribe((presets) => {
 Reading once:
 
 ```ts
-const all = manager.getPresets();   // FilterPreset[]
+const all = manager.getPresets(); // FilterPreset[]
 ```
 
 ## Export to JSON
@@ -160,7 +160,7 @@ behaviors:
 - **Validation.** Rejects invalid JSON, missing `version`, non-array `presets`, malformed entries. Each problem surfaces in `errors` as a descriptive string.
 - **Per-filter validation.** Each filter's `type` must be one of the known discriminants; required fields are checked per type (e.g., `range` needs `min` and `max`).
 - **New IDs assigned on import.** Imported presets get new UUIDs to avoid collisions with existing ones.
-- **Partial success OK.** A preset with some invalid filters is imported with those filters skipped and an error logged. A preset with *zero* valid filters is rejected entirely.
+- **Partial success OK.** A preset with some invalid filters is imported with those filters skipped and an error logged. A preset with _zero_ valid filters is rejected entirely.
 - **Unknown filter types are silently dropped.** If a future library version adds a new filter type and you import a preset with it from a newer export, the unknown filter is skipped rather than failing the whole import. That's deliberate for forward compatibility.
 
 ## Presets across multiple tables
@@ -181,7 +181,7 @@ See [multi-table guide](./multi-table.md) for the full pattern.
 
 ## Persistence
 
-Presets are *not* auto-persisted by the `FilterPresetManager` itself —
+Presets are _not_ auto-persisted by the `FilterPresetManager` itself —
 they live in a memory signal. However, session persistence (IndexedDB) does
 store filter presets as part of the session snapshot, so they survive
 page reloads. The flow:

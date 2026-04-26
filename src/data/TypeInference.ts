@@ -6,8 +6,8 @@
  */
 
 import type { DataType } from '../core/types';
-import type { WorkerBridge } from './WorkerBridge';
 import { quoteIdentifier } from '../filters/FilterSQL';
+import type { WorkerBridge } from './WorkerBridge';
 
 /**
  * Result of type inference on a string column
@@ -36,24 +36,10 @@ export interface TypeInferenceOptions {
 }
 
 // Boolean true values (case-insensitive)
-const BOOLEAN_TRUE_VALUES = new Set([
-  'true',
-  't',
-  'yes',
-  'y',
-  '1',
-  'on',
-]);
+const BOOLEAN_TRUE_VALUES = new Set(['true', 't', 'yes', 'y', '1', 'on']);
 
 // Boolean false values (case-insensitive)
-const BOOLEAN_FALSE_VALUES = new Set([
-  'false',
-  'f',
-  'no',
-  'n',
-  '0',
-  'off',
-]);
+const BOOLEAN_FALSE_VALUES = new Set(['false', 'f', 'no', 'n', '0', 'off']);
 
 /**
  * Check if a value looks like a boolean
@@ -195,9 +181,9 @@ function isTime(value: string): boolean {
   const seconds = parseInt(match[3], 10);
 
   // Validate ranges
-  return hours >= 0 && hours <= 23 &&
-         minutes >= 0 && minutes <= 59 &&
-         seconds >= 0 && seconds <= 59;
+  return (
+    hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59
+  );
 }
 
 /**
@@ -349,7 +335,7 @@ export async function inferStringColumnType(
   tableName: string,
   columnName: string,
   bridge: WorkerBridge,
-  options: TypeInferenceOptions = {}
+  options: TypeInferenceOptions = {},
 ): Promise<TypeInferenceResult> {
   const { sampleSize = 1000, minConfidence = 0.95 } = options;
 
@@ -410,7 +396,7 @@ export async function inferStringColumnType(
 export async function inferAllStringColumnTypes(
   tableName: string,
   bridge: WorkerBridge,
-  options: TypeInferenceOptions = {}
+  options: TypeInferenceOptions = {},
 ): Promise<Map<string, TypeInferenceResult>> {
   // Get schema to find string columns
   const schemaQuery = `DESCRIBE ${quoteIdentifier(tableName)}`;
@@ -428,12 +414,7 @@ export async function inferAllStringColumnTypes(
   });
 
   for (const col of stringColumns) {
-    const result = await inferStringColumnType(
-      tableName,
-      col.column_name,
-      bridge,
-      options
-    );
+    const result = await inferStringColumnType(tableName, col.column_name, bridge, options);
     results.set(col.column_name, result);
   }
 

@@ -2,16 +2,16 @@
  * CSV data loader using DuckDB's native CSV parsing
  */
 
-import { getDatabase, getConnection } from '../duckdb';
-import type { LoadResult, CSVLoadOptions } from './types';
+import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
+import { getDatabase, getConnection } from '../duckdb';
 import {
   enhanceSchemaTypes,
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
 } from './common';
-import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
+import type { LoadResult, CSVLoadOptions } from './types';
 
 let tableCounter = 0;
 
@@ -31,7 +31,7 @@ function generateTableName(): string {
  */
 export async function loadCSV(
   data: string | ArrayBuffer,
-  options: CSVLoadOptions = {}
+  options: CSVLoadOptions = {},
 ): Promise<LoadResult> {
   const db = getDatabase();
   const conn = getConnection();
@@ -49,9 +49,7 @@ export async function loadCSV(
 
   // Convert to Uint8Array for DuckDB's file system
   const content =
-    data instanceof ArrayBuffer
-      ? new Uint8Array(data)
-      : new TextEncoder().encode(data);
+    data instanceof ArrayBuffer ? new Uint8Array(data) : new TextEncoder().encode(data);
 
   // Register file with DuckDB's virtual filesystem
   const fileName = `${tableName}.csv`;
@@ -107,9 +105,7 @@ export async function loadCSV(
     const probeResult = await conn.query(
       `DESCRIBE SELECT * FROM read_csv_auto('${fileName}'${optionsStr})`,
     );
-    const probeColumns = probeResult
-      .toArray()
-      .map((row) => String(row.toJSON().column_name));
+    const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
     if (probeColumns.includes(ROWID_COLUMN)) {
       throw makeReservedColumnError();
     }
@@ -130,9 +126,7 @@ export async function loadCSV(
     }
 
     // Get row count
-    const countResult = await conn.query(
-      `SELECT COUNT(*) as count FROM ${tbl}`
-    );
+    const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
     // Get full schema info from DESCRIBE

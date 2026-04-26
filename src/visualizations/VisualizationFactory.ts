@@ -33,7 +33,7 @@ let hasWarned = false;
 function warnOnce(): void {
   if (hasWarned) return;
   hasWarned = true;
-  // eslint-disable-next-line no-console
+
   console.warn(
     'VisualizationFactory is deprecated; use `VisualizationRegistry` and pass ' +
       '`visualizationRegistry` to `createDataTable()`. The static wrapper will be ' +

@@ -113,14 +113,7 @@ function isTimeFormat(value: string): boolean {
   const hours = parseInt(parts[0], 10);
   const minutes = parseInt(parts[1], 10);
   const seconds = parseFloat(parts[2]);
-  return (
-    hours >= 0 &&
-    hours <= 23 &&
-    minutes >= 0 &&
-    minutes <= 59 &&
-    seconds >= 0 &&
-    seconds < 60
-  );
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds < 60;
 }
 
 /**
@@ -140,8 +133,8 @@ export async function detectTimestampColumns(
   conn: AsyncDuckDBConnection,
   tableName: string,
   stringColumns: string[],
-  sampleSize: number = 100,
-  confidenceThreshold: number = 0.95
+  sampleSize = 100,
+  confidenceThreshold = 0.95,
 ): Promise<string[]> {
   const timestampColumns: string[] = [];
 
@@ -192,8 +185,8 @@ export async function detectDateColumns(
   conn: AsyncDuckDBConnection,
   tableName: string,
   stringColumns: string[],
-  sampleSize: number = 100,
-  confidenceThreshold: number = 0.95
+  sampleSize = 100,
+  confidenceThreshold = 0.95,
 ): Promise<string[]> {
   const dateColumns: string[] = [];
 
@@ -239,8 +232,8 @@ export async function detectTimeColumns(
   conn: AsyncDuckDBConnection,
   tableName: string,
   stringColumns: string[],
-  sampleSize: number = 100,
-  confidenceThreshold: number = 0.95
+  sampleSize = 100,
+  confidenceThreshold = 0.95,
 ): Promise<string[]> {
   const timeColumns: string[] = [];
 
@@ -288,7 +281,7 @@ export async function convertColumnsToTimestamp(
   conn: AsyncDuckDBConnection,
   tableName: string,
   columns: string[],
-  allColumns: string[]
+  allColumns: string[],
 ): Promise<void> {
   if (columns.length === 0) return;
 
@@ -351,7 +344,7 @@ export async function convertColumnsToDate(
   conn: AsyncDuckDBConnection,
   tableName: string,
   columns: string[],
-  allColumns: string[]
+  allColumns: string[],
 ): Promise<void> {
   if (columns.length === 0) return;
 
@@ -404,7 +397,7 @@ export async function convertColumnsToTime(
   conn: AsyncDuckDBConnection,
   tableName: string,
   columns: string[],
-  allColumns: string[]
+  allColumns: string[],
 ): Promise<void> {
   if (columns.length === 0) return;
 
@@ -461,7 +454,7 @@ export async function convertColumnsToTime(
 export async function enhanceSchemaTypes(
   conn: AsyncDuckDBConnection,
   tableName: string,
-  describeRows: Record<string, unknown>[]
+  describeRows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   // Get all column names in original order (important for preserving order during conversion)
   let allColumns = describeRows.map((row) => String(row.column_name));
@@ -479,17 +472,11 @@ export async function enhanceSchemaTypes(
   let needsRefresh = false;
 
   // 1. Detect and convert timestamps (most specific pattern first)
-  const timestampColumns = await detectTimestampColumns(
-    conn,
-    tableName,
-    remainingStringColumns
-  );
+  const timestampColumns = await detectTimestampColumns(conn, tableName, remainingStringColumns);
 
   if (timestampColumns.length > 0) {
     await convertColumnsToTimestamp(conn, tableName, timestampColumns, allColumns);
-    remainingStringColumns = remainingStringColumns.filter(
-      (c) => !timestampColumns.includes(c)
-    );
+    remainingStringColumns = remainingStringColumns.filter((c) => !timestampColumns.includes(c));
     needsRefresh = true;
   }
 
@@ -505,9 +492,7 @@ export async function enhanceSchemaTypes(
 
     if (dateColumns.length > 0) {
       await convertColumnsToDate(conn, tableName, dateColumns, allColumns);
-      remainingStringColumns = remainingStringColumns.filter(
-        (c) => !dateColumns.includes(c)
-      );
+      remainingStringColumns = remainingStringColumns.filter((c) => !dateColumns.includes(c));
       needsRefresh = true;
     }
   }

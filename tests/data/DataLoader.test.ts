@@ -43,39 +43,31 @@ describe('DataLoader', () => {
   describe('detectFormatFromURL', () => {
     it('should detect CSV from URL path', () => {
       const loader = new DataLoader(mockBridge);
-      expect(loader.detectFormatFromURL('https://example.com/data.csv')).toBe(
-        'csv'
-      );
+      expect(loader.detectFormatFromURL('https://example.com/data.csv')).toBe('csv');
     });
 
     it('should detect JSON from URL path', () => {
       const loader = new DataLoader(mockBridge);
-      expect(loader.detectFormatFromURL('https://example.com/data.json')).toBe(
-        'json'
-      );
+      expect(loader.detectFormatFromURL('https://example.com/data.json')).toBe('json');
     });
 
     it('should detect Parquet from URL path', () => {
       const loader = new DataLoader(mockBridge);
-      expect(
-        loader.detectFormatFromURL('https://example.com/data.parquet')
-      ).toBe('parquet');
+      expect(loader.detectFormatFromURL('https://example.com/data.parquet')).toBe('parquet');
     });
 
     it('should handle URLs with query parameters', () => {
       const loader = new DataLoader(mockBridge);
       // URL.pathname correctly excludes query string
-      expect(
-        loader.detectFormatFromURL('https://example.com/path/file.json?token=abc')
-      ).toBe('json');
+      expect(loader.detectFormatFromURL('https://example.com/path/file.json?token=abc')).toBe(
+        'json',
+      );
     });
 
     it('should handle raw GitHub URLs', () => {
       const loader = new DataLoader(mockBridge);
       expect(
-        loader.detectFormatFromURL(
-          'https://raw.githubusercontent.com/user/repo/main/data.csv'
-        )
+        loader.detectFormatFromURL('https://raw.githubusercontent.com/user/repo/main/data.csv'),
       ).toBe('csv');
     });
   });
@@ -103,9 +95,7 @@ describe('DataLoader', () => {
 
     it('should detect Parquet from ArrayBuffer', () => {
       const loader = new DataLoader(mockBridge);
-      expect(loader.detectFormatFromContent(new ArrayBuffer(10))).toBe(
-        'parquet'
-      );
+      expect(loader.detectFormatFromContent(new ArrayBuffer(10))).toBe('parquet');
     });
 
     it('should default to CSV for non-JSON text', () => {

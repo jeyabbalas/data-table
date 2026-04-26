@@ -6,13 +6,13 @@
  * below an anchor, outside-click + Escape close handlers, toggle semantics.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
-import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
-import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
-import type { DerivedColumnDef } from './types';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
+import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
+import type { DerivedColumnDef } from './types';
 
 export interface DerivedColumnEditPanelOptions {
   classPrefix?: string;
@@ -60,7 +60,7 @@ export class DerivedColumnEditPanel {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    options?: DerivedColumnEditPanelOptions
+    options?: DerivedColumnEditPanelOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.messages = options?.messages ?? defaultStrings;
@@ -71,41 +71,39 @@ export class DerivedColumnEditPanel {
     this.element = this.createElement();
 
     // Destructure key elements (set by createElement)
-    this.titleEl = this.element.querySelector(
-      `.${this.prefix}-derived-edit-title`
-    ) as HTMLElement;
+    this.titleEl = this.element.querySelector(`.${this.prefix}-derived-edit-title`) as HTMLElement;
     this.nameInput = this.element.querySelector(
-      `.${this.prefix}-derived-edit-name-input`
+      `.${this.prefix}-derived-edit-name-input`,
     ) as HTMLInputElement;
     this.nameErrorEl = this.element.querySelector(
-      `.${this.prefix}-derived-edit-name-error`
+      `.${this.prefix}-derived-edit-name-error`,
     ) as HTMLElement;
     this.expressionSection = this.element.querySelector(
-      `.${this.prefix}-derived-edit-expr-section`
+      `.${this.prefix}-derived-edit-expr-section`,
     ) as HTMLElement;
     this.vectorInfoSection = this.element.querySelector(
-      `.${this.prefix}-derived-edit-vector-section`
+      `.${this.prefix}-derived-edit-vector-section`,
     ) as HTMLElement;
     this.vectorInfoText = this.element.querySelector(
-      `.${this.prefix}-derived-edit-vector-text`
+      `.${this.prefix}-derived-edit-vector-text`,
     ) as HTMLElement;
     this.editorContainer = this.element.querySelector(
-      `.${this.prefix}-derived-edit-editor-container`
+      `.${this.prefix}-derived-edit-editor-container`,
     ) as HTMLElement;
     this.validateBtn = this.element.querySelector(
-      `.${this.prefix}-derived-edit-validate`
+      `.${this.prefix}-derived-edit-validate`,
     ) as HTMLButtonElement;
     this.typePreview = this.element.querySelector(
-      `.${this.prefix}-derived-edit-type-preview`
+      `.${this.prefix}-derived-edit-type-preview`,
     ) as HTMLElement;
     this.updateBtn = this.element.querySelector(
-      `.${this.prefix}-derived-edit-update`
+      `.${this.prefix}-derived-edit-update`,
     ) as HTMLButtonElement;
     this.deleteBtn = this.element.querySelector(
-      `.${this.prefix}-derived-edit-delete`
+      `.${this.prefix}-derived-edit-delete`,
     ) as HTMLButtonElement;
     this.deleteConfirmDiv = this.element.querySelector(
-      `.${this.prefix}-derived-edit-delete-confirm`
+      `.${this.prefix}-derived-edit-delete-confirm`,
     ) as HTMLElement;
 
     // Attach event listeners
@@ -281,7 +279,7 @@ export class DerivedColumnEditPanel {
   private attachEventListeners(): void {
     // Close button
     const closeBtn = this.element.querySelector(
-      `.${this.prefix}-derived-edit-close`
+      `.${this.prefix}-derived-edit-close`,
     ) as HTMLElement;
     closeBtn.addEventListener('click', () => this.close());
 
@@ -292,10 +290,10 @@ export class DerivedColumnEditPanel {
     });
 
     // Validate button
-    this.validateBtn.addEventListener('click', () => this.handleValidate());
+    this.validateBtn.addEventListener('click', () => void this.handleValidate());
 
     // Update button
-    this.updateBtn.addEventListener('click', () => this.handleUpdate());
+    this.updateBtn.addEventListener('click', () => void this.handleUpdate());
 
     // Delete button
     this.deleteBtn.addEventListener('click', () => {
@@ -305,13 +303,13 @@ export class DerivedColumnEditPanel {
 
     // Delete confirm
     const confirmBtn = this.deleteConfirmDiv.querySelector(
-      `.${this.prefix}-derived-edit-delete-confirm-yes`
+      `.${this.prefix}-derived-edit-delete-confirm-yes`,
     ) as HTMLElement;
-    confirmBtn.addEventListener('click', () => this.handleConfirmDelete());
+    confirmBtn.addEventListener('click', () => void this.handleConfirmDelete());
 
     // Delete cancel
     const cancelBtn = this.deleteConfirmDiv.querySelector(
-      `.${this.prefix}-derived-edit-delete-confirm-no`
+      `.${this.prefix}-derived-edit-delete-confirm-no`,
     ) as HTMLElement;
     cancelBtn.addEventListener('click', () => {
       this.deleteConfirmDiv.style.display = 'none';
@@ -416,7 +414,7 @@ export class DerivedColumnEditPanel {
           this.currentEditor = new CodeMirrorExpressionEditor(
             this.editorContainer,
             context,
-            this.prefix
+            this.prefix,
           );
         }
       }
@@ -443,7 +441,10 @@ export class DerivedColumnEditPanel {
       this.validateBtn.style.display = 'none';
 
       const vectorType = colSchema?.originalType ?? def.vectorType;
-      this.vectorInfoText.textContent = this.messages.derived.vectorInfoText(vectorType, def.values.length);
+      this.vectorInfoText.textContent = this.messages.derived.vectorInfoText(
+        vectorType,
+        def.values.length,
+      );
 
       // No expression validation needed for vector columns
       this.expressionValidated = true;
@@ -490,7 +491,6 @@ export class DerivedColumnEditPanel {
     this.element.style.display = 'none';
   }
 
-
   // =========================================
   // Validation & Actions
   // =========================================
@@ -506,9 +506,7 @@ export class DerivedColumnEditPanel {
 
     // Check uniqueness against schema (excluding current column)
     const schema = this.state.schema.get();
-    const duplicate = schema.find(
-      (s) => s.name === name && s.name !== this.currentColumn
-    );
+    const duplicate = schema.find((s) => s.name === name && s.name !== this.currentColumn);
 
     if (duplicate) {
       this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(name);
@@ -524,15 +522,12 @@ export class DerivedColumnEditPanel {
     if (!name) return false;
 
     const schema = this.state.schema.get();
-    return !schema.some(
-      (s) => s.name === name && s.name !== this.currentColumn
-    );
+    return !schema.some((s) => s.name === name && s.name !== this.currentColumn);
   }
 
   private updateButtonState(): void {
     if (this.currentDef?.kind === 'expression') {
-      this.updateBtn.disabled =
-        !this.isNameValid() || !this.expressionValidated || this.updating;
+      this.updateBtn.disabled = !this.isNameValid() || !this.expressionValidated || this.updating;
     } else {
       // Vector columns: only need valid name
       this.updateBtn.disabled = !this.isNameValid() || this.updating;
@@ -559,7 +554,10 @@ export class DerivedColumnEditPanel {
       const result = await this.actions.validateExpression(expression);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.typePreview.textContent = this.messages.derived.typePreview(result.type!, result.originalType!);
+        this.typePreview.textContent = this.messages.derived.typePreview(
+          result.type!,
+          result.originalType!,
+        );
         this.typePreview.style.color = '';
         this.expressionValidated = true;
         this.currentEditor.setError(null);
@@ -650,10 +648,7 @@ export class DerivedColumnEditPanel {
 
   private removeEditorInputListener(): void {
     if (this.editorInputHandler && this.currentEditor) {
-      this.currentEditor.element.removeEventListener(
-        'input',
-        this.editorInputHandler
-      );
+      this.currentEditor.element.removeEventListener('input', this.editorInputHandler);
       this.editorInputHandler = null;
     }
   }

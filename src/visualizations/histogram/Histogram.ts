@@ -29,10 +29,10 @@
  * @see ValueCounts for categorical columns
  */
 
-import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { NumericColumnStats } from '../../statistics/ColumnStatsTypes';
+import type { VisualizationOptions } from '../BaseVisualization';
 import {
   fetchHistogramData,
   fetchColumnStats,
@@ -40,12 +40,7 @@ import {
   fetchDiscreteBins,
 } from './HistogramData';
 import type { HistogramData } from './HistogramData';
-import {
-  SharedHistogramBase,
-  FONTS,
-  PADDING,
-  LAYOUT,
-} from './SharedHistogramBase';
+import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
 
 // =========================================
 // Utility Functions (numeric-specific)
@@ -103,11 +98,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   /** In-flight promise for initial data fetch (prevents duplicate concurrent fetches) */
   private initialDataPromise: Promise<void> | null = null;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
   }
 
@@ -128,8 +119,12 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       const col = this.column.name;
 
       this.initialDataPromise = fetchHistogramData(tableName, col, maxBins, [], bridge)
-        .then(data => { this.initialData = data; })
-        .finally(() => { this.initialDataPromise = null; });
+        .then((data) => {
+          this.initialData = data;
+        })
+        .finally(() => {
+          this.initialDataPromise = null;
+        });
     }
 
     await this.initialDataPromise;
@@ -144,7 +139,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
    */
   private async fetchAlignedForeground(
     filters: Filter[],
-    seq: number
+    seq: number,
   ): Promise<HistogramData | null> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
@@ -156,7 +151,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     }
 
     if (initial.isDiscrete) {
-      const discreteVals = initial.bins.map(b => b.x0);
+      const discreteVals = initial.bins.map((b) => b.x0);
       const [fgDiscreteBins, fgStats] = await Promise.all([
         fetchDiscreteBins(tableName, col, discreteVals, filters, bridge),
         fetchColumnStats(tableName, col, filters, bridge),
@@ -176,7 +171,15 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       };
     } else {
       const [fgBins, fgStats] = await Promise.all([
-        fetchHistogramBins(tableName, col, initial.min, initial.max, initial.bins.length, filters, bridge),
+        fetchHistogramBins(
+          tableName,
+          col,
+          initial.min,
+          initial.max,
+          initial.bins.length,
+          filters,
+          bridge,
+        ),
         fetchColumnStats(tableName, col, filters, bridge),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
@@ -231,7 +234,11 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
         this.data = await fetchHistogramData(
-          this.options.tableName, this.column.name, maxBins, allFilters, this.options.bridge
+          this.options.tableName,
+          this.column.name,
+          maxBins,
+          allFilters,
+          this.options.bridge,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
@@ -288,9 +295,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   protected drawAxisLabels(): void {
     if (!this.data) return;
 
-    const maxX = this.data.nullCount > 0
-      ? this.nullBarArea.x - LAYOUT.nullBarGap
-      : this.width - PADDING.right;
+    const maxX =
+      this.data.nullCount > 0 ? this.nullBarArea.x - LAYOUT.nullBarGap : this.width - PADDING.right;
 
     // Handle single value case - show centered label instead of "X – X"
     if (this.data.isSingleValue) {
@@ -334,7 +340,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     if (!bin) return '';
 
     // Show single value without range for single-value or discrete columns
-    return (this.data.isSingleValue || this.data.isDiscrete)
+    return this.data.isSingleValue || this.data.isDiscrete
       ? formatAxisValue(bin.x0)
       : `${formatAxisValue(bin.x0)} – ${formatAxisValue(bin.x1)}`;
   }
@@ -349,7 +355,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     if (!startBin || !endBin) return '';
 
     // Show single value without range for single-value or discrete columns
-    return (this.data.isSingleValue || this.data.isDiscrete)
+    return this.data.isSingleValue || this.data.isDiscrete
       ? formatAxisValue(startBin.x0)
       : `${formatAxisValue(startBin.x0)} – ${formatAxisValue(endBin.x1)}`;
   }
@@ -364,14 +370,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   protected emitBrushFilter(): void {
     if (!this.data) return;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startBin = this.data.bins[startIdx];
     const endBin = this.data.bins[endIdx];
 
@@ -413,9 +413,9 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   // Filter → Visual State Sync (Numeric)
   // =========================================
 
-  protected syncVisualStateFromFilter(): void {
+  protected override syncVisualStateFromFilter(): void {
     const filters = this.options.filters;
-    const ownFilter = filters.find(f => f.column === this.column.name);
+    const ownFilter = filters.find((f) => f.column === this.column.name);
     const data = this.backgroundData ?? this.data;
 
     if (!ownFilter || !data || data.bins.length === 0) {
@@ -429,7 +429,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
     switch (ownFilter.type) {
       case 'range':
-        this.syncBrushFromNumericRange(ownFilter as RangeFilter, data.bins);
+        this.syncBrushFromNumericRange(ownFilter, data.bins);
         break;
       case 'point': {
         const value = ownFilter.value;
@@ -507,14 +507,11 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     }
   }
 
-  private syncBrushFromNumericRange(
-    filter: RangeFilter,
-    bins: Array<{ x0: number; x1: number }>
-  ): void {
-    const filterMin = typeof filter.min === 'number' && Number.isFinite(filter.min)
-      ? filter.min : -Infinity;
-    const filterMax = typeof filter.max === 'number' && Number.isFinite(filter.max)
-      ? filter.max : Infinity;
+  private syncBrushFromNumericRange(filter: RangeFilter, bins: { x0: number; x1: number }[]): void {
+    const filterMin =
+      typeof filter.min === 'number' && Number.isFinite(filter.min) ? filter.min : -Infinity;
+    const filterMax =
+      typeof filter.max === 'number' && Number.isFinite(filter.max) ? filter.max : Infinity;
 
     let startIdx = -1;
     let endIdx = -1;

@@ -53,7 +53,13 @@ describe('Parquet Loader Types', () => {
       const result: LoadResult = {
         tableName: 'large_parquet',
         rowCount: 100000,
-        columns: ['pickup_datetime', 'dropoff_datetime', 'passenger_count', 'trip_distance', 'fare_amount'],
+        columns: [
+          'pickup_datetime',
+          'dropoff_datetime',
+          'passenger_count',
+          'trip_distance',
+          'fare_amount',
+        ],
       };
       expect(result.rowCount).toBe(100000);
       expect(result.columns).toHaveLength(5);

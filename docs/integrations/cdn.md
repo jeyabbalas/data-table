@@ -9,25 +9,32 @@ blog post embeds, or pages where adding a build step isn't worth it.
 ```html
 <!doctype html>
 <html>
-<head>
-  <title>Data table — no-build</title>
-  <link rel="stylesheet" href="https://esm.sh/@jeyabbalas/data-table/styles" />
-  <style>
-    html, body { margin: 0; padding: 0; height: 100%; }
-    #my-table { height: 100vh; }
-  </style>
-</head>
-<body>
-  <div id="my-table"></div>
-  <script type="module">
-    import { createDataTable } from 'https://esm.sh/@jeyabbalas/data-table';
+  <head>
+    <title>Data table — no-build</title>
+    <link rel="stylesheet" href="https://esm.sh/@jeyabbalas/data-table/styles" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      #my-table {
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="my-table"></div>
+    <script type="module">
+      import { createDataTable } from 'https://esm.sh/@jeyabbalas/data-table';
 
-    const table = await createDataTable({
-      container: document.getElementById('my-table'),
-      source: 'https://example.com/data.csv',
-    });
-  </script>
-</body>
+      const table = await createDataTable({
+        container: document.getElementById('my-table'),
+        source: 'https://example.com/data.csv',
+      });
+    </script>
+  </body>
 </html>
 ```
 
@@ -60,20 +67,22 @@ For readability, declare an import map:
 
 ```html
 <script type="importmap">
-{
-  "imports": {
-    "@jeyabbalas/data-table":          "https://esm.sh/@jeyabbalas/data-table@0.1.0",
-    "@jeyabbalas/data-table/advanced": "https://esm.sh/@jeyabbalas/data-table@0.1.0/advanced",
-    "@jeyabbalas/data-table/styles":   "https://esm.sh/@jeyabbalas/data-table@0.1.0/styles"
+  {
+    "imports": {
+      "@jeyabbalas/data-table": "https://esm.sh/@jeyabbalas/data-table@0.1.0",
+      "@jeyabbalas/data-table/advanced": "https://esm.sh/@jeyabbalas/data-table@0.1.0/advanced",
+      "@jeyabbalas/data-table/styles": "https://esm.sh/@jeyabbalas/data-table@0.1.0/styles"
+    }
   }
-}
 </script>
 
 <script type="module">
   import { createDataTable } from '@jeyabbalas/data-table';
   import '@jeyabbalas/data-table/styles';
 
-  const table = await createDataTable({ /* … */ });
+  const table = await createDataTable({
+    /* … */
+  });
 </script>
 ```
 
@@ -153,7 +162,7 @@ covers the WASM fetch.
 
 - **TypeScript types.** CDN-loaded libraries don't come with `.d.ts` files. Your editor won't autocomplete unless you also install the npm package locally for types-only use.
 - **esm.sh cold starts.** The first request to `esm.sh/<package>@<version>` compiles the ESM bundle on the server; subsequent requests are cached. Occasional 10-second delays happen on first hit.
-- **Mixed CDN + pinned version.** If you use `https://esm.sh/@jeyabbalas/data-table` *and* `https://esm.sh/@jeyabbalas/data-table/advanced@0.1.0`, you may end up with two versions of the library in the same page — duplicate signals, state isolation surprises. Always pin to the same version across entry points.
+- **Mixed CDN + pinned version.** If you use `https://esm.sh/@jeyabbalas/data-table` _and_ `https://esm.sh/@jeyabbalas/data-table/advanced@0.1.0`, you may end up with two versions of the library in the same page — duplicate signals, state isolation surprises. Always pin to the same version across entry points.
 - **CORS and cross-origin DuckDB WASM.** When the library fetches WASM cross-origin, the host must send permissive CORS headers. jsDelivr does; most CDNs do. Your own self-hosted WASM must match.
 - **No hot reload.** Every edit requires a hard refresh. That's the nature of no-build delivery.
 

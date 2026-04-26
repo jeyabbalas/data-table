@@ -14,8 +14,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 const DATA_URL =
   'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
-const $ = <T extends HTMLElement>(id: string): T =>
-  document.getElementById(id) as T;
+const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /**
  * A host-built CodeMirror SQL editor. The example explicitly assembles
@@ -33,11 +32,14 @@ class HostSqlEditor {
   private readonly sqlCompartment = new Compartment();
   private readonly getContext: () => CompletionContext;
 
-  constructor(parent: HTMLElement, opts: {
-    placeholder: string;
-    getContext: () => CompletionContext;
-    onChange?: () => void;
-  }) {
+  constructor(
+    parent: HTMLElement,
+    opts: {
+      placeholder: string;
+      getContext: () => CompletionContext;
+      onChange?: () => void;
+    },
+  ) {
     this.getContext = opts.getContext;
 
     const state = EditorState.create({
@@ -47,9 +49,7 @@ class HostSqlEditor {
         // includeTheme: false — the host owns the visual presentation here
         // (see EditorView.theme below). Hosts that want the library's look
         // can drop the override and let createSqlExtensions add the theme.
-        this.sqlCompartment.of(
-          createSqlExtensions(this.getContext(), { includeTheme: false }),
-        ),
+        this.sqlCompartment.of(createSqlExtensions(this.getContext(), { includeTheme: false })),
 
         // ---- Standard CodeMirror plumbing the host wires up itself ----
         autocompletion({ tooltipClass: () => 'host-sql-autocomplete' }),

@@ -5,17 +5,17 @@
  * fetches data from DuckDB via WorkerBridge, and handles row hover/selection.
  */
 
-import { VirtualScroller, type VisibleRange } from './VirtualScroller';
-import { CellRenderer } from './Cell';
-import type { TableState } from '../core/State';
-import type { StateActions } from '../core/Actions';
-import type { WorkerBridge } from '../data/WorkerBridge';
-import type { ColumnSchema, SortColumn, Filter } from '../core/types';
-import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import type { AnnotationPopover } from './AnnotationPopover';
 import { maxSeverity } from '../annotations/severity';
 import type { Annotation } from '../annotations/types';
+import type { StateActions } from '../core/Actions';
+import type { TableState } from '../core/State';
+import type { ColumnSchema, SortColumn, Filter } from '../core/types';
+import type { WorkerBridge } from '../data/WorkerBridge';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
+import type { AnnotationPopover } from './AnnotationPopover';
+import { CellRenderer } from './Cell';
+import { VirtualScroller, type VisibleRange } from './VirtualScroller';
 
 /**
  * Options for configuring the TableBody
@@ -63,7 +63,7 @@ export type RowData = Record<string, unknown>;
  */
 export class TableBody {
   private virtualScroller: VirtualScroller;
-  private rowDataCache: Map<number, RowData> = new Map();
+  private rowDataCache = new Map<number, RowData>();
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
@@ -74,13 +74,13 @@ export class TableBody {
 
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
-  private rowElementMap: Map<number, HTMLElement> = new Map();
+  private rowElementMap = new Map<number, HTMLElement>();
   private readonly MAX_ROW_CACHE = 500;
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
   // Cached column name -> 1-based schema index for aria-colindex
-  private colIndexMap: Map<string, number> = new Map();
+  private colIndexMap = new Map<string, number>();
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
@@ -100,7 +100,7 @@ export class TableBody {
     private state: TableState,
     private bridge: WorkerBridge,
     private actions?: StateActions,
-    options: TableBodyOptions = {}
+    options: TableBodyOptions = {},
   ) {
     this.container = container;
     this.rowHeight = options.rowHeight ?? 32;
@@ -145,9 +145,8 @@ export class TableBody {
 
     // Set total rows (use filteredRows when filters are active)
     const filters = this.state.filters.get();
-    const effectiveTotal = filters.length > 0
-      ? this.state.filteredRows.get()
-      : this.state.totalRows.get();
+    const effectiveTotal =
+      filters.length > 0 ? this.state.filteredRows.get() : this.state.totalRows.get();
     this.virtualScroller.setTotalRows(effectiveTotal);
 
     // Subscribe to scroll events
@@ -159,7 +158,7 @@ export class TableBody {
         this.renderVisibleRows();
         return;
       }
-      this.handleScroll(range);
+      void this.handleScroll(range);
     });
     this.unsubscribes.push(unsubScroll);
 
@@ -375,7 +374,7 @@ export class TableBody {
 
     // Re-fetch and render
     const range = this.virtualScroller.getVisibleRange();
-    this.handleScroll(range);
+    void this.handleScroll(range);
   }
 
   // =========================================
@@ -462,7 +461,15 @@ export class TableBody {
     if (visibleColumns.length === 0) return;
 
     // Build SQL query
-    const sql = this.buildRowQuery(tableName, visibleColumns, sortColumns, filters, start, end - start, schema);
+    const sql = this.buildRowQuery(
+      tableName,
+      visibleColumns,
+      sortColumns,
+      filters,
+      start,
+      end - start,
+      schema,
+    );
 
     try {
       const rows = await this.bridge.query<RowData>(sql);
@@ -514,7 +521,7 @@ export class TableBody {
     filters: Filter[],
     offset: number,
     limit: number,
-    schema?: ColumnSchema[]
+    schema?: ColumnSchema[],
   ): string {
     // Build schema lookup for type-aware column selection
     const schemaMap = new Map<string, ColumnSchema>();
@@ -657,8 +664,8 @@ export class TableBody {
             }
           }
         } else {
-          for (let c = 0; c < rowEl.children.length; c++) {
-            const cell = rowEl.children[c] as HTMLElement;
+          for (const child of rowEl.children) {
+            const cell = child as HTMLElement;
             cell.classList.remove(focusClass);
             cell.setAttribute('tabindex', '-1');
           }
@@ -684,7 +691,9 @@ export class TableBody {
 
     // Also set header row width to match for scroll synchronization
     const scrollContainer = this.virtualScroller.getScrollContainer();
-    const headerRow = scrollContainer.closest('.dt-root')?.querySelector('.dt-header-row') as HTMLElement;
+    const headerRow = scrollContainer
+      .closest('.dt-root')
+      ?.querySelector('.dt-header-row') as HTMLElement;
     if (headerRow) {
       headerRow.style.minWidth = `${totalWidth}px`;
     }
@@ -742,7 +751,7 @@ export class TableBody {
       rowEl.classList.remove(
         `${this.classPrefix}-row--selected`,
         `${this.classPrefix}-row--hover`,
-        `${this.classPrefix}-row--loading`
+        `${this.classPrefix}-row--loading`,
       );
       rowEl.removeAttribute('aria-selected');
       rowEl.removeAttribute('aria-rowindex');
@@ -778,15 +787,15 @@ export class TableBody {
     cleanEl.classList.remove(
       `${this.classPrefix}-row--selected`,
       `${this.classPrefix}-row--hover`,
-      `${this.classPrefix}-row--loading`
+      `${this.classPrefix}-row--loading`,
     );
     cleanEl.removeAttribute('aria-rowindex');
     cleanEl.removeAttribute('aria-selected');
 
     // Clear cell-level focus class and reset roving tabindex
     const focusClass = `${this.classPrefix}-cell--focused`;
-    for (let i = 0; i < cleanEl.children.length; i++) {
-      const cell = cleanEl.children[i] as HTMLElement;
+    for (const child of cleanEl.children) {
+      const cell = child as HTMLElement;
       cell.classList.remove(focusClass);
       cell.setAttribute('tabindex', '-1');
     }
@@ -805,7 +814,7 @@ export class TableBody {
     index: number,
     data: RowData,
     columns: string[],
-    schemaMap: Map<string, ColumnSchema>
+    schemaMap: Map<string, ColumnSchema>,
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
     rowEl.setAttribute('aria-rowindex', String(index + 1));
@@ -836,10 +845,9 @@ export class TableBody {
     const columnWidths = this.state.columnWidths.get();
     const pinnedColumns = this.state.pinnedColumns.get();
 
-    const root = this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
-    const baseZ = Number(
-      getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()
-    ) || 20;
+    const root =
+      this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
+    const baseZ = Number(getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
 
     // Compute pinned offsets
     const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
@@ -850,7 +858,7 @@ export class TableBody {
         left: cumulativeLeft,
         zIndex: baseZ + (pinnedColumns.length - i),
       });
-      cumulativeLeft += (columnWidths.get(pCol) ?? 150);
+      cumulativeLeft += columnWidths.get(pCol) ?? 150;
     }
 
     const cells = rowEl.children;
@@ -1002,9 +1010,7 @@ export class TableBody {
 
     // Row-scope: `getByRow` also holds cell-scope anns at (rowId, any
     // col) via the shared index, so filter to scope === 'row' strictly.
-    const rowAnns = this.annotations
-      .getByRow(rowId)
-      .filter((a) => a.scope === 'row');
+    const rowAnns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
     if (rowAnns.length > 0) {
       cellEl.classList.add(`${p}-cell--row-annotated`);
       const rowSev = maxSeverity(rowAnns.filter((a) => filter[a.severity]));
@@ -1013,9 +1019,7 @@ export class TableBody {
 
     // Column-scope: same index-leak reasoning — `getByColumn` holds
     // cell-scope anns at (any row, colName) too.
-    const colAnns = this.annotations
-      .getByColumn(colName)
-      .filter((a) => a.scope === 'column');
+    const colAnns = this.annotations.getByColumn(colName).filter((a) => a.scope === 'column');
     if (colAnns.length > 0) {
       cellEl.classList.add(`${p}-cell--col-annotated`);
       const colSev = maxSeverity(colAnns.filter((a) => filter[a.severity]));
@@ -1029,9 +1033,7 @@ export class TableBody {
     // exact rowId + column match too.
     const cellAnns = this.annotations
       .getByCell(rowId, colName)
-      .filter(
-        (a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName,
-      );
+      .filter((a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName);
     if (cellAnns.length > 0) {
       cellEl.classList.add(`${p}-cell--annotated`);
       const cellSev = maxSeverity(cellAnns.filter((a) => filter[a.severity]));
@@ -1137,9 +1139,7 @@ export class TableBody {
 
       // Set focused cell from clicked cell
       if (this.actions && !this.destroyed) {
-        const cellEl = (event.target as HTMLElement).closest(
-          `.${this.classPrefix}-cell`
-        ) as HTMLElement | null;
+        const cellEl = (event.target as HTMLElement).closest(`.${this.classPrefix}-cell`);
         if (cellEl && rowEl.contains(cellEl)) {
           const cellIndex = Array.from(rowEl.children).indexOf(cellEl);
           const visibleColumns = this.state.visibleColumns.get();
@@ -1185,17 +1185,11 @@ export class TableBody {
     const colName = anchor.getAttribute('data-column');
     if (!colName) return null;
 
-    const rowAnns = this.annotations
-      .getByRow(rowId)
-      .filter((a) => a.scope === 'row');
-    const colAnns = this.annotations
-      .getByColumn(colName)
-      .filter((a) => a.scope === 'column');
+    const rowAnns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
+    const colAnns = this.annotations.getByColumn(colName).filter((a) => a.scope === 'column');
     const cellAnns = this.annotations
       .getByCell(rowId, colName)
-      .filter(
-        (a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName,
-      );
+      .filter((a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName);
     const anns = [...rowAnns, ...colAnns, ...cellAnns];
     if (anns.length === 0) return null;
     return { rowId, colName, anns };
@@ -1407,7 +1401,9 @@ export class TableBody {
 
     // Update header row width
     const scrollContainer = this.virtualScroller.getScrollContainer();
-    const headerRow = scrollContainer.closest('.dt-root')?.querySelector('.dt-header-row') as HTMLElement;
+    const headerRow = scrollContainer
+      .closest('.dt-root')
+      ?.querySelector('.dt-header-row') as HTMLElement;
     if (headerRow) {
       headerRow.style.minWidth = `${totalWidth}px`;
     }

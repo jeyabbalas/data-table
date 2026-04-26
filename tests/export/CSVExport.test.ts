@@ -168,10 +168,10 @@ describe('resolveColumns', () => {
 
     it('preserves system columns when caller passes an explicit list', () => {
       expect(
-        resolveColumns(
-          ['__rowid__', 'id'],
-          { columnOrder: orderWithSystem, schema: schemaWithSystem },
-        ),
+        resolveColumns(['__rowid__', 'id'], {
+          columnOrder: orderWithSystem,
+          schema: schemaWithSystem,
+        }),
       ).toEqual(['__rowid__', 'id']);
     });
 
@@ -295,43 +295,29 @@ describe('exportToCSV', () => {
     });
 
     it('should export without headers when includeHeaders is false', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10.5 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10.5 }]);
 
       const csv = await exportToCSV(
         'test_table',
         { scope: 'all', includeHeaders: false },
-        baseContext
+        baseContext,
       );
 
       expect(csv).toBe('1,Alice,10.5');
     });
 
     it('should use custom delimiter', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10.5 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10.5 }]);
 
-      const csv = await exportToCSV(
-        'test_table',
-        { scope: 'all', delimiter: '\t' },
-        baseContext
-      );
+      const csv = await exportToCSV('test_table', { scope: 'all', delimiter: '\t' }, baseContext);
 
       expect(csv).toBe('id\tname\tprice\n1\tAlice\t10.5');
     });
 
     it('should use custom nullValue', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: null, price: undefined },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: null, price: undefined }]);
 
-      const csv = await exportToCSV(
-        'test_table',
-        { scope: 'all', nullValue: 'N/A' },
-        baseContext
-      );
+      const csv = await exportToCSV('test_table', { scope: 'all', nullValue: 'N/A' }, baseContext);
 
       expect(csv).toBe('id,name,price\n1,N/A,N/A');
     });
@@ -350,7 +336,7 @@ describe('exportToCSV', () => {
       const csv = await exportToCSV(
         'test_table',
         { scope: 'all', includeHeaders: false },
-        baseContext
+        baseContext,
       );
 
       expect(csv).toBe('');
@@ -364,9 +350,7 @@ describe('exportToCSV', () => {
 
       const context = {
         ...baseContext,
-        sortColumns: [
-          { column: 'name', direction: 'asc' as const },
-        ],
+        sortColumns: [{ column: 'name', direction: 'asc' as const }],
       };
 
       await exportToCSV('test_table', { scope: 'all' }, context);
@@ -395,15 +379,11 @@ describe('exportToCSV', () => {
 
   describe('scope: filtered', () => {
     it('should include WHERE clause from filters', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10.5 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10.5 }]);
 
       const context = {
         ...baseContext,
-        filters: [
-          { type: 'range' as const, column: 'price', min: 5, max: 15 },
-        ],
+        filters: [{ type: 'range' as const, column: 'price', min: 5, max: 15 }],
       };
 
       const csv = await exportToCSV('test_table', { scope: 'filtered' }, context);
@@ -420,9 +400,7 @@ describe('exportToCSV', () => {
 
       const context = {
         ...baseContext,
-        filters: [
-          { type: 'range' as const, column: 'price', min: 5, max: 15 },
-        ],
+        filters: [{ type: 'range' as const, column: 'price', min: 5, max: 15 }],
       };
 
       await exportToCSV('test_table', { scope: 'all' }, context);
@@ -434,11 +412,7 @@ describe('exportToCSV', () => {
 
   describe('scope: selected', () => {
     it('should return header-only when no rows selected', async () => {
-      const csv = await exportToCSV(
-        'test_table',
-        { scope: 'selected' },
-        baseContext
-      );
+      const csv = await exportToCSV('test_table', { scope: 'selected' }, baseContext);
 
       expect(csv).toBe('id,name,price');
       expect(mockBridge.query).not.toHaveBeenCalled();
@@ -456,11 +430,7 @@ describe('exportToCSV', () => {
         selectedRows: new Set([2, 3, 4]),
       };
 
-      const csv = await exportToCSV(
-        'test_table',
-        { scope: 'selected' },
-        context
-      );
+      const csv = await exportToCSV('test_table', { scope: 'selected' }, context);
 
       expect(csv).toContain('Alice');
 
@@ -481,11 +451,7 @@ describe('exportToCSV', () => {
         selectedRows: new Set([0, 5]),
       };
 
-      const csv = await exportToCSV(
-        'test_table',
-        { scope: 'selected' },
-        context
-      );
+      const csv = await exportToCSV('test_table', { scope: 'selected' }, context);
 
       expect(csv).toContain('Alice');
 
@@ -496,9 +462,7 @@ describe('exportToCSV', () => {
     });
 
     it('should include ORDER BY in ROW_NUMBER OVER clause when sorting', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10 }]);
 
       const context = {
         ...baseContext,
@@ -533,9 +497,7 @@ describe('exportToCSV', () => {
       const context = {
         ...baseContext,
         selectedRows: new Set([0, 2]),
-        filters: [
-          { type: 'point' as const, column: 'name', value: 'Alice' },
-        ],
+        filters: [{ type: 'point' as const, column: 'name', value: 'Alice' }],
       };
 
       await exportToCSV('test_table', { scope: 'selected' }, context);
@@ -548,9 +510,7 @@ describe('exportToCSV', () => {
 
   describe('column selection', () => {
     it('should export all columns by default', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10 }]);
 
       const csv = await exportToCSV('test_table', {}, baseContext);
 
@@ -558,29 +518,17 @@ describe('exportToCSV', () => {
     });
 
     it('should export all columns when columns is "all"', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { id: 1, name: 'Alice', price: 10 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 10 }]);
 
-      const csv = await exportToCSV(
-        'test_table',
-        { columns: 'all' },
-        baseContext
-      );
+      const csv = await exportToCSV('test_table', { columns: 'all' }, baseContext);
 
       expect(csv).toContain('id,name,price');
     });
 
     it('should export specific columns', async () => {
-      mockBridge.query.mockResolvedValueOnce([
-        { name: 'Alice', price: 10 },
-      ]);
+      mockBridge.query.mockResolvedValueOnce([{ name: 'Alice', price: 10 }]);
 
-      const csv = await exportToCSV(
-        'test_table',
-        { columns: ['name', 'price'] },
-        baseContext
-      );
+      const csv = await exportToCSV('test_table', { columns: ['name', 'price'] }, baseContext);
 
       expect(csv).toBe('name,price\nAlice,10');
     });
@@ -595,13 +543,9 @@ describe('exportToCSV', () => {
         price: i * 0.5,
       }));
       // Second batch: partial (end of data)
-      const batch2 = [
-        { id: 10000, name: 'last', price: 5000 },
-      ];
+      const batch2 = [{ id: 10000, name: 'last', price: 5000 }];
 
-      mockBridge.query
-        .mockResolvedValueOnce(batch1)
-        .mockResolvedValueOnce(batch2);
+      mockBridge.query.mockResolvedValueOnce(batch1).mockResolvedValueOnce(batch2);
 
       const csv = await exportToCSV('test_table', { scope: 'all' }, baseContext);
 
@@ -625,9 +569,9 @@ describe('exportToCSV', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        exportToCSV('test_table', {}, baseContext, controller.signal)
-      ).rejects.toThrow('Export aborted');
+      await expect(exportToCSV('test_table', {}, baseContext, controller.signal)).rejects.toThrow(
+        'Export aborted',
+      );
     });
   });
 
@@ -681,15 +625,13 @@ describe('exportFromState', () => {
     await expect(
       exportFromState(
         mockState as unknown as import('@/core/State').TableState,
-        {} as unknown as import('@/data/WorkerBridge').WorkerBridge
-      )
+        {} as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      ),
     ).rejects.toThrow('No table loaded');
   });
 
   it('should read signals and delegate to exportToCSV', async () => {
-    const mockQuery = vi.fn().mockResolvedValueOnce([
-      { id: 1, name: 'Alice' },
-    ]);
+    const mockQuery = vi.fn().mockResolvedValueOnce([{ id: 1, name: 'Alice' }]);
 
     const mockState = {
       tableName: { get: () => 'my_table' },
@@ -710,7 +652,7 @@ describe('exportFromState', () => {
     const csv = await exportFromState(
       mockState as unknown as import('@/core/State').TableState,
       mockBridge as unknown as import('@/data/WorkerBridge').WorkerBridge,
-      { scope: 'all' }
+      { scope: 'all' },
     );
 
     expect(csv).toBe('id,name\n1,Alice');

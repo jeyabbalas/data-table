@@ -19,14 +19,14 @@
  * @see VisualizationRegistry for registering a replacement
  */
 
-import { BaseVisualization } from '../BaseVisualization';
-import type { VisualizationOptions } from '../BaseVisualization';
 import type { ColumnSchema } from '../../core/types';
 import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
+import { BaseVisualization } from '../BaseVisualization';
+import type { VisualizationOptions } from '../BaseVisualization';
+import { resolveColor, resolveScope } from '../palette';
+import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
-import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
-import { resolveColor, resolveScope } from '../palette';
 
 // =========================================
 // Palette
@@ -121,7 +121,6 @@ const ALL_UNIQUE_VALUE_KEY = 'All unique';
 // Utility Functions
 // =========================================
 
-
 // =========================================
 // Extended Segment Interface
 // =========================================
@@ -157,7 +156,7 @@ export class ValueCounts extends BaseVisualization {
   private hoveredSegment: number | null = null;
 
   // Selection state (supports multi-select with Ctrl/Cmd+click)
-  private selectedSegments: Set<number> = new Set();
+  private selectedSegments = new Set<number>();
 
   // Double-click detection for clearing selection
   private lastClickTime = 0;
@@ -168,7 +167,7 @@ export class ValueCounts extends BaseVisualization {
 
   // Computed layout (updated on render)
   private barArea = { x: 0, y: 0, width: 0, height: 0 };
-  private segmentPositions: Array<{ x: number; width: number; index: number }> = [];
+  private segmentPositions: { x: number; width: number; index: number }[] = [];
 
   // Combined segments including null for rendering
   private renderSegments: RenderSegment[] = [];
@@ -184,7 +183,7 @@ export class ValueCounts extends BaseVisualization {
 
   // Cached initial (unfiltered) category order and counts for stable crossfilter rendering
   private initialCategoryOrder: string[] | null = null;
-  private initialHasOther: boolean = false;
+  private initialHasOther = false;
   private initialSegmentCounts: Map<string, number> | null = null;
 
   /** Cached initial (unfiltered) data for ghost background */
@@ -196,11 +195,7 @@ export class ValueCounts extends BaseVisualization {
   // Palette resolved from CSS custom properties at the top of each render().
   private colors!: ValueCountsColors;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
 
     // Fetch data immediately and store the promise
@@ -236,11 +231,17 @@ export class ValueCounts extends BaseVisualization {
         // Ensure initial data is cached
         if (this.initialCategoryOrder === null) {
           const unfilteredData = await fetchValueCountsData(
-            this.options.tableName, this.column.name, [], this.options.bridge, MAX_CATEGORIES
+            this.options.tableName,
+            this.column.name,
+            [],
+            this.options.bridge,
+            MAX_CATEGORIES,
           );
           if (seq !== this.fetchSequence || this.destroyed) return;
-          this.initialCategoryOrder = unfilteredData.segments.filter(s => !s.isOther).map(s => s.value);
-          this.initialHasOther = unfilteredData.segments.some(s => s.isOther);
+          this.initialCategoryOrder = unfilteredData.segments
+            .filter((s) => !s.isOther)
+            .map((s) => s.value);
+          this.initialHasOther = unfilteredData.segments.some((s) => s.isOther);
           this.initialSegmentCounts = new Map();
           for (const seg of unfilteredData.segments) {
             this.initialSegmentCounts.set(seg.isOther ? 'Other' : seg.value, seg.count);
@@ -253,7 +254,12 @@ export class ValueCounts extends BaseVisualization {
 
         // Fetch foreground aligned to initial order
         const fgData = await fetchAlignedValueCountsData(
-          this.options.tableName, this.column.name, this.initialCategoryOrder, this.initialHasOther, allFilters, this.options.bridge
+          this.options.tableName,
+          this.column.name,
+          this.initialCategoryOrder,
+          this.initialHasOther,
+          allFilters,
+          this.options.bridge,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
 
@@ -263,15 +269,21 @@ export class ValueCounts extends BaseVisualization {
       } else {
         // Branch A: no filters → simple fetch, cache initial
         this.data = await fetchValueCountsData(
-          this.options.tableName, this.column.name, allFilters, this.options.bridge, MAX_CATEGORIES
+          this.options.tableName,
+          this.column.name,
+          allFilters,
+          this.options.bridge,
+          MAX_CATEGORIES,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.backgroundData = null;
 
         // Cache initial order and counts on first unfiltered fetch
         if (this.initialCategoryOrder === null) {
-          this.initialCategoryOrder = this.data.segments.filter(s => !s.isOther).map(s => s.value);
-          this.initialHasOther = this.data.segments.some(s => s.isOther);
+          this.initialCategoryOrder = this.data.segments
+            .filter((s) => !s.isOther)
+            .map((s) => s.value);
+          this.initialHasOther = this.data.segments.some((s) => s.isOther);
           this.initialSegmentCounts = new Map();
           for (const seg of this.data.segments) {
             this.initialSegmentCounts.set(seg.isOther ? 'Other' : seg.value, seg.count);
@@ -311,9 +323,7 @@ export class ValueCounts extends BaseVisualization {
     // For boolean columns, extract true count from segments
     let trueCount: number | undefined;
     if (this.column.type === 'boolean') {
-      const trueSegment = this.data.segments.find(
-        (s) => s.value === 'true'
-      );
+      const trueSegment = this.data.segments.find((s) => s.value === 'true');
       trueCount = trueSegment?.count ?? 0;
     }
 
@@ -455,13 +465,14 @@ export class ValueCounts extends BaseVisualization {
    */
   private foldExcessCategories(): void {
     // Use layout segments for folding decisions (background in crossfilter mode)
-    const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
-      ? this.backgroundSegments
-      : this.renderSegments;
+    const layoutSegments =
+      this.backgroundData !== null && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
 
     // Need at least 2 regular categories to consider folding
     const regularCount = layoutSegments.filter(
-      s => !s.isOther && !s.isNull && !s.isAllUnique
+      (s) => !s.isOther && !s.isNull && !s.isAllUnique,
     ).length;
     if (regularCount <= 1) {
       this.foldedCountOverrides = null;
@@ -480,16 +491,17 @@ export class ValueCounts extends BaseVisualization {
     // Uses seg.count directly (not initialSegmentCounts) because:
     // - background segments already have initial counts
     // - folding updates Other's count, keeping total correct across iterations
-    // eslint-disable-next-line no-constant-condition
+
     while (true) {
       const numSegments = this.renderSegments.length;
       const totalBorderWidth = (numSegments - 1) * LAYOUT.segmentBorderWidth;
       const availableWidth = chartWidth - totalBorderWidth;
 
       // Use layout segments to compute total count
-      const currentLayout = this.backgroundData !== null && this.backgroundSegments.length > 0
-        ? this.backgroundSegments
-        : this.renderSegments;
+      const currentLayout =
+        this.backgroundData !== null && this.backgroundSegments.length > 0
+          ? this.backgroundSegments
+          : this.renderSegments;
       const totalCount = currentLayout.reduce((sum, seg) => sum + seg.count, 0);
       if (totalCount === 0) break;
 
@@ -523,7 +535,7 @@ export class ValueCounts extends BaseVisualization {
       // Apply identical folding to backgroundSegments if present
       if (this.backgroundSegments.length > 0) {
         const bgIdx = this.backgroundSegments.findIndex(
-          s => !s.isOther && !s.isNull && s.value === foldValue
+          (s) => !s.isOther && !s.isNull && s.value === foldValue,
         );
         if (bgIdx >= 0) {
           this.foldCategoryIntoOther(this.backgroundSegments, bgIdx);
@@ -536,16 +548,17 @@ export class ValueCounts extends BaseVisualization {
     if (folded) {
       // Update topCategoryValues to reflect only displayed regular categories
       this.topCategoryValues = this.renderSegments
-        .filter(seg => !seg.isOther && !seg.isNull && !seg.isAllUnique)
-        .map(seg => seg.value);
+        .filter((seg) => !seg.isOther && !seg.isNull && !seg.isAllUnique)
+        .map((seg) => seg.value);
 
       // Store folded Other count so calculateSegmentPositions uses correct counts.
       // Must use layout segments (background in crossfilter mode) — foreground Other
       // may have count=0 when a filter is active, which would collapse its width.
-      const layoutSource = this.backgroundData !== null && this.backgroundSegments.length > 0
-        ? this.backgroundSegments
-        : this.renderSegments;
-      const otherSeg = layoutSource.find(s => s.isOther);
+      const layoutSource =
+        this.backgroundData !== null && this.backgroundSegments.length > 0
+          ? this.backgroundSegments
+          : this.renderSegments;
+      const otherSeg = layoutSource.find((s) => s.isOther);
       if (otherSeg) {
         this.foldedCountOverrides = new Map();
         this.foldedCountOverrides.set('Other', otherSeg.count);
@@ -570,14 +583,14 @@ export class ValueCounts extends BaseVisualization {
     const removed = segments.splice(index, 1)[0];
     if (!removed) return;
 
-    const otherIdx = segments.findIndex(s => s.isOther);
+    const otherIdx = segments.findIndex((s) => s.isOther);
     if (otherIdx >= 0) {
       // Merge into existing Other
       segments[otherIdx].count += removed.count;
       segments[otherIdx].otherCount = (segments[otherIdx].otherCount ?? 0) + 1;
     } else {
       // Create new Other segment, insert before null (or at end)
-      const nullIdx = segments.findIndex(s => s.isNull);
+      const nullIdx = segments.findIndex((s) => s.isNull);
       const newOther: RenderSegment = {
         value: 'Other',
         count: removed.count,
@@ -600,7 +613,7 @@ export class ValueCounts extends BaseVisualization {
    * highlighted segments so the visualization reflects panel-created filters.
    */
   private syncVisualStateFromFilter(): void {
-    const ownFilter = this.options.filters.find(f => f.column === this.column.name);
+    const ownFilter = this.options.filters.find((f) => f.column === this.column.name);
 
     if (!ownFilter) {
       this.selectedSegments.clear();
@@ -683,7 +696,11 @@ export class ValueCounts extends BaseVisualization {
       case 'ends':
         return value.endsWith(pattern);
       case 'regex':
-        try { return new RegExp(pattern).test(value); } catch { return false; }
+        try {
+          return new RegExp(pattern).test(value);
+        } catch {
+          return false;
+        }
       default:
         return false;
     }
@@ -716,9 +733,10 @@ export class ValueCounts extends BaseVisualization {
    */
   private calculateSegmentPositions(): void {
     // Use background segments for layout when crossfilter is active
-    const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
-      ? this.backgroundSegments
-      : this.renderSegments;
+    const layoutSegments =
+      this.backgroundData !== null && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
 
     if (layoutSegments.length === 0) {
       this.segmentPositions = [];
@@ -783,30 +801,28 @@ export class ValueCounts extends BaseVisualization {
       // Mixed: inflate sub-minimum to minSegmentWidth, scale the rest proportionally
       const totalMinInflation = subMinCount * LAYOUT.minSegmentWidth;
       const remainingWidth = availableWidth - totalMinInflation;
-      const aboveMinTotal = idealWidths.reduce(
-        (sum, w, i) => sum + (isSubMinimum[i] ? 0 : w), 0
-      );
+      const aboveMinTotal = idealWidths.reduce((sum, w, i) => sum + (isSubMinimum[i] ? 0 : w), 0);
 
       for (let i = 0; i < numSegments; i++) {
         if (isSubMinimum[i]) {
           finalWidths[i] = LAYOUT.minSegmentWidth;
         } else {
-          finalWidths[i] = aboveMinTotal > 0
-            ? (idealWidths[i] / aboveMinTotal) * remainingWidth
-            : remainingWidth / (numSegments - subMinCount);
+          finalWidths[i] =
+            aboveMinTotal > 0
+              ? (idealWidths[i] / aboveMinTotal) * remainingWidth
+              : remainingWidth / (numSegments - subMinCount);
         }
       }
     }
 
     // --- Build positions from widths ---
-    const positions: Array<{ x: number; width: number; index: number }> = [];
+    const positions: { x: number; width: number; index: number }[] = [];
     let currentX = this.barArea.x;
 
     for (let i = 0; i < numSegments; i++) {
       // Last segment snaps to edge to avoid floating-point gaps
-      const width = i === numSegments - 1
-        ? this.barArea.x + this.barArea.width - currentX
-        : finalWidths[i];
+      const width =
+        i === numSegments - 1 ? this.barArea.x + this.barArea.width - currentX : finalWidths[i];
 
       positions.push({ x: currentX, width, index: i });
       currentX += width + LAYOUT.segmentBorderWidth;
@@ -830,9 +846,10 @@ export class ValueCounts extends BaseVisualization {
     const hasCrossfilter = this.backgroundData !== null;
 
     // When crossfilter is active, layout is based on backgroundSegments
-    const layoutSegments = hasCrossfilter && this.backgroundSegments.length > 0
-      ? this.backgroundSegments
-      : this.renderSegments;
+    const layoutSegments =
+      hasCrossfilter && this.backgroundSegments.length > 0
+        ? this.backgroundSegments
+        : this.renderSegments;
     const numSegments = layoutSegments.length;
 
     // Build a lookup map from foreground segments by value for crossfilter matching
@@ -919,7 +936,7 @@ export class ValueCounts extends BaseVisualization {
           this.barArea.height,
           fadedCrossfilterColor,
           isFirst,
-          isLast
+          isLast,
         );
 
         // 2. Overdraw solid at fgProportion of segment width
@@ -933,7 +950,7 @@ export class ValueCounts extends BaseVisualization {
             this.barArea.height,
             fillColor,
             isFirst,
-            fillIsLast
+            fillIsLast,
           );
         }
       } else {
@@ -945,7 +962,7 @@ export class ValueCounts extends BaseVisualization {
           this.barArea.height,
           fillColor,
           isFirst,
-          isLast
+          isLast,
         );
       }
 
@@ -975,7 +992,7 @@ export class ValueCounts extends BaseVisualization {
     height: number,
     fill: string,
     roundLeft: boolean,
-    roundRight: boolean
+    roundRight: boolean,
   ): void {
     const ctx = this.ctx;
     const radius = LAYOUT.barRadius;
@@ -1024,10 +1041,7 @@ export class ValueCounts extends BaseVisualization {
   /**
    * Draw label inside a segment if it fits
    */
-  private drawSegmentLabel(
-    pos: { x: number; width: number },
-    segment: RenderSegment
-  ): void {
+  private drawSegmentLabel(pos: { x: number; width: number }, segment: RenderSegment): void {
     const ctx = this.ctx;
     const maxLabelWidth = pos.width - LAYOUT.labelPadding;
 
@@ -1056,11 +1070,7 @@ export class ValueCounts extends BaseVisualization {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    ctx.fillText(
-      label,
-      pos.x + pos.width / 2,
-      this.barArea.y + this.barArea.height / 2
-    );
+    ctx.fillText(label, pos.x + pos.width / 2, this.barArea.y + this.barArea.height / 2);
   }
 
   /**
@@ -1070,28 +1080,23 @@ export class ValueCounts extends BaseVisualization {
     if (!this.data || this.selectedSegments.size === 0) return;
 
     const ctx = this.ctx;
-    const indicatorY =
-      this.barArea.y + this.barArea.height + LAYOUT.selectionIndicatorGap;
+    const indicatorY = this.barArea.y + this.barArea.height + LAYOUT.selectionIndicatorGap;
 
     // Draw indicator for each selected segment
     for (const selectedIdx of this.selectedSegments) {
       const pos = this.segmentPositions[selectedIdx];
       if (!pos) continue;
 
-      const layoutSegments = this.backgroundData !== null && this.backgroundSegments.length > 0
-        ? this.backgroundSegments
-        : this.renderSegments;
+      const layoutSegments =
+        this.backgroundData !== null && this.backgroundSegments.length > 0
+          ? this.backgroundSegments
+          : this.renderSegments;
       const segment = layoutSegments[selectedIdx];
       ctx.fillStyle = segment?.isNull
         ? this.colors.nullSelectionIndicator
         : this.colors.selectionIndicator;
 
-      ctx.fillRect(
-        pos.x,
-        indicatorY,
-        pos.width,
-        LAYOUT.selectionIndicatorHeight
-      );
+      ctx.fillRect(pos.x, indicatorY, pos.width, LAYOUT.selectionIndicatorHeight);
     }
   }
 
@@ -1117,13 +1122,15 @@ export class ValueCounts extends BaseVisualization {
     const barWidth = this.width - PADDING.left - PADDING.right;
 
     // Build render segments for all unique state
-    this.renderSegments = [{
-      value: ALL_UNIQUE_VALUE_KEY,
-      count: this.data.distinctCount,
-      isOther: false,
-      isNull: false,
-      isAllUnique: true,
-    }];
+    this.renderSegments = [
+      {
+        value: ALL_UNIQUE_VALUE_KEY,
+        count: this.data.distinctCount,
+        isOther: false,
+        isNull: false,
+        isAllUnique: true,
+      },
+    ];
 
     // Add null segment if present
     if (this.data.nullCount > 0) {
@@ -1137,13 +1144,15 @@ export class ValueCounts extends BaseVisualization {
 
     // Build background segments for crossfilter rendering
     if (this.backgroundData) {
-      this.backgroundSegments = [{
-        value: ALL_UNIQUE_VALUE_KEY,
-        count: this.backgroundData.distinctCount,
-        isOther: false,
-        isNull: false,
-        isAllUnique: true,
-      }];
+      this.backgroundSegments = [
+        {
+          value: ALL_UNIQUE_VALUE_KEY,
+          count: this.backgroundData.distinctCount,
+          isOther: false,
+          isNull: false,
+          isAllUnique: true,
+        },
+      ];
       if (this.backgroundData.nullCount > 0) {
         this.backgroundSegments.push({
           value: '\u2205',
@@ -1221,7 +1230,8 @@ export class ValueCounts extends BaseVisualization {
     if (!this.data) return;
 
     if (this.hoveredSegment !== null) {
-      const segment = this.renderSegments[this.hoveredSegment] ?? this.backgroundSegments[this.hoveredSegment];
+      const segment =
+        this.renderSegments[this.hoveredSegment] ?? this.backgroundSegments[this.hoveredSegment];
       if (segment) {
         let categoryLabel: string;
         if (segment.isNull) {
@@ -1231,9 +1241,8 @@ export class ValueCounts extends BaseVisualization {
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
-          const raw = segment.value.length > 30
-            ? segment.value.substring(0, 27) + '...'
-            : segment.value;
+          const raw =
+            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
           categoryLabel = escapeHTML(raw);
         }
 
@@ -1249,9 +1258,7 @@ export class ValueCounts extends BaseVisualization {
         }
 
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` +
-          `${categoryLabel}<br>` +
-          countLine
+          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
         );
       }
     } else {
@@ -1292,7 +1299,10 @@ export class ValueCounts extends BaseVisualization {
       const timeSinceLastClick = now - this.lastClickTime;
       const distance = Math.hypot(x - this.lastClickX, y - this.lastClickY);
 
-      if (timeSinceLastClick < this.DOUBLE_CLICK_THRESHOLD && distance < this.DOUBLE_CLICK_DISTANCE) {
+      if (
+        timeSinceLastClick < this.DOUBLE_CLICK_THRESHOLD &&
+        distance < this.DOUBLE_CLICK_DISTANCE
+      ) {
         // Double-click on selected → clear all selection
         this.clearSelection();
         this.lastClickTime = 0; // Reset to prevent triple-click issues
@@ -1431,7 +1441,7 @@ export class ValueCounts extends BaseVisualization {
 
     if (hasOther) {
       // Other selected: exclude non-selected regular categories
-      const nonSelectedValues = this.topCategoryValues.filter(v => !selectedValues.includes(v));
+      const nonSelectedValues = this.topCategoryValues.filter((v) => !selectedValues.includes(v));
 
       if (nonSelectedValues.length === 0) {
         // All regular categories + Other selected
@@ -1491,9 +1501,8 @@ export class ValueCounts extends BaseVisualization {
         } else if (segment.isOther) {
           categoryLabel = `Other (${segment.otherCount} values)`;
         } else {
-          const raw = segment.value.length > 30
-            ? segment.value.substring(0, 27) + '...'
-            : segment.value;
+          const raw =
+            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
           categoryLabel = escapeHTML(raw);
         }
 
@@ -1508,9 +1517,7 @@ export class ValueCounts extends BaseVisualization {
         }
 
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` +
-          `${categoryLabel}<br>` +
-          countLine
+          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
         );
       }
       return;
@@ -1518,13 +1525,13 @@ export class ValueCounts extends BaseVisualization {
 
     // Multi-select stats
     const selectedSegmentsList = [...this.selectedSegments]
-      .map(idx => this.renderSegments[idx])
-      .filter(s => s && !s.isNull && !s.isOther && !s.isAllUnique);
+      .map((idx) => this.renderSegments[idx])
+      .filter((s) => s && !s.isNull && !s.isOther && !s.isAllUnique);
 
     const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
 
     // Format value list (truncate if too long)
-    const values = selectedSegmentsList.map(s => escapeHTML(s.value));
+    const values = selectedSegmentsList.map((s) => escapeHTML(s.value));
     let valueListStr = values.join(', ');
     if (valueListStr.length > 50) {
       valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;
@@ -1534,8 +1541,8 @@ export class ValueCounts extends BaseVisualization {
     let countLine: string;
     if (this.backgroundData) {
       const bgTotal = [...this.selectedSegments]
-        .map(idx => this.backgroundSegments[idx])
-        .filter(s => s && !s.isNull && !s.isOther && !s.isAllUnique)
+        .map((idx) => this.backgroundSegments[idx])
+        .filter((s) => s && !s.isNull && !s.isOther && !s.isAllUnique)
         .reduce((sum, s) => sum + s.count, 0);
       if (bgTotal > 0) {
         const ratio = formatPercent(totalCount / bgTotal);
@@ -1550,9 +1557,7 @@ export class ValueCounts extends BaseVisualization {
     }
 
     this.options.onStatsChange?.(
-      `<span class="stats-label">Selected:</span><br>` +
-      `${valueListStr}<br>` +
-      countLine
+      `<span class="stats-label">Selected:</span><br>` + `${valueListStr}<br>` + countLine,
     );
   }
 
@@ -1620,7 +1625,7 @@ export class ValueCounts extends BaseVisualization {
   } {
     // Check if any selected segment is the null segment
     const selectedNull = [...this.selectedSegments].some(
-      idx => this.renderSegments[idx]?.isNull === true
+      (idx) => this.renderSegments[idx]?.isNull === true,
     );
 
     return {
@@ -1633,10 +1638,12 @@ export class ValueCounts extends BaseVisualization {
    * Restore selection state from saved state
    * Call after data is loaded (fetchData completed)
    */
-  public setSelectionState(state: {
-    selectedSegments: number[];
-    selectedNull: boolean;
-  } | null): void {
+  public setSelectionState(
+    state: {
+      selectedSegments: number[];
+      selectedNull: boolean;
+    } | null,
+  ): void {
     if (!this.data) return;
 
     // Rebuild render segments if not already built

@@ -64,10 +64,7 @@ const EDGE_PAD = 4;
  * `message`, `code`, `source`) are written via `.textContent`; structure is
  * built with `createElement` + `appendChild`. No HTML parsing path exists.
  */
-function renderEntry(
-  ann: Annotation,
-  classPrefix: string,
-): HTMLLIElement {
+function renderEntry(ann: Annotation, classPrefix: string): HTMLLIElement {
   const li = document.createElement('li');
   li.className = `${classPrefix}-annotation-entry ${classPrefix}-annotation-entry--${ann.severity}`;
 
@@ -126,7 +123,8 @@ export class AnnotationPopover {
 
   constructor(options: AnnotationPopoverOptions = {}) {
     this.classPrefix = options.classPrefix ?? 'dt';
-    this.portalTarget = typeof document === 'undefined' ? null : (options.portalTarget ?? document.body);
+    this.portalTarget =
+      typeof document === 'undefined' ? null : (options.portalTarget ?? document.body);
     this.popoverId = `${this.classPrefix}-annotation-popover-${++popoverInstanceCounter}`;
 
     this.onDocumentKeyDown = (e: KeyboardEvent) => {
@@ -160,7 +158,9 @@ export class AnnotationPopover {
 
   /** `true` if the popover is currently anchored to `anchor`. */
   isOpenFor(anchor: HTMLElement): boolean {
-    return !this.destroyed && this.currentAnchor === anchor && this.element?.style.display !== 'none';
+    return (
+      !this.destroyed && this.currentAnchor === anchor && this.element?.style.display !== 'none'
+    );
   }
 
   /** `true` if the popover is open against any anchor. */
@@ -297,7 +297,7 @@ export class AnnotationPopover {
     }
 
     el.innerHTML = '';
-    const scopes: Array<'row' | 'column' | 'cell'> = ['row', 'column', 'cell'];
+    const scopes: ('row' | 'column' | 'cell')[] = ['row', 'column', 'cell'];
     for (const scope of scopes) {
       const anns = byScope[scope];
       if (anns.length === 0) continue;

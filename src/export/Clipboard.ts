@@ -6,11 +6,11 @@
  * clipboard format for spreadsheet paste.
  */
 
+import { ExportError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { exportToCSV } from './CSVExport';
 import type { ExportContext } from './ExportQuery';
-import { ExportError } from '../core/errors';
 
 /**
  * Copy a string to the clipboard.
@@ -18,10 +18,7 @@ import { ExportError } from '../core/errors';
  * @param data   - The string to copy
  * @param format - `'text'` for plain text, `'html'` for rich HTML with plain-text fallback
  */
-export async function copyToClipboard(
-  data: string,
-  format: 'text' | 'html'
-): Promise<void> {
+export async function copyToClipboard(data: string, format: 'text' | 'html'): Promise<void> {
   if (format === 'html') {
     const htmlBlob = new Blob([data], { type: 'text/html' });
     // Strip HTML tags to produce a plain-text fallback
@@ -52,7 +49,7 @@ export async function copyToClipboard(
 export async function copyRowsToClipboard(
   rows: number[],
   state: TableState,
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<void> {
   if (rows.length === 0) return;
 
@@ -70,13 +67,17 @@ export async function copyRowsToClipboard(
     schema: state.schema.get(),
   };
 
-  const tsv = await exportToCSV(tableName, {
-    scope: 'selected',
-    columns: 'all',
-    includeHeaders: true,
-    delimiter: '\t',
-    nullValue: '',
-  }, context);
+  const tsv = await exportToCSV(
+    tableName,
+    {
+      scope: 'selected',
+      columns: 'all',
+      includeHeaders: true,
+      delimiter: '\t',
+      nullValue: '',
+    },
+    context,
+  );
 
   await copyToClipboard(tsv, 'text');
 }

@@ -7,14 +7,24 @@ import { maxSeverity, severityRank } from '@/annotations/severity';
 import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
 import type { Annotation } from '@/annotations/types';
 
-function makeAnn(overrides: Partial<Annotation> & Pick<Annotation, 'scope' | 'severity' | 'message'>): Annotation {
+function makeAnn(
+  overrides: Partial<Annotation> & Pick<Annotation, 'scope' | 'severity' | 'message'>,
+): Annotation {
   const base = {
     id: `ann_${Math.random().toString(36).slice(2, 10)}`,
     createdAt: '2026-04-24T00:00:00.000Z',
     ...overrides,
   };
-  if (base.scope === 'row') return { ...base, rowId: 'rowId' in base ? (base as { rowId: number }).rowId : 0 } as Annotation;
-  if (base.scope === 'column') return { ...base, column: 'column' in base ? (base as { column: string }).column : 'col' } as Annotation;
+  if (base.scope === 'row')
+    return {
+      ...base,
+      rowId: 'rowId' in base ? (base as { rowId: number }).rowId : 0,
+    } as Annotation;
+  if (base.scope === 'column')
+    return {
+      ...base,
+      column: 'column' in base ? (base as { column: string }).column : 'col',
+    } as Annotation;
   return {
     ...base,
     rowId: 'rowId' in base ? (base as { rowId: number }).rowId : 0,
@@ -282,9 +292,7 @@ describe('AnnotationPopover', () => {
     expect(messages).toContain('<img src=x onerror=alert(1)>');
     expect(messages).toContain('<iframe src="javascript:alert(3)"></iframe>');
 
-    const meta = Array.from(root.querySelectorAll('.dt-annotation-meta')).map(
-      (n) => n.textContent,
-    );
+    const meta = Array.from(root.querySelectorAll('.dt-annotation-meta')).map((n) => n.textContent);
     expect(meta).toContain('<script>alert(2)</script> · <svg/>');
     expect(meta).toContain('<b>bold</b> · <i>italic</i>');
 

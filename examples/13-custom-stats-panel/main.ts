@@ -125,7 +125,9 @@ class MeanStdPanel extends BaseStatsPanel {
       WHERE ${where}
     `;
     try {
-      const rows = await this.options.bridge.query<{ mean: number | null; std: number | null }>(sql);
+      const rows = await this.options.bridge.query<{ mean: number | null; std: number | null }>(
+        sql,
+      );
       // Drop stale results: a fresh filter change may have superseded us.
       if (this.isDestroyed() || seq !== this.fetchSeq) return;
       this.mean = rows[0]?.mean ?? null;
@@ -146,7 +148,8 @@ class MeanStdPanel extends BaseStatsPanel {
     if (this.isDestroyed()) return;
     const n = this.nonNull;
     const nul = this.nullCount;
-    const top = n == null ? '…' : nul ? `${fmtNum(n)} non-null · ${fmtNum(nul)} null` : `${fmtNum(n)} rows`;
+    const top =
+      n == null ? '…' : nul ? `${fmtNum(n)} non-null · ${fmtNum(nul)} null` : `${fmtNum(n)} rows`;
     this.line1.textContent = top;
 
     if (this.hoverText) {
@@ -253,11 +256,7 @@ class TopValuePanel extends BaseStatsPanel {
     const n = this.nonNull;
     const d = this.distinct;
     const top =
-      n == null
-        ? '…'
-        : d != null
-          ? `${fmtNum(n)} rows · ${fmtNum(d)} unique`
-          : `${fmtNum(n)} rows`;
+      n == null ? '…' : d != null ? `${fmtNum(n)} rows · ${fmtNum(d)} unique` : `${fmtNum(n)} rows`;
     this.line1.textContent = top;
 
     if (this.hoverText) {

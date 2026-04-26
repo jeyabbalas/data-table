@@ -26,11 +26,13 @@ import { DerivedColumnError } from '@/core/errors';
  * - viewFailOnNth: throw on the Nth `CREATE OR REPLACE VIEW` call (1-indexed).
  *   Used to exercise rollback.
  */
-function createMockBridge(options: {
-  typeMap?: Record<string, string>;
-  preflightBreaks?: { needles: string[]; error: string };
-  viewFailOnNth?: number;
-} = {}) {
+function createMockBridge(
+  options: {
+    typeMap?: Record<string, string>;
+    preflightBreaks?: { needles: string[]; error: string };
+    viewFailOnNth?: number;
+  } = {},
+) {
   const typeMap = options.typeMap ?? {};
   const queryCalls: string[] = [];
   let viewCreateCount = 0;
@@ -50,7 +52,7 @@ function createMockBridge(options: {
     // Pre-flight simulation: throw when all needles are present.
     if (options.preflightBreaks) {
       const { needles, error } = options.preflightBreaks;
-      if (needles.every(n => sql.includes(n))) {
+      if (needles.every((n) => sql.includes(n))) {
         throw new Error(error);
       }
     }
@@ -118,17 +120,27 @@ describe('replaceDerivedColumn', () => {
 
   // 1. Chain replace, type-compatible
   it('replaces an expression column when dependents remain compatible', async () => {
-    setup(createMockBridge({
-      typeMap: {
-        'x * 2': 'INTEGER',
-        'x * 3': 'INTEGER',
-        'a + 1': 'INTEGER',
-      },
-    }));
+    setup(
+      createMockBridge({
+        typeMap: {
+          'x * 2': 'INTEGER',
+          'x * 3': 'INTEGER',
+          'a + 1': 'INTEGER',
+        },
+      }),
+    );
 
-    const added = await actions.addDerivedColumn({ kind: 'expression', name: 'a', expression: 'x * 2' });
+    const added = await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'a',
+      expression: 'x * 2',
+    });
     expect(added.success).toBe(true);
-    const addedB = await actions.addDerivedColumn({ kind: 'expression', name: 'b', expression: 'a + 1' });
+    const addedB = await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'b',
+      expression: 'a + 1',
+    });
     expect(addedB.success).toBe(true);
 
     const result = await actions.replaceDerivedColumn('a', {
@@ -143,31 +155,37 @@ describe('replaceDerivedColumn', () => {
     }
 
     // State reflects the replacement.
-    const a = state.derivedColumns.get().find(d => d.name === 'a');
+    const a = state.derivedColumns.get().find((d) => d.name === 'a');
     expect(a).toMatchObject({ kind: 'expression', name: 'a', expression: 'x * 3' });
 
     // B is still present and unchanged.
-    const b = state.derivedColumns.get().find(d => d.name === 'b');
+    const b = state.derivedColumns.get().find((d) => d.name === 'b');
     expect(b).toMatchObject({ kind: 'expression', name: 'b', expression: 'a + 1' });
   });
 
   // 2. Chain replace, type-incompatible
   it('rejects replacement that breaks a dependent with DEPENDENTS_INCOMPATIBLE', async () => {
-    setup(createMockBridge({
-      typeMap: {
-        'CAST(x AS INTEGER)': 'INTEGER',
-        'UPPER(a)': 'VARCHAR',
-        'CAST(x AS DOUBLE)': 'DOUBLE',
-      },
-      preflightBreaks: {
-        // Pre-flight substitutes the new expr for `a`, then validates UPPER(a)
-        // against the CTE. The CTE contains both the new expression and UPPER.
-        needles: ['CAST(x AS DOUBLE)', 'UPPER(a)'],
-        error: 'Binder Error: No function matches the given name UPPER(DOUBLE)',
-      },
-    }));
+    setup(
+      createMockBridge({
+        typeMap: {
+          'CAST(x AS INTEGER)': 'INTEGER',
+          'UPPER(a)': 'VARCHAR',
+          'CAST(x AS DOUBLE)': 'DOUBLE',
+        },
+        preflightBreaks: {
+          // Pre-flight substitutes the new expr for `a`, then validates UPPER(a)
+          // against the CTE. The CTE contains both the new expression and UPPER.
+          needles: ['CAST(x AS DOUBLE)', 'UPPER(a)'],
+          error: 'Binder Error: No function matches the given name UPPER(DOUBLE)',
+        },
+      }),
+    );
 
-    await actions.addDerivedColumn({ kind: 'expression', name: 'a', expression: 'CAST(x AS INTEGER)' });
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'a',
+      expression: 'CAST(x AS INTEGER)',
+    });
     await actions.addDerivedColumn({ kind: 'expression', name: 'b', expression: 'UPPER(a)' });
 
     const before = state.derivedColumns.get();
@@ -196,18 +214,22 @@ describe('replaceDerivedColumn', () => {
 
   // 3. Cycle induction
   it('rejects replacement that introduces a circular dependency', async () => {
-    setup(createMockBridge({
-      typeMap: {
-        'x + 1': 'INTEGER',
-        'a * 2': 'INTEGER',
-        'b / 2': 'INTEGER',
-      },
-    }));
+    setup(
+      createMockBridge({
+        typeMap: {
+          'x + 1': 'INTEGER',
+          'a * 2': 'INTEGER',
+          'b / 2': 'INTEGER',
+        },
+      }),
+    );
 
     await actions.addDerivedColumn({ kind: 'expression', name: 'a', expression: 'x + 1' });
     await actions.addDerivedColumn({ kind: 'expression', name: 'b', expression: 'a * 2' });
 
-    const viewCallsBefore = mockBridge.getQueryCalls().filter(sql => sql.includes('CREATE OR REPLACE VIEW')).length;
+    const viewCallsBefore = mockBridge
+      .getQueryCalls()
+      .filter((sql) => sql.includes('CREATE OR REPLACE VIEW')).length;
 
     const result = await actions.replaceDerivedColumn('a', {
       kind: 'expression',
@@ -222,7 +244,9 @@ describe('replaceDerivedColumn', () => {
     }
 
     // No new VIEW created after the cycle was detected.
-    const viewCallsAfter = mockBridge.getQueryCalls().filter(sql => sql.includes('CREATE OR REPLACE VIEW')).length;
+    const viewCallsAfter = mockBridge
+      .getQueryCalls()
+      .filter((sql) => sql.includes('CREATE OR REPLACE VIEW')).length;
     expect(viewCallsAfter).toBe(viewCallsBefore);
   });
 
@@ -364,11 +388,10 @@ describe('replaceDerivedColumn', () => {
     // restore of the old helper). Without the A2 fix, only one CREATE
     // TABLE __dt_vec_ would have been attempted before the throw
     // propagated, leaving DuckDB in a broken state.
-    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
-      .map((args) => args[0] as string);
-    const helperCreates = calls.filter((sql) =>
-      /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim())
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
+      (args) => args[0] as string,
     );
+    const helperCreates = calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()));
     expect(helperCreates.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -445,13 +468,14 @@ describe('replaceDerivedColumn', () => {
     });
 
     expect(result.success).toBe(true);
-    const stored = state.derivedColumns.get().find(d => d.name === 'v');
+    const stored = state.derivedColumns.get().find((d) => d.name === 'v');
     expect(stored).toMatchObject({ kind: 'expression', name: 'v', expression: 'x + 1' });
 
     // Verify the helper-table SQL surface: the old vector helper was dropped
     // and no new helper was created (the new column is an expression).
-    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
-      .map((args) => args[0] as string);
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
+      (args) => args[0] as string,
+    );
     const helperDrops = calls.filter((sql) => /^DROP TABLE.*__dt_vec_/i.test(sql.trim()));
     expect(helperDrops.length).toBeGreaterThan(0);
   });
@@ -477,23 +501,24 @@ describe('replaceDerivedColumn', () => {
     });
 
     expect(result.success).toBe(true);
-    const stored = state.derivedColumns.get().find(d => d.name === 'e');
+    const stored = state.derivedColumns.get().find((d) => d.name === 'e');
     expect(stored).toMatchObject({ kind: 'vector', name: 'e', vectorType: 'integer' });
 
     // Helper-table CREATE for the new vector should have run.
-    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls
-      .map((args) => args[0] as string);
-    const helperCreates = calls.filter((sql) =>
-      /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim())
+    const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
+      (args) => args[0] as string,
     );
+    const helperCreates = calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()));
     expect(helperCreates.length).toBeGreaterThan(0);
   });
 
   // 11. Same-name self-reference — documents current behavior.
   it('allows same-name self-reference: replaceColumn("a", "a + 1") substitutes silently', async () => {
-    setup(createMockBridge({
-      typeMap: { 'x + 1': 'INTEGER', 'a + 1': 'INTEGER' },
-    }));
+    setup(
+      createMockBridge({
+        typeMap: { 'x + 1': 'INTEGER', 'a + 1': 'INTEGER' },
+      }),
+    );
 
     const addRes = await actions.addDerivedColumn({
       kind: 'expression',
@@ -533,9 +558,11 @@ describe('replaceDerivedColumn', () => {
 
   // 8. Event payload — derivedChange fires with kind='replaced'
   it('invokes the derivedChange callback with kind="replaced" on success', async () => {
-    setup(createMockBridge({
-      typeMap: { 'x + 1': 'INTEGER', 'x + 2': 'INTEGER' },
-    }));
+    setup(
+      createMockBridge({
+        typeMap: { 'x + 1': 'INTEGER', 'x + 2': 'INTEGER' },
+      }),
+    );
 
     const spy = vi.fn();
     actions.setOnDerivedChange(spy);

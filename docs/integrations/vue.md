@@ -42,11 +42,14 @@ recreating it:
 import { watch } from 'vue';
 // … onMounted setup as above …
 
-watch(() => props.source, async (next) => {
-  if (table && !table.isDestroyed()) {
-    await table.loadData(next);
-  }
-});
+watch(
+  () => props.source,
+  async (next) => {
+    if (table && !table.isDestroyed()) {
+      await table.loadData(next);
+    }
+  },
+);
 </script>
 ```
 
@@ -101,10 +104,7 @@ For reuse across multiple components:
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 
-export function useDataTable(
-  hostRef: Ref<HTMLElement | null>,
-  source: Ref<File | string | null>
-) {
+export function useDataTable(hostRef: Ref<HTMLElement | null>, source: Ref<File | string | null>) {
   let table: DataTable | undefined;
   const filteredCount = ref(0);
 

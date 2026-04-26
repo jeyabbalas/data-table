@@ -34,7 +34,7 @@
 
 import type { ColumnSchema, DataType } from '../core/types';
 import type { VisualizationOptions } from './BaseVisualization';
-import { BaseVisualization } from './BaseVisualization';
+import type { BaseVisualization } from './BaseVisualization';
 import { Histogram } from './histogram';
 import { DateHistogram } from './histogram';
 import { TimeHistogram } from './histogram';
@@ -47,7 +47,7 @@ import { ValueCounts } from './valuecounts';
 export type VisualizationConstructor = new (
   container: HTMLElement,
   column: ColumnSchema,
-  options: VisualizationOptions
+  options: VisualizationOptions,
 ) => BaseVisualization;
 
 /**
@@ -158,7 +158,7 @@ export class VisualizationRegistry {
   create(
     container: HTMLElement,
     column: ColumnSchema,
-    options: VisualizationOptions
+    options: VisualizationOptions,
   ): BaseVisualization | null {
     const sorted = [...this.registry].sort((a, b) => b.priority - a.priority);
     for (const reg of sorted) {
@@ -192,35 +192,35 @@ export class VisualizationRegistry {
     this.register({
       name: 'histogram',
       isApplicable: isNumericType,
-      constructor: Histogram as unknown as VisualizationConstructor,
+      constructor: Histogram,
       priority: 0,
     });
 
     this.register({
       name: 'date-histogram',
       isApplicable: isDateType,
-      constructor: DateHistogram as unknown as VisualizationConstructor,
+      constructor: DateHistogram,
       priority: 0,
     });
 
     this.register({
       name: 'time-histogram',
       isApplicable: isTimeType,
-      constructor: TimeHistogram as unknown as VisualizationConstructor,
+      constructor: TimeHistogram,
       priority: 0,
     });
 
     this.register({
       name: 'interval-histogram',
       isApplicable: isIntervalType,
-      constructor: IntervalHistogram as unknown as VisualizationConstructor,
+      constructor: IntervalHistogram,
       priority: 0,
     });
 
     this.register({
       name: 'value-counts',
       isApplicable: isCategoricalType,
-      constructor: ValueCounts as unknown as VisualizationConstructor,
+      constructor: ValueCounts,
       priority: 0,
     });
   }

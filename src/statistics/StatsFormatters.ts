@@ -5,10 +5,10 @@
  * Line 2 (type-specific): distribution summary (e.g., "min 0 · med 42 · max 1.23e+6")
  */
 
-import type { DataType } from '../core/types';
-import type { ColumnStatsData } from './ColumnStatsTypes';
-import { secondsToTimeString } from '../visualizations/histogram/TimeHistogramData';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { DataType } from '../core/types';
+import { secondsToTimeString } from '../visualizations/histogram/TimeHistogramData';
+import type { ColumnStatsData } from './ColumnStatsTypes';
 
 // =========================================
 // Number Formatting
@@ -96,8 +96,7 @@ function formatLine1(stats: ColumnStatsData, messages: Strings): string {
   const s = messages.statistics;
 
   // Determine which counts to show
-  const isFiltered =
-    filteredTotalRows !== null && filteredTotalRows !== totalRows;
+  const isFiltered = filteredTotalRows !== null && filteredTotalRows !== totalRows;
 
   let line: string;
   if (isFiltered) {
@@ -130,7 +129,7 @@ function formatLine1(stats: ColumnStatsData, messages: Strings): string {
  */
 function formatNumericLine2(
   stats: Extract<ColumnStatsData, { kind: 'numeric' }>,
-  messages: Strings
+  messages: Strings,
 ): string {
   const s = messages.statistics;
   // Loose equality (==) catches both null and undefined as defense-in-depth
@@ -157,7 +156,7 @@ function formatNumericLine2(
 function formatCategoricalLine2(
   stats: Extract<ColumnStatsData, { kind: 'categorical' }>,
   dataType: DataType,
-  messages: Strings
+  messages: Strings,
 ): string {
   const s = messages.statistics;
   if (stats.nonNullCount === 0) return '';
@@ -195,7 +194,7 @@ function formatCategoricalLine2(
  */
 function formatTemporalLine2(
   stats: Extract<ColumnStatsData, { kind: 'temporal' }>,
-  messages: Strings
+  messages: Strings,
 ): string {
   // Loose equality (==) catches both null and undefined as defense-in-depth
   if (stats.min == null || stats.max == null) return '';
@@ -232,7 +231,7 @@ function formatDateForStats(isoString: string): string {
  */
 function formatTimeLine2(
   stats: Extract<ColumnStatsData, { kind: 'time' }>,
-  messages: Strings
+  messages: Strings,
 ): string {
   if (stats.minSeconds === null || stats.maxSeconds === null) return '';
 
@@ -252,7 +251,7 @@ function formatTimeLine2(
  */
 function formatIntervalLine2(
   stats: Extract<ColumnStatsData, { kind: 'interval' }>,
-  messages: Strings
+  messages: Strings,
 ): string {
   const s = messages.statistics;
   if (stats.minDisplay === null || stats.maxDisplay === null) return '';
@@ -286,13 +285,12 @@ function formatIntervalLine2(
 export function formatDefaultStats(
   stats: ColumnStatsData,
   dataType: DataType,
-  messages: Strings = defaultStrings
+  messages: Strings = defaultStrings,
 ): string {
   const line1 = formatLine1(stats, messages);
 
   // No line 2 for empty data or all-null columns
-  const currentTotal =
-    stats.filteredTotalRows !== null ? stats.filteredTotalRows : stats.totalRows;
+  const currentTotal = stats.filteredTotalRows !== null ? stats.filteredTotalRows : stats.totalRows;
   if (currentTotal === 0 || stats.nullCount === currentTotal) {
     return `<span class="dt-stats-line1">${line1}</span>`;
   }

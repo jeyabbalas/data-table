@@ -1,6 +1,6 @@
 # Derived columns
 
-A *derived column* is a virtual column layered over the loaded table. It
+A _derived column_ is a virtual column layered over the loaded table. It
 looks like any other column to filters, sorts, and visualizations, but its
 values come from one of two sources:
 
@@ -79,7 +79,7 @@ JS-side computation, data you fetched from elsewhere.
 
 ```ts
 // Suppose you have predictions aligned with each row of the base table.
-const predictions = await runModel(table);   // number[] with length === totalRows
+const predictions = await runModel(table); // number[] with length === totalRows
 
 await table.actions.addDerivedColumn({
   kind: 'vector',
@@ -106,13 +106,13 @@ persist across page reloads when session persistence is enabled.
 await table.actions.updateDerivedColumn('revenue_per_user', {
   kind: 'expression',
   name: 'revenue_per_user',
-  expression: 'revenue / NULLIF(users + 1, 0)',   // defensive divide
+  expression: 'revenue / NULLIF(users + 1, 0)', // defensive divide
 });
 
 // Rename: change the name
 await table.actions.updateDerivedColumn('age_group', {
   kind: 'expression',
-  name: 'cohort',            // new name
+  name: 'cohort', // new name
   expression: `CASE WHEN age < 18 THEN 'minor' ELSE 'adult' END`,
 });
 ```
@@ -129,7 +129,7 @@ make sense against the new type.
 
 ## Replacing a derived column (same-name + dependent re-validation)
 
-When an end-user *edits* an existing expression, you usually want a
+When an end-user _edits_ an existing expression, you usually want a
 same-name swap with three guarantees:
 
 1. The new expression is validated.
@@ -144,7 +144,7 @@ no rename and a discriminated return:
 ```ts
 const result = await table.actions.replaceDerivedColumn('tip_pct', {
   kind: 'expression',
-  name: 'tip_pct',                           // must equal the old name
+  name: 'tip_pct', // must equal the old name
   expression: 'tip_amount / NULLIF(fare_amount, 0) * 100',
 });
 
@@ -154,8 +154,7 @@ if (result.success) {
   if (result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
     // result.error.details.dependentsAffected: string[]
     // result.error.details.reasons: Record<string, string>
-    console.warn('cannot replace tip_pct — would break:',
-      result.error.details?.dependentsAffected);
+    console.warn('cannot replace tip_pct — would break:', result.error.details?.dependentsAffected);
   } else {
     console.warn(result.error);
   }
@@ -186,12 +185,12 @@ list.
 
 ### When to use which
 
-| Need | API |
-|---|---|
-| Edit an existing expression at the same name; want dependent re-validation. | `replaceDerivedColumn(name, newDef)` |
-| Rename a column. | `updateDerivedColumn(oldName, defWithNewName)` |
-| Add a brand-new column. | `addDerivedColumn(def)` |
-| Remove a column. | `removeDerivedColumn(name)` |
+| Need                                                                        | API                                            |
+| --------------------------------------------------------------------------- | ---------------------------------------------- |
+| Edit an existing expression at the same name; want dependent re-validation. | `replaceDerivedColumn(name, newDef)`           |
+| Rename a column.                                                            | `updateDerivedColumn(oldName, defWithNewName)` |
+| Add a brand-new column.                                                     | `addDerivedColumn(def)`                        |
+| Remove a column.                                                            | `removeDerivedColumn(name)`                    |
 
 `updateDerivedColumn` continues to handle the rename path. Calling
 `replaceDerivedColumn` with `newDef.name !== name` is rejected — the
@@ -228,20 +227,23 @@ const derived = table.state.derivedColumns.get();
 // DerivedColumnDef[] — same shape you passed to addDerivedColumn
 
 table.on('derivedChange', ({ derivedColumns }) => {
-  console.log('Derived columns changed:', derivedColumns.map(d => d.name));
+  console.log(
+    'Derived columns changed:',
+    derivedColumns.map((d) => d.name),
+  );
 });
 ```
 
 ## Undo / redo
 
 Derived column changes participate in the undo/redo stack. One important
-detail: the VIEW must be reconciled with DuckDB *before* the view-state
+detail: the VIEW must be reconciled with DuckDB _before_ the view-state
 signals apply. The library handles this for you — `actions.undo()` and
 `actions.redo()` are `async` precisely because they wait for VIEW
 reconciliation.
 
 ```ts
-const undone = await table.actions.undo();   // true if there was something to undo
+const undone = await table.actions.undo(); // true if there was something to undo
 const redone = await table.actions.redo();
 ```
 
@@ -272,7 +274,7 @@ for the contract.
 ### Cluster column from a JS computation
 
 ```ts
-const clusterLabels = await kmeans(rows, 4);   // string[] like ['A', 'B', 'A', ...]
+const clusterLabels = await kmeans(rows, 4); // string[] like ['A', 'B', 'A', ...]
 
 await table.actions.addDerivedColumn({
   kind: 'vector',
@@ -295,7 +297,7 @@ await table.actions.addDerivedColumn({
 ### Check-then-add
 
 ```ts
-const existing = table.state.schema.get().map(c => c.name);
+const existing = table.state.schema.get().map((c) => c.name);
 if (!existing.includes('revenue_per_user')) {
   await table.actions.addDerivedColumn({
     kind: 'expression',
@@ -309,7 +311,7 @@ if (!existing.includes('revenue_per_user')) {
 
 - **`addDerivedColumn` returns `{ success, error }` instead of throwing.** This is deliberate — invalid expressions are a normal user-input error, not a crash. Check `success` before assuming the column exists.
 - **Vector length must equal total row count.** Not filtered row count. If you re-derive after a filter, pass a full-length array.
-- **Expression columns can reference earlier derived columns.** `col_b = col_a * 2` works *if* `col_a` was added first. Circular references are rejected.
+- **Expression columns can reference earlier derived columns.** `col_b = col_a * 2` works _if_ `col_a` was added first. Circular references are rejected.
 - **Renaming a derived column also retains its filters.** Filters referencing the old name get updated. Filters on base columns are untouched.
 - **Type changes drop filters on that column.** If a derived column's detected type changes (e.g., a rewrite turns `INTEGER` into `VARCHAR`), the old filter doesn't survive.
 - **Undo/redo for derived changes is async.** `await` the result if you need to observe post-reconciliation state.

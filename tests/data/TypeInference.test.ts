@@ -6,8 +6,32 @@ import { describe, it, expect } from 'vitest';
 
 describe('TypeInference', () => {
   describe('Boolean patterns', () => {
-    const booleanTrueValues = ['true', 'True', 'TRUE', 'yes', 'Yes', 'YES', '1', 't', 'y', 'on', 'ON'];
-    const booleanFalseValues = ['false', 'False', 'FALSE', 'no', 'No', 'NO', '0', 'f', 'n', 'off', 'OFF'];
+    const booleanTrueValues = [
+      'true',
+      'True',
+      'TRUE',
+      'yes',
+      'Yes',
+      'YES',
+      '1',
+      't',
+      'y',
+      'on',
+      'ON',
+    ];
+    const booleanFalseValues = [
+      'false',
+      'False',
+      'FALSE',
+      'no',
+      'No',
+      'NO',
+      '0',
+      'f',
+      'n',
+      'off',
+      'OFF',
+    ];
 
     it('should recognize true boolean values', () => {
       for (const value of booleanTrueValues) {
@@ -132,8 +156,10 @@ function isIntegerPattern(value: string): boolean {
 
 function isFloatPattern(value: string): boolean {
   const trimmed = value.trim();
-  return /^[+-]?(\d+\.?\d*|\d*\.?\d+)([eE][+-]?\d+)?$/.test(trimmed) &&
-         (trimmed.includes('.') || trimmed.toLowerCase().includes('e'));
+  return (
+    /^[+-]?(\d+\.?\d*|\d*\.?\d+)([eE][+-]?\d+)?$/.test(trimmed) &&
+    (trimmed.includes('.') || trimmed.toLowerCase().includes('e'))
+  );
 }
 
 function isISODatePattern(value: string): boolean {

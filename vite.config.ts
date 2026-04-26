@@ -25,9 +25,7 @@ function buildStylesPlugin(): Plugin {
         .filter((f) => /^\d\d-.+\.css$/.test(f))
         .sort();
 
-      const combined = files
-        .map((f) => readFileSync(resolve(srcDir, f), 'utf8'))
-        .join('\n');
+      const combined = files.map((f) => readFileSync(resolve(srcDir, f), 'utf8')).join('\n');
 
       writeFileSync(distPath, combined, 'utf8');
       console.log(`✓ Concatenated ${files.length} CSS modules → dist/data-table.css`);
@@ -48,18 +46,13 @@ export default defineConfig({
         advanced: resolve(__dirname, 'src/advanced.ts'),
       },
       name: 'DataTable',
-      fileName: (format, entryName) =>
-        format === 'es' ? `${entryName}.js` : `${entryName}.cjs`,
+      fileName: (format, entryName) => (format === 'es' ? `${entryName}.js` : `${entryName}.cjs`),
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
       // Externalize peer dependencies — consumers install them once in their app
       // so they are not double-bundled.
-      external: [
-        /^@codemirror\//,
-        /^@lezer\//,
-        /^@duckdb\/duckdb-wasm/,
-      ],
+      external: [/^@codemirror\//, /^@lezer\//, /^@duckdb\/duckdb-wasm/],
       output: {
         // No UMD build, so no globals mapping needed.
       },

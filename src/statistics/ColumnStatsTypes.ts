@@ -5,8 +5,8 @@
  * Each visualization emits the appropriate stats type via onDefaultStatsChange.
  */
 
-import type { DataType } from '../core/types';
 import { ConfigurationError } from '../core/errors';
+import type { DataType } from '../core/types';
 
 /**
  * Base stats shared by all column types.
@@ -101,9 +101,7 @@ export type ColumnStatsData =
 /**
  * Map from DataType to the appropriate stats kind.
  */
-export function statsKindForDataType(
-  dataType: DataType
-): ColumnStatsData['kind'] {
+export function statsKindForDataType(dataType: DataType): ColumnStatsData['kind'] {
   switch (dataType) {
     case 'integer':
     case 'float':

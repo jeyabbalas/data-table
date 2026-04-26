@@ -43,10 +43,7 @@ function runOurAutocomplete(
     doc,
     extensions: [...extensions, autocompletion()],
   });
-  const sources = state.languageDataAt<(c: CMCompletionContext) => unknown>(
-    'autocomplete',
-    pos,
-  );
+  const sources = state.languageDataAt<(c: CMCompletionContext) => unknown>('autocomplete', pos);
   expect(sources.length).toBeGreaterThan(0);
   for (const source of sources) {
     const cmCtx = new CMCompletionContext(state, pos, explicit);
@@ -68,15 +65,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -98,16 +102,12 @@ describe('buildCompletionContext', () => {
   });
 
   it('uses originalType when both type and originalType are present', () => {
-    const ctx = buildCompletionContext([
-      { name: 'price', type: 'float', originalType: 'DOUBLE' },
-    ]);
+    const ctx = buildCompletionContext([{ name: 'price', type: 'float', originalType: 'DOUBLE' }]);
     expect(ctx.columns[0].type).toBe('DOUBLE');
   });
 
   it('falls back to type when originalType is missing', () => {
-    const ctx = buildCompletionContext([
-      { name: 'qty', type: 'BIGINT' },
-    ]);
+    const ctx = buildCompletionContext([{ name: 'qty', type: 'BIGINT' }]);
     expect(ctx.columns[0].type).toBe('BIGINT');
   });
 
@@ -119,9 +119,7 @@ describe('buildCompletionContext', () => {
   });
 
   it('preserves isDerived: true', () => {
-    const ctx = buildCompletionContext([
-      { name: 'tip_pct', type: 'float', isDerived: true },
-    ]);
+    const ctx = buildCompletionContext([{ name: 'tip_pct', type: 'float', isDerived: true }]);
     expect(ctx.columns[0].isDerived).toBe(true);
   });
 
@@ -153,7 +151,14 @@ describe('buildCompletionContext', () => {
         // extra fields ignored:
         nullable: true,
         system: false,
-      } as { name: string; type: string; originalType: string; isDerived: boolean; nullable: boolean; system: boolean },
+      } as {
+        name: string;
+        type: string;
+        originalType: string;
+        isDerived: boolean;
+        nullable: boolean;
+        system: boolean;
+      },
     ]);
     expect(ctx.columns[0]).toEqual({
       name: 'order_total_usd',
@@ -227,9 +232,7 @@ describe('createSqlExtensions', () => {
 
   it('accepts a DuckDBFunctionInfo[] override for functions', () => {
     const ext = createSqlExtensions(baseContext, {
-      functions: [
-        { name: 'foo', category: 'utility', description: 'custom function' },
-      ],
+      functions: [{ name: 'foo', category: 'utility', description: 'custom function' }],
     });
     expect(ext.length).toBeGreaterThan(0);
     EditorState.create({ extensions: ext });
@@ -361,9 +364,7 @@ describe('createSqlExtensions autocomplete behavior', () => {
     const ext = createSqlExtensions(ctx);
     const result = runOurAutocomplete(ext, 'a', 1);
     expect(result).not.toBeNull();
-    const functionLabels = result!.options
-      .filter((o) => o.type === 'function')
-      .map((o) => o.label);
+    const functionLabels = result!.options.filter((o) => o.type === 'function').map((o) => o.label);
     expect(functionLabels).toEqual(['only_in_context']);
   });
 
@@ -375,17 +376,13 @@ describe('createSqlExtensions autocomplete behavior', () => {
     const ext = createSqlExtensions(ctx, { functions: ['from_options'] });
     const result = runOurAutocomplete(ext, 'a', 1);
     expect(result).not.toBeNull();
-    const functionLabels = result!.options
-      .filter((o) => o.type === 'function')
-      .map((o) => o.label);
+    const functionLabels = result!.options.filter((o) => o.type === 'function').map((o) => o.label);
     expect(functionLabels).toEqual(['from_options']);
   });
 
   it('populates detail and info for DuckDBFunctionInfo[] entries', () => {
     const ext = createSqlExtensions(baseContext, {
-      functions: [
-        { name: 'demo_fn', category: 'utility', description: 'demo description' },
-      ],
+      functions: [{ name: 'demo_fn', category: 'utility', description: 'demo description' }],
     });
     const result = runOurAutocomplete(ext, 'a', 1);
     expect(result).not.toBeNull();

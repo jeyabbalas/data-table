@@ -8,10 +8,7 @@
  * uses as a signal to clear the entry).
  */
 
-import type {
-  ColumnHeaderTooltipContent,
-  ColumnHeaderTooltipItem,
-} from './types';
+import type { ColumnHeaderTooltipContent, ColumnHeaderTooltipItem } from './types';
 
 /**
  * Coerce arbitrary input into a normalized {@link ColumnHeaderTooltipContent},
@@ -30,9 +27,7 @@ import type {
  * Returns `null` whenever the result has no `title`, no `description`, and
  * no surviving `items`.
  */
-export function normalizeColumnHeaderTooltip(
-  input: unknown,
-): ColumnHeaderTooltipContent | null {
+export function normalizeColumnHeaderTooltip(input: unknown): ColumnHeaderTooltipContent | null {
   if (input == null) return null;
   if (typeof input === 'string') {
     return input.length === 0 ? null : { description: input };
@@ -52,16 +47,14 @@ export function normalizeColumnHeaderTooltip(
     const items: ColumnHeaderTooltipItem[] = [];
     for (const item of src.items) {
       if (!item || typeof item !== 'object') continue;
-      const label = (item as ColumnHeaderTooltipItem).label;
-      const value = (item as ColumnHeaderTooltipItem).value;
+      const label = item.label;
+      const value = item.value;
       if (typeof label !== 'string' || label.length === 0) continue;
       if (typeof value === 'string') {
         if (value.length === 0) continue;
         items.push({ label, value });
       } else if (Array.isArray(value)) {
-        const vals = value.filter(
-          (v): v is string => typeof v === 'string' && v.length > 0,
-        );
+        const vals = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
         if (vals.length === 0) continue;
         items.push({ label, value: vals });
       }

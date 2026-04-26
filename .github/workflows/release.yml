@@ -1,0 +1,74 @@
+name: Release
+
+# Triggered on push to main. Either:
+#   1. Opens a "Version Packages" PR that bumps `package.json` + writes
+#      `CHANGELOG.md` from accumulated `.changeset/*.md` files, or
+#   2. Once that PR merges, publishes the new version to npm with provenance.
+#
+# Manual prerequisites the maintainer enables before this workflow does
+# anything dangerous on `main`:
+#   - Add `NPM_TOKEN` repository secret with publish access to
+#     `@jeyabbalas/data-table` (or enable npm OIDC trusted publishing on the
+#     package settings page; in that case `NPM_TOKEN` is unused but
+#     `id-token: write` is required).
+#   - In the repo Settings → Actions → General, enable "Allow GitHub Actions
+#     to create and approve pull requests" so the changesets action can open
+#     the version PR.
+#
+# Until both are configured, the `publish` step is a no-op (no token, the
+# changesets action skips publishing). The "Version Packages" PR can still
+# open even without a token.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # changesets/action needs full history to detect changed packages.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build library
+        run: npm run build
+
+      - name: Run tests
+        run: npm run test:coverage
+
+      - name: Create release PR or publish
+        uses: changesets/action@v1
+        with:
+          # Runs `changeset publish` once the "Version Packages" PR merges.
+          # Provenance + access:public come from the npm publish flag below.
+          publish: npm run release
+          version: npm run version
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'

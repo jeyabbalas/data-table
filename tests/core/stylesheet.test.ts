@@ -3,16 +3,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { isStylesheetLoaded } from '@/core/stylesheet';
 
 describe('isStylesheetLoaded', () => {
-  const originalValue = document.documentElement.style.getPropertyValue(
-    '--dt-stylesheet-loaded',
-  );
+  const originalValue = document.documentElement.style.getPropertyValue('--dt-stylesheet-loaded');
 
   afterEach(() => {
     if (originalValue) {
-      document.documentElement.style.setProperty(
-        '--dt-stylesheet-loaded',
-        originalValue,
-      );
+      document.documentElement.style.setProperty('--dt-stylesheet-loaded', originalValue);
     } else {
       document.documentElement.style.removeProperty('--dt-stylesheet-loaded');
     }
@@ -29,10 +24,7 @@ describe('isStylesheetLoaded', () => {
   });
 
   it('treats whitespace-only values as absent', () => {
-    document.documentElement.style.setProperty(
-      '--dt-stylesheet-loaded',
-      '   ',
-    );
+    document.documentElement.style.setProperty('--dt-stylesheet-loaded', '   ');
     expect(isStylesheetLoaded()).toBe(false);
   });
 

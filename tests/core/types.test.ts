@@ -32,7 +32,15 @@ describe('Core Types', () => {
   });
 
   it('should allow valid FilterType values', () => {
-    const filterTypes: FilterType[] = ['range', 'point', 'set', 'not-set', 'null', 'not-null', 'pattern'];
+    const filterTypes: FilterType[] = [
+      'range',
+      'point',
+      'set',
+      'not-set',
+      'null',
+      'not-null',
+      'pattern',
+    ];
     expect(filterTypes).toHaveLength(7);
   });
 

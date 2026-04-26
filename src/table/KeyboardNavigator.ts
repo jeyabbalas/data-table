@@ -14,12 +14,12 @@
  * interfered with.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
-import type { TableBody } from './TableBody';
-import type { WorkerBridge } from '../data/WorkerBridge';
 import { isAnyModalOpen } from '../core/ModalHost';
+import type { TableState } from '../core/State';
+import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
+import type { TableBody } from './TableBody';
 
 export interface KeyboardNavigatorOptions {
   /** Grid root element that owns focus and receives keydown events. */
@@ -88,10 +88,18 @@ export class KeyboardNavigator {
     ) {
       e.preventDefault();
       switch (e.key) {
-        case 'ArrowUp':    this.moveFocus(-1, 0); break;
-        case 'ArrowDown':  this.moveFocus(1, 0); break;
-        case 'ArrowLeft':  this.moveFocus(0, -1); break;
-        case 'ArrowRight': this.moveFocus(0, 1); break;
+        case 'ArrowUp':
+          this.moveFocus(-1, 0);
+          break;
+        case 'ArrowDown':
+          this.moveFocus(1, 0);
+          break;
+        case 'ArrowLeft':
+          this.moveFocus(0, -1);
+          break;
+        case 'ArrowRight':
+          this.moveFocus(0, 1);
+          break;
       }
       return;
     }
@@ -169,21 +177,21 @@ export class KeyboardNavigator {
     // Ctrl+Z / Cmd+Z → undo
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
-      this.actions.undo();
+      void this.actions.undo();
       return;
     }
 
     // Ctrl+Shift+Z / Cmd+Shift+Z → redo
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
       e.preventDefault();
-      this.actions.redo();
+      void this.actions.redo();
       return;
     }
 
     // Ctrl+Y → redo (Windows convention)
     if (e.key === 'y' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
-      this.actions.redo();
+      void this.actions.redo();
       return;
     }
 
@@ -205,9 +213,7 @@ export class KeyboardNavigator {
 
   private getEffectiveRowCount(): number {
     const filters = this.state.filters.get();
-    return filters.length > 0
-      ? this.state.filteredRows.get()
-      : this.state.totalRows.get();
+    return filters.length > 0 ? this.state.filteredRows.get() : this.state.totalRows.get();
   }
 
   private moveFocus(deltaRow: number, deltaCol: number): void {

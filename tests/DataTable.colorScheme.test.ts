@@ -8,14 +8,7 @@
  *   - Invalid values throw ConfigurationError.
  *   - After destroy(), setColorScheme throws DestroyedError.
  */
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  afterEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
 import { ConfigurationError, DestroyedError } from '@/core/errors';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -147,9 +140,9 @@ describe('DataTable — colorScheme (Phase 7)', () => {
     it('invalid runtime value throws ConfigurationError, leaves attribute unchanged', async () => {
       const { table, container } = await createTable('dark');
       const root = getRoot(container);
-      expect(() =>
-        table.setColorScheme('midnight' as unknown as 'dark'),
-      ).toThrow(ConfigurationError);
+      expect(() => table.setColorScheme('midnight' as unknown as 'dark')).toThrow(
+        ConfigurationError,
+      );
       expect(root.getAttribute('data-dt-color-scheme')).toBe('dark');
     });
 
@@ -176,9 +169,7 @@ describe('DataTable — colorScheme (Phase 7)', () => {
   describe('color-scheme attribute on the table wrapper', () => {
     it('wrapper carries the attribute set by the initial option', async () => {
       const { container } = await createTable('dark');
-      const wrapper = container.querySelector(
-        '.dt-table-wrapper',
-      ) as HTMLElement | null;
+      const wrapper = container.querySelector('.dt-table-wrapper') as HTMLElement | null;
       expect(wrapper).not.toBeNull();
       expect(wrapper!.getAttribute('data-dt-color-scheme')).toBe('dark');
     });
@@ -186,9 +177,7 @@ describe('DataTable — colorScheme (Phase 7)', () => {
     it('setColorScheme updates both root and wrapper in lockstep', async () => {
       const { table, container } = await createTable('light');
       const root = getRoot(container);
-      const wrapper = container.querySelector(
-        '.dt-table-wrapper',
-      ) as HTMLElement | null;
+      const wrapper = container.querySelector('.dt-table-wrapper') as HTMLElement | null;
       expect(wrapper).not.toBeNull();
 
       table.setColorScheme('dark');

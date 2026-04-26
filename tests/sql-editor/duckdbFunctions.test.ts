@@ -17,8 +17,16 @@ describe('DUCKDB_FUNCTIONS', () => {
 
   it('should contain common DuckDB functions', () => {
     const common = [
-      'avg', 'count', 'sum', 'substr', 'cast', 'round',
-      'coalesce', 'length', 'upper', 'lower',
+      'avg',
+      'count',
+      'sum',
+      'substr',
+      'cast',
+      'round',
+      'coalesce',
+      'length',
+      'upper',
+      'lower',
     ];
     for (const fn of common) {
       expect(DUCKDB_FUNCTIONS).toContain(fn);

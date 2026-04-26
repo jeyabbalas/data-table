@@ -31,11 +31,11 @@
  * @see ../../docs/guides/filters.md
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
-import { FilterPanelField } from './FilterPanelField';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { FilterPanelField } from './FilterPanelField';
 
 /**
  * Options for FilterPanel
@@ -76,7 +76,7 @@ export class FilterPanel {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    options: FilterPanelOptions = {}
+    options: FilterPanelOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.colorSchemeSource = options.colorSchemeSource;
@@ -276,10 +276,7 @@ export class FilterPanel {
   // =========================================
 
   private updatePanelClearButton(hasFilter: boolean): void {
-    this.clearBtn.classList.toggle(
-      `${this.prefix}-filter-panel-clear--hidden`,
-      !hasFilter
-    );
+    this.clearBtn.classList.toggle(`${this.prefix}-filter-panel-clear--hidden`, !hasFilter);
   }
 
   // =========================================

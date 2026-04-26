@@ -144,17 +144,17 @@
   /* Stacking ladder (override to coordinate with host-app modal layers).
      Layers are ordered bottom → top. Integer gaps ≥ 10 so consumers can slot
      their own UI (tooltips, toasts) between table layers without recompiling. */
-  --dt-z-table-body: 1;        /* focused cells, resize handle — lift within local stacking */
-  --dt-z-pinned-col: 20;       /* sticky pinned column base; JS adds per-pin offsets */
-  --dt-z-header: 21;           /* column header row + hidden-columns gutter */
-  --dt-z-action-panel: 30;     /* per-column action panel popovers (reserved) */
-  --dt-z-filter-bar: 40;       /* filter bar at top of table */
-  --dt-z-floating-panel: 50;   /* in-page panels: filter / preset / derived-edit / drop indicator */
+  --dt-z-table-body: 1; /* focused cells, resize handle — lift within local stacking */
+  --dt-z-pinned-col: 20; /* sticky pinned column base; JS adds per-pin offsets */
+  --dt-z-header: 21; /* column header row + hidden-columns gutter */
+  --dt-z-action-panel: 30; /* per-column action panel popovers (reserved) */
+  --dt-z-filter-bar: 40; /* filter bar at top of table */
+  --dt-z-floating-panel: 50; /* in-page panels: filter / preset / derived-edit / drop indicator */
   --dt-z-annotation-popover: 55; /* annotation popover (slots between floating panels and autocomplete) */
-  --dt-z-col-tooltip: 56;      /* column-header tooltip popover (one above annotation popover) */
-  --dt-z-autocomplete: 60;     /* CodeMirror autocomplete tooltip (portalled to <body>) */
-  --dt-z-modal: 1000;          /* full-screen modals + backdrops */
-  --dt-z-modal-stack-step: 2;  /* step added per open modal/panel so simultaneously-open dialogs layer predictably */
+  --dt-z-col-tooltip: 56; /* column-header tooltip popover (one above annotation popover) */
+  --dt-z-autocomplete: 60; /* CodeMirror autocomplete tooltip (portalled to <body>) */
+  --dt-z-modal: 1000; /* full-screen modals + backdrops */
+  --dt-z-modal-stack-step: 2; /* step added per open modal/panel so simultaneously-open dialogs layer predictably */
 
   /* Default width for floating panels (filter panel, preset panel, derived-
      column edit panel). Override at the `:root` (or scoped ancestor) to
@@ -183,9 +183,21 @@
      on-theme in both light and dark modes (dark-mode `-bg` / `-bdr`
      overrides cascade through the nested `var(...)` references below
      without needing duplicate definitions). */
-  --dt-annotation-error-bg-hover:   color-mix(in srgb, var(--dt-annotation-error-bg)   82%, var(--dt-annotation-error-bdr)   18%);
-  --dt-annotation-warning-bg-hover: color-mix(in srgb, var(--dt-annotation-warning-bg) 82%, var(--dt-annotation-warning-bdr) 18%);
-  --dt-annotation-info-bg-hover:    color-mix(in srgb, var(--dt-annotation-info-bg)    82%, var(--dt-annotation-info-bdr)    18%);
+  --dt-annotation-error-bg-hover: color-mix(
+    in srgb,
+    var(--dt-annotation-error-bg) 82%,
+    var(--dt-annotation-error-bdr) 18%
+  );
+  --dt-annotation-warning-bg-hover: color-mix(
+    in srgb,
+    var(--dt-annotation-warning-bg) 82%,
+    var(--dt-annotation-warning-bdr) 18%
+  );
+  --dt-annotation-info-bg-hover: color-mix(
+    in srgb,
+    var(--dt-annotation-info-bg) 82%,
+    var(--dt-annotation-info-bdr) 18%
+  );
 }
 
 /* Dark mode — two triggers. See header comment for the full model.
@@ -270,7 +282,7 @@
   }
 
   /* Restore light tokens for subtrees that explicitly opt out of OS dark. */
-  [data-dt-color-scheme="light"] {
+  [data-dt-color-scheme='light'] {
     color-scheme: light;
 
     /* Primary colors */
@@ -338,7 +350,7 @@
 }
 
 /* Explicit dark opt-in — applies regardless of OS preference. */
-[data-dt-color-scheme="dark"] {
+[data-dt-color-scheme='dark'] {
   color-scheme: dark;
 
   /* Primary colors - slightly lighter for dark mode */
@@ -404,4 +416,3 @@
   --dt-annotation-info-bg: #0f2a44;
   --dt-annotation-info-bdr: #2687c7;
 }
-

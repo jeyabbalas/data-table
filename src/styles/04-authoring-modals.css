@@ -63,7 +63,9 @@
   background: transparent;
   color: var(--dt-text-secondary);
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-derived-modal-close:hover {
@@ -123,7 +125,7 @@
   cursor: pointer;
 }
 
-.dt-derived-modal-mode-option input[type="radio"] {
+.dt-derived-modal-mode-option input[type='radio'] {
   margin: 0;
   accent-color: var(--dt-primary);
 }
@@ -150,7 +152,10 @@
   background: var(--dt-bg);
   color: var(--dt-primary);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-derived-modal-validate:hover:not(:disabled) {
@@ -225,7 +230,9 @@
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-derived-modal-cancel:hover {
@@ -244,7 +251,9 @@
   font-weight: 500;
   cursor: pointer;
   min-width: 80px;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-derived-modal-create:hover:not(:disabled) {
@@ -275,36 +284,36 @@
    OS-dark mode still renders light. Explicit `[data-dt-color-scheme="dark"]`
    selectors cover forced-dark in OS-light. */
 @media (prefers-color-scheme: dark) {
-  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme='light']) {
     background: var(--dt-backdrop);
   }
-  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-dialog {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme='light']) .dt-derived-modal-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
-  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-close:hover {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme='light']) .dt-derived-modal-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
-  .dt-root:not([data-dt-color-scheme="light"]) .dt-add-column-btn:hover {
+  .dt-root:not([data-dt-color-scheme='light']) .dt-add-column-btn:hover {
     background: var(--dt-primary-alpha-10);
   }
-  .dt-derived-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-derived-modal-error {
+  .dt-derived-modal-backdrop:not([data-dt-color-scheme='light']) .dt-derived-modal-error {
     color: var(--dt-error-text-strong);
   }
 }
-.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] {
+.dt-derived-modal-backdrop[data-dt-color-scheme='dark'] {
   background: var(--dt-backdrop);
 }
-.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-dialog {
+.dt-derived-modal-backdrop[data-dt-color-scheme='dark'] .dt-derived-modal-dialog {
   box-shadow: 0 8px 32px var(--dt-shadow-md);
 }
-.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-close:hover {
+.dt-derived-modal-backdrop[data-dt-color-scheme='dark'] .dt-derived-modal-close:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-.dt-root[data-dt-color-scheme="dark"] .dt-add-column-btn:hover {
+.dt-root[data-dt-color-scheme='dark'] .dt-add-column-btn:hover {
   background: var(--dt-primary-alpha-10);
 }
-.dt-derived-modal-backdrop[data-dt-color-scheme="dark"] .dt-derived-modal-error {
+.dt-derived-modal-backdrop[data-dt-color-scheme='dark'] .dt-derived-modal-error {
   color: var(--dt-error-text-strong);
 }
 
@@ -368,7 +377,9 @@
   background: transparent;
   color: var(--dt-text-secondary);
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-close:hover {
@@ -425,7 +436,10 @@
   background: var(--dt-bg);
   color: var(--dt-primary);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-validate:hover:not(:disabled) {
@@ -476,7 +490,9 @@
   background: var(--dt-error-dark);
   color: var(--dt-on-error);
   cursor: pointer;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-remove:hover {
@@ -508,7 +524,9 @@
   border-radius: var(--dt-radius-sm);
   cursor: pointer;
   border: 1px solid;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-remove-confirm-btn:focus {
@@ -557,7 +575,9 @@
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-cancel:hover {
@@ -576,7 +596,9 @@
   font-weight: 500;
   cursor: pointer;
   min-width: 80px;
-  transition: background var(--dt-transition), border-color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    border-color var(--dt-transition);
 }
 
 .dt-sql-filter-modal-apply:hover:not(:disabled) {
@@ -593,24 +615,24 @@
    onto the backdrop by ModalHost. Same dual-scoping pattern as the derived-
    column modal above. */
 @media (prefers-color-scheme: dark) {
-  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme='light']) {
     background: var(--dt-backdrop);
   }
-  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-sql-filter-modal-dialog {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme='light']) .dt-sql-filter-modal-dialog {
     box-shadow: 0 8px 32px var(--dt-shadow-md);
   }
-  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme="light"]) .dt-sql-filter-modal-close:hover {
+  .dt-sql-filter-modal-backdrop:not([data-dt-color-scheme='light'])
+    .dt-sql-filter-modal-close:hover {
     /* keep: dark-mode subtle light highlight; no semantic variable */
     background: rgba(255, 255, 255, 0.08);
   }
 }
-.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] {
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme='dark'] {
   background: var(--dt-backdrop);
 }
-.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] .dt-sql-filter-modal-dialog {
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme='dark'] .dt-sql-filter-modal-dialog {
   box-shadow: 0 8px 32px var(--dt-shadow-md);
 }
-.dt-sql-filter-modal-backdrop[data-dt-color-scheme="dark"] .dt-sql-filter-modal-close:hover {
+.dt-sql-filter-modal-backdrop[data-dt-color-scheme='dark'] .dt-sql-filter-modal-close:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-

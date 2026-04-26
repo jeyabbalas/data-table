@@ -5,64 +5,184 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Standalone SQL editor</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; }
+      html,
       body {
-        display: flex; flex-direction: column;
-        font-family: system-ui, sans-serif;
-        background: var(--dt-bg); color: var(--dt-text);
+        margin: 0;
+        padding: 0;
+        height: 100%;
       }
-      header { padding: 0.5rem 1rem; border-bottom: 1px solid var(--dt-border); }
-      header h1 { margin: 0; font-size: 1rem; font-weight: 600; }
-      header p { margin: 0.25rem 0 0; color: var(--dt-text-secondary); font-size: 0.9em; line-height: 1.4; max-width: 880px; }
-      header a { color: var(--dt-primary); }
-      header code { background: var(--dt-bg-secondary); padding: 0 0.3em; border-radius: 3px; font-size: 0.92em; }
-      .split { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 480px; min-height: 0; }
-      #table { min-height: 0; }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+        background: var(--dt-bg);
+        color: var(--dt-text);
+      }
+      header {
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid var(--dt-border);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      header p {
+        margin: 0.25rem 0 0;
+        color: var(--dt-text-secondary);
+        font-size: 0.9em;
+        line-height: 1.4;
+        max-width: 880px;
+      }
+      header a {
+        color: var(--dt-primary);
+      }
+      header code {
+        background: var(--dt-bg-secondary);
+        padding: 0 0.3em;
+        border-radius: 3px;
+        font-size: 0.92em;
+      }
+      .split {
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 480px;
+        min-height: 0;
+      }
+      #table {
+        min-height: 0;
+      }
       aside {
-        padding: 1rem; border-left: 1px solid var(--dt-border);
-        overflow: auto; font-size: 0.9em;
-        background: var(--dt-bg-secondary); color: var(--dt-text);
-        display: flex; flex-direction: column; gap: 1rem;
+        padding: 1rem;
+        border-left: 1px solid var(--dt-border);
+        overflow: auto;
+        font-size: 0.9em;
+        background: var(--dt-bg-secondary);
+        color: var(--dt-text);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
       }
       aside section {
         background: var(--dt-bg);
         border: 1px solid var(--dt-border);
-        border-radius: 4px; padding: 0.75rem;
+        border-radius: 4px;
+        padding: 0.75rem;
       }
       aside h2 {
-        font-size: 0.72em; margin: 0 0 0.5rem;
+        font-size: 0.72em;
+        margin: 0 0 0.5rem;
         color: var(--dt-text-secondary);
-        text-transform: uppercase; letter-spacing: 0.08em;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
-      aside p { margin: 0 0 0.5rem; }
-      aside label { display: block; font-size: 0.85em; color: var(--dt-text-secondary); margin-bottom: 0.25rem; }
-      .row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
-      .row input[type="text"] {
-        flex: 1; min-width: 0; padding: 0.35rem 0.5rem;
-        border: 1px solid var(--dt-border); border-radius: 3px;
-        background: var(--dt-bg); color: var(--dt-text);
-        font: inherit; font-size: 0.9em;
+      aside p {
+        margin: 0 0 0.5rem;
       }
-      .row input[type="text"]:focus { outline: none; border-color: var(--dt-primary); box-shadow: 0 0 0 2px var(--dt-primary-soft, color-mix(in srgb, var(--dt-primary) 20%, transparent)); }
+      aside label {
+        display: block;
+        font-size: 0.85em;
+        color: var(--dt-text-secondary);
+        margin-bottom: 0.25rem;
+      }
+      .row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .row input[type='text'] {
+        flex: 1;
+        min-width: 0;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--dt-border);
+        border-radius: 3px;
+        background: var(--dt-bg);
+        color: var(--dt-text);
+        font: inherit;
+        font-size: 0.9em;
+      }
+      .row input[type='text']:focus {
+        outline: none;
+        border-color: var(--dt-primary);
+        box-shadow: 0 0 0 2px
+          var(--dt-primary-soft, color-mix(in srgb, var(--dt-primary) 20%, transparent));
+      }
       button {
-        padding: 0.4rem 0.8rem; font: inherit; font-size: 0.9em; cursor: pointer;
-        background: var(--dt-bg-tertiary); color: var(--dt-text);
-        border: 1px solid var(--dt-border); border-radius: 3px;
+        padding: 0.4rem 0.8rem;
+        font: inherit;
+        font-size: 0.9em;
+        cursor: pointer;
+        background: var(--dt-bg-tertiary);
+        color: var(--dt-text);
+        border: 1px solid var(--dt-border);
+        border-radius: 3px;
       }
-      button:hover:not(:disabled) { background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%); }
-      button:disabled { opacity: 0.55; cursor: not-allowed; }
-      button.primary { background: var(--dt-primary); color: white; border-color: var(--dt-primary); }
-      button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--dt-primary) 85%, black); }
-      .feedback { margin-top: 0.5rem; font-size: 0.85em; min-height: 1.2em; }
-      .feedback.ok { color: var(--dt-success, #16a34a); }
-      .feedback.err { color: var(--dt-error); }
-      .editor-host { /* host-built CodeMirror lives here */ }
-      ul.schema-list { list-style: none; padding: 0; margin: 0; max-height: 160px; overflow-y: auto; }
-      ul.schema-list li { padding: 0.15rem 0; border-bottom: 1px dashed var(--dt-border); display: flex; gap: 0.5rem; align-items: baseline; }
-      ul.schema-list li:last-child { border-bottom: none; }
-      ul.schema-list li code { background: var(--dt-bg-secondary); padding: 0 0.3em; border-radius: 3px; font-size: 0.95em; }
-      ul.schema-list li .type { color: var(--dt-text-secondary); font-size: 0.78em; font-family: ui-monospace, Menlo, Consolas, monospace; }
-      ul.schema-list li .derived { color: var(--dt-primary); font-size: 0.7em; font-style: normal; text-transform: uppercase; letter-spacing: 0.05em; }
+      button:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      button.primary {
+        background: var(--dt-primary);
+        color: white;
+        border-color: var(--dt-primary);
+      }
+      button.primary:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--dt-primary) 85%, black);
+      }
+      .feedback {
+        margin-top: 0.5rem;
+        font-size: 0.85em;
+        min-height: 1.2em;
+      }
+      .feedback.ok {
+        color: var(--dt-success, #16a34a);
+      }
+      .feedback.err {
+        color: var(--dt-error);
+      }
+      .editor-host {
+        /* host-built CodeMirror lives here */
+      }
+      ul.schema-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      ul.schema-list li {
+        padding: 0.15rem 0;
+        border-bottom: 1px dashed var(--dt-border);
+        display: flex;
+        gap: 0.5rem;
+        align-items: baseline;
+      }
+      ul.schema-list li:last-child {
+        border-bottom: none;
+      }
+      ul.schema-list li code {
+        background: var(--dt-bg-secondary);
+        padding: 0 0.3em;
+        border-radius: 3px;
+        font-size: 0.95em;
+      }
+      ul.schema-list li .type {
+        color: var(--dt-text-secondary);
+        font-size: 0.78em;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }
+      ul.schema-list li .derived {
+        color: var(--dt-primary);
+        font-size: 0.7em;
+        font-style: normal;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
 
       /*
        * Autocomplete tooltip — CodeMirror portals it to <body>, so we scope
@@ -90,14 +210,13 @@
     <header>
       <h1>Standalone SQL editor (<a href="../">back</a>)</h1>
       <p>
-        Two host-built CodeMirror editors mounted outside the data table,
-        each one assembled by hand from <code>createSqlExtensions()</code> +
-        <code>buildCompletionContext()</code>. Both editors share the
-        loaded table's <strong>live schema</strong> via
-        <code>actions.getCompletionContext()</code> and refresh whenever a
-        derived column is added. Type <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Space</kbd>
-        to see column names (with their DuckDB types) and DuckDB functions
-        (with category + description) in the dropdown.
+        Two host-built CodeMirror editors mounted outside the data table, each one assembled by hand
+        from <code>createSqlExtensions()</code> + <code>buildCompletionContext()</code>. Both
+        editors share the loaded table's <strong>live schema</strong> via
+        <code>actions.getCompletionContext()</code> and refresh whenever a derived column is added.
+        Type <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Space</kbd>
+        to see column names (with their DuckDB types) and DuckDB functions (with category +
+        description) in the dropdown.
       </p>
     </header>
     <div class="split">
@@ -105,32 +224,54 @@
       <aside>
         <section>
           <h2>Live schema</h2>
-          <p>Pulled from <code>table.actions.getCompletionContext()</code>; refreshed on every <code>derivedChange</code>.</p>
+          <p>
+            Pulled from <code>table.actions.getCompletionContext()</code>; refreshed on every
+            <code>derivedChange</code>.
+          </p>
           <ul class="schema-list" id="schema-list"></ul>
         </section>
 
         <section>
           <h2>Filter SQL composer</h2>
-          <p>Compose a raw <code>WHERE</code> clause. <strong>Validate</strong> uses <code>actions.validateSQLFilter</code>; <strong>Apply</strong> calls <code>actions.addRawSQLFilter</code>.</p>
+          <p>
+            Compose a raw <code>WHERE</code> clause. <strong>Validate</strong> uses
+            <code>actions.validateSQLFilter</code>; <strong>Apply</strong> calls
+            <code>actions.addRawSQLFilter</code>.
+          </p>
           <div class="editor-host" id="filter-editor"></div>
           <div class="row">
             <button id="btn-validate-filter" aria-label="Validate filter SQL">Validate</button>
-            <button id="btn-apply-filter" class="primary" disabled aria-label="Apply filter SQL to table">Apply</button>
+            <button
+              id="btn-apply-filter"
+              class="primary"
+              disabled
+              aria-label="Apply filter SQL to table"
+            >
+              Apply
+            </button>
           </div>
           <div class="feedback" id="filter-feedback"></div>
         </section>
 
         <section>
           <h2>Derived expression composer</h2>
-          <p>Compose a column expression. <strong>Validate</strong> uses <code>actions.validateExpression</code>; <strong>Add column</strong> calls <code>actions.addDerivedColumn({ kind: 'expression' })</code>.</p>
+          <p>
+            Compose a column expression. <strong>Validate</strong> uses
+            <code>actions.validateExpression</code>; <strong>Add column</strong> calls
+            <code>actions.addDerivedColumn({ kind: 'expression' })</code>.
+          </p>
           <div class="editor-host" id="expr-editor"></div>
           <div class="row">
-            <label for="expr-name" style="margin-bottom: 0; flex: 0 0 auto;">Name:</label>
+            <label for="expr-name" style="margin-bottom: 0; flex: 0 0 auto">Name:</label>
             <input id="expr-name" type="text" placeholder="e.g. tip_pct" value="tip_pct" />
           </div>
           <div class="row">
-            <button id="btn-validate-expr" aria-label="Validate derived expression">Validate</button>
-            <button id="btn-apply-expr" class="primary" disabled aria-label="Add derived column">Add column</button>
+            <button id="btn-validate-expr" aria-label="Validate derived expression">
+              Validate
+            </button>
+            <button id="btn-apply-expr" class="primary" disabled aria-label="Add derived column">
+              Add column
+            </button>
           </div>
           <div class="feedback" id="expr-feedback"></div>
         </section>

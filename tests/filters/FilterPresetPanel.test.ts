@@ -36,15 +36,29 @@ describe('FilterPresetPanel', () => {
 
     anchor = document.createElement('button');
     anchor.getBoundingClientRect = () => ({
-      top: 100, left: 50, bottom: 130, right: 150, width: 100, height: 30,
-      x: 50, y: 100, toJSON: () => {},
+      top: 100,
+      left: 50,
+      bottom: 130,
+      right: 150,
+      width: 100,
+      height: 30,
+      x: 50,
+      y: 100,
+      toJSON: () => {},
     });
 
     // Panel needs a parent for positioning
     const container = document.createElement('div');
     container.getBoundingClientRect = () => ({
-      top: 0, left: 0, bottom: 600, right: 800, width: 800, height: 600,
-      x: 0, y: 0, toJSON: () => {},
+      top: 0,
+      left: 0,
+      bottom: 600,
+      right: 800,
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
     container.appendChild(panel.getElement());
     document.body.appendChild(container);
@@ -83,7 +97,7 @@ describe('FilterPresetPanel', () => {
     it('closes on Escape key', async () => {
       panel.toggle(anchor);
       // Close handlers are registered inside requestAnimationFrame
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       // ModalHost scopes the keydown listener to the panel element.
       panel
         .getElement()
@@ -103,7 +117,9 @@ describe('FilterPresetPanel', () => {
       nameInput.value = 'Test';
       nameInput.dispatchEvent(new Event('input'));
 
-      const saveBtn = panel.getElement().querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
+      const saveBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
       expect(saveBtn?.disabled).toBe(true);
     });
 
@@ -111,7 +127,9 @@ describe('FilterPresetPanel', () => {
       state.filters.set([rangeFilter()]);
       panel.toggle(anchor);
 
-      const saveBtn = panel.getElement().querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
+      const saveBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
       expect(saveBtn?.disabled).toBe(true);
     });
 
@@ -123,7 +141,9 @@ describe('FilterPresetPanel', () => {
       nameInput.value = 'Test';
       nameInput.dispatchEvent(new Event('input'));
 
-      const saveBtn = panel.getElement().querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
+      const saveBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
       expect(saveBtn?.disabled).toBe(false);
     });
 
@@ -135,7 +155,9 @@ describe('FilterPresetPanel', () => {
       nameInput.value = 'My Preset';
       nameInput.dispatchEvent(new Event('input'));
 
-      const saveBtn = panel.getElement().querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
+      const saveBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-save-btn"]') as HTMLButtonElement;
       saveBtn?.click();
 
       expect(manager.getPresets()).toHaveLength(1);
@@ -155,7 +177,9 @@ describe('FilterPresetPanel', () => {
 
       panel.toggle(anchor);
 
-      const loadBtn = panel.getElement().querySelector('[class$="filter-preset-action-btn--load"]') as HTMLButtonElement;
+      const loadBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--load"]') as HTMLButtonElement;
       loadBtn?.click();
 
       expect(actions.loadFilterPreset).toHaveBeenCalled();
@@ -172,10 +196,14 @@ describe('FilterPresetPanel', () => {
       manager.save('P', [rangeFilter()]);
       panel.toggle(anchor);
 
-      const deleteBtn = panel.getElement().querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
+      const deleteBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
       deleteBtn?.click();
 
-      const confirmDiv = panel.getElement().querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
       expect(confirmDiv?.style.display).toBe('flex');
       expect(deleteBtn?.style.display).toBe('none');
     });
@@ -185,11 +213,15 @@ describe('FilterPresetPanel', () => {
       panel.toggle(anchor);
 
       // Click Delete, then Yes
-      const deleteBtn = panel.getElement().querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
+      const deleteBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
       deleteBtn?.click();
 
       // The Yes button is the second .dt-filter-preset-action-btn--delete in the confirm div
-      const confirmDiv = panel.getElement().querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
       const yesBtn = confirmDiv?.querySelectorAll('button')[0] as HTMLButtonElement;
       yesBtn?.click();
 
@@ -200,10 +232,14 @@ describe('FilterPresetPanel', () => {
       manager.save('P', [rangeFilter()]);
       panel.toggle(anchor);
 
-      const deleteBtn = panel.getElement().querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
+      const deleteBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
       deleteBtn?.click();
 
-      const confirmDiv = panel.getElement().querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
       const noBtn = confirmDiv?.querySelectorAll('button')[1] as HTMLButtonElement;
       noBtn?.click();
 
@@ -220,14 +256,18 @@ describe('FilterPresetPanel', () => {
   describe('export', () => {
     it('export button is disabled when no presets', () => {
       panel.toggle(anchor);
-      const exportBtn = panel.getElement().querySelectorAll('[class$="filter-preset-io-btn"]')[0] as HTMLButtonElement;
+      const exportBtn = panel
+        .getElement()
+        .querySelectorAll('[class$="filter-preset-io-btn"]')[0] as HTMLButtonElement;
       expect(exportBtn?.disabled).toBe(true);
     });
 
     it('export button is enabled when presets exist', () => {
       manager.save('P', [rangeFilter()]);
       panel.toggle(anchor);
-      const exportBtn = panel.getElement().querySelectorAll('[class$="filter-preset-io-btn"]')[0] as HTMLButtonElement;
+      const exportBtn = panel
+        .getElement()
+        .querySelectorAll('[class$="filter-preset-io-btn"]')[0] as HTMLButtonElement;
       expect(exportBtn?.disabled).toBe(false);
     });
   });

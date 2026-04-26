@@ -53,7 +53,7 @@ import '@jeyabbalas/data-table/styles';
 
 const table = await createDataTable({
   container: document.getElementById('my-table')!,
-  source: myCsvFileOrUrl,      // File | string URL | ArrayBuffer | Blob
+  source: myCsvFileOrUrl, // File | string URL | ArrayBuffer | Blob
 });
 
 table.on('filterChange', ({ filters, filteredRowCount }) => {
@@ -69,27 +69,33 @@ await table.destroy();
 Full documentation lives under [`docs/`](./docs/README.md). A quick index:
 
 **Start here**
+
 - Quick start (above) · [Runnable examples](./examples/README.md)
 - [AGENTS.md](./AGENTS.md) — agent-facing guide: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
 
 **Reference**
+
 - [API reference](./docs/api-reference.md) — every option, event, action, error, filter shape, derived-column type
 - [Troubleshooting](./docs/troubleshooting.md) — 34 error codes and 19 common-issue FAQs with fix snippets
 
 **Guides**
+
 - [Loading data](./docs/guides/loading-data.md) · [Filters](./docs/guides/filters.md) · [Derived columns](./docs/guides/derived-columns.md) · [Events](./docs/guides/events.md)
 - [Annotations](./docs/guides/annotations.md) · [Column-header tooltips](./docs/guides/column-header-tooltips.md) · [Visualizations](./docs/guides/visualizations.md) · [Stats panels](./docs/guides/stats-panels.md) · [SQL editor primitives](./docs/guides/sql-editor-primitives.md)
 - [Session persistence](./docs/guides/session-persistence.md) · [Theming](./docs/guides/theming.md) · [i18n](./docs/guides/i18n.md) · [Accessibility](./docs/guides/accessibility.md) · [Multi-table dashboards](./docs/guides/multi-table.md)
 - [CSP and offline](./docs/guides/csp-and-offline.md) · [Filter presets](./docs/guides/filter-presets.md)
 
 **Concepts**
+
 - [Architecture](./docs/concepts/architecture.md) · [State model](./docs/concepts/state-model.md)
 
 **Integrations**
+
 - Frameworks: [React](./docs/integrations/react.md) · [Vue](./docs/integrations/vue.md) · [Svelte](./docs/integrations/svelte.md) · [Solid](./docs/integrations/solid.md) · [Next.js](./docs/integrations/nextjs.md) · [Nuxt](./docs/integrations/nuxt.md)
 - Bundlers: [Vite](./docs/integrations/vite.md) · [Webpack](./docs/integrations/webpack.md) · [CDN (no-build)](./docs/integrations/cdn.md)
 
 **Source**
+
 - Tier-1 exports live in [`src/index.ts`](./src/index.ts); Tier-2 in [`src/advanced.ts`](./src/advanced.ts).
 
 ## Framework integration
@@ -112,7 +118,10 @@ export function Table({ source }: { source: File | string }) {
     let cancelled = false;
     let instance: DataTable | undefined;
     void createDataTable({ container: hostRef.current, source }).then((t) => {
-      if (cancelled) { void t.destroy(); return; }
+      if (cancelled) {
+        void t.destroy();
+        return;
+      }
       instance = t;
     });
     return () => {
@@ -160,14 +169,14 @@ Check `table.isDestroyed()` in long-lived closures before calling them.
 
 All features are on by default; pass `false` or a config object to customize:
 
-| Option              | Default | Notes                                                 |
-|---------------------|---------|-------------------------------------------------------|
-| `persistence`       | `true`  | Auto-save filters/sort/columns to IndexedDB           |
-| `presets`           | `true`  | Show the "Presets" button for saving filter sets      |
-| `undoRedo`          | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts              |
-| `expressionFilter`  | `true`  | Show the "Expression" (raw SQL) filter button         |
-| `visualizations`    | `true`  | Auto-attach column header histograms / value counts   |
-| `exportDialog`      | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal |
+| Option             | Default | Notes                                                     |
+| ------------------ | ------- | --------------------------------------------------------- |
+| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB               |
+| `presets`          | `true`  | Show the "Presets" button for saving filter sets          |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                  |
+| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button             |
+| `visualizations`   | `true`  | Auto-attach column header histograms / value counts       |
+| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal |
 
 For the full options surface (mounting, worker, UI, customization), see
 [docs/api-reference.md#createdatatableoptions](./docs/api-reference.md#createdatatableoptions).
@@ -196,8 +205,8 @@ per-instance element, or at runtime.
 :root {
   --dt-primary: #10b981;
   --dt-radius: 4px;
-  --dt-z-modal: 1500;        /* raise above your app's modal layer */
-  --dt-panel-width: 420px;   /* widen filter / preset / derived-edit panels */
+  --dt-z-modal: 1500; /* raise above your app's modal layer */
+  --dt-panel-width: 420px; /* widen filter / preset / derived-edit panels */
 }
 ```
 
@@ -269,10 +278,17 @@ per-instance `VisualizationRegistry`:
 import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
 import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
 
-class MyViz extends BaseVisualization { /* fetchData, render, … */ }
+class MyViz extends BaseVisualization {
+  /* fetchData, render, … */
+}
 
 const registry = new VisualizationRegistry();
-registry.register({ name: 'my-viz', isApplicable: t => t === 'float', constructor: MyViz as any, priority: 10 });
+registry.register({
+  name: 'my-viz',
+  isApplicable: (t) => t === 'float',
+  constructor: MyViz as any,
+  priority: 10,
+});
 const table = await createDataTable({ container, source, visualizationRegistry: registry });
 ```
 
@@ -287,7 +303,8 @@ to switch locales.
 
 ```ts
 await createDataTable({
-  container, source,
+  container,
+  source,
   messages: {
     common: { close: 'Fermer', apply: 'Appliquer' },
     filters: { panelTitle: 'Filtres' },
@@ -299,14 +316,14 @@ Runnable version in [examples/07-i18n-french](./examples/07-i18n-french/).
 
 ## Browser support
 
-| API | Used for |
-|---|---|
-| `Worker` | DuckDB runs in a dedicated worker |
-| `WebAssembly` | DuckDB is compiled to Wasm |
-| `IndexedDB` | Session persistence (skipped when `persistence: false`) |
-| `ResizeObserver` | Column resize, responsive visualizations |
-| `BigInt` | DuckDB integer columns cross the worker boundary as BigInt |
-| `structuredClone` | Bridge snapshots result sets |
+| API               | Used for                                                   |
+| ----------------- | ---------------------------------------------------------- |
+| `Worker`          | DuckDB runs in a dedicated worker                          |
+| `WebAssembly`     | DuckDB is compiled to Wasm                                 |
+| `IndexedDB`       | Session persistence (skipped when `persistence: false`)    |
+| `ResizeObserver`  | Column resize, responsive visualizations                   |
+| `BigInt`          | DuckDB integer columns cross the worker boundary as BigInt |
+| `structuredClone` | Bridge snapshots result sets                               |
 
 Roughly Chrome/Edge 98+, Firefox 94+, Safari 15.4+. Probe at runtime with
 `checkBrowserSupport()` or opt into fail-fast init via
@@ -321,8 +338,12 @@ set of stable hooks. Power users who want to orchestrate the stack directly
 themselves — can import the building blocks from `/advanced`:
 
 ```ts
-import { TableContainer, FilterBar, ExportDialog, BaseVisualization /* … */ }
-  from '@jeyabbalas/data-table/advanced';
+import {
+  TableContainer,
+  FilterBar,
+  ExportDialog,
+  BaseVisualization /* … */,
+} from '@jeyabbalas/data-table/advanced';
 ```
 
 The `/advanced` surface trades stability for flexibility: it is **not**

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  normalizeColumnHeaderTooltip,
-  tooltipContentEquals,
-} from '@/core/columnHeaderTooltip';
+import { normalizeColumnHeaderTooltip, tooltipContentEquals } from '@/core/columnHeaderTooltip';
 import type { ColumnHeaderTooltipContent } from '@/core/types';
 
 describe('normalizeColumnHeaderTooltip', () => {
@@ -27,9 +24,7 @@ describe('normalizeColumnHeaderTooltip', () => {
 
   it('object with all fields empty → null', () => {
     expect(normalizeColumnHeaderTooltip({})).toBeNull();
-    expect(
-      normalizeColumnHeaderTooltip({ title: '', description: '', items: [] }),
-    ).toBeNull();
+    expect(normalizeColumnHeaderTooltip({ title: '', description: '', items: [] })).toBeNull();
   });
 
   it('preserves non-empty title and description', () => {
@@ -117,10 +112,7 @@ describe('tooltipContentEquals', () => {
 
   it('structurally equal objects → true', () => {
     expect(
-      tooltipContentEquals(
-        { title: 'T', description: 'D' },
-        { title: 'T', description: 'D' },
-      ),
+      tooltipContentEquals({ title: 'T', description: 'D' }, { title: 'T', description: 'D' }),
     ).toBe(true);
   });
 
@@ -129,16 +121,19 @@ describe('tooltipContentEquals', () => {
   });
 
   it('different description → false', () => {
-    expect(
-      tooltipContentEquals({ description: 'D' }, { description: 'E' }),
-    ).toBe(false);
+    expect(tooltipContentEquals({ description: 'D' }, { description: 'E' })).toBe(false);
   });
 
   it('items length mismatch → false', () => {
     expect(
       tooltipContentEquals(
         { items: [{ label: 'a', value: '1' }] },
-        { items: [{ label: 'a', value: '1' }, { label: 'b', value: '2' }] },
+        {
+          items: [
+            { label: 'a', value: '1' },
+            { label: 'b', value: '2' },
+          ],
+        },
       ),
     ).toBe(false);
   });

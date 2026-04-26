@@ -20,15 +20,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -140,9 +147,7 @@ describe('DerivedColumnModal', () => {
 
   it('Escape key closes modal', () => {
     modal.open();
-    const dialog = modal
-      .getElement()
-      .querySelector('.dt-derived-modal-dialog') as HTMLElement;
+    const dialog = modal.getElement().querySelector('.dt-derived-modal-dialog') as HTMLElement;
     dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(modal.getIsOpen()).toBe(false);
   });
@@ -166,14 +171,18 @@ describe('DerivedColumnModal', () => {
 
   it('close button click closes modal', () => {
     modal.open();
-    const closeBtn = modal.getElement().querySelector('.dt-derived-modal-close') as HTMLButtonElement;
+    const closeBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-close') as HTMLButtonElement;
     closeBtn.click();
     expect(modal.getIsOpen()).toBe(false);
   });
 
   it('cancel button click closes modal', () => {
     modal.open();
-    const cancelBtn = modal.getElement().querySelector('.dt-derived-modal-cancel') as HTMLButtonElement;
+    const cancelBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-cancel') as HTMLButtonElement;
     cancelBtn.click();
     expect(modal.getIsOpen()).toBe(false);
   });
@@ -215,7 +224,9 @@ describe('DerivedColumnModal', () => {
   });
 
   it('has Create button that starts disabled', () => {
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn).not.toBeNull();
     expect(createBtn.disabled).toBe(true);
   });
@@ -271,8 +282,12 @@ describe('DerivedColumnModal', () => {
     vectorRadio.checked = true;
     vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const exprSection = modal.getElement().querySelector('.dt-derived-modal-editor-container')!.parentElement!;
-    const vecSection = modal.getElement().querySelector('.dt-derived-modal-vector-textarea')!.parentElement!;
+    const exprSection = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-editor-container')!.parentElement!;
+    const vecSection = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea')!.parentElement!;
 
     expect(exprSection.style.display).toBe('none');
     expect(vecSection.style.display).not.toBe('none');
@@ -292,7 +307,9 @@ describe('DerivedColumnModal', () => {
     exprRadio.checked = true;
     exprRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const exprSection = modal.getElement().querySelector('.dt-derived-modal-editor-container')!.parentElement!;
+    const exprSection = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-editor-container')!.parentElement!;
     expect(exprSection.style.display).not.toBe('none');
   });
 
@@ -312,7 +329,9 @@ describe('DerivedColumnModal', () => {
     // Set expression in the editor
     setEditorValue(modal.getElement(), 'price * 2');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
     // Wait for async
@@ -332,10 +351,14 @@ describe('DerivedColumnModal', () => {
 
     setEditorValue(modal.getElement(), 'price * 2');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
-    const preview = modal.getElement().querySelector('.dt-derived-modal-type-preview') as HTMLElement;
+    const preview = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-type-preview') as HTMLElement;
 
     await vi.waitFor(() => {
       expect(preview.textContent).toContain('float');
@@ -352,10 +375,14 @@ describe('DerivedColumnModal', () => {
 
     setEditorValue(modal.getElement(), 'bad syntax!!!');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
-    const preview = modal.getElement().querySelector('.dt-derived-modal-type-preview') as HTMLElement;
+    const preview = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-type-preview') as HTMLElement;
 
     await vi.waitFor(() => {
       expect(preview.textContent).toContain('Syntax error');
@@ -373,7 +400,9 @@ describe('DerivedColumnModal', () => {
     input.value = 'total';
     input.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn.disabled).toBe(true);
   });
 
@@ -394,10 +423,14 @@ describe('DerivedColumnModal', () => {
     // Set expression and validate
     setEditorValue(modal.getElement(), 'price * quantity');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
 
     await vi.waitFor(() => {
       expect(createBtn.disabled).toBe(false);
@@ -419,10 +452,14 @@ describe('DerivedColumnModal', () => {
 
     setEditorValue(modal.getElement(), 'price * 2');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
 
     await vi.waitFor(() => {
       expect(createBtn.disabled).toBe(false);
@@ -447,11 +484,15 @@ describe('DerivedColumnModal', () => {
     vectorRadio.checked = true;
     vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+    const textarea = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
     textarea.value = '1\n2'; // 2 lines, but totalRows is 3
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+    const errorEl = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
     expect(errorEl.textContent).toContain('Expected 3 values, got 2');
     expect(errorEl.style.display).not.toBe('none');
   });
@@ -470,11 +511,15 @@ describe('DerivedColumnModal', () => {
     vectorRadio.checked = true;
     vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+    const textarea = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
     textarea.value = '1\n2\n3'; // 3 lines, matching totalRows
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn.disabled).toBe(false);
   });
 
@@ -513,15 +558,21 @@ describe('DerivedColumnModal', () => {
     // Set and validate expression
     setEditorValue(modal.getElement(), 'price * quantity');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
     await vi.waitFor(() => {
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       expect(createBtn.disabled).toBe(false);
     });
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     createBtn.click();
 
     await vi.waitFor(() => {
@@ -549,15 +600,21 @@ describe('DerivedColumnModal', () => {
 
     setEditorValue(modal.getElement(), 'price * quantity');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
     await vi.waitFor(() => {
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       expect(createBtn.disabled).toBe(false);
     });
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     createBtn.click();
 
     await vi.waitFor(() => {
@@ -584,15 +641,21 @@ describe('DerivedColumnModal', () => {
 
     setEditorValue(modal.getElement(), 'bad_expr');
 
-    const validateBtn = modal.getElement().querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
     validateBtn.click();
 
     await vi.waitFor(() => {
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       expect(createBtn.disabled).toBe(false);
     });
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     createBtn.click();
 
     const errorEl = modal.getElement().querySelector('.dt-derived-modal-error') as HTMLElement;
@@ -624,11 +687,15 @@ describe('DerivedColumnModal', () => {
     select.value = 'boolean';
 
     // Enter values
-    const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+    const textarea = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
     textarea.value = 'true\nfalse\ntrue';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn.disabled).toBe(false);
     createBtn.click();
 
@@ -652,7 +719,13 @@ describe('DerivedColumnModal', () => {
       modalEl: HTMLElement,
       modalInstance: DerivedColumnModal,
       addSpy: ReturnType<typeof vi.fn>,
-      opts: { name: string; vectorType: string; textareaValue: string; expectedValues: unknown[]; expectedVectorType: string },
+      opts: {
+        name: string;
+        vectorType: string;
+        textareaValue: string;
+        expectedValues: unknown[];
+        expectedVectorType: string;
+      },
     ) {
       modalInstance.open();
 
@@ -673,7 +746,9 @@ describe('DerivedColumnModal', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
 
       // Enter values
-      const textarea = modalEl.querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      const textarea = modalEl.querySelector(
+        '.dt-derived-modal-vector-textarea',
+      ) as HTMLTextAreaElement;
       textarea.value = opts.textareaValue;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -754,8 +829,13 @@ describe('DerivedColumnModal', () => {
       await createVectorColumn(modal.getElement(), modal, addSpy, {
         name: 'ids',
         vectorType: 'uuid',
-        textareaValue: '550e8400-e29b-41d4-a716-446655440000\na1b2c3d4-e5f6-7890-abcd-ef1234567890\n00000000-0000-0000-0000-000000000001',
-        expectedValues: ['550e8400-e29b-41d4-a716-446655440000', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '00000000-0000-0000-0000-000000000001'],
+        textareaValue:
+          '550e8400-e29b-41d4-a716-446655440000\na1b2c3d4-e5f6-7890-abcd-ef1234567890\n00000000-0000-0000-0000-000000000001',
+        expectedValues: [
+          '550e8400-e29b-41d4-a716-446655440000',
+          'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          '00000000-0000-0000-0000-000000000001',
+        ],
         expectedVectorType: 'uuid',
       });
     });
@@ -776,14 +856,20 @@ describe('DerivedColumnModal', () => {
       input.value = 'bad_dates';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      const textarea = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
       textarea.value = '2024-01-15\nnot-a-date\n2024-06-30';
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       createBtn.click();
 
-      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      const errorEl = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
       expect(errorEl.style.display).not.toBe('none');
       expect(errorEl.textContent).toContain('Line 2');
       expect(errorEl.textContent).toContain('not a valid date');
@@ -803,14 +889,20 @@ describe('DerivedColumnModal', () => {
       input.value = 'bad_ts';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      const textarea = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
       textarea.value = '2024-01-15 10:30:00\njust-a-date\n2024-06-30 12:00:00';
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       createBtn.click();
 
-      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      const errorEl = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
       expect(errorEl.style.display).not.toBe('none');
       expect(errorEl.textContent).toContain('Line 2');
       expect(errorEl.textContent).toContain('not a valid timestamp');
@@ -830,14 +922,20 @@ describe('DerivedColumnModal', () => {
       input.value = 'bad_time';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      const textarea = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
       textarea.value = '14:30:00\nnoon\n23:59:59';
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       createBtn.click();
 
-      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      const errorEl = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
       expect(errorEl.style.display).not.toBe('none');
       expect(errorEl.textContent).toContain('Line 2');
       expect(errorEl.textContent).toContain('not a valid time');
@@ -857,14 +955,20 @@ describe('DerivedColumnModal', () => {
       input.value = 'bad_dec';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      const textarea = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
       textarea.value = '123.45\nabc\n0.001';
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       createBtn.click();
 
-      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      const errorEl = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
       expect(errorEl.style.display).not.toBe('none');
       expect(errorEl.textContent).toContain('Line 2');
       expect(errorEl.textContent).toContain('not a valid decimal');
@@ -884,14 +988,21 @@ describe('DerivedColumnModal', () => {
       input.value = 'bad_uuid';
       input.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const textarea = modal.getElement().querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
-      textarea.value = '550e8400-e29b-41d4-a716-446655440000\nnot-a-uuid\n00000000-0000-0000-0000-000000000001';
+      const textarea = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+      textarea.value =
+        '550e8400-e29b-41d4-a716-446655440000\nnot-a-uuid\n00000000-0000-0000-0000-000000000001';
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-      const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+      const createBtn = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
       createBtn.click();
 
-      const errorEl = modal.getElement().querySelector('.dt-derived-modal-vector-error') as HTMLElement;
+      const errorEl = modal
+        .getElement()
+        .querySelector('.dt-derived-modal-vector-error') as HTMLElement;
       expect(errorEl.style.display).not.toBe('none');
       expect(errorEl.textContent).toContain('Line 2');
       expect(errorEl.textContent).toContain('not a valid UUID');
@@ -926,7 +1037,9 @@ describe('DerivedColumnModal', () => {
     expect(input2.value).toBe('');
 
     // Create should be disabled
-    const createBtn = modal.getElement().querySelector('.dt-derived-modal-create') as HTMLButtonElement;
+    const createBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn.disabled).toBe(true);
   });
 });

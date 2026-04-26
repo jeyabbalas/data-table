@@ -106,7 +106,12 @@ describe('ColumnHeader — annotation overlay', () => {
       annotationPopover: popover,
     });
     const el = header.getElement();
-    const ann = store.add({ scope: 'column', column: 'fare_amount', severity: 'error', message: 'x' });
+    const ann = store.add({
+      scope: 'column',
+      column: 'fare_amount',
+      severity: 'error',
+      message: 'x',
+    });
     expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
 
     store.remove(ann.id);

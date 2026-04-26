@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from '@/core/UndoManager';
+import {
+  UndoManager,
+  captureSnapshot,
+  applySnapshot,
+  derivedColumnsEqual,
+} from '@/core/UndoManager';
 import type { StateSnapshot } from '@/core/UndoManager';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
@@ -372,7 +377,12 @@ describe('captureSnapshot', () => {
     state.sortColumns.set([{ column: 'name', direction: 'asc' }]);
     state.visibleColumns.set(['id', 'name']);
     state.columnOrder.set(['name', 'id', 'age']);
-    state.columnWidths.set(new Map([['id', 100], ['name', 200]]));
+    state.columnWidths.set(
+      new Map([
+        ['id', 100],
+        ['name', 200],
+      ]),
+    );
     state.pinnedColumns.set(['id']);
     state.hiddenColumnInfo.set(
       new Map([['age', { column: 'age', leftNeighbor: 'name', rightNeighbor: null }]]),
@@ -385,7 +395,12 @@ describe('captureSnapshot', () => {
     expect(snapshot.sortColumns).toEqual([{ column: 'name', direction: 'asc' }]);
     expect(snapshot.visibleColumns).toEqual(['id', 'name']);
     expect(snapshot.columnOrder).toEqual(['name', 'id', 'age']);
-    expect(snapshot.columnWidths).toEqual(new Map([['id', 100], ['name', 200]]));
+    expect(snapshot.columnWidths).toEqual(
+      new Map([
+        ['id', 100],
+        ['name', 200],
+      ]),
+    );
     expect(snapshot.pinnedColumns).toEqual(['id']);
     expect(snapshot.hiddenColumnInfo.get('age')).toEqual({
       column: 'age',
@@ -444,9 +459,7 @@ describe('captureSnapshot', () => {
     expect(snapshot.filters[0]).not.toBe(dateFilter);
     // But same Date instances (shallow copy)
     expect((snapshot.filters[0] as any).min).toBeInstanceOf(Date);
-    expect((snapshot.filters[0] as any).min.getTime()).toBe(
-      new Date('2020-01-01').getTime(),
-    );
+    expect((snapshot.filters[0] as any).min.getTime()).toBe(new Date('2020-01-01').getTime());
   });
 });
 
@@ -534,7 +547,12 @@ describe('captureSnapshot / applySnapshot round-trip', () => {
     ]);
     state.visibleColumns.set(['id', 'age']);
     state.columnOrder.set(['age', 'id', 'name']);
-    state.columnWidths.set(new Map([['id', 80], ['age', 120]]));
+    state.columnWidths.set(
+      new Map([
+        ['id', 80],
+        ['age', 120],
+      ]),
+    );
     state.pinnedColumns.set(['age']);
     state.hiddenColumnInfo.set(
       new Map([['name', { column: 'name', leftNeighbor: 'id', rightNeighbor: null }]]),
@@ -562,7 +580,12 @@ describe('captureSnapshot / applySnapshot round-trip', () => {
     ]);
     expect(state.visibleColumns.get()).toEqual(['id', 'age']);
     expect(state.columnOrder.get()).toEqual(['age', 'id', 'name']);
-    expect(state.columnWidths.get()).toEqual(new Map([['id', 80], ['age', 120]]));
+    expect(state.columnWidths.get()).toEqual(
+      new Map([
+        ['id', 80],
+        ['age', 120],
+      ]),
+    );
     expect(state.pinnedColumns.get()).toEqual(['age']);
     expect(state.hiddenColumnInfo.get().get('name')).toEqual({
       column: 'name',
@@ -590,11 +613,15 @@ describe('captureSnapshot / applySnapshot round-trip', () => {
 
   it('should round-trip Map-based fields', () => {
     const state = setupState();
-    state.columnWidths.set(new Map([['id', 75], ['name', 250], ['age', 100]]));
-    state.hiddenColumnInfo.set(
+    state.columnWidths.set(
       new Map([
-        ['name', { column: 'name', leftNeighbor: 'id', rightNeighbor: 'age' }],
+        ['id', 75],
+        ['name', 250],
+        ['age', 100],
       ]),
+    );
+    state.hiddenColumnInfo.set(
+      new Map([['name', { column: 'name', leftNeighbor: 'id', rightNeighbor: 'age' }]]),
     );
 
     const snapshot = captureSnapshot(state);
@@ -697,11 +724,14 @@ describe('applySnapshot — equality-guarded signal updates', () => {
     const snapshot = captureSnapshot(state);
 
     // Replace with new Date objects that have the same timestamp
-    state.filters.set([{
-      type: 'range', column: 'age',
-      min: new Date(d1.getTime()),
-      max: new Date(d2.getTime()),
-    }]);
+    state.filters.set([
+      {
+        type: 'range',
+        column: 'age',
+        min: new Date(d1.getTime()),
+        max: new Date(d2.getTime()),
+      },
+    ]);
 
     const cb = vi.fn();
     state.filters.subscribe(cb);
@@ -824,43 +854,69 @@ describe('derivedColumnsEqual', () => {
 
   it('returns false when kinds differ', () => {
     const a: DerivedColumnDef[] = [{ kind: 'expression', name: 'x', expression: '1' }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'x', vectorType: 'integer', values: [1] }];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'x', vectorType: 'integer', values: [1] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns true for vector columns with identical values', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(true);
   });
 
   it('returns false for vector columns with different first values', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [4, 2, 3] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [4, 2, 3] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns false for vector columns with different last values', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns false for vector columns with different middle values', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3, 4, 5] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9, 4, 5] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3, 4, 5] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 9, 4, 5] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns false for vector columns with different lengths', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
   it('returns false for vector columns with different vectorType', () => {
-    const a: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'integer', values: [1, 2, 3] }];
-    const b: DerivedColumnDef[] = [{ kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] }];
+    const a: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: [1, 2, 3] },
+    ];
+    const b: DerivedColumnDef[] = [
+      { kind: 'vector', name: 'v', vectorType: 'float', values: [1, 2, 3] },
+    ];
     expect(derivedColumnsEqual(a, b)).toBe(false);
   });
 
@@ -906,13 +962,13 @@ describe('captureSnapshot — derivedColumns', () => {
 
   it('captures expression derived columns', () => {
     const state = setupState();
-    state.derivedColumns.set([
-      { kind: 'expression', name: 'total', expression: 'id * 2' },
-    ]);
+    state.derivedColumns.set([{ kind: 'expression', name: 'total', expression: 'id * 2' }]);
     const snapshot = captureSnapshot(state);
     expect(snapshot.derivedColumns).toHaveLength(1);
     expect(snapshot.derivedColumns[0]).toEqual({
-      kind: 'expression', name: 'total', expression: 'id * 2',
+      kind: 'expression',
+      name: 'total',
+      expression: 'id * 2',
     });
   });
 

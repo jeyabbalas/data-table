@@ -24,17 +24,17 @@ available.
 
 A session snapshot is a JSON-serializable object keyed by `tableName`:
 
-| Field | Content |
-|---|---|
-| `filters` | All active filters (Dates wrapped as `{ __date__: ISO8601 }`) |
-| `sortColumns` | Current sort priorities |
-| `visibleColumns`, `columnOrder`, `pinnedColumns`, `columnWidths`, `hiddenColumnInfo` | Column layout state |
-| `derivedColumns` | Expression and vector column definitions |
-| `undoStack`, `redoStack` | Undo/redo history |
-| `vectorValuePool` | Deduplicated vector column values shared across undo entries |
-| `filterPresets` | Saved filter presets |
-| `annotations` | Full `AnnotationFile` written by `table.annotations.toJSON()` — every annotation (row / column / cell) plus unknown app-defined fields. See the [annotations guide](./annotations.md). |
-| `columnHeaderTooltips` | Per-column structured tooltip content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. See the [column-header tooltips guide](./column-header-tooltips.md). |
+| Field                                                                                | Content                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filters`                                                                            | All active filters (Dates wrapped as `{ __date__: ISO8601 }`)                                                                                                                                  |
+| `sortColumns`                                                                        | Current sort priorities                                                                                                                                                                        |
+| `visibleColumns`, `columnOrder`, `pinnedColumns`, `columnWidths`, `hiddenColumnInfo` | Column layout state                                                                                                                                                                            |
+| `derivedColumns`                                                                     | Expression and vector column definitions                                                                                                                                                       |
+| `undoStack`, `redoStack`                                                             | Undo/redo history                                                                                                                                                                              |
+| `vectorValuePool`                                                                    | Deduplicated vector column values shared across undo entries                                                                                                                                   |
+| `filterPresets`                                                                      | Saved filter presets                                                                                                                                                                           |
+| `annotations`                                                                        | Full `AnnotationFile` written by `table.annotations.toJSON()` — every annotation (row / column / cell) plus unknown app-defined fields. See the [annotations guide](./annotations.md).         |
+| `columnHeaderTooltips`                                                               | Per-column structured tooltip content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. See the [column-header tooltips guide](./column-header-tooltips.md). |
 
 Other state (hovered row, focused cell, row selection) is transient and not
 persisted.
@@ -57,6 +57,7 @@ const table = await createDataTable({
 ```
 
 On mount:
+
 1. Open IndexedDB database `dt-sessions`
 2. Look up a snapshot by `tableName` (here, `'trips'`)
 3. If one exists, restore filters/sort/columns/derived after data load
@@ -66,7 +67,7 @@ On unmount (call `table.destroy()`): the auto-save flushes a final snapshot.
 
 ### `tableName` determines the session key
 
-Two tables with the *same* `tableName` share a snapshot — the second one
+Two tables with the _same_ `tableName` share a snapshot — the second one
 overwrites the first. Either provide unique `tableName` values when mounting
 multiple tables, or pass a shared `SessionStore` (see below) and rely on the
 keying.
@@ -120,7 +121,7 @@ Both tables share a single IDB connection; each keeps its own snapshot
 ```ts
 await t1.destroy();
 await t2.destroy();
-sharedStore.close();   // release the IDB connection
+sharedStore.close(); // release the IDB connection
 ```
 
 See also the [Multi-table guide](./multi-table.md) for patterns sharing
@@ -149,7 +150,7 @@ Common causes:
 The table continues working; only persistence is disabled.
 
 `table.isPersistenceActive()` returns `false` when persistence was opted
-out *or* when IDB was unavailable at init. Check the `warning` event to
+out _or_ when IDB was unavailable at init. Check the `warning` event to
 distinguish.
 
 ## `save()` vs `saveSync()`
@@ -210,7 +211,7 @@ await store.close?.();
 
 ```ts
 const names = await sharedStore.list();
-console.log(names);   // ['trips', 'users', …]
+console.log(names); // ['trips', 'users', …]
 ```
 
 Useful for debugging, or for showing the user a "previous sessions" picker.
@@ -253,12 +254,15 @@ useEffect(() => {
   let table: DataTable | null = null;
   (async () => {
     const t = await createDataTable({ container: containerRef.current!, source });
-    if (cancelled) { await t.destroy(); return; }
+    if (cancelled) {
+      await t.destroy();
+      return;
+    }
     table = t;
   })();
   return () => {
     cancelled = true;
-    table?.destroy();   // flushes session
+    table?.destroy(); // flushes session
   };
 }, [source]);
 ```
@@ -271,7 +275,7 @@ useEffect(() => {
 - **Snapshot size grows with derived vectors.** A 1M-row vector column adds ~MBs per snapshot. Use expression columns when possible; otherwise, accept the cost.
 - **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many.
 - **Private browsing silently fails.** No error, no exception — just a `warning` event. Your UI should handle the no-persist case gracefully.
-- **Session restore happens *after* data load.** Filters/sort don't apply during the load progress stage; they snap into place on `loadComplete`.
+- **Session restore happens _after_ data load.** Filters/sort don't apply during the load progress stage; they snap into place on `loadComplete`.
 
 ## Related
 

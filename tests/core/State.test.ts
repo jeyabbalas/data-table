@@ -145,9 +145,7 @@ describe('State', () => {
     it('should update filters and notify subscribers', () => {
       const state = createTableState();
       const callback = vi.fn();
-      const filters: Filter[] = [
-        { column: 'age', type: 'range', value: { min: 18, max: 65 } },
-      ];
+      const filters: Filter[] = [{ column: 'age', type: 'range', value: { min: 18, max: 65 } }];
 
       state.filters.subscribe(callback);
       state.filters.set(filters);
@@ -254,7 +252,9 @@ describe('State', () => {
       state.columnOrder.set(['c', 'b', 'a']);
       state.columnWidths.set(new Map([['a', 100]]));
       state.pinnedColumns.set(['a']);
-      state.hiddenColumnInfo.set(new Map([['b', { column: 'b', leftNeighbor: 'a', rightNeighbor: 'c' }]]));
+      state.hiddenColumnInfo.set(
+        new Map([['b', { column: 'b', leftNeighbor: 'a', rightNeighbor: 'c' }]]),
+      );
       state.selectedRows.set(new Set([1, 2, 3]));
       state.hoveredRow.set(5);
       state.hoveredColumn.set('x');
@@ -366,7 +366,13 @@ describe('State', () => {
     it('excludes system columns from visibleColumns but keeps them in columnOrder and schema', () => {
       const state = createTableState();
       const schema: ColumnSchema[] = [
-        { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+        {
+          name: '__rowid__',
+          type: 'integer',
+          nullable: false,
+          originalType: 'BIGINT',
+          system: true,
+        },
         { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
         { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
       ];
@@ -485,9 +491,7 @@ describe('State', () => {
 
     it('should return empty Map when filters cleared', () => {
       const state = createTableState();
-      state.filters.set([
-        { column: 'age', type: 'range', min: 0, max: 100 },
-      ]);
+      state.filters.set([{ column: 'age', type: 'range', min: 0, max: 100 }]);
       expect(state.filtersByColumn.get().size).toBe(1);
 
       state.filters.set([]);
@@ -499,9 +503,7 @@ describe('State', () => {
       const callback = vi.fn();
       state.filtersByColumn.subscribe(callback);
 
-      state.filters.set([
-        { column: 'price', type: 'range', min: 10, max: 50 },
-      ]);
+      state.filters.set([{ column: 'price', type: 'range', min: 10, max: 50 }]);
 
       expect(callback).toHaveBeenCalledTimes(1);
       const map = callback.mock.calls[0][0] as Map<string, Filter[]>;
@@ -510,19 +512,21 @@ describe('State', () => {
 
     it('should update when a filter is replaced for the same column', () => {
       const state = createTableState();
-      state.filters.set([
-        { column: 'age', type: 'range', min: 0, max: 50 },
-      ]);
-      expect(state.filtersByColumn.get().get('age')![0]).toEqual(
-        { column: 'age', type: 'range', min: 0, max: 50 }
-      );
+      state.filters.set([{ column: 'age', type: 'range', min: 0, max: 50 }]);
+      expect(state.filtersByColumn.get().get('age')![0]).toEqual({
+        column: 'age',
+        type: 'range',
+        min: 0,
+        max: 50,
+      });
 
-      state.filters.set([
-        { column: 'age', type: 'range', min: 20, max: 80 },
-      ]);
-      expect(state.filtersByColumn.get().get('age')![0]).toEqual(
-        { column: 'age', type: 'range', min: 20, max: 80 }
-      );
+      state.filters.set([{ column: 'age', type: 'range', min: 20, max: 80 }]);
+      expect(state.filtersByColumn.get().get('age')![0]).toEqual({
+        column: 'age',
+        type: 'range',
+        min: 20,
+        max: 80,
+      });
     });
   });
 });

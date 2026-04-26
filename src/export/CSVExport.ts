@@ -23,11 +23,11 @@
  * @see copyToClipboard
  */
 
-import type { WorkerBridge } from '../data/WorkerBridge';
+import { ExportError } from '../core/errors';
 import type { TableState } from '../core/State';
+import type { WorkerBridge } from '../data/WorkerBridge';
 import { resolveColumns, fetchAllRows } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
-import { ExportError } from '../core/errors';
 
 // Re-export shared types so existing consumers are unaffected
 export type { ExportContext } from './ExportQuery';
@@ -109,7 +109,7 @@ export function rowToCSVLine(
   row: Record<string, unknown>,
   columns: string[],
   delimiter: string,
-  nullValue: string
+  nullValue: string,
 ): string {
   return columns
     .map((col) => escapeCSVField(formatCellValue(row[col], nullValue), delimiter))
@@ -133,7 +133,7 @@ export async function exportToCSV(
   tableName: string,
   options: Partial<ExportOptions>,
   context: ExportContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!tableName) {
     throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
@@ -155,11 +155,7 @@ export async function exportToCSV(
 
   // Header row
   if (opts.includeHeaders) {
-    lines.push(
-      columns
-        .map((col) => escapeCSVField(col, opts.delimiter))
-        .join(opts.delimiter)
-    );
+    lines.push(columns.map((col) => escapeCSVField(col, opts.delimiter)).join(opts.delimiter));
   }
 
   await fetchAllRows(
@@ -172,7 +168,7 @@ export async function exportToCSV(
         lines.push(rowToCSVLine(row, columns, opts.delimiter, opts.nullValue));
       }
     },
-    signal
+    signal,
   );
 
   return lines.join('\n');
@@ -186,7 +182,7 @@ export async function exportFromState(
   state: TableState,
   bridge: WorkerBridge,
   options?: Partial<ExportOptions>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string> {
   const tableName = state.tableName.get();
   if (!tableName) {

@@ -5,18 +5,18 @@
  * and the JSON-serializable SessionSnapshot for persistence.
  */
 
-import type { TableState, HiddenColumnInfo } from '../core/State';
-import type { Filter } from '../filters/FilterTypes';
-import type { ColumnHeaderTooltipContent } from '../core/types';
+import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
+import { batch } from '../core/Signal';
+import type { TableState, HiddenColumnInfo } from '../core/State';
+import type { ColumnHeaderTooltipContent } from '../core/types';
+import type { UndoManager, StateSnapshot } from '../core/UndoManager';
+import type { VectorColumnDef } from '../derived/types';
+import type { FilterPresetManager } from '../filters/FilterPresets';
+import type { Filter } from '../filters/FilterTypes';
+import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
-import { serializeFilter, deserializeFilter } from './SessionStore';
-import { batch } from '../core/Signal';
-import type { UndoManager, StateSnapshot } from '../core/UndoManager';
-import type { FilterPresetManager } from '../filters/FilterPresets';
-import type { VectorColumnDef } from '../derived/types';
-import type { AnnotationStore } from '../annotations/AnnotationStore';
 
 // ── StateSnapshot serialization (undo/redo stacks) ────────────────────
 
@@ -24,21 +24,22 @@ import type { AnnotationStore } from '../annotations/AnnotationStore';
 export function serializeStateSnapshot(snap: StateSnapshot): SerializedStateSnapshot {
   return {
     filters: snap.filters.map(serializeFilter),
-    sortColumns: snap.sortColumns.map(s => ({ ...s })),
+    sortColumns: snap.sortColumns.map((s) => ({ ...s })),
     visibleColumns: [...snap.visibleColumns],
     columnOrder: [...snap.columnOrder],
     columnWidths: Object.fromEntries(snap.columnWidths),
     pinnedColumns: [...snap.pinnedColumns],
     hiddenColumnInfo: Object.fromEntries(
-      Array.from(snap.hiddenColumnInfo.entries()).map(
-        ([k, v]) => [k, { ...v }],
-      ),
+      Array.from(snap.hiddenColumnInfo.entries()).map(([k, v]) => [k, { ...v }]),
     ),
     // Deep copy for IndexedDB independence (vector values need their own array).
     // Array.from works on both plain arrays and TypedArrays.
-    derivedColumns: snap.derivedColumns.map(d => {
+    derivedColumns: snap.derivedColumns.map((d) => {
       if (d.kind === 'expression') return { ...d };
-      return { ...d, values: Array.from((d as import('../derived/types').VectorColumnDef).values as ArrayLike<unknown>) } as typeof d;
+      return {
+        ...d,
+        values: Array.from(d.values as ArrayLike<unknown>),
+      } as typeof d;
     }),
   };
 }
@@ -64,51 +65,78 @@ export function deserializeStateSnapshot(
 
   const filters = s.filters
     .map(deserializeFilter)
-    .filter((f): f is Filter => f !== null && (f.type === 'raw-sql' || effectiveValid.has(f.column)));
+    .filter(
+      (f): f is Filter => f !== null && (f.type === 'raw-sql' || effectiveValid.has(f.column)),
+    );
 
-  const sortColumns = s.sortColumns.filter(sc => effectiveValid.has(sc.column));
+  const sortColumns = s.sortColumns.filter((sc) => effectiveValid.has(sc.column));
 
-  let visibleColumns = s.visibleColumns.filter(c => effectiveValid.has(c));
+  let visibleColumns = s.visibleColumns.filter((c) => effectiveValid.has(c));
   if (visibleColumns.length === 0) {
     visibleColumns = [...effectiveValid];
   }
 
-  const columnOrder = s.columnOrder.filter(c => effectiveValid.has(c));
+  const columnOrder = s.columnOrder.filter((c) => effectiveValid.has(c));
 
   const columnWidths = new Map<string, number>();
   for (const [col, width] of Object.entries(s.columnWidths)) {
     if (effectiveValid.has(col)) columnWidths.set(col, width);
   }
 
-  const pinnedColumns = s.pinnedColumns.filter(c => effectiveValid.has(c));
+  const pinnedColumns = s.pinnedColumns.filter((c) => effectiveValid.has(c));
 
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();
   for (const [col, info] of Object.entries(s.hiddenColumnInfo)) {
     if (effectiveValid.has(col)) {
       hiddenColumnInfo.set(col, {
         column: info.column,
-        leftNeighbor: info.leftNeighbor && effectiveValid.has(info.leftNeighbor) ? info.leftNeighbor : null,
-        rightNeighbor: info.rightNeighbor && effectiveValid.has(info.rightNeighbor) ? info.rightNeighbor : null,
+        leftNeighbor:
+          info.leftNeighbor && effectiveValid.has(info.leftNeighbor) ? info.leftNeighbor : null,
+        rightNeighbor:
+          info.rightNeighbor && effectiveValid.has(info.rightNeighbor) ? info.rightNeighbor : null,
       });
     }
   }
 
   // Restore derived columns — resolve pool references (v4+) or deep-copy inline values (pre-v4)
   const derivedColumns = s.derivedColumns
-    ? s.derivedColumns.map(d => {
+    ? s.derivedColumns.map((d) => {
         if (d.kind === 'expression') return { ...d };
         if (isPooledVectorRef(d)) {
           // Pool reference: share the hydrated array (safe — vector values are never mutated in place)
           const values = hydratedPool?.get(d._poolRef);
-          if (!values) return { kind: 'vector' as const, name: d.name, vectorType: d.vectorType, values: [] as unknown[] } as VectorColumnDef;
-          return { kind: 'vector' as const, name: d.name, vectorType: d.vectorType, values } as VectorColumnDef;
+          if (!values)
+            return {
+              kind: 'vector' as const,
+              name: d.name,
+              vectorType: d.vectorType,
+              values: [] as unknown[],
+            } as VectorColumnDef;
+          return {
+            kind: 'vector' as const,
+            name: d.name,
+            vectorType: d.vectorType,
+            values,
+          } as VectorColumnDef;
         }
         // Inline values (pre-v4 backward compat): deep copy for IndexedDB independence
-        return { ...d, values: Array.from((d as VectorColumnDef).values as ArrayLike<unknown>) } as typeof d;
+        return {
+          ...d,
+          values: Array.from(d.values as ArrayLike<unknown>),
+        } as typeof d;
       })
     : [];
 
-  return { filters, sortColumns, visibleColumns, columnOrder, columnWidths, pinnedColumns, hiddenColumnInfo, derivedColumns };
+  return {
+    filters,
+    sortColumns,
+    visibleColumns,
+    columnOrder,
+    columnWidths,
+    pinnedColumns,
+    hiddenColumnInfo,
+    derivedColumns,
+  };
 }
 
 // ── Session snapshot (full table state + optional undo stacks) ────────
@@ -122,7 +150,12 @@ export function deserializeStateSnapshot(
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
  */
-export function snapshotFromState(state: TableState, undoManager?: UndoManager, presetManager?: FilterPresetManager, annotationStore?: AnnotationStore): SessionSnapshot {
+export function snapshotFromState(
+  state: TableState,
+  undoManager?: UndoManager,
+  presetManager?: FilterPresetManager,
+  annotationStore?: AnnotationStore,
+): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -134,7 +167,7 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
     columnWidths: Object.fromEntries(state.columnWidths.get()),
     pinnedColumns: [...state.pinnedColumns.get()],
     hiddenColumnInfo: Object.fromEntries(state.hiddenColumnInfo.get()),
-    derivedColumns: state.derivedColumns.get().map(d => {
+    derivedColumns: state.derivedColumns.get().map((d) => {
       if (d.kind === 'expression') return { ...d };
       return { ...d, values: Array.from(d.values as ArrayLike<unknown>) } as typeof d;
     }),
@@ -151,28 +184,36 @@ export function snapshotFromState(state: TableState, undoManager?: UndoManager, 
 
     const serializeWithPool = (snap: StateSnapshot): SerializedStateSnapshot => ({
       filters: snap.filters.map(serializeFilter),
-      sortColumns: snap.sortColumns.map(s => ({ ...s })),
+      sortColumns: snap.sortColumns.map((s) => ({ ...s })),
       visibleColumns: [...snap.visibleColumns],
       columnOrder: [...snap.columnOrder],
       columnWidths: Object.fromEntries(snap.columnWidths),
       pinnedColumns: [...snap.pinnedColumns],
       hiddenColumnInfo: Object.fromEntries(
-        Array.from(snap.hiddenColumnInfo.entries()).map(
-          ([k, v]) => [k, { ...v }],
-        ),
+        Array.from(snap.hiddenColumnInfo.entries()).map(([k, v]) => [k, { ...v }]),
       ),
-      derivedColumns: snap.derivedColumns.map(d => {
+      derivedColumns: snap.derivedColumns.map((d) => {
         if (d.kind === 'expression') return { ...d };
-        const vec = d as VectorColumnDef;
+        const vec = d;
         const valuesRef = vec.values as ArrayLike<unknown>;
         const existingKey = seenArrays.get(valuesRef);
         if (existingKey) {
-          return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: existingKey };
+          return {
+            kind: 'vector' as const,
+            name: vec.name,
+            vectorType: vec.vectorType,
+            _poolRef: existingKey,
+          };
         }
         const key = `vp_${Object.keys(pool).length}`;
         pool[key] = { vectorType: vec.vectorType, values: Array.from(valuesRef) };
         seenArrays.set(valuesRef, key);
-        return { kind: 'vector' as const, name: vec.name, vectorType: vec.vectorType, _poolRef: key };
+        return {
+          kind: 'vector' as const,
+          name: vec.name,
+          vectorType: vec.vectorType,
+          _poolRef: key,
+        };
       }),
     });
 
@@ -250,14 +291,10 @@ export function restoreStateFromSnapshot(
     .filter((f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)));
 
   // Sort: drop stale column references
-  const sortColumns = snapshot.sortColumns.filter((s) =>
-    validColumns.has(s.column),
-  );
+  const sortColumns = snapshot.sortColumns.filter((s) => validColumns.has(s.column));
 
   // Visible columns: filter to valid; fallback to all if empty
-  let visibleColumns = snapshot.visibleColumns.filter((c) =>
-    validColumns.has(c),
-  );
+  let visibleColumns = snapshot.visibleColumns.filter((c) => validColumns.has(c));
   if (visibleColumns.length === 0) {
     visibleColumns = allColumnNames;
   }
@@ -267,9 +304,7 @@ export function restoreStateFromSnapshot(
   // appending to the end). This keeps system columns like __rowid__ —
   // which live at schema index 0 — at the leftmost position when a
   // pre-Phase-1 snapshot restores against a post-Phase-1 schema.
-  const restoredOrder = snapshot.columnOrder.filter((c) =>
-    validColumns.has(c),
-  );
+  const restoredOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
   const orderSet = new Set(restoredOrder);
   for (let i = 0; i < allColumnNames.length; i++) {
     const col = allColumnNames[i];
@@ -301,9 +336,7 @@ export function restoreStateFromSnapshot(
   }
 
   // Pinned columns: filter to valid
-  const pinnedColumns = snapshot.pinnedColumns.filter((c) =>
-    validColumns.has(c),
-  );
+  const pinnedColumns = snapshot.pinnedColumns.filter((c) => validColumns.has(c));
 
   // Hidden column info: Record → Map, skip stale columns, nullify dangling neighbors
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();
@@ -312,13 +345,9 @@ export function restoreStateFromSnapshot(
       hiddenColumnInfo.set(col, {
         column: info.column,
         leftNeighbor:
-          info.leftNeighbor && validColumns.has(info.leftNeighbor)
-            ? info.leftNeighbor
-            : null,
+          info.leftNeighbor && validColumns.has(info.leftNeighbor) ? info.leftNeighbor : null,
         rightNeighbor:
-          info.rightNeighbor && validColumns.has(info.rightNeighbor)
-            ? info.rightNeighbor
-            : null,
+          info.rightNeighbor && validColumns.has(info.rightNeighbor) ? info.rightNeighbor : null,
       });
     }
   }
@@ -340,10 +369,10 @@ export function restoreStateFromSnapshot(
   // the DuckDB VIEW and helper tables via DerivedColumnManager.restoreColumns().
   if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
     state.derivedColumns.set(
-      snapshot.derivedColumns.map(d => {
+      snapshot.derivedColumns.map((d) => {
         if (d.kind === 'expression') return { ...d };
         return { ...d, values: Array.from(d.values as ArrayLike<unknown>) } as typeof d;
-      })
+      }),
     );
   }
 
@@ -360,8 +389,12 @@ export function restoreStateFromSnapshot(
       }
     }
     const deserialized = {
-      undoStack: snapshot.undoStack.map(s => deserializeStateSnapshot(s, validColumns, hydratedPool)),
-      redoStack: (snapshot.redoStack ?? []).map(s => deserializeStateSnapshot(s, validColumns, hydratedPool)),
+      undoStack: snapshot.undoStack.map((s) =>
+        deserializeStateSnapshot(s, validColumns, hydratedPool),
+      ),
+      redoStack: (snapshot.redoStack ?? []).map((s) =>
+        deserializeStateSnapshot(s, validColumns, hydratedPool),
+      ),
     };
     undoManager.loadStacks(deserialized.undoStack, deserialized.redoStack);
   }

@@ -9,15 +9,7 @@
  * @vitest-environment jsdom
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 import {
   createDataTable,
@@ -26,10 +18,7 @@ import {
   defaultStatsPanelRegistry,
   type DataTable,
 } from '@/index';
-import {
-  BaseStatsPanel,
-  type StatsPanelOptions,
-} from '@/visualizations/BaseStatsPanel';
+import { BaseStatsPanel, type StatsPanelOptions } from '@/visualizations/BaseStatsPanel';
 import { BaseVisualization, type VisualizationOptions } from '@/visualizations/BaseVisualization';
 import { initializeColumnsFromSchema } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
@@ -159,7 +148,11 @@ class CapturingPanel extends BaseStatsPanel {
   async updateFilters(filters: Filter[]): Promise<void> {
     await super.updateFilters(filters);
     if (CapturingPanel.throwIn.updateFilters) throw new Error('panel updateFilters boom');
-    CapturingPanel.events.push({ type: 'updateFilters', column: this.column.name, payload: filters });
+    CapturingPanel.events.push({
+      type: 'updateFilters',
+      column: this.column.name,
+      payload: filters,
+    });
   }
 
   destroy(): void {
@@ -178,7 +171,9 @@ function makeVizRegistry(): VisualizationRegistry {
   reg.register({
     name: 'stub-numeric',
     isApplicable: (t) => t === 'integer' || t === 'float' || t === 'decimal',
-    constructor: StubViz as unknown as VisualizationRegistry['create'] extends (...args: unknown[]) => infer R
+    constructor: StubViz as unknown as VisualizationRegistry['create'] extends (
+      ...args: unknown[]
+    ) => infer R
       ? never
       : never,
     priority: 100,
@@ -198,10 +193,12 @@ interface Harness {
   bridge: WorkerBridge;
 }
 
-async function mount(opts: {
-  statsPanelRegistry?: StatsPanelRegistry;
-  vizRegistry?: VisualizationRegistry;
-} = {}): Promise<Harness> {
+async function mount(
+  opts: {
+    statsPanelRegistry?: StatsPanelRegistry;
+    vizRegistry?: VisualizationRegistry;
+  } = {},
+): Promise<Harness> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const bridge = makeBridge();
@@ -432,9 +429,7 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     });
     const { table } = await mount({ statsPanelRegistry: reg });
 
-    const initialConstructs = CapturingPanel.events.filter(
-      (e) => e.type === 'construct',
-    ).length;
+    const initialConstructs = CapturingPanel.events.filter((e) => e.type === 'construct').length;
     expect(initialConstructs).toBeGreaterThanOrEqual(2);
 
     // Replace the schema. This should re-run attachVisualizations.
@@ -627,9 +622,7 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
 
     // A filter change triggers refreshNonVizStats for non-viz columns. The uuid
     // column is non-viz but panel-owned — its slot text should NOT be replaced.
-    table.state.filters.set([
-      { type: 'not-null', column: 'amount' } as unknown as Filter,
-    ]);
+    table.state.filters.set([{ type: 'not-null', column: 'amount' } as unknown as Filter]);
     await new Promise((r) => setTimeout(r, 20));
 
     // The slot still says 'mounted:loading' (not the rows-count fallback).
@@ -655,8 +648,7 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     CapturingPanel.events.length = 0;
     const numericViz = StubViz.instances.find((v) => v.getColumn().name === 'amount')!;
 
-    const hoverHtml =
-      '<span class="stats-label">Bin:</span><br>5–10<br>Count: 42';
+    const hoverHtml = '<span class="stats-label">Bin:</span><br>5–10<br>Count: 42';
     numericViz.emitHover(hoverHtml);
 
     const hoverEvent = CapturingPanel.events.find(
@@ -676,11 +668,7 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     // panel and writes the fallback HTML in its place.
     const trackedInstances: CapturingPanel[] = [];
     class TrackingPanel extends CapturingPanel {
-      constructor(
-        container: HTMLElement,
-        column: ColumnSchema,
-        options: StatsPanelOptions,
-      ) {
+      constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
         super(container, column, options);
         trackedInstances.push(this);
       }
@@ -730,14 +718,10 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     expect(guidPanel!.isDestroyed()).toBe(true);
 
     // Trigger refreshNonVizStats by mutating filters.
-    table.state.filters.set([
-      { type: 'not-null', column: 'amount' } as unknown as Filter,
-    ]);
+    table.state.filters.set([{ type: 'not-null', column: 'amount' } as unknown as Filter]);
     await new Promise((r) => setTimeout(r, 20));
 
-    const uuidSlot = container.querySelector(
-      '[data-panel-mounted="guid"]',
-    ) as HTMLElement;
+    const uuidSlot = container.querySelector('[data-panel-mounted="guid"]') as HTMLElement;
     expect(uuidSlot).not.toBeNull();
     // Slot was overwritten with the default fallback — it now contains a
     // .dt-stats-line1 span with a rows count, not the destroyed panel's

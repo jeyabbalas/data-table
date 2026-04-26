@@ -1,6 +1,6 @@
 # 14 — Standalone SQL editor
 
-Embed a CodeMirror SQL editor *outside* the data table — for example, in a
+Embed a CodeMirror SQL editor _outside_ the data table — for example, in a
 filter-preset composer or a derived-column wizard that is part of your own
 UI shell — while still getting the library's SQL grammar, schema-aware
 column autocomplete, and DuckDB function autocomplete (with category +
@@ -22,9 +22,9 @@ npm run dev
   placeholder, gutters, and sizing.
 - `buildCompletionContext(columns, options?)` — converts any column-like
   array (`ColumnSchema[]` from the library, or an ad-hoc `[{name, type},
-  …]`) into the `CompletionContext` shape `createSqlExtensions` expects.
+…]`) into the `CompletionContext` shape `createSqlExtensions` expects.
 - `DUCKDB_FUNCTION_DETAILS` — curated array of `{ name, category,
-  description }` used by default for function autocomplete. Pass a subset
+description }` used by default for function autocomplete. Pass a subset
   via `options.functions` to restrict the list, or supply a `string[]` for
   names-only completions.
 - `dataTableTheme`, `dataTableHighlighting` — the same CodeMirror theme +
@@ -86,9 +86,7 @@ const view = new EditorView({
 // On schema change:
 table.on('derivedChange', () => {
   view.dispatch({
-    effects: sqlCompartment.reconfigure(
-      createSqlExtensions(table.actions.getCompletionContext()),
-    ),
+    effects: sqlCompartment.reconfigure(createSqlExtensions(table.actions.getCompletionContext())),
   });
 });
 ```
@@ -96,10 +94,7 @@ table.on('derivedChange', () => {
 ### Literal-schema path (no `DataTable`)
 
 ```ts
-import {
-  buildCompletionContext,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { buildCompletionContext, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 
 const ctx = buildCompletionContext([
   { name: 'price', type: 'DOUBLE' },
@@ -134,10 +129,7 @@ sidebar chrome. Either pattern is valid:
 ## Customizing the function list
 
 ```ts
-import {
-  DUCKDB_FUNCTION_DETAILS,
-  createSqlExtensions,
-} from '@jeyabbalas/data-table/advanced';
+import { DUCKDB_FUNCTION_DETAILS, createSqlExtensions } from '@jeyabbalas/data-table/advanced';
 
 // Only allow aggregate + numeric functions in autocomplete
 const subset = DUCKDB_FUNCTION_DETAILS.filter(

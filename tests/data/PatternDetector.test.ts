@@ -19,10 +19,7 @@ describe('PatternDetector', () => {
       });
 
       it('should detect emails with subdomains', () => {
-        const emails = [
-          'user@mail.example.com',
-          'admin@sub.domain.org',
-        ];
+        const emails = ['user@mail.example.com', 'admin@sub.domain.org'];
         const result = detectPattern(emails);
         expect(result.pattern).toBe('email');
         expect(result.confidence).toBe(1);
@@ -78,23 +75,14 @@ describe('PatternDetector', () => {
 
     describe('IP address detection', () => {
       it('should detect IPv4 addresses', () => {
-        const ips = [
-          '192.168.1.100',
-          '10.0.0.1',
-          '172.16.254.1',
-          '8.8.8.8',
-        ];
+        const ips = ['192.168.1.100', '10.0.0.1', '172.16.254.1', '8.8.8.8'];
         const result = detectPattern(ips);
         expect(result.pattern).toBe('ip');
         expect(result.confidence).toBe(1);
       });
 
       it('should detect special IP addresses', () => {
-        const ips = [
-          '127.0.0.1',
-          '0.0.0.0',
-          '255.255.255.255',
-        ];
+        const ips = ['127.0.0.1', '0.0.0.0', '255.255.255.255'];
         const result = detectPattern(ips);
         expect(result.pattern).toBe('ip');
         expect(result.confidence).toBe(1);
@@ -103,22 +91,14 @@ describe('PatternDetector', () => {
 
     describe('phone number detection', () => {
       it('should detect international phone numbers', () => {
-        const phones = [
-          '+1-555-123-4567',
-          '+44-20-7946-0958',
-          '+86-10-1234-5678',
-        ];
+        const phones = ['+1-555-123-4567', '+44-20-7946-0958', '+86-10-1234-5678'];
         const result = detectPattern(phones);
         expect(result.pattern).toBe('phone');
         expect(result.confidence).toBe(1);
       });
 
       it('should detect phone numbers with various formats', () => {
-        const phones = [
-          '+1-800-555-0199',
-          '+91-98765-43210',
-          '+49-30-12345678',
-        ];
+        const phones = ['+1-800-555-0199', '+91-98765-43210', '+49-30-12345678'];
         const result = detectPattern(phones);
         expect(result.pattern).toBe('phone');
         expect(result.confidence).toBe(1);
@@ -127,33 +107,21 @@ describe('PatternDetector', () => {
 
     describe('identifier detection', () => {
       it('should detect identifiers with hyphens', () => {
-        const identifiers = [
-          'SKU-12345',
-          'ID-789456',
-          'REF-00001',
-        ];
+        const identifiers = ['SKU-12345', 'ID-789456', 'REF-00001'];
         const result = detectPattern(identifiers);
         expect(result.pattern).toBe('identifier');
         expect(result.confidence).toBe(1);
       });
 
       it('should detect identifiers with underscores', () => {
-        const identifiers = [
-          'SKU_12345',
-          'ID_789456',
-          'REF_00001',
-        ];
+        const identifiers = ['SKU_12345', 'ID_789456', 'REF_00001'];
         const result = detectPattern(identifiers);
         expect(result.pattern).toBe('identifier');
         expect(result.confidence).toBe(1);
       });
 
       it('should detect identifiers without separators', () => {
-        const identifiers = [
-          'ABC12345',
-          'XYZ789456',
-          'DEF00001',
-        ];
+        const identifiers = ['ABC12345', 'XYZ789456', 'DEF00001'];
         const result = detectPattern(identifiers);
         expect(result.pattern).toBe('identifier');
         expect(result.confidence).toBe(1);
@@ -162,11 +130,7 @@ describe('PatternDetector', () => {
 
     describe('no pattern (null)', () => {
       it('should return null for regular text', () => {
-        const text = [
-          'Hello world',
-          'This is a test',
-          'Random text here',
-        ];
+        const text = ['Hello world', 'This is a test', 'Random text here'];
         const result = detectPattern(text);
         expect(result.pattern).toBe(null);
       });
@@ -179,12 +143,7 @@ describe('PatternDetector', () => {
       });
 
       it('should return null for mixed patterns with low confidence', () => {
-        const mixed = [
-          'john@example.com',
-          'regular text',
-          'more text',
-          'not an email',
-        ];
+        const mixed = ['john@example.com', 'regular text', 'more text', 'not an email'];
         const result = detectPattern(mixed);
         // Email only matches 1/4 = 25%, so should not be confident
         expect(result.confidence).toBeLessThan(0.5);
@@ -194,9 +153,7 @@ describe('PatternDetector', () => {
     describe('priority handling', () => {
       it('should prefer UUID over other patterns when all match', () => {
         // UUID is most specific, should be preferred
-        const uuids = [
-          '550e8400-e29b-41d4-a716-446655440000',
-        ];
+        const uuids = ['550e8400-e29b-41d4-a716-446655440000'];
         const result = detectPattern(uuids);
         expect(result.pattern).toBe('uuid');
       });
@@ -204,11 +161,7 @@ describe('PatternDetector', () => {
 
     describe('confidence calculation', () => {
       it('should calculate correct confidence for partial matches', () => {
-        const values = [
-          'john@example.com',
-          'jane@company.org',
-          'not an email',
-        ];
+        const values = ['john@example.com', 'jane@company.org', 'not an email'];
         const result = detectPattern(values);
         expect(result.samplesTested).toBe(3);
         expect(result.samplesMatched).toBe(2);

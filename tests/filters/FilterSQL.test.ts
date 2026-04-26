@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { filterToSQL, filtersToWhereClause, formatSQLValue, quoteIdentifier } from '@/filters/FilterSQL';
+import {
+  filterToSQL,
+  filtersToWhereClause,
+  formatSQLValue,
+  quoteIdentifier,
+} from '@/filters/FilterSQL';
 import type { Filter } from '@/filters/FilterTypes';
 
 // =========================================
@@ -14,18 +19,35 @@ describe('filterToSQL', () => {
     });
 
     it('should use <= for maxInclusive range', () => {
-      const filter: Filter = { type: 'range', column: 'price', min: 10, max: 100, maxInclusive: true };
+      const filter: Filter = {
+        type: 'range',
+        column: 'price',
+        min: 10,
+        max: 100,
+        maxInclusive: true,
+      };
       expect(filterToSQL(filter)).toBe('("price" >= 10 AND "price" <= 100)');
     });
 
     it('should generate SQL for string (ISO date) range', () => {
-      const filter: Filter = { type: 'range', column: 'date', min: '2024-01-01', max: '2024-12-31' };
-      expect(filterToSQL(filter)).toBe("(\"date\" >= '2024-01-01' AND \"date\" < '2024-12-31')");
+      const filter: Filter = {
+        type: 'range',
+        column: 'date',
+        min: '2024-01-01',
+        max: '2024-12-31',
+      };
+      expect(filterToSQL(filter)).toBe('("date" >= \'2024-01-01\' AND "date" < \'2024-12-31\')');
     });
 
     it('should use <= for time range with maxInclusive', () => {
-      const filter: Filter = { type: 'range', column: 'start_time', min: '10:00', max: '12:00', maxInclusive: true };
-      expect(filterToSQL(filter)).toBe("(\"start_time\" >= '10:00' AND \"start_time\" <= '12:00')");
+      const filter: Filter = {
+        type: 'range',
+        column: 'start_time',
+        min: '10:00',
+        max: '12:00',
+        maxInclusive: true,
+      };
+      expect(filterToSQL(filter)).toBe('("start_time" >= \'10:00\' AND "start_time" <= \'12:00\')');
     });
 
     it('should generate SQL for Date object range', () => {
@@ -33,55 +55,64 @@ describe('filterToSQL', () => {
       const max = new Date('2024-12-31T00:00:00.000Z');
       const filter: Filter = { type: 'range', column: 'created', min, max };
       expect(filterToSQL(filter)).toBe(
-        "(\"created\" >= '2024-01-01T00:00:00.000Z' AND \"created\" < '2024-12-31T00:00:00.000Z')"
+        '("created" >= \'2024-01-01T00:00:00.000Z\' AND "created" < \'2024-12-31T00:00:00.000Z\')',
       );
     });
 
     it('should prefix values with INTERVAL keyword when valueType is interval', () => {
       const filter: Filter = {
-        type: 'range', column: 'duration',
-        min: '1 day 02:00:00', max: '3 days 08:00:00',
+        type: 'range',
+        column: 'duration',
+        min: '1 day 02:00:00',
+        max: '3 days 08:00:00',
         valueType: 'interval',
       };
       expect(filterToSQL(filter)).toBe(
-        "(\"duration\" >= INTERVAL '1 day 02:00:00' AND \"duration\" < INTERVAL '3 days 08:00:00')"
+        '("duration" >= INTERVAL \'1 day 02:00:00\' AND "duration" < INTERVAL \'3 days 08:00:00\')',
       );
     });
 
     it('should handle interval range with maxInclusive', () => {
       const filter: Filter = {
-        type: 'range', column: 'duration',
-        min: '01:00:00', max: '05:00:00',
-        valueType: 'interval', maxInclusive: true,
+        type: 'range',
+        column: 'duration',
+        min: '01:00:00',
+        max: '05:00:00',
+        valueType: 'interval',
+        maxInclusive: true,
       };
       expect(filterToSQL(filter)).toBe(
-        "(\"duration\" >= INTERVAL '01:00:00' AND \"duration\" <= INTERVAL '05:00:00')"
+        '("duration" >= INTERVAL \'01:00:00\' AND "duration" <= INTERVAL \'05:00:00\')',
       );
     });
 
     it('should handle interval range with open lower bound', () => {
       const filter: Filter = {
-        type: 'range', column: 'duration',
-        min: -Infinity, max: '02:00:00',
+        type: 'range',
+        column: 'duration',
+        min: -Infinity,
+        max: '02:00:00',
         valueType: 'interval',
       };
-      expect(filterToSQL(filter)).toBe("\"duration\" < INTERVAL '02:00:00'");
+      expect(filterToSQL(filter)).toBe('"duration" < INTERVAL \'02:00:00\'');
     });
 
     it('should handle interval range with open upper bound', () => {
       const filter: Filter = {
-        type: 'range', column: 'duration',
-        min: '01:00:00', max: Infinity,
+        type: 'range',
+        column: 'duration',
+        min: '01:00:00',
+        max: Infinity,
         valueType: 'interval',
       };
-      expect(filterToSQL(filter)).toBe("\"duration\" >= INTERVAL '01:00:00'");
+      expect(filterToSQL(filter)).toBe('"duration" >= INTERVAL \'01:00:00\'');
     });
   });
 
   describe('point filter', () => {
     it('should generate SQL for string value', () => {
       const filter: Filter = { type: 'point', column: 'status', value: 'active' };
-      expect(filterToSQL(filter)).toBe("\"status\" = 'active'");
+      expect(filterToSQL(filter)).toBe('"status" = \'active\'');
     });
 
     it('should generate SQL for number value', () => {
@@ -113,12 +144,17 @@ describe('filterToSQL', () => {
 
     it('should generate SQL for single value', () => {
       const filter: Filter = { type: 'set', column: 'category', values: ['X'] };
-      expect(filterToSQL(filter)).toBe("\"category\" IN ('X')");
+      expect(filterToSQL(filter)).toBe('"category" IN (\'X\')');
     });
 
     it('should generate (IN OR IS NULL) when includeNull is true', () => {
-      const filter: Filter = { type: 'set', column: 'status', values: ['active'], includeNull: true };
-      expect(filterToSQL(filter)).toBe("(\"status\" IN ('active') OR \"status\" IS NULL)");
+      const filter: Filter = {
+        type: 'set',
+        column: 'status',
+        values: ['active'],
+        includeNull: true,
+      };
+      expect(filterToSQL(filter)).toBe('("status" IN (\'active\') OR "status" IS NULL)');
     });
 
     it('should generate IS NULL for empty set with includeNull', () => {
@@ -139,7 +175,12 @@ describe('filterToSQL', () => {
     });
 
     it('should generate (NOT IN OR IS NULL) when includeNull is true', () => {
-      const filter: Filter = { type: 'not-set', column: 'active', values: [false], includeNull: true };
+      const filter: Filter = {
+        type: 'not-set',
+        column: 'active',
+        values: [false],
+        includeNull: true,
+      };
       expect(filterToSQL(filter)).toBe('("active" NOT IN (FALSE) OR "active" IS NULL)');
     });
 
@@ -150,7 +191,7 @@ describe('filterToSQL', () => {
 
     it('should NOT add IS NULL when includeNull is absent', () => {
       const filter: Filter = { type: 'not-set', column: 'category', values: ['A'] };
-      expect(filterToSQL(filter)).toBe("\"category\" NOT IN ('A')");
+      expect(filterToSQL(filter)).toBe('"category" NOT IN (\'A\')');
     });
 
     it('should include NULLs for numeric != with includeNull', () => {
@@ -190,12 +231,22 @@ describe('filterToSQL', () => {
     });
 
     it('should generate regexp_matches for regex mode', () => {
-      const filter: Filter = { type: 'pattern', column: 'name', pattern: '^test.*$', mode: 'regex' };
-      expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), '^test.*$')");
+      const filter: Filter = {
+        type: 'pattern',
+        column: 'name',
+        pattern: '^test.*$',
+        mode: 'regex',
+      };
+      expect(filterToSQL(filter)).toBe('regexp_matches(CAST("name" AS VARCHAR), \'^test.*$\')');
     });
 
     it('should use ILIKE for contains/starts/ends but regexp_matches for regex', () => {
-      const contains: Filter = { type: 'pattern', column: 'name', pattern: 'Test', mode: 'contains' };
+      const contains: Filter = {
+        type: 'pattern',
+        column: 'name',
+        pattern: 'Test',
+        mode: 'contains',
+      };
       expect(filterToSQL(contains)).toContain('ILIKE');
 
       const starts: Filter = { type: 'pattern', column: 'name', pattern: 'Test', mode: 'starts' };
@@ -211,33 +262,71 @@ describe('filterToSQL', () => {
 
     describe('ILIKE wildcard escaping', () => {
       it('should escape % in pattern', () => {
-        const filter: Filter = { type: 'pattern', column: 'name', pattern: '50%', mode: 'contains' };
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'name',
+          pattern: '50%',
+          mode: 'contains',
+        };
         expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) ILIKE '%50\\%%' ESCAPE '\\'");
       });
 
       it('should escape _ in pattern', () => {
-        const filter: Filter = { type: 'pattern', column: 'name', pattern: 'foo_bar', mode: 'contains' };
-        expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) ILIKE '%foo\\_bar%' ESCAPE '\\'");
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'name',
+          pattern: 'foo_bar',
+          mode: 'contains',
+        };
+        expect(filterToSQL(filter)).toBe(
+          "CAST(\"name\" AS VARCHAR) ILIKE '%foo\\_bar%' ESCAPE '\\'",
+        );
       });
 
       it('should escape \\ in pattern', () => {
-        const filter: Filter = { type: 'pattern', column: 'path', pattern: 'C:\\Users', mode: 'starts' };
-        expect(filterToSQL(filter)).toBe("CAST(\"path\" AS VARCHAR) ILIKE 'C:\\\\Users%' ESCAPE '\\'");
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'path',
+          pattern: 'C:\\Users',
+          mode: 'starts',
+        };
+        expect(filterToSQL(filter)).toBe(
+          "CAST(\"path\" AS VARCHAR) ILIKE 'C:\\\\Users%' ESCAPE '\\'",
+        );
       });
 
       it('should escape single quotes in pattern', () => {
-        const filter: Filter = { type: 'pattern', column: 'name', pattern: "O'Brien", mode: 'contains' };
-        expect(filterToSQL(filter)).toBe("CAST(\"name\" AS VARCHAR) ILIKE '%O''Brien%' ESCAPE '\\'");
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'name',
+          pattern: "O'Brien",
+          mode: 'contains',
+        };
+        expect(filterToSQL(filter)).toBe(
+          "CAST(\"name\" AS VARCHAR) ILIKE '%O''Brien%' ESCAPE '\\'",
+        );
       });
 
       it('should escape multiple special characters together', () => {
-        const filter: Filter = { type: 'pattern', column: 'val', pattern: '50%_off\\', mode: 'ends' };
-        expect(filterToSQL(filter)).toBe("CAST(\"val\" AS VARCHAR) ILIKE '%50\\%\\_off\\\\' ESCAPE '\\'");
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'val',
+          pattern: '50%_off\\',
+          mode: 'ends',
+        };
+        expect(filterToSQL(filter)).toBe(
+          "CAST(\"val\" AS VARCHAR) ILIKE '%50\\%\\_off\\\\' ESCAPE '\\'",
+        );
       });
 
       it('should NOT escape ILIKE characters in regex mode', () => {
-        const filter: Filter = { type: 'pattern', column: 'name', pattern: '50%_test', mode: 'regex' };
-        expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"name\" AS VARCHAR), '50%_test')");
+        const filter: Filter = {
+          type: 'pattern',
+          column: 'name',
+          pattern: '50%_test',
+          mode: 'regex',
+        };
+        expect(filterToSQL(filter)).toBe('regexp_matches(CAST("name" AS VARCHAR), \'50%_test\')');
       });
     });
   });
@@ -264,7 +353,7 @@ describe('filtersToWhereClause', () => {
 
   it('should generate SQL for single filter', () => {
     const filters: Filter[] = [{ type: 'point', column: 'status', value: 'active' }];
-    expect(filtersToWhereClause(filters)).toBe("\"status\" = 'active'");
+    expect(filtersToWhereClause(filters)).toBe('"status" = \'active\'');
   });
 
   it('should AND-join multiple filters on different columns', () => {
@@ -275,7 +364,7 @@ describe('filtersToWhereClause', () => {
     ];
     const result = filtersToWhereClause(filters);
     expect(result).toBe(
-      '("price" >= 10 AND "price" < 100) AND "active" = TRUE AND "deleted_at" IS NULL'
+      '("price" >= 10 AND "price" < 100) AND "active" = TRUE AND "deleted_at" IS NULL',
     );
   });
 
@@ -285,7 +374,7 @@ describe('filtersToWhereClause', () => {
       { type: 'point', column: 'status', value: 'active' },
     ];
     const result = filtersToWhereClause(filters, 'price');
-    expect(result).toBe("\"status\" = 'active'");
+    expect(result).toBe('"status" = \'active\'');
     expect(result).not.toContain('price');
   });
 
@@ -389,8 +478,9 @@ describe('formatSQLValue', () => {
   });
 
   it('should quote UUID strings for DuckDB UUID columns', () => {
-    expect(formatSQLValue('550e8400-e29b-41d4-a716-446655440000'))
-      .toBe("'550e8400-e29b-41d4-a716-446655440000'");
+    expect(formatSQLValue('550e8400-e29b-41d4-a716-446655440000')).toBe(
+      "'550e8400-e29b-41d4-a716-446655440000'",
+    );
   });
 
   it('should quote decimal strings for DuckDB DECIMAL columns', () => {
@@ -411,7 +501,13 @@ describe('filterToSQL edge cases', () => {
     });
 
     it('should generate upper-bound with <= for maxInclusive', () => {
-      const filter: Filter = { type: 'range', column: 'x', min: -Infinity, max: 50, maxInclusive: true };
+      const filter: Filter = {
+        type: 'range',
+        column: 'x',
+        min: -Infinity,
+        max: 50,
+        maxInclusive: true,
+      };
       expect(filterToSQL(filter)).toBe('"x" <= 50');
     });
 
@@ -421,7 +517,13 @@ describe('filterToSQL edge cases', () => {
     });
 
     it('should generate > for minExclusive with open upper bound', () => {
-      const filter: Filter = { type: 'range', column: 'x', min: 10, max: Infinity, minExclusive: true };
+      const filter: Filter = {
+        type: 'range',
+        column: 'x',
+        min: 10,
+        max: Infinity,
+        minExclusive: true,
+      };
       expect(filterToSQL(filter)).toBe('"x" > 10');
     });
 
@@ -438,8 +540,15 @@ describe('filterToSQL edge cases', () => {
     });
 
     it('should handle regex with multiple single quotes', () => {
-      const filter: Filter = { type: 'pattern', column: 'x', pattern: "it's a 'test'", mode: 'regex' };
-      expect(filterToSQL(filter)).toBe("regexp_matches(CAST(\"x\" AS VARCHAR), 'it''s a ''test''')");
+      const filter: Filter = {
+        type: 'pattern',
+        column: 'x',
+        pattern: "it's a 'test'",
+        mode: 'regex',
+      };
+      expect(filterToSQL(filter)).toBe(
+        "regexp_matches(CAST(\"x\" AS VARCHAR), 'it''s a ''test''')",
+      );
     });
   });
 
@@ -472,8 +581,15 @@ describe('filterToSQL edge cases', () => {
     });
 
     it('should safely handle column names with double quotes in pattern filter', () => {
-      const filter: Filter = { type: 'pattern', column: 'col"name', pattern: 'test', mode: 'contains' };
-      expect(filterToSQL(filter)).toBe("CAST(\"col\"\"name\" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'");
+      const filter: Filter = {
+        type: 'pattern',
+        column: 'col"name',
+        pattern: 'test',
+        mode: 'contains',
+      };
+      expect(filterToSQL(filter)).toBe(
+        'CAST("col""name" AS VARCHAR) ILIKE \'%test%\' ESCAPE \'\\\'',
+      );
     });
 
     it('should safely handle column names with double quotes in null filter', () => {
@@ -484,7 +600,12 @@ describe('filterToSQL edge cases', () => {
 
   describe('raw-sql filter', () => {
     it('should wrap raw SQL in parentheses', () => {
-      const filter: Filter = { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' };
+      const filter: Filter = {
+        type: 'raw-sql',
+        column: '__raw_sql_abc__',
+        sql: 'age > 30',
+        id: 'abc',
+      };
       expect(filterToSQL(filter)).toBe('(age > 30)');
     });
 

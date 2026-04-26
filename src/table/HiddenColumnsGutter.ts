@@ -5,8 +5,8 @@
  * Follows the same pattern as FilterBar for collapse/expand animation.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 
 /**
@@ -35,17 +35,13 @@ export class HiddenColumnsGutter {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    options: HiddenColumnsGutterOptions = {}
+    options: HiddenColumnsGutterOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
-    this.chipsContainer = this.element.querySelector(
-      `.${this.prefix}-hidden-chips`
-    )!;
-    this.showAllButton = this.element.querySelector(
-      `.${this.prefix}-hidden-show-all`
-    )! as HTMLButtonElement;
+    this.chipsContainer = this.element.querySelector(`.${this.prefix}-hidden-chips`)!;
+    this.showAllButton = this.element.querySelector(`.${this.prefix}-hidden-show-all`)!;
 
     // Subscribe to visible columns and column order to derive hidden columns
     const unsubVisible = this.state.visibleColumns.subscribe(() => {

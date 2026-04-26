@@ -166,25 +166,48 @@ describe('AnnotationStore — CRUD', () => {
     });
 
     it('rejects scope / rowId / column / id changes with the right code', () => {
-      const a = store.add({ scope: 'cell', rowId: 1, column: 'age', severity: 'info', message: 'x' });
+      const a = store.add({
+        scope: 'cell',
+        rowId: 1,
+        column: 'age',
+        severity: 'info',
+        message: 'x',
+      });
 
-      expect(() => store.update(a.id, { scope: 'row' } as unknown as { severity: 'info' })).toThrow(AnnotationError);
-      try { store.update(a.id, { scope: 'row' } as unknown as { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_SCOPE_IMMUTABLE'); }
+      expect(() => store.update(a.id, { scope: 'row' } as unknown as { severity: 'info' })).toThrow(
+        AnnotationError,
+      );
+      try {
+        store.update(a.id, { scope: 'row' } as unknown as { severity: 'info' });
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_SCOPE_IMMUTABLE');
+      }
 
-      try { store.update(a.id, { rowId: 2 } as unknown as { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_ROWID_IMMUTABLE'); }
+      try {
+        store.update(a.id, { rowId: 2 } as unknown as { severity: 'info' });
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_ROWID_IMMUTABLE');
+      }
 
-      try { store.update(a.id, { column: 'other' } as unknown as { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_COLUMN_IMMUTABLE'); }
+      try {
+        store.update(a.id, { column: 'other' } as unknown as { severity: 'info' });
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_COLUMN_IMMUTABLE');
+      }
 
-      try { store.update(a.id, { id: 'different' } as unknown as { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_ID_IMMUTABLE'); }
+      try {
+        store.update(a.id, { id: 'different' } as unknown as { severity: 'info' });
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_ID_IMMUTABLE');
+      }
     });
 
     it('throws NOT_FOUND on unknown id', () => {
-      try { store.update('nope', { severity: 'info' }); }
-      catch (e) { expect((e as AnnotationError).code).toBe('ANNOTATION_NOT_FOUND'); }
+      try {
+        store.update('nope', { severity: 'info' });
+      } catch (e) {
+        expect((e as AnnotationError).code).toBe('ANNOTATION_NOT_FOUND');
+      }
     });
 
     it('rejects invalid severity / empty message patches', () => {
@@ -232,7 +255,13 @@ describe('AnnotationStore — CRUD', () => {
     });
 
     it('cleans indexes after remove', () => {
-      const a = store.add({ scope: 'cell', rowId: 7, column: 'age', severity: 'error', message: 'x' });
+      const a = store.add({
+        scope: 'cell',
+        rowId: 7,
+        column: 'age',
+        severity: 'error',
+        message: 'x',
+      });
       expect(store.getByCell(7, 'age')).toHaveLength(1);
       store.remove(a.id);
       expect(store.getByRow(7)).toHaveLength(0);

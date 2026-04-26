@@ -28,18 +28,18 @@ import {
   WorkerBridge,
 } from '@jeyabbalas/data-table';
 
-const sharedBridge  = new WorkerBridge();
+const sharedBridge = new WorkerBridge();
 await sharedBridge.initialize();
 const sharedPresets = new FilterPresetManager();
-const sharedStore   = new SessionStore();
+const sharedStore = new SessionStore();
 await sharedStore.open();
 
 const trips = await createDataTable({
   container: document.getElementById('trips')!,
   source: 'trips.csv',
   tableName: 'trips',
-  bridge:      sharedBridge,
-  presets:     { manager: sharedPresets },
+  bridge: sharedBridge,
+  presets: { manager: sharedPresets },
   persistence: { sessionStore: sharedStore },
 });
 
@@ -47,8 +47,8 @@ const users = await createDataTable({
   container: document.getElementById('users')!,
   source: 'users.csv',
   tableName: 'users',
-  bridge:      sharedBridge,
-  presets:     { manager: sharedPresets },
+  bridge: sharedBridge,
+  presets: { manager: sharedPresets },
   persistence: { sessionStore: sharedStore },
 });
 ```
@@ -61,13 +61,13 @@ one IndexedDB handle.
 
 ## What can and cannot be shared
 
-| Object | Shareable? | Why |
-|---|---|---|
-| `WorkerBridge` | ✅ yes (recommended for heavy dashboards) | One DuckDB worker = ≈½ memory and one WASM init instead of two. Requires distinct `tableName` per table. |
-| `FilterPresetManager` | ✅ yes | Presets are table-agnostic; they can be loaded onto any table with compatible columns |
-| `SessionStore` | ✅ yes | Snapshots are keyed by `tableName`, so one IDB connection can back many tables |
-| `VisualizationRegistry` | ✅ yes (with caveat) | Pass the same `VisualizationRegistry` to both tables if you want identical custom viz behavior |
-| `StateActions`, `TableState` | ❌ no | Per-instance by definition |
+| Object                       | Shareable?                                | Why                                                                                                      |
+| ---------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `WorkerBridge`               | ✅ yes (recommended for heavy dashboards) | One DuckDB worker = ≈½ memory and one WASM init instead of two. Requires distinct `tableName` per table. |
+| `FilterPresetManager`        | ✅ yes                                    | Presets are table-agnostic; they can be loaded onto any table with compatible columns                    |
+| `SessionStore`               | ✅ yes                                    | Snapshots are keyed by `tableName`, so one IDB connection can back many tables                           |
+| `VisualizationRegistry`      | ✅ yes (with caveat)                      | Pass the same `VisualizationRegistry` to both tables if you want identical custom viz behavior           |
+| `StateActions`, `TableState` | ❌ no                                     | Per-instance by definition                                                                               |
 
 ### Sharing a `WorkerBridge`
 
@@ -119,9 +119,9 @@ Typical cost per table, based on [`docs/performance.md`](../performance.md)'s
 50-100 bytes/cell rule:
 
 | Rows × cols | Per table (own bridge) | Two tables (shared bridge) | Two tables (own bridges) |
-|---|---|---|---|
-| 100K × 20 | ~100-200 MB + 1 worker | ~200-400 MB + 1 worker | ~200-400 MB + 2 workers |
-| 1M × 20 | ~1-2 GB + 1 worker | ~2-4 GB + 1 worker | ~2-4 GB + 2 workers |
+| ----------- | ---------------------- | -------------------------- | ------------------------ |
+| 100K × 20   | ~100-200 MB + 1 worker | ~200-400 MB + 1 worker     | ~200-400 MB + 2 workers  |
+| 1M × 20     | ~1-2 GB + 1 worker     | ~2-4 GB + 1 worker         | ~2-4 GB + 2 workers      |
 
 Browsers cap per-tab memory around 2-4 GB on desktop and much lower on
 mobile (often 1 GB). For two 100K-row tables, shared-bridge fits comfortably
@@ -287,7 +287,7 @@ Your load UI can then filter the preset list by prefix.
 ```ts
 async function teardownDashboard() {
   await Promise.all(tables.map((t) => t.destroy()));
-  sharedBridge.terminate();   // if you're sharing one
+  sharedBridge.terminate(); // if you're sharing one
   sharedStore.close();
 }
 ```

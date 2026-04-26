@@ -60,11 +60,11 @@
  * @see StatsPanelCoordinator for the filter-broadcast plumbing.
  */
 
+import type { DataTableError } from '../core/errors';
+import type { Strings } from '../core/Strings';
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
-import type { Strings } from '../core/Strings';
-import type { DataTableError } from '../core/errors';
 
 /**
  * Stage where a stats-panel error originated. Surfaced on the `error`
@@ -131,11 +131,7 @@ export abstract class BaseStatsPanel {
   protected options: StatsPanelOptions;
   protected destroyed = false;
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: StatsPanelOptions,
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
     this.container = container;
     this.column = column;
     this.options = options;

@@ -150,7 +150,7 @@ describe('Histogram', () => {
         'test_column',
         15,
         [],
-        options.bridge
+        options.bridge,
       );
     });
   });

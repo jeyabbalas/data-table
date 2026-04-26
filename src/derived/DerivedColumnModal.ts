@@ -6,13 +6,13 @@
  * fixed backdrop, body scroll lock, Escape/backdrop-click close.
  */
 
-import type { TableState } from '../core/State';
 import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
-import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
-import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
-import type { DerivedColumnDef, VectorDataType } from './types';
+import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
+import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
+import type { DerivedColumnDef, VectorDataType } from './types';
 
 export interface DerivedColumnModalOptions {
   classPrefix?: string;
@@ -74,7 +74,7 @@ export class DerivedColumnModal {
   constructor(
     private state: TableState,
     private actions: StateActions,
-    options?: DerivedColumnModalOptions
+    options?: DerivedColumnModalOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
     this.instanceId = options?.instanceId ?? '';
@@ -256,7 +256,7 @@ export class DerivedColumnModal {
     this.validateBtn.className = `${p}-derived-modal-validate`;
     this.validateBtn.type = 'button';
     this.validateBtn.textContent = this.messages.common.validate;
-    this.validateBtn.addEventListener('click', () => this.handleValidateExpression());
+    this.validateBtn.addEventListener('click', () => void this.handleValidateExpression());
     actionsRow.appendChild(this.validateBtn);
 
     this.typePreview = document.createElement('span');
@@ -280,7 +280,18 @@ export class DerivedColumnModal {
 
     this.vectorTypeSelect = document.createElement('select');
     this.vectorTypeSelect.className = `${p}-filter-select`;
-    for (const vtype of ['integer', 'float', 'decimal', 'string', 'boolean', 'uuid', 'date', 'timestamp', 'time', 'interval'] as const) {
+    for (const vtype of [
+      'integer',
+      'float',
+      'decimal',
+      'string',
+      'boolean',
+      'uuid',
+      'date',
+      'timestamp',
+      'time',
+      'interval',
+    ] as const) {
       const opt = document.createElement('option');
       opt.value = vtype;
       opt.textContent = vtype;
@@ -342,7 +353,7 @@ export class DerivedColumnModal {
     this.createBtn.type = 'button';
     this.createBtn.textContent = this.messages.derived.createButton;
     this.createBtn.disabled = true;
-    this.createBtn.addEventListener('click', () => this.handleCreate());
+    this.createBtn.addEventListener('click', () => void this.handleCreate());
     footer.appendChild(this.createBtn);
 
     return footer;
@@ -430,7 +441,10 @@ export class DerivedColumnModal {
     // Count check first
     const totalRows = this.state.totalRows.get();
     if (lines.length !== totalRows) {
-      this.vectorErrorEl.textContent = this.messages.derived.vectorCountMismatch(totalRows, lines.length);
+      this.vectorErrorEl.textContent = this.messages.derived.vectorCountMismatch(
+        totalRows,
+        lines.length,
+      );
       this.vectorErrorEl.style.display = '';
       return;
     }
@@ -472,11 +486,9 @@ export class DerivedColumnModal {
     const nameValid = this.isNameValid();
 
     if (this.getCurrentMode() === 'expression') {
-      this.createBtn.disabled =
-        !nameValid || !this.expressionValidated || this.creating;
+      this.createBtn.disabled = !nameValid || !this.expressionValidated || this.creating;
     } else {
-      this.createBtn.disabled =
-        !nameValid || !this.isVectorValid() || this.creating;
+      this.createBtn.disabled = !nameValid || !this.isVectorValid() || this.creating;
     }
   }
 
@@ -504,7 +516,10 @@ export class DerivedColumnModal {
       const result = await this.actions.validateExpression(expression);
       if (this.validationVersion !== versionAtStart) return; // stale
       if (result.valid) {
-        this.typePreview.textContent = this.messages.derived.typePreview(result.type!, result.originalType!);
+        this.typePreview.textContent = this.messages.derived.typePreview(
+          result.type!,
+          result.originalType!,
+        );
         this.typePreview.style.color = 'var(--dt-success)';
         this.expressionValidated = true;
         this.currentEditor.setError(null);
@@ -585,7 +600,7 @@ export class DerivedColumnModal {
 
   private parseVectorValues(
     lines: string[],
-    vectorType: VectorDataType
+    vectorType: VectorDataType,
   ): { success: boolean; values?: number[] | string[] | boolean[]; error?: string } {
     const m = this.messages.derived;
     if (vectorType === 'string') {
@@ -716,7 +731,7 @@ export class DerivedColumnModal {
       this.currentEditor = new CodeMirrorExpressionEditor(
         this.editorContainer,
         context,
-        this.prefix
+        this.prefix,
       );
     }
 
@@ -734,10 +749,7 @@ export class DerivedColumnModal {
 
   private removeEditorInputListener(): void {
     if (this.editorInputHandler && this.currentEditor) {
-      this.currentEditor.element.removeEventListener(
-        'input',
-        this.editorInputHandler
-      );
+      this.currentEditor.element.removeEventListener('input', this.editorInputHandler);
       this.editorInputHandler = null;
     }
   }

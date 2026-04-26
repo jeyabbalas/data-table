@@ -6,6 +6,20 @@
  * external code to interact with the table state.
  */
 
+import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
+import { attachCacheInvalidation } from '../data/QueryCache';
+import type { WorkerBridge } from '../data/WorkerBridge';
+import { DerivedColumnManager } from '../derived/DerivedColumnManager';
+import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
+import { buildSelectedRowsQuery } from '../export/ExportQuery';
+import type { FilterPresetManager } from '../filters/FilterPresets';
+import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
+import { restoreStateFromSnapshot } from '../persistence/serialization';
+import type { SessionStore } from '../persistence/SessionStore';
+import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
+import { ConfigurationError, DerivedColumnError, QueryError, SQLValidationError } from './errors';
+import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
 import type {
@@ -17,31 +31,9 @@ import type {
   DataType,
   ColumnHeaderTooltipContent,
 } from './types';
-import {
-  normalizeColumnHeaderTooltip,
-  tooltipContentEquals,
-} from './columnHeaderTooltip';
-import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
-import type { WorkerBridge } from '../data/WorkerBridge';
-import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
-import type { SessionStore } from '../persistence/SessionStore';
-import { restoreStateFromSnapshot } from '../persistence/serialization';
-import { UndoManager, captureSnapshot, applySnapshot, derivedColumnsEqual } from './UndoManager';
-import type { StateSnapshot } from './UndoManager';
-import { batch } from './Signal';
-import { DerivedColumnManager } from '../derived/DerivedColumnManager';
-import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
-import type { FilterPresetManager } from '../filters/FilterPresets';
-import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { attachCacheInvalidation } from '../data/QueryCache';
-import { buildSelectedRowsQuery } from '../export/ExportQuery';
 import { ROWID_COLUMN } from './types';
-import {
-  ConfigurationError,
-  DerivedColumnError,
-  QueryError,
-  SQLValidationError,
-} from './errors';
+import { captureSnapshot, applySnapshot, derivedColumnsEqual } from './UndoManager';
+import type { StateSnapshot, UndoManager } from './UndoManager';
 
 /**
  * Options for {@link StateActions.getColumnValues}.
@@ -126,7 +118,7 @@ export class StateActions {
   constructor(
     private state: TableState,
     bridge: WorkerBridge,
-    undoManager?: UndoManager
+    undoManager?: UndoManager,
   ) {
     this.bridge = bridge;
     this.loader = new DataLoader(bridge);
@@ -184,7 +176,7 @@ export class StateActions {
   /** Notify callback for each column that lost its filter between two states */
   private notifyRemovedFilters(before: Filter[], after: Filter[]): void {
     if (!this.onFilterRemoveCallback) return;
-    const afterColumns = new Set(after.map(f => f.column));
+    const afterColumns = new Set(after.map((f) => f.column));
     for (const f of before) {
       if (!afterColumns.has(f.column)) {
         this.onFilterRemoveCallback(f.column);
@@ -224,7 +216,7 @@ export class StateActions {
           this.state.tableName.set(
             snapshot.derivedColumns.length > 0
               ? this.derivedManager!.getEffectiveTableName()
-              : baseTable!
+              : baseTable!,
           );
         }
       });
@@ -266,7 +258,7 @@ export class StateActions {
           this.state.tableName.set(
             snapshot.derivedColumns.length > 0
               ? this.derivedManager!.getEffectiveTableName()
-              : baseTable!
+              : baseTable!,
           );
         }
       });
@@ -316,24 +308,24 @@ export class StateActions {
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
       if (this.derivedManager) {
-        try { await this.derivedManager.destroy(); } catch { /* best-effort cleanup */ }
+        try {
+          await this.derivedManager.destroy();
+        } catch {
+          /* best-effort cleanup */
+        }
         this.derivedManager = null;
       }
 
       // Collect derived column names from snapshot to strip after restore.
       // The initial snapshot may include derived columns from session restore.
-      const derivedNames = new Set(
-        this.initialSnapshot.derivedColumns.map(d => d.name)
-      );
+      const derivedNames = new Set(this.initialSnapshot.derivedColumns.map((d) => d.name));
 
       // Apply snapshot + clean up derived refs + reset tableName atomically
       batch(() => {
         applySnapshot(this.state, this.initialSnapshot!);
 
         this.state.derivedColumns.set([]);
-        this.state.schema.set(
-          this.state.schema.get().filter(c => !c.isDerived)
-        );
+        this.state.schema.set(this.state.schema.get().filter((c) => !c.isDerived));
 
         const baseTableName = this.state.baseTableName.get();
         if (baseTableName) {
@@ -373,7 +365,7 @@ export class StateActions {
    */
   async loadData(
     source: File | string | ArrayBuffer,
-    options: LoadDataOptions = {}
+    options: LoadDataOptions = {},
   ): Promise<void> {
     // Reset state for new data
     resetTableState(this.state);
@@ -384,7 +376,10 @@ export class StateActions {
 
     // Clean up any previous derived column manager
     if (this.derivedManager) {
-      this.derivedManager.destroy().catch(() => {});
+      this.derivedManager.destroy().catch(() => {
+        // Swallow — the previous manager is being replaced; restart races
+        // here are surfaced through the new manager's own error events.
+      });
       this.derivedManager = null;
     }
 
@@ -402,23 +397,27 @@ export class StateActions {
     if (options.sessionStore) {
       const snapshot = await options.sessionStore.load(result.tableName);
       if (snapshot) {
-        restoreStateFromSnapshot(this.state, snapshot, this.undoManager, options.presetManager, options.annotationStore);
+        restoreStateFromSnapshot(
+          this.state,
+          snapshot,
+          this.undoManager,
+          options.presetManager,
+          options.annotationStore,
+        );
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
         if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
           try {
             const manager = this.ensureDerivedManager();
-            const restoredSchemas = await manager.restoreColumns(
-              this.state.derivedColumns.get()
-            );
+            const restoredSchemas = await manager.restoreColumns(this.state.derivedColumns.get());
 
             if (restoredSchemas.length > 0) {
               // Compute values needed for the batch
-              const baseSchema = this.state.schema.get().filter(c => !c.isDerived);
-              const restoredNames = new Set(restoredSchemas.map(s => s.name));
-              const allSnapshotDerived = new Set(snapshot.derivedColumns!.map(d => d.name));
+              const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
+              const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+              const allSnapshotDerived = new Set(snapshot.derivedColumns.map((d) => d.name));
               const failedNames = new Set(
-                [...allSnapshotDerived].filter(n => !restoredNames.has(n))
+                [...allSnapshotDerived].filter((n) => !restoredNames.has(n)),
               );
 
               // Batch all state mutations so render() sees fully settled state.
@@ -428,7 +427,7 @@ export class StateActions {
                 this.state.schema.set([...baseSchema, ...restoredSchemas]);
                 this.state.tableName.set(manager.getEffectiveTableName());
                 this.state.derivedColumns.set(
-                  this.state.derivedColumns.get().filter(d => restoredNames.has(d.name))
+                  this.state.derivedColumns.get().filter((d) => restoredNames.has(d.name)),
                 );
                 this.stripDerivedColumnRefs(failedNames);
               });
@@ -436,7 +435,7 @@ export class StateActions {
           } catch (err) {
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state
-            const derivedNames = new Set(snapshot.derivedColumns!.map(d => d.name));
+            const derivedNames = new Set(snapshot.derivedColumns.map((d) => d.name));
             this.state.derivedColumns.set([]);
             this.stripDerivedColumnRefs(derivedNames);
           }
@@ -461,9 +460,7 @@ export class StateActions {
   addFilter(filter: Filter): void {
     this.captureForUndo();
     const current = this.state.filters.get();
-    const existingIndex = current.findIndex(
-      (f) => f.column === filter.column
-    );
+    const existingIndex = current.findIndex((f) => f.column === filter.column);
 
     if (existingIndex >= 0) {
       // Replace existing filter
@@ -485,7 +482,7 @@ export class StateActions {
     this.captureForUndo();
     const current = this.state.filters.get();
     const updated = current.filter((f) =>
-      type ? !(f.column === column && f.type === type) : f.column !== column
+      type ? !(f.column === column && f.type === type) : f.column !== column,
     );
     this.state.filters.set(updated);
   }
@@ -563,7 +560,7 @@ export class StateActions {
     }
     const syntheticKey = `__raw_sql_${id}__`;
     const current = this.state.filters.get();
-    const index = current.findIndex(f => f.column === syntheticKey);
+    const index = current.findIndex((f) => f.column === syntheticKey);
     if (index < 0) return;
     this.captureForUndo();
     const updated = [...current];
@@ -590,9 +587,7 @@ export class StateActions {
    * Get all active raw SQL filters. Convenience getter.
    */
   getRawSQLFilters(): RawSQLFilter[] {
-    return this.state.filters.get().filter(
-      (f): f is RawSQLFilter => f.type === 'raw-sql'
-    );
+    return this.state.filters.get().filter((f): f is RawSQLFilter => f.type === 'raw-sql');
   }
 
   /**
@@ -600,7 +595,10 @@ export class StateActions {
    * and returns validity, match count, and any error message.
    * Used by the SQL filter modal's Validate button (Task 8.9).
    */
-  async validateSQLFilter(sql: string, signal?: AbortSignal): Promise<{
+  async validateSQLFilter(
+    sql: string,
+    signal?: AbortSignal,
+  ): Promise<{
     valid: boolean;
     matchCount?: number;
     error?: string;
@@ -610,7 +608,7 @@ export class StateActions {
     try {
       const result = await this.bridge.query<{ cnt: number }>(
         `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(tableName)} WHERE (${sql})`,
-        signal
+        signal,
       );
       return { valid: true, matchCount: Number(result[0].cnt) };
     } catch (e) {
@@ -716,8 +714,7 @@ export class StateActions {
     // Record neighbor info before hiding
     const colIndex = visible.indexOf(column);
     const leftNeighbor = colIndex > 0 ? visible[colIndex - 1] : null;
-    const rightNeighbor =
-      colIndex < visible.length - 1 ? visible[colIndex + 1] : null;
+    const rightNeighbor = colIndex < visible.length - 1 ? visible[colIndex + 1] : null;
 
     const info: HiddenColumnInfo = { column, leftNeighbor, rightNeighbor };
     const hiddenMap = new Map(this.state.hiddenColumnInfo.get());
@@ -776,11 +773,7 @@ export class StateActions {
   /**
    * Compute restore index using columnOrder-based positioning (fallback)
    */
-  private computeOrderBasedIndex(
-    visible: string[],
-    order: string[],
-    column: string
-  ): number {
+  private computeOrderBasedIndex(visible: string[], order: string[], column: string): number {
     const orderIndex = order.indexOf(column);
     let insertIndex = 0;
     for (let i = 0; i < orderIndex; i++) {
@@ -794,16 +787,10 @@ export class StateActions {
   /**
    * Compute restore index using neighbor-aware logic
    */
-  private computeRestoreIndex(
-    visible: string[],
-    order: string[],
-    info: HiddenColumnInfo
-  ): number {
+  private computeRestoreIndex(visible: string[], order: string[], info: HiddenColumnInfo): number {
     const { leftNeighbor, rightNeighbor } = info;
-    const leftIdx =
-      leftNeighbor !== null ? visible.indexOf(leftNeighbor) : -1;
-    const rightIdx =
-      rightNeighbor !== null ? visible.indexOf(rightNeighbor) : -1;
+    const leftIdx = leftNeighbor !== null ? visible.indexOf(leftNeighbor) : -1;
+    const rightIdx = rightNeighbor !== null ? visible.indexOf(rightNeighbor) : -1;
     const leftVisible = leftIdx !== -1;
     const rightVisible = rightIdx !== -1;
 
@@ -1037,21 +1024,11 @@ export class StateActions {
   private stripDerivedColumnRefs(names: Set<string>): void {
     if (names.size === 0) return;
     batch(() => {
-      this.state.filters.set(
-        this.state.filters.get().filter(f => !names.has(f.column))
-      );
-      this.state.sortColumns.set(
-        this.state.sortColumns.get().filter(s => !names.has(s.column))
-      );
-      this.state.visibleColumns.set(
-        this.state.visibleColumns.get().filter(c => !names.has(c))
-      );
-      this.state.columnOrder.set(
-        this.state.columnOrder.get().filter(c => !names.has(c))
-      );
-      this.state.pinnedColumns.set(
-        this.state.pinnedColumns.get().filter(c => !names.has(c))
-      );
+      this.state.filters.set(this.state.filters.get().filter((f) => !names.has(f.column)));
+      this.state.sortColumns.set(this.state.sortColumns.get().filter((s) => !names.has(s.column)));
+      this.state.visibleColumns.set(this.state.visibleColumns.get().filter((c) => !names.has(c)));
+      this.state.columnOrder.set(this.state.columnOrder.get().filter((c) => !names.has(c)));
+      this.state.pinnedColumns.set(this.state.pinnedColumns.get().filter((c) => !names.has(c)));
       const widths = new Map(this.state.columnWidths.get());
       const hidden = new Map(this.state.hiddenColumnInfo.get());
       for (const name of names) {
@@ -1082,15 +1059,12 @@ export class StateActions {
     if (!this.derivedManager) {
       const baseTableName = this.state.baseTableName.get();
       if (!baseTableName) {
-        throw new ConfigurationError(
-          'Cannot create derived columns before data is loaded',
-          { code: 'BRIDGE_NOT_READY' },
-        );
+        throw new ConfigurationError('Cannot create derived columns before data is loaded', {
+          code: 'BRIDGE_NOT_READY',
+        });
       }
-      this.derivedManager = new DerivedColumnManager(
-        this.bridge,
-        baseTableName,
-        () => this.state.totalRows.get(),
+      this.derivedManager = new DerivedColumnManager(this.bridge, baseTableName, () =>
+        this.state.totalRows.get(),
       );
     }
     return this.derivedManager;
@@ -1109,7 +1083,7 @@ export class StateActions {
     }
 
     // 2. Update schema: remove old derived entries
-    const baseSchema = this.state.schema.get().filter(c => !c.isDerived);
+    const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
 
     if (snapshot.derivedColumns.length > 0) {
       // 3. Create new manager, restore columns
@@ -1120,9 +1094,9 @@ export class StateActions {
       this.state.schema.set([...baseSchema, ...restoredSchemas]);
 
       // 5. Update derivedColumns signal (filtered to only successfully restored)
-      const restoredNames = new Set(restoredSchemas.map(s => s.name));
+      const restoredNames = new Set(restoredSchemas.map((s) => s.name));
       this.state.derivedColumns.set(
-        snapshot.derivedColumns.filter(d => restoredNames.has(d.name))
+        snapshot.derivedColumns.filter((d) => restoredNames.has(d.name)),
       );
     } else {
       this.state.schema.set(baseSchema);
@@ -1140,7 +1114,7 @@ export class StateActions {
    */
   async addDerivedColumn(def: DerivedColumnDef): Promise<{ success: boolean; error?: string }> {
     // Validate name uniqueness against all columns
-    const allColumnNames = this.state.schema.get().map(c => c.name);
+    const allColumnNames = this.state.schema.get().map((c) => c.name);
     if (allColumnNames.includes(def.name)) {
       return { success: false, error: `Column name "${def.name}" already exists` };
     }
@@ -1150,8 +1124,8 @@ export class StateActions {
     }
 
     // Capture undo snapshot locally — only push after success
-    const preSnapshot = this.undoManager && !this.suppressUndoCapture
-      ? captureSnapshot(this.state) : null;
+    const preSnapshot =
+      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     try {
       const manager = this.ensureDerivedManager();
@@ -1202,11 +1176,11 @@ export class StateActions {
    */
   async updateDerivedColumn(
     oldName: string,
-    def: DerivedColumnDef
+    def: DerivedColumnDef,
   ): Promise<{ success: boolean; error?: string }> {
     // Validate target is derived
     const currentSchema = this.state.schema.get();
-    const oldEntry = currentSchema.find(c => c.name === oldName);
+    const oldEntry = currentSchema.find((c) => c.name === oldName);
     if (!oldEntry?.isDerived) {
       return { success: false, error: `Column "${oldName}" is not a derived column` };
     }
@@ -1214,7 +1188,7 @@ export class StateActions {
     // If renaming, validate new name uniqueness (excluding self)
     const isRename = oldName !== def.name;
     if (isRename) {
-      const otherNames = currentSchema.filter(c => c.name !== oldName).map(c => c.name);
+      const otherNames = currentSchema.filter((c) => c.name !== oldName).map((c) => c.name);
       if (otherNames.includes(def.name)) {
         return { success: false, error: `Column name "${def.name}" already exists` };
       }
@@ -1225,8 +1199,8 @@ export class StateActions {
     }
 
     // Capture undo snapshot locally — only push after success
-    const preSnapshot = this.undoManager && !this.suppressUndoCapture
-      ? captureSnapshot(this.state) : null;
+    const preSnapshot =
+      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     try {
       const manager = this.ensureDerivedManager();
@@ -1242,7 +1216,7 @@ export class StateActions {
       batch(() => {
         // Update derivedColumns list
         this.state.derivedColumns.set(
-          this.state.derivedColumns.get().map(d => d.name === oldName ? def : d)
+          this.state.derivedColumns.get().map((d) => (d.name === oldName ? def : d)),
         );
 
         // Update schema entry
@@ -1254,17 +1228,15 @@ export class StateActions {
           isDerived: true,
           expression: def.kind === 'expression' ? def.expression : undefined,
         };
-        this.state.schema.set(
-          currentSchema.map(c => c.name === oldName ? newSchemaEntry : c)
-        );
+        this.state.schema.set(currentSchema.map((c) => (c.name === oldName ? newSchemaEntry : c)));
 
         if (isRename) {
           // Update all state references
           this.state.visibleColumns.set(
-            this.state.visibleColumns.get().map(c => c === oldName ? def.name : c)
+            this.state.visibleColumns.get().map((c) => (c === oldName ? def.name : c)),
           );
           this.state.columnOrder.set(
-            this.state.columnOrder.get().map(c => c === oldName ? def.name : c)
+            this.state.columnOrder.get().map((c) => (c === oldName ? def.name : c)),
           );
 
           // columnWidths
@@ -1285,7 +1257,7 @@ export class StateActions {
 
           // pinnedColumns
           this.state.pinnedColumns.set(
-            this.state.pinnedColumns.get().map(c => c === oldName ? def.name : c)
+            this.state.pinnedColumns.get().map((c) => (c === oldName ? def.name : c)),
           );
 
           // hiddenColumnInfo — update entry and neighbor references
@@ -1308,28 +1280,28 @@ export class StateActions {
 
           // sortColumns
           this.state.sortColumns.set(
-            this.state.sortColumns.get().map(s =>
-              s.column === oldName ? { ...s, column: def.name } : s
-            )
+            this.state.sortColumns
+              .get()
+              .map((s) => (s.column === oldName ? { ...s, column: def.name } : s)),
           );
 
           // filters: rename or remove if type changed
           const filters = this.state.filters.get();
           if (typeChanged) {
-            if (filters.some(f => f.column === oldName)) {
-              this.state.filters.set(filters.filter(f => f.column !== oldName));
+            if (filters.some((f) => f.column === oldName)) {
+              this.state.filters.set(filters.filter((f) => f.column !== oldName));
               this.onFilterRemoveCallback?.(oldName);
             }
           } else {
             this.state.filters.set(
-              filters.map(f => f.column === oldName ? { ...f, column: def.name } : f)
+              filters.map((f) => (f.column === oldName ? { ...f, column: def.name } : f)),
             );
           }
         } else if (typeChanged) {
           // Same name but type changed — remove stale filters
           const filters = this.state.filters.get();
-          if (filters.some(f => f.column === def.name)) {
-            this.state.filters.set(filters.filter(f => f.column !== def.name));
+          if (filters.some((f) => f.column === def.name)) {
+            this.state.filters.set(filters.filter((f) => f.column !== def.name));
             this.onFilterRemoveCallback?.(def.name);
           }
         }
@@ -1373,11 +1345,10 @@ export class StateActions {
     name: string,
     newDef: DerivedColumnDef,
   ): Promise<
-    | { success: true; info: DerivedColumnInfo }
-    | { success: false; error: DerivedColumnError }
+    { success: true; info: DerivedColumnInfo } | { success: false; error: DerivedColumnError }
   > {
     const currentSchema = this.state.schema.get();
-    const oldEntry = currentSchema.find(c => c.name === name);
+    const oldEntry = currentSchema.find((c) => c.name === name);
     if (!oldEntry?.isDerived) {
       return {
         success: false,
@@ -1399,20 +1370,21 @@ export class StateActions {
     }
 
     // Capture undo snapshot locally — only push after success.
-    const preSnapshot = this.undoManager && !this.suppressUndoCapture
-      ? captureSnapshot(this.state) : null;
+    const preSnapshot =
+      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     let info: DerivedColumnInfo;
     try {
       const manager = this.ensureDerivedManager();
       info = await manager.replaceColumn(name, newDef);
     } catch (err) {
-      const typedError = err instanceof DerivedColumnError
-        ? err
-        : new DerivedColumnError(
-            err instanceof Error ? err.message : String(err),
-            { code: 'EXPRESSION_INVALID', cause: err },
-          );
+      const typedError =
+        err instanceof DerivedColumnError
+          ? err
+          : new DerivedColumnError(err instanceof Error ? err.message : String(err), {
+              code: 'EXPRESSION_INVALID',
+              cause: err,
+            });
       return { success: false, error: typedError };
     }
 
@@ -1425,7 +1397,7 @@ export class StateActions {
 
     batch(() => {
       this.state.derivedColumns.set(
-        this.state.derivedColumns.get().map(d => d.name === name ? newDef : d)
+        this.state.derivedColumns.get().map((d) => (d.name === name ? newDef : d)),
       );
 
       const newSchemaEntry: ColumnSchema = {
@@ -1436,14 +1408,12 @@ export class StateActions {
         isDerived: true,
         expression: newDef.kind === 'expression' ? newDef.expression : undefined,
       };
-      this.state.schema.set(
-        currentSchema.map(c => c.name === name ? newSchemaEntry : c)
-      );
+      this.state.schema.set(currentSchema.map((c) => (c.name === name ? newSchemaEntry : c)));
 
       if (typeChanged) {
         const filters = this.state.filters.get();
-        if (filters.some(f => f.column === name)) {
-          this.state.filters.set(filters.filter(f => f.column !== name));
+        if (filters.some((f) => f.column === name)) {
+          this.state.filters.set(filters.filter((f) => f.column !== name));
           this.onFilterRemoveCallback?.(name);
         }
       }
@@ -1460,7 +1430,7 @@ export class StateActions {
    */
   async removeDerivedColumn(name: string): Promise<void> {
     const currentSchema = this.state.schema.get();
-    const entry = currentSchema.find(c => c.name === name);
+    const entry = currentSchema.find((c) => c.name === name);
     if (!entry?.isDerived) {
       throw new DerivedColumnError(`Column "${name}" is not a derived column`, {
         code: 'NOT_FOUND',
@@ -1469,8 +1439,8 @@ export class StateActions {
     }
 
     // Capture undo snapshot locally — only push after success
-    const preSnapshot = this.undoManager && !this.suppressUndoCapture
-      ? captureSnapshot(this.state) : null;
+    const preSnapshot =
+      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     const manager = this.ensureDerivedManager();
     await manager.removeColumn(name);
@@ -1482,22 +1452,16 @@ export class StateActions {
 
     batch(() => {
       // Remove from derivedColumns
-      this.state.derivedColumns.set(
-        this.state.derivedColumns.get().filter(d => d.name !== name)
-      );
+      this.state.derivedColumns.set(this.state.derivedColumns.get().filter((d) => d.name !== name));
 
       // Remove from schema
-      this.state.schema.set(currentSchema.filter(c => c.name !== name));
+      this.state.schema.set(currentSchema.filter((c) => c.name !== name));
 
       // Remove from visibleColumns
-      this.state.visibleColumns.set(
-        this.state.visibleColumns.get().filter(c => c !== name)
-      );
+      this.state.visibleColumns.set(this.state.visibleColumns.get().filter((c) => c !== name));
 
       // Remove from columnOrder
-      this.state.columnOrder.set(
-        this.state.columnOrder.get().filter(c => c !== name)
-      );
+      this.state.columnOrder.set(this.state.columnOrder.get().filter((c) => c !== name));
 
       // Remove from columnWidths
       const widths = new Map(this.state.columnWidths.get());
@@ -1511,9 +1475,7 @@ export class StateActions {
       }
 
       // Remove from pinnedColumns
-      this.state.pinnedColumns.set(
-        this.state.pinnedColumns.get().filter(c => c !== name)
-      );
+      this.state.pinnedColumns.set(this.state.pinnedColumns.get().filter((c) => c !== name));
 
       // Remove from hiddenColumnInfo
       const hiddenInfo = new Map(this.state.hiddenColumnInfo.get());
@@ -1522,15 +1484,13 @@ export class StateActions {
 
       // Remove filters for this column
       const filters = this.state.filters.get();
-      if (filters.some(f => f.column === name)) {
-        this.state.filters.set(filters.filter(f => f.column !== name));
+      if (filters.some((f) => f.column === name)) {
+        this.state.filters.set(filters.filter((f) => f.column !== name));
         this.onFilterRemoveCallback?.(name);
       }
 
       // Remove from sortColumns
-      this.state.sortColumns.set(
-        this.state.sortColumns.get().filter(s => s.column !== name)
-      );
+      this.state.sortColumns.set(this.state.sortColumns.get().filter((s) => s.column !== name));
 
       // Switch tableName: revert to base if no more derived columns
       this.state.tableName.set(manager.getEffectiveTableName());
@@ -1599,16 +1559,16 @@ export class StateActions {
 
     const { limit, offset, scope = 'all', signal } = opts;
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
-      throw new QueryError(
-        `Invalid limit: ${limit} (must be a non-negative integer)`,
-        { code: 'INVALID_PAGINATION', details: { limit } },
-      );
+      throw new QueryError(`Invalid limit: ${limit} (must be a non-negative integer)`, {
+        code: 'INVALID_PAGINATION',
+        details: { limit },
+      });
     }
     if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
-      throw new QueryError(
-        `Invalid offset: ${offset} (must be a non-negative integer)`,
-        { code: 'INVALID_PAGINATION', details: { offset } },
-      );
+      throw new QueryError(`Invalid offset: ${offset} (must be a non-negative integer)`, {
+        code: 'INVALID_PAGINATION',
+        details: { offset },
+      });
     }
 
     const tbl = this.state.tableName.get();
@@ -1657,9 +1617,7 @@ export class StateActions {
       // matches and an explicit ORDER BY would be a redundant N log N pass.
       const needsExplicitOrder =
         scope !== 'all' || where !== '' || this.state.sortColumns.get().length > 0;
-      const orderBy = needsExplicitOrder
-        ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}`
-        : '';
+      const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
       sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
       valKey = 'val';
     }
@@ -1690,7 +1648,7 @@ export class StateActions {
       return this.derivedManager.getCompletionContext(schema);
     }
     return {
-      columns: schema.map(c => ({
+      columns: schema.map((c) => ({
         name: c.name,
         type: c.originalType,
         isDerived: c.isDerived ?? false,
@@ -1711,10 +1669,7 @@ export class StateActions {
    *   - 'toggle': Toggle this row in selection (Ctrl+click)
    *   - 'range': Select range from last selected to this row (Shift+click)
    */
-  selectRow(
-    index: number,
-    mode: 'replace' | 'toggle' | 'range' = 'replace'
-  ): void {
+  selectRow(index: number, mode: 'replace' | 'toggle' | 'range' = 'replace'): void {
     const current = this.state.selectedRows.get();
 
     switch (mode) {
@@ -1829,9 +1784,7 @@ function emptyTypedResult(
   schema: ColumnSchema,
 ): unknown[] | Int32Array | Float64Array | BigInt64Array {
   if (schema.type === 'integer') {
-    return isBigIntOriginalType(schema.originalType)
-      ? new BigInt64Array(0)
-      : new Int32Array(0);
+    return isBigIntOriginalType(schema.originalType) ? new BigInt64Array(0) : new Int32Array(0);
   }
   if (schema.type === 'float' || schema.type === 'decimal') {
     return new Float64Array(0);
@@ -1840,7 +1793,7 @@ function emptyTypedResult(
 }
 
 function materializeColumn(
-  rows: Array<Record<string, unknown>>,
+  rows: Record<string, unknown>[],
   key: string,
   schema: ColumnSchema,
 ): unknown[] | Int32Array | Float64Array | BigInt64Array {

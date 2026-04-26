@@ -2,6 +2,8 @@
  * Types for Web Worker communication
  */
 
+import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+
 // Message types from main thread to worker
 export type WorkerMessageType = 'init' | 'query' | 'load' | 'export' | 'cancel';
 
@@ -27,7 +29,7 @@ export interface InitPayload {
    * `getJsDelivrBundles()`. Consumers on strict-CSP / offline deployments
    * supply self-hosted bundles here.
    */
-  bundles?: import('@duckdb/duckdb-wasm').DuckDBBundles;
+  bundles?: DuckDBBundles;
 }
 
 export interface QueryPayload {

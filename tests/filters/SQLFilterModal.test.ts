@@ -18,15 +18,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -85,19 +92,25 @@ describe('SQLFilterModal', () => {
 
     it('shows Apply button', () => {
       modal.open();
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       expect(applyBtn?.textContent).toBe('Apply');
     });
 
     it('Apply button is disabled initially', () => {
       modal.open();
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       expect(applyBtn?.disabled).toBe(true);
     });
 
     it('hides remove section', () => {
       modal.open();
-      const removeSection = modal.getElement().querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
+      const removeSection = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
       expect(removeSection?.style.display).toBe('none');
     });
 
@@ -133,13 +146,17 @@ describe('SQLFilterModal', () => {
 
     it('shows Update button', () => {
       modal.openForEdit('test-123');
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       expect(applyBtn?.textContent).toBe('Update');
     });
 
     it('shows remove section', () => {
       modal.openForEdit('test-123');
-      const removeSection = modal.getElement().querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
+      const removeSection = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
       expect(removeSection?.style.display).not.toBe('none');
     });
 
@@ -168,23 +185,27 @@ describe('SQLFilterModal', () => {
 
     it('removes backdrop --open class', () => {
       modal.open();
-      expect(modal.getElement().classList.contains('dt-sql-filter-modal-backdrop--open')).toBe(true);
+      expect(modal.getElement().classList.contains('dt-sql-filter-modal-backdrop--open')).toBe(
+        true,
+      );
       modal.close();
-      expect(modal.getElement().classList.contains('dt-sql-filter-modal-backdrop--open')).toBe(false);
+      expect(modal.getElement().classList.contains('dt-sql-filter-modal-backdrop--open')).toBe(
+        false,
+      );
     });
 
     it('Cancel button closes modal', () => {
       modal.open();
-      const cancelBtn = modal.getElement().querySelector('[class$="sql-filter-modal-cancel"]') as HTMLButtonElement;
+      const cancelBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-cancel"]') as HTMLButtonElement;
       cancelBtn?.click();
       expect(modal.getIsOpen()).toBe(false);
     });
 
     it('Escape key closes modal', () => {
       modal.open();
-      const dialog = modal
-        .getElement()
-        .querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
+      const dialog = modal.getElement().querySelector('.dt-sql-filter-modal-dialog') as HTMLElement;
       dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       expect(modal.getIsOpen()).toBe(false);
     });
@@ -214,7 +235,9 @@ describe('SQLFilterModal', () => {
         }
       }
 
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       // Wait for async validation — signal is passed as second argument
@@ -230,7 +253,10 @@ describe('SQLFilterModal', () => {
       // Make validation hang so we can test abort on input change
       let resolveFirst!: (val: { valid: boolean; matchCount: number }) => void;
       (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise(resolve => { resolveFirst = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
       );
 
       modal.open();
@@ -242,14 +268,17 @@ describe('SQLFilterModal', () => {
 
       // Start validation
       view.dispatch({ changes: { from: 0, to: 0, insert: 'age > 30' } });
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       // Capture the signal
       await vi.waitFor(() => {
         expect(actions.validateSQLFilter).toHaveBeenCalledTimes(1);
       });
-      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock.calls[0][1] as AbortSignal;
+      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock
+        .calls[0][1] as AbortSignal;
       expect(signal.aborted).toBe(false);
 
       // Edit content — should abort the in-flight validation and re-enable button
@@ -264,7 +293,10 @@ describe('SQLFilterModal', () => {
     it('aborts in-flight validation on close', async () => {
       let resolveValidation!: (val: { valid: boolean; matchCount: number }) => void;
       (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise(resolve => { resolveValidation = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve;
+          }),
       );
 
       modal.open();
@@ -275,13 +307,16 @@ describe('SQLFilterModal', () => {
       if (!view) return;
 
       view.dispatch({ changes: { from: 0, to: 0, insert: 'test sql' } });
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       await vi.waitFor(() => {
         expect(actions.validateSQLFilter).toHaveBeenCalledTimes(1);
       });
-      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock.calls[0][1] as AbortSignal;
+      const signal = (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mock
+        .calls[0][1] as AbortSignal;
 
       // Close while validation is in-flight
       modal.close();
@@ -302,7 +337,9 @@ describe('SQLFilterModal', () => {
         }
       }
 
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       await vi.waitFor(() => {
@@ -327,7 +364,9 @@ describe('SQLFilterModal', () => {
         }
       }
 
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       await vi.waitFor(() => {
@@ -346,7 +385,10 @@ describe('SQLFilterModal', () => {
       // Create a deferred promise so we control when validation resolves
       let resolveValidation!: (val: { valid: boolean; matchCount: number }) => void;
       (actions.validateSQLFilter as ReturnType<typeof vi.fn>).mockImplementation(
-        () => new Promise(resolve => { resolveValidation = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve;
+          }),
       );
 
       modal.open();
@@ -359,7 +401,9 @@ describe('SQLFilterModal', () => {
 
       // Step 1: Type valid SQL and click Validate
       view.dispatch({ changes: { from: 0, to: 0, insert: 'age > 30' } });
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
 
       // Step 2: While validation is in-flight, modify the editor
@@ -369,11 +413,13 @@ describe('SQLFilterModal', () => {
       resolveValidation({ valid: true, matchCount: 42 });
 
       // Wait a tick for promise resolution
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Step 4: The Apply button should still be disabled because the
       // validation result was for the OLD content
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       expect(applyBtn?.disabled).toBe(true);
     });
   });
@@ -400,14 +446,18 @@ describe('SQLFilterModal', () => {
       }
 
       // Validate first
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
       await vi.waitFor(() => {
         expect(actions.validateSQLFilter).toHaveBeenCalled();
       });
 
       // Then apply
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       applyBtn?.click();
 
       expect(actions.addRawSQLFilter).toHaveBeenCalledWith('x = 1', undefined);
@@ -416,7 +466,10 @@ describe('SQLFilterModal', () => {
 
     it('calls updateRawSQLFilter in edit mode', async () => {
       const filter: RawSQLFilter = {
-        type: 'raw-sql', column: '__raw_sql_edit-1__', sql: 'old', id: 'edit-1',
+        type: 'raw-sql',
+        column: '__raw_sql_edit-1__',
+        sql: 'old',
+        id: 'edit-1',
       };
       state.filters.set([filter]);
 
@@ -435,13 +488,17 @@ describe('SQLFilterModal', () => {
         }
       }
 
-      const validateBtn = modal.getElement().querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
       validateBtn?.click();
       await vi.waitFor(() => {
         expect(actions.validateSQLFilter).toHaveBeenCalled();
       });
 
-      const applyBtn = modal.getElement().querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       applyBtn?.click();
 
       expect(actions.updateRawSQLFilter).toHaveBeenCalledWith('edit-1', 'new sql', undefined);
@@ -451,29 +508,43 @@ describe('SQLFilterModal', () => {
   describe('remove (edit mode)', () => {
     it('shows confirmation on Remove Filter click', () => {
       const filter: RawSQLFilter = {
-        type: 'raw-sql', column: '__raw_sql_rm-1__', sql: 'x', id: 'rm-1',
+        type: 'raw-sql',
+        column: '__raw_sql_rm-1__',
+        sql: 'x',
+        id: 'rm-1',
       };
       state.filters.set([filter]);
       modal.openForEdit('rm-1');
 
-      const removeBtn = modal.getElement().querySelector('[class$="sql-filter-modal-remove"]') as HTMLButtonElement;
+      const removeBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove"]') as HTMLButtonElement;
       removeBtn?.click();
 
-      const confirmDiv = modal.getElement().querySelector('[class$="sql-filter-modal-remove-confirm"]') as HTMLElement;
+      const confirmDiv = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove-confirm"]') as HTMLElement;
       expect(confirmDiv?.style.display).toBe('flex');
     });
 
     it('Confirm calls removeRawSQLFilter and closes modal', () => {
       const filter: RawSQLFilter = {
-        type: 'raw-sql', column: '__raw_sql_rm-2__', sql: 'x', id: 'rm-2',
+        type: 'raw-sql',
+        column: '__raw_sql_rm-2__',
+        sql: 'x',
+        id: 'rm-2',
       };
       state.filters.set([filter]);
       modal.openForEdit('rm-2');
 
       // Click Remove, then Confirm
-      const removeBtn = modal.getElement().querySelector('[class$="sql-filter-modal-remove"]') as HTMLButtonElement;
+      const removeBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove"]') as HTMLButtonElement;
       removeBtn?.click();
-      const confirmBtn = modal.getElement().querySelector('[class$="sql-filter-modal-remove-confirm-yes"]') as HTMLButtonElement;
+      const confirmBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-remove-confirm-yes"]') as HTMLButtonElement;
       confirmBtn?.click();
 
       expect(actions.removeRawSQLFilter).toHaveBeenCalledWith('rm-2');

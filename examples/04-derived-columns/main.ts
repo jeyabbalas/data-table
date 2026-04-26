@@ -4,8 +4,7 @@ import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 const DATA_URL =
   'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
-const $ = <T extends HTMLElement>(id: string): T =>
-  document.getElementById(id) as T;
+const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const container = $<HTMLElement>('table');
 const eventLog = $<HTMLPreElement>('event-log');

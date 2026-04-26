@@ -38,5 +38,5 @@ export interface ExpressionEditor {
  */
 export type ExpressionEditorFactory = (
   container: HTMLElement,
-  context: CompletionContext
+  context: CompletionContext,
 ) => ExpressionEditor;

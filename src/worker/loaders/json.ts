@@ -2,16 +2,16 @@
  * JSON data loader using DuckDB's native JSON parsing
  */
 
-import { getDatabase, getConnection } from '../duckdb';
-import type { LoadResult, JSONLoadOptions } from './types';
+import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
+import { getDatabase, getConnection } from '../duckdb';
 import {
   enhanceSchemaTypes,
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
 } from './common';
-import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
+import type { LoadResult, JSONLoadOptions } from './types';
 
 let tableCounter = 0;
 
@@ -52,7 +52,7 @@ function isNDJSON(data: string): boolean {
  */
 export async function loadJSON(
   data: string | ArrayBuffer,
-  options: JSONLoadOptions = {}
+  options: JSONLoadOptions = {},
 ): Promise<LoadResult> {
   const db = getDatabase();
   const conn = getConnection();
@@ -69,8 +69,7 @@ export async function loadJSON(
   await conn.query(`SET TimeZone = '${timezone}'`);
 
   // Convert ArrayBuffer to string if needed
-  const jsonString =
-    data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data;
+  const jsonString = data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data;
 
   // Detect format if not specified
   const format = options.format || (isNDJSON(jsonString) ? 'ndjson' : 'array');
@@ -127,9 +126,7 @@ export async function loadJSON(
     const probeResult = await conn.query(
       `DESCRIBE SELECT * FROM read_json_auto('${fileName}'${optionsStr})`,
     );
-    const probeColumns = probeResult
-      .toArray()
-      .map((row) => String(row.toJSON().column_name));
+    const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
     if (probeColumns.includes(ROWID_COLUMN)) {
       throw makeReservedColumnError();
     }
@@ -146,9 +143,7 @@ export async function loadJSON(
     }
 
     // Get row count
-    const countResult = await conn.query(
-      `SELECT COUNT(*) as count FROM ${tbl}`
-    );
+    const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
     // Get full schema info from DESCRIBE

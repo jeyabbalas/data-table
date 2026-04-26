@@ -21,9 +21,7 @@ import type {
 
 // --- Test helpers ---
 
-function createTestSnapshot(
-  overrides: Partial<SessionSnapshot> = {},
-): SessionSnapshot {
+function createTestSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -85,11 +83,7 @@ describe('serializeValue', () => {
 
   it('recursively wraps Dates in arrays', () => {
     const d = new Date('2024-01-01T00:00:00.000Z');
-    expect(serializeValue([1, d, 'x'])).toEqual([
-      1,
-      { __date__: '2024-01-01T00:00:00.000Z' },
-      'x',
-    ]);
+    expect(serializeValue([1, d, 'x'])).toEqual([1, { __date__: '2024-01-01T00:00:00.000Z' }, 'x']);
   });
 
   it('recursively wraps Dates in nested objects', () => {
@@ -254,7 +248,9 @@ describe('serializeFilter / deserializeFilter', () => {
   });
 
   it('returns null for unknown filter type', () => {
-    const unknownFilter = { type: 'future-type', column: 'x', value: 42 } as unknown as Parameters<typeof deserializeFilter>[0];
+    const unknownFilter = { type: 'future-type', column: 'x', value: 42 } as unknown as Parameters<
+      typeof deserializeFilter
+    >[0];
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = deserializeFilter(unknownFilter);
@@ -302,11 +298,7 @@ describe('SessionStore', () => {
     });
 
     it('deduplicates concurrent open calls', async () => {
-      const [r1, r2, r3] = await Promise.all([
-        store.open(),
-        store.open(),
-        store.open(),
-      ]);
+      const [r1, r2, r3] = await Promise.all([store.open(), store.open(), store.open()]);
       expect(r1).toBe(true);
       expect(r2).toBe(true);
       expect(r3).toBe(true);

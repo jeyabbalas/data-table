@@ -5,16 +5,76 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Multi-table dashboard</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; }
-      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
-      header { padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-      header h1 { margin: 0 0.75rem 0 0; font-size: 1rem; font-weight: 600; color: var(--dt-text); }
-      button { font: inherit; padding: 0.35rem 0.75rem; background: var(--dt-bg-tertiary); color: var(--dt-text); border: 1px solid var(--dt-border); border-radius: 4px; cursor: pointer; }
-      button:hover { background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%); }
-      main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.5rem; min-height: 0; }
-      #table-a, #table-b { flex: 1; min-height: 0; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
-      .label { position: absolute; margin: 0.25rem 0.5rem; font-size: 0.8rem; color: #666; background: rgba(255,255,255,0.8); padding: 0.1rem 0.35rem; border-radius: 3px; pointer-events: none; z-index: 1; }
-      .wrap { position: relative; min-height: 0; display: flex; flex-direction: column; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+      }
+      header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        margin: 0 0.75rem 0 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      button {
+        font: inherit;
+        padding: 0.35rem 0.75rem;
+        background: var(--dt-bg-tertiary);
+        color: var(--dt-text);
+        border: 1px solid var(--dt-border);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
+      }
+      main {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        min-height: 0;
+      }
+      #table-a,
+      #table-b {
+        flex: 1;
+        min-height: 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .label {
+        position: absolute;
+        margin: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        color: #666;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 0.1rem 0.35rem;
+        border-radius: 3px;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .wrap {
+        position: relative;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
     </style>
   </head>
   <body>
@@ -26,8 +86,14 @@
       <button id="clear-session">Clear session + reload</button>
     </header>
     <main>
-      <div class="wrap"><span class="label">A</span><div id="table-a"></div></div>
-      <div class="wrap"><span class="label">B</span><div id="table-b"></div></div>
+      <div class="wrap">
+        <span class="label">A</span>
+        <div id="table-a"></div>
+      </div>
+      <div class="wrap">
+        <span class="label">B</span>
+        <div id="table-b"></div>
+      </div>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

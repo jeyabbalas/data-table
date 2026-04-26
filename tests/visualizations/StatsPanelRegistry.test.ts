@@ -14,10 +14,7 @@ import {
   StatsPanelRegistry,
   defaultStatsPanelRegistry,
 } from '../../src/visualizations/StatsPanelRegistry';
-import {
-  BaseStatsPanel,
-  type StatsPanelOptions,
-} from '../../src/visualizations/BaseStatsPanel';
+import { BaseStatsPanel, type StatsPanelOptions } from '../../src/visualizations/BaseStatsPanel';
 import type { ColumnSchema, DataType } from '../../src/core/types';
 import type { ColumnStatsData } from '../../src/statistics/ColumnStatsTypes';
 import type { WorkerBridge } from '../../src/data/WorkerBridge';
@@ -197,7 +194,11 @@ describe('StatsPanelRegistry', () => {
   });
 
   it('passes container, column, and options through to the constructor', () => {
-    const seen: Array<{ container: HTMLElement; column: ColumnSchema; options: StatsPanelOptions }> = [];
+    const seen: Array<{
+      container: HTMLElement;
+      column: ColumnSchema;
+      options: StatsPanelOptions;
+    }> = [];
 
     class CapturingPanel extends BaseStatsPanel {
       constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {

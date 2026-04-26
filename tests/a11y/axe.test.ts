@@ -76,7 +76,7 @@ describe('a11y: axe-core grid scan', () => {
     });
 
     const blocking = results.violations.filter(
-      (v) => v.impact === 'critical' || v.impact === 'serious'
+      (v) => v.impact === 'critical' || v.impact === 'serious',
     );
 
     if (blocking.length > 0) {
@@ -86,7 +86,7 @@ describe('a11y: axe-core grid scan', () => {
             `${v.id} (${v.impact}): ${v.description}\n` +
             v.nodes
               .map((n) => `  target=${n.target.join(',')}\n  failureSummary=${n.failureSummary}`)
-              .join('\n')
+              .join('\n'),
         )
         .join('\n');
       throw new Error(`axe reported ${blocking.length} blocking violation(s):\n${detail}`);

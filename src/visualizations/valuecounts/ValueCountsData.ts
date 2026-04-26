@@ -7,10 +7,10 @@
  * - Filter to SQL integration
  */
 
+import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
-import { QueryError } from '../../core/errors';
 
 // Re-export SQL utilities for use by other modules
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -81,7 +81,7 @@ async function fetchColumnStats(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<{ total: number; nonNullCount: number; nullCount: number; distinctCount: number }> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -126,7 +126,7 @@ async function fetchTopCategories(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
-  limit: number
+  limit: number,
 ): Promise<CategoryResult[]> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -165,7 +165,7 @@ export async function fetchValueCountsData(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
-  maxCategories: number = DEFAULT_MAX_CATEGORIES
+  maxCategories: number = DEFAULT_MAX_CATEGORIES,
 ): Promise<ValueCountsData> {
   try {
     // Step 1: Fetch column statistics
@@ -188,7 +188,7 @@ export async function fetchValueCountsData(
       column,
       filters,
       bridge,
-      maxCategories
+      maxCategories,
     );
 
     // Step 3: Build segments array
@@ -260,7 +260,7 @@ export async function fetchAlignedValueCountsData(
   backgroundCategories: string[],
   backgroundHasOther: boolean,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<ValueCountsData> {
   try {
     // Step 1: Fetch foreground column statistics
@@ -299,9 +299,7 @@ export async function fetchAlignedValueCountsData(
       const col = quoteIdentifier(column);
       const tbl = quoteIdentifier(tableName);
       const whereClause = filtersToWhereClause(filters);
-      const inValues = backgroundCategories
-        .map((v) => formatSQLValue(v))
-        .join(', ');
+      const inValues = backgroundCategories.map((v) => formatSQLValue(v)).join(', ');
       const baseCondition = `CAST(${col} AS VARCHAR) IN (${inValues})`;
       const whereSQL = whereClause
         ? `WHERE ${baseCondition} AND ${whereClause}`

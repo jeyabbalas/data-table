@@ -82,7 +82,10 @@
   flex-shrink: 0;
   overflow: hidden;
   max-height: 50px;
-  transition: max-height 0.2s ease, padding 0.2s ease, border-bottom-color 0.2s ease;
+  transition:
+    max-height 0.2s ease,
+    padding 0.2s ease,
+    border-bottom-color 0.2s ease;
 }
 
 .dt-filter-bar--hidden {
@@ -163,7 +166,9 @@
   border-radius: 50%;
   cursor: pointer;
   color: var(--dt-text-secondary);
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
   flex-shrink: 0;
 }
 
@@ -221,7 +226,10 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--dt-transition), color var(--dt-transition), background var(--dt-transition);
+  transition:
+    border-color var(--dt-transition),
+    color var(--dt-transition),
+    background var(--dt-transition);
 }
 .dt-filter-expression-btn:hover {
   border-color: var(--dt-primary);
@@ -247,7 +255,9 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   border-radius: var(--dt-radius-sm);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
   white-space: nowrap;
 }
 
@@ -289,7 +299,10 @@
   flex-wrap: wrap;
   overflow: hidden;
   max-height: 200px;
-  transition: max-height 0.2s ease, padding 0.2s ease, border-top-color 0.2s ease;
+  transition:
+    max-height 0.2s ease,
+    padding 0.2s ease,
+    border-top-color 0.2s ease;
 }
 
 .dt-hidden-gutter--hidden {
@@ -340,7 +353,9 @@
   border-radius: 50%;
   cursor: pointer;
   color: var(--dt-text-secondary);
-  transition: background var(--dt-transition), color var(--dt-transition);
+  transition:
+    background var(--dt-transition),
+    color var(--dt-transition);
   flex-shrink: 0;
 }
 
@@ -370,7 +385,9 @@
   font-family: var(--dt-font-family);
   cursor: pointer;
   border-radius: var(--dt-radius-sm);
-  transition: color var(--dt-transition), background var(--dt-transition);
+  transition:
+    color var(--dt-transition),
+    background var(--dt-transition);
   white-space: nowrap;
 }
 
@@ -398,4 +415,3 @@
   position: relative; /* Positioning context for virtual scroll */
   min-width: fit-content;
 }
-

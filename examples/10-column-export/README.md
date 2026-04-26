@@ -37,5 +37,5 @@ Downstream apps built on top of this library (harmonization, data quality) need 
 
 ```ts
 const ids = await table.actions.getColumnValues('__rowid__');
-const asNumbers = Array.from(ids, (v) => Number(v));      // safe for datasets ≤ Number.MAX_SAFE_INTEGER rows
+const asNumbers = Array.from(ids, (v) => Number(v)); // safe for datasets ≤ Number.MAX_SAFE_INTEGER rows
 ```

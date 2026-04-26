@@ -21,20 +21,20 @@ surface, and explains the focus-trap behavior for modals.
 
 Focus the table (Tab into it from elsewhere on the page) and then:
 
-| Key | Action |
-|---|---|
-| `↑` / `↓` / `←` / `→` | Move cell focus |
-| `Home` | First column in the current row |
-| `Ctrl` + `Home` | First cell of the table |
-| `End` | Last column in the current row |
-| `Ctrl` + `End` | Last cell of the table |
-| `PageUp` / `PageDown` | Scroll visible range up / down (jumps by a "page" of rows) |
-| `Tab` / `Shift+Tab` | Move to next / previous cell (wraps at row ends) |
-| `Escape` | Clear cell focus (focus returns to the grid) |
-| `Enter` | Toggle selection on the focused row |
-| `Ctrl` + `Z` / `Cmd` + `Z` | Undo |
-| `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z` | Redo |
-| `Ctrl` + `C` / `Cmd` + `C` | Copy selected rows (defers to native copy behavior) |
+| Key                                            | Action                                                     |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| `↑` / `↓` / `←` / `→`                          | Move cell focus                                            |
+| `Home`                                         | First column in the current row                            |
+| `Ctrl` + `Home`                                | First cell of the table                                    |
+| `End`                                          | Last column in the current row                             |
+| `Ctrl` + `End`                                 | Last cell of the table                                     |
+| `PageUp` / `PageDown`                          | Scroll visible range up / down (jumps by a "page" of rows) |
+| `Tab` / `Shift+Tab`                            | Move to next / previous cell (wraps at row ends)           |
+| `Escape`                                       | Clear cell focus (focus returns to the grid)               |
+| `Enter`                                        | Toggle selection on the focused row                        |
+| `Ctrl` + `Z` / `Cmd` + `Z`                     | Undo                                                       |
+| `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z` | Redo                                                       |
+| `Ctrl` + `C` / `Cmd` + `C`                     | Copy selected rows (defers to native copy behavior)        |
 
 When any modal is open (export dialog, SQL filter editor, derived-column
 editor, preset panel), the grid keyboard shortcuts are disabled — the
@@ -53,21 +53,21 @@ This follows the [WAI-ARIA grid pattern](https://www.w3.org/WAI/ARIA/apg/pattern
 
 ### Roles
 
-| Element | Role |
-|---|---|
-| Outer table wrapper | `role="table"` (switches to `role="grid"` contextually for grid-pattern widgets) |
-| Header row | `role="row"` |
-| Column header cell | `role="columnheader"` |
-| Row group (body) | `role="rowgroup"` |
-| Data row | `role="row"` |
-| Data cell | `role="cell"` |
-| Filter panel | `role="dialog"` (floating popover) |
-| SQL filter modal, export dialog, derived-column modal | `role="dialog"` |
-| Null filter toggle group | `role="radiogroup"` |
-| Filter bar | `role="toolbar"` |
-| Hidden-columns gutter | `role="toolbar"` |
-| Column resizer handle | `role="separator"` |
-| Live-region announcer | `role="status"` with `aria-live="polite"`, `aria-atomic="true"` |
+| Element                                               | Role                                                                             |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Outer table wrapper                                   | `role="table"` (switches to `role="grid"` contextually for grid-pattern widgets) |
+| Header row                                            | `role="row"`                                                                     |
+| Column header cell                                    | `role="columnheader"`                                                            |
+| Row group (body)                                      | `role="rowgroup"`                                                                |
+| Data row                                              | `role="row"`                                                                     |
+| Data cell                                             | `role="cell"`                                                                    |
+| Filter panel                                          | `role="dialog"` (floating popover)                                               |
+| SQL filter modal, export dialog, derived-column modal | `role="dialog"`                                                                  |
+| Null filter toggle group                              | `role="radiogroup"`                                                              |
+| Filter bar                                            | `role="toolbar"`                                                                 |
+| Hidden-columns gutter                                 | `role="toolbar"`                                                                 |
+| Column resizer handle                                 | `role="separator"`                                                               |
+| Live-region announcer                                 | `role="status"` with `aria-live="polite"`, `aria-atomic="true"`                  |
 
 ### `aria-label` on interactive controls
 
@@ -88,12 +88,12 @@ Customizing these labels is an i18n task — override the relevant entries in
 A visually-hidden `role="status"` element at the top of the container
 announces state changes to screen readers:
 
-| Event | Announcement template |
-|---|---|
-| Filter added / removed / cleared | "N filters active, M of T rows match" |
-| Sort changed | "Sorted by column X ascending, then Y descending" |
-| Sort cleared | "Sort cleared" |
-| Row count changed (after load or clear) | "Showing N rows" |
+| Event                                   | Announcement template                             |
+| --------------------------------------- | ------------------------------------------------- |
+| Filter added / removed / cleared        | "N filters active, M of T rows match"             |
+| Sort changed                            | "Sorted by column X ascending, then Y descending" |
+| Sort cleared                            | "Sort cleared"                                    |
+| Row count changed (after load or clear) | "Showing N rows"                                  |
 
 The exact wording comes from `messages.a11y.*` — translate these carefully
 for non-English locales.
@@ -107,8 +107,8 @@ and returns focus to the control that opened it.
 - **Focus trap.** Tab can't escape the dialog while it's open.
 - **Keyboard deferral.** The grid's keyboard handlers check
   `document.activeElement.closest('[role="dialog"]')` and bail out if a
-  dialog is focused. So Ctrl+Z inside the SQL filter editor undoes *in the
-  editor*, not in the grid.
+  dialog is focused. So Ctrl+Z inside the SQL filter editor undoes _in the
+  editor_, not in the grid.
 - **Close on Escape.** Every dialog listens for `Escape` and dismisses.
 
 ## Popovers (annotation + column-header tooltip)
@@ -202,7 +202,7 @@ element), but you can add your own:
 ```ts
 const sr = document.createElement('div');
 sr.setAttribute('aria-live', 'polite');
-sr.className = 'sr-only';   // your own hidden-but-readable class
+sr.className = 'sr-only'; // your own hidden-but-readable class
 document.body.appendChild(sr);
 
 table.on('loadComplete', ({ rowCount }) => {

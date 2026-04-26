@@ -140,9 +140,7 @@ describe('AutoSave', () => {
       const autoSave = new AutoSave(state, store);
       autoSave.enable();
 
-      state.derivedColumns.set([
-        { kind: 'expression', name: 'total', expression: 'id * 2' },
-      ]);
+      state.derivedColumns.set([{ kind: 'expression', name: 'total', expression: 'id * 2' }]);
 
       vi.advanceTimersByTime(1000);
       expect(store.save).toHaveBeenCalledTimes(1);
@@ -288,9 +286,7 @@ describe('AutoSave', () => {
       expect(store.save).toHaveBeenCalledTimes(1);
 
       state.hiddenColumnInfo.set(
-        new Map([
-          ['name', { column: 'name', leftNeighbor: 'id', rightNeighbor: null }],
-        ]),
+        new Map([['name', { column: 'name', leftNeighbor: 'id', rightNeighbor: null }]]),
       );
       vi.advanceTimersByTime(1000);
       expect(store.save).toHaveBeenCalledTimes(2);

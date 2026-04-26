@@ -23,42 +23,42 @@ table.on('error', ({ error, source }) => {
 
 Source: `src/core/errors.ts` + error sites across `src/`.
 
-| Code | Class | Cause | Fix |
-|---|---|---|---|
-| `OPTIONS_INVALID` | `ConfigurationError` | Invalid option passed to `createDataTable()` or a preset call. | Check `error.details` for the bad value; align with [`CreateDataTableOptions`](./api-reference.md#createdatatableoptions). |
-| `WORKER_UNSUPPORTED` | `WorkerInitError` | `strictBrowserCheck: true` detected a missing required API. | Render an "unsupported browser" screen. `error.details.missing` lists the APIs. |
-| `WORKER_CRASHED` | `WorkerInitError` | The DuckDB worker failed to initialize or crashed. | Check DevTools → Console for the worker-side stack; often caused by a broken WASM asset path. |
-| `WORKER_INIT_TIMEOUT` | `WorkerInitError` | Init exceeded `bridgeOptions.initTimeoutMs` (default 30 s). | Increase the timeout, verify `duckdbBundles` is reachable, or pre-warm the WASM asset. |
-| `WORKER_TERMINATED` | `WorkerTerminatedError` | Worker was terminated mid-operation. | Usually a race with `destroy()`; check `isDestroyed()` guards. |
-| `BRIDGE_NOT_READY` | `ConfigurationError` | A bridge method was called before init. | `await createDataTable(...)` before issuing queries. |
-| `QUERY_RUNTIME` | `QueryError` | DuckDB returned an error at query time. | Check `error.details.sql` (when present); common causes: referenced a column that was since removed, or a derived-column VIEW is stale. |
-| `QUERY_ABORTED` | `QueryError` | A query was aborted (user cancel, bridge teardown). | Non-fatal — your own `AbortSignal` fired, or the table is being destroyed. |
-| `SQL_SYNTAX` | `SQLValidationError` | Raw-SQL filter / derived-column expression failed validation. | Use `actions.validateSQLFilter` or `actions.validateExpression` before submit. |
-| `LOAD_PARSE_FAILED` | `LoadError` | CSV/JSON/Parquet parse failed. `error.details.stage` indicates which coercion stage (`timestamp`, `date`, `time`). | Inspect the offending row; most commonly a bad timestamp format. |
-| `LOAD_INVALID_TIMEZONE` | `LoadError` | `loadOptions.timezone` isn't a valid IANA zone. | Use a canonical zone like `'America/New_York'`. |
-| `LOAD_INVALID_OPTIONS` | `LoadError` | Incompatible combination of load options. | `error.details.option` names the offending key. |
-| `LOAD_FORMAT_UNSUPPORTED` | `LoadError` | Source didn't match a known format. | Pass `sourceFormat: 'csv' \| 'json' \| 'parquet'` explicitly. |
-| `FETCH_FAILED` | `LoadError` | URL fetch failed (network, CORS, 404). | Verify the URL; surface a retry UI. |
-| `PARSE_FAILED` | `LoadError` | Generic parse fallback. | Check `error.details` for context; often a malformed file. |
-| `EXPRESSION_INVALID` | `DerivedColumnError` | Derived-column expression rejected by DuckDB. | The `error.message` echoes DuckDB's diagnostic; surface it to the user. |
-| `CIRCULAR_DEPENDENCY` | `DerivedColumnError` | Derived column references itself directly or transitively. | Name the column something new, or break the cycle. |
-| `DEPENDENTS_INCOMPATIBLE` | `DerivedColumnError` | `replaceDerivedColumn` would break one or more dependent columns under the proposed new definition. | `error.details.dependentsAffected: string[]` lists the affected columns; `error.details.reasons` maps each name to the validation message. Either fix the new expression or replace the dependent columns first. |
-| `NOT_FOUND` | `DerivedColumnError` | `updateDerivedColumn` / `removeDerivedColumn` / `replaceDerivedColumn` targeted a non-existent column. | Read `state.derivedColumns` first. |
-| `DUPLICATE_NAME` | `DerivedColumnError` | A column with that name already exists. | Choose a different name or update the existing one. |
-| `VECTOR_LENGTH_MISMATCH` | `DerivedColumnError` | `values.length !== state.totalRows`. | Resize your vector to match. |
-| `RESERVED_COLUMN_NAME` | `LoadError` | Source contains a column named `__rowid__`, which is reserved for the synthetic row id. | Rename the source column (e.g. to `_rowid_orig`) and reload. |
-| `COLUMN_NOT_FOUND` | `QueryError` | `actions.getColumnValues(name)` was called with a name that isn't in `state.schema`. | Read `state.schema.get()` to validate the name first; remember `__rowid__` is queryable even though it's hidden by default. |
-| `INVALID_PAGINATION` | `QueryError` | `getColumnValues` was called with a negative or non-integer `limit` / `offset`. | Coerce inputs to non-negative integers before passing them in. |
-| `NO_TABLE` | `QueryError` | `getColumnValues` was called before data is loaded. | Await `loadComplete` first, or gate on `state.tableName.get()`. |
-| `DUPLICATE_ID` | `AnnotationError` | An annotation was added or merged with an `id` that already exists in the store. | Omit `id` to let the library generate one (`ann_` + Crockford base32), or remove the existing annotation first. |
-| `INVALID_SHAPE` | `AnnotationError` | `loadJSON` rejected a malformed annotation entry — wrong scope, missing required field, wrong field type. | Validate the JSON against the [annotation file format](./api-reference.md#annotation-json-format) before loading. |
-| `VERSION_UNSUPPORTED` | `AnnotationError` | `loadJSON` was given a file whose `version` is greater than `ANNOTATION_FILE_VERSION`. | Either upgrade the library or downgrade / regenerate the JSON. |
-| `NO_TABLE_LOADED` | `ExportError` | Export called before data is loaded. | Await `loadComplete` first, or gate the export UI on `state.tableName.get()`. |
-| `CANVAS_UNAVAILABLE` | `ExportError` | `HTMLCanvasElement` unavailable (e.g., headless browser without canvas). | Skip the export, or use a server-side renderer. |
-| `CLIPBOARD_UNAVAILABLE` | `ExportError` | Clipboard API blocked (non-secure context, user-gesture required). | Fall back to the Download button in the export dialog. |
-| `SAVE_FAILED` | `PersistenceError` | IndexedDB write failed (quota, aborted transaction). | Surface a non-blocking message; the facade keeps running. |
-| `DESTROYED` | `DestroyedError` | Public method called after `destroy()`. | Guard async callbacks with `isDestroyed()`. |
-| `INVARIANT` | `ConfigurationError` | Internal invariant violation. | File a bug with the repro steps — this should not happen. |
+| Code                      | Class                   | Cause                                                                                                              | Fix                                                                                                                                                                                                              |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPTIONS_INVALID`         | `ConfigurationError`    | Invalid option passed to `createDataTable()` or a preset call.                                                     | Check `error.details` for the bad value; align with [`CreateDataTableOptions`](./api-reference.md#createdatatableoptions).                                                                                       |
+| `WORKER_UNSUPPORTED`      | `WorkerInitError`       | `strictBrowserCheck: true` detected a missing required API.                                                        | Render an "unsupported browser" screen. `error.details.missing` lists the APIs.                                                                                                                                  |
+| `WORKER_CRASHED`          | `WorkerInitError`       | The DuckDB worker failed to initialize or crashed.                                                                 | Check DevTools → Console for the worker-side stack; often caused by a broken WASM asset path.                                                                                                                    |
+| `WORKER_INIT_TIMEOUT`     | `WorkerInitError`       | Init exceeded `bridgeOptions.initTimeoutMs` (default 30 s).                                                        | Increase the timeout, verify `duckdbBundles` is reachable, or pre-warm the WASM asset.                                                                                                                           |
+| `WORKER_TERMINATED`       | `WorkerTerminatedError` | Worker was terminated mid-operation.                                                                               | Usually a race with `destroy()`; check `isDestroyed()` guards.                                                                                                                                                   |
+| `BRIDGE_NOT_READY`        | `ConfigurationError`    | A bridge method was called before init.                                                                            | `await createDataTable(...)` before issuing queries.                                                                                                                                                             |
+| `QUERY_RUNTIME`           | `QueryError`            | DuckDB returned an error at query time.                                                                            | Check `error.details.sql` (when present); common causes: referenced a column that was since removed, or a derived-column VIEW is stale.                                                                          |
+| `QUERY_ABORTED`           | `QueryError`            | A query was aborted (user cancel, bridge teardown).                                                                | Non-fatal — your own `AbortSignal` fired, or the table is being destroyed.                                                                                                                                       |
+| `SQL_SYNTAX`              | `SQLValidationError`    | Raw-SQL filter / derived-column expression failed validation.                                                      | Use `actions.validateSQLFilter` or `actions.validateExpression` before submit.                                                                                                                                   |
+| `LOAD_PARSE_FAILED`       | `LoadError`             | CSV/JSON/Parquet parse failed. `error.details.stage` indicates which coercion stage (`timestamp`, `date`, `time`). | Inspect the offending row; most commonly a bad timestamp format.                                                                                                                                                 |
+| `LOAD_INVALID_TIMEZONE`   | `LoadError`             | `loadOptions.timezone` isn't a valid IANA zone.                                                                    | Use a canonical zone like `'America/New_York'`.                                                                                                                                                                  |
+| `LOAD_INVALID_OPTIONS`    | `LoadError`             | Incompatible combination of load options.                                                                          | `error.details.option` names the offending key.                                                                                                                                                                  |
+| `LOAD_FORMAT_UNSUPPORTED` | `LoadError`             | Source didn't match a known format.                                                                                | Pass `sourceFormat: 'csv' \| 'json' \| 'parquet'` explicitly.                                                                                                                                                    |
+| `FETCH_FAILED`            | `LoadError`             | URL fetch failed (network, CORS, 404).                                                                             | Verify the URL; surface a retry UI.                                                                                                                                                                              |
+| `PARSE_FAILED`            | `LoadError`             | Generic parse fallback.                                                                                            | Check `error.details` for context; often a malformed file.                                                                                                                                                       |
+| `EXPRESSION_INVALID`      | `DerivedColumnError`    | Derived-column expression rejected by DuckDB.                                                                      | The `error.message` echoes DuckDB's diagnostic; surface it to the user.                                                                                                                                          |
+| `CIRCULAR_DEPENDENCY`     | `DerivedColumnError`    | Derived column references itself directly or transitively.                                                         | Name the column something new, or break the cycle.                                                                                                                                                               |
+| `DEPENDENTS_INCOMPATIBLE` | `DerivedColumnError`    | `replaceDerivedColumn` would break one or more dependent columns under the proposed new definition.                | `error.details.dependentsAffected: string[]` lists the affected columns; `error.details.reasons` maps each name to the validation message. Either fix the new expression or replace the dependent columns first. |
+| `NOT_FOUND`               | `DerivedColumnError`    | `updateDerivedColumn` / `removeDerivedColumn` / `replaceDerivedColumn` targeted a non-existent column.             | Read `state.derivedColumns` first.                                                                                                                                                                               |
+| `DUPLICATE_NAME`          | `DerivedColumnError`    | A column with that name already exists.                                                                            | Choose a different name or update the existing one.                                                                                                                                                              |
+| `VECTOR_LENGTH_MISMATCH`  | `DerivedColumnError`    | `values.length !== state.totalRows`.                                                                               | Resize your vector to match.                                                                                                                                                                                     |
+| `RESERVED_COLUMN_NAME`    | `LoadError`             | Source contains a column named `__rowid__`, which is reserved for the synthetic row id.                            | Rename the source column (e.g. to `_rowid_orig`) and reload.                                                                                                                                                     |
+| `COLUMN_NOT_FOUND`        | `QueryError`            | `actions.getColumnValues(name)` was called with a name that isn't in `state.schema`.                               | Read `state.schema.get()` to validate the name first; remember `__rowid__` is queryable even though it's hidden by default.                                                                                      |
+| `INVALID_PAGINATION`      | `QueryError`            | `getColumnValues` was called with a negative or non-integer `limit` / `offset`.                                    | Coerce inputs to non-negative integers before passing them in.                                                                                                                                                   |
+| `NO_TABLE`                | `QueryError`            | `getColumnValues` was called before data is loaded.                                                                | Await `loadComplete` first, or gate on `state.tableName.get()`.                                                                                                                                                  |
+| `DUPLICATE_ID`            | `AnnotationError`       | An annotation was added or merged with an `id` that already exists in the store.                                   | Omit `id` to let the library generate one (`ann_` + Crockford base32), or remove the existing annotation first.                                                                                                  |
+| `INVALID_SHAPE`           | `AnnotationError`       | `loadJSON` rejected a malformed annotation entry — wrong scope, missing required field, wrong field type.          | Validate the JSON against the [annotation file format](./api-reference.md#annotation-json-format) before loading.                                                                                                |
+| `VERSION_UNSUPPORTED`     | `AnnotationError`       | `loadJSON` was given a file whose `version` is greater than `ANNOTATION_FILE_VERSION`.                             | Either upgrade the library or downgrade / regenerate the JSON.                                                                                                                                                   |
+| `NO_TABLE_LOADED`         | `ExportError`           | Export called before data is loaded.                                                                               | Await `loadComplete` first, or gate the export UI on `state.tableName.get()`.                                                                                                                                    |
+| `CANVAS_UNAVAILABLE`      | `ExportError`           | `HTMLCanvasElement` unavailable (e.g., headless browser without canvas).                                           | Skip the export, or use a server-side renderer.                                                                                                                                                                  |
+| `CLIPBOARD_UNAVAILABLE`   | `ExportError`           | Clipboard API blocked (non-secure context, user-gesture required).                                                 | Fall back to the Download button in the export dialog.                                                                                                                                                           |
+| `SAVE_FAILED`             | `PersistenceError`      | IndexedDB write failed (quota, aborted transaction).                                                               | Surface a non-blocking message; the facade keeps running.                                                                                                                                                        |
+| `DESTROYED`               | `DestroyedError`        | Public method called after `destroy()`.                                                                            | Guard async callbacks with `isDestroyed()`.                                                                                                                                                                      |
+| `INVARIANT`               | `ConfigurationError`    | Internal invariant violation.                                                                                      | File a bug with the repro steps — this should not happen.                                                                                                                                                        |
 
 ---
 
@@ -68,16 +68,19 @@ Non-fatal issues surface on `table.on('warning', …)` instead of `error`:
 
 ```ts
 table.on('warning', ({ code, message, details }) => {
-  if (code === 'STYLESHEET_MISSING') { /* … */ }
-  else if (code === 'PERSISTENCE_UNAVAILABLE') { /* … */ }
+  if (code === 'STYLESHEET_MISSING') {
+    /* … */
+  } else if (code === 'PERSISTENCE_UNAVAILABLE') {
+    /* … */
+  }
 });
 ```
 
-| Code | Source | Meaning | Recommended handling |
-|---|---|---|---|
-| `STYLESHEET_MISSING` | `src/DataTable.ts` | The library didn't find the `--dt-stylesheet-loaded` marker, meaning `@jeyabbalas/data-table/styles` wasn't imported. | Add the import at application entry: `import '@jeyabbalas/data-table/styles';`. |
-| `PERSISTENCE_UNAVAILABLE` | `src/DataTable.ts` | IndexedDB was requested but unavailable (private browsing, disabled storage). | Inform the user that filters won't persist across reloads. |
-| (console warning) | `src/persistence/SessionStore.ts` | An unknown filter type was encountered while restoring a snapshot. | Safe to ignore for old snapshots; indicates a filter schema evolved. |
+| Code                      | Source                            | Meaning                                                                                                               | Recommended handling                                                            |
+| ------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `STYLESHEET_MISSING`      | `src/DataTable.ts`                | The library didn't find the `--dt-stylesheet-loaded` marker, meaning `@jeyabbalas/data-table/styles` wasn't imported. | Add the import at application entry: `import '@jeyabbalas/data-table/styles';`. |
+| `PERSISTENCE_UNAVAILABLE` | `src/DataTable.ts`                | IndexedDB was requested but unavailable (private browsing, disabled storage).                                         | Inform the user that filters won't persist across reloads.                      |
+| (console warning)         | `src/persistence/SessionStore.ts` | An unknown filter type was encountered while restoring a snapshot.                                                    | Safe to ignore for old snapshots; indicates a filter schema evolved.            |
 
 ---
 
@@ -90,7 +93,7 @@ Symptom: `warning` event with `code: 'STYLESHEET_MISSING'` and the table renders
 Fix:
 
 ```ts
-import '@jeyabbalas/data-table/styles';  // Side-effect import — do this once at app entry.
+import '@jeyabbalas/data-table/styles'; // Side-effect import — do this once at app entry.
 import { createDataTable } from '@jeyabbalas/data-table';
 ```
 
@@ -118,10 +121,16 @@ export default function TablePage() {
     (async () => {
       if (!ref.current) return;
       const t = await createDataTable({ container: ref.current, source: '/data.csv' });
-      if (cancelled) { await t.destroy(); return; }
+      if (cancelled) {
+        await t.destroy();
+        return;
+      }
       table = t;
     })();
-    return () => { cancelled = true; table?.destroy(); };
+    return () => {
+      cancelled = true;
+      table?.destroy();
+    };
   }, []);
   return <div ref={ref} style={{ height: 600 }} />;
 }
@@ -162,8 +171,14 @@ await createDataTable({
   bridgeOptions: {
     workerUrl: new URL('./duckdb-worker.js', import.meta.url).href,
     duckdbBundles: {
-      mvp: { mainModule: '/duckdb/duckdb-mvp.wasm', mainWorker: '/duckdb/duckdb-browser-mvp.worker.js' },
-      eh:  { mainModule: '/duckdb/duckdb-eh.wasm',  mainWorker: '/duckdb/duckdb-browser-eh.worker.js' },
+      mvp: {
+        mainModule: '/duckdb/duckdb-mvp.wasm',
+        mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
+      },
+      eh: {
+        mainModule: '/duckdb/duckdb-eh.wasm',
+        mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
+      },
     },
   },
 });
@@ -190,7 +205,9 @@ Or subscribe to `loadComplete`:
 
 ```ts
 const unsub = table.on('loadComplete', () => {
-  table.actions.addFilter({ /* ... */ });
+  table.actions.addFilter({
+    /* ... */
+  });
   unsub();
 });
 ```
@@ -223,10 +240,16 @@ useEffect(() => {
   let table: DataTable | undefined;
   (async () => {
     const t = await createDataTable({ container: ref.current!, source });
-    if (cancelled) { await t.destroy(); return; }
+    if (cancelled) {
+      await t.destroy();
+      return;
+    }
     table = t;
   })();
-  return () => { cancelled = true; table?.destroy(); };
+  return () => {
+    cancelled = true;
+    table?.destroy();
+  };
 }, []);
 ```
 
@@ -255,12 +278,12 @@ Cause: either the `isApplicable` predicate returns `false` for the column's `Dat
 Fix:
 
 ```ts
-const registry = new VisualizationRegistry();   // per-instance
+const registry = new VisualizationRegistry(); // per-instance
 registry.register({
   name: 'my-viz',
   isApplicable: (type) => type === 'float',
   constructor: MyViz,
-  priority: 10,                                  // beats built-ins
+  priority: 10, // beats built-ins
 });
 await createDataTable({ container, source, visualizationRegistry: registry });
 ```
@@ -279,8 +302,11 @@ Fix: call `actions.showAllColumns()` before opening the dialog, or pass an expli
 import { exportFromState } from '@jeyabbalas/data-table/advanced';
 
 const csv = await exportFromState(table.state, table.bridge, {
-  scope: 'all', columns: ['id', 'name', 'hidden_col'], includeHeaders: true,
-  delimiter: ',', nullValue: '',
+  scope: 'all',
+  columns: ['id', 'name', 'hidden_col'],
+  includeHeaders: true,
+  delimiter: ',',
+  nullValue: '',
 });
 ```
 
@@ -343,7 +369,7 @@ import { ExportDialog } from '@jeyabbalas/data-table/advanced';
 
 new ExportDialog(state, bridge, {
   classPrefix: 'dt',
-  colorSchemeSource: document.querySelector('.dt-root')!,   // mirror-from this element
+  colorSchemeSource: document.querySelector('.dt-root')!, // mirror-from this element
 });
 ```
 
@@ -375,7 +401,9 @@ Cause: the embedding app likely created the table with `persistence: false`. Tha
 Fix (intentional case): re-apply the tooltips at startup by iterating the catalogue:
 
 ```ts
-const catalogue: Record<string, ColumnHeaderTooltipContent | string> = { /* … */ };
+const catalogue: Record<string, ColumnHeaderTooltipContent | string> = {
+  /* … */
+};
 for (const [col, content] of Object.entries(catalogue)) {
   table.actions.setColumnHeaderTooltip(col, content);
 }
@@ -406,7 +434,7 @@ Common causes and fixes:
 
 Symptom: rapid brushing or filter toggling flashes an older stat for ~50–200 ms before the latest value renders.
 
-Cause: a panel that issues async DuckDB queries via `options.bridge.query(…)` can have a query for filter set F1 still in flight when F2 arrives. If F1's query resolves *after* F2's, F1's `paint()` call overwrites F2's. The library's `StatsPanelCoordinator` already stamps a `filterSequence` and short-circuits superseded `updateFilters()` invocations on the *broadcast* side, but a panel that has its own per-call awaits still needs a local counter to drop stale results once they come back.
+Cause: a panel that issues async DuckDB queries via `options.bridge.query(…)` can have a query for filter set F1 still in flight when F2 arrives. If F1's query resolves _after_ F2's, F1's `paint()` call overwrites F2's. The library's `StatsPanelCoordinator` already stamps a `filterSequence` and short-circuits superseded `updateFilters()` invocations on the _broadcast_ side, but a panel that has its own per-call awaits still needs a local counter to drop stale results once they come back.
 
 Fix: stamp a per-panel `fetchSeq` counter — increment at the top of every `fetch()` call, capture the value into a local, and bail before `paint()` if the local doesn't match the current counter:
 
@@ -439,7 +467,8 @@ try {
 } catch (err) {
   this.options.onError?.(
     new QueryError(err instanceof Error ? err.message : String(err), {
-      code: 'QUERY_RUNTIME', cause: err,
+      code: 'QUERY_RUNTIME',
+      cause: err,
     }),
     { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
   );
@@ -452,7 +481,7 @@ The facade re-emits these on the `error` event with `source: 'stats-panel'` (the
 
 Symptom: the host-built CodeMirror editor mounts, the SQL grammar highlights correctly, but pressing Ctrl/Cmd+Space (or typing a partial identifier) shows no dropdown.
 
-Cause: `createSqlExtensions` ships only the autocomplete *source* (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete *UI* extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
+Cause: `createSqlExtensions` ships only the autocomplete _source_ (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete _UI_ extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
 
 Fix: add `autocompletion()` from `@codemirror/autocomplete` to your extension array:
 
@@ -492,7 +521,7 @@ The combined pattern:
 
 ```ts
 const sqlCompartment = new Compartment();
-const getContext = () => table.actions.getCompletionContext();   // thunk
+const getContext = () => table.actions.getCompletionContext(); // thunk
 
 const refresh = () => {
   view.dispatch({
@@ -514,13 +543,13 @@ const { supported, missing } = checkBrowserSupport();
 
 Source: `src/core/checkBrowserSupport.ts`.
 
-| Probe | Feature disabled if missing |
-|---|---|
-| `Worker` | Library can't run at all. |
-| `WebAssembly` | DuckDB can't initialize. |
-| `IndexedDB` | Session persistence. Library still runs. |
-| `ResizeObserver` | Column resize + visualization responsive layout. |
-| `BigInt` | Integer columns can't cross the worker boundary. |
+| Probe             | Feature disabled if missing                       |
+| ----------------- | ------------------------------------------------- |
+| `Worker`          | Library can't run at all.                         |
+| `WebAssembly`     | DuckDB can't initialize.                          |
+| `IndexedDB`       | Session persistence. Library still runs.          |
+| `ResizeObserver`  | Column resize + visualization responsive layout.  |
+| `BigInt`          | Integer columns can't cross the worker boundary.  |
 | `structuredClone` | Result sets can't be transferred from the worker. |
 
 If you want initialization to fail fast (rather than render a half-broken table), set `strictBrowserCheck: true`. A `WorkerInitError` with `code: 'WORKER_UNSUPPORTED'` and `details.missing: string[]` is thrown from `createDataTable()`.

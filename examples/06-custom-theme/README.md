@@ -29,15 +29,15 @@ npm run dev
 
 ## Which variables are overridden
 
-| Family | Variables | Why |
-|---|---|---|
-| Primary | `--dt-primary`, `--dt-primary-hover`, `--dt-primary-light`, `--dt-primary-lighter` | Core brand color; drives buttons, focus rings, histogram bars, selection chrome, modal confirms. All four needed because hover states and tinted surfaces pull from separate tokens. |
-| Accent | `--dt-accent`, `--dt-accent-hover` | Null bar / missing-value segment color in histograms and ValueCounts. Recolored to warm magenta for a striking, non-blue contrast. |
-| Neutral | `--dt-neutral`, `--dt-neutral-hover` | ValueCounts "Other" category; switched from slate to stone. |
-| Syntax | `--dt-syntax-string`, `--dt-syntax-type` | SQL editor token colors; green + orange replace the default green + purple. |
-| Surfaces | `--dt-bg`, `--dt-bg-secondary`, `--dt-bg-tertiary`, `--dt-border`, `--dt-border-light` | Whole-page warmth; tinted cream in light, warm stone in dark. |
-| Dark text | `--dt-text`, `--dt-text-secondary`, `--dt-text-tertiary`, `--dt-arrow-*` | Re-tuned for the warm-black background. |
-| Sizing | `--dt-row-height`, `--dt-header-height`, `--dt-radius` | Compact demonstration. |
+| Family    | Variables                                                                              | Why                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Primary   | `--dt-primary`, `--dt-primary-hover`, `--dt-primary-light`, `--dt-primary-lighter`     | Core brand color; drives buttons, focus rings, histogram bars, selection chrome, modal confirms. All four needed because hover states and tinted surfaces pull from separate tokens. |
+| Accent    | `--dt-accent`, `--dt-accent-hover`                                                     | Null bar / missing-value segment color in histograms and ValueCounts. Recolored to warm magenta for a striking, non-blue contrast.                                                   |
+| Neutral   | `--dt-neutral`, `--dt-neutral-hover`                                                   | ValueCounts "Other" category; switched from slate to stone.                                                                                                                          |
+| Syntax    | `--dt-syntax-string`, `--dt-syntax-type`                                               | SQL editor token colors; green + orange replace the default green + purple.                                                                                                          |
+| Surfaces  | `--dt-bg`, `--dt-bg-secondary`, `--dt-bg-tertiary`, `--dt-border`, `--dt-border-light` | Whole-page warmth; tinted cream in light, warm stone in dark.                                                                                                                        |
+| Dark text | `--dt-text`, `--dt-text-secondary`, `--dt-text-tertiary`, `--dt-arrow-*`               | Re-tuned for the warm-black background.                                                                                                                                              |
+| Sizing    | `--dt-row-height`, `--dt-header-height`, `--dt-radius`                                 | Compact demonstration.                                                                                                                                                               |
 
 ## Portal gotcha — target both `:root` and `.dt-root`
 
@@ -53,4 +53,4 @@ This example's `theme.css` therefore declares dark overrides in **both** an `@me
 
 ## Cascade note — import order matters
 
-The overrides live in a separate `theme.css` file imported from `main.ts` **after** `@jeyabbalas/data-table/styles`. The library's built-in stylesheet declares its defaults on `:root` and `[data-dt-color-scheme="dark"]`; our overrides use the same specificity for portal coverage, so cascade order is what lets them win. Putting the overrides in an inline `<style>` in `<head>` would lose — inline styles in `<head>` load *before* the JS module's CSS import, and same-specificity rules defer to whichever was declared later.
+The overrides live in a separate `theme.css` file imported from `main.ts` **after** `@jeyabbalas/data-table/styles`. The library's built-in stylesheet declares its defaults on `:root` and `[data-dt-color-scheme="dark"]`; our overrides use the same specificity for portal coverage, so cascade order is what lets them win. Putting the overrides in an inline `<style>` in `<head>` would lose — inline styles in `<head>` load _before_ the JS module's CSS import, and same-specificity rules defer to whichever was declared later.

@@ -5,31 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Table en français</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; }
-      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
-      header { padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; }
-      header h1 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
-      header p { margin: 0; color: #555; font-size: 0.88em; line-height: 1.4; }
-      header details { margin-top: 0.35rem; color: #666; font-size: 0.85em; }
-      header details summary { cursor: pointer; user-select: none; }
-      #table { flex: 1; min-height: 0; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+      }
+      header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #ddd;
+      }
+      header h1 {
+        margin: 0 0 0.25rem;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      header p {
+        margin: 0;
+        color: #555;
+        font-size: 0.88em;
+        line-height: 1.4;
+      }
+      header details {
+        margin-top: 0.35rem;
+        color: #666;
+        font-size: 0.85em;
+      }
+      header details summary {
+        cursor: pointer;
+        user-select: none;
+      }
+      #table {
+        flex: 1;
+        min-height: 0;
+      }
     </style>
   </head>
   <body>
     <header>
       <h1>Table en français (<a href="../">retour</a>)</h1>
       <p>
-        Scénario : un outil interne chez un caviste français. Chaque bouton,
-        menu, info-bulle et ligne de statut est en français — ouvrez un filtre
-        de colonne, la boîte d'export ou les préréglages pour vérifier.
+        Scénario : un outil interne chez un caviste français. Chaque bouton, menu, info-bulle et
+        ligne de statut est en français — ouvrez un filtre de colonne, la boîte d'export ou les
+        préréglages pour vérifier.
       </p>
       <details>
         <summary>English</summary>
-        Scenario: an internal tool at a French wine merchant. Every button,
-        menu, tooltip, and status line reads in French — open a column's filter
-        panel, the export dialog, or the presets panel to check. The whole
-        translation is a single <code>messages</code> object passed to
-        <code>createDataTable()</code>; see <code>fr.ts</code>.
+        Scenario: an internal tool at a French wine merchant. Every button, menu, tooltip, and
+        status line reads in French — open a column's filter panel, the export dialog, or the
+        presets panel to check. The whole translation is a single <code>messages</code> object
+        passed to <code>createDataTable()</code>; see <code>fr.ts</code>.
       </details>
     </header>
     <div id="table"></div>

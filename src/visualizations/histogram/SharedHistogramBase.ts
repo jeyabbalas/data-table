@@ -10,11 +10,11 @@
  * - formatBrushRange(startIdx, endIdx) — type-specific brush range string
  */
 
+import type { ColumnSchema } from '../../core/types';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
-import type { ColumnSchema } from '../../core/types';
-import { formatCount, formatPercent, truncateText } from '../utils';
 import { resolveColor, resolveScope } from '../palette';
+import { formatCount, formatPercent, truncateText } from '../utils';
 
 // =========================================
 // Palette
@@ -122,7 +122,9 @@ export interface BaseHistogramData {
 // SharedHistogramBase Class
 // =========================================
 
-export abstract class SharedHistogramBase<TData extends BaseHistogramData> extends BaseVisualization {
+export abstract class SharedHistogramBase<
+  TData extends BaseHistogramData,
+> extends BaseVisualization {
   // Data
   protected data: TData | null = null;
   protected backgroundData: TData | null = null;
@@ -135,11 +137,11 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
   // Interaction state
   protected hoveredBin: number | null = null;
-  protected hoveredNull: boolean = false;
+  protected hoveredNull = false;
 
   // Selection state (single bar click-to-select)
   protected selectedBin: number | null = null;
-  protected selectedNull: boolean = false;
+  protected selectedNull = false;
 
   // All-null state (when all data is null)
   protected isAllNullState = false;
@@ -172,13 +174,9 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
   // Computed layout (updated on render)
   protected chartArea = { x: 0, y: 0, width: 0, height: 0 };
   protected nullBarArea = { x: 0, y: 0, width: 0, height: 0 };
-  protected barPositions: Array<{ x: number; width: number; binIndex: number }> = [];
+  protected barPositions: { x: number; width: number; binIndex: number }[] = [];
 
-  constructor(
-    container: HTMLElement,
-    column: ColumnSchema,
-    options: VisualizationOptions
-  ) {
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
 
     // Fetch data immediately and store the promise
@@ -190,7 +188,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
   // =========================================
 
   /** Fetch type-specific data from DuckDB */
-  abstract fetchData(): Promise<void>;
+  abstract override fetchData(): Promise<void>;
 
   /** Draw type-specific axis labels */
   protected abstract drawAxisLabels(): void;
@@ -266,9 +264,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     // Initial estimate without null bar space
     const estimatedChartWidth = this.width - PADDING.left - PADDING.right;
     const estimatedTotalGaps = numBins > 0 ? (numBins - 1) * LAYOUT.barGap : 0;
-    const estimatedBarWidth = numBins > 0
-      ? Math.max(1, (estimatedChartWidth - estimatedTotalGaps) / numBins)
-      : 8;
+    const estimatedBarWidth =
+      numBins > 0 ? Math.max(1, (estimatedChartWidth - estimatedTotalGaps) / numBins) : 8;
 
     // Null bar width: match histogram bar width (slightly wider, max 1.5x)
     const nullBarWidth = hasNulls
@@ -316,11 +313,13 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (layoutData.isSingleValue && numBins === 1) {
       const singleBarWidth = Math.min(this.chartArea.width * 0.4, 60);
       const barX = this.chartArea.x + (this.chartArea.width - singleBarWidth) / 2;
-      this.barPositions = [{
-        x: barX,
-        width: singleBarWidth,
-        binIndex: 0,
-      }];
+      this.barPositions = [
+        {
+          x: barX,
+          width: singleBarWidth,
+          binIndex: 0,
+        },
+      ];
       return;
     }
 
@@ -330,8 +329,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
       // Solve: numBins * barWidth + (numBins - 1) * gap = chartWidth
       //        gap = FEW_BINS_GAP_RATIO * barWidth
       // => barWidth = chartWidth / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO)
-      const barWidth =
-        this.chartArea.width / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO);
+      const barWidth = this.chartArea.width / (numBins + (numBins - 1) * FEW_BINS_GAP_RATIO);
       const gap = barWidth * FEW_BINS_GAP_RATIO;
 
       this.barPositions = layoutData.bins.map((_, index) => ({
@@ -395,14 +393,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     let brushEndIdx = -1;
 
     if (hasBrush && this.brushState.startBinIndex !== -1) {
-      brushStartIdx = Math.min(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
-      brushEndIdx = Math.max(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
+      brushStartIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+      brushEndIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     }
 
     for (let i = 0; i < layoutData.bins.length; i++) {
@@ -436,7 +428,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         const bgHeightRatio = bgBin.count / maxCount;
         const bgBarHeight = Math.max(
           bgBin.count > 0 ? LAYOUT.minBarHeight : 0,
-          bgHeightRatio * this.chartArea.height
+          bgHeightRatio * this.chartArea.height,
         );
 
         if (bgBarHeight > 0) {
@@ -447,7 +439,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
             pos.width,
             bgBarHeight,
             LAYOUT.barRadius,
-            this.colors.barFadedCrossfilter
+            this.colors.barFadedCrossfilter,
           );
         }
 
@@ -456,7 +448,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         const fgHeightRatio = fgCount / maxCount;
         const fgBarHeight = Math.max(
           fgCount > 0 ? LAYOUT.minBarHeight : 0,
-          fgHeightRatio * this.chartArea.height
+          fgHeightRatio * this.chartArea.height,
         );
 
         if (fgBarHeight > 0) {
@@ -467,7 +459,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
             pos.width,
             fgBarHeight,
             LAYOUT.barRadius,
-            fillColor
+            fillColor,
           );
         }
       } else {
@@ -476,7 +468,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         const heightRatio = fgCount / maxCount;
         const barHeight = Math.max(
           fgCount > 0 ? LAYOUT.minBarHeight : 0,
-          heightRatio * this.chartArea.height
+          heightRatio * this.chartArea.height,
         );
 
         this.drawRoundedBar(
@@ -486,7 +478,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
           pos.width,
           barHeight,
           LAYOUT.barRadius,
-          fillColor
+          fillColor,
         );
       }
     }
@@ -502,7 +494,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     width: number,
     height: number,
     radius: number,
-    color: string
+    color: string,
   ): void {
     if (height <= 0) return;
 
@@ -536,11 +528,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     const ctx = this.ctx;
     const hasCrossfilter = this.backgroundData !== null;
-    const maxCount = Math.max(
-      ...layoutData.bins.map((b) => b.count),
-      layoutData.nullCount,
-      1
-    );
+    const maxCount = Math.max(...layoutData.bins.map((b) => b.count), layoutData.nullCount, 1);
     const chartBottom = this.nullBarArea.y + this.nullBarArea.height;
 
     // Determine color: hover > selected > (selection|brush|hover) faded > normal
@@ -564,25 +552,46 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
       const bgHeightRatio = layoutData.nullCount / maxCount;
       const bgBarHeight = Math.max(LAYOUT.minBarHeight, bgHeightRatio * this.nullBarArea.height);
 
-      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - bgBarHeight,
-        this.nullBarArea.width, bgBarHeight, LAYOUT.barRadius, this.colors.nullFadedCrossfilter);
+      this.drawRoundedBar(
+        ctx,
+        this.nullBarArea.x,
+        chartBottom - bgBarHeight,
+        this.nullBarArea.width,
+        bgBarHeight,
+        LAYOUT.barRadius,
+        this.colors.nullFadedCrossfilter,
+      );
 
       const fgHeightRatio = this.data.nullCount / maxCount;
       const fgBarHeight = Math.max(
         this.data.nullCount > 0 ? LAYOUT.minBarHeight : 0,
-        fgHeightRatio * this.nullBarArea.height
+        fgHeightRatio * this.nullBarArea.height,
       );
 
       if (fgBarHeight > 0) {
-        this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - fgBarHeight,
-          this.nullBarArea.width, fgBarHeight, LAYOUT.barRadius, fillColor);
+        this.drawRoundedBar(
+          ctx,
+          this.nullBarArea.x,
+          chartBottom - fgBarHeight,
+          this.nullBarArea.width,
+          fgBarHeight,
+          LAYOUT.barRadius,
+          fillColor,
+        );
       }
     } else {
       const heightRatio = this.data.nullCount / maxCount;
       const barHeight = Math.max(LAYOUT.minBarHeight, heightRatio * this.nullBarArea.height);
 
-      this.drawRoundedBar(ctx, this.nullBarArea.x, chartBottom - barHeight,
-        this.nullBarArea.width, barHeight, LAYOUT.barRadius, fillColor);
+      this.drawRoundedBar(
+        ctx,
+        this.nullBarArea.x,
+        chartBottom - barHeight,
+        this.nullBarArea.width,
+        barHeight,
+        LAYOUT.barRadius,
+        fillColor,
+      );
     }
   }
 
@@ -593,8 +602,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (!this.data) return;
 
     const ctx = this.ctx;
-    const indicatorY =
-      this.chartArea.y + this.chartArea.height + LAYOUT.selectionIndicatorGap;
+    const indicatorY = this.chartArea.y + this.chartArea.height + LAYOUT.selectionIndicatorGap;
     const indicatorHeight = LAYOUT.selectionIndicatorHeight;
 
     // Check for brush selection
@@ -603,14 +611,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     let brushEndIdx = -1;
 
     if (hasBrush && this.brushState.startBinIndex !== -1) {
-      brushStartIdx = Math.min(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
-      brushEndIdx = Math.max(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
+      brushStartIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+      brushEndIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     }
 
     // Draw indicators for histogram bars
@@ -630,12 +632,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     // Draw indicator for null bar if selected
     if (this.selectedNull && this.data.nullCount > 0) {
       ctx.fillStyle = this.colors.nullSelectionIndicator;
-      ctx.fillRect(
-        this.nullBarArea.x,
-        indicatorY,
-        this.nullBarArea.width,
-        indicatorHeight
-      );
+      ctx.fillRect(this.nullBarArea.x, indicatorY, this.nullBarArea.width, indicatorHeight);
     }
   }
 
@@ -794,8 +791,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (this.isAllNullState && this.data) {
       const barX = PADDING.left;
       const barWidth = this.width - PADDING.left - PADDING.right;
-      const inBar = y >= PADDING.top && y <= this.height - PADDING.bottom &&
-                    x >= barX && x <= barX + barWidth;
+      const inBar =
+        y >= PADDING.top && y <= this.height - PADDING.bottom && x >= barX && x <= barX + barWidth;
 
       const prevHovered = this.allNullHovered;
       this.allNullHovered = inBar;
@@ -806,8 +803,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         if (this.allNullHovered) {
           this.options.onStatsChange?.(
             `<span class="stats-label">Bin:</span><br>` +
-            `null<br>` +
-            this.formatCountLine(this.data.nullCount)
+              `null<br>` +
+              this.formatCountLine(this.data.nullCount),
           );
         } else {
           this.options.onStatsChange?.(null);
@@ -830,8 +827,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     }
 
     // Track whether we have a committed brush or selection (for stat restoration)
-    const hasBrushOrSelection = this.brushState.committed ||
-      this.selectedBin !== null || this.selectedNull;
+    const hasBrushOrSelection =
+      this.brushState.committed || this.selectedBin !== null || this.selectedNull;
 
     // If brush is committed, set cursor based on position but still allow hover
     if (this.brushState.committed) {
@@ -877,9 +874,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     }
 
     // Handle hover state changes
-    const hoverChanged =
-      this.hoveredBin !== prevHoveredBin ||
-      this.hoveredNull !== prevHoveredNull;
+    const hoverChanged = this.hoveredBin !== prevHoveredBin || this.hoveredNull !== prevHoveredNull;
 
     if (hoverChanged) {
       // Re-render for bar highlighting
@@ -892,15 +887,15 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
           const rangeStr = this.formatBinRange(this.hoveredBin);
           this.options.onStatsChange?.(
             `<span class="stats-label">Bin:</span><br>` +
-            `${rangeStr}<br>` +
-            this.formatCountLine(bin.count, { start: this.hoveredBin, end: this.hoveredBin })
+              `${rangeStr}<br>` +
+              this.formatCountLine(bin.count, { start: this.hoveredBin, end: this.hoveredBin }),
           );
         }
       } else if (this.hoveredNull && this.data) {
         this.options.onStatsChange?.(
           `<span class="stats-label">Bin:</span><br>` +
-          `null<br>` +
-          this.formatCountLine(this.data.nullCount)
+            `null<br>` +
+            this.formatCountLine(this.data.nullCount),
         );
       } else if (hasBrushOrSelection) {
         // Restore brush/selection stats when hover ends
@@ -923,14 +918,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (!this.brushState.committed) return false;
     if (y < PADDING.top || y > this.height - PADDING.bottom) return false;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startPos = this.barPositions[startIdx];
     const endPos = this.barPositions[endIdx];
 
@@ -958,8 +947,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     if (this.isAllNullState) {
       const barX = PADDING.left;
       const barWidth = this.width - PADDING.left - PADDING.right;
-      const inBar = y >= PADDING.top && y <= this.height - PADDING.bottom &&
-                    x >= barX && x <= barX + barWidth;
+      const inBar =
+        y >= PADDING.top && y <= this.height - PADDING.bottom && x >= barX && x <= barX + barWidth;
 
       if (inBar) {
         this.options.onFilterChange?.({
@@ -1049,15 +1038,15 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
         const rangeStr = this.formatBinRange(this.selectedBin);
         this.options.onStatsChange?.(
           `<span class="stats-label">Bin:</span><br>` +
-          `${rangeStr}<br>` +
-          this.formatCountLine(bin.count, { start: this.selectedBin, end: this.selectedBin })
+            `${rangeStr}<br>` +
+            this.formatCountLine(bin.count, { start: this.selectedBin, end: this.selectedBin }),
         );
       }
     } else if (this.selectedNull) {
       this.options.onStatsChange?.(
         `<span class="stats-label">Bin:</span><br>` +
-        `null<br>` +
-        this.formatCountLine(this.data.nullCount)
+          `null<br>` +
+          this.formatCountLine(this.data.nullCount),
       );
     }
   }
@@ -1129,10 +1118,12 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     // If null is selected, let handleClick handle toggle on null bar;
     // for other areas, clear null selection so brush can start
     if (this.selectedNull) {
-      const onNullBar = this.data.nullCount > 0 &&
+      const onNullBar =
+        this.data.nullCount > 0 &&
         x >= this.nullBarArea.x &&
         x <= this.nullBarArea.x + this.nullBarArea.width &&
-        y >= PADDING.top && y <= this.height - PADDING.bottom;
+        y >= PADDING.top &&
+        y <= this.height - PADDING.bottom;
       if (onNullBar) {
         // Let handleClick toggle null selection
         return;
@@ -1144,15 +1135,9 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     // Check for double-click inside committed brush to clear it
     if (this.brushState.committed && this.isInsideBrush(x, y)) {
       const timeSinceLastClick = now - this.brushState.lastClickTime;
-      const distance = Math.hypot(
-        x - this.brushState.lastClickX,
-        y - this.brushState.lastClickY
-      );
+      const distance = Math.hypot(x - this.brushState.lastClickX, y - this.brushState.lastClickY);
 
-      if (
-        timeSinceLastClick < DOUBLE_CLICK_THRESHOLD &&
-        distance < DOUBLE_CLICK_DISTANCE
-      ) {
+      if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && distance < DOUBLE_CLICK_DISTANCE) {
         // Double-click detected - clear brush
         this.resetBrush();
         this.render();
@@ -1168,10 +1153,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
       this.brushState.lastClickY = y;
 
       // Calculate offset from click position to brush left edge for cursor sync
-      const startIdx = Math.min(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
+      const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
       const startPos = this.barPositions[startIdx];
       if (startPos) {
         this.brushState.slideClickOffset = x - startPos.x;
@@ -1404,10 +1386,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
     const targetBinIndex = Math.round(targetBinFloat);
 
     // Calculate bin shift from current position
-    const currentStartIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const currentStartIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const binShift = targetBinIndex - currentStartIdx;
 
     // Calculate visual offset for smooth rendering (difference from snapped position)
@@ -1416,9 +1395,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     if (binShift !== 0) {
       // Calculate new indices
-      const brushSize = Math.abs(
-        this.brushState.endBinIndex - this.brushState.startBinIndex
-      );
+      const brushSize = Math.abs(this.brushState.endBinIndex - this.brushState.startBinIndex);
       let newStart = this.brushState.startBinIndex + binShift;
       let newEnd = this.brushState.endBinIndex + binShift;
 
@@ -1455,14 +1432,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
   private updateBrushStats(): void {
     if (!this.data) return;
 
-    const startIdx = Math.min(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
-    const endIdx = Math.max(
-      this.brushState.startBinIndex,
-      this.brushState.endBinIndex
-    );
+    const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const startBin = this.data.bins[startIdx];
     const endBin = this.data.bins[endIdx];
 
@@ -1476,8 +1447,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
       this.options.onStatsChange?.(
         `<span class="stats-label">Bin:</span><br>` +
-        `${rangeStr}<br>` +
-        this.formatCountLine(rangeCount, { start: startIdx, end: endIdx })
+          `${rangeStr}<br>` +
+          this.formatCountLine(rangeCount, { start: startIdx, end: endIdx }),
       );
     }
   }
@@ -1501,14 +1472,8 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
 
     if (this.brushState.committed) {
       // Committed brush: calculate base position from bar positions
-      const startIdx = Math.min(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
-      const endIdx = Math.max(
-        this.brushState.startBinIndex,
-        this.brushState.endBinIndex
-      );
+      const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
+      const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
 
       const startPos = this.barPositions[startIdx];
       const endPos = this.barPositions[endIdx];
@@ -1589,9 +1554,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
    * Restore brush state from saved state
    * Call after data is loaded (fetchData completed)
    */
-  public setBrushState(
-    state: { startBinIndex: number; endBinIndex: number } | null
-  ): void {
+  public setBrushState(state: { startBinIndex: number; endBinIndex: number } | null): void {
     if (!state || !this.data) {
       return;
     }
@@ -1626,10 +1589,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
    * Restore selection state from saved state
    * Call after data is loaded (fetchData completed)
    */
-  public setSelectionState(state: {
-    selectedBin: number | null;
-    selectedNull: boolean;
-  }): void {
+  public setSelectionState(state: { selectedBin: number | null; selectedNull: boolean }): void {
     if (!this.data) return;
 
     // Validate selectedBin is within bounds
@@ -1672,7 +1632,7 @@ export abstract class SharedHistogramBase<TData extends BaseHistogramData> exten
    */
   protected syncVisualStateFromFilter(): void {
     const filters = this.options.filters;
-    const ownFilter = filters.find(f => f.column === this.column.name);
+    const ownFilter = filters.find((f) => f.column === this.column.name);
     const data = this.backgroundData ?? this.data;
 
     if (!ownFilter || !data || data.bins.length === 0) {

@@ -29,21 +29,28 @@
  * @see ../../docs/guides/filter-presets.md
  */
 
+import type { StateActions } from '../core/Actions';
+import { ConfigurationError } from '../core/errors';
 import { createSignal } from '../core/Signal';
 import type { Signal } from '../core/Signal';
-import type { Filter } from './FilterTypes';
 import type { SortColumn } from '../core/types';
-import type { StateActions } from '../core/Actions';
 import { serializeFilter, deserializeFilter } from '../persistence/SessionStore';
 import type { SerializedFilter } from '../persistence/types';
 import type { FilterPreset, FilterPresetCollection } from './FilterPresetTypes';
-import { ConfigurationError } from '../core/errors';
+import type { Filter } from './FilterTypes';
 
 const VALID_PATTERN_MODES = new Set(['contains', 'starts', 'ends', 'regex']);
 
 /** Known filter type discriminants for import validation */
 const KNOWN_FILTER_TYPES = new Set([
-  'range', 'point', 'set', 'not-set', 'null', 'not-null', 'pattern', 'raw-sql',
+  'range',
+  'point',
+  'set',
+  'not-set',
+  'null',
+  'not-null',
+  'pattern',
+  'raw-sql',
 ]);
 
 export class FilterPresetManager {
@@ -60,7 +67,7 @@ export class FilterPresetManager {
     name: string,
     filters: Filter[],
     sortColumns?: SortColumn[],
-    description?: string
+    description?: string,
   ): FilterPreset {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -111,9 +118,9 @@ export class FilterPresetManager {
     if (!trimmed) return;
 
     this.presets.set(
-      this.presets.get().map((p) =>
-        p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p
-      )
+      this.presets
+        .get()
+        .map((p) => (p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p)),
     );
   }
 
@@ -122,11 +129,11 @@ export class FilterPresetManager {
    */
   update(id: string, filters: Filter[]): void {
     this.presets.set(
-      this.presets.get().map((p) =>
-        p.id === id
-          ? { ...p, filters: filters.map(serializeFilter), updatedAt: Date.now() }
-          : p
-      )
+      this.presets
+        .get()
+        .map((p) =>
+          p.id === id ? { ...p, filters: filters.map(serializeFilter), updatedAt: Date.now() } : p,
+        ),
     );
   }
 
@@ -188,10 +195,19 @@ export class FilterPresetManager {
       const validatedFilters: unknown[] = [];
       let filterErrors = 0;
       for (const f of p.filters as unknown[]) {
-        if (typeof f !== 'object' || f === null) { filterErrors++; continue; }
+        if (typeof f !== 'object' || f === null) {
+          filterErrors++;
+          continue;
+        }
         const fObj = f as Record<string, unknown>;
-        if (typeof fObj.type !== 'string' || !KNOWN_FILTER_TYPES.has(fObj.type)) { filterErrors++; continue; }
-        if (typeof fObj.column !== 'string' || !fObj.column) { filterErrors++; continue; }
+        if (typeof fObj.type !== 'string' || !KNOWN_FILTER_TYPES.has(fObj.type)) {
+          filterErrors++;
+          continue;
+        }
+        if (typeof fObj.column !== 'string' || !fObj.column) {
+          filterErrors++;
+          continue;
+        }
         // Type-specific required field validation
         let typeInvalid = false;
         switch (fObj.type) {
@@ -206,11 +222,19 @@ export class FilterPresetManager {
             if (!Array.isArray(fObj.values)) typeInvalid = true;
             break;
           case 'pattern':
-            if (typeof fObj.pattern !== 'string' || typeof fObj.mode !== 'string' || !VALID_PATTERN_MODES.has(fObj.mode)) typeInvalid = true;
+            if (
+              typeof fObj.pattern !== 'string' ||
+              typeof fObj.mode !== 'string' ||
+              !VALID_PATTERN_MODES.has(fObj.mode)
+            )
+              typeInvalid = true;
             break;
           // null, not-null, point: no additional required fields
         }
-        if (typeInvalid) { filterErrors++; continue; }
+        if (typeInvalid) {
+          filterErrors++;
+          continue;
+        }
         validatedFilters.push(f);
       }
       if (filterErrors > 0) {
@@ -223,7 +247,7 @@ export class FilterPresetManager {
 
       valid.push({
         id: crypto.randomUUID(),
-        name: (p.name as string).trim(),
+        name: p.name.trim(),
         description:
           typeof p.description === 'string' ? p.description.trim() || undefined : undefined,
         filters: validatedFilters as SerializedFilter[],
@@ -231,10 +255,11 @@ export class FilterPresetManager {
           if (!Array.isArray(p.sortColumns)) return undefined;
           const validated = (p.sortColumns as unknown[]).filter(
             (s): s is SortColumn =>
-              typeof s === 'object' && s !== null &&
+              typeof s === 'object' &&
+              s !== null &&
               typeof (s as Record<string, unknown>).column === 'string' &&
               ((s as Record<string, unknown>).direction === 'asc' ||
-               (s as Record<string, unknown>).direction === 'desc')
+                (s as Record<string, unknown>).direction === 'desc'),
           );
           return validated.length > 0 ? validated : undefined;
         })(),
@@ -254,7 +279,7 @@ export class FilterPresetManager {
    * Replace all presets (used for session restore).
    */
   loadPresets(presets: FilterPreset[]): void {
-    this.presets.set(presets.map(p => ({ ...p })));
+    this.presets.set(presets.map((p) => ({ ...p })));
   }
 
   /**

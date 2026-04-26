@@ -65,28 +65,18 @@ describe('filtersToWhereClause', () => {
   });
 
   it('should generate range filter SQL', () => {
-    const filters: Filter[] = [
-      { column: 'price', type: 'range', min: 10, max: 100 },
-    ];
-    expect(filtersToWhereClause(filters)).toBe(
-      '("price" >= 10 AND "price" < 100)'
-    );
+    const filters: Filter[] = [{ column: 'price', type: 'range', min: 10, max: 100 }];
+    expect(filtersToWhereClause(filters)).toBe('("price" >= 10 AND "price" < 100)');
   });
 
   it('should generate point filter SQL', () => {
-    const filters: Filter[] = [
-      { column: 'status', type: 'point', value: 'active' },
-    ];
+    const filters: Filter[] = [{ column: 'status', type: 'point', value: 'active' }];
     expect(filtersToWhereClause(filters)).toBe('"status" = \'active\'');
   });
 
   it('should generate set filter SQL', () => {
-    const filters: Filter[] = [
-      { column: 'category', type: 'set', values: ['A', 'B', 'C'] },
-    ];
-    expect(filtersToWhereClause(filters)).toBe(
-      '"category" IN (\'A\', \'B\', \'C\')'
-    );
+    const filters: Filter[] = [{ column: 'category', type: 'set', values: ['A', 'B', 'C'] }];
+    expect(filtersToWhereClause(filters)).toBe("\"category\" IN ('A', 'B', 'C')");
   });
 
   it('should generate FALSE for empty set filter', () => {
@@ -95,16 +85,12 @@ describe('filtersToWhereClause', () => {
   });
 
   it('should generate null filter SQL', () => {
-    const filters: Filter[] = [
-      { column: 'description', type: 'null' },
-    ];
+    const filters: Filter[] = [{ column: 'description', type: 'null' }];
     expect(filtersToWhereClause(filters)).toBe('"description" IS NULL');
   });
 
   it('should generate not-null filter SQL', () => {
-    const filters: Filter[] = [
-      { column: 'description', type: 'not-null' },
-    ];
+    const filters: Filter[] = [{ column: 'description', type: 'not-null' }];
     expect(filtersToWhereClause(filters)).toBe('"description" IS NOT NULL');
   });
 
@@ -112,7 +98,9 @@ describe('filtersToWhereClause', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: 'test', mode: 'contains' },
     ];
-    expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'`);
+    expect(filtersToWhereClause(filters)).toBe(
+      `CAST("name" AS VARCHAR) ILIKE '%test%' ESCAPE '\\'`,
+    );
   });
 
   it('should generate pattern filter SQL (starts mode)', () => {
@@ -123,9 +111,7 @@ describe('filtersToWhereClause', () => {
   });
 
   it('should generate pattern filter SQL (ends mode)', () => {
-    const filters: Filter[] = [
-      { column: 'name', type: 'pattern', pattern: 'test', mode: 'ends' },
-    ];
+    const filters: Filter[] = [{ column: 'name', type: 'pattern', pattern: 'test', mode: 'ends' }];
     expect(filtersToWhereClause(filters)).toBe(`CAST("name" AS VARCHAR) ILIKE '%test' ESCAPE '\\'`);
   });
 
@@ -133,7 +119,9 @@ describe('filtersToWhereClause', () => {
     const filters: Filter[] = [
       { column: 'name', type: 'pattern', pattern: '^test.*$', mode: 'regex' },
     ];
-    expect(filtersToWhereClause(filters)).toBe('regexp_matches(CAST("name" AS VARCHAR), \'^test.*$\')');
+    expect(filtersToWhereClause(filters)).toBe(
+      'regexp_matches(CAST("name" AS VARCHAR), \'^test.*$\')',
+    );
   });
 
   it('should combine multiple filters with AND', () => {
@@ -158,16 +146,12 @@ describe('filtersToWhereClause', () => {
   });
 
   it('should return empty string when excluding the only filter', () => {
-    const filters: Filter[] = [
-      { column: 'price', type: 'range', min: 10, max: 100 },
-    ];
+    const filters: Filter[] = [{ column: 'price', type: 'range', min: 10, max: 100 }];
     expect(filtersToWhereClause(filters, 'price')).toBe('');
   });
 
   it('should handle numeric set values', () => {
-    const filters: Filter[] = [
-      { column: 'id', type: 'set', values: [1, 2, 3] },
-    ];
+    const filters: Filter[] = [{ column: 'id', type: 'set', values: [1, 2, 3] }];
     expect(filtersToWhereClause(filters)).toBe('"id" IN (1, 2, 3)');
   });
 });
@@ -228,9 +212,7 @@ describe('calculateOptimalBins', () => {
 // =========================================
 
 describe('fetchHistogramData', () => {
-  function createMockBridge(
-    queryResults: Record<string, unknown[]>
-  ): WorkerBridge {
+  function createMockBridge(queryResults: Record<string, unknown[]>): WorkerBridge {
     let callIndex = 0;
     const results = Object.values(queryResults);
 
@@ -255,13 +237,7 @@ describe('fetchHistogramData', () => {
       ],
     });
 
-    const result = await fetchHistogramData(
-      'test_table',
-      'price',
-      5,
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('test_table', 'price', 5, [], mockBridge);
 
     expect(result.bins).toHaveLength(5);
     expect(result.min).toBe(0);
@@ -277,13 +253,7 @@ describe('fetchHistogramData', () => {
       stats: [{ min: null, max: null, count: 0, null_count: 0, q1: null, q3: null }],
     });
 
-    const result = await fetchHistogramData(
-      'empty_table',
-      'value',
-      'auto',
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('empty_table', 'value', 'auto', [], mockBridge);
 
     expect(result.bins).toHaveLength(0);
     expect(result.nullCount).toBe(0);
@@ -295,13 +265,7 @@ describe('fetchHistogramData', () => {
       stats: [{ min: null, max: null, count: 0, null_count: 100, q1: null, q3: null }],
     });
 
-    const result = await fetchHistogramData(
-      'null_table',
-      'value',
-      'auto',
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('null_table', 'value', 'auto', [], mockBridge);
 
     expect(result.bins).toHaveLength(0);
     expect(result.nullCount).toBe(100);
@@ -313,13 +277,7 @@ describe('fetchHistogramData', () => {
       stats: [{ min: 42, max: 42, count: 100, null_count: 0, q1: 42, q3: 42 }],
     });
 
-    const result = await fetchHistogramData(
-      'single_value_table',
-      'value',
-      'auto',
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('single_value_table', 'value', 'auto', [], mockBridge);
 
     expect(result.bins).toHaveLength(1);
     expect(result.bins[0].x0).toBe(42);
@@ -333,13 +291,7 @@ describe('fetchHistogramData', () => {
       bins: [],
     });
 
-    const result = await fetchHistogramData(
-      'test_table',
-      'value',
-      'auto',
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('test_table', 'value', 'auto', [], mockBridge);
 
     // Should have called query twice: stats + bins
     expect(mockBridge.query).toHaveBeenCalledTimes(2);
@@ -353,9 +305,7 @@ describe('fetchHistogramData', () => {
       bins: [{ bin_idx: 0, count: 500 }],
     });
 
-    const filters: Filter[] = [
-      { column: 'category', type: 'point', value: 'electronics' },
-    ];
+    const filters: Filter[] = [{ column: 'category', type: 'point', value: 'electronics' }];
 
     await fetchHistogramData('test_table', 'price', 5, filters, mockBridge);
 
@@ -374,13 +324,7 @@ describe('fetchHistogramData', () => {
       ],
     });
 
-    const result = await fetchHistogramData(
-      'test_table',
-      'value',
-      5,
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('test_table', 'value', 5, [], mockBridge);
 
     expect(result.bins).toHaveLength(5);
     expect(result.bins[0].count).toBe(50);
@@ -397,13 +341,7 @@ describe('fetchHistogramData', () => {
     });
 
     // Note: minimum bins is 5, so passing 5 as maxBins
-    const result = await fetchHistogramData(
-      'test_table',
-      'value',
-      5,
-      [],
-      mockBridge
-    );
+    const result = await fetchHistogramData('test_table', 'value', 5, [], mockBridge);
 
     expect(result.bins).toHaveLength(5);
     expect(result.bins[0].x0).toBe(0);
@@ -423,8 +361,8 @@ describe('fetchHistogramData', () => {
       query: vi.fn().mockRejectedValue(new Error('Query failed')),
     } as unknown as WorkerBridge;
 
-    await expect(
-      fetchHistogramData('test_table', 'value', 'auto', [], mockBridge)
-    ).rejects.toThrow('Failed to fetch histogram data for column "value"');
+    await expect(fetchHistogramData('test_table', 'value', 'auto', [], mockBridge)).rejects.toThrow(
+      'Failed to fetch histogram data for column "value"',
+    );
   });
 });

@@ -5,33 +5,111 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Event listeners</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; }
-      body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; background: var(--dt-bg); color: var(--dt-text); }
-      header { padding: 0.5rem 1rem; border-bottom: 1px solid var(--dt-border); }
-      header h1 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--dt-text); }
-      header a { color: var(--dt-primary); }
-      .split { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
-      #table { min-height: 0; }
-      aside { padding: 1rem; border-left: 1px solid var(--dt-border); overflow: auto; font-size: 0.9em; background: var(--dt-bg-secondary); color: var(--dt-text); display: flex; flex-direction: column; gap: 1rem; }
-      aside section { background: var(--dt-bg); border: 1px solid var(--dt-border); border-radius: 4px; padding: 0.75rem; }
-      aside section h2 { font-size: 0.75em; margin: 0 0 0.5rem; color: var(--dt-text-secondary); text-transform: uppercase; letter-spacing: 0.08em; }
-      aside pre { margin: 0 0 0.5rem; font-size: 0.8em; white-space: pre-wrap; word-break: break-all; color: var(--dt-text); }
-      aside pre:last-child { margin-bottom: 0; }
-      .drive button { display: block; width: 100%; text-align: left; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; background: var(--dt-bg-tertiary); color: var(--dt-text); border: 1px solid var(--dt-border); border-radius: 3px; font: inherit; cursor: pointer; }
-      .drive button:hover { background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%); }
-      .drive button:last-child { margin-bottom: 0; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+        background: var(--dt-bg);
+        color: var(--dt-text);
+      }
+      header {
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid var(--dt-border);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      header a {
+        color: var(--dt-primary);
+      }
+      .split {
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        min-height: 0;
+      }
+      #table {
+        min-height: 0;
+      }
+      aside {
+        padding: 1rem;
+        border-left: 1px solid var(--dt-border);
+        overflow: auto;
+        font-size: 0.9em;
+        background: var(--dt-bg-secondary);
+        color: var(--dt-text);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      aside section {
+        background: var(--dt-bg);
+        border: 1px solid var(--dt-border);
+        border-radius: 4px;
+        padding: 0.75rem;
+      }
+      aside section h2 {
+        font-size: 0.75em;
+        margin: 0 0 0.5rem;
+        color: var(--dt-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      aside pre {
+        margin: 0 0 0.5rem;
+        font-size: 0.8em;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: var(--dt-text);
+      }
+      aside pre:last-child {
+        margin-bottom: 0;
+      }
+      .drive button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 0.4rem 0.6rem;
+        margin: 0 0 0.4rem;
+        background: var(--dt-bg-tertiary);
+        color: var(--dt-text);
+        border: 1px solid var(--dt-border);
+        border-radius: 3px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .drive button:hover {
+        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
+      }
+      .drive button:last-child {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body>
-    <header><h1>Event listeners (<a href="../">back</a>)</h1></header>
+    <header>
+      <h1>Event listeners (<a href="../">back</a>)</h1>
+    </header>
     <div class="split">
       <div id="table"></div>
       <aside>
         <section>
           <h2>Observe (via `on`)</h2>
-          <div>filterChange</div><pre id="obs-filter">—</pre>
-          <div>sortChange</div><pre id="obs-sort">—</pre>
-          <div>selectionChange</div><pre id="obs-sel">—</pre>
+          <div>filterChange</div>
+          <pre id="obs-filter">—</pre>
+          <div>sortChange</div>
+          <pre id="obs-sort">—</pre>
+          <div>selectionChange</div>
+          <pre id="obs-sel">—</pre>
         </section>
         <section class="drive">
           <h2>Drive (via `actions`)</h2>

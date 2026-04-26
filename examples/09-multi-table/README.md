@@ -29,7 +29,7 @@ schema, so a preset saved from A can be loaded onto B cleanly.
 1. **Filter something on A** — drag a histogram brush, click a value in the
    ValueCounts list, or use the filter bar.
 2. **Save preset from A** — snapshots the current filter set with a name.
-   The preset appears in *both* tables' Presets panel because the manager
+   The preset appears in _both_ tables' Presets panel because the manager
    is shared.
 3. **Load latest into B** — applies A's saved filters to B in one undo
    step. Cmd/Ctrl-Z on B restores B's pre-load state.
@@ -44,7 +44,7 @@ schema, so a preset saved from A can be loaded onto B cleanly.
    subsequent page reload finds nothing in `SessionStore` and starts from
    scratch.
 
-## What's *not* shared
+## What's _not_ shared
 
 - `TableState` and `StateActions`. Per-instance by definition — each table has
   its own filters, sort order, column visibility, and undo/redo stack.

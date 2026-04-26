@@ -8,29 +8,83 @@
       /* Tell the browser this page supports both schemes — flips native
          scrollbars, form controls, and the default body background to
          match the OS preference. */
-      :root { color-scheme: light dark; }
+      :root {
+        color-scheme: light dark;
+      }
 
-      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
-      h1 { margin-bottom: 0.25rem; }
-      p.lede { color: #555; margin-top: 0; }
-      ol { padding-left: 1.25rem; }
-      li { margin: 0.75rem 0; line-height: 1.45; }
-      li a { font-weight: 600; text-decoration: none; color: #0d6efd; }
-      li a:hover { text-decoration: underline; }
-      code { background: #f3f3f3; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
-      .hint { color: #666; font-size: 0.9em; margin-top: 2rem; }
-      .back { display: inline-block; margin-bottom: 1rem; color: #0d6efd; text-decoration: none; font-size: 0.9em; }
-      .back:hover { text-decoration: underline; }
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #222;
+      }
+      h1 {
+        margin-bottom: 0.25rem;
+      }
+      p.lede {
+        color: #555;
+        margin-top: 0;
+      }
+      ol {
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.75rem 0;
+        line-height: 1.45;
+      }
+      li a {
+        font-weight: 600;
+        text-decoration: none;
+        color: #0d6efd;
+      }
+      li a:hover {
+        text-decoration: underline;
+      }
+      code {
+        background: #f3f3f3;
+        padding: 0.1rem 0.3rem;
+        border-radius: 3px;
+        font-size: 0.9em;
+      }
+      .hint {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 2rem;
+      }
+      .back {
+        display: inline-block;
+        margin-bottom: 1rem;
+        color: #0d6efd;
+        text-decoration: none;
+        font-size: 0.9em;
+      }
+      .back:hover {
+        text-decoration: underline;
+      }
 
       /* Dark mode — mirrors the library's gray-900 surface + lifted blue
          link palette so the index reads consistently with the examples. */
       @media (prefers-color-scheme: dark) {
-        body { background: #111827; color: #f9fafb; }
-        p.lede { color: #d1d5db; }
-        li a { color: #60a5fa; }
-        code { background: #374151; }
-        .hint { color: #9ca3af; }
-        .back { color: #60a5fa; }
+        body {
+          background: #111827;
+          color: #f9fafb;
+        }
+        p.lede {
+          color: #d1d5db;
+        }
+        li a {
+          color: #60a5fa;
+        }
+        code {
+          background: #374151;
+        }
+        .hint {
+          color: #9ca3af;
+        }
+        .back {
+          color: #60a5fa;
+        }
       }
     </style>
   </head>
@@ -38,23 +92,71 @@
     <a class="back" href="../">← Back to demo</a>
     <h1>data-table examples</h1>
     <p class="lede">
-      Fourteen single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the package the same way a real consumer would.
+      Fourteen single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the
+      package the same way a real consumer would.
     </p>
     <ol>
-      <li><a href="./01-minimal/">Minimal</a> — smallest mount: eight rows defined inline in the <code>.ts</code> file, no network.</li>
-      <li><a href="./02-load-from-url/">Load from URL</a> — 100 K-row NYC taxi fetch with a live progress bar.</li>
-      <li><a href="./03-programmatic-filters/">Programmatic filters</a> — card / fare / tip / distance filters on NYC taxi; log <code>filterChange</code>.</li>
-      <li><a href="./04-derived-columns/">Derived columns</a> — <code>tip_pct</code> expression + <code>is_airport</code> vector on NYC taxi.</li>
-      <li><a href="./05-event-listeners/">Event listeners</a> — split panel: <em>Observe</em> listens via <code>on()</code>, <em>Drive</em> mutates via <code>actions.*</code>.</li>
-      <li><a href="./06-custom-theme/">Custom theme</a> — terracotta / cream palette; light + dark fully recolored.</li>
-      <li><a href="./07-i18n-french/">i18n (French)</a> — French UI chrome paired with a French-native wine fixture.</li>
-      <li><a href="./08-custom-visualization/">Custom visualization</a> — US-states choropleth on a custom <code>state</code> column; Observable Plot + <code>us-atlas</code>.</li>
-      <li><a href="./09-multi-table/">Multi-table</a> — two tables sharing a <code>FilterPresetManager</code> and a <code>SessionStore</code>; save a preset in A, load it in B.</li>
-      <li><a href="./10-column-export/">Column export</a> — <code>actions.getColumnValues</code> + synthetic <code>__rowid__</code>, plus the export-dialog "Include system columns" toggle.</li>
-      <li><a href="./11-annotations/">Annotations</a> — programmatic CRUD + JSON round-trip + session persistence on <code>table.annotations</code>.</li>
-      <li><a href="./12-column-header-tooltips/">Column header tooltips</a> — structured popover (title / description / items) on the column-name span.</li>
-      <li><a href="./13-custom-stats-panel/">Custom stats panel</a> — replace the default column-stats slot with a <code>BaseStatsPanel</code> subclass; numeric columns show <em>n · μ · σ</em> from a custom DuckDB query, string columns show <em>top: value (pct%)</em>.</li>
-      <li><a href="./14-standalone-sql-editor/">Standalone SQL editor</a> — host-built CodeMirror editors mounted outside the data table; <code>createSqlExtensions</code> + <code>buildCompletionContext</code> give them the same SQL, schema, and DuckDB-function awareness the bundled editor uses.</li>
-  </ol>
+      <li>
+        <a href="./01-minimal/">Minimal</a> — smallest mount: eight rows defined inline in the
+        <code>.ts</code> file, no network.
+      </li>
+      <li>
+        <a href="./02-load-from-url/">Load from URL</a> — 100 K-row NYC taxi fetch with a live
+        progress bar.
+      </li>
+      <li>
+        <a href="./03-programmatic-filters/">Programmatic filters</a> — card / fare / tip / distance
+        filters on NYC taxi; log <code>filterChange</code>.
+      </li>
+      <li>
+        <a href="./04-derived-columns/">Derived columns</a> — <code>tip_pct</code> expression +
+        <code>is_airport</code> vector on NYC taxi.
+      </li>
+      <li>
+        <a href="./05-event-listeners/">Event listeners</a> — split panel: <em>Observe</em> listens
+        via <code>on()</code>, <em>Drive</em> mutates via <code>actions.*</code>.
+      </li>
+      <li>
+        <a href="./06-custom-theme/">Custom theme</a> — terracotta / cream palette; light + dark
+        fully recolored.
+      </li>
+      <li>
+        <a href="./07-i18n-french/">i18n (French)</a> — French UI chrome paired with a French-native
+        wine fixture.
+      </li>
+      <li>
+        <a href="./08-custom-visualization/">Custom visualization</a> — US-states choropleth on a
+        custom <code>state</code> column; Observable Plot + <code>us-atlas</code>.
+      </li>
+      <li>
+        <a href="./09-multi-table/">Multi-table</a> — two tables sharing a
+        <code>FilterPresetManager</code> and a <code>SessionStore</code>; save a preset in A, load
+        it in B.
+      </li>
+      <li>
+        <a href="./10-column-export/">Column export</a> — <code>actions.getColumnValues</code> +
+        synthetic <code>__rowid__</code>, plus the export-dialog "Include system columns" toggle.
+      </li>
+      <li>
+        <a href="./11-annotations/">Annotations</a> — programmatic CRUD + JSON round-trip + session
+        persistence on <code>table.annotations</code>.
+      </li>
+      <li>
+        <a href="./12-column-header-tooltips/">Column header tooltips</a> — structured popover
+        (title / description / items) on the column-name span.
+      </li>
+      <li>
+        <a href="./13-custom-stats-panel/">Custom stats panel</a> — replace the default column-stats
+        slot with a <code>BaseStatsPanel</code> subclass; numeric columns show
+        <em>n · μ · σ</em> from a custom DuckDB query, string columns show
+        <em>top: value (pct%)</em>.
+      </li>
+      <li>
+        <a href="./14-standalone-sql-editor/">Standalone SQL editor</a> — host-built CodeMirror
+        editors mounted outside the data table; <code>createSqlExtensions</code> +
+        <code>buildCompletionContext</code> give them the same SQL, schema, and DuckDB-function
+        awareness the bundled editor uses.
+      </li>
+    </ol>
   </body>
 </html>

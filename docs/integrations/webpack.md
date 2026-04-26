@@ -134,10 +134,10 @@ await createDataTable({
   container,
   source,
   bridgeOptions: {
-    workerFactory: () => new Worker(
-      new URL('@jeyabbalas/data-table/dist/worker/worker.js', import.meta.url),
-      { type: 'module' },
-    ),
+    workerFactory: () =>
+      new Worker(new URL('@jeyabbalas/data-table/dist/worker/worker.js', import.meta.url), {
+        type: 'module',
+      }),
   },
 });
 ```

@@ -49,7 +49,12 @@ describe('StateActions', () => {
 
     it('addFilter() should add multiple filters for different columns', () => {
       const filter1: Filter = { column: 'age', type: 'range', min: 18, max: 65 };
-      const filter2: Filter = { column: 'name', type: 'pattern', pattern: 'John', mode: 'contains' };
+      const filter2: Filter = {
+        column: 'name',
+        type: 'pattern',
+        pattern: 'John',
+        mode: 'contains',
+      };
 
       actions.addFilter(filter1);
       actions.addFilter(filter2);
@@ -96,9 +101,7 @@ describe('StateActions', () => {
 
       actions.removeFilter('age', 'range');
 
-      expect(state.filters.get()).toEqual([
-        { column: 'age', type: 'not-null' },
-      ]);
+      expect(state.filters.get()).toEqual([{ column: 'age', type: 'not-null' }]);
     });
 
     it('clearFilters() should remove all filters', () => {
@@ -134,9 +137,7 @@ describe('StateActions', () => {
     it('toggleSort() should cycle: none → asc', () => {
       actions.toggleSort('name');
 
-      expect(state.sortColumns.get()).toEqual([
-        { column: 'name', direction: 'asc' },
-      ]);
+      expect(state.sortColumns.get()).toEqual([{ column: 'name', direction: 'asc' }]);
     });
 
     it('toggleSort() should cycle: asc → desc', () => {
@@ -144,9 +145,7 @@ describe('StateActions', () => {
 
       actions.toggleSort('name');
 
-      expect(state.sortColumns.get()).toEqual([
-        { column: 'name', direction: 'desc' },
-      ]);
+      expect(state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
     });
 
     it('toggleSort() should cycle: desc → none', () => {
@@ -162,9 +161,7 @@ describe('StateActions', () => {
 
       actions.toggleSort('age');
 
-      expect(state.sortColumns.get()).toEqual([
-        { column: 'age', direction: 'asc' },
-      ]);
+      expect(state.sortColumns.get()).toEqual([{ column: 'age', direction: 'asc' }]);
     });
 
     it('addToSort() should add column to multi-sort', () => {
@@ -200,9 +197,7 @@ describe('StateActions', () => {
 
       actions.addToSort('age');
 
-      expect(state.sortColumns.get()).toEqual([
-        { column: 'name', direction: 'asc' },
-      ]);
+      expect(state.sortColumns.get()).toEqual([{ column: 'name', direction: 'asc' }]);
     });
 
     it('clearSort() should clear all sorting', () => {
@@ -297,14 +292,18 @@ describe('StateActions', () => {
       const nameIdx = visible.indexOf('name');
       const idIdx = visible.indexOf('id');
       const ageIdx = visible.indexOf('age');
-      expect(nameIdx === idIdx + 1 || nameIdx === idIdx - 1 ||
-             nameIdx === ageIdx + 1 || nameIdx === ageIdx - 1).toBe(true);
+      expect(
+        nameIdx === idIdx + 1 ||
+          nameIdx === idIdx - 1 ||
+          nameIdx === ageIdx + 1 ||
+          nameIdx === ageIdx - 1,
+      ).toBe(true);
     });
 
     it('showColumn() should restore next to visible left neighbor when right is hidden', () => {
       // columns: id, name, age, email
-      actions.hideColumn('age');   // neighbors: name, email
-      actions.hideColumn('name');  // neighbors: id, age (but age is hidden)
+      actions.hideColumn('age'); // neighbors: name, email
+      actions.hideColumn('name'); // neighbors: id, age (but age is hidden)
 
       // Restore name — left neighbor 'id' is visible, right neighbor 'age' is hidden
       actions.showColumn('name');
@@ -314,8 +313,8 @@ describe('StateActions', () => {
 
     it('showColumn() should restore next to visible right neighbor when left is hidden', () => {
       // columns: id, name, age, email
-      actions.hideColumn('name');  // neighbors: id, age
-      actions.hideColumn('id');    // neighbors: null, name (but name is hidden)
+      actions.hideColumn('name'); // neighbors: id, age
+      actions.hideColumn('id'); // neighbors: null, name (but name is hidden)
 
       // Restore id — left neighbor null, right neighbor 'name' is hidden
       // Should walk outward to find age
@@ -608,7 +607,11 @@ describe('StateActions', () => {
 
     it('addRawSQLFilter does not capture undo before throwing', () => {
       const filtersBefore = state.filters.get();
-      try { actions.addRawSQLFilter(''); } catch { /* expected */ }
+      try {
+        actions.addRawSQLFilter('');
+      } catch {
+        /* expected */
+      }
       expect(state.filters.get()).toBe(filtersBefore);
     });
 
@@ -627,7 +630,9 @@ describe('StateActions', () => {
 
     it('updateRawSQLFilter throws on whitespace-only string', () => {
       const id = actions.addRawSQLFilter('age > 30');
-      expect(() => actions.updateRawSQLFilter(id, '   ')).toThrow('SQL expression must not be empty');
+      expect(() => actions.updateRawSQLFilter(id, '   ')).toThrow(
+        'SQL expression must not be empty',
+      );
     });
 
     it('updateRawSQLFilter succeeds with valid SQL', () => {

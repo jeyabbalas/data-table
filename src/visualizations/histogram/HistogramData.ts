@@ -7,10 +7,10 @@
  * - Filter to SQL conversion utilities
  */
 
+import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
-import { QueryError } from '../../core/errors';
 
 // Re-export for backward compatibility
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -128,7 +128,7 @@ export function calculateOptimalBins(
   max: number,
   count: number,
   iqr: number,
-  maxBins: number = 100
+  maxBins = 100,
 ): number {
   // Edge cases
   if (count <= 1) {
@@ -160,7 +160,7 @@ export function calculateOptimalBins(
  * @param numBins - Calculated number of bins
  * @param maxBins - Maximum allowed bins (default: 100)
  */
-function clampBins(numBins: number, maxBins: number = 100): number {
+function clampBins(numBins: number, maxBins = 100): number {
   const MIN_BINS = 5;
   return Math.max(MIN_BINS, Math.min(maxBins, numBins));
 }
@@ -176,7 +176,7 @@ export async function fetchColumnStats(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<ColumnStats> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -235,7 +235,7 @@ export async function fetchDiscreteValues(
   tableName: string,
   column: string,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<DiscreteResult[]> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -269,7 +269,7 @@ function buildHistogramSQL(
   numBins: number,
   min: number,
   max: number,
-  filters: Filter[]
+  filters: Filter[],
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -322,7 +322,7 @@ export async function fetchHistogramBins(
   max: number,
   numBins: number,
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<HistogramBin[]> {
   const sql = buildHistogramSQL(tableName, column, numBins, min, max, filters);
   const binResults = await bridge.query<BinResult>(sql);
@@ -365,7 +365,7 @@ export async function fetchDiscreteBins(
   column: string,
   discreteValues: number[],
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<HistogramBin[]> {
   const rawResults = await fetchDiscreteValues(tableName, column, filters, bridge);
   const countMap = new Map<number, number>();
@@ -396,7 +396,7 @@ export async function fetchHistogramData(
   column: string,
   maxBins: number | 'auto',
   filters: Filter[],
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<HistogramData> {
   try {
     // Step 1: Fetch column statistics
@@ -407,8 +407,8 @@ export async function fetchHistogramData(
       return {
         bins: [],
         nullCount: stats.nullCount,
-        min: NaN,  // NaN indicates no valid numeric range
-        max: NaN,  // NaN indicates no valid numeric range
+        min: NaN, // NaN indicates no valid numeric range
+        max: NaN, // NaN indicates no valid numeric range
         total: stats.count + stats.nullCount,
         isSingleValue: false,
         isDiscrete: false,
@@ -418,16 +418,9 @@ export async function fetchHistogramData(
     }
 
     // Step 2: Calculate optimal number of bins (clamped to maxBins)
-    const iqr =
-      stats.q1 !== null && stats.q3 !== null ? stats.q3 - stats.q1 : 0;
+    const iqr = stats.q1 !== null && stats.q3 !== null ? stats.q3 - stats.q1 : 0;
     const maxBinsValue = maxBins === 'auto' ? 100 : maxBins;
-    const actualBins = calculateOptimalBins(
-      stats.min,
-      stats.max,
-      stats.count,
-      iqr,
-      maxBinsValue
-    );
+    const actualBins = calculateOptimalBins(stats.min, stats.max, stats.count, iqr, maxBinsValue);
 
     // Handle edge case: all same value (single value column)
     if (stats.min === stats.max) {
@@ -446,12 +439,7 @@ export async function fetchHistogramData(
 
     // Step 2.5: Check for discrete binning (few unique values)
     if (stats.distinctCount <= DISCRETE_BIN_THRESHOLD) {
-      const discreteValues = await fetchDiscreteValues(
-        tableName,
-        column,
-        filters,
-        bridge
-      );
+      const discreteValues = await fetchDiscreteValues(tableName, column, filters, bridge);
 
       // Create one bin per unique value (x0 = x1 = value)
       const bins: HistogramBin[] = discreteValues.map((dv) => ({
@@ -481,7 +469,7 @@ export async function fetchHistogramData(
       stats.max,
       actualBins,
       filters,
-      bridge
+      bridge,
     );
 
     return {

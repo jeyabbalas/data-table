@@ -87,7 +87,8 @@ describe('AnnotationStore — session persistence integration', () => {
     annotationStore.setSeverityFilter({ error: false });
     vi.advanceTimersByTime(1000);
     expect(store.save).toHaveBeenCalledTimes(1);
-    const snap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock.calls[0][0];
+    const snap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock
+      .calls[0][0];
     expect(snap.annotationSeverityFilter).toEqual({ error: false, warning: true, info: true });
     autoSave.destroy();
   });
@@ -128,7 +129,8 @@ describe('AnnotationStore — session persistence integration', () => {
     autoSave.enable();
     annotationStore.add({ scope: 'row', rowId: 0, severity: 'info', message: 'x' });
     vi.advanceTimersByTime(1000);
-    const snap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock.calls[0][0];
+    const snap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock
+      .calls[0][0];
     expect(snap.annotations?.annotations).toHaveLength(1);
     autoSave.destroy();
   });
@@ -177,9 +179,17 @@ describe('AnnotationStore — session persistence integration', () => {
     const store = createMockStore();
     const autoSave = new AutoSave(state, store, { annotationStore });
     autoSave.enable();
-    annotationStore.add({ id: 'x', scope: 'cell', rowId: 3, column: 'name', severity: 'warning', message: 'round-trip' });
+    annotationStore.add({
+      id: 'x',
+      scope: 'cell',
+      rowId: 3,
+      column: 'name',
+      severity: 'warning',
+      message: 'round-trip',
+    });
     vi.advanceTimersByTime(1000);
-    const savedSnap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock.calls[0][0];
+    const savedSnap = (store.save as unknown as { mock: { calls: Array<[SessionSnapshot]> } }).mock
+      .calls[0][0];
     autoSave.destroy();
 
     const nextStore = new AnnotationStore({ tableName: state.baseTableName });

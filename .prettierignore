@@ -1,0 +1,12 @@
+node_modules
+dist
+demo-dist
+coverage
+docs/api
+package-lock.json
+tests/fixtures/datasets
+*.csv
+*.tsv
+*.parquet
+.changeset/*.md
+CHANGELOG.md

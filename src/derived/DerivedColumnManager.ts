@@ -26,8 +26,11 @@
  * @see DefaultExpressionEditor
  */
 
-import type { WorkerBridge } from '../data/WorkerBridge';
+import { ConfigurationError, DerivedColumnError } from '../core/errors';
 import type { ColumnSchema, DataType } from '../core/types';
+import { mapDuckDBType } from '../data/SchemaDetector';
+import type { WorkerBridge } from '../data/WorkerBridge';
+import { quoteIdentifier, formatSQLValue } from '../filters/FilterSQL';
 import type {
   DerivedColumnDef,
   DerivedColumnInfo,
@@ -35,9 +38,6 @@ import type {
   VectorDataType,
   CompletionContext,
 } from './types';
-import { ConfigurationError, DerivedColumnError } from '../core/errors';
-import { mapDuckDBType } from '../data/SchemaDetector';
-import { quoteIdentifier, formatSQLValue } from '../filters/FilterSQL';
 
 /** Batch size for vector INSERT statements */
 const VECTOR_BATCH_SIZE = 1000;
@@ -132,7 +132,7 @@ export class DerivedColumnManager {
    * Validates, recreates VIEW (and helper table if vector). Returns updated info.
    */
   async updateColumn(oldName: string, def: DerivedColumnDef): Promise<DerivedColumnInfo> {
-    const oldIndex = this.columns.findIndex(c => c.def.name === oldName);
+    const oldIndex = this.columns.findIndex((c) => c.def.name === oldName);
     if (oldIndex === -1) {
       throw new DerivedColumnError(`Derived column "${oldName}" not found`, {
         code: 'NOT_FOUND',
@@ -148,7 +148,7 @@ export class DerivedColumnManager {
       const dependents = this.getDependents(oldName);
       if (dependents.length > 0) {
         throw new DerivedColumnError(
-          `Cannot rename "${oldName}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Update those columns first.`,
+          `Cannot rename "${oldName}" because it is referenced by: ${dependents.map((d) => `"${d}"`).join(', ')}. Update those columns first.`,
           {
             code: 'EXPRESSION_INVALID',
             details: { column: oldName, dependents },
@@ -240,7 +240,7 @@ export class DerivedColumnManager {
       );
     }
 
-    const oldIndex = this.columns.findIndex(c => c.def.name === name);
+    const oldIndex = this.columns.findIndex((c) => c.def.name === name);
     if (oldIndex === -1) {
       throw new DerivedColumnError(`Derived column "${name}" not found`, {
         code: 'NOT_FOUND',
@@ -282,7 +282,11 @@ export class DerivedColumnManager {
       const reasons = await this.validateDependentsAgainst(name, newDef);
       if (Object.keys(reasons).length > 0) {
         throw new DerivedColumnError(
-          `Replacing "${name}" would break ${Object.keys(reasons).length} dependent column(s): ${Object.keys(reasons).map(d => `"${d}"`).join(', ')}`,
+          `Replacing "${name}" would break ${Object.keys(reasons).length} dependent column(s): ${Object.keys(
+            reasons,
+          )
+            .map((d) => `"${d}"`)
+            .join(', ')}`,
           {
             code: 'DEPENDENTS_INCOMPATIBLE',
             details: {
@@ -333,10 +337,18 @@ export class DerivedColumnManager {
       }
     } catch (helperErr) {
       if (newHelperCreated) {
-        try { await this.dropVectorHelperTable(name); } catch { /* best-effort */ }
+        try {
+          await this.dropVectorHelperTable(name);
+        } catch {
+          /* best-effort */
+        }
       }
       if (oldHelperDropped && oldInfo.def.kind === 'vector') {
-        try { await this.createVectorHelperTable(oldInfo.def); } catch { /* best-effort */ }
+        try {
+          await this.createVectorHelperTable(oldInfo.def);
+        } catch {
+          /* best-effort */
+        }
       }
       throw helperErr;
     }
@@ -356,7 +368,11 @@ export class DerivedColumnManager {
       this.columns[oldIndex] = oldInfo;
       if (newDef.kind === 'vector') {
         // Drop the freshly-created new helper table.
-        try { await this.dropVectorHelperTable(name); } catch { /* best-effort */ }
+        try {
+          await this.dropVectorHelperTable(name);
+        } catch {
+          /* best-effort */
+        }
       }
       if (oldInfo.def.kind === 'vector') {
         await this.createVectorHelperTable(oldInfo.def);
@@ -377,7 +393,7 @@ export class DerivedColumnManager {
    * Recreates VIEW without column, or drops VIEW entirely if last derived column.
    */
   async removeColumn(name: string): Promise<void> {
-    const index = this.columns.findIndex(c => c.def.name === name);
+    const index = this.columns.findIndex((c) => c.def.name === name);
     if (index === -1) {
       throw new DerivedColumnError(`Derived column "${name}" not found`, {
         code: 'NOT_FOUND',
@@ -389,7 +405,7 @@ export class DerivedColumnManager {
     const dependents = this.getDependents(name);
     if (dependents.length > 0) {
       throw new DerivedColumnError(
-        `Cannot delete "${name}" because it is referenced by: ${dependents.map(d => `"${d}"`).join(', ')}. Delete those columns first.`,
+        `Cannot delete "${name}" because it is referenced by: ${dependents.map((d) => `"${d}"`).join(', ')}. Delete those columns first.`,
         {
           code: 'EXPRESSION_INVALID',
           details: { column: name, dependents },
@@ -418,7 +434,10 @@ export class DerivedColumnManager {
   /**
    * Validate an expression without adding it. For UI preview/validation button.
    */
-  async validateExpression(expression: string, alias?: string): Promise<{
+  async validateExpression(
+    expression: string,
+    alias?: string,
+  ): Promise<{
     valid: boolean;
     type?: DataType;
     originalType?: string;
@@ -563,20 +582,20 @@ export class DerivedColumnManager {
    * Operates only on expression columns — vectors have no dependencies.
    */
   private topologicalSortExpressions(): DerivedColumnInfo[] {
-    const expressions = this.columns.filter(c => c.def.kind === 'expression');
+    const expressions = this.columns.filter((c) => c.def.kind === 'expression');
     if (expressions.length <= 1) return expressions;
 
-    const exprNames = new Set(expressions.map(c => c.def.name));
-    const exprMap = new Map(expressions.map(c => [c.def.name, c]));
+    const exprNames = new Set(expressions.map((c) => c.def.name));
+    const exprMap = new Map(expressions.map((c) => [c.def.name, c]));
 
     // Build adjacency: for each column, which other expression columns does it depend on?
     const deps = new Map<string, Set<string>>();
     for (const col of expressions) {
       const allDeps = this.getExpressionDependencies(
-        (col.def as { expression: string }).expression
+        (col.def as { expression: string }).expression,
       );
       // Only keep dependencies on other expression columns
-      deps.set(col.def.name, new Set([...allDeps].filter(d => exprNames.has(d))));
+      deps.set(col.def.name, new Set([...allDeps].filter((d) => exprNames.has(d))));
     }
 
     // Kahn's algorithm
@@ -609,8 +628,8 @@ export class DerivedColumnManager {
 
     if (sorted.length !== expressions.length) {
       const inCycle = expressions
-        .filter(c => !sorted.includes(c.def.name))
-        .map(c => `"${c.def.name}"`);
+        .filter((c) => !sorted.includes(c.def.name))
+        .map((c) => `"${c.def.name}"`);
       throw new DerivedColumnError(
         `Circular dependency detected among derived columns: ${inCycle.join(', ')}`,
         {
@@ -620,7 +639,7 @@ export class DerivedColumnManager {
       );
     }
 
-    return sorted.map(name => exprMap.get(name)!);
+    return sorted.map((name) => exprMap.get(name)!);
   }
 
   /**
@@ -631,9 +650,7 @@ export class DerivedColumnManager {
     const dependents: string[] = [];
     for (const col of this.columns) {
       if (col.def.kind === 'expression') {
-        const deps = this.getExpressionDependencies(
-          (col.def as { expression: string }).expression
-        );
+        const deps = this.getExpressionDependencies((col.def as { expression: string }).expression);
         if (deps.has(columnName)) {
           dependents.push(col.def.name);
         }
@@ -718,16 +735,15 @@ export class DerivedColumnManager {
     // Topologically order the transitive dependents so earlier CTE layers feed
     // later ones. Reuse the manager's existing sort, then filter to our set.
     const sortedAll = this.topologicalSortExpressions();
-    const sortedDependents = sortedAll.filter(info => transitive.has(info.def.name));
+    const sortedDependents = sortedAll.filter((info) => transitive.has(info.def.name));
 
     // Build scratch CTE SQL. Layer 0 = base table + the replacement. Layers 1..N =
     // each dependent in topo order. We validate by running `SELECT (<depExpr>)
     // FROM <lastLayer> LIMIT 0` at each layer. Any dependent that fails gets
     // its error captured; validation of later dependents continues using the
     // dependent's original expression (best-effort enumeration).
-    const replacementExpr = newDef.kind === 'expression'
-      ? (newDef as { expression: string }).expression
-      : null;
+    const replacementExpr =
+      newDef.kind === 'expression' ? (newDef as { expression: string }).expression : null;
 
     if (replacementExpr === null) {
       // Vector replacements produce a fixed type; no expression to inject.
@@ -775,7 +791,7 @@ export class DerivedColumnManager {
 
       // Add this dependent as a layer for subsequent transitive dependents.
       cteLayers.push(
-        `${layerName} AS (SELECT *, (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer})`
+        `${layerName} AS (SELECT *, (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer})`,
       );
       prevLayer = layerName;
     }
@@ -817,7 +833,7 @@ export class DerivedColumnManager {
 
     // Create table
     await this.bridge.query(
-      `CREATE TABLE ${quoteIdentifier(tableName)} (__rowid__ BIGINT, ${quoteIdentifier(def.name)} ${duckdbType})`
+      `CREATE TABLE ${quoteIdentifier(tableName)} (__rowid__ BIGINT, ${quoteIdentifier(def.name)} ${duckdbType})`,
     );
 
     // Insert values in batches. Iterate by index so both plain arrays and
@@ -831,7 +847,7 @@ export class DerivedColumnManager {
         parts.push(`(${j}, ${formatSQLValue(values[j])})`);
       }
       await this.bridge.query(
-        `INSERT INTO ${quoteIdentifier(tableName)} VALUES ${parts.join(', ')}`
+        `INSERT INTO ${quoteIdentifier(tableName)} VALUES ${parts.join(', ')}`,
       );
     }
   }
@@ -847,10 +863,10 @@ export class DerivedColumnManager {
   private helperTableName(columnName: string): string {
     const id = this.helperTableIds.get(columnName);
     if (id === undefined) {
-      throw new ConfigurationError(
-        `No helper table ID assigned for column "${columnName}"`,
-        { code: 'INVARIANT', details: { column: columnName } },
-      );
+      throw new ConfigurationError(`No helper table ID assigned for column "${columnName}"`, {
+        code: 'INVARIANT',
+        details: { column: columnName },
+      });
     }
     const sanitized = columnName.replace(/[^a-zA-Z0-9]/g, '_');
     return `__dt_vec_${sanitized}_${id}__`;
@@ -859,16 +875,26 @@ export class DerivedColumnManager {
   /** Map VectorDataType to DuckDB type string */
   private vectorTypeToDuckDBType(vt: VectorDataType): string {
     switch (vt) {
-      case 'integer': return 'BIGINT';
-      case 'float': return 'DOUBLE';
-      case 'decimal': return 'DECIMAL(18,6)';
-      case 'string': return 'VARCHAR';
-      case 'boolean': return 'BOOLEAN';
-      case 'uuid': return 'UUID';
-      case 'date': return 'DATE';
-      case 'timestamp': return 'TIMESTAMP';
-      case 'time': return 'TIME';
-      case 'interval': return 'INTERVAL';
+      case 'integer':
+        return 'BIGINT';
+      case 'float':
+        return 'DOUBLE';
+      case 'decimal':
+        return 'DECIMAL(18,6)';
+      case 'string':
+        return 'VARCHAR';
+      case 'boolean':
+        return 'BOOLEAN';
+      case 'uuid':
+        return 'UUID';
+      case 'date':
+        return 'DATE';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'time':
+        return 'TIME';
+      case 'interval':
+        return 'INTERVAL';
     }
   }
 
@@ -893,7 +919,7 @@ export class DerivedColumnManager {
     }
 
     // --- Base CTE: base table columns + vector columns via LEFT JOIN ---
-    const vectors = this.columns.filter(c => c.def.kind === 'vector');
+    const vectors = this.columns.filter((c) => c.def.kind === 'vector');
     const baseSelectParts: string[] = ['t.*'];
     const joinParts: string[] = [];
     let joinCounter = 0;
@@ -908,7 +934,7 @@ export class DerivedColumnManager {
       // table is rewritten (e.g. by enhanceSchemaTypes type-enhancement),
       // so joining on it is not stable; `__rowid__` survives rewrites.
       joinParts.push(
-        `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.__rowid__ = ${alias}.__rowid__`
+        `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.__rowid__ = ${alias}.__rowid__`,
       );
     }
 
@@ -935,7 +961,7 @@ export class DerivedColumnManager {
       const layerName = `__dt_layer_${i + 1}`;
       const expr = (info.def as { expression: string }).expression;
       cteParts.push(
-        `${layerName} AS (SELECT *, (${expr}) AS ${quoteIdentifier(info.def.name)} FROM ${prevLayer})`
+        `${layerName} AS (SELECT *, (${expr}) AS ${quoteIdentifier(info.def.name)} FROM ${prevLayer})`,
       );
       prevLayer = layerName;
     }
@@ -954,7 +980,10 @@ export class DerivedColumnManager {
     if (err instanceof Error) {
       // Strip common DuckDB prefixes
       return err.message
-        .replace(/^(Catalog Error|Parser Error|Binder Error|Runtime Error|Conversion Error):\s*/i, '')
+        .replace(
+          /^(Catalog Error|Parser Error|Binder Error|Runtime Error|Conversion Error):\s*/i,
+          '',
+        )
         .trim();
     }
     return String(err);

@@ -8,7 +8,7 @@ edit their integration code gets a migration guide here.
 ## Rule of thumb
 
 - **CHANGELOG entry only** — new options, new events, new exports, internal
-  refactors, bug fixes, deprecation *warnings* (old API still works).
+  refactors, bug fixes, deprecation _warnings_ (old API still works).
 - **Migration guide (here) plus CHANGELOG entry** — renamed or removed options,
   changed event payloads, removed exports, behavioural changes that break
   existing code.
@@ -23,9 +23,9 @@ Start new guides by copying [`_TEMPLATE.md`](./_TEMPLATE.md).
 
 ## Available migrations
 
-| From | To | Released | Guide |
-|------|----|----------|-------|
-| _v0.1 is the first release — no predecessor to migrate from._ | | | |
+| From                                                          | To  | Released | Guide |
+| ------------------------------------------------------------- | --- | -------- | ----- |
+| _v0.1 is the first release — no predecessor to migrate from._ |     |          |       |
 
 ## See also
 

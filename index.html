@@ -1,80 +1,88 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactive Data Table - Demo</title>
-  <link rel="stylesheet" href="./demo/demo.css">
-</head>
-<body>
-  <h1>Interactive Data Table</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Data Table - Demo</title>
+    <link rel="stylesheet" href="./demo/demo.css" />
+  </head>
+  <body>
+    <h1>Interactive Data Table</h1>
 
-  <div class="card">
-    <div class="status-bar">
-      <span class="version">v<span id="version">...</span></span>
-      <span id="init-status" class="init-status">Initializing...</span>
-      <fieldset class="theme-toggle" aria-label="Theme">
-        <legend class="sr-only">Theme</legend>
-        <label><input type="radio" name="theme" value="light"> Light</label>
-        <label><input type="radio" name="theme" value="dark"> Dark</label>
-        <label><input type="radio" name="theme" value="auto" checked> Auto</label>
-      </fieldset>
-    </div>
-    <p class="test-info">
-      Explore tabular data entirely in the browser &mdash; no server required.
-      Load a CSV, JSON, or Parquet file to get started. All processing happens locally
-      via DuckDB WASM for complete data privacy. Column headers show interactive
-      visualizations: continuous variables show <strong>histograms</strong> (click-select
-      a bin or brush-select a range to filter), and categorical variables show
-      <strong>value counts</strong> plots (click to select, <strong>Cmd/Ctrl+click</strong>
-      for multi-category selection). Use the <strong>filter button</strong> (funnel icon) for manual
-      filters with type-specific controls. <strong>Pin</strong>, <strong>hide</strong>,
-      <strong>sort</strong>, <strong>reorder</strong>, and <strong>resize</strong> columns
-      freely. Try <strong>Cmd/Ctrl+click</strong> a sort button for multi-sort, or
-      <strong>double-click</strong> a column border to auto-fit its width.
-      Your table state (filters, sort, column layout, pins, widths) is
-      <strong>automatically saved</strong> to IndexedDB and restored when you
-      reload the same file.
-    </p>
-    <p class="examples-cta">
-      Want to see the library customized? Browse <a href="./examples/">fourteen focused examples</a>
-      &mdash; programmatic filters, derived columns, event listeners, custom themes,
-      i18n, custom visualizations, multi-table dashboards, filter presets, export column data,
-      annotate cells, header tooltips, custom stats panel, and export SQL primitives.
-    </p>
-  </div>
-
-  <div class="card">
-    <h2>Load Data</h2>
-    <div class="row row--mb">
-      <input type="file" id="file-input" accept=".csv,.json,.parquet">
-      <button id="load-file-btn" disabled>Load File</button>
-    </div>
-    <div class="row">
-      <input type="text" id="url-input" placeholder="Enter URL to CSV, JSON, or Parquet file...">
-      <button id="load-url-btn" disabled>Load URL</button>
-    </div>
-  </div>
-
-  <div class="card card--no-padding">
-    <div id="table-container" class="table-wrapper"></div>
-  </div>
-
-  <div class="card">
-    <div class="row" style="justify-content: space-between; align-items: center;">
-      <div id="table-info" class="info-panel">
-        Load a file or URL to see visualizations in column headers
+    <div class="card">
+      <div class="status-bar">
+        <span class="version">v<span id="version">...</span></span>
+        <span id="init-status" class="init-status">Initializing...</span>
+        <fieldset class="theme-toggle" aria-label="Theme">
+          <legend class="sr-only">Theme</legend>
+          <label><input type="radio" name="theme" value="light" /> Light</label>
+          <label><input type="radio" name="theme" value="dark" /> Dark</label>
+          <label><input type="radio" name="theme" value="auto" checked /> Auto</label>
+        </fieldset>
       </div>
-      <div class="btn-group">
-        <button id="undo-btn" disabled class="btn--secondary" title="Undo (Ctrl+Z)">Undo</button>
-        <button id="redo-btn" disabled class="btn--secondary" title="Redo (Ctrl+Shift+Z)">Redo</button>
-        <button id="reset-btn" disabled class="btn--secondary" title="Reset to original state">Reset</button>
-        <button id="clear-session-btn" disabled class="btn--secondary">Clear Session</button>
-        <button id="export-btn" disabled class="btn--secondary">Export</button>
+      <p class="test-info">
+        Explore tabular data entirely in the browser &mdash; no server required. Load a CSV, JSON,
+        or Parquet file to get started. All processing happens locally via DuckDB WASM for complete
+        data privacy. Column headers show interactive visualizations: continuous variables show
+        <strong>histograms</strong> (click-select a bin or brush-select a range to filter), and
+        categorical variables show <strong>value counts</strong> plots (click to select,
+        <strong>Cmd/Ctrl+click</strong> for multi-category selection). Use the
+        <strong>filter button</strong> (funnel icon) for manual filters with type-specific controls.
+        <strong>Pin</strong>, <strong>hide</strong>, <strong>sort</strong>,
+        <strong>reorder</strong>, and <strong>resize</strong> columns freely. Try
+        <strong>Cmd/Ctrl+click</strong> a sort button for multi-sort, or
+        <strong>double-click</strong> a column border to auto-fit its width. Your table state
+        (filters, sort, column layout, pins, widths) is <strong>automatically saved</strong> to
+        IndexedDB and restored when you reload the same file.
+      </p>
+      <p class="examples-cta">
+        Want to see the library customized? Browse
+        <a href="./examples/">fourteen focused examples</a>
+        &mdash; programmatic filters, derived columns, event listeners, custom themes, i18n, custom
+        visualizations, multi-table dashboards, filter presets, export column data, annotate cells,
+        header tooltips, custom stats panel, and export SQL primitives.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Load Data</h2>
+      <div class="row row--mb">
+        <input type="file" id="file-input" accept=".csv,.json,.parquet" />
+        <button id="load-file-btn" disabled>Load File</button>
+      </div>
+      <div class="row">
+        <input
+          type="text"
+          id="url-input"
+          placeholder="Enter URL to CSV, JSON, or Parquet file..."
+        />
+        <button id="load-url-btn" disabled>Load URL</button>
       </div>
     </div>
-  </div>
 
-  <script type="module" src="./demo/main.ts"></script>
-</body>
+    <div class="card card--no-padding">
+      <div id="table-container" class="table-wrapper"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content: space-between; align-items: center">
+        <div id="table-info" class="info-panel">
+          Load a file or URL to see visualizations in column headers
+        </div>
+        <div class="btn-group">
+          <button id="undo-btn" disabled class="btn--secondary" title="Undo (Ctrl+Z)">Undo</button>
+          <button id="redo-btn" disabled class="btn--secondary" title="Redo (Ctrl+Shift+Z)">
+            Redo
+          </button>
+          <button id="reset-btn" disabled class="btn--secondary" title="Reset to original state">
+            Reset
+          </button>
+          <button id="clear-session-btn" disabled class="btn--secondary">Clear Session</button>
+          <button id="export-btn" disabled class="btn--secondary">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./demo/main.ts"></script>
+  </body>
 </html>

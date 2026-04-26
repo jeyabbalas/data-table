@@ -97,7 +97,13 @@ describe('TableContainer', () => {
         classPrefix: 'custom',
       };
 
-      const tableContainer = new TableContainer(container, state, undefined, undefined, customOptions);
+      const tableContainer = new TableContainer(
+        container,
+        state,
+        undefined,
+        undefined,
+        customOptions,
+      );
 
       const options = tableContainer.getOptions();
       expect(options.rowHeight).toBe(40);
@@ -482,9 +488,7 @@ describe('TableContainer', () => {
 
       // Changing state should not cause issues
       state.tableName.set('test');
-      state.schema.set([
-        { name: 'x', type: 'string', nullable: false, originalType: 'VARCHAR' },
-      ]);
+      state.schema.set([{ name: 'x', type: 'string', nullable: false, originalType: 'VARCHAR' }]);
 
       // Should not throw and render should be skipped
       expect(tableContainer.isDestroyed()).toBe(true);

@@ -18,15 +18,22 @@ beforeAll(() => {
         commonAncestorContainer: document.body,
         getClientRects: () => [],
         getBoundingClientRect: () => ({
-          top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0,
-          x: 0, y: 0, toJSON: () => {},
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
         }),
         createContextualFragment: (html: string) => {
           const template = document.createElement('template');
           template.innerHTML = html;
           return template.content;
         },
-      } as unknown as Range);
+      }) as unknown as Range;
   }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
@@ -75,9 +82,7 @@ describe('parseVectorValues — Integer validation', () => {
   beforeEach(() => {
     state = createTableState();
     actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -91,13 +96,15 @@ describe('parseVectorValues — Integer validation', () => {
 
   it('accepts valid integers', () => {
     expect(parse(['42', '-7', '0'], 'integer')).toEqual({
-      success: true, values: [42, -7, 0],
+      success: true,
+      values: [42, -7, 0],
     });
   });
 
   it('accepts single-digit integers', () => {
     expect(parse(['0', '1', '9'], 'integer')).toEqual({
-      success: true, values: [0, 1, 9],
+      success: true,
+      values: [0, 1, 9],
     });
   });
 
@@ -145,9 +152,7 @@ describe('parseVectorValues — Float validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -161,19 +166,22 @@ describe('parseVectorValues — Float validation', () => {
 
   it('accepts valid floats', () => {
     expect(parse(['3.14', '-0.5', '0'], 'float')).toEqual({
-      success: true, values: [3.14, -0.5, 0],
+      success: true,
+      values: [3.14, -0.5, 0],
     });
   });
 
   it('accepts scientific notation', () => {
     expect(parse(['1e5', '2.5e-3', '-1e10'], 'float')).toEqual({
-      success: true, values: [1e5, 2.5e-3, -1e10],
+      success: true,
+      values: [1e5, 2.5e-3, -1e10],
     });
   });
 
   it('accepts integer-like values as floats', () => {
     expect(parse(['42', '-7', '0'], 'float')).toEqual({
-      success: true, values: [42, -7, 0],
+      success: true,
+      values: [42, -7, 0],
     });
   });
 
@@ -215,9 +223,7 @@ describe('parseVectorValues — Date validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -231,7 +237,8 @@ describe('parseVectorValues — Date validation', () => {
 
   it('accepts valid ISO dates', () => {
     expect(parse(['2024-01-15', '1970-01-01', '2099-12-31'], 'date')).toEqual({
-      success: true, values: ['2024-01-15', '1970-01-01', '2099-12-31'],
+      success: true,
+      values: ['2024-01-15', '1970-01-01', '2099-12-31'],
     });
   });
 
@@ -267,9 +274,7 @@ describe('parseVectorValues — Timestamp validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -283,25 +288,29 @@ describe('parseVectorValues — Timestamp validation', () => {
 
   it('accepts space-separated timestamps', () => {
     expect(parse(['2024-01-15 10:30:00'], 'timestamp')).toEqual({
-      success: true, values: ['2024-01-15 10:30:00'],
+      success: true,
+      values: ['2024-01-15 10:30:00'],
     });
   });
 
   it('accepts T-separated timestamps', () => {
     expect(parse(['2024-01-15T10:30:00'], 'timestamp')).toEqual({
-      success: true, values: ['2024-01-15T10:30:00'],
+      success: true,
+      values: ['2024-01-15T10:30:00'],
     });
   });
 
   it('accepts timestamps without seconds', () => {
     expect(parse(['2024-01-15 10:30'], 'timestamp')).toEqual({
-      success: true, values: ['2024-01-15 10:30'],
+      success: true,
+      values: ['2024-01-15 10:30'],
     });
   });
 
   it('accepts timestamps with fractional seconds', () => {
     expect(parse(['2024-01-15 10:30:00.123456'], 'timestamp')).toEqual({
-      success: true, values: ['2024-01-15 10:30:00.123456'],
+      success: true,
+      values: ['2024-01-15 10:30:00.123456'],
     });
   });
 
@@ -331,9 +340,7 @@ describe('parseVectorValues — Time validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -347,19 +354,22 @@ describe('parseVectorValues — Time validation', () => {
 
   it('accepts HH:MM:SS format', () => {
     expect(parse(['14:30:00', '00:00:00', '23:59:59'], 'time')).toEqual({
-      success: true, values: ['14:30:00', '00:00:00', '23:59:59'],
+      success: true,
+      values: ['14:30:00', '00:00:00', '23:59:59'],
     });
   });
 
   it('accepts HH:MM format (no seconds)', () => {
     expect(parse(['14:30', '00:00', '23:59'], 'time')).toEqual({
-      success: true, values: ['14:30', '00:00', '23:59'],
+      success: true,
+      values: ['14:30', '00:00', '23:59'],
     });
   });
 
   it('accepts time with fractional seconds', () => {
     expect(parse(['14:30:00.123', '00:00:00.5'], 'time')).toEqual({
-      success: true, values: ['14:30:00.123', '00:00:00.5'],
+      success: true,
+      values: ['14:30:00.123', '00:00:00.5'],
     });
   });
 
@@ -383,9 +393,7 @@ describe('parseVectorValues — Interval validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -399,7 +407,8 @@ describe('parseVectorValues — Interval validation', () => {
 
   it('accepts DuckDB interval formats', () => {
     expect(parse(['1 day', '2 hours 30 minutes', '1 year 6 months'], 'interval')).toEqual({
-      success: true, values: ['1 day', '2 hours 30 minutes', '1 year 6 months'],
+      success: true,
+      values: ['1 day', '2 hours 30 minutes', '1 year 6 months'],
     });
   });
 
@@ -424,9 +433,7 @@ describe('parseVectorValues — Decimal validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -440,7 +447,8 @@ describe('parseVectorValues — Decimal validation', () => {
 
   it('accepts valid decimals', () => {
     expect(parse(['123.456', '-0.5', '42'], 'decimal')).toEqual({
-      success: true, values: ['123.456', '-0.5', '42'],
+      success: true,
+      values: ['123.456', '-0.5', '42'],
     });
   });
 
@@ -470,9 +478,7 @@ describe('parseVectorValues — UUID validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -519,9 +525,7 @@ describe('parseVectorValues — Boolean validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -535,13 +539,15 @@ describe('parseVectorValues — Boolean validation', () => {
 
   it('accepts "true" and "false" (case-insensitive)', () => {
     expect(parse(['true', 'false', 'TRUE'], 'boolean')).toEqual({
-      success: true, values: [true, false, true],
+      success: true,
+      values: [true, false, true],
     });
   });
 
   it('accepts "1" and "0"', () => {
     expect(parse(['1', '0', '1'], 'boolean')).toEqual({
-      success: true, values: [true, false, true],
+      success: true,
+      values: [true, false, true],
     });
   });
 
@@ -571,9 +577,7 @@ describe('parseVectorValues — String validation', () => {
   beforeEach(() => {
     const state = createTableState();
     const actions = new StateActions(state, mockBridge);
-    state.schema.set([
-      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
-    ]);
+    state.schema.set([{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
     state.totalRows.set(3);
     state.tableName.set('test_table');
     modal = new DerivedColumnModal(state, actions);
@@ -587,7 +591,8 @@ describe('parseVectorValues — String validation', () => {
 
   it('accepts any strings without validation', () => {
     expect(parse(['hello', '', 'special chars: <>!@#$'], 'string')).toEqual({
-      success: true, values: ['hello', '', 'special chars: <>!@#$'],
+      success: true,
+      values: ['hello', '', 'special chars: <>!@#$'],
     });
   });
 });

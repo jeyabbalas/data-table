@@ -103,9 +103,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
     expect(root).toBeTruthy();
     expect(root.style.display).toBe('block');
     expect(root.querySelector('.dt-col-tooltip__title')?.textContent).toBe('Fare');
-    expect(root.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
-      'Metered fare.',
-    );
+    expect(root.querySelector('.dt-col-tooltip__description')?.textContent).toBe('Metered fare.');
 
     header.destroy();
   });
@@ -164,9 +162,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
   it('Escape on document hides the popover', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('fare_amount', { description: 'D' });
-    getNameEl(header).dispatchEvent(
-      new PointerEvent('pointerenter', { bubbles: true }),
-    );
+    getNameEl(header).dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     expect(tooltipPopover.isOpen()).toBe(true);
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -177,20 +173,14 @@ describe('ColumnHeader — column-header tooltip popover', () => {
   it('changing the tooltip while shown refreshes the popover in place', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('fare_amount', { description: 'first' });
-    getNameEl(header).dispatchEvent(
-      new PointerEvent('pointerenter', { bubbles: true }),
-    );
+    getNameEl(header).dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     const elBefore = portal.querySelector('.dt-col-tooltip');
-    expect(elBefore?.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
-      'first',
-    );
+    expect(elBefore?.querySelector('.dt-col-tooltip__description')?.textContent).toBe('first');
 
     actions.setColumnHeaderTooltip('fare_amount', { description: 'second' });
     const elAfter = portal.querySelector('.dt-col-tooltip');
     expect(elAfter).toBe(elBefore); // same instance, updated content
-    expect(elAfter?.querySelector('.dt-col-tooltip__description')?.textContent).toBe(
-      'second',
-    );
+    expect(elAfter?.querySelector('.dt-col-tooltip__description')?.textContent).toBe('second');
 
     header.destroy();
   });
@@ -198,9 +188,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
   it('clearing the tooltip while shown hides the popover', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('fare_amount', { description: 'D' });
-    getNameEl(header).dispatchEvent(
-      new PointerEvent('pointerenter', { bubbles: true }),
-    );
+    getNameEl(header).dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     expect(tooltipPopover.isOpen()).toBe(true);
 
     actions.setColumnHeaderTooltip('fare_amount', null);
@@ -227,9 +215,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
     const header = makeHeader();
     const multiLine = 'Line one.\nLine two.\nLine three.';
     actions.setColumnHeaderTooltip('fare_amount', { description: multiLine });
-    getNameEl(header).dispatchEvent(
-      new PointerEvent('pointerenter', { bubbles: true }),
-    );
+    getNameEl(header).dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
 
     const desc = portal.querySelector('.dt-col-tooltip__description') as HTMLElement;
     expect(desc).toBeTruthy();
@@ -303,9 +289,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
 
       // Annotation classes applied (Phase 4).
       expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
-      expect(el.classList.contains('dt-col-header--annotation-error')).toBe(
-        true,
-      );
+      expect(el.classList.contains('dt-col-header--annotation-error')).toBe(true);
       expect(el.dataset.dtAnnotationCount).toBe('1');
 
       // Tooltip wired on nameEl independently of the annotation.
@@ -316,9 +300,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
       const tt = portal.querySelector('.dt-col-tooltip') as HTMLElement;
       expect(tt).toBeTruthy();
       expect(tt.style.display).toBe('block');
-      expect(tt.querySelector('.dt-col-tooltip__title')?.textContent).toBe(
-        'Fare',
-      );
+      expect(tt.querySelector('.dt-col-tooltip__title')?.textContent).toBe('Fare');
 
       // Hovering the header (not the name span) opens the annotation popover.
       el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
@@ -378,9 +360,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
       title: '<img src=x onerror=alert(1)>',
       description: '<script>alert(2)</script>',
     });
-    getNameEl(header).dispatchEvent(
-      new PointerEvent('pointerenter', { bubbles: true }),
-    );
+    getNameEl(header).dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
 
     const root = portal.querySelector('.dt-col-tooltip') as HTMLElement;
     expect(root.querySelector('img')).toBeNull();

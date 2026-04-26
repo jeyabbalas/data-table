@@ -42,7 +42,7 @@ existing instance instead:
 
 ```tsx
 createEffect(async () => {
-  const source = props.source;   // track
+  const source = props.source; // track
   if (!host) return;
   if (!table) {
     table = await createDataTable({ container: host, source });

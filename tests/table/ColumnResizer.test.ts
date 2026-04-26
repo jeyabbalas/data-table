@@ -45,7 +45,9 @@ describe('ColumnResizer', () => {
     });
 
     it('uses custom class prefix', () => {
-      const resizer = new ColumnResizer(header, onResize, undefined, undefined, { classPrefix: 'custom' });
+      const resizer = new ColumnResizer(header, onResize, undefined, undefined, {
+        classPrefix: 'custom',
+      });
 
       const handle = header.querySelector('.custom-col-resize-handle');
       expect(handle).not.toBeNull();
@@ -278,7 +280,7 @@ describe('ColumnResizer', () => {
           clientX: 200,
           bubbles: true,
           cancelable: true,
-        })
+        }),
       );
       expect(resizer.isDraggingNow()).toBe(true);
 

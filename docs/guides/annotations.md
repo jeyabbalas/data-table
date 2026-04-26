@@ -61,13 +61,13 @@ hovering the cell opens the annotation popover.
 
 ## What annotations are (and aren't)
 
-| Annotations | Are | Are NOT |
-|---|---|---|
-| Storage | A separate store on `table.annotations` (overlay metadata) | A field on `TableState` |
-| Undo/redo | Excluded — does not inflate the undo stack | Snapshotted by `UndoManager` |
-| Persistence | Auto-saved into `SessionSnapshot.annotations` (v5+) | Round-tripped through `StateSnapshot` |
-| Authoring UX | Programmatic CRUD; you build the authoring UI | Editable from a built-in dialog |
-| Visual coupling | Rendered as DOM classes + intersection popover | A modification of the underlying cell value |
+| Annotations     | Are                                                        | Are NOT                                     |
+| --------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| Storage         | A separate store on `table.annotations` (overlay metadata) | A field on `TableState`                     |
+| Undo/redo       | Excluded — does not inflate the undo stack                 | Snapshotted by `UndoManager`                |
+| Persistence     | Auto-saved into `SessionSnapshot.annotations` (v5+)        | Round-tripped through `StateSnapshot`       |
+| Authoring UX    | Programmatic CRUD; you build the authoring UI              | Editable from a built-in dialog             |
+| Visual coupling | Rendered as DOM classes + intersection popover             | A modification of the underlying cell value |
 
 The split keeps app-authored validation results out of the user-driven
 view-state pipeline. A 10 000-entry bulk-load of validation errors
@@ -89,9 +89,9 @@ const stored = table.annotations.add({
 
 // Atomic batch — fires a single `change` event. If any entry fails, none are stored.
 table.annotations.addMany([
-  { scope: 'cell',   rowId: 0, column: 'age',        severity: 'error',   message: '…' },
-  { scope: 'column', column: 'tip_amount',           severity: 'error',   message: '…' },
-  { scope: 'row',    rowId: 7,                       severity: 'info',    message: '…' },
+  { scope: 'cell', rowId: 0, column: 'age', severity: 'error', message: '…' },
+  { scope: 'column', column: 'tip_amount', severity: 'error', message: '…' },
+  { scope: 'row', rowId: 7, severity: 'info', message: '…' },
 ]);
 ```
 
@@ -114,9 +114,9 @@ updates `updatedAt` on every successful update.
 ### `remove`, `removeMany`, `clear`
 
 ```ts
-table.annotations.remove(stored.id);                       // returns true / false
-table.annotations.removeMany([id1, id2, id3]);             // returns count actually removed
-table.annotations.clear('cell');                           // remove only cell-scope; default is 'all'
+table.annotations.remove(stored.id); // returns true / false
+table.annotations.removeMany([id1, id2, id3]); // returns count actually removed
+table.annotations.clear('cell'); // remove only cell-scope; default is 'all'
 ```
 
 `clear` fires one `change` event with the full id list, regardless of
@@ -125,10 +125,10 @@ how many annotations it removed.
 ## Lookups
 
 ```ts
-const all       = table.annotations.getAll();                           // insertion order
-const ofRow5    = table.annotations.getByRow(5);                        // row-scope only
-const ofTotal   = table.annotations.getByColumn('total_amount');        // column-scope only
-const here      = table.annotations.getByCell(7, 'fare_amount');        // intersection
+const all = table.annotations.getAll(); // insertion order
+const ofRow5 = table.annotations.getByRow(5); // row-scope only
+const ofTotal = table.annotations.getByColumn('total_amount'); // column-scope only
+const here = table.annotations.getByCell(7, 'fare_amount'); // intersection
 ```
 
 `getByRow` / `getByColumn` return only annotations of that scope.
@@ -149,7 +149,7 @@ All four lookups are O(1) thanks to secondary indexes (`byId`,
 ## Severity filter (view layer)
 
 ```ts
-table.annotations.setSeverityFilter({ info: false });          // hide info-level visually
+table.annotations.setSeverityFilter({ info: false }); // hide info-level visually
 const flags = table.annotations.getSeverityFilter();
 // → { error: true, warning: true, info: false }
 ```
@@ -179,13 +179,13 @@ const off = table.annotations.on('change', ({ kind, ids }) => {
 off();
 ```
 
-| `kind` | Fires when |
-|---|---|
-| `'added'` | `add` / `addMany` / `loadJSON('merge')` succeeded. `ids` lists the new annotations. |
-| `'updated'` | `update` succeeded. `ids` is `[id]`. |
-| `'removed'` | `remove` / `removeMany` removed at least one annotation. `ids` lists the removed ones. |
-| `'cleared'` | `clear` removed any number (including zero). `ids` lists the removed ones. |
-| `'filterChanged'` | `setSeverityFilter` flipped a flag. `ids` is `[]` (the data didn't change). |
+| `kind`            | Fires when                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `'added'`         | `add` / `addMany` / `loadJSON('merge')` succeeded. `ids` lists the new annotations.    |
+| `'updated'`       | `update` succeeded. `ids` is `[id]`.                                                   |
+| `'removed'`       | `remove` / `removeMany` removed at least one annotation. `ids` lists the removed ones. |
+| `'cleared'`       | `clear` removed any number (including zero). `ids` lists the removed ones.             |
+| `'filterChanged'` | `setSeverityFilter` flipped a flag. `ids` is `[]` (the data didn't change).            |
 
 Bulk operations fire **one** event with the full id list; the rendering
 layer uses this to invalidate only the affected rows / cells / headers
@@ -216,11 +216,11 @@ Modes:
 
 Errors:
 
-| Code | Trigger |
-|---|---|
-| `INVALID_SHAPE` | A specific entry is malformed (wrong scope, wrong field type, missing required field). |
-| `VERSION_UNSUPPORTED` | `file.version > ANNOTATION_FILE_VERSION` (currently `1`). |
-| `DUPLICATE_ID` | Merge-mode collision. |
+| Code                  | Trigger                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| `INVALID_SHAPE`       | A specific entry is malformed (wrong scope, wrong field type, missing required field). |
+| `VERSION_UNSUPPORTED` | `file.version > ANNOTATION_FILE_VERSION` (currently `1`).                              |
+| `DUPLICATE_ID`        | Merge-mode collision.                                                                  |
 
 Unknown top-level and per-annotation fields **round-trip verbatim**.
 You can stash app-specific tracking data (e.g. reviewer ids, schema
@@ -250,10 +250,10 @@ preserved.
 
 The rendering layer adds the following CSS classes at render time:
 
-| Element | Class | Severity modifier |
-|---|---|---|
-| Row | `dt-row--annotated` | `dt-row--annotation-{error,warning,info}` |
-| Cell | `dt-cell--annotated` | `dt-cell--annotation-{error,warning,info}` |
+| Element       | Class                  | Severity modifier                            |
+| ------------- | ---------------------- | -------------------------------------------- |
+| Row           | `dt-row--annotated`    | `dt-row--annotation-{error,warning,info}`    |
+| Cell          | `dt-cell--annotated`   | `dt-cell--annotation-{error,warning,info}`   |
 | Column header | `dt-header--annotated` | `dt-header--annotation-{error,warning,info}` |
 
 Severity is **highest-wins**: a cell with both an info and an error
@@ -300,7 +300,7 @@ const ids = await table.actions.getColumnValues('__rowid__');
 for (let i = 0; i < ids.length; i++) {
   table.annotations.add({
     scope: 'row',
-    rowId: Number(ids[i]),                    // BigInt → number
+    rowId: Number(ids[i]), // BigInt → number
     severity: 'info',
     message: 'visited row',
   });
@@ -316,12 +316,12 @@ Top-level shape:
 
 ```ts
 interface AnnotationFile {
-  version: 1;                              // required; loadJSON refuses files with version > current
-  tableName?: string;                      // set by toJSON
-  createdAt?: string;                      // ISO 8601, set by toJSON
-  updatedAt?: string;                      // ISO 8601, refreshed on every change
-  annotations: Annotation[];               // required
-  [unknownField: string]: unknown;         // unknown top-level fields preserved verbatim
+  version: 1; // required; loadJSON refuses files with version > current
+  tableName?: string; // set by toJSON
+  createdAt?: string; // ISO 8601, set by toJSON
+  updatedAt?: string; // ISO 8601, refreshed on every change
+  annotations: Annotation[]; // required
+  [unknownField: string]: unknown; // unknown top-level fields preserved verbatim
 }
 ```
 
@@ -329,20 +329,20 @@ Each annotation is discriminated by `scope`:
 
 ```ts
 type Annotation =
-  | (AnnotationBase & { scope: 'row';    rowId: number })
+  | (AnnotationBase & { scope: 'row'; rowId: number })
   | (AnnotationBase & { scope: 'column'; column: string })
-  | (AnnotationBase & { scope: 'cell';   rowId: number; column: string });
+  | (AnnotationBase & { scope: 'cell'; rowId: number; column: string });
 
 interface AnnotationBase {
-  id: string;                              // ann_ + 26-char Crockford base32 (auto-generated if missing)
+  id: string; // ann_ + 26-char Crockford base32 (auto-generated if missing)
   severity: 'error' | 'warning' | 'info';
   message: string;
-  code?: string;                           // app-defined
-  source?: string;                         // app-defined
-  metadata?: Record<string, unknown>;      // app-defined extras
-  createdAt?: string;                      // ISO 8601
-  updatedAt?: string;                      // ISO 8601
-  [unknownField: string]: unknown;         // per-annotation unknowns preserved verbatim
+  code?: string; // app-defined
+  source?: string; // app-defined
+  metadata?: Record<string, unknown>; // app-defined extras
+  createdAt?: string; // ISO 8601
+  updatedAt?: string; // ISO 8601
+  [unknownField: string]: unknown; // per-annotation unknowns preserved verbatim
 }
 ```
 
@@ -357,7 +357,9 @@ Sample file (one of each scope):
   "annotations": [
     {
       "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWX",
-      "scope": "cell", "rowId": 42, "column": "age",
+      "scope": "cell",
+      "rowId": 42,
+      "column": "age",
       "severity": "error",
       "message": "Value 200 exceeds maximum allowed 150",
       "code": "JSON_SCHEMA_MAXIMUM",
@@ -365,13 +367,15 @@ Sample file (one of each scope):
     },
     {
       "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWY",
-      "scope": "row", "rowId": 10,
+      "scope": "row",
+      "rowId": 10,
       "severity": "warning",
       "message": "Row violates dependency on (lastName, firstName, dob)"
     },
     {
       "id": "ann_01HXYZABCDEFGHJKMNPQRSTVWZ",
-      "scope": "column", "column": "id",
+      "scope": "column",
+      "column": "id",
       "severity": "error",
       "message": "Column violates uniqueness constraint"
     }
@@ -392,7 +396,7 @@ import Ajv from 'ajv';
 
 const validator = new Ajv().compile(schema);
 const rows: unknown[] = await table.bridge.query(`SELECT * FROM ${state.tableName.get()}`);
-const rowIds = await table.actions.getColumnValues('__rowid__');     // BigInt64Array
+const rowIds = await table.actions.getColumnValues('__rowid__'); // BigInt64Array
 
 const additions = [];
 for (let i = 0; i < rows.length; i++) {
@@ -410,7 +414,7 @@ for (let i = 0; i < rows.length; i++) {
     }
   }
 }
-table.annotations.addMany(additions);                                // single 'added' event
+table.annotations.addMany(additions); // single 'added' event
 ```
 
 ### Show only errors during a triage pass
@@ -427,7 +431,7 @@ table.annotations.setSeverityFilter({ warning: true, info: true });
 const file = table.annotations.toJSON();
 file.annotations[0].metadata = { ...file.annotations[0].metadata, reviewedBy: 'jeya' };
 file.tableName = 'source-after-review';
-table.annotations.loadJSON(file, 'replace');                         // clears + reloads
+table.annotations.loadJSON(file, 'replace'); // clears + reloads
 ```
 
 ## Gotchas

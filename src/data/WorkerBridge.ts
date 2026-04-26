@@ -1,4 +1,13 @@
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+import {
+  ConfigurationError,
+  QueryError,
+  WorkerInitError,
+  WorkerTerminatedError,
+  reconstructError,
+} from '../core/errors';
+import type { ProgressInfo, ProgressCallback } from '../core/Progress';
+import type { ColumnSchema } from '../core/types';
 import type {
   WorkerMessage,
   WorkerResponse,
@@ -9,15 +18,6 @@ import type {
   LoadPayload,
   ExportPayload,
 } from '../worker/types';
-import type { ProgressInfo, ProgressCallback } from '../core/Progress';
-import type { ColumnSchema } from '../core/types';
-import {
-  ConfigurationError,
-  QueryError,
-  WorkerInitError,
-  WorkerTerminatedError,
-  reconstructError,
-} from '../core/errors';
 import { QueryCache, type QueryCacheOptions } from './QueryCache';
 
 // Re-export for convenience
@@ -249,10 +249,7 @@ export class WorkerBridge {
   /**
    * Execute a SQL query
    */
-  async query<T = Record<string, unknown>>(
-    sql: string,
-    signal?: AbortSignal
-  ): Promise<T[]> {
+  async query<T = Record<string, unknown>>(sql: string, signal?: AbortSignal): Promise<T[]> {
     this.ensureInitialized();
 
     // Only cache SELECT queries
@@ -285,7 +282,7 @@ export class WorkerBridge {
     source: ArrayBuffer | string,
     options: LoadOptions,
     onProgress?: ProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<LoadDataResult> {
     this.ensureInitialized();
 
@@ -315,11 +312,7 @@ export class WorkerBridge {
    * The SQL query is wrapped in COPY (...) TO on the worker side.
    * Returns the file contents as a Uint8Array.
    */
-  async exportToBuffer(
-    sql: string,
-    format: 'parquet',
-    signal?: AbortSignal
-  ): Promise<Uint8Array> {
+  async exportToBuffer(sql: string, format: 'parquet', signal?: AbortSignal): Promise<Uint8Array> {
     this.ensureInitialized();
 
     const payload: ExportPayload = { sql, format };
@@ -365,10 +358,9 @@ export class WorkerBridge {
 
   private ensureInitialized(): void {
     if (!this.worker) {
-      throw new ConfigurationError(
-        'WorkerBridge not initialized. Call initialize() first.',
-        { code: 'BRIDGE_NOT_READY' },
-      );
+      throw new ConfigurationError('WorkerBridge not initialized. Call initialize() first.', {
+        code: 'BRIDGE_NOT_READY',
+      });
     }
   }
 
@@ -384,7 +376,7 @@ export class WorkerBridge {
     type: WorkerMessageType,
     payload: unknown,
     onProgress?: ProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = this.generateId();
@@ -415,8 +407,11 @@ export class WorkerBridge {
       }
 
       this.pendingRequests.set(id, {
-        resolve, reject, onProgress,
-        signal, abortHandler,
+        resolve,
+        reject,
+        onProgress,
+        signal,
+        abortHandler,
       });
 
       const message: WorkerMessage = { id, type, payload };
@@ -461,4 +456,3 @@ export class WorkerBridge {
     }
   }
 }
-

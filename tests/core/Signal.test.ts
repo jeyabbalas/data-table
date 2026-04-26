@@ -255,9 +255,7 @@ describe('Computed', () => {
 
       comp.dispose();
 
-      expect(() => comp.subscribe(() => {})).toThrow(
-        'Cannot subscribe to a disposed computed'
-      );
+      expect(() => comp.subscribe(() => {})).toThrow('Cannot subscribe to a disposed computed');
     });
 
     it('should clear subscribers on dispose', () => {

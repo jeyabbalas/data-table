@@ -102,13 +102,24 @@ describe('formatFilter', () => {
     });
 
     it('should format range with string values (ISO dates)', () => {
-      const filter: Filter = { type: 'range', column: 'date', min: '2024-01-05', max: '2024-03-22' };
+      const filter: Filter = {
+        type: 'range',
+        column: 'date',
+        min: '2024-01-05',
+        max: '2024-03-22',
+      };
       const result = formatFilter(filter);
       expect(result.description).toBe('2024-01-05 \u2013 2024-03-22');
     });
 
     it('should format open-ended range (greater than)', () => {
-      const filter: Filter = { type: 'range', column: 'age', min: 18, max: Infinity, minExclusive: true };
+      const filter: Filter = {
+        type: 'range',
+        column: 'age',
+        min: 18,
+        max: Infinity,
+        minExclusive: true,
+      };
       const result = formatFilter(filter);
       expect(result.description).toBe('> 18');
     });
@@ -126,7 +137,13 @@ describe('formatFilter', () => {
     });
 
     it('should format open-ended range (less than or equal)', () => {
-      const filter: Filter = { type: 'range', column: 'age', min: -Infinity, max: 100, maxInclusive: true };
+      const filter: Filter = {
+        type: 'range',
+        column: 'age',
+        min: -Infinity,
+        max: 100,
+        maxInclusive: true,
+      };
       const result = formatFilter(filter);
       expect(result.description).toBe('\u2264 100');
     });
@@ -209,7 +226,12 @@ describe('formatFilter', () => {
     });
 
     it('should format set with includeNull', () => {
-      const filter: Filter = { type: 'set', column: 'color', values: ['red', 'blue'], includeNull: true };
+      const filter: Filter = {
+        type: 'set',
+        column: 'color',
+        values: ['red', 'blue'],
+        includeNull: true,
+      };
       const result = formatFilter(filter);
       expect(result.description).toBe('in {red, blue} or null');
     });
@@ -381,7 +403,10 @@ describe('FilterChip', () => {
 
   it('should render raw-sql chip with SQL column label', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+      type: 'raw-sql',
+      column: '__raw_sql_abc__',
+      sql: 'age > 30',
+      id: 'abc',
     };
     const chip = new FilterChip(filter, () => {});
     const el = chip.getElement();
@@ -397,7 +422,11 @@ describe('FilterChip', () => {
 
   it('should render raw-sql chip with label instead of SQL when provided', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30 AND status = 1', id: 'abc', label: 'Adult active',
+      type: 'raw-sql',
+      column: '__raw_sql_abc__',
+      sql: 'age > 30 AND status = 1',
+      id: 'abc',
+      label: 'Adult active',
     };
     const chip = new FilterChip(filter, () => {});
     const el = chip.getElement();
@@ -410,7 +439,10 @@ describe('FilterChip', () => {
 
   it('should add code icon and SQL class to raw-sql chip', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+      type: 'raw-sql',
+      column: '__raw_sql_abc__',
+      sql: 'age > 30',
+      id: 'abc',
     };
     const chip = new FilterChip(filter, () => {});
     const el = chip.getElement();
@@ -423,7 +455,10 @@ describe('FilterChip', () => {
 
   it('should make label clickable when onEdit is provided', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+      type: 'raw-sql',
+      column: '__raw_sql_abc__',
+      sql: 'age > 30',
+      id: 'abc',
     };
     const onEdit = vi.fn();
     const chip = new FilterChip(filter, () => {}, { onEdit });
@@ -440,7 +475,10 @@ describe('FilterChip', () => {
 
   it('should not trigger onEdit when X button is clicked', () => {
     const filter: Filter = {
-      type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc',
+      type: 'raw-sql',
+      column: '__raw_sql_abc__',
+      sql: 'age > 30',
+      id: 'abc',
     };
     const onEdit = vi.fn();
     const onRemove = vi.fn();

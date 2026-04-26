@@ -18,10 +18,7 @@ import type { BaseVisualization } from '../../src/visualizations/BaseVisualizati
 import type { Filter } from '../../src/core/types';
 
 /** Stub visualization that tracks concurrency through a shared counter. */
-function makeStubViz(
-  tracker: { inflight: number; peak: number },
-  ms = 10,
-): BaseVisualization {
+function makeStubViz(tracker: { inflight: number; peak: number }, ms = 10): BaseVisualization {
   return {
     async updateFilters(_filters: Filter[]): Promise<void> {
       tracker.inflight += 1;
@@ -60,9 +57,7 @@ describe('CrossfilterCoordinator — concurrency cap', () => {
     }
 
     // Trigger a filter change so onFiltersChanged fires for every registered viz.
-    state.filters.set([
-      { type: 'not-null', column: 'col_0' } as unknown as Filter,
-    ]);
+    state.filters.set([{ type: 'not-null', column: 'col_0' } as unknown as Filter]);
 
     // Poll until all viz tasks have drained.
     const start = Date.now();
@@ -88,9 +83,7 @@ describe('CrossfilterCoordinator — concurrency cap', () => {
       coord.register(`col_${i}`, makeStubViz(tracker, 10));
     }
 
-    state.filters.set([
-      { type: 'not-null', column: 'col_0' } as unknown as Filter,
-    ]);
+    state.filters.set([{ type: 'not-null', column: 'col_0' } as unknown as Filter]);
 
     const start = Date.now();
     while (tracker.inflight > 0 && Date.now() - start < 2000) {
@@ -114,9 +107,7 @@ describe('CrossfilterCoordinator — concurrency cap', () => {
       coord.register(`col_${i}`, makeStubViz(tracker, 5));
     }
 
-    state.filters.set([
-      { type: 'not-null', column: 'col_0' } as unknown as Filter,
-    ]);
+    state.filters.set([{ type: 'not-null', column: 'col_0' } as unknown as Filter]);
 
     const start = Date.now();
     while (tracker.inflight > 0 && Date.now() - start < 2000) {

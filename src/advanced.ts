@@ -16,11 +16,7 @@ export { EventEmitter } from './core/EventEmitter';
 export { StateActions } from './core/Actions';
 export type { LoadDataOptions } from './core/Actions';
 
-export {
-  createTableState,
-  resetTableState,
-  initializeColumnsFromSchema,
-} from './core/State';
+export { createTableState, resetTableState, initializeColumnsFromSchema } from './core/State';
 export type { TableState, HiddenColumnInfo } from './core/State';
 
 export {
@@ -108,10 +104,7 @@ export type {
   DuckDBFunctionInfo,
   DuckDBFunctionCategory,
 } from './sql-editor/duckdbFunctionDetails';
-export {
-  createSqlExtensions,
-  buildCompletionContext,
-} from './sql-editor/extensions';
+export { createSqlExtensions, buildCompletionContext } from './sql-editor/extensions';
 export type { SqlExtensionOptions } from './sql-editor/extensions';
 export { dataTableTheme, dataTableHighlighting } from './sql-editor/theme';
 
@@ -184,7 +177,12 @@ export type {
 } from './visualizations/BaseStatsPanel';
 export { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
 
-export { Histogram, DateHistogram, TimeHistogram, IntervalHistogram } from './visualizations/histogram';
+export {
+  Histogram,
+  DateHistogram,
+  TimeHistogram,
+  IntervalHistogram,
+} from './visualizations/histogram';
 export type {
   HistogramBin,
   HistogramData,

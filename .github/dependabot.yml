@@ -1,0 +1,49 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      lint-and-format:
+        patterns:
+          - eslint
+          - eslint-*
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - prettier
+          - 'prettier-*'
+      typescript:
+        patterns:
+          - typescript
+          - '@types/*'
+      vitest:
+        patterns:
+          - vitest
+          - '@vitest/*'
+          - jsdom
+          - fake-indexeddb
+      codemirror:
+        patterns:
+          - '@codemirror/*'
+          - '@lezer/*'
+      typedoc:
+        patterns:
+          - typedoc
+          - 'typedoc-*'
+    ignore:
+      # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev42.0`).
+      # Major bumps need to be reviewed manually against the worker bridge
+      # (see review-plan.md §7 risk register).
+      - dependency-name: '@duckdb/duckdb-wasm'
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

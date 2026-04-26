@@ -33,11 +33,13 @@ class MeanStdPanel extends BaseStatsPanel {
   constructor(container, column, options) {
     super(container, column, options);
     // build your DOM once, then …
-    void this.fetch();   // initial query
+    void this.fetch(); // initial query
   }
 
   // Library hands you the same ColumnStatsData visualizations emit.
-  update(stats) { /* render row counts, distinct, etc. */ }
+  update(stats) {
+    /* render row counts, distinct, etc. */
+  }
 
   // Library hands you the new filter array on every change.
   // Default impl just stashes filters; override to query DuckDB.
@@ -47,7 +49,9 @@ class MeanStdPanel extends BaseStatsPanel {
   }
 
   // Library hands you the visualization's hover string (or null to clear).
-  setHoverStats(text) { /* swap line 2 in/out */ }
+  setHoverStats(text) {
+    /* swap line 2 in/out */
+  }
 
   destroy() {
     this.container.replaceChildren();
@@ -89,7 +93,7 @@ class NameAwareRegistry extends StatsPanelRegistry {
 
 ## Responding to filters
 
-`StatsPanelCoordinator` (composed for you by `createDataTable`) subscribes to `state.filters` and calls `updateFilters(filters)` on every registered panel — including panels mounted on columns *without* a visualization (e.g. `uuid`). Panels that only re-render existing `ColumnStatsData` need not override `updateFilters` at all; the library will still call `update(stats)` whenever the column's visualization (if any) refreshes its query. Panels that compute their own statistics override `updateFilters` to issue their queries via `options.bridge`.
+`StatsPanelCoordinator` (composed for you by `createDataTable`) subscribes to `state.filters` and calls `updateFilters(filters)` on every registered panel — including panels mounted on columns _without_ a visualization (e.g. `uuid`). Panels that only re-render existing `ColumnStatsData` need not override `updateFilters` at all; the library will still call `update(stats)` whenever the column's visualization (if any) refreshes its query. Panels that compute their own statistics override `updateFilters` to issue their queries via `options.bridge`.
 
 ```ts
 async updateFilters(filters) {
@@ -104,6 +108,6 @@ async updateFilters(filters) {
 
 - **Stale results**: the example uses a per-panel `fetchSeq` counter so a slow query that resolves after a fresh filter change is dropped instead of overwriting the new render.
 - **Errors**: route fetch failures through `this.options.onError(err, { source: 'stats-panel', column, phase })`. The facade re-emits these on its `error` event so `table.on('error', …)` listeners catch panel failures alongside load / query / persistence ones.
-- **Fallthrough**: leave a column type *unregistered* and the library renders its built-in formatter — opt-in is granular, you don't have to handle every type.
+- **Fallthrough**: leave a column type _unregistered_ and the library renders its built-in formatter — opt-in is granular, you don't have to handle every type.
 - **Hover integration**: override `setHoverStats(text)` to pin the visualization's hover preview into your layout; ignore it if your panel design doesn't need a bin-by-bin readout.
 - **No viz columns**: panels work on `uuid` and other types that have no visualization. The coordinator still broadcasts filter changes, so the panel can refresh its DuckDB stats independently.

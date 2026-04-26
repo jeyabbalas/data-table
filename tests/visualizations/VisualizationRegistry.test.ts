@@ -29,9 +29,7 @@ const mockCanvasContext = {
   translate: vi.fn(),
   measureText: vi.fn().mockReturnValue({ width: 50 }),
 };
-HTMLCanvasElement.prototype.getContext = vi
-  .fn()
-  .mockReturnValue(mockCanvasContext);
+HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(mockCanvasContext);
 
 class MockResizeObserver {
   observe = vi.fn();
@@ -187,14 +185,10 @@ describe('VisualizationFactory — deprecated static wrapper (Phase 3)', () => {
       priority: 5,
     });
 
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).toContain(
-      'wrapper-custom',
-    );
+    expect(defaultVisualizationRegistry.getRegisteredTypes()).toContain('wrapper-custom');
 
     VisualizationFactory.unregister('wrapper-custom');
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain(
-      'wrapper-custom',
-    );
+    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain('wrapper-custom');
   });
 
   it('forwards resetToDefaults to defaultVisualizationRegistry', () => {
@@ -207,8 +201,6 @@ describe('VisualizationFactory — deprecated static wrapper (Phase 3)', () => {
     expect(defaultVisualizationRegistry.getRegisteredTypes()).toContain('temp');
 
     VisualizationFactory.resetToDefaults();
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain(
-      'temp',
-    );
+    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain('temp');
   });
 });

@@ -64,7 +64,10 @@ function collectDocVars() {
 }
 
 function formatSet(set) {
-  return [...set].sort().map((n) => `  ${n}`).join('\n');
+  return [...set]
+    .sort()
+    .map((n) => `  ${n}`)
+    .join('\n');
 }
 
 function main() {
@@ -100,7 +103,9 @@ function main() {
     console.error(formatSet(new Set(extra)));
     console.error('');
   }
-  console.error(`Fix: update the table under the \`<!-- dt-vars:start -->\` ... \`<!-- dt-vars:end -->\` block in ${docRelPath}.`);
+  console.error(
+    `Fix: update the table under the \`<!-- dt-vars:start -->\` ... \`<!-- dt-vars:end -->\` block in ${docRelPath}.`,
+  );
   console.error('     Run `node scripts/check-css-vars.mjs --emit` to seed a fresh list.');
   process.exit(1);
 }

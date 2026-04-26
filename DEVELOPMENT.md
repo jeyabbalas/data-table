@@ -35,12 +35,33 @@ Available routes:
 
 During dev, `@jeyabbalas/data-table` resolves to `src/index.ts` and `@jeyabbalas/data-table/advanced` resolves to `src/advanced.ts` — no prebuild step is needed for source changes to appear.
 
+## Linting and formatting
+
+```bash
+npm run lint              # ESLint flat config
+npm run lint:fix          # auto-fix mechanical issues
+npm run format            # Prettier write
+npm run format:check      # Prettier check (CI uses this)
+npm run typecheck         # tsc --noEmit
+```
+
+ESLint config lives at [`eslint.config.js`](./eslint.config.js); the rule set
+mixes `typescript-eslint` recommended-typed and stylistic with
+`eslint-plugin-import`'s `no-cycle` and ordering checks. Prettier picks up
+[`.prettierrc.json`](./.prettierrc.json); ignored paths live in
+[`.prettierignore`](./.prettierignore). The `lint`/`format`/`typecheck`
+scripts are gated in CI under the `Lint, typecheck, format, docs` job.
+
 ## Testing
 
 ```bash
 npm test                  # watch mode
 npm run test:coverage     # single run with v8 coverage (HTML report in coverage/)
 ```
+
+`test:coverage` enforces the thresholds declared in
+[`vitest.config.ts`](./vitest.config.ts). Phase-0 baselines are intentionally
+loose; tighten them in Phase 9 of the review plan.
 
 Run a single test file:
 
@@ -77,7 +98,7 @@ Create a file that mirrors the source-module path under `tests/`. Import from th
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { createDataTable } from '../src';   // or from '@/index'
+import { createDataTable } from '../src'; // or from '@/index'
 ```
 
 Vitest globals (`describe`, `it`, `expect`, `beforeEach`) are enabled, so you don't need to import them.
@@ -180,39 +201,70 @@ For the reactive/worker/crossfilter architecture, see [`docs/concepts/architectu
 - **Public API additions require**:
   1. JSDoc on the export (at minimum a one-sentence description and an `@example` block).
   2. An entry in [`docs/api-reference.md`](./docs/api-reference.md).
-  3. A changelog entry under `## [Unreleased]` in [`CHANGELOG.md`](./CHANGELOG.md).
+  3. A `.changeset/*.md` file (`npx changeset`) describing the change. The
+     [release workflow](./.github/workflows/release.yml) uses these to roll
+     forward `CHANGELOG.md` automatically when versioning.
   4. An update to the API-surface snapshot (`npx vitest -u`).
 
 ## Release process
 
-1. Verify `main` is green:
+The repo uses [changesets](https://github.com/changesets/changesets) for
+versioning and publishing. A push to `main` triggers
+[`.github/workflows/release.yml`](./.github/workflows/release.yml), which
+either opens a "Version Packages" PR (when one or more `.changeset/*.md`
+files exist) or runs `changeset publish` once that PR merges. npm provenance
+(`NPM_CONFIG_PROVENANCE=true`) is enabled in the workflow.
+
+### One-time setup before the workflow can publish
+
+The workflow is committed in a safe, secret-gated state:
+
+1. Add an `NPM_TOKEN` repository secret with publish access to
+   `@jeyabbalas/data-table`, **or** enable npm OIDC trusted publishing on
+   `https://www.npmjs.com/package/@jeyabbalas/data-table/access` and remove
+   the `NPM_TOKEN` reference from the workflow.
+2. Settings → Actions → General → check **"Allow GitHub Actions to create
+   and approve pull requests"** so the changesets action can open the
+   "Version Packages" PR.
+
+Until both are configured, the publish step is a no-op.
+
+### Day-to-day flow
+
+1. As part of every PR, run:
    ```bash
-   npm test
-   npm run build
+   npx changeset
    ```
-2. Update [`CHANGELOG.md`](./CHANGELOG.md):
-   - Rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`.
-   - Add a fresh, empty `## [Unreleased]` block above it (with the standard subsection headings).
-3. Bump the version (this also creates a git tag):
-   ```bash
-   npm version X.Y.Z
-   ```
-4. Publish:
-   ```bash
-   npm publish --access public
-   ```
-   The `--access public` flag is required for scoped packages (`@jeyabbalas/…`) on first publish; it's saved for subsequent publishes of the same package.
-5. Push the commit and tag:
-   ```bash
-   git push && git push --tags
-   ```
-6. Create a GitHub Release from the new tag and copy the corresponding `CHANGELOG.md` entry into the release notes.
-7. Verify the new version appears on https://www.npmjs.com/package/@jeyabbalas/data-table and that `npm install @jeyabbalas/data-table@X.Y.Z` resolves against a clean registry cache.
+   …and answer the prompts. The CLI writes a markdown file under `.changeset/`.
+   Commit it alongside your code.
+2. Merge the PR.
+3. The release workflow opens (or updates) a `chore: version packages` PR
+   that bumps `package.json` and prepends a fresh `CHANGELOG.md` section
+   built from the changesets.
+4. Review the version PR. Merge when ready.
+5. The workflow runs `changeset publish` against npm with provenance, and
+   tags the commit.
+
+### Manual fallback
+
+If GitHub Actions is unavailable:
+
+```bash
+npm run typecheck && npm run lint && npm run format:check
+npm run test:coverage
+npm run build
+npx changeset version            # bumps package.json, writes CHANGELOG
+npx changeset publish            # publishes; --provenance comes from .npmrc / env
+git push && git push --tags
+```
+
+`prepublishOnly` runs `npm run build && npm run test:coverage` as a final
+guard against publishing a broken artifact.
 
 ## Troubleshooting the dev loop
 
 - **`check:css-vars` fails after editing `src/styles/*`.** The script prints the exact list of missing or extra variables. Update the `--dt-*` reference table in `docs/guides/theming.md` to match, then re-run `npm run check:css-vars`.
 - **`tsc --noEmit` fails on CodeMirror or DuckDB imports.** Peer-dependency `devDependencies` weren't installed. Re-run `npm install`.
-- **Tests hang or fail on IndexedDB.** Import `fake-indexeddb/auto` *before* the module under test; the library checks for `globalThis.indexedDB` at module load time.
+- **Tests hang or fail on IndexedDB.** Import `fake-indexeddb/auto` _before_ the module under test; the library checks for `globalThis.indexedDB` at module load time.
 - **Demo server shows a 404 at `/`.** The base path is `/data-table/`, not `/`. Open `http://localhost:5173/data-table/`.
 - **`axe-core` flags a violation in a new component.** Check roles, labels, and keyboard focus — the grid (`role="grid"`) exposes `aria-rowcount` / `aria-colcount` / `aria-rowindex` / `aria-colindex`, and modals require a focus trap via `ModalHost`. See [`docs/guides/accessibility.md`](./docs/guides/accessibility.md).

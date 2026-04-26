@@ -28,7 +28,7 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
       workerFactory: factory,
       workerUrl: 'ignored.js',
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const worker = (bridge as any).createWorker();
 
     expect(factory).toHaveBeenCalledTimes(1);
@@ -47,18 +47,17 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
         removeEventListener: vi.fn(),
       });
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (globalThis as any).Worker = ctor;
     try {
       const bridge = new WorkerBridge({ workerUrl: '/custom/worker.js' });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (bridge as any).createWorker();
 
       expect(ctor).toHaveBeenCalledTimes(1);
       expect(ctor.mock.calls[0][0]).toBe('/custom/worker.js');
       expect(ctor.mock.calls[0][1]).toEqual({ type: 'module' });
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).Worker = originalWorker;
     }
   });
@@ -70,11 +69,9 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
       },
     });
     expect(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (bridge as any).createWorker();
     }).toThrowError(WorkerInitError);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (bridge as any).createWorker();
     } catch (err) {
       expect(err).toBeInstanceOf(WorkerInitError);
@@ -88,11 +85,9 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
 
   it('throws WorkerInitError when workerFactory returns a non-Worker', () => {
     const bridge = new WorkerBridge({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       workerFactory: () => ({}) as any,
     });
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (bridge as any).createWorker();
       throw new Error('should have thrown');
     } catch (err) {
@@ -105,14 +100,13 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
 
   it('throws WorkerInitError when workerUrl construction fails', () => {
     const originalWorker = globalThis.Worker;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (globalThis as any).Worker = function () {
       throw new Error('boom');
     };
     try {
       const bridge = new WorkerBridge({ workerUrl: '/bad.js' });
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (bridge as any).createWorker();
         throw new Error('should have thrown');
       } catch (err) {
@@ -124,7 +118,6 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
         });
       }
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).Worker = originalWorker;
     }
   });
@@ -144,7 +137,7 @@ describe('WorkerBridge — duckdbBundles forwarding (Phase 3)', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (bridge as any).worker = fakeWorker;
     return { bridge, postMessage };
   }
@@ -161,7 +154,7 @@ describe('WorkerBridge — duckdbBundles forwarding (Phase 3)', () => {
 
   it('sends empty init payload when duckdbBundles is not configured', () => {
     const { bridge, postMessage } = primeBridge();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (bridge as any).sendMessage('init', {});
     const payload = extractInitPayload(postMessage);
     expect(payload).toEqual({});
@@ -171,11 +164,10 @@ describe('WorkerBridge — duckdbBundles forwarding (Phase 3)', () => {
     const bundles = {
       mvp: { mainModule: 'a.wasm', mainWorker: 'a.js' },
       eh: { mainModule: 'b.wasm', mainWorker: 'b.js' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const { bridge, postMessage } = primeBridge({ duckdbBundles: bundles });
     // Synthesize the exact init call the real `initialize()` flow makes.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const b: any = bridge;
     b.sendMessage('init', b.duckdbBundles ? { bundles: b.duckdbBundles } : {});
     const payload = extractInitPayload(postMessage);

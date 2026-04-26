@@ -44,10 +44,7 @@ let table: DataTable | undefined;
   // Tip > 20% of fare. Uses the raw-SQL escape hatch for an expression
   // not expressible with the typed Filter shapes.
   document.getElementById('btn-tip')!.onclick = () => {
-    table!.actions.addRawSQLFilter(
-      'tip_amount / NULLIF(fare_amount, 0) > 0.20',
-      'tip > 20%',
-    );
+    table!.actions.addRawSQLFilter('tip_amount / NULLIF(fare_amount, 0) > 0.20', 'tip > 20%');
   };
 
   // Short trips under 2 miles — demonstrates a second RangeFilter at the

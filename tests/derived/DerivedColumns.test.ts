@@ -121,7 +121,7 @@ describe('Derived Columns — Actions Integration', () => {
 
       // schema updated with isDerived flag
       const schema = state.schema.get();
-      const totalCol = schema.find(c => c.name === 'total');
+      const totalCol = schema.find((c) => c.name === 'total');
       expect(totalCol).toBeDefined();
       expect(totalCol!.isDerived).toBe(true);
       expect(totalCol!.type).toBe('float'); // DOUBLE maps to float
@@ -156,12 +156,16 @@ describe('Derived Columns — Actions Integration', () => {
       const calls = mockBridge.getQueryCalls();
 
       // Should have: validation (LIMIT 0), type detection (typeof), VIEW creation
-      expect(calls.some(sql => sql.includes('LIMIT 0') && sql.includes('price * quantity'))).toBe(true);
-      expect(calls.some(sql => sql.includes('typeof') && sql.includes('price * quantity'))).toBe(true);
-      expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('LIMIT 0') && sql.includes('price * quantity'))).toBe(
+        true,
+      );
+      expect(calls.some((sql) => sql.includes('typeof') && sql.includes('price * quantity'))).toBe(
+        true,
+      );
+      expect(calls.some((sql) => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
 
       // The VIEW SQL should reference the base table and the expression
-      const viewSQL = calls.find(sql => sql.includes('CREATE OR REPLACE VIEW'))!;
+      const viewSQL = calls.find((sql) => sql.includes('CREATE OR REPLACE VIEW'))!;
       expect(viewSQL).toContain('"__dt_view_test_table__"');
       expect(viewSQL).toContain('price * quantity');
       expect(viewSQL).toContain('"total"');
@@ -181,7 +185,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(state.derivedColumns.get()).toHaveLength(2);
-      expect(state.schema.get().filter(c => c.isDerived)).toHaveLength(2);
+      expect(state.schema.get().filter((c) => c.isDerived)).toHaveLength(2);
 
       // Both should be in visible/order
       expect(state.visibleColumns.get()).toContain('total');
@@ -204,10 +208,10 @@ describe('Derived Columns — Actions Integration', () => {
       allTypesBridge = createMockBridge({
         'price * quantity': 'DOUBLE',
         'CAST(price AS INTEGER)': 'INTEGER',
-        "CAST(price AS DECIMAL(10,2))": 'DECIMAL(10,2)',
-        'CURRENT_DATE': 'DATE',
-        'CURRENT_TIMESTAMP': 'TIMESTAMP',
-        'CURRENT_TIME': 'TIME',
+        'CAST(price AS DECIMAL(10,2))': 'DECIMAL(10,2)',
+        CURRENT_DATE: 'DATE',
+        CURRENT_TIMESTAMP: 'TIMESTAMP',
+        CURRENT_TIME: 'TIME',
         "INTERVAL '1 day'": 'INTERVAL',
         'uuid()': 'UUID',
         'UPPER(name)': 'VARCHAR',
@@ -223,82 +227,104 @@ describe('Derived Columns — Actions Integration', () => {
 
     it('detects integer type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'int_col', expression: 'CAST(price AS INTEGER)',
+        kind: 'expression',
+        name: 'int_col',
+        expression: 'CAST(price AS INTEGER)',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'int_col')!.type).toBe('integer');
+      expect(allTypesState.schema.get().find((c) => c.name === 'int_col')!.type).toBe('integer');
     });
 
     it('detects float type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'float_col', expression: 'price * quantity',
+        kind: 'expression',
+        name: 'float_col',
+        expression: 'price * quantity',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'float_col')!.type).toBe('float');
+      expect(allTypesState.schema.get().find((c) => c.name === 'float_col')!.type).toBe('float');
     });
 
     it('detects decimal type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'dec_col', expression: 'CAST(price AS DECIMAL(10,2))',
+        kind: 'expression',
+        name: 'dec_col',
+        expression: 'CAST(price AS DECIMAL(10,2))',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'dec_col')!.type).toBe('decimal');
+      expect(allTypesState.schema.get().find((c) => c.name === 'dec_col')!.type).toBe('decimal');
     });
 
     it('detects date type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'date_col', expression: 'CURRENT_DATE',
+        kind: 'expression',
+        name: 'date_col',
+        expression: 'CURRENT_DATE',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'date_col')!.type).toBe('date');
+      expect(allTypesState.schema.get().find((c) => c.name === 'date_col')!.type).toBe('date');
     });
 
     it('detects timestamp type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'ts_col', expression: 'CURRENT_TIMESTAMP',
+        kind: 'expression',
+        name: 'ts_col',
+        expression: 'CURRENT_TIMESTAMP',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'ts_col')!.type).toBe('timestamp');
+      expect(allTypesState.schema.get().find((c) => c.name === 'ts_col')!.type).toBe('timestamp');
     });
 
     it('detects time type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'time_col', expression: 'CURRENT_TIME',
+        kind: 'expression',
+        name: 'time_col',
+        expression: 'CURRENT_TIME',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'time_col')!.type).toBe('time');
+      expect(allTypesState.schema.get().find((c) => c.name === 'time_col')!.type).toBe('time');
     });
 
     it('detects interval type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'interval_col', expression: "INTERVAL '1 day'",
+        kind: 'expression',
+        name: 'interval_col',
+        expression: "INTERVAL '1 day'",
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'interval_col')!.type).toBe('interval');
+      expect(allTypesState.schema.get().find((c) => c.name === 'interval_col')!.type).toBe(
+        'interval',
+      );
     });
 
     it('detects uuid type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'uuid_col', expression: 'uuid()',
+        kind: 'expression',
+        name: 'uuid_col',
+        expression: 'uuid()',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'uuid_col')!.type).toBe('uuid');
+      expect(allTypesState.schema.get().find((c) => c.name === 'uuid_col')!.type).toBe('uuid');
     });
 
     it('detects string type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'str_col', expression: 'UPPER(name)',
+        kind: 'expression',
+        name: 'str_col',
+        expression: 'UPPER(name)',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'str_col')!.type).toBe('string');
+      expect(allTypesState.schema.get().find((c) => c.name === 'str_col')!.type).toBe('string');
     });
 
     it('detects boolean type from expression', async () => {
       const result = await allTypesActions.addDerivedColumn({
-        kind: 'expression', name: 'bool_col', expression: 'quantity > 50',
+        kind: 'expression',
+        name: 'bool_col',
+        expression: 'quantity > 50',
       });
       expect(result.success).toBe(true);
-      expect(allTypesState.schema.get().find(c => c.name === 'bool_col')!.type).toBe('boolean');
+      expect(allTypesState.schema.get().find((c) => c.name === 'bool_col')!.type).toBe('boolean');
     });
   });
 
@@ -401,7 +427,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.success).toBe(true);
 
       // Schema updated
-      const scoreCol = state.schema.get().find(c => c.name === 'scores');
+      const scoreCol = state.schema.get().find((c) => c.name === 'scores');
       expect(scoreCol).toBeDefined();
       expect(scoreCol!.isDerived).toBe(true);
       expect(scoreCol!.type).toBe('float');
@@ -412,12 +438,16 @@ describe('Derived Columns — Actions Integration', () => {
 
       // Helper table created + VIEW created
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
-      expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
+      expect(
+        calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('__dt_vec_scores_0__')),
+      ).toBe(true);
+      expect(
+        calls.some((sql) => sql.includes('INSERT INTO') && sql.includes('__dt_vec_scores_0__')),
+      ).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
 
       // VIEW should have a LEFT JOIN for the vector column
-      const viewSQL = calls.find(sql => sql.includes('CREATE OR REPLACE VIEW'))!;
+      const viewSQL = calls.find((sql) => sql.includes('CREATE OR REPLACE VIEW'))!;
       expect(viewSQL).toContain('LEFT JOIN');
       expect(viewSQL).toContain('__dt_vec_scores_0__');
       expect(viewSQL).toContain('rowid');
@@ -433,7 +463,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const labelCol = state.schema.get().find(c => c.name === 'labels');
+      const labelCol = state.schema.get().find((c) => c.name === 'labels');
       expect(labelCol!.type).toBe('string');
     });
 
@@ -447,7 +477,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const flagCol = state.schema.get().find(c => c.name === 'flags');
+      const flagCol = state.schema.get().find((c) => c.name === 'flags');
       expect(flagCol!.type).toBe('boolean');
     });
 
@@ -464,15 +494,17 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'event_date');
+      const col = state.schema.get().find((c) => c.name === 'event_date');
       expect(col).toBeDefined();
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('date');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('DATE'))).toBe(true);
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes('__dt_vec_event_date_0__'))).toBe(true);
-      expect(calls.some(sql => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('DATE'))).toBe(true);
+      expect(
+        calls.some((sql) => sql.includes('INSERT INTO') && sql.includes('__dt_vec_event_date_0__')),
+      ).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
     });
 
     it('adds a timestamp vector column', async () => {
@@ -488,12 +520,14 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'event_ts');
+      const col = state.schema.get().find((c) => c.name === 'event_ts');
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('timestamp');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('TIMESTAMP'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('TIMESTAMP'))).toBe(
+        true,
+      );
     });
 
     it('adds a time vector column', async () => {
@@ -510,12 +544,12 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'event_time');
+      const col = state.schema.get().find((c) => c.name === 'event_time');
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('time');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('TIME'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('TIME'))).toBe(true);
     });
 
     it('adds an interval vector column', async () => {
@@ -530,14 +564,18 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'durations');
+      const col = state.schema.get().find((c) => c.name === 'durations');
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('interval');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('INTERVAL'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('INTERVAL'))).toBe(
+        true,
+      );
       // Verify string values are quoted in INSERT
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes("'1 day'"))).toBe(true);
+      expect(calls.some((sql) => sql.includes('INSERT INTO') && sql.includes("'1 day'"))).toBe(
+        true,
+      );
     });
 
     it('adds a decimal vector column', async () => {
@@ -550,12 +588,14 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'precise_vals');
+      const col = state.schema.get().find((c) => c.name === 'precise_vals');
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('decimal');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('DECIMAL(18,6)'))).toBe(true);
+      expect(
+        calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('DECIMAL(18,6)')),
+      ).toBe(true);
     });
 
     it('adds a uuid vector column', async () => {
@@ -571,14 +611,18 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'record_ids');
+      const col = state.schema.get().find((c) => c.name === 'record_ids');
       expect(col!.isDerived).toBe(true);
       expect(col!.type).toBe('uuid');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('CREATE TABLE') && sql.includes('UUID'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('CREATE TABLE') && sql.includes('UUID'))).toBe(true);
       // Verify UUID values are quoted in INSERT
-      expect(calls.some(sql => sql.includes('INSERT INTO') && sql.includes("'550e8400-e29b-41d4-a716-"))).toBe(true);
+      expect(
+        calls.some(
+          (sql) => sql.includes('INSERT INTO') && sql.includes("'550e8400-e29b-41d4-a716-"),
+        ),
+      ).toBe(true);
     });
 
     it('rejects a vector whose length does not match totalRows', async () => {
@@ -615,7 +659,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(state.derivedColumns.get()).toHaveLength(0);
 
       // Schema no longer has 'total'
-      expect(state.schema.get().find(c => c.name === 'total')).toBeUndefined();
+      expect(state.schema.get().find((c) => c.name === 'total')).toBeUndefined();
 
       // Column arrays no longer have 'total'
       expect(state.visibleColumns.get()).not.toContain('total');
@@ -710,8 +754,8 @@ describe('Derived Columns — Actions Integration', () => {
       expect(state.tableName.get()).toBe('__dt_view_test_table__');
 
       // 'total' still in schema, 'upper_name' gone
-      expect(state.schema.get().find(c => c.name === 'total')).toBeDefined();
-      expect(state.schema.get().find(c => c.name === 'upper_name')).toBeUndefined();
+      expect(state.schema.get().find((c) => c.name === 'total')).toBeDefined();
+      expect(state.schema.get().find((c) => c.name === 'upper_name')).toBeUndefined();
     });
 
     it('drops vector helper table on remove', async () => {
@@ -729,7 +773,11 @@ describe('Derived Columns — Actions Integration', () => {
       await actions.removeDerivedColumn('scores');
 
       const calls = mockBridge.getQueryCalls();
-      expect(calls.some(sql => sql.includes('DROP TABLE IF EXISTS') && sql.includes('__dt_vec_scores_0__'))).toBe(true);
+      expect(
+        calls.some(
+          (sql) => sql.includes('DROP TABLE IF EXISTS') && sql.includes('__dt_vec_scores_0__'),
+        ),
+      ).toBe(true);
     });
   });
 
@@ -752,7 +800,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(result.success).toBe(true);
-      const col = state.schema.get().find(c => c.name === 'total');
+      const col = state.schema.get().find((c) => c.name === 'total');
       expect(col!.expression).toBe('quantity + 1');
       expect(col!.type).toBe('integer'); // BIGINT maps to integer
     });
@@ -777,12 +825,12 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.success).toBe(true);
 
       // Old name gone from everywhere
-      expect(state.schema.get().find(c => c.name === 'total')).toBeUndefined();
+      expect(state.schema.get().find((c) => c.name === 'total')).toBeUndefined();
       expect(state.visibleColumns.get()).not.toContain('total');
       expect(state.columnOrder.get()).not.toContain('total');
 
       // New name present everywhere
-      expect(state.schema.get().find(c => c.name === 'revenue')).toBeDefined();
+      expect(state.schema.get().find((c) => c.name === 'revenue')).toBeDefined();
       expect(state.visibleColumns.get()).toContain('revenue');
       expect(state.columnOrder.get()).toContain('revenue');
 
@@ -875,7 +923,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/has 42 values but the table has 100 rows/);
       // Original vector definition still in place.
-      expect(state.derivedColumns.get().find(d => d.name === 'flags')).toMatchObject({
+      expect(state.derivedColumns.get().find((d) => d.name === 'flags')).toMatchObject({
         kind: 'vector',
         name: 'flags',
       });
@@ -914,8 +962,8 @@ describe('Derived Columns — Actions Integration', () => {
       const ctx = actions.getCompletionContext();
 
       expect(ctx.columns).toHaveLength(4);
-      expect(ctx.columns.every(c => !c.isDerived)).toBe(true);
-      expect(ctx.columns.map(c => c.name)).toEqual(['id', 'name', 'price', 'quantity']);
+      expect(ctx.columns.every((c) => !c.isDerived)).toBe(true);
+      expect(ctx.columns.map((c) => c.name)).toEqual(['id', 'name', 'price', 'quantity']);
     });
 
     it('includes derived columns after adding them', async () => {
@@ -928,7 +976,7 @@ describe('Derived Columns — Actions Integration', () => {
       const ctx = actions.getCompletionContext();
       expect(ctx.columns).toHaveLength(5);
 
-      const derivedEntry = ctx.columns.find(c => c.name === 'total');
+      const derivedEntry = ctx.columns.find((c) => c.name === 'total');
       expect(derivedEntry).toBeDefined();
       expect(derivedEntry!.isDerived).toBe(true);
     });
@@ -975,15 +1023,25 @@ describe('Derived Columns — Actions Integration', () => {
 
       // Load data with a session that has a derived column
       const sessionSnapshot = {
-        version: 2, timestamp: Date.now(), tableName: 'test_table',
-        filters: [], sortColumns: [],
+        version: 2,
+        timestamp: Date.now(),
+        tableName: 'test_table',
+        filters: [],
+        sortColumns: [],
         visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
         columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
-        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
-        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+        columnWidths: {},
+        pinnedColumns: [],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          { kind: 'expression' as const, name: 'total', expression: 'price * quantity' },
+        ],
       };
       const store = createMockStore(sessionSnapshot as any);
-      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+      await act.loadData(new File([''], 'test.csv'), {
+        tableName: 'test_table',
+        sessionStore: store as any,
+      });
 
       // Verify initial state includes derived column
       expect(state.visibleColumns.get()).toContain('total');
@@ -1002,7 +1060,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(state.tableName.get()).toBe('test_table');
       expect(state.visibleColumns.get()).not.toContain('total');
       expect(state.columnOrder.get()).not.toContain('total');
-      expect(state.schema.get().every(c => !c.isDerived)).toBe(true);
+      expect(state.schema.get().every((c) => !c.isDerived)).toBe(true);
     });
 
     it('strips derived column names from pinnedColumns', async () => {
@@ -1018,15 +1076,25 @@ describe('Derived Columns — Actions Integration', () => {
       // Load with a session that has a pinned derived column.
       // restoreStateFromSnapshot now preserves derived column pins.
       const sessionSnapshot = {
-        version: 2, timestamp: Date.now(), tableName: 'test_table',
-        filters: [], sortColumns: [],
+        version: 2,
+        timestamp: Date.now(),
+        tableName: 'test_table',
+        filters: [],
+        sortColumns: [],
         visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
         columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
-        columnWidths: {}, pinnedColumns: ['total'], hiddenColumnInfo: {},
-        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+        columnWidths: {},
+        pinnedColumns: ['total'],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          { kind: 'expression' as const, name: 'total', expression: 'price * quantity' },
+        ],
       };
       const store = createMockStore(sessionSnapshot as any);
-      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+      await act.loadData(new File([''], 'test.csv'), {
+        tableName: 'test_table',
+        sessionStore: store as any,
+      });
 
       // Pin is now preserved from session restore
       expect(state.pinnedColumns.get()).toContain('total');
@@ -1069,15 +1137,25 @@ describe('Derived Columns — Actions Integration', () => {
       const act = new StateActions(state, bridge as any, um);
 
       const sessionSnapshot = {
-        version: 2, timestamp: Date.now(), tableName: 'test_table',
-        filters: [], sortColumns: [],
+        version: 2,
+        timestamp: Date.now(),
+        tableName: 'test_table',
+        filters: [],
+        sortColumns: [],
         visibleColumns: ['id', 'name', 'price', 'quantity', 'total'],
         columnOrder: ['id', 'name', 'price', 'quantity', 'total'],
-        columnWidths: {}, pinnedColumns: [], hiddenColumnInfo: {},
-        derivedColumns: [{ kind: 'expression' as const, name: 'total', expression: 'price * quantity' }],
+        columnWidths: {},
+        pinnedColumns: [],
+        hiddenColumnInfo: {},
+        derivedColumns: [
+          { kind: 'expression' as const, name: 'total', expression: 'price * quantity' },
+        ],
       };
       const store = createMockStore(sessionSnapshot as any);
-      await act.loadData(new File([''], 'test.csv'), { tableName: 'test_table', sessionStore: store as any });
+      await act.loadData(new File([''], 'test.csv'), {
+        tableName: 'test_table',
+        sessionStore: store as any,
+      });
 
       // Make destroy throw by making DROP VIEW fail
       let dropCount = 0;
@@ -1138,9 +1216,7 @@ describe('Derived Columns — Actions Integration', () => {
       // All derived column state should be preserved
       expect(state.filters.get()).toHaveLength(1);
       expect(state.filters.get()[0].column).toBe('total');
-      expect(state.sortColumns.get()).toEqual([
-        { column: 'total', direction: 'desc' },
-      ]);
+      expect(state.sortColumns.get()).toEqual([{ column: 'total', direction: 'desc' }]);
       expect(state.pinnedColumns.get()).toContain('total');
       expect(state.columnWidths.get().get('total')).toBe(180);
 
@@ -1227,11 +1303,11 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       expect(state.derivedColumns.get()).toHaveLength(2);
-      expect(state.schema.get().filter(c => c.isDerived)).toHaveLength(2);
+      expect(state.schema.get().filter((c) => c.isDerived)).toHaveLength(2);
 
       // Last VIEW creation should have both expression and JOIN
       const calls = mockBridge.getQueryCalls();
-      const viewCalls = calls.filter(sql => sql.includes('CREATE OR REPLACE VIEW'));
+      const viewCalls = calls.filter((sql) => sql.includes('CREATE OR REPLACE VIEW'));
       const lastView = viewCalls[viewCalls.length - 1];
 
       expect(lastView).toContain('price * quantity');
@@ -1332,9 +1408,9 @@ describe('Derived Columns — Actions Integration', () => {
       expect(r2.success).toBe(true);
 
       expect(dfdState.derivedColumns.get()).toHaveLength(2);
-      expect(dfdState.schema.get().filter(c => c.isDerived)).toHaveLength(2);
+      expect(dfdState.schema.get().filter((c) => c.isDerived)).toHaveLength(2);
 
-      const taxCol = dfdState.schema.get().find(c => c.name === 'tax');
+      const taxCol = dfdState.schema.get().find((c) => c.name === 'tax');
       expect(taxCol).toBeDefined();
       expect(taxCol!.isDerived).toBe(true);
       expect(taxCol!.expression).toBe('total * 0.1');
@@ -1374,7 +1450,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       const calls = dfdBridge.getQueryCalls();
-      const viewCalls = calls.filter(sql => sql.includes('CREATE OR REPLACE VIEW'));
+      const viewCalls = calls.filter((sql) => sql.includes('CREATE OR REPLACE VIEW'));
       const lastView = viewCalls[viewCalls.length - 1];
 
       // Should use CTE structure
@@ -1415,10 +1491,10 @@ describe('Derived Columns — Actions Integration', () => {
       const calls = dfdBridge.getQueryCalls();
 
       // Validation and typeof should query the VIEW, not the base table
-      const validationSQL = calls.find(sql => sql.includes('LIMIT 0'));
+      const validationSQL = calls.find((sql) => sql.includes('LIMIT 0'));
       expect(validationSQL).toContain('__dt_view_test_table__');
 
-      const typeofSQL = calls.find(sql => sql.includes('typeof'));
+      const typeofSQL = calls.find((sql) => sql.includes('typeof'));
       expect(typeofSQL).toContain('__dt_view_test_table__');
     });
   });
@@ -1467,7 +1543,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.error).toContain('Circular dependency');
 
       // State should be unchanged
-      const colA = dfdState.schema.get().find(c => c.name === 'col_a');
+      const colA = dfdState.schema.get().find((c) => c.name === 'col_a');
       expect(colA!.expression).toBe('price * quantity');
     });
   });
@@ -1504,7 +1580,7 @@ describe('Derived Columns — Actions Integration', () => {
       });
 
       await expect(dfdActions.removeDerivedColumn('total')).rejects.toThrow(
-        /Cannot delete "total".*referenced by.*"tax"/
+        /Cannot delete "total".*referenced by.*"tax"/,
       );
 
       // State unchanged — both columns still exist

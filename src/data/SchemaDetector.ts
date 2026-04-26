@@ -4,8 +4,8 @@
  */
 
 import type { ColumnSchema, DataType } from '../core/types';
-import type { WorkerBridge } from './WorkerBridge';
 import { quoteIdentifier } from '../filters/FilterSQL';
+import type { WorkerBridge } from './WorkerBridge';
 
 /**
  * Result from DuckDB DESCRIBE query
@@ -135,11 +135,11 @@ export function mapDuckDBType(duckdbType: string): DataType {
  */
 export async function detectSchema(
   tableName: string,
-  bridge: WorkerBridge
+  bridge: WorkerBridge,
 ): Promise<ColumnSchema[]> {
   // Query column information using DESCRIBE
   const describeResults = await bridge.query<DescribeResult>(
-    `DESCRIBE ${quoteIdentifier(tableName)}`
+    `DESCRIBE ${quoteIdentifier(tableName)}`,
   );
 
   return describeResults.map((row) => ({

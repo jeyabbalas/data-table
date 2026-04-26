@@ -24,7 +24,7 @@ const unsub = table.on('filterChange', ({ filters, filteredRowCount }) => {
 });
 
 // Later:
-unsub();                                  // or: table.off('filterChange', handler);
+unsub(); // or: table.off('filterChange', handler);
 ```
 
 ## Event catalog
@@ -32,22 +32,22 @@ unsub();                                  // or: table.off('filterChange', handl
 Every event is strongly typed. The full map lives at
 [`src/core/TableEvents.ts`](../../src/core/TableEvents.ts).
 
-| Event | Payload | Fires when |
-|---|---|---|
-| `ready` | `{ bridgeReady: true }` | Worker is initialized; the table can accept queries. |
-| `loadStart` | `{ source: string }` | `loadData()` begins. `source` is a short description (URL or `'<buffer>'`). |
-| `loadProgress` | `ProgressInfo` | Per-chunk progress. See [Loading data — Progress](./loading-data.md#progress-reporting). |
-| `loadComplete` | `{ tableName, rowCount, schema }` | Data is loaded and schema is known. |
-| `loadError` | `{ error: Error }` | A load failed. `error` is always a `DataTableError` subclass. |
-| `error` | `{ error: DataTableError, source }` | Any recoverable typed error — see [Errors](#errors-warnings-and-load-failures). |
-| `warning` | `{ code, message, details? }` | Non-fatal degradation (e.g., missing stylesheet, IndexedDB unavailable). |
-| `filterChange` | `{ filters, filteredRowCount, totalRowCount }` | Active filter list changes. |
-| `sortChange` | `{ sortColumns }` | Sort order changes. |
-| `selectionChange` | `{ selectedRows: Set<number> }` | User selects or deselects rows. |
-| `columnChange` | `{ visibleColumns, pinnedColumns, columnOrder }` | Column visibility, pin state, or order changes. |
-| `derivedChange` | `{ derivedColumns, kind, columnName? }` | Derived-column list changed. `kind: 'added' \| 'removed' \| 'replaced' \| 'updated'`. `columnName` names the affected column (set on `'added'` / `'removed'` / `'replaced'`; not set when the whole list is replaced atomically). `'replaced'` fires for [`replaceDerivedColumn`](./derived-columns.md#replacing-a-derived-column-same-name--dependent-re-validation), `'updated'` for `updateDerivedColumn`. |
-| `undoChange` | `{ canUndo, canRedo }` | Undo/redo availability changes. |
-| `destroy` | `{}` | Emitted once, just before `destroy()` disposes signals. |
+| Event             | Payload                                          | Fires when                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`           | `{ bridgeReady: true }`                          | Worker is initialized; the table can accept queries.                                                                                                                                                                                                                                                                                                                                                          |
+| `loadStart`       | `{ source: string }`                             | `loadData()` begins. `source` is a short description (URL or `'<buffer>'`).                                                                                                                                                                                                                                                                                                                                   |
+| `loadProgress`    | `ProgressInfo`                                   | Per-chunk progress. See [Loading data — Progress](./loading-data.md#progress-reporting).                                                                                                                                                                                                                                                                                                                      |
+| `loadComplete`    | `{ tableName, rowCount, schema }`                | Data is loaded and schema is known.                                                                                                                                                                                                                                                                                                                                                                           |
+| `loadError`       | `{ error: Error }`                               | A load failed. `error` is always a `DataTableError` subclass.                                                                                                                                                                                                                                                                                                                                                 |
+| `error`           | `{ error: DataTableError, source }`              | Any recoverable typed error — see [Errors](#errors-warnings-and-load-failures).                                                                                                                                                                                                                                                                                                                               |
+| `warning`         | `{ code, message, details? }`                    | Non-fatal degradation (e.g., missing stylesheet, IndexedDB unavailable).                                                                                                                                                                                                                                                                                                                                      |
+| `filterChange`    | `{ filters, filteredRowCount, totalRowCount }`   | Active filter list changes.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `sortChange`      | `{ sortColumns }`                                | Sort order changes.                                                                                                                                                                                                                                                                                                                                                                                           |
+| `selectionChange` | `{ selectedRows: Set<number> }`                  | User selects or deselects rows.                                                                                                                                                                                                                                                                                                                                                                               |
+| `columnChange`    | `{ visibleColumns, pinnedColumns, columnOrder }` | Column visibility, pin state, or order changes.                                                                                                                                                                                                                                                                                                                                                               |
+| `derivedChange`   | `{ derivedColumns, kind, columnName? }`          | Derived-column list changed. `kind: 'added' \| 'removed' \| 'replaced' \| 'updated'`. `columnName` names the affected column (set on `'added'` / `'removed'` / `'replaced'`; not set when the whole list is replaced atomically). `'replaced'` fires for [`replaceDerivedColumn`](./derived-columns.md#replacing-a-derived-column-same-name--dependent-re-validation), `'updated'` for `updateDerivedColumn`. |
+| `undoChange`      | `{ canUndo, canRedo }`                           | Undo/redo availability changes.                                                                                                                                                                                                                                                                                                                                                                               |
+| `destroy`         | `{}`                                             | Emitted once, just before `destroy()` disposes signals.                                                                                                                                                                                                                                                                                                                                                       |
 
 `on` returns an unsubscribe function; `off` works too and accepts the original
 handler reference.
@@ -91,7 +91,7 @@ destroy()
 ```
 
 Subscribe to `ready` before you assume the worker is available — for anything
-driven by `createDataTable({ source })`, `ready` fires *before* `loadStart`.
+driven by `createDataTable({ source })`, `ready` fires _before_ `loadStart`.
 Raw `table.bridge.query()` calls made before `ready` will throw
 `ConfigurationError` with `code: 'BRIDGE_NOT_READY'`.
 
@@ -146,9 +146,9 @@ separate pathways.
 The library keeps running but in a reduced mode. Codes you'll see in
 practice:
 
-| Code | Meaning | What to do |
-|---|---|---|
-| `STYLESHEET_MISSING` | `@jeyabbalas/data-table/styles` wasn't imported | Import it |
+| Code                      | Meaning                                                    | What to do                             |
+| ------------------------- | ---------------------------------------------------------- | -------------------------------------- |
+| `STYLESHEET_MISSING`      | `@jeyabbalas/data-table/styles` wasn't imported            | Import it                              |
 | `PERSISTENCE_UNAVAILABLE` | IndexedDB isn't usable (private browsing, blocked storage) | Inform the user; session won't persist |
 
 ```ts
@@ -156,7 +156,7 @@ table.on('warning', ({ code, message }) => {
   if (code === 'STYLESHEET_MISSING') {
     console.warn('Forgot to import @jeyabbalas/data-table/styles?');
   } else if (code === 'PERSISTENCE_UNAVAILABLE') {
-    showBanner('Your browser is blocking local storage — session won\'t be saved.');
+    showBanner("Your browser is blocking local storage — session won't be saved.");
   }
 });
 ```
@@ -168,18 +168,18 @@ Always unsubscribe before you throw away your event-producing UI frame:
 ```ts
 const subs = [
   table.on('filterChange', syncFilterBadge),
-  table.on('sortChange',   syncSortIcon),
-  table.on('error',        reportError),
+  table.on('sortChange', syncSortIcon),
+  table.on('error', reportError),
 ];
 
 // On unmount:
-subs.forEach(unsub => unsub());
+subs.forEach((unsub) => unsub());
 await table.destroy();
 ```
 
 `destroy()` disposes all remaining subscriptions as part of teardown, so
 forgetting to call `unsub()` won't leak beyond the lifetime of the table —
-but it will leak *during* it, so prefer explicit cleanup.
+but it will leak _during_ it, so prefer explicit cleanup.
 
 ### React
 
@@ -207,8 +207,8 @@ Sometimes you need a one-off snapshot rather than an event:
 
 ```ts
 const currentFilters = table.state.filters.get();
-const filteredCount  = table.state.filteredRows.get();
-const visibleCols    = table.state.visibleColumns.get();
+const filteredCount = table.state.filteredRows.get();
+const visibleCols = table.state.visibleColumns.get();
 ```
 
 Use events when you want to react to changes; use `state.*.get()` when you
@@ -244,19 +244,25 @@ redoBtn.addEventListener('click', () => table.actions.redo());
 ### Track a long load
 
 ```ts
-table.on('loadStart', () => { progressEl.style.display = 'block'; });
+table.on('loadStart', () => {
+  progressEl.style.display = 'block';
+});
 table.on('loadProgress', ({ percent, stage }) => {
   progressEl.textContent = `${stage} ${Math.round(percent)}%`;
 });
-table.on('loadComplete', () => { progressEl.style.display = 'none'; });
-table.on('loadError',    () => { progressEl.style.display = 'none'; });
+table.on('loadComplete', () => {
+  progressEl.style.display = 'none';
+});
+table.on('loadError', () => {
+  progressEl.style.display = 'none';
+});
 ```
 
 ### Route errors to Sentry, but tolerate persistence failures
 
 ```ts
 table.on('error', ({ error, source }) => {
-  if (source === 'persistence') return;   // silent degrade is fine
+  if (source === 'persistence') return; // silent degrade is fine
   Sentry.captureException(error, { tags: { source } });
 });
 ```

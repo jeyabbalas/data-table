@@ -22,7 +22,7 @@
     <a class="back" href="../">← Back to demo</a>
     <h1>data-table examples</h1>
     <p class="lede">
-      Thirteen single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the package the same way a real consumer would.
+      Fourteen single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the package the same way a real consumer would.
     </p>
     <ol>
       <li><a href="./01-minimal/">Minimal</a> — smallest mount: eight rows defined inline in the <code>.ts</code> file, no network.</li>
@@ -38,6 +38,7 @@
       <li><a href="./11-annotations/">Annotations</a> — programmatic CRUD + JSON round-trip + session persistence on <code>table.annotations</code>.</li>
       <li><a href="./12-column-header-tooltips/">Column header tooltips</a> — structured popover (title / description / items) on the column-name span; XSS-safe; no persistence.</li>
       <li><a href="./13-custom-stats-panel/">Custom stats panel</a> — replace the default column-stats slot with a <code>BaseStatsPanel</code> subclass; numeric columns show <em>n · μ · σ</em> from a custom DuckDB query, string columns show <em>top: value (pct%)</em>.</li>
+      <li><a href="./14-standalone-sql-editor/">Standalone SQL editor</a> — host-built CodeMirror editors mounted outside the data table; <code>createSqlExtensions</code> + <code>buildCompletionContext</code> give them the same SQL, schema, and DuckDB-function awareness the bundled editor uses.</li>
   </ol>
   </body>
 </html>

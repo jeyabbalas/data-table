@@ -307,7 +307,15 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `DerivedColumnManager` | class | DuckDB-side lifecycle (VIEW, vector helper tables, validation). |
 | `DerivedColumnInfo` | interface | Stored def + detected type metadata. |
 | `CodeMirrorExpressionEditor` | class | CodeMirror 6 editor with DuckDB SQL grammar + autocompletion. |
-| `DUCKDB_FUNCTIONS` | const array | Function names/signatures surfaced by autocomplete. |
+| `DUCKDB_FUNCTIONS` | const array | Function names surfaced by autocomplete. Derived from `DUCKDB_FUNCTION_DETAILS`. |
+| `DUCKDB_FUNCTION_DETAILS` | const array | `{ name, category, description }` for each curated DuckDB function. |
+| `DuckDBFunctionInfo` | interface | Shape of one entry in `DUCKDB_FUNCTION_DETAILS`. |
+| `DuckDBFunctionCategory` | union type | `'aggregate' \| 'numeric' \| 'string' \| 'date/time' \| 'casting' \| 'conditional' \| 'list' \| 'struct' \| 'window' \| 'utility'`. |
+| `createSqlExtensions(context, options?)` | function | Returns CodeMirror `Extension[]` (PostgreSQL grammar + schema/function autocomplete + optional theme) for host-built editors mounted outside the data table. |
+| `buildCompletionContext(columns, options?)` | function | Normalizes any column-like array (`ColumnSchema[]`, `[{name, type}, …]`) into a `CompletionContext`. |
+| `SqlExtensionOptions` | interface | `{ includeTheme?, functions?, upperCaseKeywords? }` accepted by `createSqlExtensions`. |
+| `dataTableTheme` | const | CodeMirror theme using `--dt-*` CSS variables. |
+| `dataTableHighlighting` | const | Syntax-highlighting colors that pair with `dataTableTheme`. |
 
 ### Export (low-level)
 

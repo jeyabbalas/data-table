@@ -103,6 +103,17 @@ export type { DerivedColumnInfo } from './derived/types';
 
 export { CodeMirrorExpressionEditor } from './sql-editor/CodeMirrorExpressionEditor';
 export { DUCKDB_FUNCTIONS } from './sql-editor/duckdbFunctions';
+export { DUCKDB_FUNCTION_DETAILS } from './sql-editor/duckdbFunctionDetails';
+export type {
+  DuckDBFunctionInfo,
+  DuckDBFunctionCategory,
+} from './sql-editor/duckdbFunctionDetails';
+export {
+  createSqlExtensions,
+  buildCompletionContext,
+} from './sql-editor/extensions';
+export type { SqlExtensionOptions } from './sql-editor/extensions';
+export { dataTableTheme, dataTableHighlighting } from './sql-editor/theme';
 
 // ---- Export (low-level) ----
 export { ExportDialog } from './export/ExportDialog';

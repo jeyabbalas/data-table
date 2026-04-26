@@ -13,6 +13,32 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 
 ### Added
 
+- **Public SQL editor primitives for host-app embedding.** The library now
+  exposes the building blocks needed to assemble a SQL-, schema-, and
+  DuckDB-aware CodeMirror editor *outside* the data table — for filter
+  preset composers, derived-column wizards, query-template editors, etc.
+  Three new exports on `@jeyabbalas/data-table/advanced`:
+  `createSqlExtensions(context, options?)` returns a CodeMirror
+  `Extension[]` (PostgreSQL grammar + schema/function autocomplete +
+  optional theme) ready to drop into any `EditorState.create({ extensions
+  })`; `buildCompletionContext(columns, options?)` normalizes any
+  column-like array (`ColumnSchema[]`, ad-hoc `[{name, type}, …]`) into the
+  `CompletionContext` shape; and `DUCKDB_FUNCTION_DETAILS` carries the
+  curated `{ name, category, description }` metadata used to populate the
+  autocomplete `detail` (category) and `info` (one-line description)
+  fields. The library theme (`dataTableTheme`, `dataTableHighlighting`) is
+  also re-exported from `/advanced` for hosts that opt out of
+  `includeTheme` and want to apply the theme separately. The bundled
+  `CodeMirrorExpressionEditor` is now a thin wrapper around
+  `createSqlExtensions`, so its autocomplete dropdown picks up the new
+  category chip and description panel for free — a visible UX upgrade with
+  no public API change. `DUCKDB_FUNCTIONS` keeps its names-only shape and
+  is now derived from `DUCKDB_FUNCTION_DETAILS` so the two cannot drift.
+  Example 14 (`examples/14-standalone-sql-editor/`) demos two
+  host-assembled editors (filter SQL composer + derived expression
+  composer) that share a data table's live schema via
+  `actions.getCompletionContext()` and refresh their autocomplete on every
+  `derivedChange` via a single `Compartment.reconfigure()`.
 - **Custom column-stats panels.** A new `BaseStatsPanel` abstract class
   (Tier-2, `@jeyabbalas/data-table/advanced`) plus a per-instance
   `StatsPanelRegistry` (Tier-1, root) lets downstream apps replace the

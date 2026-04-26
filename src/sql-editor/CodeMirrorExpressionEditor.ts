@@ -1,12 +1,10 @@
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { sql, PostgreSQL } from '@codemirror/lang-sql';
 import { autocompletion } from '@codemirror/autocomplete';
-import type { CompletionContext as CMCompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { CompletionContext } from '../derived/types';
 import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
-import { DUCKDB_FUNCTIONS } from './duckdbFunctions';
+import { createSqlExtensions } from './extensions';
 import { dataTableTheme, dataTableHighlighting } from './theme';
 
 /**
@@ -142,49 +140,13 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
   }
 
   /**
-   * Build the SQL language extension + function completion source.
+   * Build the SQL language extension + completion source.
    * Both are wrapped in the same Compartment so updateCompletionContext()
-   * can swap them atomically.
+   * can swap them atomically. Theme/highlighting are added separately at
+   * construction time (outside the Compartment) so they survive
+   * reconfiguration without flickering.
    */
   private buildCompletionExtensions(context: CompletionContext) {
-    const funcList = context.functions ?? DUCKDB_FUNCTIONS;
-
-    // Column completions with type detail
-    const columnOptions = context.columns.map((c) => ({
-      label: c.name,
-      type: 'variable' as const,
-      detail: c.type,
-      boost: 0,
-    }));
-
-    // Function completions (lower priority)
-    const functionOptions = funcList.map((f) => ({
-      label: f,
-      type: 'function' as const,
-      boost: -1,
-    }));
-
-    const allOptions = [...columnOptions, ...functionOptions];
-
-    return [
-      // SQL language for syntax highlighting + keyword completions
-      sql({
-        dialect: PostgreSQL,
-        upperCaseKeywords: true,
-      }),
-
-      // Column + function completion source via language data facet
-      PostgreSQL.language.data.of({
-        autocomplete: (cmCtx: CMCompletionContext): CompletionResult | null => {
-          const word = cmCtx.matchBefore(/\w+/);
-          if (!word && !cmCtx.explicit) return null;
-          return {
-            from: word?.from ?? cmCtx.pos,
-            options: allOptions,
-            validFor: /^\w*$/,
-          };
-        },
-      }),
-    ];
+    return createSqlExtensions(context, { includeTheme: false });
   }
 }

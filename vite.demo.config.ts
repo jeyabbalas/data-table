@@ -18,6 +18,7 @@ const EXAMPLES = [
   '11-annotations',
   '12-column-header-tooltips',
   '13-custom-stats-panel',
+  '14-standalone-sql-editor',
 ];
 
 export default defineConfig({

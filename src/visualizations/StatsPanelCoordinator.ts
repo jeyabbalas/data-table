@@ -41,6 +41,13 @@ import type { BaseStatsPanel } from './BaseStatsPanel';
  */
 const DEFAULT_PANEL_CONCURRENCY = 4;
 
+/**
+ * Mirrors {@link CrossfilterCoordinator} for `BaseStatsPanel` subclasses:
+ * stamps a monotonic `filterSequence` on every broadcast so panels can drop
+ * stale results, and bounds panel-issued query fan-out via its own
+ * concurrency cap. Composed by the facade; expose for power users
+ * orchestrating panels manually.
+ */
 export class StatsPanelCoordinator {
   private panels = new Map<string, BaseStatsPanel>();
   private unsubscribe: (() => void) | null = null;

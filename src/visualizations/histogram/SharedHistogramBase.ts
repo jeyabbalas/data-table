@@ -20,6 +20,12 @@ import { formatCount, formatPercent, truncateText } from '../utils';
 // Palette
 // =========================================
 
+/**
+ * Palette descriptor resolved from `--dt-*` CSS custom properties at paint
+ * time. Intentionally not exported from the public API surface; consumers
+ * theme histograms via CSS variables, while the `colors` field on
+ * {@link SharedHistogramBase} subclasses uses this shape internally.
+ */
 export interface HistogramColors {
   barFill: string;
   barHover: string;

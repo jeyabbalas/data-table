@@ -12,6 +12,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { FilterPresetManager } from './FilterPresets';
 import type { FilterPreset } from './FilterPresetTypes';
 
+/** Construction options for {@link FilterPresetPanel}. */
 export interface FilterPresetPanelOptions {
   classPrefix?: string;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
@@ -20,6 +21,11 @@ export interface FilterPresetPanelOptions {
   messages?: Strings;
 }
 
+/**
+ * Floating panel that hosts the save / load / import / export UI for filter
+ * presets. Composed by the facade when `presets` is enabled; reach for it
+ * directly to embed the preset list inside a custom shell.
+ */
 export class FilterPresetPanel {
   private element: HTMLElement;
   private nameInput!: HTMLInputElement;

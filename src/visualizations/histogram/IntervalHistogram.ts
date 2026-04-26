@@ -27,6 +27,13 @@ import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBa
 // IntervalHistogram Class
 // =========================================
 
+/**
+ * Histogram for DuckDB `interval` columns (durations). Displays bins by
+ * duration unit (seconds, minutes, hours, days, ...) auto-selected from the
+ * value range. Brush emits {@link RangeFilter} entries with
+ * `valueType: 'interval'` so SQL generation prefixes the literals with
+ * `INTERVAL`.
+ */
 export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData> {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: IntervalHistogramData | null = null;

@@ -8,7 +8,12 @@
 import { ConfigurationError } from './errors';
 
 /**
- * Signal interface - a mutable reactive value
+ * Reactive value primitive — emit changes to subscribers when `set` is
+ * called with a new value. Intentionally not exported from the public API
+ * surface (`@jeyabbalas/data-table` / `@jeyabbalas/data-table/advanced`),
+ * but referenced structurally by `TableState`, `FilterPresetManager`, and
+ * `UndoManager` so consumers can read fields like `state.totalRows.get()`
+ * or subscribe via `state.filters.subscribe(...)`.
  */
 export interface Signal<T> {
   /** Get the current value */
@@ -22,7 +27,9 @@ export interface Signal<T> {
 }
 
 /**
- * Computed interface - a read-only derived reactive value
+ * Read-only derived reactive value — recomputes when any of its declared
+ * dependencies change. Same not-publicly-exported semantics as {@link Signal};
+ * referenced structurally from `TableState.filtersByColumn`.
  */
 export interface Computed<T> {
   /** Get the current computed value */

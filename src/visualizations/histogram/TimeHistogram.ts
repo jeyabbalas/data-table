@@ -32,6 +32,11 @@ import type { TimeHistogramData } from './TimeHistogramData';
 // TimeHistogram Class
 // =========================================
 
+/**
+ * Time-of-day histogram for `time` columns. Bins clock values across a
+ * 24-hour cycle; tick labels render as `HH:mm` strings. Same brush /
+ * crossfilter contract as {@link Histogram}.
+ */
 export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: TimeHistogramData | null = null;

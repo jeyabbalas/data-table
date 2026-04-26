@@ -12,6 +12,7 @@
 
 // ---- Low-level state & reactive primitives ----
 export { EventEmitter } from './core/EventEmitter';
+export type { ListenerErrorHandler } from './core/EventEmitter';
 
 export { StateActions } from './core/Actions';
 export type { LoadDataOptions } from './core/Actions';
@@ -143,7 +144,7 @@ export { SNAPSHOT_VERSION, isPooledVectorRef } from './persistence/types';
 // Most consumers reach the store via `table.annotations`. Export the class
 // and id generator here for composability (tests, framework integrations).
 export { AnnotationStore } from './annotations/AnnotationStore';
-export type { AnnotationStoreOptions } from './annotations/AnnotationStore';
+export type { AnnotationStoreOptions, LoadJSONOptions } from './annotations/AnnotationStore';
 export { generateAnnotationId, isAnnotationIdShape } from './annotations/AnnotationId';
 
 // ---- Statistics ----
@@ -200,7 +201,11 @@ export type { CategorySegment, ValueCountsData } from './visualizations/valuecou
 
 export { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 export { InteractionManager } from './visualizations/InteractionManager';
-export type { InteractiveVisualization } from './visualizations/InteractionManager';
+export type {
+  InteractiveVisualization,
+  BrushCapable,
+  SelectionCapable,
+} from './visualizations/InteractionManager';
 
 export {
   isNumericType,

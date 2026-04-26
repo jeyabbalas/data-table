@@ -9,6 +9,12 @@
 import type { SortColumn } from '../core/types';
 import type { SerializedFilter } from '../persistence/types';
 
+/**
+ * One named filter preset — a saved snapshot of `state.filters` plus optional
+ * `state.sortColumns`. Stored by {@link FilterPresetManager}; round-trips
+ * through `exportToJSON` / `importFromJSON` for handoff to downstream apps
+ * (data-quality rule editors, dashboards).
+ */
 export interface FilterPreset {
   id: string;
   name: string;
@@ -19,6 +25,11 @@ export interface FilterPreset {
   updatedAt: number;
 }
 
+/**
+ * JSON file shape emitted by {@link FilterPresetManager.exportToJSON} and
+ * accepted by {@link FilterPresetManager.importFromJSON}. The `version`
+ * field gates back-compat parsing.
+ */
 export interface FilterPresetCollection {
   version: number;
   presets: FilterPreset[];

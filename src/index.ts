@@ -10,6 +10,7 @@
  * live at `@jeyabbalas/data-table/advanced`.
  */
 
+/** Library semantic-version string. Matches `package.json#version`. */
 export const VERSION = '0.1.0';
 
 // ---- Facade ----
@@ -79,7 +80,8 @@ export type { FilterPreset, FilterPresetCollection } from './filters/FilterPrese
 // Exposed for consumers pre-constructing a bridge or passing custom
 // load options (progress callbacks, abort signals, format overrides).
 export { WorkerBridge } from './data/WorkerBridge';
-export type { LoadOptions, WorkerBridgeOptions } from './data/WorkerBridge';
+export type { LoadOptions, LoadDataResult, WorkerBridgeOptions } from './data/WorkerBridge';
+export type { QueryCacheOptions } from './data/QueryCache';
 export type { DataFormat, LoadResult } from './data/DataLoader';
 
 // ---- Persistence ----
@@ -87,7 +89,14 @@ export type { DataFormat, LoadResult } from './data/DataLoader';
 // `serializeFilter` / `deserializeFilter` let apps round-trip filter
 // state into their own stores (URL params, cloud sync, etc.).
 export { SessionStore, serializeFilter, deserializeFilter } from './persistence/SessionStore';
-export type { SerializedFilter } from './persistence/types';
+export type {
+  SerializedFilter,
+  SerializedRangeFilter,
+  SerializedPointFilter,
+  SerializedSetFilter,
+  SerializedNotSetFilter,
+  DateWrapper,
+} from './persistence/types';
 
 // ---- Annotations ----
 // Programmatic row / column / cell annotation overlay exposed on

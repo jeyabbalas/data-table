@@ -6,8 +6,14 @@ import { LoadError } from '../core/errors';
 import type { ColumnSchema } from '../core/types';
 import type { WorkerBridge } from './WorkerBridge';
 
+/** Recognized data formats for {@link createDataTable}'s `source` argument. */
 export type DataFormat = 'csv' | 'json' | 'parquet';
 
+/**
+ * Outcome of a successful `DataLoader.load`: the DuckDB table name the
+ * data landed in, the row count, the column-name list, and the resolved
+ * schema. Surfaced on the `loadComplete` event payload.
+ */
 export interface LoadResult {
   tableName: string;
   rowCount: number;

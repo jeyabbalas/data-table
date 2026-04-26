@@ -7,6 +7,7 @@
 
 import { type Strings, defaultStrings } from '../core/Strings';
 
+/** Construction options for {@link AddColumnButton}. */
 export interface AddColumnButtonOptions {
   classPrefix?: string;
   onClick?: () => void;
@@ -14,6 +15,11 @@ export interface AddColumnButtonOptions {
   messages?: Strings;
 }
 
+/**
+ * Vertical "+" affordance positioned at the table's right edge that opens the
+ * derived-column modal. Composed by the facade when derived-column UI is
+ * enabled.
+ */
 export class AddColumnButton {
   private element: HTMLElement;
   private destroyed = false;

@@ -35,6 +35,7 @@ import { nextInstanceId } from '../core/instanceId';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
+import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
 import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
 import { DerivedColumnModal } from '../derived/DerivedColumnModal';
@@ -51,12 +52,6 @@ import { ColumnReorder } from './ColumnReorder';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
-
-/**
- * Light/dark theme selector accepted by {@link TableContainerOptions.colorScheme}
- * and {@link TableContainer.setColorScheme}.
- */
-export type ContainerColorScheme = 'light' | 'dark' | 'auto';
 
 /**
  * Options for configuring the TableContainer
@@ -98,7 +93,7 @@ export interface TableContainerOptions {
    * `prefers-color-scheme`; `'light'` / `'dark'` force the theme by writing
    * `data-dt-color-scheme` onto the root element.
    */
-  colorScheme?: ContainerColorScheme;
+  colorScheme?: ColorScheme;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings;
   /**
@@ -379,7 +374,7 @@ export class TableContainer {
    * `'auto'` removes the attribute so CSS `prefers-color-scheme` governs;
    * `'light'` / `'dark'` set it to force the theme regardless of OS preference.
    */
-  private applyColorSchemeAttribute(el: HTMLElement, scheme: ContainerColorScheme): void {
+  private applyColorSchemeAttribute(el: HTMLElement, scheme: ColorScheme): void {
     if (scheme === 'auto') {
       el.removeAttribute('data-dt-color-scheme');
     } else {
@@ -393,7 +388,7 @@ export class TableContainer {
    * copy exists so the `+` button inherits the attribute-scoped CSS
    * variables — without it the sibling stays on the light defaults.
    */
-  private applyColorSchemeToTargets(scheme: ContainerColorScheme): void {
+  private applyColorSchemeToTargets(scheme: ColorScheme): void {
     this.applyColorSchemeAttribute(this.element, scheme);
     if (this.wrapperElement) {
       this.applyColorSchemeAttribute(this.wrapperElement, scheme);
@@ -406,14 +401,14 @@ export class TableContainer {
    * modals observe the attribute via MutationObserver (installed by ModalHost
    * when they were opened) and re-sync automatically.
    */
-  setColorScheme(scheme: ContainerColorScheme): void {
+  setColorScheme(scheme: ColorScheme): void {
     if (this.destroyed) return;
     this.resolvedOptions.colorScheme = scheme;
     this.applyColorSchemeToTargets(scheme);
   }
 
   /** Returns the currently-applied color scheme. */
-  getColorScheme(): ContainerColorScheme {
+  getColorScheme(): ColorScheme {
     return this.resolvedOptions.colorScheme;
   }
 

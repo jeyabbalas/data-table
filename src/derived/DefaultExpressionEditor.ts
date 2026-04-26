@@ -8,6 +8,12 @@
 import type { ExpressionEditor } from './ExpressionEditorTypes';
 import type { CompletionContext } from './types';
 
+/**
+ * Plain-textarea fallback that satisfies {@link ExpressionEditor} when no
+ * custom factory is supplied. Renders a monospace textarea, an error slot,
+ * and a column-hint slot. Apps that want SQL-aware autocompletion should
+ * pass `editorFactory: () => new CodeMirrorExpressionEditor(...)` instead.
+ */
 export class DefaultExpressionEditor implements ExpressionEditor {
   readonly element: HTMLElement;
   private textarea: HTMLTextAreaElement;

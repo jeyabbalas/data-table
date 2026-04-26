@@ -46,13 +46,20 @@ export interface FilterPanelOptions {
   /**
    * Element to mirror `data-dt-color-scheme` from (typically the owning
    * table's `.dt-root`). Keeps the panel's theming in sync when the table's
-   * color scheme changes at runtime via {@link DataTable.setColorScheme}.
+   * color scheme changes at runtime (see `DataTable.setColorScheme` on the
+   * facade).
    */
   colorSchemeSource?: HTMLElement;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings;
 }
 
+/**
+ * Floating panel that hosts the type-aware filter editor for a single
+ * column. Composed by the facade lazily (one instance per
+ * {@link TableContainer}); reach for it directly only when assembling a
+ * bespoke container shell that reuses the built-in filter UX.
+ */
 export class FilterPanel {
   private element: HTMLElement;
   private body: HTMLElement;

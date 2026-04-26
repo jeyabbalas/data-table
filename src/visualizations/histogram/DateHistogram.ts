@@ -33,6 +33,12 @@ import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBa
 // DateHistogram Class
 // =========================================
 
+/**
+ * Calendar-aware histogram for `date` and `timestamp` columns. Picks an
+ * appropriate bin granularity (year / month / day / hour / minute) from the
+ * value range and renders ticks as readable date labels. Same brush /
+ * crossfilter contract as {@link Histogram}.
+ */
 export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   /** Date format context computed from data range */
   private formatContext: DateFormatContext | null = null;

@@ -50,6 +50,11 @@ export type ScrollCallback = (range: VisibleRange) => void;
 export type ScrollAlign = 'start' | 'center' | 'end';
 
 /**
+ * Fixed-row-height virtual scroller — emits a `VisibleRange` whenever the
+ * viewport crosses a row boundary so the host renders only the rows that are
+ * actually on screen. Composed internally by {@link TableBody}; reach for
+ * the class on `/advanced` when building a custom row renderer.
+ *
  * @example
  * import { VirtualScroller } from '@jeyabbalas/data-table/advanced';
  *

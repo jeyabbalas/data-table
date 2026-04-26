@@ -15,7 +15,13 @@ export type DataType =
   | 'time'
   | 'interval';
 
-// Column metadata
+/**
+ * Column metadata exposed on `state.schema.get()` and threaded through every
+ * subsystem (filter UI, derived columns, export, visualizations). One entry
+ * per column in the active table; ordering matches the underlying DuckDB
+ * `pragma_table_info` plus any synthetic columns the loaders inject (e.g.
+ * `__rowid__`).
+ */
 export interface ColumnSchema {
   name: string;
   type: DataType;
@@ -56,10 +62,13 @@ export type {
   RawSQLFilter,
 } from '../filters/FilterTypes';
 
-// Sort direction
+/** Sort direction for a single column — ascending or descending. */
 export type SortDirection = 'asc' | 'desc';
 
-// Sort column configuration
+/**
+ * One row in the multi-column sort key. Order in `state.sortColumns` reflects
+ * sort precedence (first entry is primary sort).
+ */
 export interface SortColumn {
   column: string;
   direction: SortDirection;

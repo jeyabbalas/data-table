@@ -15,13 +15,33 @@
  * unsub(); // or bus.off('click', handler)
  */
 
+/**
+ * Listener function shape used by {@link EventEmitter}'s `on`/`off`/`once`
+ * signatures. Intentionally not exported from the public API surface;
+ * referenced structurally so consumer-supplied callbacks check against
+ * `(data: Events[K]) => void`.
+ */
 type EventCallback<T> = (data: T) => void;
 
+/**
+ * Optional listener-error handler hook for {@link EventEmitter}. Receives the
+ * thrown value and the event key whose listener threw. The default behaviour
+ * (when not provided) logs the error and rethrows it inside a microtask so
+ * `window.onerror` / Sentry can capture it without aborting the emit loop.
+ */
 export type ListenerErrorHandler<Events extends Record<string, unknown>> = (
   error: unknown,
   event: keyof Events,
 ) => void;
 
+/**
+ * Type-safe pub/sub emitter parameterised by an event-shape map. Listeners
+ * are isolated via try/catch so one throwing subscriber does not break later
+ * listeners; errors route to an optional {@link ListenerErrorHandler} or fall
+ * back to `console.error` + microtask rethrow. Used internally by
+ * `createDataTable()` to expose `table.on/off`; reusable standalone for
+ * custom UIs composed on `/advanced`.
+ */
 export class EventEmitter<Events extends Record<string, unknown>> {
   private listeners = new Map<keyof Events, Set<EventCallback<unknown>>>();
   private onListenerError?: ListenerErrorHandler<Events>;

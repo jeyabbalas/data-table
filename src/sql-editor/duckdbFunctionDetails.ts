@@ -36,6 +36,12 @@ export interface DuckDBFunctionInfo {
   description: string;
 }
 
+/**
+ * Curated DuckDB function metadata array used to populate the autocomplete
+ * `detail` (category chip) and `info` (one-line description) slots. Frozen
+ * at load — apps that need a richer / different set should pass their own
+ * `functions` array to {@link createSqlExtensions}.
+ */
 export const DUCKDB_FUNCTION_DETAILS: readonly DuckDBFunctionInfo[] = Object.freeze([
   // ---- Aggregate ----
   Object.freeze({

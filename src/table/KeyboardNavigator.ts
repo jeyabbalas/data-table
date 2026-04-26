@@ -21,6 +21,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
 import type { TableBody } from './TableBody';
 
+/** Construction options for {@link KeyboardNavigator}. */
 export interface KeyboardNavigatorOptions {
   /** Grid root element that owns focus and receives keydown events. */
   rootElement: HTMLElement;
@@ -36,6 +37,13 @@ export interface KeyboardNavigatorOptions {
   getBridge?: () => WorkerBridge | undefined;
 }
 
+/**
+ * WCAG-oriented keyboard navigation controller for the table grid: arrow
+ * keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
+ * (header) or select (body), and Ctrl/Cmd+C to copy the selection.
+ * Composed by {@link TableContainer}; reach for it directly only when
+ * assembling a custom container shell.
+ */
 export class KeyboardNavigator {
   private readonly rootElement: HTMLElement;
   private readonly bodyScroll: HTMLElement;

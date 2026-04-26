@@ -2,7 +2,7 @@
  * AnnotationPopover — singleton floating panel that lists the annotations
  * attached to a single cell or column header.
  *
- * One instance per {@link DataTable}; shared across every annotated cell and
+ * One instance per `DataTable`; shared across every annotated cell and
  * header. Owned by `TableContainer` (constructed inside `createDataTable`),
  * passed as an option into `TableBody` and `ColumnHeader`, and destroyed
  * when the table tears down.
@@ -104,6 +104,12 @@ function titleFor(scope: 'row' | 'column' | 'cell'): string {
 // `severityRank` and `maxSeverity` live in src/annotations/severity.ts so
 // renderers can consume them without importing from a popover module.
 
+/**
+ * Shared, body-portalled popover singleton that renders the intersection of
+ * row, column, and cell annotations on hover / focus of an annotated grid
+ * element. One instance per `DataTable` is enough — the facade owns
+ * one and threads it to every renderer that emits annotation tints.
+ */
 export class AnnotationPopover {
   private readonly classPrefix: string;
   private readonly portalTarget: HTMLElement | null;

@@ -27,6 +27,13 @@
 
 import type { ErrorPayload } from '../worker/types';
 
+/**
+ * Constructor options for {@link DataTableError} and its subclasses. All
+ * fields are optional; `code` defaults to `'UNKNOWN'` (subclasses pass a
+ * type-specific default), `cause` chains via the standard `Error.cause`
+ * mechanism, and `details` is a free-form structured payload that consumers
+ * read off `err.details` after narrowing on `err.code`.
+ */
 export interface DataTableErrorOptions {
   code?: string;
   cause?: unknown;

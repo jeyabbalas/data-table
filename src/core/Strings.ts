@@ -22,6 +22,14 @@ export type DeepPartial<T> = T extends (...args: unknown[]) => unknown
     ? { [K in keyof T]?: DeepPartial<T[K]> }
     : T;
 
+/**
+ * Typed shape of every user-facing string the library renders. Pass a
+ * `messages: DeepPartial<Strings>` override to {@link createDataTable} to
+ * localize button labels, placeholder text, ARIA announcements, and stats
+ * templates; missing leaves fall back to the English values in
+ * {@link defaultStrings}. Function-typed leaves take runtime arguments
+ * directly so locale grammar stays inside the consumer's translation.
+ */
 export interface Strings {
   // =========================================
   // Common — shared across features
@@ -404,6 +412,13 @@ export interface Strings {
 // Default English strings (verbatim match for current UI text)
 // =========================================
 
+/**
+ * Default English strings for every user-facing label, placeholder, ARIA
+ * announcement, and stats template. Pass `messages: DeepPartial<Strings>` to
+ * {@link createDataTable} to override any subtree; missing keys fall back to
+ * these defaults via {@link mergeStrings}. Messages are resolved once at
+ * construction — recreate the table to switch locales at runtime.
+ */
 export const defaultStrings: Strings = {
   common: {
     close: 'Close',

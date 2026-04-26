@@ -5,6 +5,12 @@
  * per-type interfaces so consumers get type-safe property access.
  */
 
+/**
+ * Range (`min` ≤ x ≤ `max` by default) filter on a numeric, date, or interval
+ * column. Bounds may be widened to strict comparisons via `maxInclusive` /
+ * `minExclusive`. Constructed by histogram brushing or explicit
+ * `actions.addFilter({ type: 'range', … })` calls.
+ */
 export interface RangeFilter {
   type: 'range';
   column: string;
@@ -18,12 +24,20 @@ export interface RangeFilter {
   valueType?: 'interval';
 }
 
+/**
+ * Equality filter (`column = value`). NULL is allowed as a literal value;
+ * it generates `column IS NULL`.
+ */
 export interface PointFilter {
   type: 'point';
   column: string;
   value: string | number | boolean | Date | null;
 }
 
+/**
+ * Set-membership filter (`column IN (values)`). The {@link includeNull} flag
+ * widens the predicate to include NULL rows.
+ */
 export interface SetFilter {
   type: 'set';
   column: string;
@@ -32,6 +46,9 @@ export interface SetFilter {
   includeNull?: boolean;
 }
 
+/**
+ * Set-exclusion filter (`column NOT IN (values)`). Mirror of {@link SetFilter}.
+ */
 export interface NotSetFilter {
   type: 'not-set';
   column: string;
@@ -40,11 +57,22 @@ export interface NotSetFilter {
   includeNull?: boolean;
 }
 
+/**
+ * NULL / NOT-NULL predicate filter — `column IS NULL` or `column IS NOT NULL`
+ * depending on the discriminator value of `type`.
+ */
 export interface NullFilter {
   type: 'null' | 'not-null';
   column: string;
 }
 
+/**
+ * String-pattern filter on a categorical column. The {@link mode} value picks
+ * the comparison: `contains` / `starts` / `ends` use case-insensitive
+ * substring matching; `regex` runs the pattern through DuckDB's RE2 engine
+ * (linear-time, ReDoS-resistant). The `pattern` field is a literal user
+ * string; SQL escaping is handled internally.
+ */
 export interface PatternFilter {
   type: 'pattern';
   column: string;
@@ -52,6 +80,10 @@ export interface PatternFilter {
   mode: 'contains' | 'starts' | 'ends' | 'regex';
 }
 
+/**
+ * Raw-SQL `WHERE`-clause fragment filter. Spliced verbatim into the active
+ * query — see the trust-boundary note on {@link RawSQLFilter.sql}.
+ */
 export interface RawSQLFilter {
   type: 'raw-sql';
   column: string; // Synthetic key: '__raw_sql_<id>__'
@@ -70,6 +102,11 @@ export interface RawSQLFilter {
   id: string; // Unique identifier (crypto.randomUUID())
 }
 
+/**
+ * Discriminated union of every filter shape understood by the library.
+ * `actions.addFilter`, `state.filters`, the export pipeline, and
+ * `filtersToWhereClause` all consume this union directly.
+ */
 export type Filter =
   | RangeFilter
   | PointFilter
@@ -78,4 +115,6 @@ export type Filter =
   | NullFilter
   | PatternFilter
   | RawSQLFilter;
+
+/** String literal union of every {@link Filter} discriminator value. */
 export type FilterType = Filter['type'];

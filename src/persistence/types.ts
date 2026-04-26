@@ -27,6 +27,7 @@ export interface DateWrapper {
 
 // --- Serialized filter variants (Date replaced with DateWrapper) ---
 
+/** JSON-safe form of {@link RangeFilter}: any `Date` operand becomes a {@link DateWrapper}. */
 export interface SerializedRangeFilter {
   type: 'range';
   column: string;
@@ -36,12 +37,14 @@ export interface SerializedRangeFilter {
   minExclusive?: boolean;
 }
 
+/** JSON-safe form of {@link PointFilter}: any `Date` operand becomes a {@link DateWrapper}. */
 export interface SerializedPointFilter {
   type: 'point';
   column: string;
   value: string | number | boolean | DateWrapper | null;
 }
 
+/** JSON-safe form of {@link SetFilter}; values pass through `serializeValue`. */
 export interface SerializedSetFilter {
   type: 'set';
   column: string;
@@ -49,6 +52,7 @@ export interface SerializedSetFilter {
   includeNull?: boolean;
 }
 
+/** JSON-safe form of {@link NotSetFilter}; values pass through `serializeValue`. */
 export interface SerializedNotSetFilter {
   type: 'not-set';
   column: string;
@@ -56,6 +60,13 @@ export interface SerializedNotSetFilter {
   includeNull?: boolean;
 }
 
+/**
+ * Discriminated union of every {@link Filter} after JSON normalization. Used
+ * by {@link SessionStore}, {@link FilterPresetManager}, and any consumer
+ * round-tripping filter state through their own storage (URL params, cloud
+ * sync). Filters whose runtime form is already JSON-safe (`NullFilter`,
+ * `PatternFilter`, `RawSQLFilter`) flow through unchanged.
+ */
 export type SerializedFilter =
   | SerializedRangeFilter
   | SerializedPointFilter
@@ -67,8 +78,6 @@ export type SerializedFilter =
 
 // Re-export derived column types from their canonical location
 export type DerivedColumnDef = _DerivedColumnDef;
-export type ExpressionColumnDef = _ExpressionColumnDef;
-export type VectorColumnDef = _VectorColumnDef;
 
 // ── Vector value pool (v4+) ─────────────────────────────────────────
 
@@ -93,8 +102,8 @@ export interface VectorValuePoolEntry {
  * undo/redo stack entries.
  */
 export type SerializedDerivedColumnDef =
-  | ExpressionColumnDef
-  | VectorColumnDef
+  | _ExpressionColumnDef
+  | _VectorColumnDef
   | PooledVectorColumnRef;
 
 /** Type guard: true when a serialized derived column uses a pool reference. */

@@ -92,6 +92,12 @@ function formatAxisValue(value: number): string {
 // Histogram Class
 // =========================================
 
+/**
+ * Numeric histogram visualization rendered into a column header. Subclass of
+ * `SharedHistogramBase`; registered on `VisualizationRegistry` (root entry)
+ * by default for `integer` / `float` / `decimal` columns. Drag a brush to
+ * emit a `RangeFilter`; click an empty bin to reset.
+ */
 export class Histogram extends SharedHistogramBase<HistogramData> {
   /** Cached initial (unfiltered) data for ghost background */
   private initialData: HistogramData | null = null;

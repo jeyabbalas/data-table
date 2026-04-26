@@ -14,6 +14,7 @@ import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEd
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import type { DerivedColumnDef } from './types';
 
+/** Construction options for {@link DerivedColumnEditPanel}. */
 export interface DerivedColumnEditPanelOptions {
   classPrefix?: string;
   /** Custom editor factory. If omitted, uses DefaultExpressionEditor. */
@@ -24,6 +25,11 @@ export interface DerivedColumnEditPanelOptions {
   messages?: Strings;
 }
 
+/**
+ * Floating panel that hosts the rename / SQL-expression editor for an
+ * existing derived column. Composed by the facade; reach for it directly
+ * only when assembling a custom container shell.
+ */
 export class DerivedColumnEditPanel {
   private element: HTMLElement;
   private titleEl: HTMLElement;

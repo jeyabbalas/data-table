@@ -123,6 +123,13 @@ function hasRenderableContent(content: ColumnHeaderTooltipContent): boolean {
   return false;
 }
 
+/**
+ * Shared, body-portalled popover singleton that renders the structured
+ * column-header tooltip set via `actions.setColumnHeaderTooltip`. Anchored
+ * on hover / focus of the column-name span. Pairs with
+ * {@link AnnotationPopover} but lives at a higher z-index so they don't
+ * collide.
+ */
 export class ColumnHeaderTooltipPopover {
   private readonly classPrefix: string;
   private readonly portalTarget: HTMLElement | null;

@@ -141,6 +141,12 @@ interface RenderSegment {
 // ValueCounts Class
 // =========================================
 
+/**
+ * Stacked bar visualization rendered into the column header for categorical
+ * columns (`string` / `boolean` / `uuid`). Each segment represents a distinct
+ * value sized by row count; click toggles a `SetFilter` membership. Long
+ * tails fold into an "other" segment.
+ */
 export class ValueCounts extends BaseVisualization {
   // Data
   private data: ValueCountsData | null = null;

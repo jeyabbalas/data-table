@@ -23,11 +23,21 @@ import { QueryCache, type QueryCacheOptions } from './QueryCache';
 // Re-export for convenience
 export type { ProgressInfo, ProgressCallback } from '../core/Progress';
 
+/**
+ * Low-level options accepted by {@link WorkerBridge.loadData}. Most consumers
+ * use the higher-level `table.loadData(source, opts?)` facade instead, which
+ * builds these from a `File` / URL / Blob input.
+ */
 export interface LoadOptions {
   format: 'csv' | 'json' | 'parquet';
   tableName?: string;
 }
 
+/**
+ * Outcome of a successful {@link WorkerBridge.loadData}: the DuckDB table
+ * name, the row count, the column-name list, and the resolved schema.
+ * Internally maps to the public `loadComplete` event payload.
+ */
 export interface LoadDataResult {
   tableName: string;
   rowCount: number;

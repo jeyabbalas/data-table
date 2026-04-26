@@ -31,6 +31,12 @@ import type { BaseVisualization } from './BaseVisualization';
  *  queries. A small cap (4) keeps the worker fed without head-of-line blocking. */
 const DEFAULT_VIZ_CONCURRENCY = 4;
 
+/**
+ * Coordinates filter rebroadcasting across all column-header visualizations
+ * on a table. Composed by the facade; rarely needed directly. Bounds in-flight
+ * fan-out via a small concurrency cap so DuckDB-WASM (single-threaded) stays
+ * responsive on wide tables.
+ */
 export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;

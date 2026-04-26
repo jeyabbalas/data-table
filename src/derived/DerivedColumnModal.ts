@@ -14,6 +14,7 @@ import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEd
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import type { DerivedColumnDef, VectorDataType } from './types';
 
+/** Construction options for {@link DerivedColumnModal}. */
 export interface DerivedColumnModalOptions {
   classPrefix?: string;
   /**
@@ -37,6 +38,12 @@ export interface DerivedColumnModalOptions {
   messages?: Strings;
 }
 
+/**
+ * Modal dialog for creating new derived columns (SQL expression or
+ * pre-computed vector). Composed by the facade; portal-mounted to
+ * `document.body` (or `portalTarget`) so its z-stacking is independent of
+ * the table's own DOM.
+ */
 export class DerivedColumnModal {
   private element: HTMLElement;
   private dialogEl!: HTMLElement;

@@ -63,6 +63,7 @@ export function sanitizeFilenameStem(name: string): string {
   return cleaned;
 }
 
+/** Construction options for {@link ExportDialog}. */
 export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
@@ -83,6 +84,11 @@ export interface ExportDialogOptions {
   messages?: Strings;
 }
 
+/**
+ * Modal dialog for exporting data — CSV / JSON / Parquet, with row-scope
+ * (filtered / all / selected) and column inclusion toggles. Composed by the
+ * facade; reach for it directly when assembling a custom export pipeline.
+ */
 export class ExportDialog {
   private element: HTMLElement;
   private destroyed = false;

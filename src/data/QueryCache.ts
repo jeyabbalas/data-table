@@ -8,6 +8,12 @@
 import type { TableState } from '../core/State';
 import type { WorkerBridge } from './WorkerBridge';
 
+/**
+ * Tuning knobs for the per-bridge query result cache. Pass via
+ * {@link WorkerBridgeOptions.cache} (a `Partial<QueryCacheOptions>`) to
+ * override either the LRU size or the TTL while keeping the other default.
+ * Set `maxEntries: 0` to disable caching entirely.
+ */
 export interface QueryCacheOptions {
   /** Maximum number of cached query results. Set to 0 to disable caching. Default: 100 */
   maxEntries: number;

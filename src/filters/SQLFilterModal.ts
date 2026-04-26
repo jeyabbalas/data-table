@@ -14,6 +14,7 @@ import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/Expre
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { RawSQLFilter } from './FilterTypes';
 
+/** Construction options for {@link SQLFilterModal}. */
 export interface SQLFilterModalOptions {
   classPrefix?: string;
   /**
@@ -35,6 +36,12 @@ export interface SQLFilterModalOptions {
   messages?: Strings;
 }
 
+/**
+ * Modal dialog that hosts the raw-SQL `WHERE`-clause filter editor backed
+ * by a CodeMirror editor (DuckDB grammar + autocompletion). On Apply, emits
+ * a {@link RawSQLFilter}. Treat user-authored SQL as trusted developer input
+ * — see the trust-boundary note on `RawSQLFilter.sql`.
+ */
 export class SQLFilterModal {
   private element: HTMLElement;
   private dialogEl!: HTMLElement;

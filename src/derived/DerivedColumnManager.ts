@@ -42,6 +42,13 @@ import type {
 /** Batch size for vector INSERT statements */
 const VECTOR_BATCH_SIZE = 1000;
 
+/**
+ * Owns derived-column lifecycle: validates SQL expressions through DuckDB
+ * (`PREPARE`-based syntax check), maintains a wrapper VIEW
+ * (`__dt_view_<baseTableName>__`) over the source table, generates SELECT
+ * lists for each derived column, and re-validates dependents on rename /
+ * replace. Composed by the facade; reachable on `/advanced` for power users.
+ */
 export class DerivedColumnManager {
   /** VIEW name: __dt_view_<baseTableName>__ */
   readonly viewName: string;

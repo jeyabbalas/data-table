@@ -11,5 +11,12 @@
   "githubPages": false,
   "hideGenerator": true,
   "disableSources": false,
-  "skipErrorChecking": true
+  "skipErrorChecking": true,
+  "intentionallyNotExported": [
+    "Signal",
+    "Computed",
+    "HistogramColors",
+    "AnnotationBase",
+    "EventCallback"
+  ]
 }

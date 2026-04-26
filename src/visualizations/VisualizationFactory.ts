@@ -42,8 +42,15 @@ function warnOnce(): void {
 }
 
 /**
- * @deprecated Static wrapper that forwards to `defaultVisualizationRegistry`.
- * Prefer constructing a `VisualizationRegistry` instance per table.
+ * Legacy static wrapper that forwards every method to the shared
+ * `defaultVisualizationRegistry` (exported from the root entry). Kept
+ * reachable on `/advanced` only for source-compatibility while consumers
+ * migrate.
+ *
+ * @deprecated Construct a `VisualizationRegistry` per table and pass it via
+ * `createDataTable({ visualizationRegistry })`, or register on
+ * `defaultVisualizationRegistry` directly. The static wrapper will be
+ * removed in a future minor.
  */
 export class VisualizationFactory {
   /** @deprecated Use `VisualizationRegistry#register` on an instance. */

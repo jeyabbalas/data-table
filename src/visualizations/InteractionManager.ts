@@ -18,13 +18,21 @@
  * @see CrossfilterCoordinator
  */
 
-/** Interface for visualizations that support brush clearing */
-interface BrushCapable {
+/**
+ * Capability marker — visualizations that expose `clearBrush()` for
+ * brush-style range selection. Combined with {@link SelectionCapable} into
+ * {@link InteractiveVisualization}; subclass implementers picking one or both
+ * capabilities should reference this from their `implements` clause.
+ */
+export interface BrushCapable {
   clearBrush(): void;
 }
 
-/** Interface for visualizations that support selection clearing */
-interface SelectionCapable {
+/**
+ * Capability marker — visualizations that expose `clearSelection()` for
+ * discrete-value selection. See {@link BrushCapable}.
+ */
+export interface SelectionCapable {
   clearSelection(): void;
 }
 
@@ -40,6 +48,12 @@ interface ActiveInteraction {
   visualization: InteractiveVisualization;
 }
 
+/**
+ * LIFO interaction stack for per-column brush / selection state across all
+ * mounted visualizations. Owns a global `keydown` listener so pressing
+ * Escape clears the most recent interaction. Composed by the facade; reach
+ * for it directly only when wiring custom visualization shells.
+ */
 export class InteractionManager {
   private stack: ActiveInteraction[] = [];
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;

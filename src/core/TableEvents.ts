@@ -27,9 +27,16 @@ export type TableErrorSource =
   | 'listener'
   | 'unknown';
 
-// NOTE: defined as a `type` (not `interface`) so it satisfies
-// `Record<string, unknown>` for EventEmitter. Interfaces with named
-// keys in TypeScript don't auto-satisfy that constraint.
+/**
+ * Discriminated event map for the {@link DataTable} facade. Subscribe via
+ * `table.on(event, handler)` (returns an unsubscribe function) or
+ * `table.off(event, handler)`. Each key below documents the payload shape
+ * the handler receives.
+ *
+ * @remarks Defined as a `type` (not `interface`) so it satisfies
+ * `Record<string, unknown>` for `EventEmitter`. Interfaces with named
+ * keys in TypeScript don't auto-satisfy that constraint.
+ */
 export type TableEvents = {
   /** Fired after `initialize()` completes and the worker is ready. */
   ready: { bridgeReady: true };

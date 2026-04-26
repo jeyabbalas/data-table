@@ -14,7 +14,8 @@
     },
     "./advanced": {
       "types": "./dist/advanced.d.ts",
-      "import": "./dist/advanced.js"
+      "import": "./dist/advanced.js",
+      "require": "./dist/advanced.cjs"
     },
     "./styles": "./dist/data-table.css",
     "./styles.css": "./dist/data-table.css"
@@ -47,6 +48,7 @@
     "check:css-vars": "node scripts/check-css-vars.mjs",
     "docs:api": "typedoc",
     "docs:api:check": "typedoc --emit none",
+    "size": "size-limit",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish",
@@ -113,6 +115,7 @@
     "@duckdb/duckdb-wasm": "^1.33.1-dev42.0",
     "@lezer/highlight": "^1.2.3",
     "@observablehq/plot": "^0.6.17",
+    "@size-limit/file": "^12.1.0",
     "@types/node": "^25.6.0",
     "@types/topojson-client": "^3.1.5",
     "@vitest/coverage-v8": "^4.1.4",
@@ -125,6 +128,7 @@
     "globals": "^16.5.0",
     "jsdom": "^29.0.2",
     "prettier": "^3.8.3",
+    "size-limit": "^12.1.0",
     "topojson-client": "^3.1.0",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",

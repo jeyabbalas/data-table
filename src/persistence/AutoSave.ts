@@ -31,6 +31,10 @@ import type { SessionStore } from './SessionStore';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
+/**
+ * Construction options for {@link AutoSave}. Most fields are optional and
+ * default to sensible values matching the facade's wiring.
+ */
 export interface AutoSaveOptions {
   debounceMs?: number;
   undoManager?: UndoManager;
@@ -44,6 +48,13 @@ export interface AutoSaveOptions {
   onError?: (error: PersistenceError) => void;
 }
 
+/**
+ * Listens to `TableState` mutations and writes a snapshot to the
+ * {@link SessionStore} on a debounced cadence so the table re-mounts in the
+ * same state after a reload. Composed by the facade when `persistence: true`;
+ * power users orchestrating their own state-store flow can construct one
+ * directly.
+ */
 export class AutoSave {
   private unsubscribes: (() => void)[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;

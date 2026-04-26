@@ -35,6 +35,10 @@ export type AnnotationSeverity = 'error' | 'warning' | 'info';
  * sanitization. `severity` is restricted by the {@link AnnotationSeverity}
  * union and validated against that allow-list before being interpolated
  * into a CSS class name.
+ *
+ * @remarks Use the concrete variants ({@link RowAnnotation}, {@link ColumnAnnotation},
+ * {@link CellAnnotation}) or the {@link Annotation} union from the public
+ * surface; this base interface is structural and intentionally not exported.
  */
 export interface AnnotationBase {
   /** Stable identifier. Auto-generated if omitted at `add` time. */

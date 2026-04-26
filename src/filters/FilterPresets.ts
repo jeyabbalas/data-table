@@ -53,6 +53,11 @@ const KNOWN_FILTER_TYPES = new Set([
   'raw-sql',
 ]);
 
+/**
+ * In-memory store for named filter presets with JSON import / export. Pass
+ * one to {@link createDataTable} via `presets: { manager }` to share preset
+ * state across multiple tables on a page.
+ */
 export class FilterPresetManager {
   readonly presets: Signal<FilterPreset[]>;
 

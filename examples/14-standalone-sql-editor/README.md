@@ -38,9 +38,9 @@ npm run dev
 
 1. **Live schema in autocomplete.** Click into either editor and press
    <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Space</kbd> (or just type a partial
-   identifier). The dropdown lists the loaded columns (`order_id`,
-   `state`, `product_category`, `order_total_usd`, `order_date`) with
-   their DuckDB types in the `detail` column.
+   identifier). The dropdown lists the loaded columns (`trip_distance`,
+   `fare_amount`, `tip_amount`, `payment_type`, `tpep_pickup_datetime`,
+   …) with their DuckDB types in the `detail` column.
 2. **Function metadata.** Type a partial function name (e.g. `avg`,
    `regexp`, `date_t`). DuckDB functions show their **category**
    (aggregate, string, date/time, …) in the `detail` chip and a one-line
@@ -156,8 +156,20 @@ Pass `[]` to disable function autocomplete entirely.
 
 ## Data
 
-The same 181-row × 5-column
-[`us_customer_orders.csv`](../../tests/fixtures/datasets/csv/us_customer_orders.csv)
-used by examples 08 and 13. Columns: `order_id` (BIGINT), `state` (VARCHAR),
-`product_category` (VARCHAR), `order_total_usd` (DOUBLE), `order_date`
-(DATE).
+A 100,000-row × 19-column NYC Taxi & Limousine Commission trip-record
+fixture (TLC, January 2024), loaded from
+[`nyc_taxi.parquet`](../../tests/fixtures/datasets/parquet/nyc_taxi.parquet)
+via `sourceFormat: 'parquet'`. The same trip-record dataset is used by
+examples 02, 03, 04, 09, 10, 11, and 12 in their CSV form — example 14
+exercises the parquet loader instead. Representative columns include
+`trip_distance` (DOUBLE), `fare_amount` (DOUBLE), `tip_amount` (DOUBLE),
+`payment_type` (BIGINT — `1` = credit card, `2` = cash), and
+`tpep_pickup_datetime` (TIMESTAMP).
+
+The pre-filled composer expressions exercise this schema:
+
+- **Filter** — `trip_distance > 5 AND payment_type = 1` (long credit-card
+  trips).
+- **Derived column** — `100 * tip_amount / NULLIF(fare_amount, 0)`
+  computes tip percentage; `NULLIF` guards against zero-fare divides. The
+  same expression is added programmatically in example 04.

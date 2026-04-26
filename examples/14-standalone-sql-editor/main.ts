@@ -12,7 +12,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { autocompletion } from '@codemirror/autocomplete';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/refs/heads/main/tests/fixtures/datasets/csv/us_customer_orders.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -129,7 +129,7 @@ let appliedFilterId: string | null = null;
 (async () => {
   table = await createDataTable({
     container: $('table'),
-    tableName: 'orders',
+    tableName: 'nyc_taxi',
     persistence: false,
   });
 
@@ -146,7 +146,7 @@ let appliedFilterId: string | null = null;
   const btnApplyFilter = $<HTMLButtonElement>('btn-apply-filter');
 
   filterEditor = new HostSqlEditor($('filter-editor'), {
-    placeholder: 'WHERE clause, e.g. order_total_usd > 100',
+    placeholder: 'WHERE clause, e.g. trip_distance > 5',
     getContext,
     onChange: () => {
       // Editing invalidates any prior validation result.
@@ -203,7 +203,7 @@ let appliedFilterId: string | null = null;
   const btnApplyExpr = $<HTMLButtonElement>('btn-apply-expr');
 
   exprEditor = new HostSqlEditor($('expr-editor'), {
-    placeholder: 'Expression, e.g. order_total_usd * 1.1',
+    placeholder: 'Expression, e.g. 100 * tip_amount / NULLIF(fare_amount, 0)',
     getContext,
     onChange: () => {
       btnApplyExpr.disabled = true;
@@ -308,13 +308,14 @@ let appliedFilterId: string | null = null;
 
   // Quick-start hints — pre-fill so the example does something useful
   // immediately on first interaction.
-  filterEditor.setValue("order_total_usd > 100 AND product_category = 'Electronics'");
-  exprEditor.setValue('order_total_usd * 1.08');
+  filterEditor.setValue('trip_distance > 5 AND payment_type = 1');
+  exprEditor.setValue('100 * tip_amount / NULLIF(fare_amount, 0)');
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet' });
 
   // (loadComplete just fired and called refreshAll → editors now know about
-  // order_id, state, product_category, order_total_usd, order_date.)
+  // the 19 NYC Taxi columns: trip_distance, fare_amount, tip_amount,
+  // payment_type, tpep_pickup_datetime, …)
 })();
 
 window.addEventListener('beforeunload', () => {

@@ -18,7 +18,7 @@
  * | `DERIVED_*`   | {@link DerivedColumnError}   |
  * | `PERSIST_*` / `IDB_*` | {@link PersistenceError} |
  * | `ANNOTATION_*` | {@link AnnotationError}     |
- * | `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` / `BRIDGE_*` / `INVARIANT` | {@link ConfigurationError} |
+ * | `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` / `BRIDGE_*` / `PRESET_*` / `INVARIANT` | {@link ConfigurationError} |
  * | `DESTROYED`   | {@link DestroyedError}       |
  *
  * {@link reconstructError} maps a plain `{ code, message, details }` payload
@@ -342,7 +342,8 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
     code === 'INVARIANT' ||
     code.startsWith('CONFIG_') ||
     code.startsWith('OPTIONS_') ||
-    code.startsWith('CONTAINER_')
+    code.startsWith('CONTAINER_') ||
+    code.startsWith('PRESET_')
   ) {
     return new ConfigurationError(message, options);
   }

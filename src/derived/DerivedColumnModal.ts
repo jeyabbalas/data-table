@@ -483,7 +483,7 @@ export class DerivedColumnModal {
     // Split by newlines, trim each, filter empty
     const lines = text.split('\n');
     // Remove trailing empty lines
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') {
       lines.pop();
     }
     return lines.map((l) => l.trim());
@@ -617,13 +617,13 @@ export class DerivedColumnModal {
     if (vectorType === 'boolean') {
       const values: boolean[] = [];
       for (let i = 0; i < lines.length; i++) {
-        const lower = lines[i].toLowerCase();
+        const lower = lines[i]!.toLowerCase();
         if (lower === 'true' || lower === '1') {
           values.push(true);
         } else if (lower === 'false' || lower === '0') {
           values.push(false);
         } else {
-          return { success: false, error: m.vectorInvalidBoolean(i + 1, lines[i]) };
+          return { success: false, error: m.vectorInvalidBoolean(i + 1, lines[i]!) };
         }
       }
       return { success: true, values };
@@ -634,10 +634,10 @@ export class DerivedColumnModal {
       const re = /^\d{4}-\d{2}-\d{2}$/;
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidDate(i + 1, lines[i]) };
+        if (!re.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidDate(i + 1, lines[i]!) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -646,10 +646,10 @@ export class DerivedColumnModal {
       const re = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidTimestamp(i + 1, lines[i]) };
+        if (!re.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidTimestamp(i + 1, lines[i]!) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -658,10 +658,10 @@ export class DerivedColumnModal {
       const re = /^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidTime(i + 1, lines[i]) };
+        if (!re.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidTime(i + 1, lines[i]!) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -669,10 +669,10 @@ export class DerivedColumnModal {
     if (vectorType === 'interval') {
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().length === 0) {
+        if (lines[i]!.trim().length === 0) {
           return { success: false, error: m.vectorInvalidInterval(i + 1) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -681,10 +681,10 @@ export class DerivedColumnModal {
       const re = /^-?\d+(\.\d+)?$/;
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidDecimal(i + 1, lines[i]) };
+        if (!re.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidDecimal(i + 1, lines[i]!) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -693,10 +693,10 @@ export class DerivedColumnModal {
       const re = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const values: string[] = [];
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidUUID(i + 1, lines[i]) };
+        if (!re.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidUUID(i + 1, lines[i]!) };
         }
-        values.push(lines[i]);
+        values.push(lines[i]!);
       }
       return { success: true, values };
     }
@@ -705,18 +705,18 @@ export class DerivedColumnModal {
     const values: number[] = [];
     for (let i = 0; i < lines.length; i++) {
       if (vectorType === 'integer') {
-        if (!/^-?\d+$/.test(lines[i])) {
-          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]) };
+        if (!/^-?\d+$/.test(lines[i]!)) {
+          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]!) };
         }
-        const num = parseInt(lines[i], 10);
+        const num = parseInt(lines[i]!, 10);
         if (isNaN(num)) {
-          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]) };
+          return { success: false, error: m.vectorInvalidInteger(i + 1, lines[i]!) };
         }
         values.push(num);
       } else {
-        const num = parseFloat(lines[i]);
+        const num = parseFloat(lines[i]!);
         if (isNaN(num) || !Number.isFinite(num)) {
-          return { success: false, error: m.vectorInvalidFloat(i + 1, lines[i]) };
+          return { success: false, error: m.vectorInvalidFloat(i + 1, lines[i]!) };
         }
         values.push(num);
       }

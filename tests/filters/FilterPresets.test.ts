@@ -3,6 +3,7 @@
  * and validation of imported filter data.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ConfigurationError } from '@/core/errors';
 import { FilterPresetManager } from '@/filters/FilterPresets';
 import type { Filter, RawSQLFilter } from '@/filters/FilterTypes';
 import type { StateActions } from '@/core/Actions';
@@ -637,6 +638,150 @@ describe('FilterPresetManager', () => {
       });
       manager.importFromJSON(json);
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ==========================================
+  // Phase 5 — name uniqueness contract
+  // ==========================================
+
+  describe('name uniqueness (Phase 5)', () => {
+    it('save() throws PRESET_DUPLICATE_NAME on collision', () => {
+      manager.save('My filter', [rangeFilter()]);
+      try {
+        manager.save('My filter', [rangeFilter('age', 0, 99)]);
+        throw new Error('expected save to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConfigurationError);
+        expect((err as ConfigurationError).code).toBe('PRESET_DUPLICATE_NAME');
+        expect((err as ConfigurationError).details).toEqual({ name: 'My filter' });
+      }
+      // Original preset survived; the failed save did not corrupt the list.
+      expect(manager.getPresets()).toHaveLength(1);
+    });
+
+    it('save() compares trimmed names so whitespace cannot smuggle in a duplicate', () => {
+      manager.save('My filter', [rangeFilter()]);
+      expect(() => manager.save('   My filter   ', [rangeFilter()])).toThrow(/already exists/);
+      expect(manager.getPresets()).toHaveLength(1);
+    });
+
+    it('rename() throws PRESET_DUPLICATE_NAME when the new name belongs to another preset', () => {
+      manager.save('A', [rangeFilter()]);
+      manager.save('B', [rangeFilter()]);
+      const [a, b] = manager.getPresets();
+      expect(() => manager.rename(b.id, 'A')).toThrow(ConfigurationError);
+      try {
+        manager.rename(b.id, 'A');
+      } catch (err) {
+        expect((err as ConfigurationError).code).toBe('PRESET_DUPLICATE_NAME');
+      }
+      // Names unchanged.
+      expect(
+        manager
+          .getPresets()
+          .map((p) => p.name)
+          .sort(),
+      ).toEqual(['A', 'B']);
+      // Defensive: A's preset object identity is preserved.
+      expect(manager.getPresets().find((p) => p.id === a.id)?.name).toBe('A');
+    });
+
+    it('rename() to the preset’s own current name is a no-op (not an error)', () => {
+      manager.save('A', [rangeFilter()]);
+      const before = manager.getPresets()[0];
+      const beforeUpdatedAt = before.updatedAt;
+      // No throw, no signal write (updatedAt stays the same).
+      manager.rename(before.id, 'A');
+      const after = manager.getPresets()[0];
+      expect(after.name).toBe('A');
+      expect(after.updatedAt).toBe(beforeUpdatedAt);
+    });
+
+    it('rename() with empty / whitespace name remains a no-op', () => {
+      manager.save('A', [rangeFilter()]);
+      const before = manager.getPresets()[0];
+      manager.rename(before.id, '');
+      manager.rename(before.id, '   ');
+      expect(manager.getPresets()[0].name).toBe('A');
+    });
+
+    it('importFromJSON skips presets whose name collides with an existing preset', () => {
+      manager.save('Premium', [rangeFilter()]);
+      const json = JSON.stringify({
+        version: 1,
+        presets: [
+          { name: 'Premium', filters: [{ type: 'null', column: 'x' }] },
+          { name: 'Other', filters: [{ type: 'null', column: 'y' }] },
+        ],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(result.errors.some((e) => /Premium.*already exists/i.test(e))).toBe(true);
+      expect(
+        manager
+          .getPresets()
+          .map((p) => p.name)
+          .sort(),
+      ).toEqual(['Other', 'Premium']);
+    });
+
+    it('importFromJSON dedupes within the same import file', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [
+          { name: 'Dup', filters: [{ type: 'null', column: 'x' }] },
+          { name: 'Dup', filters: [{ type: 'null', column: 'y' }] },
+          { name: 'Unique', filters: [{ type: 'null', column: 'z' }] },
+        ],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(2);
+      expect(result.errors.some((e) => /Dup.*already exists/i.test(e))).toBe(true);
+      const names = manager.getPresets().map((p) => p.name);
+      expect(names).toContain('Unique');
+      expect(names.filter((n) => n === 'Dup')).toHaveLength(1);
+    });
+  });
+
+  // ==========================================
+  // Phase 5 — round-trip every filter type
+  // ==========================================
+
+  describe('round-trip (Phase 5)', () => {
+    it('preserves every filter type through save → exportToJSON → importFromJSON', () => {
+      const filters: Filter[] = [
+        { type: 'range', column: 'price', min: 1, max: 99 },
+        { type: 'point', column: 'sku', value: 'A-42' },
+        { type: 'set', column: 'country', values: ['US', 'CA'] },
+        { type: 'not-set', column: 'status', values: ['archived'] },
+        { type: 'null', column: 'deleted_at' },
+        { type: 'not-null', column: 'name' },
+        { type: 'pattern', column: 'name', pattern: 'smith', mode: 'contains' },
+        rawSQLFilter('price > 100', 'rt-1'),
+      ];
+      manager.save('Everything', filters);
+      const json = manager.exportToJSON();
+
+      const fresh = new FilterPresetManager();
+      const result = fresh.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(result.errors).toEqual([]);
+
+      const actions = mockActions();
+      fresh.load(fresh.getPresets()[0].id, actions);
+      const loaded = (actions.loadFilterPreset as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(loaded).toHaveLength(filters.length);
+      expect(loaded.map((f: Filter) => f.type).sort()).toEqual([
+        'not-null',
+        'not-set',
+        'null',
+        'pattern',
+        'point',
+        'range',
+        'raw-sql',
+        'set',
+      ]);
     });
   });
 });

@@ -1219,6 +1219,12 @@ export class StateActions {
     if (this.destroyed) {
       return { success: false, error: 'DataTable is destroyed' };
     }
+    if (def.name === ROWID_COLUMN) {
+      return {
+        success: false,
+        error: `Column name "${def.name}" is reserved for the synthetic row id`,
+      };
+    }
     // Validate name uniqueness against all columns
     const allColumnNames = this.state.schema.get().map((c) => c.name);
     if (allColumnNames.includes(def.name)) {
@@ -1303,6 +1309,12 @@ export class StateActions {
     // If renaming, validate new name uniqueness (excluding self)
     const isRename = oldName !== def.name;
     if (isRename) {
+      if (def.name === ROWID_COLUMN) {
+        return {
+          success: false,
+          error: `Column name "${def.name}" is reserved for the synthetic row id`,
+        };
+      }
       const otherNames = currentSchema.filter((c) => c.name !== oldName).map((c) => c.name);
       if (otherNames.includes(def.name)) {
         return { success: false, error: `Column name "${def.name}" already exists` };

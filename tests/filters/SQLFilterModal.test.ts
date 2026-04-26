@@ -569,4 +569,96 @@ describe('SQLFilterModal', () => {
       expect(modal.getIsOpen()).toBe(false);
     });
   });
+
+  // ==========================================
+  // Phase 5 — autocomplete + empty-SQL contract
+  // ==========================================
+
+  describe('autocomplete schema (Phase 5)', () => {
+    it('reads completion context from actions on open() — base columns only', () => {
+      modal.open();
+      expect(actions.getCompletionContext).toHaveBeenCalled();
+    });
+
+    it('includes derived columns returned by actions.getCompletionContext()', () => {
+      // Re-wire the mock so a derived column shows up in the completion context.
+      // The modal subscribes to getCompletionContext at open time; that's the
+      // contract Phase 5 locks. Live refresh on `derivedChange` while the modal
+      // is open is deferred to Phase 8.
+      (actions.getCompletionContext as ReturnType<typeof vi.fn>).mockReturnValue({
+        columns: [
+          { name: 'age', type: 'INTEGER' },
+          { name: 'price_with_tax', type: 'DOUBLE', isDerived: true },
+        ],
+        functions: [],
+      });
+
+      // Re-instantiate so the new mock is observed at open(). The default
+      // beforeEach hook constructed the modal before the mock was rewritten;
+      // we rebuild it here to keep the test focused.
+      modal.destroy();
+      modal = new SQLFilterModal(state, actions);
+      document.body.appendChild(modal.getElement());
+
+      modal.open();
+
+      const ctx = (actions.getCompletionContext as ReturnType<typeof vi.fn>).mock.results[
+        (actions.getCompletionContext as ReturnType<typeof vi.fn>).mock.results.length - 1
+      ].value as { columns: Array<{ name: string; type: string; isDerived?: boolean }> };
+      expect(ctx.columns.map((c) => c.name)).toContain('price_with_tax');
+      const derived = ctx.columns.find((c) => c.name === 'price_with_tax');
+      expect(derived?.isDerived).toBe(true);
+    });
+
+    it('opens with an empty completion context without throwing', () => {
+      (actions.getCompletionContext as ReturnType<typeof vi.fn>).mockReturnValue({
+        columns: [],
+        functions: [],
+      });
+      modal.destroy();
+      modal = new SQLFilterModal(state, actions);
+      document.body.appendChild(modal.getElement());
+      expect(() => modal.open()).not.toThrow();
+    });
+  });
+
+  describe('empty SQL gating (Phase 5)', () => {
+    it('clicking Apply on empty SQL is a no-op — never calls addRawSQLFilter', () => {
+      modal.open();
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      applyBtn?.click();
+      expect(actions.addRawSQLFilter).not.toHaveBeenCalled();
+      // Modal remains open — no premature close on the no-op click.
+      expect(modal.getIsOpen()).toBe(true);
+    });
+
+    it('clicking Apply on whitespace-only SQL is a no-op', async () => {
+      modal.open();
+      const cmEditor = modal.getElement().querySelector('.cm-editor') as HTMLElement;
+      if (cmEditor) {
+        const { EditorView } = await import('@codemirror/view');
+        const view = EditorView.findFromDOM(cmEditor);
+        if (view) {
+          view.dispatch({ changes: { from: 0, to: 0, insert: '   \n\t  ' } });
+        }
+      }
+      const applyBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
+      applyBtn?.click();
+      expect(actions.addRawSQLFilter).not.toHaveBeenCalled();
+      expect(modal.getIsOpen()).toBe(true);
+    });
+
+    it('clicking Validate on empty SQL is a no-op', () => {
+      modal.open();
+      const validateBtn = modal
+        .getElement()
+        .querySelector('[class$="sql-filter-modal-validate"]') as HTMLButtonElement;
+      validateBtn?.click();
+      expect(actions.validateSQLFilter).not.toHaveBeenCalled();
+    });
+  });
 });

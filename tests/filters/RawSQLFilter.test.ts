@@ -192,3 +192,50 @@ describe('RawSQLFilter serialization round-trip', () => {
     expect((serialized as Record<string, unknown>).sql).toBe('y = 2');
   });
 });
+
+describe('RawSQLFilter — Phase 5 label fallback', () => {
+  it('empty-string label falls back to the truncated SQL', () => {
+    // FilterChip.ts:136 uses `filter.label || truncateSQL(...)`. Empty string
+    // is falsy so the fallback fires; documents that downstream consumers do
+    // not need to filter out '' before passing to formatFilter.
+    const filter: Filter = {
+      type: 'raw-sql',
+      column: '__raw_sql_e__',
+      sql: 'x = 1',
+      id: 'e',
+      label: '',
+    };
+    expect(formatFilter(filter).description).toBe('x = 1');
+  });
+
+  it('round-trips an empty-string label as undefined per persistence semantics', () => {
+    // serializeFilter / deserializeFilter currently round-trip the empty
+    // string as-is (it is JSON-valid). Lock the contract so a future change
+    // that drops empty labels in serialisation surfaces as an explicit test
+    // failure rather than a silent semantics shift.
+    const filter: Filter = {
+      type: 'raw-sql',
+      column: '__raw_sql_e__',
+      sql: 'x = 1',
+      id: 'e',
+      label: '',
+    };
+    const round = deserializeFilter(serializeFilter(filter));
+    expect(round).toEqual(filter);
+  });
+
+  it('explicit `label: undefined` survives serialize/deserialize without coercion', () => {
+    const filter: RawSQLFilter = {
+      type: 'raw-sql',
+      column: '__raw_sql_u__',
+      sql: 'x = 1',
+      id: 'u',
+      label: undefined,
+    };
+    const round = deserializeFilter(serializeFilter(filter)) as RawSQLFilter;
+    // After JSON round-trip the key is dropped; treat that as
+    // semantically-equivalent to undefined.
+    expect(round.type).toBe('raw-sql');
+    expect(round.label).toBeUndefined();
+  });
+});

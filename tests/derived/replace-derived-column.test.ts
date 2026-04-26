@@ -212,6 +212,67 @@ describe('replaceDerivedColumn', () => {
     expect(state.derivedColumns.get()).toEqual(before);
   });
 
+  // 2b. Phase 5 — transitive multi-level cascade (a → b → c).
+  // Replacing `a` with a numeric definition breaks `b` (UPPER on numeric); the
+  // pre-flight enumeration also surfaces `c` (LENGTH on the broken `b`) since
+  // layer-1 CTE evaluation requires UPPER(a). Locks the algorithm's contract
+  // that DEPENDENTS_INCOMPATIBLE.details.dependentsAffected enumerates every
+  // transitive dependent that fails, not just the direct one.
+  it('rejects replacement that breaks a multi-level transitive dependent chain', async () => {
+    setup(
+      createMockBridge({
+        typeMap: {
+          'CAST(x AS INTEGER)': 'INTEGER',
+          'UPPER(a)': 'VARCHAR',
+          'LENGTH(b)': 'INTEGER',
+          'CAST(x AS DOUBLE)': 'DOUBLE',
+        },
+        // Both b's and c's pre-flight queries include `CAST(x AS DOUBLE)`
+        // (in the layer-0 CTE) and `UPPER(a)` (b's expression, present in
+        // both b's validation SELECT and c's layer-1 CTE definition that
+        // c's validation reads from). Failing on both needles fires for
+        // both queries.
+        preflightBreaks: {
+          needles: ['CAST(x AS DOUBLE)', 'UPPER(a)'],
+          error: 'Binder Error: No function matches the given name UPPER(DOUBLE)',
+        },
+      }),
+    );
+
+    await actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'a',
+      expression: 'CAST(x AS INTEGER)',
+    });
+    await actions.addDerivedColumn({ kind: 'expression', name: 'b', expression: 'UPPER(a)' });
+    await actions.addDerivedColumn({ kind: 'expression', name: 'c', expression: 'LENGTH(b)' });
+
+    const before = state.derivedColumns.get();
+
+    const result = await actions.replaceDerivedColumn('a', {
+      kind: 'expression',
+      name: 'a',
+      expression: 'CAST(x AS DOUBLE)',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(DerivedColumnError);
+      expect(result.error.code).toBe('DEPENDENTS_INCOMPATIBLE');
+      const details = result.error.details as {
+        dependentsAffected: string[];
+        reasons: Record<string, string>;
+      };
+      // Both direct (b) and transitive (c) dependents surface in the cascade.
+      expect(details.dependentsAffected.sort()).toEqual(['b', 'c']);
+      expect(details.reasons.b).toMatch(/UPPER/);
+      expect(details.reasons.c).toMatch(/UPPER/);
+    }
+
+    // State untouched.
+    expect(state.derivedColumns.get()).toEqual(before);
+  });
+
   // 3. Cycle induction
   it('rejects replacement that introduces a circular dependency', async () => {
     setup(

@@ -387,6 +387,72 @@ describe('Derived Columns — Actions Integration', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('empty');
     });
+
+    // Phase 5 — explicit reservation guard. Independent of whether the synthetic
+    // __rowid__ column is currently in the live schema (which it is after the
+    // loaders inject it, but should not be relied on as the only reservation
+    // mechanism).
+    it('rejects __rowid__ when the synthetic column is in the schema', async () => {
+      // Default beforeEach loads sampleSchema which does NOT include __rowid__,
+      // so plant it here to mimic the post-load state.
+      initializeColumnsFromSchema(state, [
+        ...sampleSchema,
+        {
+          name: '__rowid__',
+          type: 'integer',
+          nullable: false,
+          originalType: 'BIGINT',
+          system: true,
+        },
+      ]);
+
+      const result = await actions.addDerivedColumn({
+        kind: 'expression',
+        name: '__rowid__',
+        expression: 'price * 2',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('reserved');
+      expect(state.derivedColumns.get()).toHaveLength(0);
+    });
+
+    it('rejects __rowid__ even when the synthetic column is NOT in the schema', async () => {
+      // sampleSchema (loaded by the outer beforeEach) deliberately omits __rowid__;
+      // the explicit reservation guard must still fire.
+      const schemaBefore = state.schema.get();
+      expect(schemaBefore.some((c) => c.name === '__rowid__')).toBe(false);
+
+      const result = await actions.addDerivedColumn({
+        kind: 'expression',
+        name: '__rowid__',
+        expression: 'price * 2',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('reserved');
+      expect(state.derivedColumns.get()).toHaveLength(0);
+    });
+
+    it('updateDerivedColumn refuses to rename to __rowid__', async () => {
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+
+      const result = await actions.updateDerivedColumn('total', {
+        kind: 'expression',
+        name: '__rowid__',
+        expression: 'price * quantity',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('reserved');
+      // Derived list and schema are untouched.
+      expect(state.derivedColumns.get().map((d) => d.name)).toEqual(['total']);
+      expect(state.schema.get().some((c) => c.name === '__rowid__')).toBe(false);
+    });
   });
 
   // =========================================
@@ -1363,6 +1429,38 @@ describe('Derived Columns — Actions Integration', () => {
       await actions.removeDerivedColumn('total');
 
       expect(undoManager.undoDepth).toBe(2); // add + remove
+    });
+
+    // Phase 5 — reordering derived columns via setColumnOrder participates in
+    // the same undo stack and reverts cleanly. setColumnOrder is the public
+    // reorder mechanism; this test locks the contract so a future rename to
+    // a derived-specific helper does not silently break undo participation.
+    it('setColumnOrder is undoable for derived columns', async () => {
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'total',
+        expression: 'price * quantity',
+      });
+      await actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'tax',
+        expression: 'quantity + 1',
+      });
+
+      const orderBefore = state.columnOrder.get();
+      expect(orderBefore.slice(-2)).toEqual(['total', 'tax']);
+
+      // Move the derived columns to the front.
+      actions.setColumnOrder(['total', 'tax', 'id', 'name', 'price', 'quantity']);
+      expect(state.columnOrder.get().slice(0, 2)).toEqual(['total', 'tax']);
+
+      // Undo the reorder; original order returns.
+      actions.undo();
+      expect(state.columnOrder.get()).toEqual(orderBefore);
+
+      // Redo re-applies.
+      actions.redo();
+      expect(state.columnOrder.get().slice(0, 2)).toEqual(['total', 'tax']);
     });
   });
 

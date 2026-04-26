@@ -147,7 +147,7 @@ export class DerivedColumnManager {
       });
     }
 
-    const oldInfo = this.columns[oldIndex];
+    const oldInfo = this.columns[oldIndex]!;
 
     // Block rename if other columns depend on this one
     const isRename = oldName !== def.name;
@@ -255,7 +255,7 @@ export class DerivedColumnManager {
       });
     }
 
-    const oldInfo = this.columns[oldIndex];
+    const oldInfo = this.columns[oldIndex]!;
 
     let detectedType: DataType;
     let detectedOriginalType: string;
@@ -420,7 +420,7 @@ export class DerivedColumnManager {
       );
     }
 
-    const info = this.columns[index];
+    const info = this.columns[index]!;
 
     // Drop vector helper table if applicable
     if (info.def.kind === 'vector') {
@@ -781,7 +781,7 @@ export class DerivedColumnManager {
 
     let prevLayer = '__dt_preflight_0';
     for (let i = 0; i < sortedDependents.length; i++) {
-      const depInfo = sortedDependents[i];
+      const depInfo = sortedDependents[i]!;
       const depExpr = (depInfo.def as { expression: string }).expression;
       const layerName = `__dt_preflight_${i + 1}`;
 
@@ -819,7 +819,7 @@ export class DerivedColumnManager {
       return { detectedType: 'string', detectedOriginalType: 'VARCHAR' };
     }
 
-    const originalType = rows[0].t;
+    const originalType = rows[0]!.t;
     return {
       detectedType: mapDuckDBType(originalType),
       detectedOriginalType: originalType,
@@ -964,7 +964,7 @@ export class DerivedColumnManager {
     let prevLayer = '__dt_base';
 
     for (let i = 0; i < sortedExpressions.length; i++) {
-      const info = sortedExpressions[i];
+      const info = sortedExpressions[i]!;
       const layerName = `__dt_layer_${i + 1}`;
       const expr = (info.def as { expression: string }).expression;
       cteParts.push(

@@ -675,7 +675,7 @@ export class FilterPanelField {
       return { type: 'range', column: col, min: val1, max: Infinity };
     }
     // !val1 && val2
-    return { type: 'range', column: col, min: -Infinity, max: val2, maxInclusive: true };
+    return { type: 'range', column: col, min: -Infinity, max: val2!, maxInclusive: true };
   }
 
   private buildUuidFilter(): Filter | null {
@@ -725,7 +725,7 @@ export class FilterPanelField {
       return;
     }
 
-    const filter = filters[0]; // One filter per column
+    const filter = filters[0]!; // One filter per column; length checked above
     this.populateFromFilter(filter);
   }
 
@@ -798,31 +798,31 @@ export class FilterPanelField {
 
       if (!minIsOpen && !maxIsOpen) {
         select.value = 'between';
-        inputs[0].value = this.formatForInput(filter.min);
-        inputs[1].value = this.formatForInput(filter.max);
-        inputs[1].style.display = '';
-        inputs[0].placeholder = ph.min;
+        inputs[0]!.value = this.formatForInput(filter.min);
+        inputs[1]!.value = this.formatForInput(filter.max);
+        inputs[1]!.style.display = '';
+        inputs[0]!.placeholder = ph.min;
       } else if (maxIsOpen && !minIsOpen) {
         select.value = filter.minExclusive ? 'gt' : 'gte';
-        inputs[0].value = this.formatForInput(filter.min);
-        inputs[1].style.display = 'none';
-        inputs[0].placeholder = ph.value;
+        inputs[0]!.value = this.formatForInput(filter.min);
+        inputs[1]!.style.display = 'none';
+        inputs[0]!.placeholder = ph.value;
       } else if (minIsOpen && !maxIsOpen) {
         select.value = filter.maxInclusive ? 'lte' : 'lt';
-        inputs[0].value = this.formatForInput(filter.max);
-        inputs[1].style.display = 'none';
-        inputs[0].placeholder = ph.value;
+        inputs[0]!.value = this.formatForInput(filter.max);
+        inputs[1]!.style.display = 'none';
+        inputs[0]!.placeholder = ph.value;
       }
     } else if (filter.type === 'point') {
       select.value = 'eq';
-      inputs[0].value = this.formatForInput(filter.value);
-      inputs[1].style.display = 'none';
-      inputs[0].placeholder = ph.value;
+      inputs[0]!.value = this.formatForInput(filter.value);
+      inputs[1]!.style.display = 'none';
+      inputs[0]!.placeholder = ph.value;
     } else if (filter.type === 'not-set' && filter.values.length === 1) {
       select.value = 'neq';
-      inputs[0].value = this.formatForInput(filter.values[0]);
-      inputs[1].style.display = 'none';
-      inputs[0].placeholder = ph.value;
+      inputs[0]!.value = this.formatForInput(filter.values[0]);
+      inputs[1]!.style.display = 'none';
+      inputs[0]!.placeholder = ph.value;
     }
   }
 
@@ -847,34 +847,34 @@ export class FilterPanelField {
     if (checkboxes.length < 3) return;
 
     // Default: all checked
-    checkboxes[0].checked = true;
-    checkboxes[1].checked = true;
-    checkboxes[2].checked = true;
+    checkboxes[0]!.checked = true;
+    checkboxes[1]!.checked = true;
+    checkboxes[2]!.checked = true;
 
     if (filter.type === 'point') {
       if (filter.value === true) {
-        checkboxes[0].checked = true;
-        checkboxes[1].checked = false;
-        checkboxes[2].checked = false;
+        checkboxes[0]!.checked = true;
+        checkboxes[1]!.checked = false;
+        checkboxes[2]!.checked = false;
       } else if (filter.value === false) {
-        checkboxes[0].checked = false;
-        checkboxes[1].checked = true;
-        checkboxes[2].checked = false;
+        checkboxes[0]!.checked = false;
+        checkboxes[1]!.checked = true;
+        checkboxes[2]!.checked = false;
       }
     } else if (filter.type === 'null') {
-      checkboxes[0].checked = false;
-      checkboxes[1].checked = false;
-      checkboxes[2].checked = true;
+      checkboxes[0]!.checked = false;
+      checkboxes[1]!.checked = false;
+      checkboxes[2]!.checked = true;
     } else if (filter.type === 'not-null') {
-      checkboxes[0].checked = true;
-      checkboxes[1].checked = true;
-      checkboxes[2].checked = false;
+      checkboxes[0]!.checked = true;
+      checkboxes[1]!.checked = true;
+      checkboxes[2]!.checked = false;
     } else if (filter.type === 'not-set') {
       // Exclude specific values
       const excluded = new Set(filter.values.map(String));
-      checkboxes[0].checked = !excluded.has('true');
-      checkboxes[1].checked = !excluded.has('false');
-      checkboxes[2].checked = filter.includeNull !== false;
+      checkboxes[0]!.checked = !excluded.has('true');
+      checkboxes[1]!.checked = !excluded.has('false');
+      checkboxes[2]!.checked = filter.includeNull !== false;
     }
   }
 
@@ -899,27 +899,27 @@ export class FilterPanelField {
           minStr.slice(0, 16) === maxStr.slice(0, 16)
         ) {
           select.value = 'eq';
-          inputs[0].value = minStr.slice(0, 16); // Show the base minute
-          inputs[1].style.display = 'none';
+          inputs[0]!.value = minStr.slice(0, 16); // Show the base minute
+          inputs[1]!.style.display = 'none';
         } else {
           select.value = 'between';
-          inputs[0].value = minStr;
-          inputs[1].value = maxStr;
-          inputs[1].style.display = '';
+          inputs[0]!.value = minStr;
+          inputs[1]!.value = maxStr;
+          inputs[1]!.style.display = '';
         }
       } else if (maxIsOpen && !minIsOpen) {
         select.value = filter.minExclusive ? 'after' : 'on-or-after';
-        inputs[0].value = String(filter.min);
-        inputs[1].style.display = 'none';
+        inputs[0]!.value = String(filter.min);
+        inputs[1]!.style.display = 'none';
       } else if (minIsOpen && !maxIsOpen) {
         select.value = filter.maxInclusive ? 'on-or-before' : 'before';
-        inputs[0].value = String(filter.max);
-        inputs[1].style.display = 'none';
+        inputs[0]!.value = String(filter.max);
+        inputs[1]!.style.display = 'none';
       }
     } else if (filter.type === 'point') {
       select.value = 'eq';
-      inputs[0].value = String(filter.value ?? '');
-      inputs[1].style.display = 'none';
+      inputs[0]!.value = String(filter.value ?? '');
+      inputs[1]!.style.display = 'none';
     }
   }
 
@@ -933,8 +933,8 @@ export class FilterPanelField {
       const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min as number);
       const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max as number);
 
-      inputs[0].value = minIsOpen ? '' : String(filter.min);
-      inputs[1].value = maxIsOpen ? '' : String(filter.max);
+      inputs[0]!.value = minIsOpen ? '' : String(filter.min);
+      inputs[1]!.value = maxIsOpen ? '' : String(filter.max);
     }
   }
 

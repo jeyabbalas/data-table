@@ -67,6 +67,11 @@ export class FilterPresetManager {
 
   /**
    * Save current filters as a named preset.
+   *
+   * Names are unique within a manager. Calling `save` with a name that
+   * already exists throws `ConfigurationError({ code: 'PRESET_DUPLICATE_NAME' })`
+   * — call `update(id, …)` to overwrite an existing preset, or pick a
+   * different name.
    */
   save(
     name: string,
@@ -78,6 +83,13 @@ export class FilterPresetManager {
     if (!trimmed) {
       throw new ConfigurationError('Preset name is required', {
         code: 'OPTIONS_INVALID',
+      });
+    }
+
+    if (this.presets.get().some((p) => p.name === trimmed)) {
+      throw new ConfigurationError(`A preset named "${trimmed}" already exists`, {
+        code: 'PRESET_DUPLICATE_NAME',
+        details: { name: trimmed },
       });
     }
 
@@ -117,15 +129,29 @@ export class FilterPresetManager {
 
   /**
    * Rename a preset.
+   *
+   * Throws `ConfigurationError({ code: 'PRESET_DUPLICATE_NAME' })` when
+   * `newName` collides with another preset's name. Renaming a preset to its
+   * own current name is a no-op. Empty / whitespace-only `newName` is also a
+   * no-op.
    */
   rename(id: string, newName: string): void {
     const trimmed = newName.trim();
     if (!trimmed) return;
 
+    const presets = this.presets.get();
+    const target = presets.find((p) => p.id === id);
+    if (!target || target.name === trimmed) return;
+
+    if (presets.some((p) => p.id !== id && p.name === trimmed)) {
+      throw new ConfigurationError(`A preset named "${trimmed}" already exists`, {
+        code: 'PRESET_DUPLICATE_NAME',
+        details: { name: trimmed },
+      });
+    }
+
     this.presets.set(
-      this.presets
-        .get()
-        .map((p) => (p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p)),
+      presets.map((p) => (p.id === id ? { ...p, name: trimmed, updatedAt: Date.now() } : p)),
     );
   }
 
@@ -172,26 +198,33 @@ export class FilterPresetManager {
     }
 
     const obj = parsed as Record<string, unknown>;
-    if (typeof obj.version !== 'number') {
+    if (typeof obj['version'] !== 'number') {
       return { imported: 0, errors: ['Missing or invalid "version" field'] };
     }
-    if (!Array.isArray(obj.presets)) {
+    if (!Array.isArray(obj['presets'])) {
       return { imported: 0, errors: ['Missing or invalid "presets" array'] };
     }
 
     const valid: FilterPreset[] = [];
-    for (let i = 0; i < obj.presets.length; i++) {
-      const entry = obj.presets[i];
+    const existingNames = new Set(this.presets.get().map((p) => p.name));
+    const presetsArr = obj['presets'] as unknown[];
+    for (let i = 0; i < presetsArr.length; i++) {
+      const entry = presetsArr[i];
       if (typeof entry !== 'object' || entry === null) {
         errors.push(`Preset ${i}: not an object`);
         continue;
       }
       const p = entry as Record<string, unknown>;
-      if (typeof p.name !== 'string' || !p.name.trim()) {
+      if (typeof p['name'] !== 'string' || !p['name'].trim()) {
         errors.push(`Preset ${i}: missing or empty name`);
         continue;
       }
-      if (!Array.isArray(p.filters)) {
+      const trimmedName = p['name'].trim();
+      if (existingNames.has(trimmedName)) {
+        errors.push(`Preset ${i}: name "${trimmedName}" already exists; skipped`);
+        continue;
+      }
+      if (!Array.isArray(p['filters'])) {
         errors.push(`Preset ${i}: missing filters array`);
         continue;
       }
@@ -199,38 +232,39 @@ export class FilterPresetManager {
       // Validate individual filters — reject objects with unknown/missing types
       const validatedFilters: unknown[] = [];
       let filterErrors = 0;
-      for (const f of p.filters as unknown[]) {
+      for (const f of p['filters']) {
         if (typeof f !== 'object' || f === null) {
           filterErrors++;
           continue;
         }
         const fObj = f as Record<string, unknown>;
-        if (typeof fObj.type !== 'string' || !KNOWN_FILTER_TYPES.has(fObj.type)) {
+        if (typeof fObj['type'] !== 'string' || !KNOWN_FILTER_TYPES.has(fObj['type'])) {
           filterErrors++;
           continue;
         }
-        if (typeof fObj.column !== 'string' || !fObj.column) {
+        if (typeof fObj['column'] !== 'string' || !fObj['column']) {
           filterErrors++;
           continue;
         }
         // Type-specific required field validation
         let typeInvalid = false;
-        switch (fObj.type) {
+        switch (fObj['type']) {
           case 'raw-sql':
-            if (typeof fObj.sql !== 'string' || typeof fObj.id !== 'string') typeInvalid = true;
+            if (typeof fObj['sql'] !== 'string' || typeof fObj['id'] !== 'string')
+              typeInvalid = true;
             break;
           case 'range':
-            if (fObj.min === undefined || fObj.max === undefined) typeInvalid = true;
+            if (fObj['min'] === undefined || fObj['max'] === undefined) typeInvalid = true;
             break;
           case 'set':
           case 'not-set':
-            if (!Array.isArray(fObj.values)) typeInvalid = true;
+            if (!Array.isArray(fObj['values'])) typeInvalid = true;
             break;
           case 'pattern':
             if (
-              typeof fObj.pattern !== 'string' ||
-              typeof fObj.mode !== 'string' ||
-              !VALID_PATTERN_MODES.has(fObj.mode)
+              typeof fObj['pattern'] !== 'string' ||
+              typeof fObj['mode'] !== 'string' ||
+              !VALID_PATTERN_MODES.has(fObj['mode'])
             )
               typeInvalid = true;
             break;
@@ -245,31 +279,32 @@ export class FilterPresetManager {
       if (filterErrors > 0) {
         errors.push(`Preset ${i}: skipped ${filterErrors} invalid filter(s)`);
       }
-      if (validatedFilters.length === 0 && (p.filters as unknown[]).length > 0) {
+      if (validatedFilters.length === 0 && (p['filters'] as unknown[]).length > 0) {
         errors.push(`Preset ${i}: no valid filters`);
         continue;
       }
 
+      existingNames.add(trimmedName);
       valid.push({
         id: crypto.randomUUID(),
-        name: p.name.trim(),
+        name: trimmedName,
         description:
-          typeof p.description === 'string' ? p.description.trim() || undefined : undefined,
+          typeof p['description'] === 'string' ? p['description'].trim() || undefined : undefined,
         filters: validatedFilters as SerializedFilter[],
         sortColumns: (() => {
-          if (!Array.isArray(p.sortColumns)) return undefined;
-          const validated = (p.sortColumns as unknown[]).filter(
+          if (!Array.isArray(p['sortColumns'])) return undefined;
+          const validated = (p['sortColumns'] as unknown[]).filter(
             (s): s is SortColumn =>
               typeof s === 'object' &&
               s !== null &&
-              typeof (s as Record<string, unknown>).column === 'string' &&
-              ((s as Record<string, unknown>).direction === 'asc' ||
-                (s as Record<string, unknown>).direction === 'desc'),
+              typeof (s as Record<string, unknown>)['column'] === 'string' &&
+              ((s as Record<string, unknown>)['direction'] === 'asc' ||
+                (s as Record<string, unknown>)['direction'] === 'desc'),
           );
           return validated.length > 0 ? validated : undefined;
         })(),
-        createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
-        updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now(),
+        createdAt: typeof p['createdAt'] === 'number' ? p['createdAt'] : Date.now(),
+        updatedAt: typeof p['updatedAt'] === 'number' ? p['updatedAt'] : Date.now(),
       });
     }
 

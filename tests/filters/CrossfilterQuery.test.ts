@@ -103,4 +103,24 @@ describe('splitCrossfilterFilters', () => {
     expect(result.hasOwnFilter).toBe(false);
     expect(result.background).toEqual([]);
   });
+
+  // Phase 5 — divergence between splitCrossfilterFilters and filtersToWhereClause.
+  // splitCrossfilterFilters has no explicit raw-sql carve-out: it filters by
+  // strict column equality. If a caller passes the synthetic key as the
+  // `column` argument, the raw-sql filter IS excluded from the background.
+  // filtersToWhereClause behaves differently — it always keeps raw-sql.
+  // This test documents the divergence so the next refactor of either
+  // function exposes the contract drift explicitly.
+  it('synthetic-key collision: column === raw-sql synthetic key excludes the raw-sql filter from background', () => {
+    const filters: Filter[] = [
+      { type: 'range', column: 'price', min: 10, max: 100 },
+      { type: 'raw-sql', column: '__raw_sql_abc__', sql: 'age > 30', id: 'abc' },
+    ];
+    const result = splitCrossfilterFilters(filters, '__raw_sql_abc__');
+    // hasOwnFilter is true (the raw-sql filter's synthetic column matches),
+    // so the function excludes the matching filter from background.
+    expect(result.hasOwnFilter).toBe(true);
+    expect(result.background).toEqual([{ type: 'range', column: 'price', min: 10, max: 100 }]);
+    expect(result.foreground).toBe(filters);
+  });
 });

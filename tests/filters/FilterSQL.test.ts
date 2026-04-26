@@ -729,5 +729,137 @@ describe('filterToSQL edge cases', () => {
       const result = filtersToWhereClause(filters);
       expect(result).toBe('(age > 30) AND (status = 1)');
     });
+
+    // Phase 5 — explicit precedence test. The exclusion predicate prefers the
+    // raw-sql carve-out over the column-name match, even when the synthesised
+    // raw-sql column key would be a literal collision target.
+    it('does not exclude a raw-sql filter even when excludeColumn matches its synthetic key', () => {
+      const filters: Filter[] = [
+        { type: 'range', column: 'price', min: 10, max: 100 },
+        { type: 'raw-sql', column: '__raw_sql_xyz__', sql: 'age > 30', id: 'xyz' },
+      ];
+      const result = filtersToWhereClause(filters, '__raw_sql_xyz__');
+      // The raw-sql filter still appears alongside the kept range filter.
+      expect(result).toBe('("price" >= 10 AND "price" < 100) AND (age > 30)');
+    });
+  });
+});
+
+// ==========================================
+// Phase 5 — additional filter coverage
+// ==========================================
+
+describe('Phase 5 — filter coverage gaps', () => {
+  describe('pattern filter NULL handling', () => {
+    // DuckDB's ILIKE / regexp_matches return NULL when the column value is
+    // NULL (3-valued logic). The library emits the predicate without an
+    // explicit `IS NOT NULL` guard — NULL rows are excluded naturally by
+    // the WHERE clause's NULL-as-FALSE semantics. Lock that no `IS NULL`
+    // accidentally creeps into the emit (which would invert the semantics).
+    it('contains mode does not emit an IS NULL guard', () => {
+      const filter: Filter = {
+        type: 'pattern',
+        column: 'name',
+        pattern: 'smith',
+        mode: 'contains',
+      };
+      const sql = filterToSQL(filter);
+      expect(sql).toContain('ILIKE');
+      expect(sql).not.toMatch(/IS NULL/i);
+      expect(sql).not.toMatch(/IS NOT NULL/i);
+    });
+
+    it('starts mode does not emit an IS NULL guard', () => {
+      const filter: Filter = { type: 'pattern', column: 'name', pattern: 'A', mode: 'starts' };
+      expect(filterToSQL(filter)).not.toMatch(/IS NULL/i);
+    });
+
+    it('ends mode does not emit an IS NULL guard', () => {
+      const filter: Filter = { type: 'pattern', column: 'name', pattern: 'son', mode: 'ends' };
+      expect(filterToSQL(filter)).not.toMatch(/IS NULL/i);
+    });
+
+    it('regex mode does not emit an IS NULL guard', () => {
+      const filter: Filter = { type: 'pattern', column: 'name', pattern: '^a.*z$', mode: 'regex' };
+      const sql = filterToSQL(filter);
+      expect(sql).toContain('regexp_matches');
+      expect(sql).not.toMatch(/IS NULL/i);
+    });
+  });
+
+  describe('special characters in value-side payloads', () => {
+    it('point with single-quoted string value escapes by doubling', () => {
+      const filter: Filter = { type: 'point', column: 'name', value: "O'Brien" };
+      expect(filterToSQL(filter)).toBe("\"name\" = 'O''Brien'");
+    });
+
+    it('point with backslash in string is preserved literally', () => {
+      // formatSQLValue does NOT escape backslashes — DuckDB's default string
+      // literal lacks E'…' interpretation, so a backslash is just a backslash.
+      const filter: Filter = { type: 'point', column: 'path', value: 'C:\\Users\\name' };
+      expect(filterToSQL(filter)).toBe('"path" = \'C:\\Users\\name\'');
+    });
+
+    it('point with newline in string is preserved literally', () => {
+      const filter: Filter = { type: 'point', column: 'note', value: 'a\nb' };
+      expect(filterToSQL(filter)).toBe('"note" = \'a\nb\'');
+    });
+
+    it('set with mixed-type values escapes quotes per element', () => {
+      const filter: Filter = { type: 'set', column: 'tag', values: ["O'Brien", 42, true, null] };
+      // null in `set.values` is formatted as the literal NULL token by formatSQLValue.
+      expect(filterToSQL(filter)).toBe("\"tag\" IN ('O''Brien', 42, TRUE, NULL)");
+    });
+
+    it('not-set with single-quoted strings escapes per element', () => {
+      const filter: Filter = { type: 'not-set', column: 'tag', values: ["it's", 'plain'] };
+      expect(filterToSQL(filter)).toBe("\"tag\" NOT IN ('it''s', 'plain')");
+    });
+
+    it('formatSQLValue rejects neither a semicolon nor an embedded "--" — escapes single quotes only', () => {
+      // Both are valid string contents in a SQL literal once quotes are doubled.
+      // DuckDB will not re-interpret them as a statement terminator or comment
+      // because they are inside the literal. Documents the trust boundary.
+      const filter: Filter = { type: 'point', column: 'note', value: "x'; DROP TABLE t; --" };
+      expect(filterToSQL(filter)).toBe("\"note\" = 'x''; DROP TABLE t; --'");
+    });
+  });
+
+  describe('range with Date bounds and inclusive upper', () => {
+    it('Date min, Date max, maxInclusive emits ISO literals with closed upper bound', () => {
+      const min = new Date('2024-01-01T00:00:00.000Z');
+      const max = new Date('2025-01-01T00:00:00.000Z');
+      const filter: Filter = {
+        type: 'range',
+        column: 'created_at',
+        min,
+        max,
+        maxInclusive: true,
+      };
+      expect(filterToSQL(filter)).toBe(
+        '("created_at" >= \'2024-01-01T00:00:00.000Z\' AND "created_at" <= \'2025-01-01T00:00:00.000Z\')',
+      );
+    });
+
+    it('Date min with Infinity max collapses to single-side predicate', () => {
+      const min = new Date('2024-01-01T00:00:00.000Z');
+      const filter: Filter = { type: 'range', column: 'created_at', min, max: Infinity };
+      expect(filterToSQL(filter)).toBe('"created_at" >= \'2024-01-01T00:00:00.000Z\'');
+    });
+  });
+
+  describe('range with bigint bounds', () => {
+    it('bigint min/max emits bare numeric literals (no quotes)', () => {
+      const filter: Filter = {
+        type: 'range',
+        column: 'rowid',
+        min: 0n as unknown as number,
+        max: 9007199254740993n as unknown as number,
+      };
+      // The discriminator types `min`/`max` as `number | string | Date` but the
+      // SQL formatter accepts bigint via formatSQLValue, so this exercises the
+      // formatter even though TypeScript would normally reject the input.
+      expect(filterToSQL(filter)).toBe('("rowid" >= 0 AND "rowid" < 9007199254740993)');
+    });
   });
 });

@@ -313,6 +313,93 @@ describe('DerivedColumnModal', () => {
     expect(exprSection.style.display).not.toBe('none');
   });
 
+  // Phase 5 — switching modes does not lose state inappropriately.
+  // The modal preserves both editors' content across mode toggles so a user
+  // can experiment with both kinds without losing a half-typed expression.
+  // resetForm() (called on close) is the wipe boundary; the radio toggle is not.
+  it('preserves expression text across a vector → expression mode round-trip', () => {
+    modal.open();
+    setEditorValue(modal.getElement(), 'price * 2 + quantity');
+
+    const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+    const exprRadio = radios[0] as HTMLInputElement;
+    const vectorRadio = radios[1] as HTMLInputElement;
+
+    // Switch to vector and back.
+    vectorRadio.checked = true;
+    vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    exprRadio.checked = true;
+    exprRadio.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Expression editor still holds the original text.
+    const cm = modal.getElement().querySelector('.cm-editor') as HTMLElement;
+    const view = EditorView.findFromDOM(cm)!;
+    expect(view.state.doc.toString()).toBe('price * 2 + quantity');
+  });
+
+  it('preserves vector textarea content across an expression → vector mode round-trip', () => {
+    modal.open();
+    const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+    const exprRadio = radios[0] as HTMLInputElement;
+    const vectorRadio = radios[1] as HTMLInputElement;
+
+    // Switch to vector mode and type.
+    vectorRadio.checked = true;
+    vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    const textarea = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+    textarea.value = '1, 2, 3';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Switch to expression and back.
+    exprRadio.checked = true;
+    exprRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    vectorRadio.checked = true;
+    vectorRadio.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Vector textarea still holds the original values.
+    const restored = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-vector-textarea') as HTMLTextAreaElement;
+    expect(restored.value).toBe('1, 2, 3');
+  });
+
+  it('clears the expression-validated flag when the mode toggles', async () => {
+    vi.spyOn(actions, 'validateExpression').mockResolvedValue({
+      valid: true,
+      type: 'float',
+      originalType: 'DOUBLE',
+    });
+
+    modal.open();
+    setEditorValue(modal.getElement(), 'price * 2');
+    const validateBtn = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-validate') as HTMLButtonElement;
+    validateBtn.click();
+
+    // After successful validation the type-preview chip displays the type.
+    const preview = modal
+      .getElement()
+      .querySelector('.dt-derived-modal-type-preview') as HTMLElement;
+    await vi.waitFor(() => {
+      expect(preview.textContent ?? '').not.toBe('');
+    });
+
+    // Toggle to vector and back. The validated state resets — the preview text
+    // and its colour cue are both cleared (resetForm is the wipe boundary, but
+    // onModeChange clears just the validation chip so a fresh mode is unbiased).
+    const radios = modal.getElement().querySelectorAll('input[type="radio"]');
+    (radios[1] as HTMLInputElement).checked = true;
+    (radios[1] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+    (radios[0] as HTMLInputElement).checked = true;
+    (radios[0] as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(preview.textContent).toBe('');
+    expect(preview.style.color).toBe('');
+  });
+
   // =========================================
   // Expression Validation
   // =========================================

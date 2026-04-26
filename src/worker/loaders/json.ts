@@ -10,6 +10,7 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  type LoaderContext,
 } from './common';
 import type { LoadResult, JSONLoadOptions } from './types';
 
@@ -31,7 +32,7 @@ function isNDJSON(data: string): boolean {
   if (lines.length < 2) return false;
 
   try {
-    const first = JSON.parse(lines[0]);
+    const first = JSON.parse(lines[0]!);
     // NDJSON has objects on each line, not an array
     return typeof first === 'object' && !Array.isArray(first);
   } catch {
@@ -48,14 +49,17 @@ function isNDJSON(data: string): boolean {
  *
  * @param data - JSON content as string or ArrayBuffer
  * @param options - JSON loading options
+ * @param context - Optional explicit { db, conn }; see {@link loadCSV} for
+ *   the rationale. Production callers (worker.ts) omit it.
  * @returns LoadResult with table name, row count, and columns
  */
 export async function loadJSON(
   data: string | ArrayBuffer,
   options: JSONLoadOptions = {},
+  context?: LoaderContext,
 ): Promise<LoadResult> {
-  const db = getDatabase();
-  const conn = getConnection();
+  const db = context?.db ?? getDatabase();
+  const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
   // Set timezone for TIMESTAMPTZ columns (default: UTC)

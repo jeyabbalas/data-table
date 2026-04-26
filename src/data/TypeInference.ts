@@ -109,9 +109,9 @@ function isUSDate(value: string): boolean {
   const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!match) return false;
 
-  const month = parseInt(match[1], 10);
-  const day = parseInt(match[2], 10);
-  const year = parseInt(match[3], 10);
+  const month = parseInt(match[1]!, 10);
+  const day = parseInt(match[2]!, 10);
+  const year = parseInt(match[3]!, 10);
 
   // Validate ranges
   if (month < 1 || month > 12) return false;
@@ -120,7 +120,7 @@ function isUSDate(value: string): boolean {
 
   // Additional validation for days in month
   const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (day > daysInMonth[month - 1]) return false;
+  if (day > daysInMonth[month - 1]!) return false;
 
   return true;
 }
@@ -134,9 +134,9 @@ function isEUDate(value: string): boolean {
   const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!match) return false;
 
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  const year = parseInt(match[3], 10);
+  const day = parseInt(match[1]!, 10);
+  const month = parseInt(match[2]!, 10);
+  const year = parseInt(match[3]!, 10);
 
   // Validate ranges
   if (day < 1 || day > 31) return false;
@@ -145,7 +145,7 @@ function isEUDate(value: string): boolean {
 
   // Additional validation for days in month
   const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (day > daysInMonth[month - 1]) return false;
+  if (day > daysInMonth[month - 1]!) return false;
 
   return true;
 }
@@ -159,8 +159,8 @@ function isAmbiguousSlashDate(value: string): boolean {
   const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!match) return false;
 
-  const first = parseInt(match[1], 10);
-  const second = parseInt(match[2], 10);
+  const first = parseInt(match[1]!, 10);
+  const second = parseInt(match[2]!, 10);
 
   // If both numbers are <= 12, it's ambiguous
   return first >= 1 && first <= 12 && second >= 1 && second <= 12;
@@ -176,9 +176,9 @@ function isTime(value: string): boolean {
   const match = trimmed.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/);
   if (!match) return false;
 
-  const hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const seconds = parseInt(match[3], 10);
+  const hours = parseInt(match[1]!, 10);
+  const minutes = parseInt(match[2]!, 10);
+  const seconds = parseInt(match[3]!, 10);
 
   // Validate ranges
   return (

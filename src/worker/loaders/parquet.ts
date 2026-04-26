@@ -10,6 +10,7 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  type LoaderContext,
 } from './common';
 import type { LoadResult, ParquetLoadOptions } from './types';
 
@@ -27,14 +28,17 @@ function generateTableName(): string {
  *
  * @param data - Parquet content as ArrayBuffer
  * @param options - Parquet loading options
+ * @param context - Optional explicit { db, conn }; see {@link loadCSV} for
+ *   the rationale. Production callers (worker.ts) omit it.
  * @returns LoadResult with table name, row count, and columns
  */
 export async function loadParquet(
   data: ArrayBuffer,
   options: ParquetLoadOptions = {},
+  context?: LoaderContext,
 ): Promise<LoadResult> {
-  const db = getDatabase();
-  const conn = getConnection();
+  const db = context?.db ?? getDatabase();
+  const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
   // Set timezone for TIMESTAMPTZ columns (default: UTC)

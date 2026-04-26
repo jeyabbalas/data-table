@@ -10,6 +10,7 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  type LoaderContext,
 } from './common';
 import type { LoadResult, CSVLoadOptions } from './types';
 
@@ -27,14 +28,20 @@ function generateTableName(): string {
  *
  * @param data - CSV content as string or ArrayBuffer
  * @param options - CSV loading options
+ * @param context - Optional explicit { db, conn } to use instead of the
+ *   module-level singletons in `./duckdb.ts`. When omitted, falls back to
+ *   `getDatabase()` / `getConnection()`. Internal seam for tests that drive
+ *   loaders against a Node-built DuckDB without going through the worker
+ *   IPC; production callers (worker.ts) omit it.
  * @returns LoadResult with table name, row count, and columns
  */
 export async function loadCSV(
   data: string | ArrayBuffer,
   options: CSVLoadOptions = {},
+  context?: LoaderContext,
 ): Promise<LoadResult> {
-  const db = getDatabase();
-  const conn = getConnection();
+  const db = context?.db ?? getDatabase();
+  const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
   // Set timezone for TIMESTAMPTZ columns (default: UTC)
@@ -161,8 +168,9 @@ export async function loadCSV(
  * Drop a table from DuckDB
  *
  * @param tableName - Name of the table to drop
+ * @param context - Optional explicit { conn }; see {@link loadCSV} for rationale.
  */
-export async function dropTable(tableName: string): Promise<void> {
-  const conn = getConnection();
+export async function dropTable(tableName: string, context?: LoaderContext): Promise<void> {
+  const conn = context?.conn ?? getConnection();
   await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
 }

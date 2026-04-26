@@ -15,6 +15,7 @@ export default tseslint.config(
       'tests/fixtures/datasets/**',
       '.changeset/**',
       '*.cjs',
+      'tests/helpers/duckdbNodeWorkerBoot.cjs',
     ],
   },
 

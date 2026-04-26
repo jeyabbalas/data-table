@@ -58,8 +58,8 @@ function isIntervalObject(obj: Record<string, unknown>): boolean {
   return (
     'months' in obj &&
     'days' in obj &&
-    (typeof obj.months === 'number' || typeof obj.months === 'bigint') &&
-    (typeof obj.days === 'number' || typeof obj.days === 'bigint')
+    (typeof obj['months'] === 'number' || typeof obj['months'] === 'bigint') &&
+    (typeof obj['days'] === 'number' || typeof obj['days'] === 'bigint')
   );
 }
 
@@ -70,15 +70,15 @@ function isIntervalObject(obj: Record<string, unknown>): boolean {
  * Output: "1 year 2 months 3 days 04:05:06"
  */
 function intervalObjectToString(obj: Record<string, unknown>): string {
-  const months = Number(obj.months) || 0;
-  const days = Number(obj.days) || 0;
+  const months = Number(obj['months']) || 0;
+  const days = Number(obj['days']) || 0;
 
   // DuckDB WASM may use "nanoseconds" (Arrow MonthDayNano) or "micros" (DuckDB internal)
   let totalMicros = 0;
   if ('nanoseconds' in obj) {
-    totalMicros = Math.floor(Number(obj.nanoseconds) / 1000);
+    totalMicros = Math.floor(Number(obj['nanoseconds']) / 1000);
   } else if ('micros' in obj) {
-    totalMicros = Number(obj.micros) || 0;
+    totalMicros = Number(obj['micros']) || 0;
   }
 
   const parts: string[] = [];

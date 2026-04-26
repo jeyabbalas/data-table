@@ -5,7 +5,19 @@
  * that can be reused across CSV, JSON, and other loaders.
  */
 
-import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+
+/**
+ * Optional explicit DuckDB context for loader entry points (`loadCSV`,
+ * `loadJSON`, `loadParquet`). When omitted, the loaders fall back to the
+ * module-level singletons in `./duckdb.ts`. Internal seam for tests that
+ * drive loaders against a Node-built DuckDB without going through the
+ * worker IPC.
+ */
+export interface LoaderContext {
+  db?: AsyncDuckDB;
+  conn?: AsyncDuckDBConnection;
+}
 
 /**
  * Quote a SQL identifier (table/column name) with proper escaping.
@@ -110,9 +122,9 @@ function isTimeFormat(value: string): boolean {
   }
   // Validate time components are in valid range
   const parts = trimmed.split(':');
-  const hours = parseInt(parts[0], 10);
-  const minutes = parseInt(parts[1], 10);
-  const seconds = parseFloat(parts[2]);
+  const hours = parseInt(parts[0]!, 10);
+  const minutes = parseInt(parts[1]!, 10);
+  const seconds = parseFloat(parts[2]!);
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds < 60;
 }
 
@@ -457,12 +469,12 @@ export async function enhanceSchemaTypes(
   describeRows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
   // Get all column names in original order (important for preserving order during conversion)
-  let allColumns = describeRows.map((row) => String(row.column_name));
+  let allColumns = describeRows.map((row) => String(row['column_name']));
 
   // Find all VARCHAR columns
   const stringColumns = describeRows
-    .filter((row) => String(row.column_type).toUpperCase() === 'VARCHAR')
-    .map((row) => String(row.column_name));
+    .filter((row) => String(row['column_type']).toUpperCase() === 'VARCHAR')
+    .map((row) => String(row['column_name']));
 
   if (stringColumns.length === 0) {
     return describeRows;

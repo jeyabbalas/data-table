@@ -29,6 +29,9 @@
   "engines": {
     "node": ">=18"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite --config vite.demo.config.ts",
     "build": "npm run check:css-vars && tsc --noEmit && vite build && tsc -p tsconfig.build.json",
@@ -38,7 +41,8 @@
     "test:coverage": "vitest --coverage",
     "check:css-vars": "node scripts/check-css-vars.mjs",
     "docs:api": "typedoc",
-    "docs:api:check": "typedoc --emit none"
+    "docs:api:check": "typedoc --emit none",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "data-table",

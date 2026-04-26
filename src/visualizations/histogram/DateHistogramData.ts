@@ -274,7 +274,6 @@ function parseDate(value: string | null): Date | null {
 
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) {
-    console.warn(`[DateHistogramData] Failed to parse date: ${value}`);
     return null;
   }
 

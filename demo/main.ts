@@ -7,19 +7,20 @@
  * auto-restore across page refreshes).
  */
 
+import '@jeyabbalas/data-table/styles';
 import {
   VERSION,
   createDataTable,
   quoteIdentifier,
   type ColorScheme,
   type DataTable,
-} from '../src/index';
+} from '@jeyabbalas/data-table';
 import {
   isNumericType,
   isDateType,
   isTimeType,
   isCategoricalType,
-} from '../src/advanced';
+} from '@jeyabbalas/data-table/advanced';
 
 // ----- DOM refs -----
 const versionEl = document.getElementById('version')!;
@@ -35,7 +36,6 @@ const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButt
 const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const remountBtn = document.getElementById('remount-btn') as HTMLButtonElement;
 const themeRadios = Array.from(
   document.querySelectorAll<HTMLInputElement>('input[name="theme"]'),
 );
@@ -193,13 +193,9 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
         colorScheme: currentScheme,
       });
       wireTableEvents(table);
-      // Demo-only: expose the table for DevTools inspection of lifecycle,
-      // destroy guards, and sticky-ready behavior. Remove before shipping.
-      (window as unknown as { __table?: DataTable | null }).__table = table;
     } else {
       await table.loadData(source, { tableName });
     }
-    remountBtn.disabled = false;
 
     updateTableInfo();
 
@@ -290,44 +286,6 @@ exportBtn.addEventListener('click', () => table?.openExportDialog());
 undoBtn.addEventListener('click', () => table?.actions.undo());
 redoBtn.addEventListener('click', () => table?.actions.redo());
 resetBtn.addEventListener('click', () => table?.actions.resetToInitial());
-// Demo-only: destroy and recreate the table against the current session.
-// Used for lifecycle stress testing (post-destroy guards, AbortSignal leaks,
-// EventEmitter resilience). The last-session pointer + Parquet cache handle
-// the data reload; this button only exercises the facade lifecycle.
-remountBtn.addEventListener('click', async () => {
-  if (!table) return;
-  remountBtn.disabled = true;
-  try {
-    await table.destroy();
-  } catch {
-    /* best effort */
-  }
-  table = null;
-  (window as unknown as { __table?: DataTable | null }).__table = null;
-
-  // Reuse the normal auto-restore path — reads last-session + cached Parquet.
-  try {
-    const raw = localStorage.getItem(LAST_SESSION_KEY);
-    if (!raw) {
-      updateInfo('Load a file or URL to get started.');
-      return;
-    }
-    const session: LastSession = JSON.parse(raw);
-    const cached = await loadCachedData(session.tableName);
-    if (cached) {
-      const bytesArray = new Uint8Array(cached.buffer as unknown as ArrayBufferLike);
-      const blob = new Blob([bytesArray as unknown as BlobPart]);
-      const file = new File([blob], cached.sourceName + '.parquet');
-      void loadSource(file, session.tableName);
-    } else if (session.type === 'url') {
-      void loadSource(session.source, session.tableName);
-    } else {
-      updateInfo('Remount: no cached data — load a file or URL to continue.');
-    }
-  } catch {
-    updateInfo('Load a file or URL to get started.');
-  }
-});
 
 clearSessionBtn.addEventListener('click', async () => {
   const tableName = table?.state.baseTableName.get() ?? table?.state.tableName.get() ?? null;

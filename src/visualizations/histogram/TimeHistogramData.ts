@@ -98,7 +98,6 @@ export function parseTimeToSeconds(value: string | null): number | null {
   // Match HH:MM:SS with optional fractional seconds
   const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/);
   if (!match) {
-    console.warn(`[TimeHistogramData] Failed to parse time: ${value}`);
     return null;
   }
 
@@ -109,7 +108,6 @@ export function parseTimeToSeconds(value: string | null): number | null {
 
   // Validate ranges
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
-    console.warn(`[TimeHistogramData] Invalid time values: ${value}`);
     return null;
   }
 

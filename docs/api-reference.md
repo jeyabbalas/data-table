@@ -22,6 +22,7 @@ Every row links back to the source of truth (`src/<file>:<line>`). When the sour
 - [Column-header tooltip content](#column-header-tooltip-content)
 - [Annotation JSON format](#annotation-json-format)
 - [Stats panels](#stats-panels)
+- [SQL editor primitives](#sql-editor-primitives)
 - [Serialization helpers](#serialization-helpers)
 - [Browser support probe](#browser-support-probe)
 - [i18n (`Strings`)](#i18n-strings)
@@ -1137,6 +1138,184 @@ private async fetch(): Promise<void> {
   }
 }
 ```
+
+---
+
+## SQL editor primitives
+
+Building blocks for assembling a CodeMirror SQL editor *outside* the data
+table — for filter-preset composers, derived-column wizards, query-template
+forms, etc. The helpers ship the same DuckDB SQL grammar, schema- and
+function-aware autocomplete source, and theme that the bundled
+[`CodeMirrorExpressionEditor`](#tier-2-exports) uses internally; the
+host owns layout, sizing, keymap, and the autocompletion UI surface.
+
+Re-exported from `@jeyabbalas/data-table/advanced`. Source:
+`src/sql-editor/extensions.ts`, `src/sql-editor/duckdbFunctionDetails.ts`,
+`src/sql-editor/theme.ts`. See also the [SQL editor primitives
+guide](./guides/sql-editor-primitives.md) and runnable
+[`examples/14-standalone-sql-editor/`](../examples/14-standalone-sql-editor/).
+
+Two intended paths: **live-schema**, paired with a `DataTable` via
+[`actions.getCompletionContext()`](#actions-methods) plus
+`Compartment.reconfigure()` on `loadComplete` / `derivedChange`; and
+**literal-schema**, with an ad-hoc `[{name, type}, …]` array fed through
+`buildCompletionContext` once.
+
+### `createSqlExtensions(context, options?)`
+
+```ts
+function createSqlExtensions(
+  context: CompletionContext,
+  options?: SqlExtensionOptions,
+): Extension[];
+```
+
+Returns a CodeMirror `Extension[]` containing the PostgreSQL grammar, the
+schema/function autocomplete *source* (a `PostgreSQL.language.data.of({
+autocomplete: ... })` extension), and — when `includeTheme` is left at its
+default `true` — `dataTableTheme` and `dataTableHighlighting`. Drop it
+into any `EditorState.create({ extensions })` alongside whatever other
+extensions the host wants (`keymap`, `placeholder`, sizing, gutters).
+
+**The returned array does not include `autocompletion()`.** The helper
+ships the autocomplete source (the language-data facet); the autocomplete
+UI is the host's responsibility. Without `autocompletion()` from
+`@codemirror/autocomplete` in your extension array, no dropdown ever
+appears (`src/sql-editor/extensions.ts:156-158`). The bundled
+`CodeMirrorExpressionEditor` adds it explicitly
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`).
+
+Wrap the result in a `Compartment` to enable schema swaps via
+`Compartment.reconfigure()` without rebuilding the editor — preserves undo
+history, focus, selection, and scroll position. The bundled
+`CodeMirrorExpressionEditor` uses the same pattern internally
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:142-148`).
+
+### `buildCompletionContext(columns, options?)`
+
+```ts
+function buildCompletionContext(
+  columns: ReadonlyArray<{
+    name: string;
+    type?: string | null;
+    originalType?: string | null;
+    isDerived?: boolean | null;
+  }>,
+  options?: { functions?: readonly string[] },
+): CompletionContext;
+```
+
+Tiny shape-normalizer for the literal-schema path. Accepts inputs as terse
+as `[{name: 'foo'}]` or as full as a `ColumnSchema[]`. When both
+`originalType` and `type` are present, `originalType` wins (matches the
+data-table's internal behavior). Unknown types fall back to an empty
+string. `isDerived` defaults to `false`. The
+[`CompletionContext`](#derived-columns) type the helper produces is the
+same one [`actions.getCompletionContext()`](#actions-methods) returns —
+they are interchangeable inputs to `createSqlExtensions`.
+
+System columns are **not** filtered automatically. If your column array
+came from `actions.tableSchema` or any raw source, filter
+`name === '__rowid__'` before passing it in — `actions.getCompletionContext()`
+already filters the synthetic id, but `buildCompletionContext` does not.
+
+### `SqlExtensionOptions`
+
+```ts
+interface SqlExtensionOptions {
+  includeTheme?: boolean;          // default true
+  functions?: readonly DuckDBFunctionInfo[] | readonly string[];
+  upperCaseKeywords?: boolean;     // default true
+}
+```
+
+| Field | Default | Effect |
+|---|---|---|
+| `includeTheme` | `true` | Append `dataTableTheme` + `dataTableHighlighting`. Set `false` if the host owns presentation, or wants to add the theme outside the `Compartment` so it survives reconfiguration without flicker (the pattern the bundled editor uses). |
+| `functions` | `undefined` | Override the function autocomplete list. See **Function-list precedence** below. |
+| `upperCaseKeywords` | `true` | Format SQL keywords as uppercase. Matches DuckDB's preferred style and the bundled `CodeMirrorExpressionEditor`. |
+
+### Function-list precedence
+
+Resolution order (`src/sql-editor/extensions.ts:140-142`):
+
+1. `options.functions` (if not `undefined`)
+2. `context.functions` (if not `undefined`)
+3. `DUCKDB_FUNCTION_DETAILS` (built-in fallback)
+
+`undefined` falls through; `[]` (empty array) does **not** fall through —
+it disables function autocomplete entirely. The helper uses `??`, which
+only treats `null` / `undefined` as missing.
+
+Shape detection runs once on the resolved list, looking at the first
+element (`src/sql-editor/extensions.ts:185-198`):
+
+| Shape | Completion fields produced |
+|---|---|
+| `DuckDBFunctionInfo[]` | `label` = `name`, `detail` = `category`, `info` = `description`, `type: 'function'`, `boost: -1` |
+| `string[]` | `label` = name, `type: 'function'`, `boost: -1` (no `detail` / `info`) |
+
+Mixed arrays are not supported — pass either rich objects or plain names,
+not both. Column completions use `type: 'variable'`, `detail` = the
+column's DuckDB type, `boost: 0` (so columns rank above functions in the
+dropdown).
+
+### `DUCKDB_FUNCTION_DETAILS` and types
+
+```ts
+interface DuckDBFunctionInfo {
+  name: string;                    // lowercase, matches DuckDB resolution
+  category: DuckDBFunctionCategory;
+  description: string;
+}
+
+type DuckDBFunctionCategory =
+  | 'aggregate' | 'numeric' | 'string' | 'date/time'
+  | 'casting'   | 'conditional' | 'list' | 'struct'
+  | 'window'    | 'utility';
+
+const DUCKDB_FUNCTION_DETAILS: readonly DuckDBFunctionInfo[];   // 176 entries
+const DUCKDB_FUNCTIONS:        readonly string[];               // names-only, derived
+```
+
+`DUCKDB_FUNCTION_DETAILS` is the curated list used as the built-in
+fallback — `Object.freeze`-d at array level and entry level so consumers
+cannot mutate it accidentally. `DUCKDB_FUNCTIONS` is now derived from
+`DUCKDB_FUNCTION_DETAILS.map((f) => f.name)`, so the two cannot drift; pass
+the constant to `options.functions` for a fixed names-only surface.
+
+### `dataTableTheme`, `dataTableHighlighting`
+
+The CodeMirror theme and `HighlightStyle` the bundled
+`CodeMirrorExpressionEditor` uses, re-exported for hosts that opt out of
+`includeTheme` and want to apply the theme separately — for example,
+outside a `Compartment` so it survives schema reconfiguration without
+flicker. Both reference `--dt-*` CSS variables (`--dt-bg`, `--dt-border`,
+`--dt-primary`, `--dt-text`, `--dt-syntax-string`, `--dt-syntax-type`,
+…), so the editor automatically follows the table's color scheme. Source:
+`src/sql-editor/theme.ts`.
+
+### Live-schema vs literal-schema usage
+
+Walk-through prose with full code blocks lives in the [SQL editor
+primitives guide](./guides/sql-editor-primitives.md). The short version:
+
+- **Live-schema** — call
+  `() => table.actions.getCompletionContext()` as a thunk (not a snapshot)
+  so subsequent refreshes see the latest schema; wrap
+  `createSqlExtensions(...)` in a `Compartment`; subscribe to
+  `loadComplete` and `derivedChange` and call
+  `compartment.reconfigure(createSqlExtensions(getContext()))` from each.
+- **Literal-schema** — call `buildCompletionContext([{name, type}, …])`
+  once and feed it through `createSqlExtensions(ctx)`. Refresh by
+  rebuilding the context and dispatching a `reconfigure` if your schema
+  source changes.
+
+For the in-table case (the SQL filter modal, the derived-column expression
+input), use [`CodeMirrorExpressionEditor`](#tier-2-exports) — it wraps
+exactly these primitives and adds the autocompletion UI, keymap, history,
+and theme bookkeeping for you.
 
 ---
 

@@ -20,6 +20,11 @@ machine.
 - Custom column-stats panels — replace the built-in two-line stats
   display in a column header with your own DOM and DuckDB queries via
   `BaseStatsPanel` + per-instance `StatsPanelRegistry`
+- Public CodeMirror SQL editor primitives — embed a schema- and
+  DuckDB-aware SQL editor anywhere in your own UI shell via
+  `createSqlExtensions` / `buildCompletionContext` (filter-preset
+  composers, derived-column wizards, query-template editors); live or
+  literal schema, optional library theme
 - Filter presets (import/export JSON)
 - Undo/redo and IndexedDB session persistence
 - CSV / JSON / Parquet export
@@ -73,7 +78,7 @@ Full documentation lives under [`docs/`](./docs/README.md). A quick index:
 
 **Guides**
 - [Loading data](./docs/guides/loading-data.md) · [Filters](./docs/guides/filters.md) · [Derived columns](./docs/guides/derived-columns.md) · [Events](./docs/guides/events.md)
-- [Annotations](./docs/guides/annotations.md) · [Column-header tooltips](./docs/guides/column-header-tooltips.md) · [Visualizations](./docs/guides/visualizations.md) · [Stats panels](./docs/guides/stats-panels.md)
+- [Annotations](./docs/guides/annotations.md) · [Column-header tooltips](./docs/guides/column-header-tooltips.md) · [Visualizations](./docs/guides/visualizations.md) · [Stats panels](./docs/guides/stats-panels.md) · [SQL editor primitives](./docs/guides/sql-editor-primitives.md)
 - [Session persistence](./docs/guides/session-persistence.md) · [Theming](./docs/guides/theming.md) · [i18n](./docs/guides/i18n.md) · [Accessibility](./docs/guides/accessibility.md) · [Multi-table dashboards](./docs/guides/multi-table.md)
 - [CSP and offline](./docs/guides/csp-and-offline.md) · [Filter presets](./docs/guides/filter-presets.md)
 

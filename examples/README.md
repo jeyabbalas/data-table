@@ -1,6 +1,6 @@
 # Examples
 
-Thirteen single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
+Fourteen single-feature examples for `@jeyabbalas/data-table`. Each one is compact, imports from `@jeyabbalas/data-table` (not `../src/`), and demonstrates one focused pattern.
 
 ## Run
 
@@ -10,7 +10,7 @@ From the repo root:
 npm run dev
 ```
 
-Then open `http://localhost:5173/data-table/` and click **thirteen focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
+Then open `http://localhost:5173/data-table/` and click **fourteen focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
 
 No pre-build needed — Vite serves the library from source via aliases (see `vite.demo.config.ts`).
 
@@ -33,5 +33,6 @@ The same examples are also browsable on the deployed demo under [`/data-table/ex
 | 11 | [`11-annotations`](./11-annotations/) | Programmatic row / column / cell annotations with severity, JSON round-trip, IndexedDB persistence, intersection popover | `table.annotations.*` (`add`, `addMany`, `getByCell`, `setSeverityFilter`, `toJSON`, `loadJSON`, `on('change', …)`) |
 | 12 | [`12-column-header-tooltips`](./12-column-header-tooltips/) | Structured popover (title / description / items + enum chips) anchored on the column-name span; XSS-safe; stateless demo (`persistence: false`) | `actions.setColumnHeaderTooltip`, `actions.getColumnHeaderTooltip` |
 | 13 | [`13-custom-stats-panel`](./13-custom-stats-panel/) | Replace the column-header `.dt-col-stats` slot with a `BaseStatsPanel` subclass. Numeric panel does `n · μ · σ` via a custom `AVG` / `STDDEV_POP` query; categorical panel does `top: <value> (<pct>%)`; both re-query on every filter change with a per-panel `fetchSeq` stale-result guard | `BaseStatsPanel`, `StatsPanelRegistry`, `StatsPanelOptions` |
+| 14 | [`14-standalone-sql-editor`](./14-standalone-sql-editor/) | Two host-built CodeMirror SQL editors mounted *outside* the data table — filter SQL composer + derived expression composer — sharing the table's live schema via `actions.getCompletionContext()` and refreshing on every `derivedChange` via a single `Compartment.reconfigure()`. Demonstrates host-owned theming via `--dt-*` CSS variables, scoped autocomplete tooltips via `tooltipClass`, and the `validateSQLFilter` / `validateExpression` Apply-gate pattern | `createSqlExtensions`, `buildCompletionContext`, `DUCKDB_FUNCTION_DETAILS`, `dataTableTheme` |
 
 For the full API, see [`docs/api-reference.md`](../docs/api-reference.md).

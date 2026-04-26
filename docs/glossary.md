@@ -95,6 +95,21 @@ embedding apps that already own a column registry typically opt out via
 popover — both can be visible simultaneously.
 See: [Column-header tooltips](./guides/column-header-tooltips.md) · Source: `src/core/columnHeaderTooltip.ts`
 
+### CompletionContext
+The schema-and-functions snapshot that drives autocomplete in the SQL
+expression / filter editors. Shape: `{ columns: Array<{ name, type,
+isDerived }>; functions?: string[] }`. Two canonical entry points: the
+Tier-1 `actions.getCompletionContext()` reads live state and filters the
+synthetic `__rowid__`; the Tier-2 `buildCompletionContext(columns,
+options?)` (from `/advanced`) normalizes any column-like input
+(`ColumnSchema[]`, ad-hoc `[{name, type, originalType?, isDerived?}, …]`,
+…) into the same shape — `originalType` wins over `type` when both are
+present, unknown types fall back to `''`, system columns are *not*
+filtered automatically. Consumed by the bundled
+`CodeMirrorExpressionEditor` and by the public
+[`createSqlExtensions`](#sql-editor-primitives) helper.
+See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/derived/types.ts`, `src/sql-editor/extensions.ts`
+
 ### Computed
 A read-only reactive primitive derived from one or more [Signals](#signal).
 Recomputes lazily when a dependency changes and caches the result until the
@@ -126,6 +141,22 @@ pre-computed array the library registers as a DuckDB table function. Changes
 kick off [Reconciliation](#reconciliation) so the UI stays aligned with the
 underlying view.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
+
+### DuckDBFunctionInfo / DuckDBFunctionCategory
+Curated metadata used by the [SQL editor primitives](#sql-editor-primitives)
+(Tier-2, `@jeyabbalas/data-table/advanced`) to populate function
+autocomplete. `DuckDBFunctionInfo` is `{ name; category; description }`;
+`category` becomes the autocomplete `detail` chip (`'aggregate' |
+'numeric' | 'string' | 'date/time' | 'casting' | 'conditional' | 'list' |
+'struct' | 'window' | 'utility'`) and `description` becomes the
+side-panel `info` tooltip. The exported `DUCKDB_FUNCTION_DETAILS` array
+is `Object.freeze`-d at both array and entry level (176 entries); pass it
+or a filtered subset through `createSqlExtensions(ctx, { functions:
+subset })` to scope the dropdown, pass a `string[]` for names-only
+completions, or pass `[]` to disable function autocomplete entirely. The
+older names-only `DUCKDB_FUNCTIONS` constant is now derived from
+`DUCKDB_FUNCTION_DETAILS` so the two cannot drift.
+See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/sql-editor/duckdbFunctionDetails.ts`
 
 ### ExpressionColumnDef
 A [Derived Column](#derived-column) definition whose values come from a SQL
@@ -278,6 +309,27 @@ change. Underpins `TableState` — every public field (`filters`, `sortColumns`,
 `visibleColumns`, …) is a signal that UI components read and `actions.*`
 methods write. Batched writes use `batch(() => { … })` to coalesce notifications.
 See: [State model](./concepts/state-model.md) · [Architecture](./concepts/architecture.md) · Source: `src/core/Signal.ts`
+
+### SQL editor primitives
+Building blocks (Tier-2, `@jeyabbalas/data-table/advanced`) for assembling
+a CodeMirror SQL editor *outside* the data table — for filter-preset
+composers, derived-column wizards, query-template forms.
+`createSqlExtensions(context, options?)` returns a CodeMirror
+`Extension[]` carrying the PostgreSQL grammar, the schema/function
+autocomplete *source*, and (optionally) the library's theme;
+`buildCompletionContext(columns, options?)` normalizes any column-like
+array into the [`CompletionContext`](#completioncontext) shape. Function
+autocomplete defaults to the curated 176-entry `DUCKDB_FUNCTION_DETAILS`
+list (see [DuckDBFunctionInfo](#duckdbfunctioninfo--duckdbfunctioncategory))
+— `options.functions` overrides; `[]` disables (does *not* fall through).
+The bundled `CodeMirrorExpressionEditor` uses the same primitives
+internally for the in-table case. The helper ships the autocomplete
+*source*, not the autocomplete UI — hosts must add `autocompletion()`
+from `@codemirror/autocomplete` themselves
+(`src/sql-editor/extensions.ts:156-158`). Live-schema refresh uses
+CodeMirror `Compartment.reconfigure()` so undo history, focus, and
+scroll position survive schema swaps.
+See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/sql-editor/extensions.ts`, `src/sql-editor/duckdbFunctionDetails.ts`, `src/sql-editor/theme.ts`
 
 ### StateSnapshot
 The lightweight in-memory capture of user-manipulable view state (filters,

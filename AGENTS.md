@@ -37,6 +37,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts).
 - Histograms and value-counts in column headers; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
 - Custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry` — replace the `.dt-col-stats` slot with your own DOM and DuckDB queries (src/visualizations/BaseStatsPanel.ts, src/visualizations/StatsPanelRegistry.ts, src/visualizations/StatsPanelCoordinator.ts).
+- Public SQL editor primitives — host-app embedded CodeMirror SQL editors via `createSqlExtensions` / `buildCompletionContext` from `/advanced`; live-schema refresh via `Compartment.reconfigure` (src/sql-editor/extensions.ts).
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
@@ -368,6 +369,70 @@ const table = await createDataTable({ container, source: '/data.csv', statsPanel
 
 The registry is empty by default — leaving a column type unregistered falls back to the library's built-in `formatDefaultStats` HTML, so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:128-216` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
 
+### (n) Standalone SQL editor — host-app embedded, schema-aware
+
+```ts
+import {
+  buildCompletionContext,
+  createSqlExtensions,
+} from '@jeyabbalas/data-table/advanced';
+import type { CompletionContext, DataTable } from '@jeyabbalas/data-table';
+import { Compartment, EditorState } from '@codemirror/state';
+import { EditorView, keymap, placeholder } from '@codemirror/view';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { autocompletion } from '@codemirror/autocomplete';
+
+// ----- Live-schema path (paired with a DataTable) -----
+
+const sqlCompartment = new Compartment();
+const getContext = () => table.actions.getCompletionContext();   // thunk, not snapshot
+
+const view = new EditorView({
+  state: EditorState.create({
+    doc: '',
+    extensions: [
+      // Library contribution: SQL grammar + schema/function autocomplete source.
+      // Wrapped in a Compartment so we can swap on schema change without re-mounting.
+      sqlCompartment.of(createSqlExtensions(getContext())),
+
+      // Standard CodeMirror plumbing the host wires up itself.
+      // createSqlExtensions ships the autocomplete *source*, not the UI — add it here
+      // or no dropdown ever appears (src/sql-editor/extensions.ts:156-158).
+      autocompletion({ tooltipClass: () => 'my-app-sql-autocomplete' }),
+      keymap.of([...defaultKeymap, ...historyKeymap]),
+      history(),
+      placeholder('e.g. order_total_usd > 100'),
+    ],
+  }),
+  parent: hostEl,
+});
+
+// Refresh autocomplete when the schema changes — preserves undo history,
+// focus, scroll, and the current document.
+const refresh = () => {
+  view.dispatch({
+    effects: sqlCompartment.reconfigure(createSqlExtensions(getContext())),
+  });
+};
+table.on('loadComplete', refresh);
+table.on('derivedChange', refresh);
+
+// ----- Literal-schema variant (no DataTable required) -----
+//
+// const ctx = buildCompletionContext([
+//   { name: 'price', type: 'DOUBLE' },
+//   { name: 'qty',   type: 'BIGINT' },
+// ]);
+// new EditorView({
+//   state: EditorState.create({
+//     extensions: [createSqlExtensions(ctx), autocompletion()],
+//   }),
+//   parent: hostEl,
+// });
+```
+
+`createSqlExtensions` ships the autocomplete *source* — add `autocompletion()` yourself or no dropdown appears (`src/sql-editor/extensions.ts:156-158`). For the in-table case, use the bundled `CodeMirrorExpressionEditor` (also exported from `/advanced`), which wraps these primitives and adds the UI, keymap, and theme. Function-list precedence: `options.functions` ▶ `context.functions` ▶ `DUCKDB_FUNCTION_DETAILS`; `[]` disables function autocomplete and does *not* fall through. See [`docs/guides/sql-editor-primitives.md`](./docs/guides/sql-editor-primitives.md) for the full walk-through and [`examples/14-standalone-sql-editor/`](./examples/14-standalone-sql-editor/) for a runnable demo.
+
 ---
 
 ## 4. Default config cheat-sheet
@@ -435,6 +500,7 @@ Reach into `/advanced` (`@jeyabbalas/data-table/advanced`) only when at least on
 - **Manual undo/redo capture.** You have imperative mutations outside `StateActions` and need to push your own snapshots via `UndoManager` + `captureSnapshot`/`applySnapshot`.
 - **Custom export pipeline.** You call `exportFromState`/`exportJSONFromState`/`exportParquetFromState` directly (e.g., to pipe rows into a download worker).
 - **Standalone filter / preset UI.** Mount `FilterBar` / `FilterPanel` / `FilterPresetPanel` independently.
+- **Custom SQL editor outside the data table.** Build your own CodeMirror editor — for filter-preset composers, query-template forms, or derived-column wizards mounted in your own UI shell — using `createSqlExtensions` + `buildCompletionContext`. The bundled `CodeMirrorExpressionEditor` handles the in-table case; reach for the primitives when the editor lives elsewhere.
 
 Signals that you're reaching unnecessarily:
 
@@ -500,7 +566,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 **Guides (task-oriented walkthroughs)**
 - [`docs/guides/loading-data.md`](./docs/guides/loading-data.md), [`filters.md`](./docs/guides/filters.md), [`derived-columns.md`](./docs/guides/derived-columns.md), [`events.md`](./docs/guides/events.md), [`visualizations.md`](./docs/guides/visualizations.md), [`session-persistence.md`](./docs/guides/session-persistence.md)
-- [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md), [`stats-panels.md`](./docs/guides/stats-panels.md)
+- [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md), [`stats-panels.md`](./docs/guides/stats-panels.md), [`sql-editor-primitives.md`](./docs/guides/sql-editor-primitives.md)
 - [`theming.md`](./docs/guides/theming.md), [`i18n.md`](./docs/guides/i18n.md), [`accessibility.md`](./docs/guides/accessibility.md)
 - [`multi-table.md`](./docs/guides/multi-table.md), [`csp-and-offline.md`](./docs/guides/csp-and-offline.md), [`filter-presets.md`](./docs/guides/filter-presets.md)
 
@@ -516,11 +582,12 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 - [`docs/performance.md`](./docs/performance.md)
 
 **Runnable code**
-- **Examples index** — [`examples/README.md`](./examples/README.md) (13 single-feature examples)
+- **Examples index** — [`examples/README.md`](./examples/README.md) (14 single-feature examples)
   - [`10-column-export`](./examples/10-column-export/) — `getColumnValues` + synthetic `__rowid__`
   - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter
   - [`12-column-header-tooltips`](./examples/12-column-header-tooltips/) — structured tooltip popover, XSS-safe
   - [`13-custom-stats-panel`](./examples/13-custom-stats-panel/) — `BaseStatsPanel` subclass + `StatsPanelRegistry`; numeric `n · μ · σ` via custom `AVG` / `STDDEV_POP` query, categorical top-value with percentage
+  - [`14-standalone-sql-editor`](./examples/14-standalone-sql-editor/) — two host-built CodeMirror SQL editors (filter SQL composer + derived expression composer) sharing live schema via `actions.getCompletionContext()`; refresh on `derivedChange` via `Compartment.reconfigure()`
 - **Demo app** (full consumer showcase) — [`demo/`](./demo/)
 
 **Source-of-truth (prefer these over the docs when they disagree)**

@@ -21,6 +21,7 @@ export type TableErrorSource =
   | 'export'
   | 'persistence'
   | 'visualization'
+  | 'stats-panel'
   | 'sql-validation'
   | 'derived-column'
   | 'listener'

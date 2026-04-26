@@ -22,7 +22,7 @@
     <a class="back" href="../">← Back to demo</a>
     <h1>data-table examples</h1>
     <p class="lede">
-      Twelve single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the package the same way a real consumer would.
+      Thirteen single-feature examples for <code>@jeyabbalas/data-table</code>. Each one imports the package the same way a real consumer would.
     </p>
     <ol>
       <li><a href="./01-minimal/">Minimal</a> — smallest mount: eight rows defined inline in the <code>.ts</code> file, no network.</li>
@@ -37,6 +37,7 @@
       <li><a href="./10-column-export/">Column export</a> — <code>actions.getColumnValues</code> + synthetic <code>__rowid__</code>, plus the export-dialog "Include system columns" toggle.</li>
       <li><a href="./11-annotations/">Annotations</a> — programmatic CRUD + JSON round-trip + session persistence on <code>table.annotations</code>.</li>
       <li><a href="./12-column-header-tooltips/">Column header tooltips</a> — structured popover (title / description / items) on the column-name span; XSS-safe; no persistence.</li>
+      <li><a href="./13-custom-stats-panel/">Custom stats panel</a> — replace the default column-stats slot with a <code>BaseStatsPanel</code> subclass; numeric columns show <em>n · μ · σ</em> from a custom DuckDB query, string columns show <em>top: value (pct%)</em>.</li>
   </ol>
   </body>
 </html>

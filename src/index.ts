@@ -120,6 +120,21 @@ export type {
   VisualizationConstructor,
 } from './visualizations/VisualizationRegistry';
 
+// ---- Stats panel registry ----
+// Register a `BaseStatsPanel` subclass to replace the library's built-in
+// two-line stats display in a column header with your own rendering. Same
+// per-instance isolation semantics as `visualizationRegistry`. Empty by
+// default — when no registration matches a column's type, the library
+// falls back to its built-in HTML formatter.
+export {
+  StatsPanelRegistry,
+  defaultStatsPanelRegistry,
+} from './visualizations/StatsPanelRegistry';
+export type {
+  StatsPanelRegistration,
+  StatsPanelConstructor,
+} from './visualizations/StatsPanelRegistry';
+
 // ---- Derived columns ----
 // Types consumers need when passing initial derived-column definitions
 // or when injecting a custom expression editor.

@@ -17,6 +17,7 @@ const EXAMPLES = [
   '10-column-export',
   '11-annotations',
   '12-column-header-tooltips',
+  '13-custom-stats-panel',
 ];
 
 export default defineConfig({

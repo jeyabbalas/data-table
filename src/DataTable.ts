@@ -69,6 +69,12 @@ import {
   VisualizationRegistry,
   defaultVisualizationRegistry,
 } from './visualizations/VisualizationRegistry';
+import {
+  StatsPanelRegistry,
+  defaultStatsPanelRegistry,
+} from './visualizations/StatsPanelRegistry';
+import { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
+import type { BaseStatsPanel, StatsPanelOptions } from './visualizations/BaseStatsPanel';
 import type { BaseVisualization } from './visualizations/BaseVisualization';
 import { Histogram } from './visualizations/histogram/Histogram';
 import { DateHistogram } from './visualizations/histogram/DateHistogram';
@@ -165,6 +171,20 @@ export interface CreateDataTableOptions {
    * is used.
    */
   visualizationRegistry?: VisualizationRegistry;
+
+  /**
+   * Per-instance stats panel registry. Register a {@link BaseStatsPanel}
+   * subclass to replace the library's built-in two-line stats display in
+   * a column header with your own rendering (custom DuckDB stats, badges,
+   * progress bars, alternate locales). Same per-instance isolation
+   * semantics as `visualizationRegistry`. When omitted, the shared
+   * `defaultStatsPanelRegistry` is used (also empty by default — register
+   * on it to share custom panels across every table without a per-instance
+   * registry). When no registration matches a column's type, the library
+   * falls back to its built-in HTML formatter, so behavior is unchanged
+   * for tables that don't opt in.
+   */
+  statsPanelRegistry?: StatsPanelRegistry;
 
   /** Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`. */
   exportDialog?: boolean;
@@ -518,6 +538,29 @@ export async function createDataTable(
   const vizRegistry: VisualizationRegistry =
     opts.visualizationRegistry ?? defaultVisualizationRegistry;
 
+  // -------- Stats panels (auto-attach alongside visualizations) --------
+  // Active panels are keyed by column name so the non-viz stats refresh path
+  // can quickly check whether a column's slot is panel-owned without iterating
+  // the array on every signal change.
+  let statsPanelCoordinator: StatsPanelCoordinator | null = null;
+  const activeStatsPanels = new Map<string, BaseStatsPanel>();
+  const statsPanelRegistry: StatsPanelRegistry =
+    opts.statsPanelRegistry ?? defaultStatsPanelRegistry;
+  const emitStatsPanelError = (
+    err: unknown,
+    column: string,
+    phase: 'construct' | 'update' | 'hover' | 'fetch' | 'destroy',
+  ): void => {
+    const typed =
+      err instanceof DataTableError
+        ? err
+        : new ConfigurationError(
+            err instanceof Error ? err.message : String(err),
+            { code: 'INVARIANT', cause: err, details: { column, phase } },
+          );
+    emitter.emit('error', { error: typed, source: 'stats-panel' });
+  };
+
   /** Clear saved interaction state for a single column (on filter removal). */
   const clearVisualizationState = (column: string): void => {
     brushStates.delete(column);
@@ -572,24 +615,83 @@ export async function createDataTable(
     activeVisualizations = [];
     interactionManager?.clear();
 
+    // Tear down previous stats panels (run before the coordinator resets so a
+    // panel's destroy hook still sees a valid registration if it queries us).
+    for (const [colName, panel] of activeStatsPanels) {
+      try {
+        panel.destroy();
+      } catch (err) {
+        emitStatsPanelError(err, colName, 'destroy');
+      }
+    }
+    activeStatsPanels.clear();
+
     // Recreate coordinator for this table; it reads state.tableName dynamically.
     if (coordinator) coordinator.destroy();
     coordinator = new CrossfilterCoordinator(state, actions, bridge);
+
+    // Recreate stats panel coordinator. Panels for non-viz columns still need
+    // filter-aware updates, so we keep this coordinator independent of the viz one.
+    if (statsPanelCoordinator) statsPanelCoordinator.destroy();
+    statsPanelCoordinator = new StatsPanelCoordinator(state);
 
     // Create a visualization per applicable column.
     const headers = tableContainer.getColumnHeaders();
     for (const header of headers) {
       const column = header.getColumn();
+      const statsEl = header.getStatsElement();
+
+      // Try to instantiate a custom stats panel for this column. When a panel
+      // is created, it owns the contents of `.dt-col-stats` for the lifetime
+      // of this attach pass; the library never writes to the slot directly.
+      // Failures during construction route to the `error` event and the
+      // column gracefully falls back to the default HTML formatter.
+      let panel: BaseStatsPanel | null = null;
+      if (statsPanelRegistry.isApplicable(column)) {
+        const panelOptions: StatsPanelOptions = {
+          tableName,
+          bridge,
+          filters: state.filters.get(),
+          messages,
+          onError: (err) => {
+            emitter.emit('error', { error: err, source: 'stats-panel' });
+          },
+        };
+        try {
+          // Clear the slot before construction so the panel starts on a blank
+          // canvas — any prior fallback HTML or previous-panel residue is gone.
+          statsEl.innerHTML = '';
+          panel = statsPanelRegistry.create(statsEl, column, panelOptions);
+        } catch (err) {
+          emitStatsPanelError(err, column.name, 'construct');
+          panel = null;
+        }
+        if (panel) {
+          activeStatsPanels.set(column.name, panel);
+          statsPanelCoordinator.register(column.name, panel);
+          // Initial render with no stats. A subsequent viz fetch (if any) will
+          // emit `onDefaultStatsChange` which routes to `panel.update(stats)`.
+          try {
+            panel.update(null);
+          } catch (err) {
+            emitStatsPanelError(err, column.name, 'update');
+          }
+        }
+      }
+
       if (!vizRegistry.isApplicable(column)) {
-        // Fallback: simple row count for non-visualized types.
-        const statsEl = header.getStatsElement();
-        const total = state.totalRows.get();
-        statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(total)}</span>`;
+        // No visualization for this column. If a custom panel is mounted, it
+        // owns the stats slot — `refreshNonVizStats` skips panel-owned columns
+        // and the panel's own `updateFilters` (via the coordinator) handles
+        // filter-aware refreshes. Otherwise, write the simple row-count fallback.
+        if (!panel) {
+          const total = state.totalRows.get();
+          statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(total)}</span>`;
+        }
         continue;
       }
 
       const vizContainer = header.getVizContainer();
-      const statsEl = header.getStatsElement();
       let currentDefault: string | null = null;
       let showingHover = false;
 
@@ -601,7 +703,8 @@ export async function createDataTable(
           ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.filteredRowCount(fr, tr)}</span>`
           : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(tr)}</span>`;
       };
-      statsEl.innerHTML = fallbackStats();
+      // Only write the placeholder fallback when there's no panel taking the slot.
+      if (!panel) statsEl.innerHTML = fallbackStats();
 
       let viz: VisualizationType | undefined;
       const vizOptions = {
@@ -612,11 +715,27 @@ export async function createDataTable(
           coordinator!.handleFilterChange(column.name, filter);
         },
         onDefaultStatsChange: (stats: ColumnStatsData) => {
+          if (panel) {
+            try {
+              panel.update(stats);
+            } catch (err) {
+              emitStatsPanelError(err, column.name, 'update');
+            }
+            return;
+          }
           const html = formatDefaultStats(stats, column.type, messages);
           currentDefault = html;
           if (!showingHover) statsEl.innerHTML = html;
         },
         onStatsChange: (stats: string | null) => {
+          if (panel) {
+            try {
+              panel.setHoverStats(stats);
+            } catch (err) {
+              emitStatsPanelError(err, column.name, 'hover');
+            }
+            return;
+          }
           if (stats) {
             showingHover = true;
             statsEl.innerHTML = stats;
@@ -728,6 +847,10 @@ export async function createDataTable(
 
     // Rebroadcast any filters already in state (e.g., restored from session).
     coordinator.syncExistingFilters();
+    // Same for stats panels — give them the current filter array up-front so
+    // panels with their own DuckDB queries don't have to wait for the next
+    // user-driven filter change.
+    statsPanelCoordinator.syncExistingFilters(state.filters.get());
   };
 
   // -------- AutoSave --------
@@ -863,7 +986,10 @@ export async function createDataTable(
 
   // Keep the row-count stats line live for columns without a visualization
   // (e.g. uuid). Columns *with* a visualization refresh their own stats via
-  // the `onDefaultStatsChange` callback inside `attachVisualizations`.
+  // the `onDefaultStatsChange` callback inside `attachVisualizations`. A
+  // column with a custom stats panel — viz-backed or not — is skipped because
+  // the panel owns the slot and receives filter updates from
+  // `StatsPanelCoordinator` directly.
   const refreshNonVizStats = (): void => {
     if (destroyed) return;
     if (!state.tableName.get()) return;
@@ -875,6 +1001,7 @@ export async function createDataTable(
     for (const header of headers) {
       const column = header.getColumn();
       if (vizRegistry.isApplicable(column)) continue;
+      if (activeStatsPanels.has(column.name)) continue;
       const statsEl = header.getStatsElement();
       statsEl.innerHTML =
         activeFilters.length > 0
@@ -972,6 +1099,17 @@ export async function createDataTable(
     interactionManager?.destroy();
     coordinator?.destroy();
     coordinator = null;
+
+    for (const [colName, panel] of activeStatsPanels) {
+      try {
+        panel.destroy();
+      } catch (err) {
+        emitStatsPanelError(err, colName, 'destroy');
+      }
+    }
+    activeStatsPanels.clear();
+    statsPanelCoordinator?.destroy();
+    statsPanelCoordinator = null;
 
     exportDialog?.destroy();
     exportDialog = null;

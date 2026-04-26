@@ -160,6 +160,19 @@ export { fetchIntervalStats } from './statistics/StatsComputer';
 export { BaseVisualization } from './visualizations/BaseVisualization';
 export type { VisualizationOptions } from './visualizations/BaseVisualization';
 
+// ---- Stats panel internals ----
+// Subclass `BaseStatsPanel` and register it on a `StatsPanelRegistry` (root
+// entry) to replace the column-header stats slot with your own rendering.
+// `StatsPanelCoordinator` is composed by the facade and only exposed for
+// power users orchestrating panels manually.
+export { BaseStatsPanel } from './visualizations/BaseStatsPanel';
+export type {
+  StatsPanelOptions,
+  StatsPanelErrorContext,
+  StatsPanelErrorPhase,
+} from './visualizations/BaseStatsPanel';
+export { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
+
 export { Histogram, DateHistogram, TimeHistogram, IntervalHistogram } from './visualizations/histogram';
 export type {
   HistogramBin,

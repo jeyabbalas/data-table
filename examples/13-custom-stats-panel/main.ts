@@ -3,6 +3,7 @@ import {
   createDataTable,
   filtersToWhereClause,
   QueryError,
+  quoteIdentifier,
   StatsPanelRegistry,
   type DataTable,
 } from '@jeyabbalas/data-table';
@@ -106,16 +107,21 @@ class MeanStdPanel extends BaseStatsPanel {
   private async fetch(): Promise<void> {
     if (this.isDestroyed()) return;
     const seq = ++this.fetchSeq;
-    const col = this.column.name;
+    // Quote identifiers — column names with embedded `"` are legal in CSV
+    // headers and DuckDB DDL, and would otherwise break the SQL or open a
+    // SQL-injection path. `quoteIdentifier` doubles embedded `"` per
+    // DuckDB's escaping rules.
+    const colId = quoteIdentifier(this.column.name);
+    const tableId = quoteIdentifier(this.options.tableName);
     const filterWhere = filtersToWhereClause(this.options.filters);
     const where = filterWhere
-      ? `"${col}" IS NOT NULL AND (${filterWhere})`
-      : `"${col}" IS NOT NULL`;
+      ? `${colId} IS NOT NULL AND (${filterWhere})`
+      : `${colId} IS NOT NULL`;
     const sql = `
       SELECT
-        AVG("${col}")::DOUBLE AS mean,
-        STDDEV_POP("${col}")::DOUBLE AS std
-      FROM "${this.options.tableName}"
+        AVG(${colId})::DOUBLE AS mean,
+        STDDEV_POP(${colId})::DOUBLE AS std
+      FROM ${tableId}
       WHERE ${where}
     `;
     try {
@@ -211,14 +217,15 @@ class TopValuePanel extends BaseStatsPanel {
   private async fetch(): Promise<void> {
     if (this.isDestroyed()) return;
     const seq = ++this.fetchSeq;
-    const col = this.column.name;
+    const colId = quoteIdentifier(this.column.name);
+    const tableId = quoteIdentifier(this.options.tableName);
     const filterWhere = filtersToWhereClause(this.options.filters);
     const where = filterWhere
-      ? `"${col}" IS NOT NULL AND (${filterWhere})`
-      : `"${col}" IS NOT NULL`;
+      ? `${colId} IS NOT NULL AND (${filterWhere})`
+      : `${colId} IS NOT NULL`;
     const sql = `
-      SELECT "${col}"::VARCHAR AS value, COUNT(*) AS cnt
-      FROM "${this.options.tableName}"
+      SELECT ${colId}::VARCHAR AS value, COUNT(*) AS cnt
+      FROM ${tableId}
       WHERE ${where}
       GROUP BY 1
       ORDER BY 2 DESC, 1 ASC

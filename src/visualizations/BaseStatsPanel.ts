@@ -149,14 +149,27 @@ export abstract class BaseStatsPanel {
   abstract update(stats: ColumnStatsData | null): void;
 
   /**
-   * Called when the user hovers a visualization bin/segment. `text` is the
-   * pre-formatted hover string the visualization emits (the same one the
-   * default panel briefly shows in place of the second line). `null`
+   * Called when the user hovers a visualization bin / segment. `null`
    * clears the hover and signals the panel should restore its resting state.
+   *
+   * The argument is an **HTML string**, not plain text — the same pre-
+   * formatted markup the library's built-in panel briefly renders in place
+   * of the second line (e.g.
+   * `<span class="stats-label">Bin:</span><br>...`). The library's bundled
+   * visualizations escape every user-derived value before producing this
+   * string (see `escapeHTML` calls inside `Histogram` / `ValueCounts`); a
+   * panel writing the value via `innerHTML` is trusting the visualization
+   * to have done that escaping.
+   *
+   * Custom visualizations that emit their own hover snippets are
+   * responsible for escaping any user-derived text before passing it to
+   * `onStatsChange`. Panels that only want plain text should write the
+   * value via `textContent`, which strips the markup safely (line breaks
+   * and label styling will be lost, but XSS-safe by construction).
    *
    * Default implementation is a no-op so simple panels can ignore hover.
    */
-  setHoverStats(_text: string | null): void {
+  setHoverStats(_html: string | null): void {
     // no-op default
   }
 
@@ -178,6 +191,14 @@ export abstract class BaseStatsPanel {
    * to `container` and any subscriptions or listeners they registered, then
    * call `super.destroy()`. The library does not clear the container for
    * the panel; that is the panel's responsibility.
+   *
+   * The library calls `destroy()` exactly once on its own teardown path
+   * (schema change, table destroy). Panels should **not** call `destroy()`
+   * on themselves — the library tracks active panels in a name-keyed map
+   * and a self-destroy leaves a dangling registration whose
+   * `.dt-col-stats` slot is no longer eligible for fallback rendering.
+   * Use `setHoverStats` / `update` to express resting / loading / empty
+   * states instead, and let the library's lifecycle drive `destroy()`.
    */
   destroy(): void {
     this.destroyed = true;

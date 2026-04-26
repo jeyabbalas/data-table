@@ -653,7 +653,19 @@ export async function createDataTable(
           bridge,
           filters: state.filters.get(),
           messages,
-          onError: (err) => {
+          onError: (err, ctx) => {
+            // Merge ctx into err.details so async errors carry the same
+            // {column, phase} payload the synchronous-throw path attaches
+            // via emitStatsPanelError. Without this, listeners see two
+            // different shapes depending on which path the panel took.
+            // `details` is declared readonly on DataTableError; the cast
+            // is the deliberate write-through site.
+            const target = err as { details?: Record<string, unknown> };
+            target.details = {
+              ...(target.details ?? {}),
+              column: ctx.column,
+              phase: ctx.phase,
+            };
             emitter.emit('error', { error: err, source: 'stats-panel' });
           },
         };
@@ -1001,7 +1013,15 @@ export async function createDataTable(
     for (const header of headers) {
       const column = header.getColumn();
       if (vizRegistry.isApplicable(column)) continue;
-      if (activeStatsPanels.has(column.name)) continue;
+      // Panel-owned slot? Skip — except when the panel destroyed itself
+      // early. A self-destroyed panel leaves the slot frozen with whatever
+      // it last wrote; that's worse than reverting to the default fallback,
+      // so we prune the dangling entry here and fall through to the write.
+      const panel = activeStatsPanels.get(column.name);
+      if (panel) {
+        if (!panel.isDestroyed()) continue;
+        activeStatsPanels.delete(column.name);
+      }
       const statsEl = header.getStatsElement();
       statsEl.innerHTML =
         activeFilters.length > 0

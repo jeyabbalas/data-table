@@ -46,6 +46,16 @@ export class StatsPanelCoordinator {
   private unsubscribe: (() => void) | null = null;
   private readonly concurrency: number;
   private destroyed = false;
+  /**
+   * Monotonically-increasing tag for filter changes. Captured per broadcast
+   * so that an in-flight `runLimited` from filter set F1 can be aborted
+   * mid-fan-out as soon as a fresh F2 arrives — without it, F1's per-panel
+   * `updateFilters(F1)` calls keep firing after F2 has been broadcast and
+   * the base-class default's last-write-wins behavior on
+   * `this.options.filters` lands stale data on each panel. Mirrors
+   * `CrossfilterCoordinator.filterSequence`.
+   */
+  private filterSequence = 0;
 
   constructor(state: TableState, concurrency: number = DEFAULT_PANEL_CONCURRENCY) {
     this.concurrency = Math.max(1, concurrency);
@@ -89,9 +99,10 @@ export class StatsPanelCoordinator {
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
     if (this.destroyed) return;
 
+    const seq = ++this.filterSequence;
     const tasks = [...this.panels.values()]
       .filter((p) => !p.isDestroyed())
-      .map((p) => () => this.callUpdateFilters(p, filters));
+      .map((p) => () => this.callUpdateFilters(p, filters, seq));
 
     await this.runLimited(tasks);
   }
@@ -99,7 +110,11 @@ export class StatsPanelCoordinator {
   private async callUpdateFilters(
     panel: BaseStatsPanel,
     filters: Filter[],
+    seq: number,
   ): Promise<void> {
+    if (this.destroyed) return;
+    if (seq !== this.filterSequence) return;
+    if (panel.isDestroyed()) return;
     try {
       await panel.updateFilters(filters);
     } catch {

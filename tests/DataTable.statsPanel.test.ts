@@ -637,4 +637,115 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
 
     await table.destroy();
   });
+
+  it('hover string is passed verbatim to panel.setHoverStats (HTML pass-through)', async () => {
+    // Locks in the contract documented on BaseStatsPanel.setHoverStats:
+    // the argument is HTML, not plain text — angle brackets are preserved
+    // exactly so the panel can write it through innerHTML safely (the
+    // library escapes user-derived values upstream).
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'all',
+      isApplicable: () => true,
+      constructor: CapturingPanel,
+      priority: 0,
+    });
+    const { table } = await mount({ statsPanelRegistry: reg });
+
+    CapturingPanel.events.length = 0;
+    const numericViz = StubViz.instances.find((v) => v.getColumn().name === 'amount')!;
+
+    const hoverHtml =
+      '<span class="stats-label">Bin:</span><br>5–10<br>Count: 42';
+    numericViz.emitHover(hoverHtml);
+
+    const hoverEvent = CapturingPanel.events.find(
+      (e) => e.type === 'setHoverStats' && e.column === 'amount',
+    );
+    expect(hoverEvent).toBeDefined();
+    // Verbatim — no string transformation, no escape, no truncation.
+    expect(hoverEvent?.payload).toBe(hoverHtml);
+    expect(hoverEvent?.payload).toContain('<span class="stats-label">');
+
+    await table.destroy();
+  });
+
+  it('self-destroyed panel falls back to default HTML on next filter refresh', async () => {
+    // Regression for "self-destroying panels orphan their slot": the
+    // refreshNonVizStats path now detects a destroyed-but-still-tracked
+    // panel and writes the fallback HTML in its place.
+    const trackedInstances: CapturingPanel[] = [];
+    class TrackingPanel extends CapturingPanel {
+      constructor(
+        container: HTMLElement,
+        column: ColumnSchema,
+        options: StatsPanelOptions,
+      ) {
+        super(container, column, options);
+        trackedInstances.push(this);
+      }
+    }
+
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'uuid-panel',
+      isApplicable: (t) => t === 'uuid',
+      constructor: TrackingPanel,
+      priority: 10,
+    });
+
+    // No viz registration for `uuid` so the column is non-viz and goes
+    // through the refreshNonVizStats path on filter change.
+    const vizReg = makeVizRegistry();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const bridge = makeBridge();
+    const table = await createDataTable({
+      container,
+      bridge,
+      persistence: { sessionStore: makeSessionStore() },
+      presets: false,
+      undoRedo: false,
+      expressionFilter: false,
+      exportDialog: false,
+      visualizationRegistry: vizReg,
+      statsPanelRegistry: reg,
+    });
+    table.state.tableName.set('t1');
+    initializeColumnsFromSchema(table.state, [
+      { name: 'amount', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      { name: 'guid', type: 'uuid', nullable: false, originalType: 'UUID' },
+    ]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const guidPanel = trackedInstances.find((p) => p.getColumn().name === 'guid');
+    expect(guidPanel).toBeDefined();
+    expect(guidPanel!.isDestroyed()).toBe(false);
+
+    // Self-destroy. The library normally drives this on schema change /
+    // table destroy; here we exercise the misuse path documented in
+    // BaseStatsPanel.destroy's docstring.
+    guidPanel!.destroy();
+    expect(guidPanel!.isDestroyed()).toBe(true);
+
+    // Trigger refreshNonVizStats by mutating filters.
+    table.state.filters.set([
+      { type: 'not-null', column: 'amount' } as unknown as Filter,
+    ]);
+    await new Promise((r) => setTimeout(r, 20));
+
+    const uuidSlot = container.querySelector(
+      '[data-panel-mounted="guid"]',
+    ) as HTMLElement;
+    expect(uuidSlot).not.toBeNull();
+    // Slot was overwritten with the default fallback — it now contains a
+    // .dt-stats-line1 span with a rows count, not the destroyed panel's
+    // last-rendered text.
+    expect(uuidSlot.querySelector('.dt-stats-line1')).not.toBeNull();
+    expect(uuidSlot.textContent).toMatch(/rows/);
+    expect(uuidSlot.textContent).not.toContain('mounted:');
+
+    await table.destroy();
+  });
 });

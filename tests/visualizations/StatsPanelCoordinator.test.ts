@@ -240,4 +240,39 @@ describe('StatsPanelCoordinator', () => {
 
     coord.destroy();
   });
+
+  it('drops superseded broadcasts before they reach the next panel', async () => {
+    // Regression for the missing filterSequence guard. Setup: concurrency=1
+    // serializes panels in registration order, and panel A's updateFilters
+    // yields long enough for F2 to land while F1 is still in flight. After
+    // F2 advances the seq, the worker dequeues panel B's task for F1 and
+    // self-skips before reaching panel B; F1 never touches panel B.
+    const state = createTableState();
+    state.tableName.set('t');
+    const coord = new StatsPanelCoordinator(state, 1);
+
+    const a = makeStubPanel({ delayMs: 50 });
+    const b = makeStubPanel();
+    coord.register('a', a);
+    coord.register('b', b);
+
+    const F1: Filter = { type: 'not-null', column: 'col_0' } as unknown as Filter;
+    const F2: Filter = { type: 'not-null', column: 'col_1' } as unknown as Filter;
+
+    state.filters.set([F1]);
+    // Wait long enough for panel A's updateFilters to push F1 and start
+    // awaiting its 50ms delay, while panel B's task is still queued.
+    await new Promise((r) => setTimeout(r, 15));
+    state.filters.set([F2]);
+
+    // Wait for both broadcasts to settle.
+    await new Promise((r) => setTimeout(r, 200));
+
+    // Panel A: hit by F1 (already in flight), then by F2.
+    expect(a.calls).toEqual([[F1], [F2]]);
+    // Panel B: F1 was skipped (seq advanced before its turn); only F2 lands.
+    expect(b.calls).toEqual([[F2]]);
+
+    coord.destroy();
+  });
 });

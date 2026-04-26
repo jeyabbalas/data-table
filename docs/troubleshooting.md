@@ -448,6 +448,61 @@ try {
 
 The facade re-emits these on the `error` event with `source: 'stats-panel'` (the discriminant in the [error-event source enum](./api-reference.md#event-catalog)) so existing `table.on('error', …)` listeners catch panel failures alongside load / query / persistence ones.
 
+### 23. I added `createSqlExtensions` but no autocomplete dropdown appears
+
+Symptom: the host-built CodeMirror editor mounts, the SQL grammar highlights correctly, but pressing Ctrl/Cmd+Space (or typing a partial identifier) shows no dropdown.
+
+Cause: `createSqlExtensions` ships only the autocomplete *source* (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete *UI* extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
+
+Fix: add `autocompletion()` from `@codemirror/autocomplete` to your extension array:
+
+```ts
+import { createSqlExtensions } from '@jeyabbalas/data-table/advanced';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { autocompletion } from '@codemirror/autocomplete';
+
+new EditorView({
+  state: EditorState.create({
+    extensions: [
+      createSqlExtensions(ctx),
+      autocompletion({ tooltipClass: () => 'my-app-sql-autocomplete' }),
+      // ...rest of host plumbing (keymap, history, placeholder, ...)
+    ],
+  }),
+  parent: hostEl,
+});
+```
+
+`tooltipClass` scopes any CSS targeting `.cm-tooltip-autocomplete` to your instance — the dropdown portals to `document.body` so an unscoped rule would also style any other CodeMirror autocomplete on the page.
+
+### 24. My host SQL editor's autocomplete doesn't pick up new columns after a `derivedChange`
+
+Symptom: a host-built editor (assembled via `createSqlExtensions`) shows the original schema in autocomplete, but a derived column added later via `actions.addDerivedColumn` never appears in the dropdown.
+
+Common causes and fixes:
+
+- **The completion context was a snapshot, not a thunk.** `createSqlExtensions(table.actions.getCompletionContext())` captures the schema at editor-construction time. Pass `() => table.actions.getCompletionContext()` and call it on every refresh so each `Compartment.reconfigure` reads live state. (Example 14 wires this exact pattern at [`main.ts:34, 41, 101-107`](../examples/14-standalone-sql-editor/main.ts).)
+
+- **No subscription to `derivedChange` / `loadComplete`.** Without `table.on('derivedChange', refresh)` and `table.on('loadComplete', refresh)`, schema changes never trigger a re-pull. The `loadComplete` subscription is the one most often missed — without it, the very first `loadData` resolves with the editor still bound to an empty schema.
+
+- **The refresh dispatched a brand-new `EditorState` instead of `Compartment.reconfigure`.** Replacing the entire state works, but loses undo history, focus, selection, and scroll position. Use a `Compartment` and call `view.dispatch({ effects: compartment.reconfigure(createSqlExtensions(getContext())) })` — preserving view state survives schema swaps cleanly. (See `src/sql-editor/CodeMirrorExpressionEditor.ts:142-148` for the rationale and example 14's `refreshContext()` at [`main.ts:101-107`](../examples/14-standalone-sql-editor/main.ts) for the canonical implementation.)
+
+The combined pattern:
+
+```ts
+const sqlCompartment = new Compartment();
+const getContext = () => table.actions.getCompletionContext();   // thunk
+
+const refresh = () => {
+  view.dispatch({
+    effects: sqlCompartment.reconfigure(createSqlExtensions(getContext())),
+  });
+};
+table.on('loadComplete', refresh);
+table.on('derivedChange', refresh);
+```
+
 ---
 
 ## Browser support quick reference

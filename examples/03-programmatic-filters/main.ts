@@ -2,7 +2,7 @@ import '@jeyabbalas/data-table/styles';
 import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const container = document.getElementById('table') as HTMLElement;
 
@@ -19,7 +19,7 @@ let table: DataTable | undefined;
     console.log('[03] filterChange', filters);
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet' });
 
   // Credit-card trips (payment_type 1 = credit card per the TLC codebook).
   document.getElementById('btn-card')!.onclick = () => {

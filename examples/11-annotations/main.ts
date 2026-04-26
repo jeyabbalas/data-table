@@ -8,7 +8,7 @@ import {
 } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -25,7 +25,7 @@ let table: DataTable | undefined;
     tableName: 'nyc_taxi_annotations',
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv', tableName: 'nyc_taxi_annotations' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet', tableName: 'nyc_taxi_annotations' });
 
   // =========================================
   // Scenarios — each clears first so overlays don't accumulate
@@ -153,7 +153,7 @@ let table: DataTable | undefined;
       await table!.clearSession();
       await table!.bridge.query('DROP TABLE IF EXISTS "nyc_taxi_annotations"');
       await table!.loadData(DATA_URL, {
-        sourceFormat: 'csv',
+        sourceFormat: 'parquet',
         tableName: 'nyc_taxi_annotations',
       });
     } catch (err) {

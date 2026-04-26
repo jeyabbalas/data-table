@@ -8,7 +8,7 @@ import {
 } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 // One WorkerBridge (= one DuckDB WASM instance, one Web Worker) backs both
 // tables. Each table still owns its own UI, state, and filters; they just
@@ -50,8 +50,8 @@ let sharedBuffer: ArrayBuffer | null = null;
     persistence: { sessionStore: sharedStore },
   });
 
-  // Fetch the CSV once on the main thread and pass the ArrayBuffer to both
-  // tables. Avoids the 2× 10 MB JS-heap peak and the 2× network round-trip
+  // Fetch the parquet file once on the main thread and pass the ArrayBuffer
+  // to both tables. Avoids the 2× JS-heap peak and the 2× network round-trip
   // the previous `Promise.all([a.loadData(url), b.loadData(url)])` created.
   // Loads are serialised because DuckDB-WASM is single-threaded — the parallel
   // version was queueing behind itself inside DuckDB anyway.
@@ -60,8 +60,8 @@ let sharedBuffer: ArrayBuffer | null = null;
   // Explicit tableName is required for session persistence to key correctly —
   // without it the loader auto-generates a fresh name every page load and
   // AutoSave would never find the snapshot on reload.
-  await a.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_a' });
-  await b.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_b' });
+  await a.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_a' });
+  await b.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_b' });
 
   document.getElementById('save-a')!.addEventListener('click', () => {
     const name = `A snapshot ${sharedPresets.getPresets().length + 1}`;
@@ -83,7 +83,7 @@ let sharedBuffer: ArrayBuffer | null = null;
 
   // Full-session wipe for both tables: deletes both IDB rows, empties the
   // shared preset list, clears each table's undo stack, then reloads the
-  // CSV buffer into both tables so the page stays usable. `clearSession`
+  // parquet buffer into both tables so the page stays usable. `clearSession`
   // resets JS state only — the DuckDB tables survive, so drop them before
   // the second loadData or `CREATE TABLE` throws "already exists".
   document.getElementById('clear-session')!.addEventListener('click', async () => {
@@ -92,8 +92,8 @@ let sharedBuffer: ArrayBuffer | null = null;
     await b!.clearSession();
     await sharedBridge.query('DROP TABLE IF EXISTS "trips_a"');
     await sharedBridge.query('DROP TABLE IF EXISTS "trips_b"');
-    await a!.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_a' });
-    await b!.loadData(sharedBuffer, { sourceFormat: 'csv', tableName: 'trips_b' });
+    await a!.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_a' });
+    await b!.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_b' });
     console.log('[09] session cleared and both tables reloaded');
   });
 })();

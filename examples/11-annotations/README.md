@@ -28,7 +28,7 @@ Then navigate to `examples/` and click **11 — Annotations**.
 
 ## Data
 
-Same `nyc_taxi.csv` fixture as example 10 (`tableName: 'nyc_taxi_annotations'`
+Same `nyc_taxi.parquet` fixture as example 10 (`tableName: 'nyc_taxi_annotations'`
 to avoid colliding with that example's saved session).
 
 ## What to observe
@@ -46,8 +46,8 @@ to avoid colliding with that example's saved session).
    annotation store in memory; AutoSave persists the empty state, so a
    reload reads an IDB snapshot with `annotations: []` but filters / sort /
    presets are retained. `Clear session + reload` additionally deletes the
-   IDB row, resets filters / sort / presets / undo, and re-fetches the CSV
-   so the grid stays interactive. Both produce a single `cleared`-kind
+   IDB row, resets filters / sort / presets / undo, and re-fetches the
+   parquet file so the grid stays interactive. Both produce a single `cleared`-kind
    change event.
 
 ## Why

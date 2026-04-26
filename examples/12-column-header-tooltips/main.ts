@@ -6,7 +6,7 @@ import {
 } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -26,7 +26,7 @@ let table: DataTable | undefined;
   });
 
   await table.loadData(DATA_URL, {
-    sourceFormat: 'csv',
+    sourceFormat: 'parquet',
     tableName: 'nyc_taxi_tooltips',
   });
 

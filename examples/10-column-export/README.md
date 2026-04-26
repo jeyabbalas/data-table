@@ -17,7 +17,7 @@ npm run dev
 
 ## Data
 
-100,000 rows × 19 columns — [`tests/fixtures/datasets/csv/nyc_taxi.csv`](../../tests/fixtures/datasets/csv/nyc_taxi.csv), plus the synthetic `__rowid__` (BIGINT, 0..N-1) injected at load.
+100,000 rows × 19 columns — [`tests/fixtures/datasets/parquet/nyc_taxi.parquet`](../../tests/fixtures/datasets/parquet/nyc_taxi.parquet), plus the synthetic `__rowid__` (BIGINT, 0..N-1) injected at load.
 
 ## What to observe
 

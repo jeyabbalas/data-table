@@ -7,7 +7,7 @@ import {
 } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -33,7 +33,7 @@ let table: DataTable | undefined;
     populateColumnDropdown();
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv', tableName: 'nyc_taxi' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet', tableName: 'nyc_taxi' });
 
   // __rowid__ is hidden by default. Toggle its visibility in the grid.
   showRowidCb.checked = table.state.visibleColumns.get().includes(ROWID_COLUMN);

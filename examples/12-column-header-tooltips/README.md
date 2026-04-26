@@ -26,7 +26,7 @@ Then navigate to `examples/` and click **12 — Column header tooltips**.
 
 ## Data
 
-NYC taxi `nyc_taxi.csv` fixture, loaded once at startup.
+NYC taxi `nyc_taxi.parquet` fixture, loaded once at startup via `sourceFormat: 'parquet'`.
 `tableName: 'nyc_taxi_tooltips'` — distinct from example 11's
 `nyc_taxi_annotations` to avoid any DuckDB-side collision.
 

@@ -2,7 +2,7 @@ import '@jeyabbalas/data-table/styles';
 import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -34,7 +34,7 @@ let table: DataTable | undefined;
     );
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv', tableName: 'nyc_taxi' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet', tableName: 'nyc_taxi' });
 
   // Expression column — evaluated inside DuckDB. The new column appears in
   // the table header as soon as the VIEW rebuilds (no data reload).

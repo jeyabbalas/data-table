@@ -40,7 +40,7 @@ schema, so a preset saved from A can be loaded onto B cleanly.
    `tableName` (`trips_a`, `trips_b`).
 6. **Clear session + reload** — `table.clearSession()` on both A and B
    (deletes both IDB rows, empties the shared preset list, clears each
-   undo stack) and then re-loads the CSV buffer into both tables. A
+   undo stack) and then re-loads the parquet buffer into both tables. A
    subsequent page reload finds nothing in `SessionStore` and starts from
    scratch.
 

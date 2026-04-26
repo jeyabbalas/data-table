@@ -18,7 +18,7 @@ npm run dev
 
 ## Data
 
-100,000 rows × 19 columns — [`tests/fixtures/datasets/csv/nyc_taxi.csv`](../../tests/fixtures/datasets/csv/nyc_taxi.csv).
+100,000 rows × 19 columns — [`tests/fixtures/datasets/parquet/nyc_taxi.parquet`](../../tests/fixtures/datasets/parquet/nyc_taxi.parquet).
 
 ## What to observe
 

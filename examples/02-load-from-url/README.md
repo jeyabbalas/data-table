@@ -18,11 +18,11 @@ npm run dev
 
 ## Data
 
-100,000 rows × 19 columns — [`tests/fixtures/datasets/csv/nyc_taxi.csv`](../../tests/fixtures/datasets/csv/nyc_taxi.csv) (NYC TLC, January 2024 sample).
+100,000 rows × 19 columns — [`tests/fixtures/datasets/parquet/nyc_taxi.parquet`](../../tests/fixtures/datasets/parquet/nyc_taxi.parquet) (NYC TLC, January 2024 sample), loaded via `sourceFormat: 'parquet'`.
 
 ## What to observe
 
-1. The progress bar fills as the CSV flows through `reading` → `parsing` → `indexing` → `analyzing` stages. The label shows `<stage> <percent>%` live.
+1. The progress bar fills as the parquet file flows through `reading` → `parsing` → `indexing` → `analyzing` stages. The label shows `<stage> <percent>%` live.
 2. On completion the bar reaches 100 % and the label flips to `100,000 rows loaded`.
 3. Disable the network in DevTools then reload — the `loadError` event fires, the bar turns red, and the label shows the error message.
 

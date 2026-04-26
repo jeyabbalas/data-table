@@ -2,7 +2,7 @@ import '@jeyabbalas/data-table/styles';
 import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/csv/nyc_taxi.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/parquet/nyc_taxi.parquet';
 
 const container = document.getElementById('table') as HTMLElement;
 const bar = document.querySelector('#progress > span') as HTMLElement;
@@ -34,7 +34,7 @@ let table: DataTable | undefined;
     bar.style.background = 'var(--dt-error, #ef4444)';
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'csv' });
+  await table.loadData(DATA_URL, { sourceFormat: 'parquet' });
 })();
 
 window.addEventListener('beforeunload', () => void table?.destroy());

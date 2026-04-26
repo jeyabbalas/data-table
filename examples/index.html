@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@jeyabbalas/data-table — Examples</title>
     <style>
+      /* Tell the browser this page supports both schemes — flips native
+         scrollbars, form controls, and the default body background to
+         match the OS preference. */
+      :root { color-scheme: light dark; }
+
       body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
       h1 { margin-bottom: 0.25rem; }
       p.lede { color: #555; margin-top: 0; }
@@ -16,6 +21,17 @@
       .hint { color: #666; font-size: 0.9em; margin-top: 2rem; }
       .back { display: inline-block; margin-bottom: 1rem; color: #0d6efd; text-decoration: none; font-size: 0.9em; }
       .back:hover { text-decoration: underline; }
+
+      /* Dark mode — mirrors the library's gray-900 surface + lifted blue
+         link palette so the index reads consistently with the examples. */
+      @media (prefers-color-scheme: dark) {
+        body { background: #111827; color: #f9fafb; }
+        p.lede { color: #d1d5db; }
+        li a { color: #60a5fa; }
+        code { background: #374151; }
+        .hint { color: #9ca3af; }
+        .back { color: #60a5fa; }
+      }
     </style>
   </head>
   <body>

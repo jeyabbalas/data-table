@@ -2,16 +2,61 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeAll } from 'vitest';
+import type { Extension } from '@codemirror/state';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { autocompletion } from '@codemirror/autocomplete';
+import {
+  autocompletion,
+  CompletionContext as CMCompletionContext,
+  type Completion,
+} from '@codemirror/autocomplete';
 import {
   createSqlExtensions,
   buildCompletionContext,
   type SqlExtensionOptions,
 } from '@/sql-editor/extensions';
 import { DUCKDB_FUNCTION_DETAILS } from '@/sql-editor/duckdbFunctionDetails';
+import { dataTableTheme, dataTableHighlighting } from '@/sql-editor/theme';
 import type { CompletionContext } from '@/derived/types';
+
+/** A `CompletionResult`-shaped subset that the library's source emits. */
+type AcResult = {
+  options: readonly Completion[];
+  from: number;
+  validFor?: RegExp;
+} | null;
+
+/**
+ * Resolve and invoke the autocomplete source registered by
+ * `createSqlExtensions`. The PostgreSQL language may have its own keyword
+ * source registered too; we identify the library's source by its distinctive
+ * `validFor: /^\w*$/`. For tests where our source returns `null`
+ * (no-word + non-explicit), the helper returns `null` overall.
+ */
+function runOurAutocomplete(
+  extensions: Extension[],
+  doc: string,
+  pos: number,
+  explicit = false,
+): AcResult {
+  const state = EditorState.create({
+    doc,
+    extensions: [...extensions, autocompletion()],
+  });
+  const sources = state.languageDataAt<(c: CMCompletionContext) => unknown>(
+    'autocomplete',
+    pos,
+  );
+  expect(sources.length).toBeGreaterThan(0);
+  for (const source of sources) {
+    const cmCtx = new CMCompletionContext(state, pos, explicit);
+    const result = source(cmCtx) as AcResult;
+    if (result && result.validFor && result.validFor.toString() === '/^\\w*$/') {
+      return result;
+    }
+  }
+  return null;
+}
 
 // CodeMirror requires DOM APIs that jsdom may not fully support.
 beforeAll(() => {
@@ -132,10 +177,19 @@ describe('createSqlExtensions', () => {
     expect(ext.length).toBeGreaterThan(0);
   });
 
-  it('produces fewer extensions when includeTheme is false', () => {
+  it('includes the library theme by default and omits it when includeTheme is false', () => {
     const withTheme = createSqlExtensions(baseContext, { includeTheme: true });
     const withoutTheme = createSqlExtensions(baseContext, { includeTheme: false });
-    expect(withoutTheme.length).toBe(withTheme.length - 2);
+    const defaulted = createSqlExtensions(baseContext);
+
+    // Identity check (catches refactors that swap the theme reference).
+    expect(withTheme).toContain(dataTableTheme);
+    expect(withTheme).toContain(dataTableHighlighting);
+    expect(defaulted).toContain(dataTableTheme);
+    expect(defaulted).toContain(dataTableHighlighting);
+
+    expect(withoutTheme).not.toContain(dataTableTheme);
+    expect(withoutTheme).not.toContain(dataTableHighlighting);
   });
 
   it('mounts in a real EditorState without throwing', () => {
@@ -204,10 +258,13 @@ describe('createSqlExtensions', () => {
     EditorState.create({ extensions: ext });
   });
 
-  it('honors upperCaseKeywords flag', () => {
+  it('accepts both upperCaseKeywords settings without crashing', () => {
+    // The flag is plumbed through to `sql({ upperCaseKeywords })`; the actual
+    // case of suggested SQL keywords is owned by `@codemirror/lang-sql` and is
+    // covered by its own test suite. We verify only that both values mount
+    // cleanly here.
     const upper = createSqlExtensions(baseContext, { upperCaseKeywords: true });
     const lower = createSqlExtensions(baseContext, { upperCaseKeywords: false });
-    expect(upper.length).toBe(lower.length);
     EditorState.create({ extensions: upper });
     EditorState.create({ extensions: lower });
   });
@@ -235,5 +292,165 @@ describe('SqlExtensionOptions type smoke', () => {
       functions: ['avg'],
     };
     expect(opts).toBeDefined();
+  });
+});
+
+describe('createSqlExtensions autocomplete behavior', () => {
+  // These tests resolve and call the autocomplete source the library
+  // registers via `PostgreSQL.language.data.of(...)`. They guard the contract
+  // that mounting alone cannot — option ordering, boost values,
+  // detail/info population, validFor regex, and explicit-vs-no-word handling.
+
+  const baseContext: CompletionContext = {
+    columns: [
+      { name: 'price', type: 'DOUBLE', isDerived: false },
+      { name: 'qty', type: 'BIGINT', isDerived: false },
+    ],
+  };
+
+  it('returns columns + default DuckDB functions when nothing is overridden', () => {
+    const ext = createSqlExtensions(baseContext);
+    // Position after one alphanumeric char so matchBefore(/\w+/) is satisfied.
+    const result = runOurAutocomplete(ext, 'p', 1);
+    expect(result).not.toBeNull();
+    const labels = result!.options.map((o) => o.label);
+    expect(labels).toContain('price');
+    expect(labels).toContain('qty');
+    expect(labels).toContain('avg');
+    expect(labels).toContain('count');
+  });
+
+  it('ranks columns above functions via boost', () => {
+    const ext = createSqlExtensions(baseContext);
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+
+    const columnOpts = result!.options.filter((o) => o.type === 'variable');
+    const functionOpts = result!.options.filter((o) => o.type === 'function');
+
+    expect(columnOpts.length).toBeGreaterThan(0);
+    expect(functionOpts.length).toBeGreaterThan(0);
+
+    // boost contract: 0 for columns, -1 for functions (so columns rank higher).
+    for (const c of columnOpts) expect(c.boost).toBe(0);
+    for (const f of functionOpts) expect(f.boost).toBe(-1);
+
+    // Columns appear before functions in the emitted order.
+    const lastColumnIdx = result!.options.findLastIndex((o) => o.type === 'variable');
+    const firstFunctionIdx = result!.options.findIndex((o) => o.type === 'function');
+    expect(lastColumnIdx).toBeLessThan(firstFunctionIdx);
+  });
+
+  it('disables function autocomplete when options.functions is []', () => {
+    const ext = createSqlExtensions(baseContext, { functions: [] });
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+    const functionOpts = result!.options.filter((o) => o.type === 'function');
+    expect(functionOpts).toHaveLength(0);
+
+    const columnLabels = result!.options.map((o) => o.label);
+    expect(columnLabels).toContain('price');
+    expect(columnLabels).toContain('qty');
+  });
+
+  it('falls back to context.functions when options.functions is omitted', () => {
+    const ctx: CompletionContext = {
+      columns: baseContext.columns,
+      functions: ['only_in_context'],
+    };
+    const ext = createSqlExtensions(ctx);
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+    const functionLabels = result!.options
+      .filter((o) => o.type === 'function')
+      .map((o) => o.label);
+    expect(functionLabels).toEqual(['only_in_context']);
+  });
+
+  it('lets options.functions override context.functions', () => {
+    const ctx: CompletionContext = {
+      columns: baseContext.columns,
+      functions: ['from_context'],
+    };
+    const ext = createSqlExtensions(ctx, { functions: ['from_options'] });
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+    const functionLabels = result!.options
+      .filter((o) => o.type === 'function')
+      .map((o) => o.label);
+    expect(functionLabels).toEqual(['from_options']);
+  });
+
+  it('populates detail and info for DuckDBFunctionInfo[] entries', () => {
+    const ext = createSqlExtensions(baseContext, {
+      functions: [
+        { name: 'demo_fn', category: 'utility', description: 'demo description' },
+      ],
+    });
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+    const opt = result!.options.find((o) => o.label === 'demo_fn');
+    expect(opt).toBeDefined();
+    expect(opt!.type).toBe('function');
+    expect(opt!.detail).toBe('utility');
+    expect(opt!.info).toBe('demo description');
+    expect(opt!.boost).toBe(-1);
+  });
+
+  it('populates only label for string[] function entries', () => {
+    const ext = createSqlExtensions(baseContext, { functions: ['just_a_name'] });
+    const result = runOurAutocomplete(ext, 'a', 1);
+    expect(result).not.toBeNull();
+    const opt = result!.options.find((o) => o.label === 'just_a_name');
+    expect(opt).toBeDefined();
+    expect(opt!.type).toBe('function');
+    expect(opt!.boost).toBe(-1);
+    expect(opt!.detail).toBeUndefined();
+    expect(opt!.info).toBeUndefined();
+  });
+
+  it('sets validFor to /^\\w*$/ on the result', () => {
+    const ext = createSqlExtensions(baseContext);
+    const result = runOurAutocomplete(ext, 'p', 1);
+    expect(result).not.toBeNull();
+    expect(result!.validFor).toBeInstanceOf(RegExp);
+    expect(result!.validFor!.toString()).toBe('/^\\w*$/');
+  });
+
+  it('sets `from` to the start of the matched word', () => {
+    const ext = createSqlExtensions(baseContext);
+    // doc='abc', pos=3 → matchBefore(/\w+/) returns {from: 0, to: 3}
+    const result = runOurAutocomplete(ext, 'abc', 3);
+    expect(result).not.toBeNull();
+    expect(result!.from).toBe(0);
+  });
+
+  it('returns null when there is no word and the request is not explicit', () => {
+    const ext = createSqlExtensions(baseContext);
+    const result = runOurAutocomplete(ext, '', 0, /* explicit */ false);
+    // Our source returns null in this case; runOurAutocomplete's source-finder
+    // looks for our distinctive validFor and finds nothing → returns null.
+    expect(result).toBeNull();
+  });
+
+  it('returns options when there is no word but the request IS explicit', () => {
+    const ext = createSqlExtensions(baseContext);
+    const result = runOurAutocomplete(ext, '', 0, /* explicit */ true);
+    expect(result).not.toBeNull();
+    expect(result!.from).toBe(0);
+    const labels = result!.options.map((o) => o.label);
+    expect(labels).toContain('price');
+    expect(labels).toContain('qty');
+  });
+
+  it('exposes columns with type set to the column type and type=variable', () => {
+    const ext = createSqlExtensions(baseContext);
+    const result = runOurAutocomplete(ext, 'p', 1);
+    expect(result).not.toBeNull();
+    const priceOpt = result!.options.find((o) => o.label === 'price');
+    expect(priceOpt).toBeDefined();
+    expect(priceOpt!.type).toBe('variable');
+    expect(priceOpt!.detail).toBe('DOUBLE');
+    expect(priceOpt!.boost).toBe(0);
   });
 });

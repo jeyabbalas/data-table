@@ -54,6 +54,12 @@ describe('DUCKDB_FUNCTION_DETAILS', () => {
     }
   });
 
+  it('is frozen at the array and entry level', () => {
+    expect(Object.isFrozen(DUCKDB_FUNCTION_DETAILS)).toBe(true);
+    expect(Object.isFrozen(DUCKDB_FUNCTION_DETAILS[0])).toBe(true);
+    expect(Object.isFrozen(DUCKDB_FUNCTION_DETAILS[DUCKDB_FUNCTION_DETAILS.length - 1])).toBe(true);
+  });
+
   it('contains common DuckDB functions across major categories', () => {
     const sample: Array<[string, DuckDBFunctionCategory]> = [
       ['avg', 'aggregate'],

@@ -53,15 +53,16 @@ export interface SqlExtensionOptions {
    */
   includeTheme?: boolean;
   /**
-   * Override the function list surfaced via autocomplete.
+   * Override the function list surfaced via autocomplete. Three behaviors:
    *
-   * - `readonly DuckDBFunctionInfo[]` populates `detail` (category) and
-   *   `info` (description) on each completion option.
-   * - `readonly string[]` populates only `label`.
-   *
-   * Resolution precedence: `options.functions` ▶ `context.functions` ▶
-   * built-in `DUCKDB_FUNCTION_DETAILS`. Pass an empty array to disable
-   * function autocomplete entirely.
+   * - **`undefined` (default)** — fall back to `context.functions`, then to the
+   *   built-in `DUCKDB_FUNCTION_DETAILS`.
+   * - **`[]` (empty array)** — disable function autocomplete entirely; only
+   *   column completions are surfaced. Note: this does NOT fall through, since
+   *   `??` only treats `null`/`undefined` as missing.
+   * - **non-empty array** — replace the function list. A `DuckDBFunctionInfo[]`
+   *   populates `detail` (category chip) and `info` (description tooltip) on
+   *   each completion option; a `string[]` populates `label` only.
    */
   functions?: readonly DuckDBFunctionInfo[] | readonly string[];
   /**
@@ -80,6 +81,13 @@ export interface SqlExtensionOptions {
  * `originalType` wins (matches the data-table's internal behavior). Unknown
  * types fall back to an empty string. `isDerived` defaults to `false`.
  *
+ * **System columns:** if you obtain columns from
+ * `actions.getCompletionContext()`, the synthetic `__rowid__` is already
+ * filtered. If you pull columns from `actions.tableSchema` (or some other
+ * raw source), filter rows where `name === '__rowid__'` before passing
+ * them in — otherwise the synthetic id will appear in the autocomplete
+ * dropdown.
+ *
  * @param columns - Source columns. Extra fields are ignored.
  * @param options - Optional `functions` array forwarded to `CompletionContext.functions`.
  * @returns A `CompletionContext` ready to pass to `createSqlExtensions` or
@@ -97,7 +105,7 @@ export function buildCompletionContext(
   const result: CompletionContext = {
     columns: columns.map((c) => ({
       name: c.name,
-      type: (c.originalType ?? c.type ?? '').toString(),
+      type: c.originalType ?? c.type ?? '',
       isDerived: c.isDerived === true,
     })),
   };

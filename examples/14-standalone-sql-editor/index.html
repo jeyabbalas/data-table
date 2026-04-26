@@ -114,8 +114,8 @@
           <p>Compose a raw <code>WHERE</code> clause. <strong>Validate</strong> uses <code>actions.validateSQLFilter</code>; <strong>Apply</strong> calls <code>actions.addRawSQLFilter</code>.</p>
           <div class="editor-host" id="filter-editor"></div>
           <div class="row">
-            <button id="btn-validate-filter">Validate</button>
-            <button id="btn-apply-filter" class="primary" disabled>Apply</button>
+            <button id="btn-validate-filter" aria-label="Validate filter SQL">Validate</button>
+            <button id="btn-apply-filter" class="primary" disabled aria-label="Apply filter SQL to table">Apply</button>
           </div>
           <div class="feedback" id="filter-feedback"></div>
         </section>
@@ -129,8 +129,8 @@
             <input id="expr-name" type="text" placeholder="e.g. total_with_tax" value="total_with_tax" />
           </div>
           <div class="row">
-            <button id="btn-validate-expr">Validate</button>
-            <button id="btn-apply-expr" class="primary" disabled>Add column</button>
+            <button id="btn-validate-expr" aria-label="Validate derived expression">Validate</button>
+            <button id="btn-apply-expr" class="primary" disabled aria-label="Add derived column">Add column</button>
           </div>
           <div class="feedback" id="expr-feedback"></div>
         </section>

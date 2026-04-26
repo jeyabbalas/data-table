@@ -45,6 +45,12 @@ The library mounts **Export**, **Derived Column**, and **SQL Filter** modals on 
 
 This example's `theme.css` targets **both** `:root` and `.dt-root` for light, and **both** `:root[data-dt-color-scheme="dark"]` and `.dt-root[data-dt-color-scheme="dark"]` for dark. `ModalHost` mirrors the `data-dt-color-scheme` attribute from `.dt-root` onto its portal host, so the dark-mode selector reaches both scopes automatically.
 
+## Dark mode needs two triggers — `@media` AND the attribute
+
+`colorScheme: 'auto'` (the default) tells the library to **remove** `data-dt-color-scheme` and let `@media (prefers-color-scheme: dark)` govern the palette. A custom theme that only declares dark overrides under `[data-dt-color-scheme="dark"]` will silently break in auto mode + OS dark: the library's own `@media` block flips library-controlled tokens (`--dt-text`, `--dt-border` defaults) to dark, while the unattributed custom overrides stay on the light palette — yielding light text on light backgrounds.
+
+This example's `theme.css` therefore declares dark overrides in **both** an `@media (prefers-color-scheme: dark)` block (for auto mode) and a bare `[data-dt-color-scheme="dark"]` block (for explicit dark), with a light-restoration block inside the `@media` for instances that opt back to light. This mirrors the dual-trigger pattern in [`src/styles/01-variables.css`](../../src/styles/01-variables.css) — see the `@media` and `[data-dt-color-scheme="dark"]` blocks there for the canonical reference. CSS has no mixins, so the dark block is duplicated; keep the two copies in sync.
+
 ## Cascade note — import order matters
 
 The overrides live in a separate `theme.css` file imported from `main.ts` **after** `@jeyabbalas/data-table/styles`. The library's built-in stylesheet declares its defaults on `:root` and `[data-dt-color-scheme="dark"]`; our overrides use the same specificity for portal coverage, so cascade order is what lets them win. Putting the overrides in an inline `<style>` in `<head>` would lose — inline styles in `<head>` load *before* the JS module's CSS import, and same-specificity rules defer to whichever was declared later.

@@ -29,12 +29,23 @@
         border-color: var(--dt-primary, #c2410c);
       }
 
-      /* Swap page chrome colors when the example switches to dark. */
+      /* Swap page chrome colors when the example switches to dark — explicit. */
       body:has(.dt-root[data-dt-color-scheme="dark"]) { background: #1c1917; color: #fafaf9; }
       body:has(.dt-root[data-dt-color-scheme="dark"]) header { border-bottom-color: #44403c; }
       body:has(.dt-root[data-dt-color-scheme="dark"]) header a { color: #fdba74; }
       body:has(.dt-root[data-dt-color-scheme="dark"]) button { background: #292524; border-color: #44403c; color: #fafaf9; }
       body:has(.dt-root[data-dt-color-scheme="dark"]) button:hover { background: #44403c; }
+
+      /* Auto mode + system dark — flip the page chrome unless the user
+         explicitly opted back to light. The :not() guard mirrors the
+         library's opt-out semantic in src/styles/01-variables.css. */
+      @media (prefers-color-scheme: dark) {
+        body:has(.dt-root:not([data-dt-color-scheme="light"])) { background: #1c1917; color: #fafaf9; }
+        body:has(.dt-root:not([data-dt-color-scheme="light"])) header { border-bottom-color: #44403c; }
+        body:has(.dt-root:not([data-dt-color-scheme="light"])) header a { color: #fdba74; }
+        body:has(.dt-root:not([data-dt-color-scheme="light"])) button { background: #292524; border-color: #44403c; color: #fafaf9; }
+        body:has(.dt-root:not([data-dt-color-scheme="light"])) button:hover { background: #44403c; }
+      }
 
       #table { flex: 1; min-height: 0; }
     </style>

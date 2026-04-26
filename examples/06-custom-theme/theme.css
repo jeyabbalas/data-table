@@ -2,16 +2,34 @@
    stone, zero blue. Imported from main.ts AFTER the library's built-in
    stylesheet so cascade order favors these rules.
 
-   Scope strategy:
-   - Light: `:root` — declares defaults on <html> that cascade everywhere,
-     including body-portaled modals (Export, Derived Column, SQL Filter)
-     via inherited custom-property values.
-   - Dark: bare `[data-dt-color-scheme="dark"]` — the library's own dark
-     block uses the same bare selector (src/styles/01-variables.css:288),
-     and ModalHost mirrors the attribute onto portal hosts, so this
-     matches both the in-tree `.dt-root` AND the portaled modal hosts.
-     Same specificity as the library default, but imported later → source
-     order wins. */
+   Scope strategy mirrors the library's own dual-trigger pattern in
+   src/styles/01-variables.css:
+
+   - Light defaults: `:root, .dt-root` — declares defaults on <html> that
+     cascade everywhere, including body-portaled modals (Export, Derived
+     Column, SQL Filter) via inherited custom-property values. The
+     `.dt-root` half ensures per-instance overrides also apply when a
+     consumer scopes the table differently.
+
+   - Dark via OS preference: `@media (prefers-color-scheme: dark)` — fires
+     when `colorScheme: 'auto'` is in effect (the library removes the
+     `data-dt-color-scheme` attribute) and the OS reports dark mode.
+     Without this block, the library's @media rules would flip
+     library-controlled vars (`--dt-text` etc.) to dark while these
+     custom overrides stayed on the light palette — yielding light text
+     on cream backgrounds.
+
+   - Dark via explicit attribute: `[data-dt-color-scheme="dark"]` —
+     forces dark regardless of OS. Bare selector matches both the
+     in-tree `.dt-root` and portaled modal hosts (ModalHost mirrors the
+     attribute onto its portal hosts).
+
+   - Light restoration inside @media — when the user explicitly opts back
+     to light while the OS is dark, restore the light palette so portal
+     hosts (which carry the mirrored attribute) follow suit.
+
+   The dark block is duplicated between the @media rule and the bare
+   attribute rule (CSS has no mixins) — keep the two blocks in sync. */
 
 /* ---- Light (default + explicit) ---------------------------------------- */
 :root,
@@ -49,7 +67,76 @@
   --dt-radius:          3px;
 }
 
-/* ---- Dark — bare attribute selector reaches both .dt-root and portaled modals. -- */
+/* ---- Dark via OS preference (auto mode + system dark) ------------------ */
+@media (prefers-color-scheme: dark) {
+  :root,
+  .dt-root {
+    --dt-primary:         #fb923c;   /* orange-400 */
+    --dt-primary-hover:   #fdba74;   /* orange-300 */
+    --dt-primary-light:   #431407;   /* orange-950 */
+    --dt-primary-lighter: #7c2d12;   /* orange-900 */
+
+    --dt-accent:          #f472b6;   /* pink-400 */
+    --dt-accent-hover:    #ec4899;   /* pink-500 */
+
+    --dt-neutral:         #a8a29e;   /* stone-400 */
+    --dt-neutral-hover:   #78716c;   /* stone-500 */
+
+    --dt-syntax-string:   #86efac;   /* green-300 */
+    --dt-syntax-type:     #fdba74;   /* orange-300 */
+
+    --dt-bg:              #1c1917;   /* stone-950 — warm black */
+    --dt-bg-secondary:    #292524;   /* stone-900 */
+    --dt-bg-tertiary:     #44403c;   /* stone-800 */
+    --dt-border:          #44403c;
+    --dt-border-light:    #292524;
+
+    --dt-text:            #fafaf9;   /* stone-50  */
+    --dt-text-secondary:  #d6d3d1;   /* stone-300 */
+    --dt-text-tertiary:   #a8a29e;   /* stone-400 */
+
+    --dt-arrow-default:   #57534e;
+    --dt-arrow-hover:     #a8a29e;
+  }
+
+  /* Restore the light palette for instances (and their mirrored portal
+     hosts) that explicitly opt back to light while the OS is dark. Must
+     restore every variable the dark block above sets on .dt-root —
+     otherwise the dark block's direct .dt-root value wins (same
+     specificity, earlier in source order doesn't matter once it's
+     unopposed). --dt-text family + arrow tokens use the library's light
+     defaults because the example's light palette doesn't customize them. */
+  [data-dt-color-scheme="light"] {
+    --dt-primary:         #c2410c;
+    --dt-primary-hover:   #9a3412;
+    --dt-primary-light:   #ffedd5;
+    --dt-primary-lighter: #fff7ed;
+
+    --dt-accent:          #be185d;
+    --dt-accent-hover:    #9f1239;
+
+    --dt-neutral:         #78716c;
+    --dt-neutral-hover:   #57534e;
+
+    --dt-syntax-string:   #15803d;
+    --dt-syntax-type:     #9a3412;
+
+    --dt-bg:              #fffbf5;
+    --dt-bg-secondary:    #fef3e2;
+    --dt-bg-tertiary:     #fde4c8;
+    --dt-border:          #e7d8c3;
+    --dt-border-light:    #f5ead8;
+
+    --dt-text:            #111827;   /* gray-900 — library light default */
+    --dt-text-secondary:  #6b7280;   /* gray-500 */
+    --dt-text-tertiary:   #9ca3af;   /* gray-400 */
+
+    --dt-arrow-default:   #d1d5db;   /* gray-300 */
+    --dt-arrow-hover:     #9ca3af;   /* gray-400 */
+  }
+}
+
+/* ---- Dark via explicit attribute — reaches both .dt-root and portaled modals. -- */
 [data-dt-color-scheme="dark"] {
   --dt-primary:         #fb923c;   /* orange-400 */
   --dt-primary-hover:   #fdba74;   /* orange-300 */

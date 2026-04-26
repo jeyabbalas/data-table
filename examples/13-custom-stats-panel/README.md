@@ -17,15 +17,14 @@ npm run dev
 
 ## Data
 
-The same 181-row × 5-column [`us_customer_orders.csv`](../../tests/fixtures/datasets/csv/us_customer_orders.csv) used by example 08. Columns: `order_id` (integer), `state` (string), `product_category` (string), `order_total_usd` (float), `order_date` (date).
+The 891-row × 12-column [`titanic.json`](../../tests/fixtures/datasets/json/titanic.json) fixture, loaded via `sourceFormat: 'json'`. Columns: `PassengerId` (integer), `Survived` (integer), `Pclass` (integer), `Name` (string), `Sex` (string), `Age` (float), `SibSp` (integer), `Parch` (integer), `Ticket` (string), `Fare` (float), `Cabin` (string), `Embarked` (string).
 
 ## What to observe
 
-1. The two numeric columns (`order_id`, `order_total_usd`) show `<n> rows · μ <mean> · σ <stddev>` instead of the default `min · med · max`. Mean / stddev come from a panel-issued `SELECT AVG(...), STDDEV_POP(...)` query, not from `ColumnStatsData`.
-2. The two string columns (`state`, `product_category`) show `top: <value> (<pct>%)` — most-common value and its share. The panel runs its own `GROUP BY ... ORDER BY COUNT DESC LIMIT 1` query on every filter change.
-3. `order_date` keeps the library's default `2025-01-01 – 2025-12-31` line. We never registered a panel for `date` columns, so the default HTML formatter renders unchanged.
-4. Brush `order_total_usd`, click a state segment, or otherwise filter — both panels re-query in lockstep, and the row counts shrink to match the visible subset.
-5. Hover a histogram bin or value-counts segment: the panel's bottom line briefly shows the visualization's hover snippet, then snaps back when you mouse off. Custom panels keep the standard hover-preview UX by routing `onStatsChange` through `setHoverStats(text)`.
+1. The seven numeric columns (`PassengerId`, `Survived`, `Pclass`, `Age`, `SibSp`, `Parch`, `Fare`) show `<n> rows · μ <mean> · σ <stddev>` instead of the default `min · med · max`. Mean / stddev come from a panel-issued `SELECT AVG(...), STDDEV_POP(...)` query, not from `ColumnStatsData`.
+2. The five string columns (`Name`, `Sex`, `Ticket`, `Cabin`, `Embarked`) show `top: <value> (<pct>%)` — most-common value and its share. The panel runs its own `GROUP BY ... ORDER BY COUNT DESC LIMIT 1` query on every filter change.
+3. Brush `Fare`, click a `Sex` segment, or otherwise filter — both panels re-query in lockstep, and the row counts shrink to match the visible subset.
+4. Hover a histogram bin or value-counts segment: the panel's bottom line briefly shows the visualization's hover snippet, then snaps back when you mouse off. Custom panels keep the standard hover-preview UX by routing `onStatsChange` through `setHoverStats(text)`.
 
 ## Lifecycle quickstart
 
@@ -82,7 +81,7 @@ To restrict a panel to a specific column **name** (not just a type), subclass th
 ```ts
 class NameAwareRegistry extends StatsPanelRegistry {
   create(container, column, options) {
-    if (column.name === 'order_total_usd') return new RevenuePanel(container, column, options);
+    if (column.name === 'Fare') return new FarePanel(container, column, options);
     return super.create(container, column, options);
   }
 }

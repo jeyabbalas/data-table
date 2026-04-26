@@ -15,7 +15,7 @@ import {
 import type { ColumnSchema, Filter } from '@jeyabbalas/data-table';
 
 const DATA_URL =
-  'https://raw.githubusercontent.com/jeyabbalas/data-table/refs/heads/main/tests/fixtures/datasets/csv/us_customer_orders.csv';
+  'https://raw.githubusercontent.com/jeyabbalas/data-table/main/tests/fixtures/datasets/json/titanic.json';
 
 /**
  * Tiny helper: format a number with at most two fraction digits, suppressing
@@ -278,9 +278,7 @@ class TopValuePanel extends BaseStatsPanel {
 const container = document.getElementById('table') as HTMLElement;
 
 // Build the registry. Numeric columns get MeanStdPanel; string columns get
-// TopValuePanel. Date / time / boolean / uuid / interval columns receive no
-// registration → the library's built-in HTML formatter handles them, proving
-// the fallthrough path works.
+// TopValuePanel. Together these cover every column in the Titanic dataset.
 const statsPanelRegistry = new StatsPanelRegistry();
 statsPanelRegistry.register({
   name: 'mean-std',
@@ -299,11 +297,11 @@ let table: DataTable | undefined;
 (async () => {
   table = await createDataTable({
     container,
-    tableName: 'orders',
+    tableName: 'titanic',
     statsPanelRegistry,
     persistence: false,
   });
-  await table.loadData(DATA_URL, { sourceFormat: 'csv' });
+  await table.loadData(DATA_URL, { sourceFormat: 'json' });
 })();
 
 window.addEventListener('beforeunload', () => void table?.destroy());

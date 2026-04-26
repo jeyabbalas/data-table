@@ -21,10 +21,9 @@
         A <code>BaseStatsPanel</code> subclass replaces the library's built-in
         column-stats slot with a custom one. Numeric columns show
         <em>n · μ · σ</em> (mean and stddev fetched from a custom DuckDB
-        query); string columns show the most-common value and its share. The
-        date column falls through to the default formatter — registrations
-        you don't supply are unchanged. Brush a histogram or filter a
-        category to watch every panel re-query in lockstep.
+        query); string columns show the most-common value and its share.
+        Brush a histogram or filter a category to watch every panel re-query
+        in lockstep.
       </p>
     </header>
     <div id="table"></div>

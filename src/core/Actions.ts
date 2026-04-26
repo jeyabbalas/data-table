@@ -522,9 +522,19 @@ export class StateActions {
 
   /**
    * Add a raw SQL filter. Does NOT re-validate — caller is responsible
-   * for validation (see validateSQLFilter). Creates a RawSQLFilter with
-   * a unique id and synthetic column key, appends to state.filters.
-   * Captures undo snapshot before mutation.
+   * for validation (see {@link validateSQLFilter}). Creates a RawSQLFilter
+   * with a unique id and synthetic column key, appends to `state.filters`.
+   * Captures an undo snapshot before mutation.
+   *
+   * **Trust boundary.** The `sql` string is spliced verbatim into a WHERE
+   * clause when filters are evaluated (see `filterToSQL` in
+   * `src/filters/FilterSQL.ts`). The library calls DuckDB to validate
+   * parseability via {@link validateSQLFilter}, but does not constrain
+   * semantics — any SELECT/UNION/EXISTS expression DuckDB accepts will
+   * run. Treat `sql` as trusted developer input. If your end users author
+   * raw SQL (e.g. through the SQL filter modal), validate at the host
+   * application layer or document the data-exposure surface to them.
+   *
    * @returns The filter's unique id
    */
   addRawSQLFilter(sql: string, label?: string): string {

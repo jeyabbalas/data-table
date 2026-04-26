@@ -60,22 +60,52 @@ const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
 // ---------------------------------------------------------------------------
 
 /**
- * Escape a CSV field value per RFC 4180.
+ * Cells whose first character is one of these execute as a formula when the
+ * CSV is opened in Excel, LibreOffice Calc, or Google Sheets — the OWASP
+ * "CSV injection" / "formula injection" vector. We neutralise by prepending
+ * a single quote so the spreadsheet treats the cell as text.
  *
- * If the field contains the delimiter, a double-quote, a newline, or a
- * carriage return, the entire field is wrapped in double-quotes and any
- * embedded double-quotes are doubled.
+ * `\t` and `\r` are listed because Excel's CSV importer can interpret a
+ * leading tab/CR as a continuation of a previous formula cell.
  */
-export function escapeCSVField(value: string, delimiter: string): string {
-  if (
-    value.includes(delimiter) ||
-    value.includes('"') ||
-    value.includes('\n') ||
-    value.includes('\r')
-  ) {
-    return '"' + value.replace(/"/g, '""') + '"';
+const FORMULA_TRIGGER_PREFIXES = ['=', '+', '-', '@', '\t', '\r'] as const;
+
+/**
+ * Prepend a single quote when the cell starts with a spreadsheet formula
+ * trigger character. Returns the input unchanged otherwise. Idempotent:
+ * an already-escaped value (`'=...`) is left alone because the second
+ * character is the trigger; only the leading character is inspected.
+ */
+export function neutralizeFormulaPrefix(value: string): string {
+  if (value.length === 0) return value;
+  const first = value.charAt(0);
+  for (const trigger of FORMULA_TRIGGER_PREFIXES) {
+    if (first === trigger) return `'${value}`;
   }
   return value;
+}
+
+/**
+ * Escape a CSV field value per RFC 4180 plus formula-injection neutralisation.
+ *
+ * The formula-injection step prepends a single quote to cells whose first
+ * character is `=`, `+`, `-`, `@`, `\t`, or `\r` (see {@link neutralizeFormulaPrefix}).
+ * After that, RFC 4180 wrapping kicks in: if the (possibly prefixed) field
+ * contains the delimiter, a double-quote, a newline, or a carriage return,
+ * the entire field is wrapped in double-quotes and any embedded double-quotes
+ * are doubled.
+ */
+export function escapeCSVField(value: string, delimiter: string): string {
+  const neutralized = neutralizeFormulaPrefix(value);
+  if (
+    neutralized.includes(delimiter) ||
+    neutralized.includes('"') ||
+    neutralized.includes('\n') ||
+    neutralized.includes('\r')
+  ) {
+    return '"' + neutralized.replace(/"/g, '""') + '"';
+  }
+  return neutralized;
 }
 
 /**

@@ -1008,7 +1008,15 @@ export class TableContainer {
             const width = columnWidths.get(colName) ?? 150;
             colEl.style.width = `${width}px`;
 
-            colEl.innerHTML = `<strong>${colSchema.name}</strong><br><small>${colSchema.type}</small>`;
+            // Build the placeholder header via DOM nodes so a hostile column
+            // name (e.g. from an attacker-controlled CSV header) cannot inject
+            // markup. Reachable via /advanced when TableContainer is mounted
+            // without `actions`.
+            const nameEl = document.createElement('strong');
+            nameEl.textContent = colSchema.name;
+            const typeEl = document.createElement('small');
+            typeEl.textContent = colSchema.type;
+            colEl.replaceChildren(nameEl, document.createElement('br'), typeEl);
             headerRowEl.appendChild(colEl);
           }
         }

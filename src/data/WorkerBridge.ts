@@ -52,18 +52,34 @@ export interface WorkerBridgeOptions {
    * built-in default. Useful for strict-CSP / bundler-specific deployments
    * where the default `new Worker(new URL(...), { type: 'module' })` cannot
    * be used. The caller is responsible for passing `{ type: 'module' }`.
+   *
+   * **Trust boundary.** The returned `Worker` runs JavaScript with full
+   * access to the calling page's origin. Treat this option as
+   * developer-controlled — never invoke the factory with values derived
+   * from end-user input.
    */
   workerFactory?: () => Worker;
   /**
    * Custom URL/path for the worker script. Instantiated via
    * `new Worker(workerUrl, { type: 'module' })`. Ignored if
    * {@link workerFactory} is set.
+   *
+   * **Trust boundary.** The library does NOT validate the scheme, origin,
+   * or content-type of `workerUrl`. Passing user-derived input here lets
+   * an attacker run arbitrary JavaScript in your origin. Pin to a static
+   * same-origin URL (or one served with appropriate CORS headers).
    */
   workerUrl?: string | URL;
   /**
    * DuckDB WASM bundles override for offline / self-hosted deployments.
    * Forwarded to the worker on init; when omitted the worker falls back
    * to `getJsDelivrBundles()`.
+   *
+   * **Trust boundary.** The bundle URLs are passed verbatim to
+   * `@duckdb/duckdb-wasm`'s `selectBundle`, which `fetch`-es them and
+   * instantiates WASM. Treat as developer-controlled — never derived from
+   * end-user input. See `docs/integrations/csp-and-offline.md` for the
+   * recommended self-hosting pattern.
    */
   duckdbBundles?: DuckDBBundles;
 }
@@ -429,7 +445,22 @@ export class WorkerBridge {
   }
 
   private handleMessage(event: MessageEvent<WorkerResponse>): void {
-    const { id, type, payload } = event.data;
+    // Defense in depth: the worker is library-controlled, but a hostile
+    // workerFactory / cross-origin worker could deliver malformed messages.
+    // Reject anything that doesn't match the expected `{ id, type, payload }`
+    // shape rather than blindly trusting `event.data`.
+    const data = event.data as unknown;
+    if (typeof data !== 'object' || data === null) {
+      console.warn('[WorkerBridge] dropping non-object worker message');
+      return;
+    }
+    const id = (data as { id?: unknown }).id;
+    const type = (data as { type?: unknown }).type;
+    const payload = (data as { payload?: unknown }).payload;
+    if (typeof id !== 'string') {
+      console.warn('[WorkerBridge] dropping worker message with non-string id');
+      return;
+    }
 
     // Ignore ready message (handled in initialize)
     if (id === '__ready__') return;
@@ -443,15 +474,36 @@ export class WorkerBridge {
         request.resolve(payload);
         break;
 
-      case 'error':
+      case 'error': {
         this.cleanupRequest(id);
+        if (typeof payload !== 'object' || payload === null) {
+          request.reject(
+            new WorkerInitError('Worker error response missing payload', {
+              code: 'WORKER_PROTOCOL_VIOLATION',
+              details: { id, type },
+            }),
+          );
+          break;
+        }
         request.reject(reconstructError(payload as ErrorPayload));
         break;
+      }
 
       case 'progress':
-        if (request.onProgress) {
+        if (request.onProgress && typeof payload === 'object' && payload !== null) {
           request.onProgress(payload as ProgressInfo);
         }
+        break;
+
+      default:
+        console.warn(`[WorkerBridge] dropping worker message with unknown type: ${String(type)}`);
+        this.cleanupRequest(id);
+        request.reject(
+          new WorkerInitError(`Worker sent unknown message type: ${String(type)}`, {
+            code: 'WORKER_PROTOCOL_VIOLATION',
+            details: { id, type: String(type) },
+          }),
+        );
         break;
     }
   }

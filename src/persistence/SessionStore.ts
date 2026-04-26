@@ -131,6 +131,46 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
   }
 }
 
+// --- Snapshot shape coercion ---
+
+/**
+ * Required keys on a `SessionSnapshot` returned by IDB. Anything missing one
+ * of these is treated as malformed and discarded — the snapshot tampering
+ * surface is small (same-origin write access only), but defending against
+ * partial / corrupt records keeps `restoreStateFromSnapshot` from having to
+ * re-check every field.
+ */
+const REQUIRED_SNAPSHOT_KEYS = [
+  'tableName',
+  'version',
+  'filters',
+  'sortColumns',
+  'visibleColumns',
+  'columnOrder',
+  'columnWidths',
+  'pinnedColumns',
+  'hiddenColumnInfo',
+] as const;
+
+function coerceLoadedSnapshot(raw: unknown): SessionSnapshot | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  for (const key of REQUIRED_SNAPSHOT_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return null;
+  }
+  if (typeof obj.tableName !== 'string') return null;
+  if (typeof obj.version !== 'number') return null;
+  if (!Array.isArray(obj.filters)) return null;
+  if (!Array.isArray(obj.sortColumns)) return null;
+  if (!Array.isArray(obj.visibleColumns)) return null;
+  if (!Array.isArray(obj.columnOrder)) return null;
+  if (!Array.isArray(obj.pinnedColumns)) return null;
+  if (typeof obj.columnWidths !== 'object' || obj.columnWidths === null) return null;
+  if (typeof obj.hiddenColumnInfo !== 'object' || obj.hiddenColumnInfo === null) return null;
+  return obj as unknown as SessionSnapshot;
+}
+
 // --- SessionStore class ---
 
 /**
@@ -141,9 +181,14 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
  * `persistence: true` (default). Construct your own to share one store
  * across multiple `DataTable` instances on a page, inject a differently-keyed
  * store, or swap the default for an app-specific backend (localStorage,
- * remote sync, in-memory mock). Every method degrades gracefully — returns
- * `null` / `[]` on failure and never throws — so private-browsing and
- * no-IndexedDB environments fall back to a non-persistent session.
+ * remote sync, in-memory mock). Open / read / list methods degrade
+ * gracefully — they return `null` / `[]` when IndexedDB is unavailable
+ * (private browsing, opt-out, no-IDB environment) and never throw — so
+ * those environments fall back to a non-persistent session. Write methods
+ * (`save`, `saveSync`, `delete`) reject / throw with the underlying
+ * `DOMException` when IDB IS available but a transaction fails (typically
+ * `QuotaExceededError`); see `AutoSave` for the consumer-side
+ * mapping to a typed `PersistenceError`.
  *
  * @example
  * import {
@@ -215,20 +260,30 @@ export class SessionStore {
     return this.db ? true : this.open();
   }
 
-  /** Store a snapshot. No-op if tableName is null or db unavailable. */
+  /**
+   * Store a snapshot. No-op if `tableName` is null or IDB is unavailable
+   * (private browsing, opt-out, no-IDB environment).
+   *
+   * Rejects with the underlying `DOMException` (typically
+   * `QuotaExceededError`) when IDB IS available but the transaction fails
+   * — see `AutoSave` for the consumer-side mapping to a typed
+   * `PersistenceError`. The "never throws" contract applies only to the
+   * no-IDB fallback; quota and abort errors must reach the consumer.
+   */
   async save(snapshot: SessionSnapshot): Promise<void> {
     if (snapshot.tableName == null) return;
     if (!(await this.ensureOpen())) return;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       try {
         const tx = this.db!.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
         store.put(snapshot);
         tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch {
-        resolve();
+        tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+      } catch (cause) {
+        reject(cause instanceof Error ? cause : new Error(String(cause)));
       }
     });
   }
@@ -238,21 +293,25 @@ export class SessionStore {
    * queue. Use this in page lifecycle handlers (beforeunload, visibilitychange)
    * where an async await could be skipped by the browser during page teardown.
    *
-   * No-op if the database hasn't been opened yet or tableName is null.
+   * No-op if the database hasn't been opened yet or `tableName` is null.
+   * Re-throws synchronously if `transaction()` / `put()` throws — typically
+   * `QuotaExceededError`. `AutoSave.flushPendingSave` catches and
+   * routes through `reportError`.
    */
   saveSync(snapshot: SessionSnapshot): void {
     if (snapshot.tableName == null) return;
     if (!this.db) return;
 
-    try {
-      const tx = this.db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(snapshot);
-    } catch {
-      // Silently ignore — best-effort during page teardown
-    }
+    const tx = this.db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(snapshot);
   }
 
-  /** Load a snapshot by table name. Returns null if not found or db unavailable. */
+  /**
+   * Load a snapshot by table name. Returns `null` if not found, if IDB is
+   * unavailable, or if the stored value fails a structural shape check (a
+   * partially-tampered blob from a same-origin attacker, or a snapshot from
+   * a future schema version we can't recognise).
+   */
   async load(tableName: string): Promise<SessionSnapshot | null> {
     if (!(await this.ensureOpen())) return null;
 
@@ -261,7 +320,7 @@ export class SessionStore {
         const tx = this.db!.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
         const request = store.get(tableName);
-        request.onsuccess = () => resolve(request.result ?? null);
+        request.onsuccess = () => resolve(coerceLoadedSnapshot(request.result));
         request.onerror = () => resolve(null);
       } catch {
         resolve(null);

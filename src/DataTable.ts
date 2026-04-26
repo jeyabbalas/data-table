@@ -59,7 +59,7 @@ import { FilterPresetManager } from './filters/FilterPresets';
 import { AutoSave } from './persistence/AutoSave';
 import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
-import { formatDefaultStats } from './statistics/StatsFormatters';
+import { escapeHtml, formatDefaultStats } from './statistics/StatsFormatters';
 import { AnnotationPopover } from './table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
 import { TableContainer } from './table/TableContainer';
@@ -657,7 +657,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // filter-aware refreshes. Otherwise, write the simple row-count fallback.
         if (!panel) {
           const total = state.totalRows.get();
-          statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(total)}</span>`;
+          // escapeHtml the i18n function output: consumers may override
+          // `messages.statistics.rowCount` with anything, and we splice into innerHTML.
+          statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.rowCount(total))}</span>`;
         }
         continue;
       }
@@ -670,9 +672,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         const fr = state.filteredRows.get();
         const tr = state.totalRows.get();
         const af = state.filters.get();
+        // escapeHtml: messages.* are consumer-overridable functions whose
+        // return value lands in innerHTML.
         return af.length > 0
-          ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.filteredRowCount(fr, tr)}</span>`
-          : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${messages.statistics.rowCount(tr)}</span>`;
+          ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.filteredRowCount(fr, tr))}</span>`
+          : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.rowCount(tr))}</span>`;
       };
       // Only write the placeholder fallback when there's no panel taking the slot.
       if (!panel) statsEl.innerHTML = fallbackStats();

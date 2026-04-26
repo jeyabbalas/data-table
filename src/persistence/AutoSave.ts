@@ -253,9 +253,28 @@ export class AutoSave {
       cause instanceof PersistenceError
         ? cause
         : new PersistenceError(cause instanceof Error ? cause.message : String(cause), {
-            code: 'SAVE_FAILED',
+            code: classifyPersistenceFailure(cause),
             cause,
           });
     this.onError(err);
   }
+}
+
+/**
+ * Map an arbitrary thrown / rejected value to the most specific
+ * `PersistenceError.code`. Today this is binary: quota exhaustion → its
+ * own code, everything else → the generic `SAVE_FAILED`.
+ */
+function classifyPersistenceFailure(cause: unknown): string {
+  // DOMException doesn't exist in every JS runtime (Node tests ship a polyfill);
+  // duck-type on `name` to cover both real DOMException and fake-indexeddb shims.
+  if (
+    cause &&
+    typeof cause === 'object' &&
+    'name' in cause &&
+    (cause as { name: unknown }).name === 'QuotaExceededError'
+  ) {
+    return 'PERSISTENCE_QUOTA_EXCEEDED';
+  }
+  return 'SAVE_FAILED';
 }

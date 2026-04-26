@@ -29,6 +29,40 @@ import { exportParquetFromState } from './ParquetExport';
 
 export type ExportFormat = 'csv' | 'json' | 'parquet';
 export type ExportScope = 'all' | 'filtered' | 'selected';
+
+const FILENAME_STEM_MAX_LENGTH = 100;
+
+/**
+ * Sanitise a user-provided filename stem (no extension) for safe use as a
+ * `<a download>` filename. Strips:
+ *
+ *  - NUL bytes and ASCII control characters (`\x00–\x1f`, `\x7f`)
+ *  - Path separators `/` and `\\`
+ *  - Leading dots (so `.htaccess` becomes `htaccess`)
+ *
+ * Replaces every `..` run with `__` to defang parent-dir traversal hints,
+ * and caps the final length at {@link FILENAME_STEM_MAX_LENGTH} to leave
+ * room for the `_export.<ext>` suffix under the typical 255-char filesystem
+ * limit.
+ *
+ * Returns an empty string if every character was sanitised away — callers
+ * are responsible for falling back to `'export'` (or similar) in that case.
+ */
+export function sanitizeFilenameStem(name: string): string {
+  // Strip control chars, path separators in one pass; keep ordinary text.
+  // eslint-disable-next-line no-control-regex
+  let cleaned = name.replace(/[\x00-\x1f\x7f/\\]/g, '');
+  // Drop leading dots BEFORE defanging so `.htaccess` becomes `htaccess`
+  // and `....hidden` becomes `hidden`. Internal `..` runs are still defanged
+  // below to defuse parent-directory hints embedded in the middle of a name.
+  cleaned = cleaned.replace(/^\.+/, '');
+  cleaned = cleaned.replace(/\.{2,}/g, (match) => '_'.repeat(match.length));
+  if (cleaned.length > FILENAME_STEM_MAX_LENGTH) {
+    cleaned = cleaned.slice(0, FILENAME_STEM_MAX_LENGTH);
+  }
+  return cleaned;
+}
+
 export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string;
@@ -703,7 +737,10 @@ export class ExportDialog {
   }
 
   private getExportFilename(ext: string): string {
-    const baseName = this.sourceName ?? this.state.tableName.get() ?? 'export';
+    // sourceName is already sanitised in setSourceName(); tableName comes from
+    // data loading and may reflect the source filename, so re-sanitise here.
+    const raw = this.sourceName ?? this.state.tableName.get() ?? 'export';
+    const baseName = sanitizeFilenameStem(raw) || 'export';
     return `${baseName}_export.${ext}`;
   }
 
@@ -761,11 +798,17 @@ export class ExportDialog {
    * Set the source file name used as the base for exported file names.
    * Pass the original filename (e.g. "sales_data.csv") — the extension
    * will be stripped and replaced with the chosen export format's extension.
+   *
+   * The stem is sanitised to remove path separators, NUL/control characters,
+   * leading dots, and runs of `..`, then capped at 100 characters so the
+   * full `<stem>_export.<ext>` name comfortably fits the typical 255-char
+   * filesystem limit.
    */
   setSourceName(name: string): void {
     // Strip extension to get base name
     const dotIndex = name.lastIndexOf('.');
-    this.sourceName = dotIndex > 0 ? name.substring(0, dotIndex) : name;
+    const stem = dotIndex > 0 ? name.substring(0, dotIndex) : name;
+    this.sourceName = sanitizeFilenameStem(stem);
   }
 
   getElement(): HTMLElement {

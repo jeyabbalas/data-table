@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { SQLValidationError } from '@/core/errors';
 import {
   filterToSQL,
   filtersToWhereClause,
@@ -404,6 +405,51 @@ describe('quoteIdentifier', () => {
   it('should handle name that is just a double quote', () => {
     expect(quoteIdentifier('"')).toBe('""""');
   });
+
+  // ---- Phase 1 security hardening ----
+
+  it('throws INVALID_IDENTIFIER on empty string', () => {
+    expect(() => quoteIdentifier('')).toThrow(SQLValidationError);
+    try {
+      quoteIdentifier('');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SQLValidationError);
+      expect((err as SQLValidationError).code).toBe('INVALID_IDENTIFIER');
+    }
+  });
+
+  it('throws INVALID_IDENTIFIER on embedded NUL byte', () => {
+    expect(() => quoteIdentifier('col\0name')).toThrow(SQLValidationError);
+    try {
+      quoteIdentifier('col\0name');
+    } catch (err) {
+      expect((err as SQLValidationError).code).toBe('INVALID_IDENTIFIER');
+    }
+  });
+
+  it('throws INVALID_IDENTIFIER on a NUL-only identifier', () => {
+    expect(() => quoteIdentifier('\0')).toThrow(SQLValidationError);
+  });
+
+  it('preserves surrogate pairs (emoji) unchanged', () => {
+    // 'a😀b' → "a😀b" — surrogate halves must not be split.
+    const id = quoteIdentifier('a😀b');
+    expect(id).toBe('"a😀b"');
+  });
+
+  it('preserves non-ASCII Unicode unchanged', () => {
+    expect(quoteIdentifier('café')).toBe('"café"');
+    expect(quoteIdentifier('значение')).toBe('"значение"');
+  });
+
+  it('preserves leading and trailing whitespace (DuckDB owns trimming)', () => {
+    expect(quoteIdentifier('  col  ')).toBe('"  col  "');
+  });
+
+  it('preserves non-NUL ASCII control chars (DuckDB will reject if it dislikes them)', () => {
+    // 0x01 SOH; we do not strip silently. DuckDB will throw at parse time.
+    expect(quoteIdentifier('a\x01b')).toBe('"a\x01b"');
+  });
 });
 
 // =========================================
@@ -486,6 +532,31 @@ describe('formatSQLValue', () => {
   it('should quote decimal strings for DuckDB DECIMAL columns', () => {
     expect(formatSQLValue('123.456')).toBe("'123.456'");
     expect(formatSQLValue('-0.5')).toBe("'-0.5'");
+  });
+
+  // ---- Phase 1 security hardening ----
+
+  it('emits BIGINT as bare numeric literal (no quotes)', () => {
+    expect(formatSQLValue(42n)).toBe('42');
+    expect(formatSQLValue(0n)).toBe('0');
+    expect(formatSQLValue(-1n)).toBe('-1');
+    // BIGINT range bound — must not be quoted.
+    expect(formatSQLValue(9223372036854775807n)).toBe('9223372036854775807');
+  });
+
+  it('keeps adversarial single-quote strings inside the literal', () => {
+    const adversarial = "a' OR 1=1 --";
+    expect(formatSQLValue(adversarial)).toBe("'a'' OR 1=1 --'");
+  });
+
+  it('keeps SQL-injection-shaped strings sandboxed', () => {
+    expect(formatSQLValue("'); DROP TABLE x; --")).toBe("'''); DROP TABLE x; --'");
+  });
+
+  it('passes through HTML-shaped strings (SQL escaping does not touch HTML)', () => {
+    // formatSQLValue's job is SQL-literal safety, not HTML safety. Confirms
+    // the contract: payload is preserved, only single quotes are escaped.
+    expect(formatSQLValue('<img src=x onerror=alert(1)>')).toBe("'<img src=x onerror=alert(1)>'");
   });
 });
 

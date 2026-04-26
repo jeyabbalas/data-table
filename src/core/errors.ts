@@ -316,6 +316,7 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
   }
   if (
     code.startsWith('PERSIST_') ||
+    code.startsWith('PERSISTENCE_') ||
     code.startsWith('IDB_') ||
     code === 'SNAPSHOT_INVALID' ||
     code === 'VERSION_MISMATCH' ||

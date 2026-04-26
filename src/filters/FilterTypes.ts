@@ -55,7 +55,17 @@ export interface PatternFilter {
 export interface RawSQLFilter {
   type: 'raw-sql';
   column: string; // Synthetic key: '__raw_sql_<id>__'
-  sql: string; // WHERE clause fragment (no WHERE keyword)
+  /**
+   * SQL WHERE-clause fragment (no `WHERE` keyword).
+   *
+   * **Trust boundary.** Spliced verbatim into the query when filters are
+   * evaluated. The library validates parseability via DuckDB
+   * (`actions.validateSQLFilter`) but does not constrain semantics —
+   * subqueries, UNIONs, and CTEs that DuckDB accepts will run with the
+   * library's data access. Treat as trusted developer input; sanitise
+   * at the host application layer if end users author the SQL.
+   */
+  sql: string;
   label?: string; // Human-readable label for filter chip
   id: string; // Unique identifier (crypto.randomUUID())
 }

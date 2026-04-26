@@ -45,6 +45,7 @@ createDataTable(options) ────► DataTable (facade)
                                ├─ SessionStore (IndexedDB)
                                ├─ UndoManager  (snapshot history)
                                ├─ AnnotationStore             (overlay metadata)
+                               ├─ StatsPanelCoordinator       (filter-broadcast to BaseStatsPanel instances)
                                └─ FilterPresetManager
 ```
 
@@ -278,6 +279,38 @@ flags that the rendering layer reads, but the underlying data is
 unchanged. `getAll` / `getByRow` / `getByColumn` / `getByCell` always
 return the full set; clearing a severity in the filter only changes
 what gets painted (or popped).
+
+## Stats panel coordination (`StatsPanelCoordinator`)
+
+[`StatsPanelCoordinator`](../../src/visualizations/StatsPanelCoordinator.ts)
+is a sibling of [`CrossfilterCoordinator`](#crossfilter-crossfiltercoordinator)
+that broadcasts filter changes to every registered
+[`BaseStatsPanel`](../../src/visualizations/BaseStatsPanel.ts). It is a
+sibling rather than a hook on `CrossfilterCoordinator` for one decisive
+reason: a stats panel can exist for a column that has no visualization
+(e.g. `uuid` columns, which are never visualized). Parenting panel
+broadcasts to visualization broadcasts would silently skip those columns
+on every filter change.
+
+The coordinator stamps a monotonically-increasing `filterSequence` on
+every broadcast, captured per-panel before the `await panel.updateFilters(filters)`
+call lands. If a fresh filter change arrives while an in-flight broadcast
+is still fanning out, the stale call short-circuits before applying —
+without this guard the base-class default's last-write-wins on
+`this.options.filters` could land filter set F1's data on a panel after
+filter set F2's broadcast had already completed. The same race-guard
+pattern lives on `CrossfilterCoordinator`; the two coordinators stay in
+sync deliberately. The rationale is captured in
+[`StatsPanelCoordinator.ts:42–57`](../../src/visualizations/StatsPanelCoordinator.ts).
+
+Fan-out is bounded — `DEFAULT_PANEL_CONCURRENCY = 4` — sized
+independently of the visualization fan-out cap because a panel may issue
+its *own* DuckDB queries (mean+stddev, top-value, custom aggregates) and
+flooding the single-threaded worker on a 200-column table is the
+dominant failure mode. Per-panel rejections are swallowed at the
+coordinator boundary so one panel's failure does not cascade across
+columns; surfacing the error is the panel's responsibility (route
+through `options.onError(err, { source: 'stats-panel', column, phase })`).
 
 ## Event bus: `EventEmitter`
 

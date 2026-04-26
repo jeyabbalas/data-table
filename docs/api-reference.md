@@ -21,6 +21,7 @@ Every row links back to the source of truth (`src/<file>:<line>`). When the sour
 - [Derived columns](#derived-columns)
 - [Column-header tooltip content](#column-header-tooltip-content)
 - [Annotation JSON format](#annotation-json-format)
+- [Stats panels](#stats-panels)
 - [Serialization helpers](#serialization-helpers)
 - [Browser support probe](#browser-support-probe)
 - [i18n (`Strings`)](#i18n-strings)
@@ -59,7 +60,7 @@ Exported from `@jeyabbalas/data-table`. Source: `src/index.ts`.
 |---|---|---|
 | `TableEvents` | type | Event-name → payload map. |
 | `TableEventName` | type | `keyof TableEvents`. |
-| `TableErrorSource` | type | Discriminator for the `error` event (`'load' \| 'query' \| 'export' \| 'persistence' \| 'visualization' \| 'sql-validation' \| 'derived-column' \| 'listener' \| 'unknown'`). |
+| `TableErrorSource` | type | Discriminator for the `error` event (`'load' \| 'query' \| 'export' \| 'persistence' \| 'visualization' \| 'stats-panel' \| 'sql-validation' \| 'derived-column' \| 'listener' \| 'unknown'`). |
 
 ### Error classes
 
@@ -164,6 +165,17 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 | `VisualizationRegistration` | interface | `{ name, isApplicable, constructor, priority }`. |
 | `VisualizationConstructor` | type | `new (container, column, options) => BaseVisualization`. |
 
+### Stats panel registry
+
+Types for the [Stats panels](#stats-panels) extension point. Source: `src/visualizations/StatsPanelRegistry.ts`.
+
+| Symbol | Kind | Purpose |
+|---|---|---|
+| `StatsPanelRegistry` | class | Per-instance registry of `BaseStatsPanel` subclasses keyed by `DataType`. Empty by default; mirror of `VisualizationRegistry` for the column-stats slot. |
+| `defaultStatsPanelRegistry` | const instance | Module-scoped fallback used when `createDataTable` is called without a `statsPanelRegistry` option. Also empty by default. |
+| `StatsPanelRegistration` | interface | `{ name, isApplicable: (type: DataType) => boolean, constructor: StatsPanelConstructor, priority: number }`. Same-name re-register replaces; higher `priority` wins on multi-match. |
+| `StatsPanelConstructor` | type | `new (container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) => BaseStatsPanel`. |
+
 ### Derived columns
 
 | Symbol | Kind | Purpose |
@@ -258,6 +270,11 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `AnnotationPopoverOptions` | interface | Popover ctor options. |
 | `ColumnHeaderTooltipPopover` | class | Single shared popover for `actions.setColumnHeaderTooltip`. Anchored on the column-name span (distinct DOM node from `AnnotationPopover`). |
 | `ColumnHeaderTooltipPopoverOptions` | interface | Popover ctor options. |
+| `BaseStatsPanel` | abstract class | Subclass to render a custom stats panel into the `.dt-col-stats` slot. Lifecycle: `update(stats)` → `updateFilters(filters)` → `setHoverStats(html)` → `destroy()`. See [Stats panels](#stats-panels). |
+| `StatsPanelOptions` | interface | `{ tableName, bridge, filters, messages, onError? }` passed to the panel constructor and refreshed on every filter change. Mirrors `VisualizationOptions`. |
+| `StatsPanelErrorContext` | interface | Context object passed to `options.onError` — `{ source: 'stats-panel', column: string, phase: StatsPanelErrorPhase }`. |
+| `StatsPanelErrorPhase` | type | `'construct' \| 'update' \| 'hover' \| 'fetch' \| 'destroy'` — discriminator for where in the panel lifecycle the error originated. |
+| `StatsPanelCoordinator` | class | Composed by `createDataTable`; subscribes to `state.filters` and broadcasts `panel.updateFilters(filters)` to every registered panel. Stamps a monotonic `filterSequence` per broadcast to drop stale in-flight calls; bounded fan-out (`DEFAULT_PANEL_CONCURRENCY = 4`). Exposed for power users orchestrating panels manually. |
 
 ### Filter UI components
 
@@ -402,6 +419,7 @@ Source: `src/DataTable.ts:124-223`.
 | `expressionFilter` | `boolean` | `true` | Raw-SQL filter button in the filter bar. |
 | `visualizations` | `boolean` | `true` | Auto-attach column-header histograms and value counts. |
 | `visualizationRegistry` | `VisualizationRegistry` | `defaultVisualizationRegistry` | Per-instance registry for custom visualizations. |
+| `statsPanelRegistry` | `StatsPanelRegistry` | `defaultStatsPanelRegistry` | Per-instance registry for custom column-stats panels. Both the per-instance and module-scoped fallback are empty by default — register a `BaseStatsPanel` subclass to replace the library's built-in `formatDefaultStats` rendering for matching column types. See [Stats panels](#stats-panels). |
 | `exportDialog` | `boolean` | `true` | Built-in export dialog (CSV/JSON/Parquet). |
 
 ### Worker
@@ -946,6 +964,171 @@ await table.actions.addDerivedColumn({
 ```
 
 Vector columns materialize a helper table in DuckDB; the main table becomes a VIEW so existing queries transparently see the new column.
+
+---
+
+## Stats panels
+
+Custom replacements for the column-header `.dt-col-stats` slot — the two-line stats text that sits below each visualization. Subclass [`BaseStatsPanel`](#tier-2-exports) and register it on a [`StatsPanelRegistry`](#stats-panel-registry); the facade routes filter changes, visualization stats, and viz-hover snippets to the matching panel for every column whose `DataType` your registration handles.
+
+The registry is empty by default — when no registration matches a column's type, the library falls back to its built-in `formatDefaultStats` HTML rendering, so opt-in is granular. Source: `src/visualizations/BaseStatsPanel.ts`, `src/visualizations/StatsPanelRegistry.ts`, `src/visualizations/StatsPanelCoordinator.ts`. See also the [Stats panels guide](./guides/stats-panels.md) and runnable [`examples/13-custom-stats-panel/`](../examples/13-custom-stats-panel/).
+
+### Registry
+
+```ts
+class StatsPanelRegistry {
+  register(registration: StatsPanelRegistration): void;
+  unregister(name: string): boolean;
+  create(
+    container: HTMLElement,
+    column: ColumnSchema,
+    options: StatsPanelOptions,
+  ): BaseStatsPanel | null;
+  isApplicable(column: ColumnSchema): boolean;
+  getRegisteredTypes(): string[];
+  resetToDefaults(): void;          // empties the registry (no library built-ins)
+}
+
+interface StatsPanelRegistration {
+  name: string;                     // stable identifier; same-name re-register replaces
+  isApplicable: (type: DataType) => boolean;
+  constructor: StatsPanelConstructor;
+  priority: number;                 // higher wins on multi-match
+}
+
+type StatsPanelConstructor = new (
+  container: HTMLElement,
+  column: ColumnSchema,
+  options: StatsPanelOptions,
+) => BaseStatsPanel;
+```
+
+Pass via `createDataTable({ statsPanelRegistry })`; or register on the module-scoped `defaultStatsPanelRegistry` to share across every table that doesn't pass a per-instance registry. To restrict a panel to a specific column **name** rather than a `DataType`, subclass `StatsPanelRegistry` and override `create()` (same pattern as `examples/08-custom-visualization`'s `StateAwareRegistry`).
+
+### Panel constructor and lifecycle
+
+```ts
+abstract class BaseStatsPanel {
+  protected readonly container: HTMLElement;
+  protected readonly column: ColumnSchema;
+  protected options: StatsPanelOptions;
+
+  constructor(
+    container: HTMLElement,
+    column: ColumnSchema,
+    options: StatsPanelOptions,
+  );
+
+  /**
+   * Required. Receives `null` once on mount, then with each ColumnStatsData
+   * the column's visualization emits (and on data reload). Columns without
+   * a visualization receive `update(null)` only.
+   */
+  abstract update(stats: ColumnStatsData | null): void;
+
+  /**
+   * Optional. Default no-op. Receives the visualization's hover snippet as
+   * an HTML string (the same pre-formatted markup the library's built-in
+   * panel renders in place of line 2), or `null` to clear. The bundled
+   * Histogram / ValueCounts visualizations escape every user-derived value
+   * before producing this string; custom visualizations are responsible
+   * for escaping before passing text to onStatsChange.
+   */
+  setHoverStats(html: string | null): void;
+
+  /**
+   * Optional. Default refreshes `this.options.filters` only. Override to
+   * issue your own DuckDB queries via `this.options.bridge` whenever the
+   * active filter array changes. The library guarantees `update(stats)`
+   * separately on viz refetch, so panels that only re-render existing
+   * stats need not override.
+   */
+  async updateFilters(filters: Filter[]): Promise<void>;
+
+  /**
+   * Required (override). Subclasses must clear any DOM nodes they appended
+   * to `container`, drop any subscriptions, then call `super.destroy()`.
+   * The library calls `destroy()` exactly once on its own teardown path
+   * (schema change, table destroy). Panels MUST NOT call `destroy()` on
+   * themselves — the library tracks active panels in a name-keyed map and
+   * a self-destroy leaves a dangling registration whose `.dt-col-stats`
+   * slot is no longer eligible for fallback rendering.
+   */
+  destroy(): void;
+
+  /** Accessors */
+  isDestroyed(): boolean;
+  getColumn(): ColumnSchema;
+}
+```
+
+### Lifecycle ordering guarantees
+
+Quoted from `src/visualizations/BaseStatsPanel.ts:108-127`:
+
+- The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header).
+- `update(null)` fires once on mount, then with each `ColumnStatsData` the visualization for this column emits (and on data reload). Columns without a visualization receive `update(null)` only.
+- `updateFilters(filters)` fires every time the table's active filter array changes, before any subsequent `update(stats)` call from a viz refetch.
+- `setHoverStats(html | null)` fires when the column's visualization emits a hover snippet (and again with `null` to clear). Columns without a viz never trigger this.
+- `destroy()` is called exactly once, before the container is reused for a freshly-constructed panel (e.g. on a schema change).
+
+### Options and error surface
+
+```ts
+interface StatsPanelOptions {
+  tableName: string;                // DuckDB table name the panel can query
+  bridge: WorkerBridge;             // run your own SELECTs against the worker
+  filters: Filter[];                // refreshed on each updateFilters call
+  messages: Strings;                // resolved i18n strings for any text the panel renders
+  onError?: (
+    error: DataTableError,
+    context: StatsPanelErrorContext,
+  ) => void;
+}
+
+interface StatsPanelErrorContext {
+  source: 'stats-panel';
+  column: string;
+  phase: 'construct' | 'update' | 'hover' | 'fetch' | 'destroy';
+}
+```
+
+The facade re-emits any error routed through `options.onError(...)` on its `error` event with `source: 'stats-panel'` (see [Event catalog](#event-catalog)). The library's [`StatsPanelCoordinator`](#tier-2-exports) deliberately swallows per-panel `updateFilters` rejections so one panel's failure can't cascade across columns; surfacing those errors is the panel's responsibility.
+
+### Filter-aware queries — the canonical pattern
+
+Build a `WHERE` clause with [`filtersToWhereClause`](#sql-authoring-helpers) and quote identifiers with [`quoteIdentifier`](#sql-authoring-helpers). Use a per-panel `fetchSeq` counter to drop stale results that resolve out of order — the coordinator's own `filterSequence` guards the broadcast side, but a panel that has its own per-call awaits still needs a local counter. See [troubleshooting §21](./troubleshooting.md#21-stats-panel-renders-stale-data-after-a-fast-filter-change) for the full pattern.
+
+```ts
+private fetchSeq = 0;
+
+async updateFilters(filters: Filter[]): Promise<void> {
+  await super.updateFilters(filters);                         // refresh this.options.filters
+  await this.fetch();
+}
+
+private async fetch(): Promise<void> {
+  if (this.isDestroyed()) return;
+  const seq = ++this.fetchSeq;
+  const colId = quoteIdentifier(this.column.name);
+  const tableId = quoteIdentifier(this.options.tableName);
+  const where = filtersToWhereClause(this.options.filters);
+  const sql = `SELECT AVG(${colId}) m, STDDEV_POP(${colId}) s
+               FROM ${tableId} ${where ? 'WHERE ' + where : ''}`;
+  try {
+    const [row] = await this.options.bridge.query<{ m: number; s: number }>(sql);
+    if (this.isDestroyed() || seq !== this.fetchSeq) return;  // dropped
+    this.paint(row);
+  } catch (err) {
+    this.options.onError?.(
+      new QueryError(err instanceof Error ? err.message : String(err), {
+        code: 'QUERY_RUNTIME', cause: err,
+      }),
+      { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
+    );
+  }
+}
+```
 
 ---
 

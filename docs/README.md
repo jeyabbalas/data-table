@@ -7,7 +7,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 ## Start here
 
 - [Quick start](../README.md#quick-start) — mount a table in ~10 lines
-- [Runnable examples](../examples/README.md) — twelve focused single-feature examples, browsable from the demo via `npm run dev`
+- [Runnable examples](../examples/README.md) — thirteen focused single-feature examples, browsable from the demo via `npm run dev`
 - [AGENTS.md](../AGENTS.md) — coding-agent orientation: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
 
 ## Reference
@@ -27,6 +27,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 - [Column-header tooltips](./guides/column-header-tooltips.md) — structured popover for column metadata, XSS-safe by construction
 - [Events](./guides/events.md) — event catalog, lifecycle ordering, error discrimination
 - [Visualizations](./guides/visualizations.md) — built-ins and custom class registration
+- [Stats panels](./guides/stats-panels.md) — replace the column-header `.dt-col-stats` slot with your own rendering and DuckDB queries
 - [Session persistence](./guides/session-persistence.md) — IndexedDB lifecycle, sync-save, custom store
 - [Theming](./guides/theming.md) — complete `--dt-*` CSS variable reference, dark mode, per-instance overrides
 - [Internationalization (i18n)](./guides/i18n.md) — `Strings` interface, `DeepPartial` overrides, function-typed strings

@@ -13,6 +13,42 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 
 ### Added
 
+- **Custom column-stats panels.** A new `BaseStatsPanel` abstract class
+  (Tier-2, `@jeyabbalas/data-table/advanced`) plus a per-instance
+  `StatsPanelRegistry` (Tier-1, root) lets downstream apps replace the
+  library's built-in two-line stats display in a column header — the
+  `.dt-col-stats` slot — with their own DOM and DuckDB queries. The
+  registry is empty by default; when no registration matches a
+  column's `DataType`, the library falls back to `formatDefaultStats`,
+  so existing apps see no behavior change. Per-instance via
+  `createDataTable({ statsPanelRegistry })`; the module-scoped
+  `defaultStatsPanelRegistry` is the implicit fallback when omitted.
+  Lifecycle: `constructor(container, column, options)` → `update(stats:
+  ColumnStatsData | null)` (called with `null` once on mount, then
+  with each `ColumnStatsData` the column's visualization emits) →
+  `updateFilters(filters: Filter[])` (called on every filter change
+  before any subsequent `update` from a viz refetch; default
+  implementation only refreshes `this.options.filters`) →
+  `setHoverStats(html: string | null)` (HTML string from the
+  visualization's hover snippet; default no-op) → `destroy()`. Panel
+  options carry `{ tableName, bridge, filters, messages, onError }`;
+  errors route through `onError(err, { source: 'stats-panel', column,
+  phase: 'construct' | 'update' | 'hover' | 'fetch' | 'destroy' })`
+  and are re-emitted on the facade's `error` event with `source:
+  'stats-panel'` (a new discriminant in `TableErrorSource`). Tier-1
+  exports: `StatsPanelRegistry`, `defaultStatsPanelRegistry`,
+  `StatsPanelRegistration`, `StatsPanelConstructor`. Tier-2
+  (`/advanced`): `BaseStatsPanel`, `StatsPanelOptions`,
+  `StatsPanelErrorContext`, `StatsPanelErrorPhase`,
+  `StatsPanelCoordinator`. The coordinator stamps a monotonic
+  `filterSequence` on every broadcast and bounds fan-out to
+  `DEFAULT_PANEL_CONCURRENCY = 4` so panel-issued queries don't
+  flood the single-threaded worker on wide tables. Example 13
+  (`examples/13-custom-stats-panel/`) demos numeric (`n · μ · σ`
+  from a custom `AVG` / `STDDEV_POP` query) and categorical
+  (`top: <value> (<pct>%)` from a `GROUP BY ... ORDER BY COUNT
+  DESC LIMIT 1`) panels with the recommended per-panel `fetchSeq`
+  stale-result guard.
 - **Stable synthetic `__rowid__` + read-only column export.** A
   `BIGINT` `__rowid__` column is synthesized at load time on every CSV /
   JSON / Parquet source (`row_number() OVER () - 1`) and survives sort,
@@ -225,6 +261,19 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   `visibilitychange` / `beforeunload` listeners.
 - `ColumnResizer` clears its `transitionend` fallback `setTimeout` on detach
   so abandoned animations don't fire against removed elements.
+- **Stats-panel filter-broadcast race.** `StatsPanelCoordinator` now
+  stamps a monotonic `filterSequence` per broadcast and short-
+  circuits per-panel `updateFilters()` calls whose tag has been
+  superseded, so a fresh filter change can no longer land stale
+  data on a panel mid-fan-out (the base-class default's last-write-
+  wins on `this.options.filters` previously made this possible). The
+  `setHoverStats` contract is also tightened: the argument is an
+  **HTML string** (the same pre-formatted markup the library's
+  built-in panel renders in place of line 2); the bundled
+  `Histogram` / `ValueCounts` visualizations escape every user-
+  derived value before producing it, and custom visualizations are
+  responsible for escaping any user-derived text before passing it
+  to `onStatsChange`.
 
 ### Changed (breaking)
 

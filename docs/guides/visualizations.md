@@ -258,5 +258,6 @@ registry.unregister('date-histogram');
 
 - Events: [Events guide — `error` event, `visualization` source](./events.md#errors-warnings-and-load-failures)
 - Multi-table: [Multi-table dashboards](./multi-table.md) for per-instance registry across tables
+- [Stats panels](./stats-panels.md) — sibling extension point for the `.dt-col-stats` slot below each visualization (replace the two-line stats display with your own DOM and DuckDB queries)
 - API reference: [`BaseVisualization`, `VisualizationRegistry`](../api-reference.md#visualizations)
 - Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`

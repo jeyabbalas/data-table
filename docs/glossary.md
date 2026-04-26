@@ -38,6 +38,25 @@ Opt-in helper that writes a [`SessionSnapshot`](#sessionsnapshot) to a
 manually from `/advanced` for apps that manage their own save cadence.
 See: [Session persistence](./guides/session-persistence.md) · Source: `src/persistence/AutoSave.ts`
 
+### BaseStatsPanel
+Abstract class for custom column-stats panels (Tier-2,
+`@jeyabbalas/data-table/advanced`). Mounts in the `.dt-col-stats` slot
+inside a column header and replaces the library's built-in
+`formatDefaultStats` rendering with downstream-app DOM and DuckDB queries.
+Subclasses implement `update(stats: ColumnStatsData | null)`; everything else
+has a default. Receives the same `ColumnStatsData` the visualization for that
+column emits, plus filter-aware `updateFilters(filters: Filter[])` callbacks
+the panel can use to issue its own queries via `options.bridge`. Default
+`updateFilters` only refreshes `this.options.filters`; default `setHoverStats`
+is a no-op. The library guarantees `update(null)` once on mount,
+`updateFilters(filters)` on every filter change before any subsequent
+`update`, `setHoverStats(html | null)` on visualization hover in / out, and
+`destroy()` exactly once. Errors route through `options.onError(err, {
+source: 'stats-panel', column, phase: 'construct' | 'update' | 'hover' |
+'fetch' | 'destroy' })`. Registered via [`StatsPanelRegistry`](#statspanelregistry);
+filter-broadcast plumbed by [`StatsPanelCoordinator`](#statspanelcoordinator).
+See: [Stats panels](./guides/stats-panels.md) · [API reference](./api-reference.md#stats-panels) · Source: `src/visualizations/BaseStatsPanel.ts`
+
 ### BrowserSupport
 Result shape returned by `checkBrowserSupport()` — `{ supported: boolean, missing: string[] }`.
 Probes `Worker`, `WebAssembly`, `indexedDB`, `ResizeObserver`, `BigInt`, and
@@ -267,6 +286,40 @@ sorts, column order / widths / pinning, derived columns) used by
 [Signal](#signal) formats — distinct from [SessionSnapshot](#sessionsnapshot),
 which is the serialised JSON form used for persistence.
 See: [State model](./concepts/state-model.md) · Source: `src/core/UndoManager.ts`
+
+### StatsPanelCoordinator
+Filter-broadcast coordinator for [`BaseStatsPanel`](#basestatspanel)
+instances. Composed by `createDataTable`; subscribes to `state.filters` and
+calls `panel.updateFilters(filters)` on every registered, non-destroyed
+panel whenever the filter array changes. Parallels
+[`CrossfilterCoordinator`](#crossfilter) for visualizations, and is a
+sibling rather than a hook on it because a stats panel can exist for a
+column with no visualization (e.g. `uuid`). Stamps a monotonic
+`filterSequence` per broadcast and short-circuits per-panel
+`updateFilters()` calls whose tag has been superseded — without this the
+base-class default's last-write-wins on `this.options.filters` could land
+stale data on a panel mid-fan-out. Bounded fan-out
+(`DEFAULT_PANEL_CONCURRENCY = 4`) keeps panel-issued queries from flooding
+the single-threaded worker on wide tables. Exposed at `/advanced` for
+power users orchestrating panels manually outside the facade.
+See: [Architecture concepts](./concepts/architecture.md#stats-panel-coordination-statspanelcoordinator) · Source: `src/visualizations/StatsPanelCoordinator.ts`
+
+### StatsPanelRegistry
+Per-instance registry of [`BaseStatsPanel`](#basestatspanel) subclasses
+scoped by `DataType`. Mirrors [`VisualizationRegistry`](#visualizationregistry)
+for the column-stats slot. Empty by default; when no registration matches a
+column's type, the library falls back to `formatDefaultStats` (the built-in
+HTML two-line display). Pass via `createDataTable({ statsPanelRegistry })`;
+the module-scoped `defaultStatsPanelRegistry` is the implicit fallback when
+omitted (also empty by default — register on it to share custom panels
+across every table that doesn't specify its own registry). Same-name
+re-register replaces; `priority` resolves multi-match ties (descending). To
+restrict by column **name** rather than type, subclass and override
+`create()` (same pattern as `examples/08-custom-visualization`'s
+`StateAwareRegistry`). Public exports: `StatsPanelRegistration` (the
+registration record) and `StatsPanelConstructor` (the constructor signature
+type).
+See: [Stats panels](./guides/stats-panels.md) · Source: `src/visualizations/StatsPanelRegistry.ts`
 
 ### TableState
 The root reactive store — a record of [Signals](#signal) holding every piece

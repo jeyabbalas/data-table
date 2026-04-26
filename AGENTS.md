@@ -36,6 +36,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - Session persistence to IndexedDB (filters, sort, columns, derived columns, presets, undo/redo, annotations, column-header tooltips) (src/persistence/SessionStore.ts).
 - Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts).
 - Histograms and value-counts in column headers; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
+- Custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry` — replace the `.dt-col-stats` slot with your own DOM and DuckDB queries (src/visualizations/BaseStatsPanel.ts, src/visualizations/StatsPanelRegistry.ts, src/visualizations/StatsPanelCoordinator.ts).
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
@@ -309,6 +310,64 @@ table.actions.setColumnHeaderTooltip('total_amount', null);                   //
 
 Every text field is rendered via `.textContent` — HTML strings are not parsed. Tooltips persist into `SessionSnapshot.columnHeaderTooltips` by default; pass `persistence: false` if the embedding app already owns its column catalogue (recommended pattern in `examples/12-column-header-tooltips/`).
 
+### (m) Custom stats panel — replace the column-stats slot
+
+```ts
+import { createDataTable, StatsPanelRegistry, filtersToWhereClause, quoteIdentifier, QueryError } from '@jeyabbalas/data-table';
+import { BaseStatsPanel, type StatsPanelOptions, type ColumnStatsData } from '@jeyabbalas/data-table/advanced';
+import type { ColumnSchema, Filter } from '@jeyabbalas/data-table';
+
+class MeanStdPanel extends BaseStatsPanel {
+  private fetchSeq = 0;
+
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
+    super(container, column, options);
+    void this.refresh();
+  }
+
+  update(_stats: ColumnStatsData | null): void { /* paint from stats if you want */ }
+
+  async updateFilters(filters: Filter[]): Promise<void> {
+    await super.updateFilters(filters);   // refresh this.options.filters
+    await this.refresh();
+  }
+
+  destroy(): void { this.container.replaceChildren(); super.destroy(); }
+
+  private async refresh(): Promise<void> {
+    if (this.isDestroyed()) return;
+    const seq = ++this.fetchSeq;          // stale-result guard
+    const colId = quoteIdentifier(this.column.name);
+    const tableId = quoteIdentifier(this.options.tableName);
+    const where = filtersToWhereClause(this.options.filters);
+    const sql = `SELECT AVG(${colId}) m, STDDEV_POP(${colId}) s
+                 FROM ${tableId} ${where ? 'WHERE ' + where : ''}`;
+    try {
+      const [row] = await this.options.bridge.query<{ m: number | null; s: number | null }>(sql);
+      if (this.isDestroyed() || seq !== this.fetchSeq) return;   // dropped
+      this.container.textContent = `μ ${row?.m ?? '—'} · σ ${row?.s ?? '—'}`;
+    } catch (err) {
+      this.options.onError?.(
+        new QueryError(err instanceof Error ? err.message : String(err), { code: 'QUERY_RUNTIME', cause: err }),
+        { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
+      );
+    }
+  }
+}
+
+const statsPanelRegistry = new StatsPanelRegistry();
+statsPanelRegistry.register({
+  name: 'mean-std',
+  isApplicable: (type) => type === 'integer' || type === 'float' || type === 'decimal',
+  constructor: MeanStdPanel,
+  priority: 10,
+});
+
+const table = await createDataTable({ container, source: '/data.csv', statsPanelRegistry });
+```
+
+The registry is empty by default — leaving a column type unregistered falls back to the library's built-in `formatDefaultStats` HTML, so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:128-216` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
+
 ---
 
 ## 4. Default config cheat-sheet
@@ -441,7 +500,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 **Guides (task-oriented walkthroughs)**
 - [`docs/guides/loading-data.md`](./docs/guides/loading-data.md), [`filters.md`](./docs/guides/filters.md), [`derived-columns.md`](./docs/guides/derived-columns.md), [`events.md`](./docs/guides/events.md), [`visualizations.md`](./docs/guides/visualizations.md), [`session-persistence.md`](./docs/guides/session-persistence.md)
-- [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md)
+- [`annotations.md`](./docs/guides/annotations.md), [`column-header-tooltips.md`](./docs/guides/column-header-tooltips.md), [`stats-panels.md`](./docs/guides/stats-panels.md)
 - [`theming.md`](./docs/guides/theming.md), [`i18n.md`](./docs/guides/i18n.md), [`accessibility.md`](./docs/guides/accessibility.md)
 - [`multi-table.md`](./docs/guides/multi-table.md), [`csp-and-offline.md`](./docs/guides/csp-and-offline.md), [`filter-presets.md`](./docs/guides/filter-presets.md)
 
@@ -457,10 +516,11 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 - [`docs/performance.md`](./docs/performance.md)
 
 **Runnable code**
-- **Examples index** — [`examples/README.md`](./examples/README.md) (12 single-feature examples)
+- **Examples index** — [`examples/README.md`](./examples/README.md) (13 single-feature examples)
   - [`10-column-export`](./examples/10-column-export/) — `getColumnValues` + synthetic `__rowid__`
   - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter
   - [`12-column-header-tooltips`](./examples/12-column-header-tooltips/) — structured tooltip popover, XSS-safe
+  - [`13-custom-stats-panel`](./examples/13-custom-stats-panel/) — `BaseStatsPanel` subclass + `StatsPanelRegistry`; numeric `n · μ · σ` via custom `AVG` / `STDDEV_POP` query, categorical top-value with percentage
 - **Demo app** (full consumer showcase) — [`demo/`](./demo/)
 
 **Source-of-truth (prefer these over the docs when they disagree)**

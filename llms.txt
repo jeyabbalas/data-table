@@ -1,6 +1,6 @@
 # @jeyabbalas/data-table
 
-> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), programmatic row/column/cell annotations with severity tiers + popover, structured XSS-safe column-header tooltips, stable synthetic `__rowid__` plus read-only column export, undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
+> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), programmatic row/column/cell annotations with severity tiers + popover, structured XSS-safe column-header tooltips, custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry`, stable synthetic `__rowid__` plus read-only column export, undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
 
 This file follows the [llms.txt](https://llmstxt.org) convention. It is a curated index for coding agents and LLM-driven tools. Human readers should start with [README.md](./README.md).
 
@@ -24,6 +24,7 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 - [docs/guides/column-header-tooltips.md](./docs/guides/column-header-tooltips.md): Structured popover for column-header metadata (title / description / items + enum chips), XSS-safe by construction.
 - [docs/guides/events.md](./docs/guides/events.md): Full event catalog, lifecycle ordering, error discrimination.
 - [docs/guides/visualizations.md](./docs/guides/visualizations.md): Built-in visualization classes and custom class registration.
+- [docs/guides/stats-panels.md](./docs/guides/stats-panels.md): Replace the column-header `.dt-col-stats` slot with a `BaseStatsPanel` subclass — lifecycle, filter-aware DuckDB queries, hover integration, error surfacing.
 - [docs/guides/session-persistence.md](./docs/guides/session-persistence.md): IndexedDB lifecycle, `saveSync()` for page-exit, custom stores.
 - [docs/guides/theming.md](./docs/guides/theming.md): Complete `--dt-*` CSS variable reference, dark mode, per-instance overrides.
 - [docs/guides/i18n.md](./docs/guides/i18n.md): `Strings` interface, `DeepPartial` overrides, function-typed strings.
@@ -51,7 +52,7 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 
 ## Examples
 
-- [examples/](./examples/README.md): 12 runnable single-feature examples, each ≤80 LOC, browsable from the demo via `npm run dev`.
+- [examples/](./examples/README.md): 13 runnable single-feature examples, each ≤80 LOC (example 13 is ~310 LOC for two stats-panel subclasses), browsable from the demo via `npm run dev`.
 
 ## Source (authoritative)
 

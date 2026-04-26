@@ -391,6 +391,63 @@ Cause: pre-v5 snapshots have no `annotations` field, so the store loads empty. T
 
 Fix: nothing to fix. New annotations / tooltips created from now on persist normally. To start clean, call `await table.clearSession()` before re-loading.
 
+### 20. My custom stats panel never renders — the built-in two-line formatter still shows
+
+Symptom: a `BaseStatsPanel` subclass is registered, the table mounts, but the column header still renders the library's default `min · med · max` (or `<n> unique`) line.
+
+Common causes and fixes:
+
+- **`isApplicable(type)` predicate doesn't match.** The argument is the column's `DataType` from `state.schema.get().get(name)?.type` — one of `'integer' | 'float' | 'decimal' | 'string' | 'boolean' | 'uuid' | 'date' | 'timestamp' | 'time' | 'interval'`. A panel guarded by `(type) => type === 'number'` (no such type) silently never matches. Log the actual type from `state.schema` to confirm.
+- **A higher-`priority` registration shadows yours.** Use `statsPanelRegistry.getRegisteredTypes()` to inspect the registered names, then re-register with a higher `priority`. Same-name re-register replaces the existing entry.
+- **You registered on the wrong registry.** A common slip: registering on `defaultStatsPanelRegistry` (the module-scoped fallback) but constructing the table with `statsPanelRegistry: new StatsPanelRegistry()` (an empty per-instance one), or vice-versa. The per-instance registry, if passed, fully replaces the default — it does not layer on top.
+- **The match is by name, not type.** Subclass `StatsPanelRegistry` and override `create(container, column, options)` to inspect `column.name`; fall back to `super.create(...)` for everything else (same pattern as `examples/08-custom-visualization`'s `StateAwareRegistry`).
+
+### 21. Stats panel renders stale data after a fast filter change
+
+Symptom: rapid brushing or filter toggling flashes an older stat for ~50–200 ms before the latest value renders.
+
+Cause: a panel that issues async DuckDB queries via `options.bridge.query(…)` can have a query for filter set F1 still in flight when F2 arrives. If F1's query resolves *after* F2's, F1's `paint()` call overwrites F2's. The library's `StatsPanelCoordinator` already stamps a `filterSequence` and short-circuits superseded `updateFilters()` invocations on the *broadcast* side, but a panel that has its own per-call awaits still needs a local counter to drop stale results once they come back.
+
+Fix: stamp a per-panel `fetchSeq` counter — increment at the top of every `fetch()` call, capture the value into a local, and bail before `paint()` if the local doesn't match the current counter:
+
+```ts
+private fetchSeq = 0;
+
+private async fetch(): Promise<void> {
+  if (this.isDestroyed()) return;
+  const seq = ++this.fetchSeq;
+  const rows = await this.options.bridge.query<{ /* ... */ }>(sql);
+  if (this.isDestroyed() || seq !== this.fetchSeq) return;   // dropped
+  this.paint(rows);
+}
+```
+
+The canonical pattern is in [`examples/13-custom-stats-panel/main.ts`](../examples/13-custom-stats-panel/main.ts) (lines 107–143).
+
+### 22. Stats-panel errors don't reach my `table.on('error', …)` listener
+
+Symptom: a panel's fetch / render branch throws or rejects, but the error event never fires.
+
+Cause: the panel didn't route the error through `options.onError`. The library's `StatsPanelCoordinator` deliberately swallows per-panel `updateFilters()` rejections so one panel's failure doesn't cascade across the other columns — surfacing the error is the panel's responsibility.
+
+Fix: wrap each fetch / render branch in try / catch and route through `onError`:
+
+```ts
+try {
+  const rows = await this.options.bridge.query(sql);
+  // ...
+} catch (err) {
+  this.options.onError?.(
+    new QueryError(err instanceof Error ? err.message : String(err), {
+      code: 'QUERY_RUNTIME', cause: err,
+    }),
+    { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
+  );
+}
+```
+
+The facade re-emits these on the `error` event with `source: 'stats-panel'` (the discriminant in the [error-event source enum](./api-reference.md#event-catalog)) so existing `table.on('error', …)` listeners catch panel failures alongside load / query / persistence ones.
+
 ---
 
 ## Browser support quick reference

@@ -404,7 +404,7 @@ export abstract class SharedHistogramBase<
     }
 
     for (let i = 0; i < layoutData.bins.length; i++) {
-      const bgBin = layoutData.bins[i];
+      const bgBin = layoutData.bins[i]!;
       const fgBin = this.data.bins[i];
       const pos = this.barPositions[i];
 
@@ -1447,7 +1447,7 @@ export abstract class SharedHistogramBase<
       // Sum counts in range
       let rangeCount = 0;
       for (let i = startIdx; i <= endIdx; i++) {
-        rangeCount += this.data.bins[i].count;
+        rangeCount += this.data.bins[i]!.count;
       }
       const rangeStr = this.formatBrushRange(startIdx, endIdx);
 

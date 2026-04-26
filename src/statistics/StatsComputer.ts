@@ -91,7 +91,7 @@ export async function fetchIntervalStats(
       };
     }
 
-    const row = results[0];
+    const row = results[0]!;
     const total = Number(row.total);
     const nonNull = Number(row.non_null);
     const nullCount = Number(row.null_count);

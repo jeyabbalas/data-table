@@ -111,7 +111,7 @@ export class CrossfilterCoordinator {
       while (true) {
         const i = cursor++;
         if (i >= tasks.length) return;
-        results[i] = await tasks[i]();
+        results[i] = await tasks[i]!();
       }
     });
     await Promise.all(workers);
@@ -131,7 +131,7 @@ export class CrossfilterCoordinator {
       const result = await this.bridge.query<{ cnt: number }>(sql);
       // Only apply if this is still the latest filter change
       if (seq !== this.filterSequence) return;
-      this.state.filteredRows.set(Number(result[0].cnt));
+      this.state.filteredRows.set(Number(result[0]!.cnt));
     } catch (error) {
       console.error('[CrossfilterCoordinator] Failed to update filtered row count:', error);
     }

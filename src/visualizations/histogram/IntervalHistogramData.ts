@@ -123,11 +123,11 @@ export function parseIntervalToSeconds(
 
   // Handle Arrow MonthDayNano interval objects from DuckDB WASM
   if (typeof value === 'object' && 'months' in value && 'days' in value) {
-    const months = Number(value.months) || 0;
-    const days = Number(value.days) || 0;
+    const months = Number(value['months']) || 0;
+    const days = Number(value['days']) || 0;
     let totalMicros = 0;
-    if ('nanoseconds' in value) totalMicros = Math.floor(Number(value.nanoseconds) / 1000);
-    else if ('micros' in value) totalMicros = Number(value.micros) || 0;
+    if ('nanoseconds' in value) totalMicros = Math.floor(Number(value['nanoseconds']) / 1000);
+    else if ('micros' in value) totalMicros = Number(value['micros']) || 0;
 
     return months * MONTH_SECONDS + days * DAY_SECONDS + totalMicros / 1_000_000;
   }
@@ -146,18 +146,18 @@ export function parseIntervalToSeconds(
   const monthMatch = input.match(/(-?\d+)\s*months?/i);
   const dayMatch = input.match(/(-?\d+)\s*days?/i);
 
-  if (yearMatch) totalSeconds += parseInt(yearMatch[1], 10) * YEAR_SECONDS;
-  if (monthMatch) totalSeconds += parseInt(monthMatch[1], 10) * MONTH_SECONDS;
-  if (dayMatch) totalSeconds += parseInt(dayMatch[1], 10) * DAY_SECONDS;
+  if (yearMatch) totalSeconds += parseInt(yearMatch[1]!, 10) * YEAR_SECONDS;
+  if (monthMatch) totalSeconds += parseInt(monthMatch[1]!, 10) * MONTH_SECONDS;
+  if (dayMatch) totalSeconds += parseInt(dayMatch[1]!, 10) * DAY_SECONDS;
 
   // Parse time component with optional leading negative sign.
   // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff".
   const timeMatch = input.match(/(-?)(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
   if (timeMatch) {
     const timeSign = timeMatch[1] === '-' ? -1 : 1;
-    let timeSec = parseInt(timeMatch[2], 10) * 3600;
-    timeSec += parseInt(timeMatch[3], 10) * 60;
-    timeSec += parseInt(timeMatch[4], 10);
+    let timeSec = parseInt(timeMatch[2]!, 10) * 3600;
+    timeSec += parseInt(timeMatch[3]!, 10) * 60;
+    timeSec += parseInt(timeMatch[4]!, 10);
     if (timeMatch[5]) {
       timeSec += parseFloat(`0.${timeMatch[5]}`);
     }
@@ -356,7 +356,7 @@ export async function fetchIntervalColumnStats(
     return { minSeconds: null, maxSeconds: null, medianSeconds: null, count: 0, nullCount: 0 };
   }
 
-  const row = results[0];
+  const row = results[0]!;
   return {
     minSeconds: parseIntervalToSeconds(row.min_val),
     maxSeconds: parseIntervalToSeconds(row.max_val),
@@ -436,7 +436,7 @@ export async function fetchIntervalNumericBins(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 

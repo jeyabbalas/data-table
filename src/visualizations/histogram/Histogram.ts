@@ -29,6 +29,7 @@
  * @see ValueCounts for categorical columns
  */
 
+import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { NumericColumnStats } from '../../statistics/ColumnStatsTypes';
@@ -261,8 +262,18 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
       this.render();
     } catch (error) {
-      if (seq !== this.fetchSequence) return; // Stale error, discard
-      console.error(`[Histogram] Failed to fetch data for ${this.column.name}:`, error);
+      if (seq !== this.fetchSequence || this.destroyed) return; // Stale or torn down — drop
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
       this.data = null;
       this.backgroundData = null;
       this.render();
@@ -318,8 +329,8 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     }
     // Handle discrete bins - show first and last value labels
     else if (this.data.isDiscrete && this.data.bins.length > 0) {
-      const firstBin = this.data.bins[0];
-      const lastBin = this.data.bins[this.data.bins.length - 1];
+      const firstBin = this.data.bins[0]!;
+      const lastBin = this.data.bins[this.data.bins.length - 1]!;
       this.drawMinMaxLabels(formatAxisValue(firstBin.x0), formatAxisValue(lastBin.x0), maxX);
     }
     // Normal continuous case: min on left, max on right
@@ -393,7 +404,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         } else {
           const values = [];
           for (let i = startIdx; i <= endIdx; i++) {
-            values.push(this.data.bins[i].x0);
+            values.push(this.data.bins[i]!.x0);
           }
           this.options.onFilterChange?.({
             column: this.column.name,
@@ -443,7 +454,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           this.selectedNull = false;
           let found = false;
           for (let i = 0; i < data.bins.length; i++) {
-            const bin = data.bins[i];
+            const bin = data.bins[i]!;
             if (bin.x0 === bin.x1) {
               // Discrete bin: exact match
               if (value === bin.x0) {
@@ -476,7 +487,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           let maxIdx = -Infinity;
           for (const val of values) {
             for (let i = 0; i < data.bins.length; i++) {
-              if (data.bins[i].x0 === val) {
+              if (data.bins[i]!.x0 === val) {
                 minIdx = Math.min(minIdx, i);
                 maxIdx = Math.max(maxIdx, i);
                 break;
@@ -523,7 +534,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     let endIdx = -1;
 
     for (let i = 0; i < bins.length; i++) {
-      if (bins[i].x1 > filterMin && bins[i].x0 < filterMax) {
+      if (bins[i]!.x1 > filterMin && bins[i]!.x0 < filterMax) {
         if (startIdx === -1) startIdx = i;
         endIdx = i;
       }

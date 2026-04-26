@@ -143,7 +143,7 @@ export class StatsPanelCoordinator {
       while (true) {
         const i = cursor++;
         if (i >= tasks.length) return;
-        await tasks[i]();
+        await tasks[i]!();
       }
     });
     await Promise.all(workers);

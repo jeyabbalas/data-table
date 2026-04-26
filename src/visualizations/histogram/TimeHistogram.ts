@@ -8,6 +8,7 @@
  * - Bin range formatting
  */
 
+import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TimeColumnStats } from '../../statistics/ColumnStatsTypes';
@@ -206,8 +207,18 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
       this.render();
     } catch (error) {
-      if (seq !== this.fetchSequence) return;
-      console.error(`[TimeHistogram] Failed to fetch data for ${this.column.name}:`, error);
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
       this.data = null;
       this.backgroundData = null;
       this.render();
@@ -255,13 +266,13 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
       const label = this.data.isNumericBinning
-        ? formatTimeOnlyLabelNumeric(this.data.bins[0].binStartSeconds)
-        : formatTimeOnlyLabel(this.data.bins[0].binStartSeconds, this.data.interval);
+        ? formatTimeOnlyLabelNumeric(this.data.bins[0]!.binStartSeconds)
+        : formatTimeOnlyLabel(this.data.bins[0]!.binStartSeconds, this.data.interval);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0) {
-      const firstBin = this.data.bins[0];
-      const lastBin = this.data.bins[this.data.bins.length - 1];
+      const firstBin = this.data.bins[0]!;
+      const lastBin = this.data.bins[this.data.bins.length - 1]!;
 
       const minLabel = this.data.isNumericBinning
         ? formatTimeOnlyLabelNumeric(firstBin.binStartSeconds)
@@ -428,7 +439,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
     let endIdx = -1;
 
     for (let i = 0; i < bins.length; i++) {
-      const bin = bins[i];
+      const bin = bins[i]!;
       if (bin.binEndSeconds > filterMinSec && bin.binStartSeconds < filterMaxSec) {
         if (startIdx === -1) startIdx = i;
         endIdx = i;

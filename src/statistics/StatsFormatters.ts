@@ -219,7 +219,7 @@ function formatDateForStats(isoString: string): string {
   // Extract just the date part for compact display
   const dateMatch = isoString.match(/^(\d{4}-\d{2}-\d{2})/);
   if (dateMatch) {
-    return dateMatch[1];
+    return dateMatch[1]!;
   }
   // Fallback: escape and return as-is (shouldn't happen with valid DuckDB output)
   return escapeHtml(isoString);

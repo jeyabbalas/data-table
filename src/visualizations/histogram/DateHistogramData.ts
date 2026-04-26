@@ -140,7 +140,7 @@ export function adjustIntervalForMaxBins(
       break;
     }
     idx++;
-    interval = TIME_INTERVALS[idx];
+    interval = TIME_INTERVALS[idx]!;
   }
 
   return interval;
@@ -320,7 +320,7 @@ export async function fetchDateStats(
     return { min: null, max: null, count: 0, nullCount: 0 };
   }
 
-  const row = results[0];
+  const row = results[0]!;
   return {
     min: parseDate(row.min_date),
     max: parseDate(row.max_date),
@@ -443,7 +443,7 @@ async function fetchDateHistogramWithNumericBinning(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 
@@ -542,7 +542,7 @@ export async function fetchDateNumericBins(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 

@@ -148,7 +148,7 @@ export function formatDateLabel(
   context: DateFormatContext,
 ): string {
   // Use UTC methods to avoid timezone shifts at date boundaries
-  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const month = MONTHS_SHORT[date.getUTCMonth()]!;
   const day = date.getUTCDate();
   const year = date.getUTCFullYear();
   const yearSuffix = getYearSuffix(year);
@@ -263,7 +263,7 @@ export function formatDateRange(
  */
 export function formatDateForStats(date: Date, interval: TimeInterval): string {
   // Use UTC methods to avoid timezone shifts at date boundaries
-  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const month = MONTHS_SHORT[date.getUTCMonth()]!;
   const day = date.getUTCDate();
   const year = date.getUTCFullYear();
   const hour = date.getUTCHours();
@@ -392,7 +392,7 @@ export function formatTimeOnlyForStats(seconds: number): string {
  */
 export function formatDateRangeNumeric(start: Date, end: Date): string {
   const formatFull = (d: Date): string => {
-    const month = MONTHS_SHORT[d.getUTCMonth()];
+    const month = MONTHS_SHORT[d.getUTCMonth()]!;
     const day = d.getUTCDate();
     const year = d.getUTCFullYear();
     const hour = d.getUTCHours();
@@ -429,7 +429,7 @@ export function formatTimeOnlyRangeNumeric(startSec: number, endSec: number): st
  * - "Jan 5, 1980 14:32"
  */
 export function formatDateLabelNumeric(date: Date): string {
-  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const month = MONTHS_SHORT[date.getUTCMonth()]!;
   const day = date.getUTCDate();
   const year = date.getUTCFullYear();
   const hour = date.getUTCHours();
@@ -465,7 +465,7 @@ export function formatTimeOnlyLabelNumeric(seconds: number): string {
  * @param columnType - The column type ('date' or 'timestamp')
  */
 export function formatDateForType(date: Date, columnType: string): string {
-  const month = MONTHS_SHORT[date.getUTCMonth()];
+  const month = MONTHS_SHORT[date.getUTCMonth()]!;
   const day = date.getUTCDate();
   const year = date.getUTCFullYear();
 

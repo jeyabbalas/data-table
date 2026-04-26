@@ -19,6 +19,7 @@
  * @see VisualizationRegistry for registering a replacement
  */
 
+import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema } from '../../core/types';
 import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
@@ -301,8 +302,18 @@ export class ValueCounts extends BaseVisualization {
         this.initialData = this.data;
       }
     } catch (error) {
-      if (seq !== this.fetchSequence) return;
-      console.error(`[ValueCounts] Failed to fetch data for ${this.column.name}:`, error);
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
       this.data = null;
       this.backgroundData = null;
     }
@@ -517,7 +528,7 @@ export class ValueCounts extends BaseVisualization {
       let regularRemaining = 0;
 
       for (let i = 0; i < currentLayout.length; i++) {
-        const seg = currentLayout[i];
+        const seg = currentLayout[i]!;
         if (seg.isOther || seg.isNull || seg.isAllUnique) continue;
         regularRemaining++;
 
@@ -592,8 +603,8 @@ export class ValueCounts extends BaseVisualization {
     const otherIdx = segments.findIndex((s) => s.isOther);
     if (otherIdx >= 0) {
       // Merge into existing Other
-      segments[otherIdx].count += removed.count;
-      segments[otherIdx].otherCount = (segments[otherIdx].otherCount ?? 0) + 1;
+      segments[otherIdx]!.count += removed.count;
+      segments[otherIdx]!.otherCount = (segments[otherIdx]!.otherCount ?? 0) + 1;
     } else {
       // Create new Other segment, insert before null (or at end)
       const nullIdx = segments.findIndex((s) => s.isNull);
@@ -629,7 +640,7 @@ export class ValueCounts extends BaseVisualization {
     this.selectedSegments.clear();
 
     for (let i = 0; i < this.renderSegments.length; i++) {
-      const seg = this.renderSegments[i];
+      const seg = this.renderSegments[i]!;
 
       // Handle filter types that include the "Other" segment before the skip
       if (ownFilter.type === 'not-null' && !seg.isNull && !seg.isAllUnique) {
@@ -781,7 +792,7 @@ export class ValueCounts extends BaseVisualization {
     let subMinCount = 0;
 
     for (let i = 0; i < numSegments; i++) {
-      const proportion = getCount(layoutSegments[i]) / totalCount;
+      const proportion = getCount(layoutSegments[i]!) / totalCount;
       const ideal = proportion * availableWidth;
       idealWidths.push(ideal);
       const sub = ideal < LAYOUT.minSegmentWidth;
@@ -795,7 +806,7 @@ export class ValueCounts extends BaseVisualization {
     if (subMinCount === 0) {
       // All segments fit proportionally
       for (let i = 0; i < numSegments; i++) {
-        finalWidths[i] = idealWidths[i];
+        finalWidths[i] = idealWidths[i]!;
       }
     } else if (subMinCount === numSegments) {
       // All segments are sub-minimum — divide equally
@@ -815,7 +826,7 @@ export class ValueCounts extends BaseVisualization {
         } else {
           finalWidths[i] =
             aboveMinTotal > 0
-              ? (idealWidths[i] / aboveMinTotal) * remainingWidth
+              ? (idealWidths[i]! / aboveMinTotal) * remainingWidth
               : remainingWidth / (numSegments - subMinCount);
         }
       }
@@ -828,7 +839,7 @@ export class ValueCounts extends BaseVisualization {
     for (let i = 0; i < numSegments; i++) {
       // Last segment snaps to edge to avoid floating-point gaps
       const width =
-        i === numSegments - 1 ? this.barArea.x + this.barArea.width - currentX : finalWidths[i];
+        i === numSegments - 1 ? this.barArea.x + this.barArea.width - currentX : finalWidths[i]!;
 
       positions.push({ x: currentX, width, index: i });
       currentX += width + LAYOUT.segmentBorderWidth;
@@ -867,7 +878,7 @@ export class ValueCounts extends BaseVisualization {
     }
 
     for (let i = 0; i < this.segmentPositions.length; i++) {
-      const pos = this.segmentPositions[i];
+      const pos = this.segmentPositions[i]!;
       const bgSegment = layoutSegments[i];
       if (!bgSegment) continue;
 
@@ -1422,7 +1433,7 @@ export class ValueCounts extends BaseVisualization {
 
     if (this.selectedSegments.size === 1) {
       // Single selection - use existing logic
-      const idx = [...this.selectedSegments][0];
+      const idx = [...this.selectedSegments][0]!;
       const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
       if (segment) {
         this.createFilterForSegment(segment);
@@ -1496,7 +1507,7 @@ export class ValueCounts extends BaseVisualization {
 
     // Single selection
     if (this.selectedSegments.size === 1) {
-      const idx = [...this.selectedSegments][0];
+      const idx = [...this.selectedSegments][0]!;
       const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
       if (segment) {
         let categoryLabel: string;
@@ -1532,7 +1543,7 @@ export class ValueCounts extends BaseVisualization {
     // Multi-select stats
     const selectedSegmentsList = [...this.selectedSegments]
       .map((idx) => this.renderSegments[idx])
-      .filter((s) => s && !s.isNull && !s.isOther && !s.isAllUnique);
+      .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique);
 
     const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
 
@@ -1548,7 +1559,7 @@ export class ValueCounts extends BaseVisualization {
     if (this.backgroundData) {
       const bgTotal = [...this.selectedSegments]
         .map((idx) => this.backgroundSegments[idx])
-        .filter((s) => s && !s.isNull && !s.isOther && !s.isAllUnique)
+        .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique)
         .reduce((sum, s) => sum + s.count, 0);
       if (bgTotal > 0) {
         const ratio = formatPercent(totalCount / bgTotal);

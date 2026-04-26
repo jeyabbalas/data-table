@@ -8,6 +8,7 @@
  * - Bin range formatting
  */
 
+import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TemporalColumnStats } from '../../statistics/ColumnStatsTypes';
@@ -213,8 +214,18 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
 
       this.render();
     } catch (error) {
-      if (seq !== this.fetchSequence) return;
-      console.error(`[DateHistogram] Failed to fetch data for ${this.column.name}:`, error);
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
       this.data = null;
       this.backgroundData = null;
       this.formatContext = null;
@@ -265,12 +276,12 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const label =
         this.data.isNumericBinning && this.data.min
           ? formatDateForType(this.data.min, this.column.type)
-          : formatDateLabel(this.data.bins[0].binStart, this.data.interval, this.formatContext);
+          : formatDateLabel(this.data.bins[0]!.binStart, this.data.interval, this.formatContext);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0 && this.data.min && this.data.max) {
-      const firstBin = this.data.bins[0];
-      const lastBin = this.data.bins[this.data.bins.length - 1];
+      const firstBin = this.data.bins[0]!;
+      const lastBin = this.data.bins[this.data.bins.length - 1]!;
 
       const minLabel = this.data.isNumericBinning
         ? formatDateForType(this.data.min, this.column.type)
@@ -385,7 +396,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         this.selectedNull = false;
         this.selectedBin = null;
         for (let i = 0; i < data.bins.length; i++) {
-          const bin = data.bins[i];
+          const bin = data.bins[i]!;
           if (targetDate >= bin.binStart && targetDate < bin.binEnd) {
             this.selectedBin = i;
             break;
@@ -436,8 +447,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
     let endIdx = -1;
 
     for (let i = 0; i < bins.length; i++) {
-      const binStartMs = bins[i].binStart.getTime();
-      const binEndMs = bins[i].binEnd.getTime();
+      const binStartMs = bins[i]!.binStart.getTime();
+      const binEndMs = bins[i]!.binEnd.getTime();
 
       // Bin overlaps filter if: binEnd > filterMin AND binStart < filterMax
       if (binEndMs > filterMinMs && binStartMs < filterMaxMs) {

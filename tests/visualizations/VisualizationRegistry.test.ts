@@ -169,6 +169,103 @@ describe('VisualizationRegistry (Phase 3)', () => {
     for (const name of reg.getRegisteredTypes()) reg.unregister(name);
     expect(reg.isApplicable(makeColumn('integer'))).toBe(false);
   });
+
+  // ---- Phase 6 additions: tie-break determinism, fall-through, sync contract ----
+
+  it('priority tie-break: among registrations with identical priority, earliest-registered wins (stable sort)', () => {
+    class FirstViz extends FakeViz {}
+    class SecondViz extends FakeViz {}
+    class ThirdViz extends FakeViz {}
+
+    const reg = new VisualizationRegistry();
+    // Empty out built-ins so only our three registrations matter.
+    for (const name of reg.getRegisteredTypes()) reg.unregister(name);
+
+    reg.register({
+      name: 'first',
+      isApplicable: (t) => t === 'integer',
+      constructor: FirstViz,
+      priority: 5,
+    });
+    reg.register({
+      name: 'second',
+      isApplicable: (t) => t === 'integer',
+      constructor: SecondViz,
+      priority: 5,
+    });
+    reg.register({
+      name: 'third',
+      isApplicable: (t) => t === 'integer',
+      constructor: ThirdViz,
+      priority: 5,
+    });
+
+    const container = document.createElement('div');
+    const viz = reg.create(container, makeColumn('integer'), makeOptions());
+    // Stable sort preserves insertion order among ties → FirstViz wins.
+    expect(viz).toBeInstanceOf(FirstViz);
+  });
+
+  it('higher-priority later registration beats earlier lower-priority one', () => {
+    class LowViz extends FakeViz {}
+    class HighViz extends FakeViz {}
+    const reg = new VisualizationRegistry();
+    for (const name of reg.getRegisteredTypes()) reg.unregister(name);
+
+    reg.register({
+      name: 'low',
+      isApplicable: (t) => t === 'integer',
+      constructor: LowViz,
+      priority: 1,
+    });
+    reg.register({
+      name: 'high',
+      isApplicable: (t) => t === 'integer',
+      constructor: HighViz,
+      priority: 10,
+    });
+
+    const container = document.createElement('div');
+    const viz = reg.create(container, makeColumn('integer'), makeOptions());
+    expect(viz).toBeInstanceOf(HighViz);
+  });
+
+  it('create() returns null when every registration rejects the column (full fall-through)', () => {
+    const reg = new VisualizationRegistry();
+    for (const name of reg.getRegisteredTypes()) reg.unregister(name);
+    reg.register({
+      name: 'never',
+      isApplicable: () => false,
+      constructor: FakeViz,
+      priority: 100,
+    });
+
+    const container = document.createElement('div');
+    const viz = reg.create(container, makeColumn('integer'), makeOptions());
+    // Returning null is the contract; the facade then renders a
+    // PlaceholderVisualization in the column header.
+    expect(viz).toBeNull();
+  });
+
+  it('isApplicable contract is sync: a Promise-returning predicate is treated as truthy and matches every column', () => {
+    // Documents current behavior: the registry does NOT await isApplicable.
+    // A Promise object is truthy, so a Promise-returning predicate matches
+    // every column. Custom registrants must keep isApplicable synchronous.
+    class AsyncViz extends FakeViz {}
+    const reg = new VisualizationRegistry();
+    for (const name of reg.getRegisteredTypes()) reg.unregister(name);
+    reg.register({
+      name: 'async',
+      // Lying about the contract just to exercise the check; cast through.
+      isApplicable: (() => Promise.resolve(false)) as unknown as (type: DataType) => boolean,
+      constructor: AsyncViz,
+      priority: 1,
+    });
+
+    const container = document.createElement('div');
+    const viz = reg.create(container, makeColumn('integer'), makeOptions());
+    expect(viz).toBeInstanceOf(AsyncViz);
+  });
 });
 
 describe('VisualizationFactory — deprecated static wrapper (Phase 3)', () => {

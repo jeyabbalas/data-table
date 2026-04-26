@@ -102,9 +102,9 @@ export function parseTimeToSeconds(value: string | null): number | null {
   }
 
   const [, h, m, s, frac] = match;
-  const hours = parseInt(h, 10);
-  const minutes = parseInt(m, 10);
-  const seconds = parseInt(s, 10);
+  const hours = parseInt(h!, 10);
+  const minutes = parseInt(m!, 10);
+  const seconds = parseInt(s!, 10);
 
   // Validate ranges
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
@@ -202,7 +202,7 @@ export function adjustIntervalForMaxBinsTime(
       break;
     }
     idx++;
-    interval = TIME_INTERVALS[idx];
+    interval = TIME_INTERVALS[idx]!;
   }
 
   return interval;
@@ -295,7 +295,7 @@ export async function fetchTimeStats(
     return { minSeconds: null, maxSeconds: null, count: 0, nullCount: 0 };
   }
 
-  const row = results[0];
+  const row = results[0]!;
   return {
     minSeconds: parseTimeToSeconds(row.min_time),
     maxSeconds: parseTimeToSeconds(row.max_time),
@@ -424,7 +424,7 @@ async function fetchTimeHistogramWithNumericBinning(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 
@@ -520,7 +520,7 @@ export async function fetchTimeNumericBins(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 

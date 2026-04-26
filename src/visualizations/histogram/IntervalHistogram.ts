@@ -8,6 +8,7 @@
  * - Bin range formatting
  */
 
+import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
 import type { IntervalColumnStats } from '../../statistics/ColumnStatsTypes';
@@ -172,8 +173,18 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
       this.render();
     } catch (error) {
-      if (seq !== this.fetchSequence) return;
-      console.error(`[IntervalHistogram] Failed to fetch data for ${this.column.name}:`, error);
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
       this.data = null;
       this.backgroundData = null;
       this.render();
@@ -224,12 +235,12 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
-      const label = secondsToIntervalString(this.data.bins[0].binStartSeconds);
+      const label = secondsToIntervalString(this.data.bins[0]!.binStartSeconds);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0) {
-      const firstBin = this.data.bins[0];
-      const lastBin = this.data.bins[this.data.bins.length - 1];
+      const firstBin = this.data.bins[0]!;
+      const lastBin = this.data.bins[this.data.bins.length - 1]!;
       const minLabel = secondsToIntervalString(firstBin.binStartSeconds);
       const maxLabel = secondsToIntervalString(lastBin.binEndSeconds);
       this.drawMinMaxLabels(minLabel, maxLabel, maxX);
@@ -387,7 +398,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
     let endIdx = -1;
 
     for (let i = 0; i < bins.length; i++) {
-      const bin = bins[i];
+      const bin = bins[i]!;
       if (bin.binEndSeconds > filterMinSec + EPS && bin.binStartSeconds < filterMaxSec - EPS) {
         if (startIdx === -1) startIdx = i;
         endIdx = i;

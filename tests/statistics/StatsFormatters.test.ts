@@ -573,3 +573,120 @@ describe('formatDefaultStats - HTML structure', () => {
     expect(result).not.toContain('<br>');
   });
 });
+
+// =========================================
+// Phase 6 additions
+// =========================================
+
+describe('formatDefaultStats — Phase 6 edge cases', () => {
+  it('Numeric Line 2 with median === null: "min ... · max ..." (no med segment)', () => {
+    const stats: NumericColumnStats = {
+      kind: 'numeric',
+      totalRows: 5,
+      nonNullCount: 5,
+      nullCount: 0,
+      filteredTotalRows: null,
+      min: 1,
+      max: 9,
+      median: null,
+      distinctCount: 5,
+    };
+    const result = formatDefaultStats(stats, 'integer');
+    expect(result).toContain('min 1');
+    expect(result).toContain('max 9');
+    expect(result).not.toContain('med');
+  });
+
+  it('Numeric Line 2: when min === max (single-value), "all values" supersedes the min/med/max layout even with non-null median', () => {
+    const stats: NumericColumnStats = {
+      kind: 'numeric',
+      totalRows: 10,
+      nonNullCount: 10,
+      nullCount: 0,
+      filteredTotalRows: null,
+      min: 7,
+      max: 7,
+      median: 7,
+      distinctCount: 1,
+    };
+    const result = formatDefaultStats(stats, 'integer');
+    expect(result).toContain('all values: 7');
+    expect(result).not.toMatch(/min 7.*max 7/);
+  });
+
+  it('Interval Line 2 with medianDisplay === null: shows "min ... · max ..." only', () => {
+    const stats: IntervalColumnStats = {
+      kind: 'interval',
+      totalRows: 4,
+      nonNullCount: 4,
+      nullCount: 0,
+      filteredTotalRows: null,
+      minDisplay: '1h',
+      maxDisplay: '12h',
+      medianDisplay: null,
+    };
+    const result = formatDefaultStats(stats, 'interval');
+    expect(result).toContain('min 1h');
+    expect(result).toContain('max 12h');
+    expect(result).not.toContain('med');
+  });
+
+  it('Time Line 2: 00:00:00 and 23:59:59 form an end-to-end day range (en-dash separator)', () => {
+    const stats: TimeColumnStats = {
+      kind: 'time',
+      totalRows: 100,
+      nonNullCount: 100,
+      nullCount: 0,
+      filteredTotalRows: null,
+      minSeconds: 0,
+      maxSeconds: 23 * 3600 + 59 * 60 + 59,
+    };
+    const result = formatDefaultStats(stats, 'time');
+    expect(result).toContain('00:00:00');
+    expect(result).toContain('23:59:59');
+    // En-dash (U+2013) separator, not a hyphen-minus.
+    expect(result).toContain('–');
+  });
+
+  it('Temporal Line 2: en-dash separator between min and max (locale-stable)', () => {
+    const stats: TemporalColumnStats = {
+      kind: 'temporal',
+      totalRows: 100,
+      nonNullCount: 100,
+      nullCount: 0,
+      filteredTotalRows: null,
+      min: '2020-01-01',
+      max: '2024-12-31',
+    };
+    const result = formatDefaultStats(stats, 'date');
+    expect(result).toContain('2020-01-01');
+    expect(result).toContain('2024-12-31');
+    expect(result).toContain('–');
+  });
+
+  it('Categorical boolean: rounds 1/3 ≈ 33% (locks Math.round behavior at non-trivial fractions)', () => {
+    const stats: CategoricalColumnStats = {
+      kind: 'categorical',
+      totalRows: 3,
+      nonNullCount: 3,
+      nullCount: 0,
+      filteredTotalRows: null,
+      distinctCount: 2,
+      trueCount: 1,
+    };
+    const result = formatDefaultStats(stats, 'boolean');
+    expect(result).toContain('33%');
+  });
+
+  it('locale strategy: integer values use toLocaleString separators (not raw digits)', () => {
+    // The library relies on Number.toLocaleString() for thousands separators
+    // (no explicit Intl.NumberFormat in StatsFormatters.ts). Lock the
+    // locale-stable contract: a 4-digit integer is rendered with at least
+    // one non-digit separator (comma, NBSP, or thin space depending on the
+    // host locale).
+    const formatted = formatStatValue(12345);
+    expect(formatted.replace(/[\d-]/g, '').length).toBeGreaterThan(0);
+    // Sanity: digits round-trip correctly.
+    expect(formatted.replace(/\D/g, '')).toBe('12345');
+  });
+});

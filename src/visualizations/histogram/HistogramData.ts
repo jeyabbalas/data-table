@@ -214,7 +214,7 @@ export async function fetchColumnStats(
     };
   }
 
-  const row = results[0];
+  const row = results[0]!;
   return {
     min: row.min,
     max: row.max,
@@ -341,7 +341,7 @@ export async function fetchHistogramBins(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx].count = Number(result.count);
+      bins[idx]!.count = Number(result.count);
     }
   }
 

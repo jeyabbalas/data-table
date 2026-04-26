@@ -109,7 +109,7 @@ async function fetchColumnStats(
     };
   }
 
-  const row = results[0];
+  const row = results[0]!;
   return {
     total: Number(row.total),
     nonNullCount: Number(row.non_null_count),

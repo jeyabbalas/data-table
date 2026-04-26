@@ -121,7 +121,7 @@ export class InteractionManager {
   clearLast(): boolean {
     // Prune destroyed visualizations from the top of the stack
     while (this.stack.length > 0) {
-      const last = this.stack[this.stack.length - 1];
+      const last = this.stack[this.stack.length - 1]!;
       if (last.visualization.isDestroyed()) {
         this.stack.pop();
         continue;

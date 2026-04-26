@@ -193,6 +193,48 @@ describe('StatsPanelRegistry', () => {
     expect(defaultStatsPanelRegistry.getRegisteredTypes()).toEqual([]);
   });
 
+  // ---- Phase 6 additions: tie-break determinism, fall-through ----
+
+  it('priority tie-break: among registrations with identical priority, earliest-registered wins (stable sort)', () => {
+    class FirstPanel extends BaseStatsPanel {
+      update(_stats: ColumnStatsData | null): void {}
+    }
+    class SecondPanel extends BaseStatsPanel {
+      update(_stats: ColumnStatsData | null): void {}
+    }
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'first',
+      isApplicable: (t) => t === 'integer',
+      constructor: FirstPanel,
+      priority: 5,
+    });
+    reg.register({
+      name: 'second',
+      isApplicable: (t) => t === 'integer',
+      constructor: SecondPanel,
+      priority: 5,
+    });
+    const container = document.createElement('div');
+    const panel = reg.create(container, makeColumn('integer'), makeOptions());
+    expect(panel).toBeInstanceOf(FirstPanel);
+  });
+
+  it('full fall-through: create() returns null when every registration rejects the column', () => {
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'never',
+      isApplicable: () => false,
+      constructor: FakePanel,
+      priority: 100,
+    });
+    const container = document.createElement('div');
+    const panel = reg.create(container, makeColumn('integer'), makeOptions());
+    // null contract → the facade falls back to the built-in
+    // formatDefaultStats HTML for this column.
+    expect(panel).toBeNull();
+  });
+
   it('passes container, column, and options through to the constructor', () => {
     const seen: Array<{
       container: HTMLElement;

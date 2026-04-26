@@ -36,7 +36,7 @@ export async function initializeDuckDB(
 
   // Instantiate the async DuckDB
   const worker = new Worker(worker_url);
-  const logger = new duckdb.ConsoleLogger();
+  const logger = new duckdb.VoidLogger();
   db = new duckdb.AsyncDuckDB(logger, worker);
 
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);

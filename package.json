@@ -79,7 +79,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.1",
-    "@duckdb/duckdb-wasm": "^1.33.1-dev42.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@lezer/highlight": "^1.2.3"
   },
   "peerDependenciesMeta": {
@@ -113,7 +113,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.1",
-    "@duckdb/duckdb-wasm": "^1.33.1-dev42.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@lezer/highlight": "^1.2.3",
     "@observablehq/plot": "^0.6.17",
     "@size-limit/file": "^12.1.0",

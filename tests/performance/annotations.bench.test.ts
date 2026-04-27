@@ -2,8 +2,9 @@
  * Phase 9 — AnnotationStore performance budgets.
  *
  * Pure-JS micro-benchmarks (no DuckDB). Runs in the default `npm test` suite
- * because it's fast and deterministic. Budgets are 4-5x of M1 local medians
- * to absorb CI / shared-runner variance.
+ * because it's fast and deterministic. Budgets are sized for GitHub-hosted
+ * runner variance (5–7× slower than M1 plus noise), not just for local
+ * medians.
  *
  * Local M1 medians (3-run, after warmup):
  *   - addMany(10_000):                       ~50ms
@@ -15,7 +16,9 @@
  * intersection path. Each lookup unions row-scope + column-scope +
  * cell-scope Set entries (typically ~150 column-anns + a few row/cell)
  * then sorts by severity. Constant-factor work per call; budget gives
- * 4× CI headroom over the local median.
+ * ~12× CI headroom over the local M1 median (~120ms) — an O(n²)
+ * regression at this fixture size lands in multi-second territory,
+ * well past the 1500ms budget.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -104,6 +107,6 @@ describe('AnnotationStore — Phase 9 perf budgets', () => {
     // Sanity check — most cells in the 10k mix should hit at least one of
     // row-scope (40%) + column-scope (30%) — so total > 0 by a wide margin.
     expect(total).toBeGreaterThan(0);
-    expect(m.durationMs).toBeLessThan(500);
+    expect(m.durationMs).toBeLessThan(1500);
   });
 });

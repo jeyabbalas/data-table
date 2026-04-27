@@ -862,10 +862,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // they registered before or after awaiting `createDataTable(...)`.
   let readyPayload: { bridgeReady: true } | null = null;
 
+  // Each emit allocates a fresh shallow copy of mutable payload fields
+  // (arrays, Sets) so handlers that destructure and mutate the payload
+  // can't write back into the live signal value. Object-shape items
+  // inside the arrays (Filter, SortColumn, ColumnSchema, …) are not
+  // deep-cloned — the immutability contract is "the collection is
+  // yours; the items inside are still shared, treat them read-only".
   unsubscribes.push(
     state.filters.subscribe((filters: Filter[]) => {
       emitter.emit('filterChange', {
-        filters,
+        filters: [...filters],
         filteredRowCount: state.filteredRows.get(),
         totalRowCount: state.totalRows.get(),
       });
@@ -873,29 +879,29 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   );
   unsubscribes.push(
     state.sortColumns.subscribe((sortColumns: SortColumn[]) => {
-      emitter.emit('sortChange', { sortColumns });
+      emitter.emit('sortChange', { sortColumns: [...sortColumns] });
     }),
   );
   unsubscribes.push(
     state.selectedRows.subscribe((selectedRows: Set<number>) => {
-      emitter.emit('selectionChange', { selectedRows });
+      emitter.emit('selectionChange', { selectedRows: new Set(selectedRows) });
     }),
   );
   unsubscribes.push(
     state.visibleColumns.subscribe(() => {
       emitter.emit('columnChange', {
-        visibleColumns: state.visibleColumns.get(),
-        pinnedColumns: state.pinnedColumns.get(),
-        columnOrder: state.columnOrder.get(),
+        visibleColumns: [...state.visibleColumns.get()],
+        pinnedColumns: [...state.pinnedColumns.get()],
+        columnOrder: [...state.columnOrder.get()],
       });
     }),
   );
   unsubscribes.push(
     state.pinnedColumns.subscribe(() => {
       emitter.emit('columnChange', {
-        visibleColumns: state.visibleColumns.get(),
-        pinnedColumns: state.pinnedColumns.get(),
-        columnOrder: state.columnOrder.get(),
+        visibleColumns: [...state.visibleColumns.get()],
+        pinnedColumns: [...state.pinnedColumns.get()],
+        columnOrder: [...state.columnOrder.get()],
       });
     }),
   );

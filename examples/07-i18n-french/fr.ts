@@ -196,6 +196,7 @@ export const frenchMessages: DeepPartial<Strings> = {
     copiedFeedback: 'Copié !',
     exportFailedFallback: "Échec de l'export",
     copyFailedFallback: 'Échec de la copie',
+    includeSystemColumnsLabel: 'Inclure les colonnes système (par ex. __rowid__)',
 
     csv: {
       delimiterLabel: 'Séparateur',
@@ -238,6 +239,8 @@ export const frenchMessages: DeepPartial<Strings> = {
 
     expressionLabel: 'Expression SQL',
     expressionRequired: "L'expression est requise",
+    expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+    availableColumnsLabel: 'Colonnes disponibles :',
     typePreview: (type, originalType) => `Type : ${type} (${originalType})`,
     validationFailed: 'Échec de la validation',
 
@@ -316,6 +319,9 @@ export const frenchMessages: DeepPartial<Strings> = {
 
     hiddenColumnsLabel: 'Colonnes masquées',
     showColumn: (column) => `Afficher ${column}`,
+
+    resizeHandleLabel: 'Redimensionner la colonne',
+    loadingRowLabel: (rowNumber) => `Chargement de la ligne ${rowNumber}…`,
   },
 
   statistics: {

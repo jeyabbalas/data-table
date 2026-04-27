@@ -244,6 +244,8 @@ export interface Strings {
     copiedFeedback: string;
     exportFailedFallback: string;
     copyFailedFallback: string;
+    /** Label on the "include system columns (e.g. __rowid__)" checkbox. */
+    includeSystemColumnsLabel: string;
 
     csv: {
       delimiterLabel: string;
@@ -292,6 +294,10 @@ export interface Strings {
 
     expressionLabel: string;
     expressionRequired: string;
+    /** Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor). */
+    expressionPlaceholder: string;
+    /** Prefix shown before the comma-separated column-hint list (DefaultExpressionEditor). */
+    availableColumnsLabel: string;
     typePreview: (type: string, originalType: string) => string;
     validationFailed: string;
 
@@ -377,6 +383,11 @@ export interface Strings {
     /** Hidden-columns gutter. */
     hiddenColumnsLabel: string;
     showColumn: (column: string) => string;
+
+    /** Aria-label on the column-resize handle (`.dt-col-resize-handle`). */
+    resizeHandleLabel: string;
+    /** Placeholder text shown for not-yet-fetched rows during fast scroll. */
+    loadingRowLabel: (rowNumber: number) => string;
   };
 
   // =========================================
@@ -609,6 +620,7 @@ export const defaultStrings: Strings = {
     copiedFeedback: 'Copied!',
     exportFailedFallback: 'Export failed',
     copyFailedFallback: 'Copy failed',
+    includeSystemColumnsLabel: 'Include system columns (e.g. __rowid__)',
 
     csv: {
       delimiterLabel: 'Delimiter',
@@ -651,6 +663,8 @@ export const defaultStrings: Strings = {
 
     expressionLabel: 'SQL Expression',
     expressionRequired: 'Expression is required',
+    expressionPlaceholder: 'Enter SQL expression, e.g. price * quantity',
+    availableColumnsLabel: 'Available columns:',
     typePreview: (type, originalType) => `Type: ${type} (${originalType})`,
     validationFailed: 'Validation failed',
 
@@ -728,6 +742,9 @@ export const defaultStrings: Strings = {
 
     hiddenColumnsLabel: 'Hidden columns',
     showColumn: (column) => `Show ${column}`,
+
+    resizeHandleLabel: 'Resize column',
+    loadingRowLabel: (rowNumber) => `Loading row ${rowNumber}…`,
   },
 
   statistics: {

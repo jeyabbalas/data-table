@@ -12,6 +12,7 @@ import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
+import { wireLiveCompletionContext } from '../sql-editor/wireLiveCompletionContext';
 import type { RawSQLFilter } from './FilterTypes';
 
 /** Construction options for {@link SQLFilterModal}. */
@@ -62,6 +63,9 @@ export class SQLFilterModal {
   private colorSchemeSource?: HTMLElement | undefined;
   private currentEditor: ExpressionEditor | null = null;
   private editorInputHandler: (() => void) | null = null;
+  // Unsub for the live-completion-context wiring set up in `ensureEditor`
+  // and torn down in `destroyEditor`. Null while the editor is unmounted.
+  private unsubLiveCompletion: (() => void) | null = null;
   private isOpen = false;
   private destroyed = false;
   private validated = false;
@@ -292,6 +296,14 @@ export class SQLFilterModal {
       );
     }
 
+    // Live-refresh autocomplete when schema or derived columns change while
+    // the modal is open. Preserves cursor / focus / scroll across reconfigure.
+    this.unsubLiveCompletion = wireLiveCompletionContext(
+      this.currentEditor,
+      this.state,
+      this.actions,
+    );
+
     // Listen for input changes to reset validation
     this.removeEditorInputListener();
     this.editorInputHandler = () => {
@@ -319,6 +331,10 @@ export class SQLFilterModal {
 
   private destroyEditor(): void {
     this.removeEditorInputListener();
+    if (this.unsubLiveCompletion) {
+      this.unsubLiveCompletion();
+      this.unsubLiveCompletion = null;
+    }
     if (this.currentEditor) {
       this.currentEditor.destroy();
       this.currentEditor = null;

@@ -11,6 +11,8 @@
  * - Cursor feedback during drag
  */
 
+import { type Strings, defaultStrings } from '../core/Strings';
+
 /**
  * Options for configuring the ColumnResizer
  */
@@ -25,6 +27,8 @@ export interface ColumnResizerOptions {
   onDragStart?: (() => void) | undefined;
   /** Called when a resize drag ends (mouseup after drag) */
   onDragEnd?: (() => void) | undefined;
+  /** Resolved i18n strings (used for the handle's aria-label). Defaults to English. */
+  messages?: Strings | undefined;
 }
 
 /**
@@ -64,6 +68,7 @@ export class ColumnResizer {
   private readonly classPrefix: string;
   private readonly onDragStart?: (() => void) | undefined;
   private readonly onDragEnd?: (() => void) | undefined;
+  private readonly messages: Strings;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseDown: (e: MouseEvent) => void;
@@ -83,6 +88,7 @@ export class ColumnResizer {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.onDragStart = options.onDragStart;
     this.onDragEnd = options.onDragEnd;
+    this.messages = options.messages ?? defaultStrings;
 
     // Bind event handlers
     this.boundMouseDown = this.handleMouseDown.bind(this);
@@ -120,7 +126,7 @@ export class ColumnResizer {
     this.handle.className = `${this.classPrefix}-col-resize-handle`;
     this.handle.setAttribute('role', 'separator');
     this.handle.setAttribute('aria-orientation', 'vertical');
-    this.handle.setAttribute('aria-label', 'Resize column');
+    this.handle.setAttribute('aria-label', this.messages.a11y.resizeHandleLabel);
 
     // Attach mouse events
     this.handle.addEventListener('mousedown', this.boundMouseDown);

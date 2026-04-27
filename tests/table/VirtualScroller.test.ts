@@ -701,4 +701,103 @@ describe('VirtualScroller', () => {
       scroller.destroy();
     });
   });
+
+  // -------- Phase 8 — edge-case coverage --------
+
+  describe('Phase 8 — edge cases', () => {
+    it('handles 0 rows: visible range is start=0, end=0; content height 0', () => {
+      const scroller = createScroller();
+      Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
+        value: 320,
+        configurable: true,
+      });
+      scroller.setTotalRows(0);
+
+      const range = scroller.getVisibleRange();
+      expect(range.start).toBe(0);
+      expect(range.end).toBe(0);
+
+      const contentContainer = scroller.getScrollContainer().firstElementChild as HTMLElement;
+      expect(contentContainer.style.height).toBe('0px');
+
+      scroller.destroy();
+    });
+
+    it('handles 1 row: range covers a single row', () => {
+      const scroller = createScroller();
+      Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
+        value: 320,
+        configurable: true,
+      });
+      scroller.setTotalRows(1);
+
+      const range = scroller.getVisibleRange();
+      expect(range.start).toBe(0);
+      expect(range.end).toBeGreaterThanOrEqual(1);
+      // end clamps at totalRows
+      expect(range.end).toBeLessThanOrEqual(1);
+
+      scroller.destroy();
+    });
+
+    it('handles 1M rows without instantiating per-row DOM', () => {
+      const scroller = createScroller();
+      Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
+        value: 480,
+        configurable: true,
+      });
+      scroller.setTotalRows(1_000_000);
+
+      const range = scroller.getVisibleRange();
+      // The visible range spans only as many rows as the viewport can hold
+      // (plus a small overscan buffer) — must be ≪ totalRows.
+      expect(range.end - range.start).toBeLessThan(200);
+
+      // Total content height = 1M × rowHeight; it's a single inline-styled
+      // div, not a million child nodes.
+      const contentContainer = scroller.getScrollContainer().firstElementChild as HTMLElement;
+      expect(contentContainer.style.height).toBe(`${1_000_000 * 32}px`);
+      expect(contentContainer.children.length).toBeLessThan(10);
+
+      scroller.destroy();
+    });
+
+    it('handles rowHeight > viewport height (renders ≥ 1 row)', () => {
+      const scroller = createScroller({ rowHeight: 800 });
+      Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
+        value: 320,
+        configurable: true,
+      });
+      scroller.setTotalRows(10);
+
+      const range = scroller.getVisibleRange();
+      // Viewport is smaller than one row, but the scroller must still
+      // surface at least one row so the user sees something.
+      expect(range.end - range.start).toBeGreaterThanOrEqual(1);
+
+      scroller.destroy();
+    });
+
+    it('scrollToRow(N) places row N in the viewport', () => {
+      const scroller = createScroller();
+      Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
+        value: 320,
+        configurable: true,
+      });
+      scroller.setTotalRows(1000);
+      // jsdom does not compute layout — stub the content container's
+      // offsetHeight so scrollToRow's max-clamp uses the intended max.
+      const contentContainer = scroller.getScrollContainer().firstElementChild as HTMLElement;
+      Object.defineProperty(contentContainer, 'offsetHeight', {
+        value: 1000 * 32,
+        configurable: true,
+      });
+
+      scroller.scrollToRow(500, 'start');
+      // start alignment → scrollTop = 500 * rowHeight
+      expect(scroller.getScrollContainer().scrollTop).toBe(500 * 32);
+
+      scroller.destroy();
+    });
+  });
 });

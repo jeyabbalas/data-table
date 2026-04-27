@@ -234,7 +234,7 @@ export class ColumnReorder {
     let newDropIndex = 0;
 
     for (let i = 0; i < headers.length; i++) {
-      const header = headers[i];
+      const header = headers[i]!;
       const rect = header.getBoundingClientRect();
       const midpoint = rect.left + rect.width / 2;
 

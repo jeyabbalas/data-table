@@ -202,13 +202,14 @@ export class CellRenderer {
    */
   private formatDate(value: unknown): string {
     if (value instanceof Date) {
-      return value.toISOString().split('T')[0];
+      // ISO is `YYYY-MM-DDTHH:…` — `split('T')[0]` is always defined.
+      return value.toISOString().split('T')[0]!;
     }
     // DuckDB-WASM returns DATE as milliseconds since epoch (via row.toJSON())
     if (typeof value === 'bigint' || typeof value === 'number') {
       const date = new Date(Number(value)); // Value IS milliseconds
       if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
+        return date.toISOString().split('T')[0]!;
       }
       return String(value);
     }
@@ -218,7 +219,7 @@ export class CellRenderer {
       if (/^-?\d+(\.\d+)?$/.test(value)) {
         const date = new Date(Number(value)); // Value IS milliseconds
         if (!isNaN(date.getTime())) {
-          return date.toISOString().split('T')[0];
+          return date.toISOString().split('T')[0]!;
         }
       }
       // Already formatted string (ISO date or other format)
@@ -269,7 +270,7 @@ export class CellRenderer {
       // Check if string value has timezone offset: 2025-12-30T14:30:45+05:00
       const tzMatch = value.match(/^(.+?)([+-]\d{2}:?\d{2})$/);
       if (tzMatch) {
-        const [, , offset] = tzMatch;
+        const offset = tzMatch[2]!;
         const parsed = new Date(value);
         if (!isNaN(parsed.getTime())) {
           const formatted = this.formatTimestampCore(parsed);
@@ -324,11 +325,11 @@ export class CellRenderer {
     // decompose into compact display format, preserving sign and fractional seconds.
     if (value !== null && typeof value === 'object' && 'months' in value && 'days' in value) {
       const obj = value as Record<string, unknown>;
-      const months = Number(obj.months) || 0;
-      const days = Number(obj.days) || 0;
+      const months = Number(obj['months']) || 0;
+      const days = Number(obj['days']) || 0;
       let totalMicros = 0;
-      if ('nanoseconds' in obj) totalMicros = Math.floor(Number(obj.nanoseconds) / 1000);
-      else if ('micros' in obj) totalMicros = Number(obj.micros) || 0;
+      if ('nanoseconds' in obj) totalMicros = Math.floor(Number(obj['nanoseconds']) / 1000);
+      else if ('micros' in obj) totalMicros = Number(obj['micros']) || 0;
 
       const DAY_SEC = 86400;
       const totalSec = months * MONTH_SECONDS + days * DAY_SEC + totalMicros / 1_000_000;
@@ -389,16 +390,16 @@ export class CellRenderer {
     const monthMatch = input.match(/(\d+)\s*months?/i);
     const dayMatch = input.match(/(\d+)\s*days?/i);
 
-    if (yearMatch) parts.push(`${parseInt(yearMatch[1], 10)}y`);
-    if (monthMatch) parts.push(`${parseInt(monthMatch[1], 10)}mo`);
-    if (dayMatch) parts.push(`${parseInt(dayMatch[1], 10)}d`);
+    if (yearMatch) parts.push(`${parseInt(yearMatch[1]!, 10)}y`);
+    if (monthMatch) parts.push(`${parseInt(monthMatch[1]!, 10)}mo`);
+    if (dayMatch) parts.push(`${parseInt(dayMatch[1]!, 10)}d`);
 
     // Parse time component (HH:MM:SS or HH:MM:SS.ffffff)
     const timeMatch = input.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
     if (timeMatch) {
-      const hours = parseInt(timeMatch[1], 10);
-      const minutes = parseInt(timeMatch[2], 10);
-      const seconds = parseInt(timeMatch[3], 10);
+      const hours = parseInt(timeMatch[1]!, 10);
+      const minutes = parseInt(timeMatch[2]!, 10);
+      const seconds = parseInt(timeMatch[3]!, 10);
       const fraction = timeMatch[4];
 
       if (hours > 0) parts.push(`${hours}h`);
@@ -457,7 +458,8 @@ export class CellRenderer {
       // Match TIME format: HH:MM:SS or HH:MM:SS.ffffff
       const match = value.match(/^(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
       if (match) {
-        const [, time, frac] = match;
+        const time = match[1]!;
+        const frac = match[2];
         if (frac) {
           // Truncate to milliseconds (3 digits) and remove trailing zeros
           const truncated = frac.slice(0, 3).replace(/0+$/, '');

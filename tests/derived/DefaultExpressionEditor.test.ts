@@ -154,4 +154,35 @@ describe('DefaultExpressionEditor', () => {
 
     editor.destroy();
   });
+
+  // Phase 8 — A2: messages override flows through to the placeholder + label.
+  it('falls back to English defaults when no messages are provided', () => {
+    const editor = new DefaultExpressionEditor(container, context);
+    const textarea = editor.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(textarea.placeholder).toBe('Enter SQL expression, e.g. price * quantity');
+
+    const contextDiv = editor.element.querySelector('.dt-expr-editor-context');
+    expect(contextDiv?.textContent?.startsWith('Available columns: ')).toBe(true);
+
+    editor.destroy();
+  });
+
+  it('uses messages override for placeholder and available-columns label', async () => {
+    const { mergeStrings, defaultStrings } = await import('@/core/Strings');
+    const messages = mergeStrings(defaultStrings, {
+      derived: {
+        expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+        availableColumnsLabel: 'Colonnes disponibles :',
+      },
+    });
+    const editor = new DefaultExpressionEditor(container, context, 'dt', messages);
+
+    const textarea = editor.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(textarea.placeholder).toBe('Saisir une expression SQL, ex. prix * quantité');
+
+    const contextDiv = editor.element.querySelector('.dt-expr-editor-context');
+    expect(contextDiv?.textContent?.startsWith('Colonnes disponibles : ')).toBe(true);
+
+    editor.destroy();
+  });
 });

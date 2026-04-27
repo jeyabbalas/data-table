@@ -10,6 +10,7 @@ import { maxSeverity } from '../annotations/severity';
 import type { Annotation } from '../annotations/types';
 import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, SortColumn, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
@@ -42,6 +43,8 @@ export interface TableBodyOptions {
    * hover / focus of an annotated cell.
    */
   annotationPopover?: AnnotationPopover | undefined;
+  /** Resolved i18n strings (used for the placeholder-row label). Defaults to English. */
+  messages?: Strings | undefined;
 }
 
 /**
@@ -88,6 +91,7 @@ export class TableBody {
   private readonly container: HTMLElement;
   private readonly annotations: AnnotationStore | null;
   private readonly annotationPopover: AnnotationPopover | null;
+  private readonly messages: Strings;
   private unsubAnnotations: (() => void) | null = null;
 
   // Tracks the anchor currently driving the popover so pointer/focus
@@ -107,6 +111,7 @@ export class TableBody {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
+    this.messages = options.messages ?? defaultStrings;
     this.cellRenderer = new CellRenderer({ classPrefix: this.classPrefix });
 
     // Create virtual scroller
@@ -183,7 +188,7 @@ export class TableBody {
     this.colIndexMap.clear();
     const schema = this.state.schema.get();
     for (let i = 0; i < schema.length; i++) {
-      this.colIndexMap.set(schema[i].name, i + 1);
+      this.colIndexMap.set(schema[i]!.name, i + 1);
     }
   }
 
@@ -853,7 +858,7 @@ export class TableBody {
     const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
     let cumulativeLeft = 0;
     for (let i = 0; i < pinnedColumns.length; i++) {
-      const pCol = pinnedColumns[i];
+      const pCol = pinnedColumns[i]!;
       pinnedOffsets.set(pCol, {
         left: cumulativeLeft,
         zIndex: baseZ + (pinnedColumns.length - i),
@@ -863,7 +868,7 @@ export class TableBody {
 
     const cells = rowEl.children;
     for (let i = 0; i < columns.length && i < cells.length; i++) {
-      const colName = columns[i];
+      const colName = columns[i]!;
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
       const cellEl = cells[i] as HTMLElement;
@@ -999,7 +1004,7 @@ export class TableBody {
       `${p}-cell--annotation-warning`,
       `${p}-cell--annotation-info`,
     );
-    delete cellEl.dataset.dtAnnotationCount;
+    delete cellEl.dataset['dtAnnotationCount'];
     if (!this.annotations || rowId === null) return;
 
     // Marker classes (`-annotated`) and the count badge track unfiltered
@@ -1043,7 +1048,7 @@ export class TableBody {
     const total = rowAnns.length + colAnns.length + cellAnns.length;
     if (total > 0) {
       cellEl.title = '';
-      cellEl.dataset.dtAnnotationCount = String(total);
+      cellEl.dataset['dtAnnotationCount'] = String(total);
     }
   }
 
@@ -1082,7 +1087,7 @@ export class TableBody {
       const cells = rowEl.children;
       for (let c = 0; c < visibleColumns.length && c < cells.length; c++) {
         const cellEl = cells[c] as HTMLElement;
-        const colName = visibleColumns[c];
+        const colName = visibleColumns[c]!;
         this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
         this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
@@ -1109,7 +1114,7 @@ export class TableBody {
     placeholderCell.className = `${this.classPrefix}-cell ${this.classPrefix}-cell--placeholder`;
     placeholderCell.setAttribute('role', 'cell');
     placeholderCell.setAttribute('tabindex', '-1');
-    placeholderCell.textContent = `Loading row ${index + 1}...`;
+    placeholderCell.textContent = this.messages.a11y.loadingRowLabel(index + 1);
     rowEl.appendChild(placeholderCell);
 
     return rowEl;
@@ -1146,7 +1151,7 @@ export class TableBody {
           if (cellIndex >= 0 && cellIndex < visibleColumns.length) {
             this.actions.setFocusedCell({
               row: index,
-              column: visibleColumns[cellIndex],
+              column: visibleColumns[cellIndex]!,
             });
           }
         }
@@ -1385,7 +1390,7 @@ export class TableBody {
     for (const [, rowEl] of this.rowElementMap) {
       const cells = rowEl.children;
       for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i];
+        const colName = visibleColumns[i]!;
         const width = columnWidths.get(colName) ?? 150;
         (cells[i] as HTMLElement).style.width = `${width}px`;
       }

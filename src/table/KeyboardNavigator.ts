@@ -119,11 +119,13 @@ export class KeyboardNavigator {
       if (visibleColumns.length === 0 || rowCount === 0) return;
 
       const current = this.state.focusedCell.get();
+      // After length-check above, [0] is non-null.
+      const firstCol = visibleColumns[0]!;
       if (e.ctrlKey || e.metaKey) {
-        this.setFocusAbsolute(0, visibleColumns[0]);
+        this.setFocusAbsolute(0, firstCol);
       } else {
         const row = current?.row ?? 0;
-        this.setFocusAbsolute(row, visibleColumns[0]);
+        this.setFocusAbsolute(row, firstCol);
       }
       return;
     }
@@ -135,7 +137,7 @@ export class KeyboardNavigator {
       if (visibleColumns.length === 0 || rowCount === 0) return;
 
       const current = this.state.focusedCell.get();
-      const lastCol = visibleColumns[visibleColumns.length - 1];
+      const lastCol = visibleColumns[visibleColumns.length - 1]!;
       if (e.ctrlKey || e.metaKey) {
         this.setFocusAbsolute(rowCount - 1, lastCol);
       } else {
@@ -245,7 +247,8 @@ export class KeyboardNavigator {
     row = Math.max(0, Math.min(rowCount - 1, row + deltaRow));
     colIdx = Math.max(0, Math.min(visibleColumns.length - 1, colIdx + deltaCol));
 
-    this.setFocusAbsolute(row, visibleColumns[colIdx]);
+    // colIdx is bounded by the visibleColumns length above.
+    this.setFocusAbsolute(row, visibleColumns[colIdx]!);
   }
 
   private moveFocusTab(reverse: boolean): void {
@@ -263,9 +266,9 @@ export class KeyboardNavigator {
       if (colIdx < 0) colIdx = 0;
     } else {
       if (reverse) {
-        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]);
+        this.setFocusAbsolute(rowCount - 1, visibleColumns[visibleColumns.length - 1]!);
       } else {
-        this.setFocusAbsolute(0, visibleColumns[0]);
+        this.setFocusAbsolute(0, visibleColumns[0]!);
       }
       return;
     }
@@ -292,7 +295,7 @@ export class KeyboardNavigator {
       }
     }
 
-    this.setFocusAbsolute(row, visibleColumns[colIdx]);
+    this.setFocusAbsolute(row, visibleColumns[colIdx]!);
   }
 
   private setFocusAbsolute(row: number, column: string): void {

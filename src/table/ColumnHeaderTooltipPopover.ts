@@ -211,6 +211,15 @@ export class ColumnHeaderTooltipPopover {
     this.cancelGraceHide();
     populateInto(el, content, this.classPrefix);
 
+    // Clear the previous anchor's aria-describedby before re-pointing the
+    // popover. Without this, a sequence of show(A) → show(B) leaves A
+    // claiming an active description that no longer belongs to it.
+    if (this.currentAnchor && this.currentAnchor !== anchor) {
+      if (this.currentAnchor.getAttribute('aria-describedby') === this.popoverId) {
+        this.currentAnchor.removeAttribute('aria-describedby');
+      }
+    }
+
     // Mark open BEFORE positioning so listeners that read `currentAnchor` are correct.
     this.currentAnchor = anchor;
     anchor.setAttribute('aria-describedby', this.popoverId);

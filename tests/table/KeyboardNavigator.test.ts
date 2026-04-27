@@ -234,4 +234,103 @@ describe('KeyboardNavigator', () => {
     // Still at the original cell — listener is gone
     expect(state.focusedCell.get()).toEqual({ row: 0, column: 'a' });
   });
+
+  // ---- Phase 8: undo/redo/copy shortcut wiring ----
+
+  describe('Phase 8 — undo / redo / copy shortcuts', () => {
+    it('Cmd/Ctrl+Z routes to actions.undo()', () => {
+      const { actions, root, nav } = setup();
+      const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);
+      keydown(root, { key: 'z', ctrlKey: true });
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      keydown(root, { key: 'z', metaKey: true });
+      expect(undo).toHaveBeenCalledTimes(2);
+      nav.destroy();
+    });
+
+    it('Cmd/Ctrl+Shift+Z routes to actions.redo()', () => {
+      const { actions, root, nav } = setup();
+      const redo = vi.spyOn(actions, 'redo').mockResolvedValue(true);
+      keydown(root, { key: 'z', ctrlKey: true, shiftKey: true });
+      expect(redo).toHaveBeenCalledTimes(1);
+
+      keydown(root, { key: 'Z', metaKey: true, shiftKey: true });
+      expect(redo).toHaveBeenCalledTimes(2);
+      nav.destroy();
+    });
+
+    it('Ctrl+Y routes to actions.redo() (Windows convention)', () => {
+      const { actions, root, nav } = setup();
+      const redo = vi.spyOn(actions, 'redo').mockResolvedValue(true);
+      keydown(root, { key: 'y', ctrlKey: true });
+      expect(redo).toHaveBeenCalledTimes(1);
+      nav.destroy();
+    });
+
+    it('Ctrl/Cmd+C is a no-op when no rows are selected', () => {
+      const { state, root, nav } = setup();
+      // No rows selected.
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'c',
+        ctrlKey: true,
+        cancelable: true,
+      });
+      root.dispatchEvent(event);
+      expect(state.selectedRows.get().size).toBe(0);
+      // Default not prevented when there's no selection — the browser
+      // still receives the keystroke for native copy of the URL bar etc.
+      expect(event.defaultPrevented).toBe(false);
+      nav.destroy();
+    });
+
+    it('Ctrl/Cmd+C with selection prevents default and triggers copy path', () => {
+      const { state, actions, root } = setup();
+      const root2 = root;
+      // Set up nav with a getBridge stub so the copy path runs.
+      const bodyScroll = document.createElement('div');
+      const getBridge = vi.fn(() => mockBridge);
+      const nav = new KeyboardNavigator({
+        rootElement: root2,
+        bodyScroll,
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+        getBridge,
+      });
+
+      state.selectedRows.set(new Set([0, 1, 2]));
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'c',
+        ctrlKey: true,
+        cancelable: true,
+      });
+      root2.dispatchEvent(event);
+
+      // Default IS prevented when there's a selection — async copy fired.
+      expect(event.defaultPrevented).toBe(true);
+      expect(getBridge).toHaveBeenCalled();
+      nav.destroy();
+    });
+
+    it('native browser undo (Cmd+Z) inside a child input is NOT hijacked', () => {
+      const { actions, root, nav } = setup();
+      const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);
+
+      // A modal-hosted input — the modal-open guard short-circuits.
+      const modal = document.createElement('div');
+      modal.setAttribute('role', 'dialog');
+      const input = document.createElement('input');
+      modal.appendChild(input);
+      document.body.appendChild(modal);
+      input.focus();
+
+      keydown(root, { key: 'z', ctrlKey: true });
+      // Document-active-element is inside the dialog → grid yields.
+      expect(undo).not.toHaveBeenCalled();
+      nav.destroy();
+    });
+  });
 });

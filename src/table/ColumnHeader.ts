@@ -101,6 +101,7 @@ export class ColumnHeader {
         classPrefix: this.classPrefix,
         onDragStart: () => this.actions.beginColumnWidthChange(),
         onDragEnd: () => this.actions.endColumnWidthChange(),
+        messages: this.messages,
       },
     );
 
@@ -352,7 +353,7 @@ export class ColumnHeader {
       `${p}-col-header--annotation-warning`,
       `${p}-col-header--annotation-info`,
     );
-    delete el.dataset.dtAnnotationCount;
+    delete el.dataset['dtAnnotationCount'];
     if (!annotations) return;
     const anns = annotations.getByColumn(this.column.name).filter((a) => a.scope === 'column');
     if (anns.length === 0) return;
@@ -360,7 +361,7 @@ export class ColumnHeader {
     // reachable even when every visible severity is hidden; the severity
     // class falls back through error → warning → info per the filter.
     el.classList.add(`${p}-col-header--annotated`);
-    el.dataset.dtAnnotationCount = String(anns.length);
+    el.dataset['dtAnnotationCount'] = String(anns.length);
     const filter = annotations.getSeverityFilter();
     const sev = maxSeverity(anns.filter((a) => filter[a.severity]));
     if (sev) el.classList.add(`${p}-col-header--annotation-${sev}`);
@@ -690,7 +691,7 @@ export class ColumnHeader {
     const sortColumns = this.state.sortColumns.get();
     const sortIndex = sortColumns.findIndex((s) => s.column === this.column.name);
     if (sortIndex !== -1) {
-      const direction = sortColumns[sortIndex].direction === 'asc' ? a.ascending : a.descending;
+      const direction = sortColumns[sortIndex]!.direction === 'asc' ? a.ascending : a.descending;
       if (sortColumns.length > 1) {
         parts.push(a.sortedMultiSuffix(direction, sortIndex + 1));
       } else {
@@ -736,7 +737,7 @@ export class ColumnHeader {
       this.element.setAttribute('aria-sort', 'none');
       this.sortButton.setAttribute('title', this.messages.a11y.sortAscendingTitle);
     } else {
-      const sortConfig = sortColumns[sortIndex];
+      const sortConfig = sortColumns[sortIndex]!;
       const isAsc = sortConfig.direction === 'asc';
 
       // Add appropriate class for arrow styling

@@ -166,6 +166,40 @@ describe('buildCompletionContext', () => {
       isDerived: false,
     });
   });
+
+  // -------- Phase 8 — non-printable / Unicode / odd-name edges --------
+
+  it('preserves Unicode column names verbatim', () => {
+    const ctx = buildCompletionContext([
+      { name: '測試', type: 'VARCHAR' },
+      { name: 'café', type: 'VARCHAR' },
+      { name: 'ñame', type: 'VARCHAR' },
+      { name: '🔑id', type: 'BIGINT' },
+    ]);
+    expect(ctx.columns.map((c) => c.name)).toEqual(['測試', 'café', 'ñame', '🔑id']);
+  });
+
+  it('preserves column names with embedded quotes verbatim', () => {
+    const ctx = buildCompletionContext([
+      { name: `O'Reilly`, type: 'VARCHAR' },
+      { name: 'has "quote"', type: 'VARCHAR' },
+      { name: 'back`tick', type: 'VARCHAR' },
+    ]);
+    expect(ctx.columns.map((c) => c.name)).toEqual([`O'Reilly`, 'has "quote"', 'back`tick']);
+  });
+
+  it('preserves column names with spaces verbatim', () => {
+    const ctx = buildCompletionContext([
+      { name: 'first name', type: 'VARCHAR' },
+      { name: '  leading spaces', type: 'VARCHAR' },
+    ]);
+    expect(ctx.columns.map((c) => c.name)).toEqual(['first name', '  leading spaces']);
+  });
+
+  it('coerces a column with no type to an empty-string detail (not "undefined")', () => {
+    const ctx = buildCompletionContext([{ name: 'untyped' }]);
+    expect(ctx.columns[0]).toEqual({ name: 'untyped', type: '', isDerived: false });
+  });
 });
 
 describe('createSqlExtensions', () => {

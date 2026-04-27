@@ -206,14 +206,19 @@ export class StateActions {
     this.onDerivedChangeCallback = callback;
   }
 
-  /** Emit a derived-change event with the current column list. */
+  /**
+   * Emit a derived-change event with the current column list.
+   *
+   * The `derivedColumns` array is a fresh shallow copy so handlers
+   * destructuring the payload can't mutate the signal-backed list.
+   */
   private emitDerivedChange(
     kind: 'added' | 'removed' | 'updated' | 'replaced',
     columnName?: string,
   ): void {
     if (!this.onDerivedChangeCallback) return;
     this.onDerivedChangeCallback({
-      derivedColumns: this.state.derivedColumns.get(),
+      derivedColumns: [...this.state.derivedColumns.get()],
       kind,
       columnName,
     });

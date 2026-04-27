@@ -257,6 +257,32 @@ describe('AnnotationPopover', () => {
     expect(root.querySelector('.dt-annotation-pill--info')).toBeTruthy();
   });
 
+  // Phase 8 — multiple-show / multiple-anchor regression coverage.
+  it('rapid show against a different anchor clears the previous aria-describedby', () => {
+    const anchorB = document.createElement('div');
+    anchorB.setAttribute('tabindex', '0');
+    document.body.appendChild(anchorB);
+    const ann = makeAnn({ scope: 'row', severity: 'info', message: 'x' });
+
+    popover.show(anchor, [ann]);
+    expect(anchor.getAttribute('aria-describedby')).toBe(popover.getId());
+
+    popover.show(anchorB, [ann]);
+    expect(anchor.getAttribute('aria-describedby')).toBe(null);
+    expect(anchorB.getAttribute('aria-describedby')).toBe(popover.getId());
+
+    anchorB.remove();
+  });
+
+  it('destroy after multiple show/hide cycles does not throw', () => {
+    const ann = makeAnn({ scope: 'row', severity: 'info', message: 'x' });
+    for (let i = 0; i < 5; i++) {
+      popover.show(anchor, [ann]);
+      popover.hide();
+    }
+    expect(() => popover.destroy()).not.toThrow();
+  });
+
   it('does not parse HTML in message, code, or source (textContent only)', () => {
     popover.show(anchor, [
       makeAnn({

@@ -145,4 +145,50 @@ describe('DataTable — i18n messages hook', () => {
     const merged = mergeStrings(defaultStrings, { common: { apply: 'X' } });
     expect(merged.common.apply).toBe('X');
   });
+
+  // Phase 8 — A2: 3 hardcoded English strings now route through Strings.
+  describe('A2 (Phase 8) — newly translatable strings', () => {
+    it('overriding export.includeSystemColumnsLabel changes the system-columns checkbox label', async () => {
+      const { table } = await createTable(
+        {
+          export: {
+            includeSystemColumnsLabel: 'Inclure les colonnes système (par ex. __rowid__)',
+          },
+        },
+        { exportDialog: true },
+      );
+
+      // Inject a synthetic system column so the system-columns row reveals.
+      table.state.schema.set([
+        { name: '__rowid__', type: 'integer', originalType: 'BIGINT' },
+        { name: 'name', type: 'string', originalType: 'VARCHAR' },
+      ]);
+      table.state.tableName.set('t');
+      table.openExportDialog();
+
+      // The label is the parent of the checkbox input.
+      const checkbox = document.querySelector('.dt-export-field input[type="checkbox"]');
+      expect(checkbox).toBeTruthy();
+      expect(checkbox?.parentElement?.textContent).toContain(
+        'Inclure les colonnes système (par ex. __rowid__)',
+      );
+      // English default substring is gone in the override.
+      expect(checkbox?.parentElement?.textContent).not.toContain('Include system columns');
+
+      await table.destroy();
+    });
+
+    it('English defaults populate the new derived.* keys', () => {
+      expect(defaultStrings.derived.expressionPlaceholder).toBe(
+        'Enter SQL expression, e.g. price * quantity',
+      );
+      expect(defaultStrings.derived.availableColumnsLabel).toBe('Available columns:');
+    });
+
+    it('English default populates export.includeSystemColumnsLabel', () => {
+      expect(defaultStrings.export.includeSystemColumnsLabel).toBe(
+        'Include system columns (e.g. __rowid__)',
+      );
+    });
+  });
 });

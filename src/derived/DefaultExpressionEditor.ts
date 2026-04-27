@@ -5,6 +5,7 @@
  * Used when no custom ExpressionEditorFactory is provided.
  */
 
+import { defaultStrings, type Strings } from '../core/Strings';
 import type { ExpressionEditor } from './ExpressionEditorTypes';
 import type { CompletionContext } from './types';
 
@@ -13,6 +14,12 @@ import type { CompletionContext } from './types';
  * custom factory is supplied. Renders a monospace textarea, an error slot,
  * and a column-hint slot. Apps that want SQL-aware autocompletion should
  * pass `editorFactory: () => new CodeMirrorExpressionEditor(...)` instead.
+ *
+ * The optional 4th `messages` constructor argument lets custom factories
+ * forward the table's i18n bundle so the placeholder text and the
+ * "Available columns:" label localize alongside the rest of the UI.
+ * When omitted (the bare-bones `new DefaultExpressionEditor(c, ctx)`
+ * call), English defaults apply.
  */
 export class DefaultExpressionEditor implements ExpressionEditor {
   readonly element: HTMLElement;
@@ -20,9 +27,16 @@ export class DefaultExpressionEditor implements ExpressionEditor {
   private errorDiv: HTMLElement;
   private contextDiv: HTMLElement;
   private prefix: string;
+  private messages: Strings;
 
-  constructor(container: HTMLElement, context: CompletionContext, classPrefix = 'dt') {
+  constructor(
+    container: HTMLElement,
+    context: CompletionContext,
+    classPrefix = 'dt',
+    messages: Strings = defaultStrings,
+  ) {
     this.prefix = classPrefix;
+    this.messages = messages;
 
     // Root container
     this.element = document.createElement('div');
@@ -31,7 +45,7 @@ export class DefaultExpressionEditor implements ExpressionEditor {
     this.textarea = document.createElement('textarea');
     this.textarea.className = `${this.prefix}-expr-editor-input`;
     this.textarea.rows = 4;
-    this.textarea.placeholder = 'Enter SQL expression, e.g. price * quantity';
+    this.textarea.placeholder = this.messages.derived.expressionPlaceholder;
     this.textarea.spellcheck = false;
     this.textarea.autocomplete = 'off';
     this.element.appendChild(this.textarea);
@@ -92,6 +106,6 @@ export class DefaultExpressionEditor implements ExpressionEditor {
       return;
     }
     const cols = context.columns.map((c) => `${c.name} (${c.type})`).join(', ');
-    this.contextDiv.textContent = `Available columns: ${cols}`;
+    this.contextDiv.textContent = `${this.messages.derived.availableColumnsLabel} ${cols}`;
   }
 }

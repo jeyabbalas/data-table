@@ -777,7 +777,7 @@ export class TableContainer {
         } else {
           this.actions?.setFocusedCell({
             row: focusedCell.row,
-            column: cols[0],
+            column: cols[0]!,
           });
         }
       }
@@ -837,7 +837,7 @@ export class TableContainer {
     let cumulativeLeft = 0;
 
     for (let i = 0; i < pinnedColumns.length; i++) {
-      const colName = pinnedColumns[i];
+      const colName = pinnedColumns[i]!;
       pinnedOffsets.set(colName, {
         left: cumulativeLeft,
         zIndex: baseZ + (pinnedColumns.length - i),
@@ -871,7 +871,7 @@ export class TableContainer {
     for (const row of rows) {
       const cells = row.children;
       for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i];
+        const colName = visibleColumns[i]!;
         const cell = cells[i] as HTMLElement;
         const offset = pinnedOffsets.get(colName);
 
@@ -1042,6 +1042,7 @@ export class TableContainer {
           // headerHeight no longer needed - body scroll only contains body
           annotations: this.resolvedOptions.annotations,
           annotationPopover: this.resolvedOptions.annotationPopover,
+          messages: this.messages,
         });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.

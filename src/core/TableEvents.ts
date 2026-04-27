@@ -36,6 +36,13 @@ export type TableErrorSource =
  * @remarks Defined as a `type` (not `interface`) so it satisfies
  * `Record<string, unknown>` for `EventEmitter`. Interfaces with named
  * keys in TypeScript don't auto-satisfy that constraint.
+ *
+ * **Payload immutability.** Every payload field carrying a mutable
+ * collection (`Filter[]`, `Set<number>`, `string[]`, `DerivedColumnDef[]`,
+ * `ColumnSchema[]`, …) is a fresh shallow copy at emit time. Handlers
+ * may destructure and mutate those collections without corrupting the
+ * library's internal state. Item identity inside the collection is not
+ * deep-cloned — treat the items themselves as read-only.
  */
 export type TableEvents = {
   /** Fired after `initialize()` completes and the worker is ready. */

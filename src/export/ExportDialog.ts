@@ -335,7 +335,9 @@ export class ExportDialog {
     this.systemColumnsCheckbox.type = 'checkbox';
     this.systemColumnsCheckbox.checked = false;
     label.appendChild(this.systemColumnsCheckbox);
-    label.appendChild(document.createTextNode(' Include system columns (e.g. __rowid__)'));
+    label.appendChild(
+      document.createTextNode(` ${this.messages.export.includeSystemColumnsLabel}`),
+    );
 
     container.appendChild(label);
     this.systemColumnsSection = container;
@@ -368,7 +370,10 @@ export class ExportDialog {
     delimField.className = `${p}-export-field`;
     const delimLabel = document.createElement('label');
     delimLabel.textContent = this.messages.export.csv.delimiterLabel;
+    const delimId = `${p}-${this.instanceId}-export-csv-delimiter`;
+    delimLabel.htmlFor = delimId;
     this.delimiterSelect = document.createElement('select');
+    this.delimiterSelect.id = delimId;
     this.delimiterSelect.className = `${p}-filter-select`;
     const delimiters = [
       { value: ',', label: this.messages.export.csv.delimiters.comma },
@@ -386,24 +391,28 @@ export class ExportDialog {
     delimField.appendChild(this.delimiterSelect);
     container.appendChild(delimField);
 
-    // Include headers
+    // Include headers — wrap checkbox inside its label for implicit a11y
+    // association (axe `label` rule).
     const headersField = document.createElement('div');
     headersField.className = `${p}-export-field`;
     const headersLabel = document.createElement('label');
-    headersLabel.textContent = this.messages.export.csv.headersLabel;
     this.headersCheckbox = document.createElement('input');
     this.headersCheckbox.type = 'checkbox';
     this.headersCheckbox.checked = true;
+    headersLabel.appendChild(this.headersCheckbox);
+    headersLabel.appendChild(document.createTextNode(` ${this.messages.export.csv.headersLabel}`));
     headersField.appendChild(headersLabel);
-    headersField.appendChild(this.headersCheckbox);
     container.appendChild(headersField);
 
-    // Null value
+    // Null value — explicit for/id association.
     const nullField = document.createElement('div');
     nullField.className = `${p}-export-field`;
     const nullLabel = document.createElement('label');
     nullLabel.textContent = this.messages.export.csv.nullValueLabel;
+    const nullId = `${p}-${this.instanceId}-export-csv-null`;
+    nullLabel.htmlFor = nullId;
     this.nullValueInput = document.createElement('input');
+    this.nullValueInput.id = nullId;
     this.nullValueInput.type = 'text';
     this.nullValueInput.className = `${p}-filter-input`;
     this.nullValueInput.value = '';
@@ -427,7 +436,10 @@ export class ExportDialog {
     fmtField.className = `${p}-export-field`;
     const fmtLabel = document.createElement('label');
     fmtLabel.textContent = this.messages.export.json.formatLabel;
+    const fmtId = `${p}-${this.instanceId}-export-json-format`;
+    fmtLabel.htmlFor = fmtId;
     this.jsonFormatSelect = document.createElement('select');
+    this.jsonFormatSelect.id = fmtId;
     this.jsonFormatSelect.className = `${p}-filter-select`;
     const formats = [
       { value: 'array', label: this.messages.export.json.formats.array },
@@ -443,16 +455,17 @@ export class ExportDialog {
     fmtField.appendChild(this.jsonFormatSelect);
     container.appendChild(fmtField);
 
-    // Pretty-print
+    // Pretty-print — wrap checkbox inside its label for implicit a11y
+    // association (axe `label` rule).
     const prettyField = document.createElement('div');
     prettyField.className = `${p}-export-field`;
     const prettyLabel = document.createElement('label');
-    prettyLabel.textContent = this.messages.export.json.prettyLabel;
     this.jsonPrettyCheckbox = document.createElement('input');
     this.jsonPrettyCheckbox.type = 'checkbox';
     this.jsonPrettyCheckbox.checked = false;
+    prettyLabel.appendChild(this.jsonPrettyCheckbox);
+    prettyLabel.appendChild(document.createTextNode(` ${this.messages.export.json.prettyLabel}`));
     prettyField.appendChild(prettyLabel);
-    prettyField.appendChild(this.jsonPrettyCheckbox);
     container.appendChild(prettyField);
 
     this.jsonOptionsEl = container;

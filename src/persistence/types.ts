@@ -81,7 +81,14 @@ export type DerivedColumnDef = _DerivedColumnDef;
 
 // ── Vector value pool (v4+) ─────────────────────────────────────────
 
-/** A vector column stored by pool reference instead of inline values. */
+/**
+ * A vector column stored by pool reference instead of inline values.
+ *
+ * `_poolRef` is a synthetic key (`vp_0`, `vp_1`, …) into the snapshot's
+ * `vectorValuePool`. Multiple stack entries that refer to the same vector
+ * column share the same key, so the values array is materialised exactly
+ * once per snapshot.
+ */
 export interface PooledVectorColumnRef {
   kind: 'vector';
   name: string;
@@ -90,7 +97,22 @@ export interface PooledVectorColumnRef {
   _poolRef: string;
 }
 
-/** Entry in the vector value pool. */
+/**
+ * Entry in the vector value pool.
+ *
+ * **Dedup is reference-identity, not content-hash.** `snapshotFromState`
+ * walks the undo/redo stacks once and groups entries by JS array reference
+ * (`Map<ArrayLike, key>`); two entries that hold the same array literal
+ * but different references each produce their own pool entry. This
+ * intentionally trades a small storage redundancy on the rare
+ * "structurally-identical-but-distinct" case for O(n) snapshot
+ * serialisation — `captureSnapshot` (`src/core/UndoManager.ts`) reuses the
+ * derived-column array ref across stack entries that didn't mutate the
+ * vector, so reference identity covers the common case.
+ *
+ * Consumers building their own undo stacks via the `/advanced` entry get
+ * dedup only when they share array references explicitly.
+ */
 export interface VectorValuePoolEntry {
   vectorType: string;
   values: unknown[];

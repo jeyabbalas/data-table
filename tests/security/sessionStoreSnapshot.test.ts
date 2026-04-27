@@ -139,15 +139,20 @@ describe('SessionStore.load — shape coercion', () => {
     expect(await store.load('tampered_widths')).toBeNull();
   });
 
-  it('accepts an unknown version value (forward-compat read; restore-time validates fields)', async () => {
+  it('rejects a future-version snapshot (Phase 7 — explicit version range check)', async () => {
+    // Phase 7 changed the contract: `coerceLoadedSnapshot` now range-checks
+    // `version` to be an integer in [1, SNAPSHOT_VERSION]. Future-version
+    // blobs (e.g. v99999 from a newer library that wrote the IDB row before
+    // a downgrade) load as `null` so the table boots fresh rather than risk
+    // misinterpreting unknown fields. See
+    // docs/migration-guides/phase-7-snapshot-version-policy.md.
     await plantRaw({
       ...makeValidSnapshot(),
       tableName: 'future_version',
       version: 99999,
     });
     const loaded = await store.load('future_version');
-    expect(loaded).not.toBeNull();
-    expect(loaded?.version).toBe(99999);
+    expect(loaded).toBeNull();
   });
 
   it('returns null when the stored value is a primitive', async () => {

@@ -104,6 +104,64 @@ describe('formatRowForJSON', () => {
 });
 
 // =========================================
+// JSON.parse round-trip locks (Phase 7)
+// =========================================
+//
+// Phase 7 cross-verifies that the formatted output deserialises through the
+// standard Web JSON.parse without surprise. The library does NOT emit
+// `{__type:'date',value:...}`-style envelopes; consumers must recompute
+// Dates from the ISO string themselves.
+
+describe('formatValueForJSON — JSON.parse round-trip', () => {
+  it('safe BigInt → number → JSON.parse round-trips losslessly', () => {
+    const original = 9007199254740991n; // MAX_SAFE_INTEGER
+    const formatted = formatValueForJSON(original);
+    const json = JSON.stringify({ v: formatted });
+    const parsed = JSON.parse(json) as { v: unknown };
+    expect(parsed.v).toBe(9007199254740991);
+    expect(BigInt(parsed.v as number)).toBe(original);
+  });
+
+  it('unsafe BigInt → string → JSON.parse returns the string verbatim (NOT a BigInt)', () => {
+    const original = 9007199254740993n; // MAX_SAFE_INTEGER + 2
+    const formatted = formatValueForJSON(original);
+    expect(formatted).toBe('9007199254740993'); // serialised as decimal string
+    const json = JSON.stringify({ v: formatted });
+    const parsed = JSON.parse(json) as { v: unknown };
+    expect(typeof parsed.v).toBe('string');
+    expect(parsed.v).toBe('9007199254740993');
+    // Consumer must re-cast explicitly:
+    expect(BigInt(parsed.v as string)).toBe(original);
+  });
+
+  it('Date → ISO string → JSON.parse → new Date round-trips losslessly', () => {
+    const original = new Date('2024-06-15T12:30:00.123Z');
+    const formatted = formatValueForJSON(original);
+    const json = JSON.stringify({ ts: formatted });
+    const parsed = JSON.parse(json) as { ts: string };
+    expect(parsed.ts).toBe('2024-06-15T12:30:00.123Z');
+    expect(new Date(parsed.ts).getTime()).toBe(original.getTime());
+  });
+
+  it('NaN/Infinity → null survives JSON.stringify (which would otherwise emit "null" anyway)', () => {
+    // The library pre-coerces, so consumers that pass formatted values into
+    // their own JSON pipeline don't hit JSON.stringify's quirk of converting
+    // NaN/Infinity to null silently — the value is already null.
+    expect(formatValueForJSON(NaN)).toBeNull();
+    expect(formatValueForJSON(Infinity)).toBeNull();
+    const json = JSON.stringify({ a: formatValueForJSON(NaN), b: formatValueForJSON(Infinity) });
+    expect(JSON.parse(json)).toEqual({ a: null, b: null });
+  });
+
+  it('boolean / null / regular number / string preserve identity through JSON.parse', () => {
+    expect(JSON.parse(JSON.stringify(formatValueForJSON(true)))).toBe(true);
+    expect(JSON.parse(JSON.stringify(formatValueForJSON(null)))).toBeNull();
+    expect(JSON.parse(JSON.stringify(formatValueForJSON(3.14)))).toBe(3.14);
+    expect(JSON.parse(JSON.stringify(formatValueForJSON('hi')))).toBe('hi');
+  });
+});
+
+// =========================================
 // exportToJSON Integration Tests
 // =========================================
 

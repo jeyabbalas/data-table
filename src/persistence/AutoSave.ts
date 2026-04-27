@@ -66,6 +66,12 @@ export class AutoSave {
   private boundOnVisibilityChange: (() => void) | null = null;
   private boundOnBeforeUnload: (() => void) | null = null;
   private onError: ((error: PersistenceError) => void) | undefined;
+  // One-shot circuit-breaker. After a `QuotaExceededError`, all subsequent
+  // save() / saveSync() calls become no-ops until enable() is re-entered
+  // (clearSession's disable→enable cycle is the canonical reset path).
+  // Without this, a constrained tab would emit one PersistenceError per
+  // debounce tick for as long as the user kept mutating state.
+  private quotaExceeded = false;
 
   constructor(
     private state: TableState,
@@ -87,6 +93,11 @@ export class AutoSave {
     // signal notifications; leaving existing subscriptions in place avoids
     // that window.
     if (this.unsubscribes.length > 0) return;
+
+    // A fresh enable() (after disable() or first activation) resets the
+    // quota circuit-breaker. clearSession() runs disable→delete→enable, so
+    // this naturally re-arms saves after the consumer freed up space.
+    this.quotaExceeded = false;
 
     const signals = [
       this.state.filters,
@@ -217,6 +228,7 @@ export class AutoSave {
 
   private save(): void {
     if (this.destroyed) return;
+    if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
     const snapshot = snapshotFromState(
@@ -243,6 +255,7 @@ export class AutoSave {
    */
   private saveSync(): void {
     if (this.destroyed) return;
+    if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
     const snapshot = snapshotFromState(
@@ -259,12 +272,18 @@ export class AutoSave {
   }
 
   private reportError(cause: unknown): void {
+    const code = cause instanceof PersistenceError ? cause.code : classifyPersistenceFailure(cause);
+    // Trip the circuit-breaker BEFORE invoking onError so a synchronous
+    // handler that re-enters AutoSave sees the latched flag.
+    if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
+      this.quotaExceeded = true;
+    }
     if (!this.onError) return;
     const err =
       cause instanceof PersistenceError
         ? cause
         : new PersistenceError(cause instanceof Error ? cause.message : String(cause), {
-            code: classifyPersistenceFailure(cause),
+            code,
             cause,
           });
     this.onError(err);

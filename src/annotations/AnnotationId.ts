@@ -60,7 +60,8 @@ function fillRandomBytes(target: Uint8Array<ArrayBuffer>): void {
 function incrementRandomness(bytes: Uint8Array<ArrayBuffer>): void {
   // Treat bytes as big-endian 80-bit counter; increment by one with carry.
   for (let i = bytes.length - 1; i >= 0; i--) {
-    const v = bytes[i] + 1;
+    // Bounds-checked by `i < bytes.length`.
+    const v = bytes[i]! + 1;
     bytes[i] = v & 0xff;
     if (v < 256) return;
     // Carry into next byte.
@@ -101,7 +102,8 @@ export function isAnnotationIdShape(s: unknown): s is string {
   if (s.length !== 30) return false;
   if (!s.startsWith('ann_')) return false;
   for (let i = 4; i < s.length; i++) {
-    if (CROCKFORD.indexOf(s[i]) === -1) return false;
+    // Bounds-checked by `i < s.length`.
+    if (CROCKFORD.indexOf(s[i]!) === -1) return false;
   }
   return true;
 }

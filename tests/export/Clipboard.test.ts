@@ -73,6 +73,36 @@ describe('copyToClipboard', () => {
     mockWrite.mockRejectedValueOnce(new Error('Clipboard API error'));
     await expect(copyToClipboard('<p>hi</p>', 'html')).rejects.toThrow('Clipboard API error');
   });
+
+  // Phase 7: lock the plain-text fallback algorithm — consumers depending
+  // on the regex-based tag strip need it to remain stable.
+  it('html format produces plain-text fallback by stripping <...> tags', async () => {
+    await copyToClipboard('<p>hello <b>world</b></p>', 'html');
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+    const items = mockWrite.mock.calls[0][0] as Array<{ items: Record<string, Blob> }>;
+    expect(items).toHaveLength(1);
+    const plainBlob = items[0].items['text/plain'];
+    const plainText = await plainBlob.text();
+    expect(plainText).toBe('hello world');
+  });
+
+  // Phase 7: lock the no-size-precheck behavior — `data.length` is not
+  // inspected before the platform call. A future regression that adds
+  // pre-validation should bump the API surface and migration guide.
+  it('does NOT pre-check data length (browser is the size gatekeeper)', async () => {
+    const big = 'x'.repeat(50_000_000); // 50 MB
+    await copyToClipboard(big, 'text');
+    // The mock accepted it; the real browser would reject — locked here.
+    expect(mockWriteText).toHaveBeenCalledWith(big);
+    expect(mockWriteText).toHaveBeenCalledTimes(1);
+  });
+
+  it("text format treats HTML markup verbatim (no tag-strip on the 'text' path)", async () => {
+    // Locks the contract that the 'text' format is byte-for-byte; only
+    // the 'html' path computes a plain-text fallback.
+    await copyToClipboard('<p>raw markup</p>', 'text');
+    expect(mockWriteText).toHaveBeenCalledWith('<p>raw markup</p>');
+  });
 });
 
 describe('copyRowsToClipboard', () => {

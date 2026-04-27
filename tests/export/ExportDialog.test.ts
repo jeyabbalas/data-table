@@ -708,4 +708,126 @@ describe('ExportDialog', () => {
       removeSpy.mockRestore();
     });
   });
+
+  // =========================================
+  // System columns toggle (Phase 7)
+  // =========================================
+  //
+  // The "Include system columns" checkbox is hidden when the schema has no
+  // system columns. When visible, default-unchecked excludes them; toggling
+  // checked prepends them to the column order passed to the exporter.
+
+  describe('system columns toggle', () => {
+    function getSystemCheckbox(): HTMLInputElement | null {
+      // Locate the system-columns checkbox by its accompanying label text.
+      const labels = Array.from(
+        dialog.getElement().querySelectorAll('label'),
+      ) as HTMLLabelElement[];
+      const match = labels.find((l) => l.textContent?.includes('Include system columns'));
+      if (!match) return null;
+      return match.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    }
+
+    function getSystemCheckboxField(): HTMLElement | null {
+      const cb = getSystemCheckbox();
+      return cb ? (cb.closest('.dt-export-field') as HTMLElement | null) : null;
+    }
+
+    it('hides the system-columns checkbox when the schema has no system columns', () => {
+      // testSchema has only id / name / price — no system columns.
+      dialog.open();
+      const field = getSystemCheckboxField();
+      // The field exists in the DOM but display is 'none' — created at
+      // build time, conditionally revealed in open().
+      expect(field).not.toBeNull();
+      expect(field!.style.display).toBe('none');
+    });
+
+    it('reveals the checkbox when the schema includes a system column', () => {
+      // Re-initialise the schema with a system column. ExportDialog reads
+      // schema in open(), so we set it before opening.
+      const schemaWithSystem: ColumnSchema[] = [
+        {
+          name: '__rowid__',
+          type: 'integer',
+          nullable: false,
+          originalType: 'BIGINT',
+          system: true,
+        },
+        ...testSchema,
+      ];
+      initializeColumnsFromSchema(state, schemaWithSystem);
+      dialog.open();
+
+      const field = getSystemCheckboxField();
+      expect(field).not.toBeNull();
+      expect(field!.style.display).not.toBe('none');
+
+      const cb = getSystemCheckbox()!;
+      expect(cb.checked).toBe(false); // unchecked by default
+    });
+
+    it("default-unchecked → exporter receives columns: 'all' (which excludes system columns via resolveColumns)", async () => {
+      const schemaWithSystem: ColumnSchema[] = [
+        {
+          name: '__rowid__',
+          type: 'integer',
+          nullable: false,
+          originalType: 'BIGINT',
+          system: true,
+        },
+        ...testSchema,
+      ];
+      initializeColumnsFromSchema(state, schemaWithSystem);
+      dialog.open();
+
+      const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
+      downloadBtn.click();
+
+      await vi.waitFor(() => {
+        expect(exportFromState).toHaveBeenCalledTimes(1);
+      });
+      expect(exportFromState).toHaveBeenCalledWith(
+        state,
+        mockBridge,
+        expect.objectContaining({ columns: 'all' }),
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('checkbox toggled checked → exporter receives an explicit array prepending the system column', async () => {
+      const schemaWithSystem: ColumnSchema[] = [
+        {
+          name: '__rowid__',
+          type: 'integer',
+          nullable: false,
+          originalType: 'BIGINT',
+          system: true,
+        },
+        ...testSchema,
+      ];
+      initializeColumnsFromSchema(state, schemaWithSystem);
+      dialog.open();
+
+      const cb = getSystemCheckbox()!;
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change'));
+
+      const downloadBtn = dialog.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
+      downloadBtn.click();
+
+      await vi.waitFor(() => {
+        expect(exportFromState).toHaveBeenCalledTimes(1);
+      });
+
+      const callArgs = (exportFromState as ReturnType<typeof vi.fn>).mock.calls[0];
+      const opts = callArgs[2] as { columns: string[] };
+      expect(Array.isArray(opts.columns)).toBe(true);
+      expect(opts.columns[0]).toBe('__rowid__'); // prepended
+      // Non-system columns from columnOrder follow.
+      expect(opts.columns).toContain('id');
+      expect(opts.columns).toContain('name');
+      expect(opts.columns).toContain('price');
+    });
+  });
 });

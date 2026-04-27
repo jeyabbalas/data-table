@@ -270,12 +270,14 @@ useEffect(() => {
 ## Gotchas
 
 - **Two tables with the same `tableName` overwrite each other's sessions.** Pick unique names, or share the store and accept the overwrite.
+- **Two tabs of the same app race on the IDB row.** Two browser tabs that mount a table with the same `tableName` against the same `dt-sessions` database both open their own `SessionStore` and write debounced snapshots. There is no cross-tab coordination (no `BroadcastChannel`, no IDB observer): whichever tab's debounced save lands second wins, and the other tab's most-recent edits are lost on reload. Practical mitigations: scope `tableName` per-tab (e.g. include a tab id or session id), avoid sharing the same `tableName` across tabs that are likely to be edited concurrently, or accept last-writer-wins as the documented contract. A future Phase-9-or-later release may add `BroadcastChannel` coordination; until then, treat IDB session state as single-writer.
 - **`SessionStore` is a thin IDB wrapper — it never throws.** On failure (closed DB, blocked storage) it resolves with `null` / `false`. Check return values and listen for `warning`.
 - **`saveSync()` requires the DB to already be open.** It's a no-op until after `await store.open()` resolves. The library opens the DB during `createDataTable()` init.
 - **Snapshot size grows with derived vectors.** A 1M-row vector column adds ~MBs per snapshot. Use expression columns when possible; otherwise, accept the cost.
-- **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many.
+- **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many. When a save trips `QuotaExceededError`, AutoSave latches a one-shot circuit-breaker: the consumer's `onError` (or the facade's `error` event with `source: 'persistence'`) fires exactly once for that quota episode, and subsequent state mutations skip the save attempt. Calling `actions.clearSession()` (which deletes the snapshot) re-arms the breaker — saves resume on the next debounce tick.
 - **Private browsing silently fails.** No error, no exception — just a `warning` event. Your UI should handle the no-persist case gracefully.
 - **Session restore happens _after_ data load.** Filters/sort don't apply during the load progress stage; they snap into place on `loadComplete`.
+- **Snapshot version is bound to the library version.** `coerceLoadedSnapshot` rejects any snapshot whose `version` is not in `[1, SNAPSHOT_VERSION]`. Future-version blobs (e.g., a snapshot written by a newer library, then read by a downgraded build) load as `null`; the table boots fresh. Pre-1.0 has no migration framework — earlier versions load only by luck of optional-field absence. Treat the snapshot as bound to the major library version.
 
 ## Related
 

@@ -45,6 +45,25 @@ const DEFAULT_JSON_OPTIONS: JSONExportOptions = {
  *
  * Preserves native JSON types (numbers, booleans, null) unlike CSV which
  * converts everything to strings.
+ *
+ * **Type-coercion table:**
+ *
+ * | Input              | Output                                              |
+ * | ------------------ | --------------------------------------------------- |
+ * | `null`/`undefined` | `null`                                              |
+ * | `boolean`          | `boolean` (unchanged)                               |
+ * | `bigint` in safe range | `number` (lossless up to `±2^53−1`)             |
+ * | `bigint` outside safe range | `string` (decimal — preserves precision)   |
+ * | `number` (`NaN`/`Infinity`) | `null` (JSON cannot represent these)       |
+ * | `number`           | `number` (unchanged)                                |
+ * | `Date`             | ISO 8601 UTC string (e.g. `"2024-06-15T12:30:00.000Z"`) |
+ * | other              | `String(value)` (best-effort)                       |
+ *
+ * **BigInt round-trip caveat.** A value just over the safe range
+ * (e.g. `9007199254740993n`) is emitted as the string `"9007199254740993"`.
+ * `JSON.parse` returns it as a string, not a `BigInt` — consumers who need
+ * BigInt back must explicitly post-process. Within the safe range the
+ * round-trip is lossless: `BigInt(JSON.parse(str)[i].field) === original`.
  */
 export function formatValueForJSON(value: unknown): unknown {
   if (value === null || value === undefined) {

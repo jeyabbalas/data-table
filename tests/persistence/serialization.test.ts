@@ -976,6 +976,69 @@ describe('snapshotFromState — vector value pool deduplication', () => {
     const poolEntry = Object.values(snapshot.vectorValuePool!)[0];
     expect(poolEntry.values).toEqual([1, 2, 3]);
   });
+
+  // Phase 7: lock the documented reference-identity (NOT content-hash) semantic.
+  // Two structurally-identical-but-distinct arrays produce TWO pool entries —
+  // dedup is by JS reference identity, the cheap O(n) path that covers the
+  // captureSnapshot-shares-refs common case.
+  it('two structurally-identical-but-distinct arrays produce TWO pool entries (ref-id dedup)', () => {
+    const state = setupState();
+    // Distinct array objects with identical contents.
+    const valuesA = [1, 2, 3];
+    const valuesB = [1, 2, 3];
+    expect(valuesA).not.toBe(valuesB);
+    expect(valuesA).toEqual(valuesB);
+
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: valuesA },
+    ]);
+
+    const undoManager = new UndoManager();
+    undoManager.push(captureSnapshot(state));
+    state.filters.set([{ type: 'null', column: 'name' }]);
+
+    // Swap the column to a structurally-identical NEW array reference.
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: valuesB },
+    ]);
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+
+    // Documents reference-identity dedup: TWO entries, not one. A content-hash
+    // implementation would emit only one entry — this test fails first if the
+    // dedup strategy is ever changed (and the JSDoc on
+    // PooledVectorColumnRef / VectorValuePoolEntry needs updating in lockstep).
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(2);
+    const [keyA, keyB] = Object.keys(snapshot.vectorValuePool!);
+    expect(snapshot.vectorValuePool![keyA].values).toEqual([1, 2, 3]);
+    expect(snapshot.vectorValuePool![keyB].values).toEqual([1, 2, 3]);
+  });
+
+  // Sanity check: the same array reference reused across an explicit undo
+  // boundary still dedupes — confirms the "common case" the dedup is sized for.
+  it('same array reference across distinct stack entries shares one pool entry', () => {
+    const state = setupState();
+    const sharedRef = [42, 43, 44];
+
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: sharedRef },
+    ]);
+
+    const undoManager = new UndoManager();
+    undoManager.push(captureSnapshot(state));
+    state.filters.set([{ type: 'null', column: 'name' }]);
+
+    // Re-set with the SAME ref (consumer re-supplies the same array literal,
+    // e.g. an idempotent re-import). Dedup should fire.
+    state.derivedColumns.set([
+      { kind: 'vector', name: 'v', vectorType: 'integer', values: sharedRef },
+    ]);
+    undoManager.push(captureSnapshot(state));
+
+    const snapshot = snapshotFromState(state, undoManager);
+    expect(Object.keys(snapshot.vectorValuePool!)).toHaveLength(1);
+  });
 });
 
 // =========================================

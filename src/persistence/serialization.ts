@@ -307,7 +307,8 @@ export function restoreStateFromSnapshot(
   const restoredOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
   const orderSet = new Set(restoredOrder);
   for (let i = 0; i < allColumnNames.length; i++) {
-    const col = allColumnNames[i];
+    // Bounds-checked by `i < allColumnNames.length`.
+    const col = allColumnNames[i]!;
     if (orderSet.has(col)) continue;
     const insertAt = Math.min(i, restoredOrder.length);
     restoredOrder.splice(insertAt, 0, col);

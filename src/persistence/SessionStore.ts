@@ -6,6 +6,7 @@
  */
 
 import type { Filter } from '../filters/FilterTypes';
+import { SNAPSHOT_VERSION } from './types';
 import type { DateWrapper, SerializedFilter, SessionSnapshot } from './types';
 
 // --- IndexedDB constants ---
@@ -125,7 +126,7 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
     default:
       console.warn(
         'Unknown filter type during deserialization:',
-        (filter as Record<string, unknown>).type,
+        (filter as Record<string, unknown>)['type'],
       );
       return null;
   }
@@ -159,15 +160,21 @@ function coerceLoadedSnapshot(raw: unknown): SessionSnapshot | null {
   for (const key of REQUIRED_SNAPSHOT_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(obj, key)) return null;
   }
-  if (typeof obj.tableName !== 'string') return null;
-  if (typeof obj.version !== 'number') return null;
-  if (!Array.isArray(obj.filters)) return null;
-  if (!Array.isArray(obj.sortColumns)) return null;
-  if (!Array.isArray(obj.visibleColumns)) return null;
-  if (!Array.isArray(obj.columnOrder)) return null;
-  if (!Array.isArray(obj.pinnedColumns)) return null;
-  if (typeof obj.columnWidths !== 'object' || obj.columnWidths === null) return null;
-  if (typeof obj.hiddenColumnInfo !== 'object' || obj.hiddenColumnInfo === null) return null;
+  if (typeof obj['tableName'] !== 'string') return null;
+  if (typeof obj['version'] !== 'number') return null;
+  // Reject snapshots from future library versions (forward incompat) and
+  // invalid sentinel versions (≤ 0). Pre-v5 snapshots that happen to have
+  // the required fields keep loading via the lenient field-by-field shape
+  // check below — pre-1.0 clean break, no migration framework.
+  const ver = obj['version'] as number;
+  if (!Number.isInteger(ver) || ver < 1 || ver > SNAPSHOT_VERSION) return null;
+  if (!Array.isArray(obj['filters'])) return null;
+  if (!Array.isArray(obj['sortColumns'])) return null;
+  if (!Array.isArray(obj['visibleColumns'])) return null;
+  if (!Array.isArray(obj['columnOrder'])) return null;
+  if (!Array.isArray(obj['pinnedColumns'])) return null;
+  if (typeof obj['columnWidths'] !== 'object' || obj['columnWidths'] === null) return null;
+  if (typeof obj['hiddenColumnInfo'] !== 'object' || obj['hiddenColumnInfo'] === null) return null;
   return obj as unknown as SessionSnapshot;
 }
 

@@ -65,9 +65,10 @@ export function isContiguousRange(
   sortedIndices: number[],
 ): { start: number; length: number } | null {
   if (sortedIndices.length === 0) return null;
-  const start = sortedIndices[0];
+  // After length===0 early-return, [0] and [length-1] are non-null.
+  const start = sortedIndices[0]!;
   const length = sortedIndices.length;
-  if (sortedIndices[length - 1] - start === length - 1) {
+  if (sortedIndices[length - 1]! - start === length - 1) {
     return { start, length };
   }
   return null;

@@ -231,6 +231,68 @@ messages: {
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
 - **High-DPI + custom focus ring.** If you override `--dt-primary`, check that the focus outline contrast ratio stays ≥ 3:1 against the cell background.
 
+## Manual screen-reader test plan
+
+The automated `tests/a11y/axe.test.ts` suite catches structural ARIA
+issues in jsdom (12 scenarios as of Phase 8 — empty grid, filters open,
+sort active, every modal, every popover, dark mode, multi-table, RTL).
+The matrix below covers the dynamic announcement and focus-flow
+behaviour that needs a real screen reader.
+
+Run before each release on at least one combination of OS + screen
+reader from each row. The test rig is the demo (`npm run dev`).
+
+| Scenario                                                                        | VoiceOver (macOS, Safari)                                                                                  | NVDA (Windows, Firefox) | JAWS (Windows, Chrome) |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------- |
+| **Grid focus + arrow nav** — focus the grid, ArrowDown / ArrowRight a few cells | row N, column NAME, value V                                                                                | same                    | same                   |
+| **Filter add** — open Filter panel, apply a range filter, close                 | live region: "1 filter active, showing X of Y rows"                                                        | same                    | same                   |
+| **Sort change** — click a column header twice (toggle desc)                     | live region: "sorted by NAME descending"                                                                   | same                    | same                   |
+| **Modal open** — open Export, then SQL filter, then Derived column              | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener | same                    | same                   |
+| **Annotation popover** — focus an annotated cell; trigger via pointer / focus   | tooltip role; description announced                                                                        | same                    | same                   |
+| **Column header tooltip** — focus a header with a tooltip set                   | tooltip role; description announced                                                                        | same                    | same                   |
+| **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                              | live region announces resulting state ("0 filters active, …")                                              | same (Ctrl+Z / Ctrl+Y)  | same                   |
+
+Document any divergence in the relevant release / phase report. Known
+quirks worth checking:
+
+- **VoiceOver** does not always announce `aria-rowindex` updates when
+  the grid virtualises a long scroll — fall back to "row N of M" via
+  the polite live region.
+- **JAWS** in browse mode treats `role="grid"` cells as read-only text
+  by default; switch to forms mode (Insert+Z, then Insert+space) to
+  enable arrow-key navigation per the grid contract.
+
+## Color-contrast verification
+
+Axe-core does not run color-contrast in jsdom (no layout). Verify
+contrast manually before each release:
+
+1. `npm run build:demo && npm run preview` (or run the live demo).
+2. Run a Lighthouse a11y audit on the demo page in light mode.
+3. Toggle the theme switcher to dark mode; re-run the audit.
+4. The Lighthouse a11y score should be ≥ 95; any contrast issue
+   against `--dt-text-primary` / `--dt-surface-1` / `--dt-primary` is a
+   release blocker.
+
+For CI, consider a Playwright-based axe-with-real-layout job (deferred
+to Phase 9 / post-1.0).
+
+## What's not yet supported
+
+- **`prefers-contrast: more`** — the library does not bump contrast
+  under the `more` media query. Consumers can override `--dt-primary` /
+  `--dt-text-primary` themselves; an opt-in higher-contrast bundle is
+  a Phase 9 follow-up.
+- **`forced-colors` (Windows High Contrast Mode)** — modals and
+  popovers retain their custom background. Borders use `currentColor`
+  so the outline survives, but filled buttons / chips may invert
+  unexpectedly. Phase 9 follow-up.
+- **Touch + drag-and-drop** — column resize / reorder use mouse events
+  (`mousedown` / `mousemove` / `mouseup`). iOS Safari does not
+  synthesise reliable mousemove between touchstart and touchend, so
+  resize / reorder are pointer-only. Documented in the README and
+  AGENTS.md as out-of-scope.
+
 ## Related
 
 - i18n: [i18n guide](./i18n.md) for translating `a11y` strings and ARIA labels

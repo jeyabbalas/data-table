@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   escapeCSVField,
   formatCellValue,
+  neutralizeFormulaPrefix,
   resolveColumns,
   rowToCSVLine,
   isContiguousRange,
@@ -52,6 +53,78 @@ describe('escapeCSVField', () => {
   it('should handle semicolon delimiter', () => {
     expect(escapeCSVField('a;b', ';')).toBe('"a;b"');
     expect(escapeCSVField('a,b', ';')).toBe('a,b');
+  });
+});
+
+// =========================================
+// neutralizeFormulaPrefix — CSV-injection lock (Phase 7)
+// =========================================
+//
+// Phase 1 audited the implementation; Phase 7 locks every prefix in
+// FORMULA_TRIGGER_PREFIXES against regression. A spreadsheet (Excel,
+// LibreOffice Calc, Google Sheets) treats a leading `=`, `+`, `-`, `@`,
+// `\t`, or `\r` as a formula trigger; the library prepends `'` so the
+// cell renders as plain text.
+
+describe('neutralizeFormulaPrefix — CSV-injection prefixes', () => {
+  it('prepends a single quote to a cell starting with `=` (formula)', () => {
+    expect(neutralizeFormulaPrefix('=SUM(A1:A10)')).toBe("'=SUM(A1:A10)");
+  });
+
+  it('prepends a single quote to a cell starting with `+`', () => {
+    expect(neutralizeFormulaPrefix('+1+1')).toBe("'+1+1");
+  });
+
+  it('prepends a single quote to a cell starting with `-` (catches negative-number-like strings)', () => {
+    // Genuine negative numbers stored as strings get escaped too — documents
+    // the trade-off. (Numeric `-1` cells go through formatCellValue → "-1"
+    // which IS escaped here. Consumers who need un-escaped negative numbers
+    // in CSV should pre-format their cells outside the export pipeline.)
+    expect(neutralizeFormulaPrefix('-1')).toBe("'-1");
+    expect(neutralizeFormulaPrefix('-1+CMD()')).toBe("'-1+CMD()");
+  });
+
+  it('prepends a single quote to a cell starting with `@` (Excel macro)', () => {
+    expect(neutralizeFormulaPrefix('@INDIRECT("R1C1")')).toBe('\'@INDIRECT("R1C1")');
+  });
+
+  it('prepends a single quote to a cell starting with TAB (\\t)', () => {
+    expect(neutralizeFormulaPrefix('\tdata')).toBe("'\tdata");
+  });
+
+  it('prepends a single quote to a cell starting with CR (\\r)', () => {
+    expect(neutralizeFormulaPrefix('\rdata')).toBe("'\rdata");
+  });
+
+  it('does NOT touch a normal cell', () => {
+    expect(neutralizeFormulaPrefix('hello')).toBe('hello');
+    expect(neutralizeFormulaPrefix('123')).toBe('123');
+    expect(neutralizeFormulaPrefix('')).toBe('');
+  });
+
+  it('does NOT touch a cell with a trigger char in the middle', () => {
+    expect(neutralizeFormulaPrefix('A=B')).toBe('A=B');
+    expect(neutralizeFormulaPrefix('hello+world')).toBe('hello+world');
+    expect(neutralizeFormulaPrefix('msg@example.com')).toBe('msg@example.com');
+  });
+
+  it('escapeCSVField composes formula neutralisation with RFC 4180 quoting', () => {
+    // Cell `=A1+B1,malicious` — the `=` triggers formula escape, then the
+    // comma triggers RFC 4180 wrapping. Result: '"\'=A1+B1,malicious"'
+    expect(escapeCSVField('=A1+B1,malicious', ',')).toBe('"\'=A1+B1,malicious"');
+  });
+
+  it('escapeCSVField escapes formula trigger AND embedded double-quotes', () => {
+    // Cell `=A1+"X"` — formula neutralised, then RFC 4180 wrapping with
+    // doubled quotes inside the wrapper.
+    expect(escapeCSVField('=A1+"X"', ',')).toBe('"\'=A1+""X"""');
+  });
+
+  it('header rows go through the same neutralisation pipeline', async () => {
+    // A column literally named `=ATTACK()` (yes, DuckDB allows this)
+    // should be CSV-quoted with formula prefix in the header line.
+    // This routes through `escapeCSVField`, mirroring the cell path.
+    expect(escapeCSVField('=ATTACK()', ',')).toBe("'=ATTACK()");
   });
 });
 
@@ -659,5 +732,85 @@ describe('exportFromState', () => {
     expect(mockQuery).toHaveBeenCalledTimes(1);
     const sql = mockQuery.mock.calls[0][0] as string;
     expect(sql).toContain('FROM "my_table"');
+  });
+});
+
+// =========================================
+// __rowid__ system-column end-to-end (Phase 7)
+// =========================================
+//
+// Phase 1 locked `resolveColumns` system-column filtering. Phase 7 adds an
+// end-to-end CSV cross-check that BIGINT-typed `__rowid__` formats as a
+// decimal string (no scientific notation, no precision loss) when the
+// caller opts in via an explicit columns array.
+
+describe('exportToCSV — __rowid__ default-exclusion + opt-in', () => {
+  const schemaWithSystem: ColumnSchema[] = [
+    {
+      name: '__rowid__',
+      type: 'integer',
+      nullable: false,
+      originalType: 'BIGINT',
+      system: true,
+    },
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'label', type: 'string', nullable: false, originalType: 'VARCHAR' },
+  ];
+
+  let mockBridge: { query: ReturnType<typeof vi.fn> };
+  let baseContext: ExportContext;
+
+  beforeEach(() => {
+    mockBridge = { query: vi.fn() };
+    baseContext = {
+      bridge: mockBridge as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      filters: [],
+      sortColumns: [],
+      selectedRows: new Set(),
+      columnOrder: ['__rowid__', 'id', 'label'],
+      schema: schemaWithSystem,
+    };
+  });
+
+  it("scope:'all' + columns:'all' excludes __rowid__ from the SELECT", async () => {
+    mockBridge.query.mockResolvedValueOnce([{ id: 1, label: 'a' }]);
+    const csv = await exportToCSV('t', { scope: 'all', columns: 'all' }, baseContext);
+    expect(csv).toBe('id,label\n1,a');
+    const sql = mockBridge.query.mock.calls[0][0] as string;
+    expect(sql).not.toContain('"__rowid__"');
+    expect(sql).toContain('"id"');
+    expect(sql).toContain('"label"');
+  });
+
+  it("explicit ['__rowid__', 'id', 'label'] includes __rowid__ as the leftmost column", async () => {
+    // Mimic the BIGINT row-id values DuckDB produces — JS BigInt cells in
+    // result rows. CSV emits decimal strings via formatCellValue.
+    mockBridge.query.mockResolvedValueOnce([
+      { __rowid__: 0n, id: 1, label: 'a' },
+      { __rowid__: 1n, id: 2, label: 'b' },
+    ]);
+    const csv = await exportToCSV(
+      't',
+      { scope: 'all', columns: ['__rowid__', 'id', 'label'] },
+      baseContext,
+    );
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe('__rowid__,id,label');
+    expect(lines[1]).toBe('0,1,a');
+    expect(lines[2]).toBe('1,2,b');
+    const sql = mockBridge.query.mock.calls[0][0] as string;
+    expect(sql).toContain('"__rowid__"');
+  });
+
+  it('BIGINT __rowid__ values beyond Number.MAX_SAFE_INTEGER format as decimal string (no scientific notation, no precision loss)', async () => {
+    const big = BigInt('9007199254740993'); // MAX_SAFE_INTEGER + 2
+    mockBridge.query.mockResolvedValueOnce([{ __rowid__: big, id: 1, label: 'huge' }]);
+    const csv = await exportToCSV(
+      't',
+      { scope: 'all', columns: ['__rowid__', 'id', 'label'] },
+      baseContext,
+    );
+    expect(csv).toContain('9007199254740993,1,huge');
+    expect(csv).not.toMatch(/e\+/i); // no scientific notation
   });
 });

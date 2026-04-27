@@ -1,5 +1,385 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- 1a228a8: Type tightening: `TableEvents` payload fields carrying mutable collections (`filterChange.filters`, `sortChange.sortColumns`, `selectionChange.selectedRows`, `columnChange.{visibleColumns, pinnedColumns, columnOrder}`, `derivedChange.derivedColumns`, `loadComplete.schema`) are now typed `readonly` / `ReadonlySet`. Phase 8 already cloned these at runtime; this completes the contract at the type level so handler-side mutation surfaces as `TS2540` instead of compiling silently. JavaScript consumers unaffected; TypeScript consumers that mutated the payload should clone via `.slice()` / `new Set(...)` at the destructuring point. See `docs/migration-guides/phase-9-readonly-event-payloads.md` for examples.
+
+### Patch Changes
+
+- 7e190b9: Phase 1 security audit: harden SQL/DOM/IndexedDB/export trust boundaries.
+
+  **XSS fixes**
+  - `TableContainer` fallback header (used by `/advanced` consumers without `actions`) no longer interpolates `colSchema.name`/`colSchema.type` into `innerHTML`; uses safe DOM construction.
+  - `DataTable` stats placeholders now escape `messages.statistics.rowCount` / `filteredRowCount` outputs before splicing into `innerHTML`, so consumer-overridden i18n functions can't inject markup.
+
+  **SQL hardening**
+  - `quoteIdentifier` rejects empty strings and embedded NUL bytes with `SQLValidationError({ code: 'INVALID_IDENTIFIER' })`; tightened JSDoc on Unicode handling.
+  - `formatSQLValue` emits `bigint` values as bare numeric literals (was previously falling through to a single-quoted string fallback).
+  - Trust-boundary JSDoc added to `Actions.addRawSQLFilter`, `RawSQLFilter.sql`, the `case 'raw-sql':` site, and the `pattern` `regex` mode comment.
+  - `filtersToWhereClause` JSDoc now states explicitly that callers must wrap the result in `WHERE (…)`.
+
+  **CSV / export**
+  - **Behavior change.** `exportToCSV` / `exportFromState` / `exportToClipboard` (CSV path) now neutralise cells whose first character is `=`, `+`, `-`, `@`, `\t`, or `\r` by prepending a single quote. Defuses CSV injection in Excel / LibreOffice / Google Sheets per OWASP guidance. Header-row column names go through the same escape. Consumers that pipe library-generated CSV directly into a non-spreadsheet tool will see the leading quote on those cells; remove it at your sink if needed.
+  - New `sanitizeFilenameStem` strips path separators, NUL/control characters, and leading dots from `setSourceName` / `getExportFilename` inputs; caps stem length at 100.
+
+  **Worker / IndexedDB**
+  - `WorkerBridge.handleMessage` validates inbound `MessageEvent` shape; malformed messages are dropped with a console warning, and unknown `type` values reject the pending request with `WorkerInitError({ code: 'WORKER_PROTOCOL_VIOLATION' })`.
+  - `WorkerBridgeOptions.workerUrl` and `duckdbBundles` JSDoc now spells out the trust boundary: developer-controlled, no scheme/origin validation.
+  - `SessionStore.save` / `saveSync` surface IndexedDB transaction errors instead of swallowing them; `SessionStore.load` shape-checks the stored blob and returns `null` on missing required keys.
+  - `AutoSave` maps `QuotaExceededError` to `PersistenceError({ code: 'PERSISTENCE_QUOTA_EXCEEDED' })`; `reconstructError` recognises `PERSISTENCE_*` codes alongside the existing `PERSIST_*`.
+
+  **Tests**
+  - Added `tests/security/` with 6 new test files (78 cases) covering CSV formula injection, filename sanitisation, snapshot tampering, worker protocol guards, quota error classification, and XSS smoke for the rendering paths.
+  - Extended `tests/filters/FilterSQL.test.ts` with 13 new adversarial cases for `quoteIdentifier`, `formatSQLValue`, and string-injection-shaped patterns.
+
+- c44f94b: Phase 2 — public API & packaging audit. Locks the published surface ahead of subsystem deep-dives in later phases.
+
+  **Packaging**
+  - Advertise `dist/advanced.cjs` via `package.json#exports["./advanced"].require` so Node CommonJS consumers (`require('@jeyabbalas/data-table/advanced')`) actually resolve. The CJS file was already emitted by `vite build` but was unrouted — a latent `ERR_PACKAGE_PATH_NOT_EXPORTED` for any CJS consumer of the advanced surface.
+  - `tsconfig.build.json` now sets `stripInternal: true`, so JSDoc-tagged `@internal` symbols (e.g., `__resetModalHostForTests`) are dropped from emitted `.d.ts` declarations.
+
+  **Documentation surface**
+  - Resolved every typedoc warning (`docs:api:check` goes from 20 warnings → 0). Internal types referenced by public types but never publicly exported (`Signal`, `Computed`, `HistogramColors`, `AnnotationBase`, `EventCallback`) are listed in `typedoc.json#intentionallyNotExported`. Cross-tier `{@link}` references that typedoc cannot resolve (e.g., `{@link DataTable}` from a `/advanced` symbol) were swapped for plain backtick text following the precedent set in Phase 1. The `@media (prefers-color-scheme: dark)` reference in `dataTableTheme`'s JSDoc was wrapped in backticks so it renders as code instead of being parsed as a JSDoc tag.
+  - Backfilled JSDoc on every top-level public symbol that was missing or thin: `VERSION`, the per-filter shape interfaces (`RangeFilter`, `PointFilter`, `SetFilter`, `NotSetFilter`, `NullFilter`, `PatternFilter`, `RawSQLFilter`), `Filter`, `FilterType`, `ColumnSchema`, `SortDirection`, `SortColumn`, `Strings`, `TableEvents`, `DataTableErrorOptions`, `DataFormat`, `LoadResult`, `LoadOptions`, `LoadDataResult`, `QueryCacheOptions`, `FilterPreset`, `FilterPresetCollection`, `SerializedRangeFilter` / `SerializedPointFilter` / `SerializedSetFilter` / `SerializedNotSetFilter` / `SerializedFilter`, `defaultStrings`, `DUCKDB_FUNCTIONS`, `DUCKDB_FUNCTION_DETAILS`, `dataTableTheme`, `dataTableHighlighting`, plus class-level docs on every `/advanced` class (`EventEmitter`, `AnnotationStore`, `AutoSave`, `CrossfilterCoordinator`, `StatsPanelCoordinator`, `VisualizationFactory`, `Histogram` / `DateHistogram` / `TimeHistogram` / `IntervalHistogram` / `ValueCounts`, `InteractionManager`, `FilterPanel` / `FilterPresetPanel` / `SQLFilterModal`, `DerivedColumnEditPanel` / `DerivedColumnModal` / `DerivedColumnManager` / `DefaultExpressionEditor` / `AddColumnButton`, `ExportDialog`, `AnnotationPopover`, `ColumnHeaderTooltipPopover`, `KeyboardNavigator`, `VirtualScroller`).
+
+  **New exports**
+  - Root entry (`@jeyabbalas/data-table`): `LoadDataResult`, `QueryCacheOptions` (referenced by the existing `WorkerBridge.loadData` and `WorkerBridgeOptions.cache`); the per-filter `Serialized*` union members (`SerializedRangeFilter`, `SerializedPointFilter`, `SerializedSetFilter`, `SerializedNotSetFilter`) plus `DateWrapper` so consumers round-tripping individual filters can name the shape directly instead of indexing into `SerializedFilter`.
+  - `/advanced`: `BrushCapable`, `SelectionCapable` (the capability markers that compose `InteractiveVisualization`), `LoadJSONOptions` (`AnnotationStore.loadJSON` parameter shape), `ListenerErrorHandler` (`EventEmitter` constructor parameter shape).
+
+  All additions are type-only; the runtime keys exposed by `Object.keys(rootModule)` and `Object.keys(advancedModule)` are unchanged, so the existing `tests/api-surface.exports.test.ts` deny / allow lists and the snapshot at `tests/__snapshots__/api-surface.snapshot.test.ts.snap` are still green without modification.
+
+  **Source-only deduplication**
+  - Removed the duplicate `ExpressionColumnDef` / `VectorColumnDef` re-exports in `src/persistence/types.ts`; `SerializedDerivedColumnDef` now references the canonical declarations from `src/derived/types.ts` directly. The original interfaces remain exported from the root entry.
+  - Replaced the local `ContainerColorScheme` type in `src/table/TableContainer.ts` with a type-only import of the public `ColorScheme` from `src/DataTable.ts`. The two were structurally identical; consolidation removes a duplicate name from the public `.d.ts` surface.
+
+  **Bundle-size budgets**
+  - New `size-limit` dev dependency (`size-limit` + `@size-limit/file`) gates the brotli-compressed size of every published artifact. Phase 2 baselines (raw → brotli) were captured at 2026-04-26 and budgets were set with ~10–15 % headroom so unrelated peer churn does not trip the gate. Run `npm run size` locally; Phase 9 will tighten the caps and wire size-limit into CI.
+
+  **No runtime behavior changes.** Tests: 2693 → 2946 (+253). `npm run docs:api:check`: 20 → 0 warnings.
+
+- 1fdae4a: Phase 3 — Core reactivity, state, errors, modals, i18n. Hardens the substrate every later phase trusts.
+
+  **Async destroy guards on `StateActions`**
+  - `DataTable.destroy()` now calls a new `actions.markDestroyed()` first thing, before any other teardown step. After that flag flips, every public `StateActions` method short-circuits:
+    - Sync mutators (filters, sort, column visibility, pin, width, header tooltip, selection, hover, focused-cell, and the `setOnFilterRemove` / `setOnDerivedChange` callback registrations) throw `DestroyedError`. Pure getters (`getUndoManager`, `getRawSQLFilters`, `getFiltersSQL`, `getColumnHeaderTooltip`, `getCompletionContext`) keep working so consumers can still read last-known state during teardown.
+    - Async methods returning `Promise<void>` (`loadData`, `removeDerivedColumn`) and `Promise<typed-array>` (`getColumnValues`) and `Promise<{ valid, … }>` (`validateExpression`, `validateSQLFilter`) check the flag both at entry and after each `await` — if destruction landed mid-flight, they reject with `DestroyedError` and **drop** the post-await state mutation.
+    - Async methods returning `{ success, error? }` (`addDerivedColumn`, `updateDerivedColumn`, `replaceDerivedColumn`) return `{ success: false, error: 'DataTable is destroyed' }` (or, for `replaceDerivedColumn`'s typed-error variant, `DerivedColumnError({ code: 'DESTROYED' })`) at the same checkpoints.
+  - `DataTable.loadDataImpl` and `DataTable.clearSession` add post-await destroy guards so a destroy mid-load no longer emits `loadComplete` / `loadError` / `error` on a torn-down emitter, and no longer mutates state after `resetTableState` if the table was already torn down.
+  - New tests: `tests/core/Actions.destroy.test.ts` (29 cases — sync mutator coverage, pre-call destroyed coverage on every async method, and three destroyed-during-await race tests) plus `tests/DataTable.destroy.race.test.ts` (8 integration cases — `table.actions.*` post-destroy, `loadData` mid-flight, `ready` replay race).
+
+  **Error-code drift fix and lock test**
+  - `docs/troubleshooting.md` error-code reference table updated to match what `src/` actually throws. Renamed `RESERVED_COLUMN_NAME` → `LOAD_RESERVED_COLUMN_NAME` (Phase 1 prefix-routing); replaced `DUPLICATE_ID` / `INVALID_SHAPE` / `VERSION_UNSUPPORTED` with their actual `ANNOTATION_*`-prefixed forms; added rows for `WORKER_PROTOCOL_VIOLATION` (Phase 1), `INVALID_IDENTIFIER` (Phase 1), `INVALID_ROWID`, `EXPORT_FAILED` (default), `PERSISTENCE_QUOTA_EXCEEDED` (Phase 1), `UNKNOWN` (`DataTableError` default), and a consolidated row for the rest of the `ANNOTATION_*` family pointing at `errors.ts`'s JSDoc list. Removed the `DUPLICATE_NAME` row (the duplicate-name path returns a string error, never sets that code).
+  - New `tests/api-surface.error-codes.test.ts` programmatically scans every `code: 'X'` literal across `src/`, every subclass-default code, and an explicit indirect-codes allowlist (currently `PERSISTENCE_QUOTA_EXCEEDED` from `classifyPersistenceFailure`). Asserts every code appears in `docs/troubleshooting.md`'s error-code table and vice versa, modulo a small documented-but-currently-unwrapped allowlist (`CLIPBOARD_UNAVAILABLE` — Phase 7 will wrap it). Future PRs that add a new code without documenting it (or doc a code without throwing it) will fail this test.
+
+  **Reactive substrate test gaps closed**
+  - `tests/core/reactive-substrate.phase3.test.ts` (13 new cases) locks behaviour the audit found unverified: `Computed` does not auto-track reads (only declared `deps` trigger recomputation), `batch()` flushes pending notifications even when the callback throws and resets the depth counter for subsequent batches, `EventEmitter.emit()` iterates a snapshot of the listener set so `off()` from one handler does not skip later handlers in the same emit, post-`removeAllListeners()` emit is a no-op, `once()` unsubscribed before its first emit does not fire, and multiple handlers throwing in the same emit each route to `onListenerError` (or each microtask-rethrow when no handler is supplied) without aborting the emit loop.
+
+  **ModalHost test gaps closed**
+  - `tests/core/ModalHost.phase3.test.ts` (7 new cases) adds the nested-modal Esc behaviour (Esc on the inner host closes only inner; outer's z-index reservation and focus restoration to the inner-opener button are preserved), the `destroy()`-without-`close()` path (asserts `wheel` and `touchmove` document listeners are torn down and the open-stack reservation is released), and mixed inline-panel + portalled-modal stacking (modal base 1000 always tops panel base 50 regardless of open order).
+
+  **Strict-TS rollout**
+  - `tsconfig.json` now sets `exactOptionalPropertyTypes: true` (deferred from Phase 2 §10). Every public option type whose field is genuinely "optional and may be `undefined`" was widened from `prop?: T` to `prop?: T | undefined` so explicit-undefined consumer pass-throughs continue to compile. The runtime behaviour is unchanged; the api-surface snapshot reflects only the type-level diff. See [`docs/migration-guides/phase-3-exact-optional-properties.md`](../docs/migration-guides/phase-3-exact-optional-properties.md) for the full list of affected option types and the guidance for downstream apps that mirror the flag.
+  - `noUncheckedIndexedAccess` was temporarily flipped on to identify and fix every offending site in `src/core/` (32 sites across `Actions.ts`, `UndoManager.ts`, `ModalHost.ts`, `columnHeaderTooltip.ts`). Sites were narrowed via post-bounds-check non-null assertions or `?? null` fallbacks. The flag stays disabled globally until Phase 9 flips it project-wide; subsystem phases 4–8 each clean their slice in turn.
+
+  **No public-API runtime surface change.** `tests/api-surface.exports.test.ts`, `tests/api-surface.snapshot.test.ts`, `tests/api-surface.jsdoc.test.ts`, `tests/api-surface.private-paths.test.ts`, and `tests/api-surface.cjs-routing.test.ts` all stay green. Tests: 2946 → 3007 (+61). `npm run docs:api:check`: 0 → 0 warnings.
+
+- 60a89f7: Phase 4 — Worker, data loading, type inference. Closes the largest remaining test gap in the repo and fixes the long-standing worker `cancel` TODO.
+
+  **Worker-side cancel implemented**
+  - `src/worker/dispatcher.ts` (extracted from `worker.ts` for testability) now tracks an in-flight `{ id, type }` reference and, on receipt of a `cancel` message whose `targetId` matches, calls `connection.cancelSent()`. Mismatched targetIds reply with `{ cancelled: false, reason: 'no-matching-inflight' }`. Previously the worker accepted the cancel message but did nothing — DuckDB kept grinding the orphaned query.
+  - New error code `QUERY_CANCELLED` (worker-side, when DuckDB interrupts an in-flight query/load/export) is distinct from the existing `QUERY_ABORTED` (bridge-side, when the consumer's `AbortSignal` fires before the worker reply lands). Consumers branching on `QUERY_ABORTED` continue to work; `QUERY_CANCELLED` is purely additive. See [`docs/migration-guides/phase-4-cancel-codes.md`](../docs/migration-guides/phase-4-cancel-codes.md).
+  - DuckDB does not ship a typed `CancelledError`; the worker maps interrupt-shaped rejection messages (`INTERRUPT`, `interrupted`, `cancelled`) to `QUERY_CANCELLED` via a single `isCancelRejection` helper. Future DuckDB-WASM versions could add a typed cancel class — the heuristic lives in one place behind a documented helper.
+  - `docs/troubleshooting.md` gains the `QUERY_CANCELLED` row; `tests/api-surface.error-codes.test.ts` (Phase 3 lock) auto-validates the addition.
+
+  **Loaders made testable: optional `{ db, conn }` context**
+  - `loadCSV` / `loadJSON` / `loadParquet` accept an optional third `LoaderContext` argument. When supplied, the loader uses the provided `AsyncDuckDB` / `AsyncDuckDBConnection` instead of the module-level singletons in `src/worker/duckdb.ts`. Production callers (`worker.ts` → `dispatcher.ts`) omit it and behavior is unchanged. Internal seam — loaders are not exported from `src/index.ts` or `src/advanced.ts`.
+
+  **End-to-end loader integration tests against real fixtures**
+  - New `tests/helpers/duckdbNode.ts` builds a real `AsyncDuckDB` against `@duckdb/duckdb-wasm/dist/duckdb-node.cjs` using `worker_threads.Worker` plus a tiny bootstrap script (`tests/helpers/duckdbNodeWorkerBoot.cjs`) that installs the DOM-Worker shape on `global` so duckdb-wasm's worker module can run inside Node. Tests pass `{ db, conn }` directly into the loaders.
+  - New `tests/helpers/fixtures.ts`, `tests/helpers/mockWorker.ts` round out the test infra. `mockWorker` consolidates the inline mock-worker patterns previously duplicated in `tests/data/WorkerBridge.workerFactory.test.ts:18-24` and `tests/security/workerBridgeProtocol.test.ts`.
+  - New tests:
+    - `tests/worker/loaders/csv.integration.test.ts` (13) — titanic, nyc_taxi (100k), vins_de_france, us_customer_orders, plus reserved-column / delimiter / timezone / string-vs-buffer paths.
+    - `tests/worker/loaders/json.integration.test.ts` (12) — titanic, nyc_taxi, vins_de_france, test_patterns, plus NDJSON auto-detection and option validation.
+    - `tests/worker/loaders/parquet.integration.test.ts` (8) — titanic, nyc_taxi, numeric-stress, datetime-stress, plus selective `columns` and reserved-name rejection.
+    - `tests/worker/loaders/numericStress.test.ts` (14) — locks per-format type inference for mixed-type, all-NULL, single-value, scientific notation, extreme magnitudes.
+    - `tests/worker/loaders/datetimeStress.test.ts` (19) — locks per-format DATE / TIME / TIMESTAMP / TIMESTAMPTZ behavior, epoch / Y2K / leap-year boundaries, ambiguous date strings staying VARCHAR, and one documented quirk: `str_date_compact` (8-digit numerics) is sniffed as integer by DuckDB CSV.
+    - `tests/worker/cancel.test.ts` (8) — dispatcher cancel paths, in-flight tracking, INTERRUPT-message rewrap to `QUERY_CANCELLED`.
+
+  **Type inference + pattern detection behavior locked**
+  - `tests/data/TypeInference.behavior.test.ts` (18) — drives `inferStringColumnType` against a real DuckDB connection. Locks: all-NULL → string with confidence 0, mixed-type → string, scientific notation → float, leading zeros, boolean variants (`true`/`false`/`yes`/`no`/`Y`/`N`/`1`/`0`), ISO date/timestamp/time, US (MM > 12 → `month >12` resolution wait, day > 12) and EU disambiguators, ambiguous-slash dates → string, high-cardinality strings, and the `minConfidence` demotion gate.
+  - `tests/data/PatternDetector.behavior.test.ts` (13) — UUID / email / URL / IPv4 / phone / identifier acceptance plus tie-breaking precedence and a deferred-feature lock asserting currency / percentage / unit strings currently return `pattern: null` (so adding those detectors later becomes a deliberate, observable change).
+  - `tests/data/QueryCache.invalidation.test.ts` (6) — default `maxEntries=100` LRU eviction, 200-distinct-set stress, every `state.*` signal triggers `bridge.clearQueryCache`, unsub stops triggers, TTL=0 immediate-expiry semantics, and TTL boundary hit/miss.
+
+  **WorkerBridge race / lifecycle / error round-trip**
+  - `tests/data/WorkerBridge.cancel.test.ts` (6) — early `AbortSignal.aborted` → `QUERY_ABORTED`, mid-flight abort dispatches a `cancel` `WorkerMessage` with the matching `targetId`, worker `QUERY_CANCELLED` reply reconstructs as `QueryError({ code: 'QUERY_CANCELLED' })`, cancel-after-completion is a no-op, abort-listener cleanup, cache not poisoned by aborted SELECT.
+  - `tests/data/WorkerBridge.parallel.test.ts` (4) — 100 concurrent queries replied in reverse / random order all resolve to the matching caller; one failing query among 99 successes only rejects that promise; identical SELECTs hit the cache and don't re-dispatch.
+  - `tests/data/WorkerBridge.lifecycle.test.ts` (6) — `initializeTimeoutMs` honored on inert workers, `terminate()` rejects every pending request with `WorkerTerminatedError`, terminate→re-`initialize()` flow, two-bridge isolation, `isInitialized()` flips, no-op on uninitialized bridge.
+  - `tests/data/WorkerBridge.errorRoundTrip.test.ts` (20) — every error subclass (`WorkerInitError`, `WorkerTerminatedError`, `QueryError` × 3 codes, `LoadError` × 2, `SQLValidationError`, `DerivedColumnError` × 2, `PersistenceError` × 2, `AnnotationError`, `ExportError`, `ConfigurationError` × 2, `DestroyedError`) round-trips with `code` / `details` / `message` preserved. BigInt in `details` survives structured-clone. No-code error defaults to `QueryError(QUERY_RUNTIME)`.
+  - `tests/data/WorkerBridge.bundles.test.ts` (5) — `duckdbBundles` forwarding into the `init` payload (omitted, present), `workerFactory` failure paths surface `WorkerInitError({ code: 'WORKER_CRASHED', details.source })`, `workerUrl` constructor failure path.
+
+  **Performance baseline (opt-in)**
+  - `tests/performance/benchmarks.duckdb.test.ts` (4) — gated by `RUN_DUCKDB_PERF=1`. Budgets keyed off local M1 medians × 4-5 for CI variance: nyc_taxi.parquet load < 8000ms; nyc_taxi.csv load < 15000ms; 100 cached SELECTs < 150ms; 100 uncached random-WHERE COUNT(\*)s < 3000ms. Default `npm test` skips the file.
+
+  **Strict-TS rollout for the data + worker slice**
+  - `noPropertyAccessFromIndexSignature: true` was temporarily enabled and the data + worker slice cleaned: 11 sites in `src/worker/duckdb.ts` (interval-shape reads) and `src/worker/loaders/common.ts` (DESCRIBE row reads) flipped to bracket access. Flag is OFF globally — `~83` sites in other slices (`src/annotations/`, `src/filters/FilterPresets.ts`, `src/persistence/SessionStore.ts`, `src/table/`, `src/visualizations/histogram/IntervalHistogramData.ts`) remain to be cleaned by their respective phases per the Phase 0 §11 routing (Phase 5 / 6 / 7 / 8). Phase 9 flips the flag globally.
+  - `noUncheckedIndexedAccess: true` was temporarily enabled and the data + worker slice cleaned: 17 sites in `src/data/TypeInference.ts` (regex `match[i]` reads + `daysInMonth[month-1]` access) and `src/worker/loaders/{common.ts, json.ts}` flipped to non-null-assertion-after-bounds-check. Flag is OFF globally; subsystem phases continue cleaning per Phase 0 §11.
+
+  **Worker dispatcher extracted for testability**
+  - `src/worker/worker.ts` is now a thin entry point that wires `self.onmessage` → `handleMessage` from the new `src/worker/dispatcher.ts`. The split lets tests drive `handleMessage` directly via vi.mock against `./duckdb` and `./loaders/*`. Two `@internal` test-only exports (`__resetInFlightForTests`, `__getInFlightForTests`) are stripped from `dist/.d.ts` by `stripInternal: true` (Phase 2). No public-API change.
+
+  **Tests:** 3007 → 3163 (+156 added; 4 opt-in-skipped → 152 active in default run). **Coverage:** every metric ticked up — statements 73.17% → 74.66%, branches 60.15% → 61.57%, functions 78.28% → 80.47%, lines 75.01% → 76.46%. Worker loaders move from near-zero to 89-93% per file. **No public-API runtime surface change** — every api-surface gate (`exports`, `snapshot`, `jsdoc`, `error-codes`, `private-paths`, `cjs-routing`) stays green untouched. **No new dependencies** added — `@duckdb/duckdb-wasm` was already a peer dep.
+
+- 89ddcf1: Phase 5 — Filters & derived columns. Hardens the management layer
+  behind the seven filter types and the two derived-column kinds, closes
+  remaining test gaps, and lands the Phase 0 §11-routed strict-TS slice
+  for `src/filters/` + `src/derived/`.
+
+  **Two consumer-visible behavior changes**
+  - `FilterPresetManager.save` and `.rename` now throw
+    `ConfigurationError({ code: 'PRESET_DUPLICATE_NAME', details: { name } })`
+    when the trimmed name collides with another preset. Previously
+    duplicates silently coexisted, which made the picker show two
+    identically-named entries. `importFromJSON` keeps importing — duplicate
+    presets within the imported file or against the existing collection
+    are skipped and reported on the `errors[]` channel rather than
+    throwing. Migration: [`docs/migration-guides/phase-5-preset-name-uniqueness.md`](../docs/migration-guides/phase-5-preset-name-uniqueness.md).
+  - `actions.addDerivedColumn` and `actions.updateDerivedColumn` (rename
+    path) now reject the reserved name `__rowid__` with the message
+    `Column name "__rowid__" is reserved for the synthetic row id`. The
+    duplicate-name guard already caught this in the typical post-load
+    state; the explicit reservation closes a hole in the pre-load case
+    and produces a clearer error message. `replaceDerivedColumn` is
+    unaffected (rename is already rejected separately). The
+    `Promise<{ success: boolean; error?: string }>` return shape is
+    unchanged — no new error class, no api-surface delta. Migration:
+    [`docs/migration-guides/phase-5-derived-rowid-reservation.md`](../docs/migration-guides/phase-5-derived-rowid-reservation.md).
+
+  **New error code routed to `ConfigurationError`**
+  - `PRESET_DUPLICATE_NAME` joins the `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` /
+    `BRIDGE_*` / `INVARIANT` family so worker-boundary error reconstruction
+    rebuilds it as `ConfigurationError`. Documented in
+    `docs/troubleshooting.md`; the Phase 3 `tests/api-surface.error-codes.test.ts`
+    lock auto-validates the addition.
+
+  **Documentation drift fix (carryover from Phase 3)**
+  - `docs/troubleshooting.md` section 16 still referenced the old
+    `RESERVED_COLUMN_NAME` heading. Renamed to `LOAD_RESERVED_COLUMN_NAME`
+    to match the table at line 51 (Phase 3 renamed the table entry but
+    missed the section heading). Body updated to mention the
+    derived-column-add-time reservation.
+
+  **Tests added** — 64 new cases across 9 files; 1 new file:
+  - `tests/filters/FilterSQL.test.ts` (+14) — pattern NULL handling for
+    every mode, special chars in `point`/`set`/`not-set` value-side
+    payloads, range with Date+`maxInclusive` and Date+`Infinity`, range
+    with bigint bounds, raw-sql synthetic-key collision precedence.
+  - `tests/filters/RawSQLFilter.test.ts` (+3) — empty-string label
+    fallback, label round-trip including `undefined`.
+  - `tests/filters/FilterRoundTrip.test.ts` (NEW, 21) — every filter type
+    serialised → deserialised through both the structured-clone-equivalent
+    path (preserves Date / Infinity / bigint) and the JSON path (FilterPresetManager
+    export/import; documents the Infinity → null limitation).
+  - `tests/filters/FilterPresets.test.ts` (+8) — name-uniqueness
+    contract on `save` / `rename` / `importFromJSON`, full round-trip
+    every filter type via `save` → `exportToJSON` → `importFromJSON` →
+    `load`.
+  - `tests/filters/SQLFilterModal.test.ts` (+6) — open-time autocomplete
+    refresh including derived columns (live `derivedChange` refresh while
+    the modal is open is deferred to Phase 8), empty / whitespace-only
+    SQL gating on Validate and Apply.
+  - `tests/filters/CrossfilterQuery.test.ts` (+1) — documents the
+    divergence between `splitCrossfilterFilters` and
+    `filtersToWhereClause` when the `column` argument matches a
+    raw-sql synthetic key (only `filtersToWhereClause` has the explicit
+    raw-sql carve-out).
+  - `tests/derived/DerivedColumns.test.ts` (+4) —
+    `addDerivedColumn({ name: '__rowid__' })` reservation in both
+    schema-loaded and pre-load states; `updateDerivedColumn` rename
+    refuses `__rowid__`; `setColumnOrder` reordering derived columns is
+    undoable.
+  - `tests/derived/replace-derived-column.test.ts` (+1) — transitive
+    multi-level cascade (a → b → c): replacing `a` with a numeric
+    expression breaks both direct dependent `b` and transitive dependent
+    `c`; `DEPENDENTS_INCOMPATIBLE.details.dependentsAffected` enumerates
+    both.
+  - `tests/derived/DerivedColumnModal.test.ts` (+3) — kind toggle
+    preserves expression text and vector textarea content across mode
+    round-trips; clears the validation chip when toggling.
+
+  **Strict-TS slice cleanup (Phase 0 §11 routing)**
+  - `noPropertyAccessFromIndexSignature: true` was temporarily enabled
+    and the **34 sites in `src/filters/FilterPresets.ts`** flipped to
+    bracket access (concentrated in `importFromJSON`'s validation
+    switch). Other slices (`src/annotations/`, `src/persistence/`,
+    `src/table/`, `src/visualizations/histogram/IntervalHistogramData.ts`)
+    remain to be cleaned by Phases 6 / 7 / 8; flag stays OFF globally
+    until Phase 9.
+  - `noUncheckedIndexedAccess: true` was temporarily enabled and the
+    filters + derived slice cleaned: **102 sites** total —
+    `FilterPanelField.ts` (~70 sites: `inputs[N]?.value` and
+    `inputs[N].value` patterns in DOM-node iteration loops),
+    `FilterPresets.ts` (2 sites), `DerivedColumnManager.ts` (~6 sites:
+    `findIndex`-then-direct-access patterns and topological sort
+    loops), `DerivedColumnModal.ts` (~25 sites: `lines[i]` reads after
+    bounds checks). Pattern: post-bounds-check non-null assertion
+    `arr[i]!`. Other slices cleaned by their respective subsystem
+    phases; flag stays OFF globally until Phase 9.
+
+  **Tests:** 3163 → 3227 (+64 in default run; opt-in skipped count
+  unchanged). **Coverage:** thresholds met; metrics ticked up vs Phase 4
+  baseline. **No public-API runtime surface change** — every api-surface
+  gate (`exports`, `snapshot`, `jsdoc`, `error-codes`, `private-paths`,
+  `cjs-routing`) stays green untouched. **No new dependencies** added.
+
+- 8fa1838: Visualizations & stats hardening (review-plan Phase 6).
+  - All five `BaseVisualization` subclasses (`Histogram`, `DateHistogram`,
+    `TimeHistogram`, `IntervalHistogram`, `ValueCounts`) now route
+    `fetchData` failures through `options.onError({ stage: 'fetch' })`
+    instead of swallowing them with `console.error`. The facade re-emits
+    these as `error` events with `source: 'visualization'`. The empty-canvas
+    rendering after error is unchanged. See
+    `docs/migration-guides/phase-6-viz-fetch-error-routing.md` for the
+    consumer-side impact (consumers branching on the `error` event will
+    start seeing fetch failures they could previously only observe in the
+    developer console).
+  - Added ~85 new test cases across 9 new files + 3 extensions:
+    histogram math correctness against real DuckDB (numeric, date /
+    timezone-stable, time, interval), value-counts top-N + "Other" cap with
+    high cardinality, `BaseVisualization` lifecycle / in-flight destroy /
+    onError contract, registry tie-break determinism, full fall-through to
+    `PlaceholderVisualization`, `CrossfilterCoordinator` filter-flow
+    integration, `StatsFormatters` line-2 edge cases.
+  - Strict-TS slice cleanup for `src/visualizations/` + `src/statistics/`:
+    `noPropertyAccessFromIndexSignature` (4 sites in
+    `IntervalHistogramData.ts`) and `noUncheckedIndexedAccess` (~146 sites)
+    are now clean for the slice. Both flags remain disabled globally; the
+    remaining slices land in Phases 7 / 8 / 9.
+
+- 676bd80: Persistence, annotations, and export hardening (review-plan Phase 7).
+  - `coerceLoadedSnapshot` in `src/persistence/SessionStore.ts` now rejects
+    snapshots whose `version` is not an integer in `[1, SNAPSHOT_VERSION]`.
+    Future-version blobs (e.g., `version: 6` from a newer library that wrote
+    the IDB row before a downgrade) load as `null` so the table boots fresh
+    rather than risk misinterpreting unknown fields. Pre-1.0 clean break:
+    no migration framework. See
+    `docs/migration-guides/phase-7-snapshot-version-policy.md`.
+  - `AutoSave` latches a one-shot quota circuit-breaker on the first
+    `PERSISTENCE_QUOTA_EXCEEDED` error. Subsequent debounced saves become
+    no-ops until `enable()` is re-entered (the canonical reset is
+    `actions.clearSession()`'s built-in `disable()` → `enable()` cycle).
+    Consumers see exactly one `onError` per quota episode instead of one
+    per state mutation. Non-quota errors (`SAVE_FAILED`) are NOT latched.
+    See `docs/migration-guides/phase-7-autosave-quota-circuit-breaker.md`.
+  - Vector value pool dedup is documented as **reference-identity, not
+    content-hash**. New JSDoc on `PooledVectorColumnRef` /
+    `VectorValuePoolEntry` makes the contract explicit, and a new
+    regression test in `tests/persistence/serialization.test.ts` locks
+    the semantic (two structurally-identical-but-distinct arrays produce
+    two pool entries; same array reference across stack entries shares
+    one entry).
+  - New tests: `~65 cases across 4 new files + 6 extensions` covering
+    snapshot version policy (12), AutoSave quota circuit-breaker (8),
+    vector pool reference-identity (2), DateWrapper timezone stability
+    (6), AnnotationStore tableName Signal binding (6), CSV
+    formula-injection prefixes (=, +, -, @, \t, \r — 11), Parquet
+    round-trip via real DuckDB (5 cases, mixed types + scope variants),
+    ExportDialog system-columns toggle (4), JSON BigInt + Date round-trip
+    through `JSON.parse` (5), Clipboard format / size invariants (3), and
+    CSV `__rowid__` end-to-end with BIGINT decimal-string formatting (3).
+  - Strict-TS slice cleanup for `src/persistence/` and `src/annotations/`
+    (Phase 0 §11): `noPropertyAccessFromIndexSignature` and
+    `noUncheckedIndexedAccess` are clean for these two slices. Both
+    flags remain disabled globally; the remaining slices land in
+    Phases 8 / 9.
+  - Documentation: cross-tab race (last-writer-wins, no
+    `BroadcastChannel`), AutoSave quota circuit-breaker behaviour,
+    snapshot version-policy contract added to
+    `docs/guides/session-persistence.md`.
+  - JSDoc: clarified the BigInt safe-vs-unsafe coercion in `JSONExport`
+    and the no-size-precheck contract on `Clipboard.copyToClipboard`.
+
+- f22a19e: Table UI rendering, accessibility, and i18n hardening (review-plan Phase 8).
+  - **Event payloads are independent shallow copies.** Every
+    `TableEvents` payload field that carries a mutable collection
+    (`Filter[]`, `SortColumn[]`, `Set<number>`, `string[]`,
+    `DerivedColumnDef[]`) is allocated fresh at emit time. Pre-fix
+    consumers that mutated the payload from a handler silently corrupted
+    the live signal value; post-fix the mutation is contained in the
+    consumer's copy. Item identity inside the collection is unchanged —
+    treat the items as read-only. Runtime contract only; the typed
+    `readonly` markers on `TableEvents` are deferred to Phase 9 so this
+    release lands without forcing a TS2540 on consumer destructure-and-
+    mutate code. See
+    `docs/migration-guides/phase-8-event-payload-immutability.md`.
+  - **`SQLFilterModal` and `DerivedColumnModal` autocomplete refresh
+    live.** Both modals subscribe their open editor to `state.schema` and
+    `state.derivedColumns` so adding a derived column elsewhere in the UI
+    while the modal is open updates the autocomplete dropdown without
+    remounting. Cursor / focus / scroll preserved via the editor's
+    existing `Compartment.reconfigure` path
+    (`CodeMirrorExpressionEditor.updateCompletionContext`). Microtask
+    debounce so a bulk reconcile (undo / redo / session restore)
+    collapses to one editor dispatch. New shared helper
+    `src/sql-editor/wireLiveCompletionContext.ts` (internal). See
+    `docs/migration-guides/phase-8-sql-modal-live-autocomplete.md`.
+  - **i18n: 5 new translatable strings.** Added
+    `derived.expressionPlaceholder`, `derived.availableColumnsLabel`,
+    `export.includeSystemColumnsLabel`, `a11y.resizeHandleLabel`, and
+    `a11y.loadingRowLabel(rowNumber)`. Sites: `DefaultExpressionEditor`
+    (placeholder + column-hint label), `ExportDialog` (system-columns
+    checkbox), `ColumnResizer` (drag-handle ARIA), `TableBody`
+    (loading-row placeholder text). `DefaultExpressionEditor`,
+    `ColumnResizer`, and `TableBody` gained an optional
+    `messages?: Strings` constructor option (Tier-2, additive). The
+    bundled `TableContainer` and `ColumnHeader` plumb this automatically;
+    consumers using a custom `editorFactory` should forward `messages`
+    themselves. French overrides extended in `examples/07-i18n-french/`.
+  - **`AnnotationPopover` and `ColumnHeaderTooltipPopover`: stale
+    aria-describedby fix.** A sequence of `show(A) → show(B)` previously
+    left A's `aria-describedby` pointing at the popover after the popover
+    had moved on to B. Both popovers now clear the previous anchor's
+    attribute before re-pointing.
+  - **`ExportDialog` label-control association.** The CSV / JSON select
+    elements gained `for` / `id` pairing (axe `select-name` rule) and the
+    headers / pretty-print checkboxes are now wrapped inside their labels
+    for implicit `label` association. Surfaced by the new axe scenarios.
+  - **Comprehensive axe-core suite.** `tests/a11y/axe.test.ts` expanded
+    from 1 scenario (empty grid) to 12: filters open, sort active, every
+    modal (Export / SQL filter / Derived column), every popover
+    (annotation + header tooltip), light + dark mode, multi-table,
+    `dir="rtl"` smoke. Modal scenarios re-enable `aria-required-children`
+    (relaxed only for the table-root toolbar-sibling pattern). The select-
+    name and checkbox-label fixes in `ExportDialog` were caught by this
+    expansion.
+  - **Tests added: ~50+ new cases across 8 new files + 5 extensions.**
+    Event-payload immutability (9), SQLFilterModal live-refresh (6),
+    DerivedColumnModal live-refresh (3), DataTable.i18n keys (3),
+    DefaultExpressionEditor messages (2), `buildCompletionContext` edges
+    (4), KeyboardNavigator undo / redo / copy (5), VirtualScroller edges
+    (5), AnnotationPopover multi-anchor (2), axe-core scenarios (10
+    new), and the meta-scanner
+    `tests/i18n/hardcodedStringsScan.test.ts` that prevents future
+    hardcoded English strings from sneaking back in.
+  - **Strict-TS slice cleanup.** `noPropertyAccessFromIndexSignature`
+    and `noUncheckedIndexedAccess` enabled temporarily, applied to
+    `src/table/{Cell,ColumnHeader,ColumnReorder,KeyboardNavigator,TableBody,TableContainer}.ts`
+    (~50 sites) plus 3 sites in `src/export/ExportQuery.ts` missed by
+    Phase 7. Both flags reverted to `false` globally per the per-phase
+    routing — Phase 9 flips globally.
+  - **Documentation.** `docs/guides/accessibility.md` adds a structured
+    manual screen-reader test plan (VoiceOver / NVDA / JAWS matrix), a
+    Lighthouse contrast-verification recipe, and an explicit "what's not
+    yet supported" section (`prefers-contrast: more`, `forced-colors`,
+    touch + drag). `docs/guides/i18n.md` documents the 5 new keys and
+    the meta-scanner.
+  - No public-API symbol moves; `tests/api-surface.exports.test.ts` and
+    `tests/api-surface.snapshot.test.ts` remain green untouched.
+
+- 1a228a8: Surface `AnnotationError` in the `MUST_EXIST_AT_ROOT` API gate (`tests/api-surface.exports.test.ts`). The class was already exported from `src/index.ts` and tracked by `tests/api-surface.snapshot.test.ts`; this aligns the explicit gate manifest with the runtime exports so future drift surfaces immediately.
+- 1a228a8: Phase 9 — performance, memory, release readiness. Tightened coverage thresholds (76 / 63 / 81 / 77 — actuals minus 1 pp) and bundle-size budgets (root ESM 7.7 kB, lazy ExportDialog 81 kB ESM, etc. — actuals + ~5 % headroom). Added an opt-in perf suite (`npm run test:perf`, `RUN_DUCKDB_PERF=1` / `RUN_LIFECYCLE_STRESS=1`) covering 1 M-row filter latency, 10 k annotation insert / lookup, scroll-handler frame budget, 1000-cycle create / destroy stress, and shared-bridge / 1k-mutation autosave memory leak gates. Wired `npm run size` into the CI matrix as a third job. Added high-contrast + forced-colors CSS for `prefers-contrast: more` and `forced-colors: active`. Removed the dead-code `splitCrossfilterFilters` (was never exported). Coalesced duplicate `columnChange` emit on column re-pinning via `queueMicrotask`. Defensive shallow-clone of `loadComplete.schema`. New `warning` event with `code: 'PERSISTENCE_VERSION_REJECTED'` when `SessionStore.load()` rejects a stored snapshot whose version is outside `[1, SNAPSHOT_VERSION]`. Documented OIDC trusted publishing in `DEVELOPMENT.md`. Refreshed `docs/performance.md` with a 0.2.0 benchmark snapshot.
+
 All notable changes to `@jeyabbalas/data-table` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project adheres to [Semantic Versioning](https://semver.org/).
@@ -15,13 +395,13 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 
 - **Public SQL editor primitives for host-app embedding.** The library now
   exposes the building blocks needed to assemble a SQL-, schema-, and
-  DuckDB-aware CodeMirror editor *outside* the data table — for filter
+  DuckDB-aware CodeMirror editor _outside_ the data table — for filter
   preset composers, derived-column wizards, query-template editors, etc.
   Three new exports on `@jeyabbalas/data-table/advanced`:
   `createSqlExtensions(context, options?)` returns a CodeMirror
   `Extension[]` (PostgreSQL grammar + schema/function autocomplete +
   optional theme) ready to drop into any `EditorState.create({ extensions
-  })`; `buildCompletionContext(columns, options?)` normalizes any
+})`; `buildCompletionContext(columns, options?)` normalizes any
   column-like array (`ColumnSchema[]`, ad-hoc `[{name, type}, …]`) into the
   `CompletionContext` shape; and `DUCKDB_FUNCTION_DETAILS` carries the
   curated `{ name, category, description }` metadata used to populate the
@@ -50,7 +430,7 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   `createDataTable({ statsPanelRegistry })`; the module-scoped
   `defaultStatsPanelRegistry` is the implicit fallback when omitted.
   Lifecycle: `constructor(container, column, options)` → `update(stats:
-  ColumnStatsData | null)` (called with `null` once on mount, then
+ColumnStatsData | null)` (called with `null` once on mount, then
   with each `ColumnStatsData` the column's visualization emits) →
   `updateFilters(filters: Filter[])` (called on every filter change
   before any subsequent `update` from a viz refetch; default
@@ -59,9 +439,9 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   visualization's hover snippet; default no-op) → `destroy()`. Panel
   options carry `{ tableName, bridge, filters, messages, onError }`;
   errors route through `onError(err, { source: 'stats-panel', column,
-  phase: 'construct' | 'update' | 'hover' | 'fetch' | 'destroy' })`
+phase: 'construct' | 'update' | 'hover' | 'fetch' | 'destroy' })`
   and are re-emitted on the facade's `error` event with `source:
-  'stats-panel'` (a new discriminant in `TableErrorSource`). Tier-1
+'stats-panel'` (a new discriminant in `TableErrorSource`). Tier-1
   exports: `StatsPanelRegistry`, `defaultStatsPanelRegistry`,
   `StatsPanelRegistration`, `StatsPanelConstructor`. Tier-2
   (`/advanced`): `BaseStatsPanel`, `StatsPanelOptions`,
@@ -73,7 +453,7 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   (`examples/13-custom-stats-panel/`) demos numeric (`n · μ · σ`
   from a custom `AVG` / `STDDEV_POP` query) and categorical
   (`top: <value> (<pct>%)` from a `GROUP BY ... ORDER BY COUNT
-  DESC LIMIT 1`) panels with the recommended per-panel `fetchSeq`
+DESC LIMIT 1`) panels with the recommended per-panel `fetchSeq`
   stale-result guard.
 - **Stable synthetic `__rowid__` + read-only column export.** A
   `BIGINT` `__rowid__` column is synthesized at load time on every CSV /
@@ -87,21 +467,21 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   typed JS array — `Int32Array` (INTEGER), `Float64Array` (FLOAT /
   DECIMAL), `BigInt64Array` (BIGINT including `__rowid__`), or
   `unknown[]` (strings / dates / booleans). Options: `scope: 'all' |
-  'filtered' | 'selected'`, `limit`, `offset`, `signal`. Throws
+'filtered' | 'selected'`, `limit`, `offset`, `signal`. Throws
   `QueryError` with `COLUMN_NOT_FOUND` / `INVALID_PAGINATION` /
   `NO_TABLE`. Public exports: `ROWID_COLUMN` constant,
   `RowId` type, `GetColumnValuesOptions` type. Example 10 (`examples/
-  10-column-export/`) demos every option and the `BigInt64Array`
+10-column-export/`) demos every option and the `BigInt64Array`
   ergonomics for `__rowid__`.
 - **`actions.replaceDerivedColumn` with dependent re-validation.** A
   same-name replacement variant that pre-flight-validates every
   dependent against the proposed new definition and reports affected
   dependents on failure. Discriminated return: `{ success: true; info
-  } | { success: false; error: DerivedColumnError }`. New error code
+} | { success: false; error: DerivedColumnError }`. New error code
   `DEPENDENTS_INCOMPATIBLE` carries `details.dependentsAffected:
-  string[]` and `details.reasons: Record<string, string>`. The
+string[]` and `details.reasons: Record<string, string>`. The
   `derivedChange` event payload widened to carry a `kind: 'added' |
-  'removed' | 'replaced' | 'updated'` discriminator and the affected
+'removed' | 'replaced' | 'updated'` discriminator and the affected
   `columnName`. Use `replaceDerivedColumn` when an end-user edits an
   expression whose dependents you want to re-validate atomically;
   continue using `updateDerivedColumn` for renames.
@@ -115,7 +495,7 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   `getByRow`, `getByColumn`, `getByCell` (intersection sorted by
   severity → `createdAt` → insertion), `remove`, `removeMany`,
   `clear(scope?)`, `count`, `toJSON`, `loadJSON(file, mode?: 'replace'
-  | 'merge')`, `on('change', handler)`, `setSeverityFilter`,
+| 'merge')`, `on('change', handler)`, `setSeverityFilter`,
   `getSeverityFilter`. JSON file format documented at
   `docs/api-reference.md#annotation-json-format` with
   `ANNOTATION_FILE_VERSION = 1`; unknown top-level and per-annotation
@@ -134,19 +514,19 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   `-info`). Highest-severity-wins per element. Shared
   `AnnotationPopover` (single instance, anchored on hover / focus,
   dismissed on Escape / blur / scroll / click outside; `role="tooltip"`
-  + `aria-live="polite"`) renders the `getByCell` intersection grouped
-  by scope. Severity filter (`setSeverityFilter`) is a view concern —
-  data is unchanged; the rendering layer reads the flags and hides
-  non-matching annotations. CSS tokens: `--dt-annotation-{error,
-  warning, info}-{fg,bg,bdr}` plus derived `-bg-hover` variants in
-  light + dark; new z-index `--dt-z-annotation-popover: 55` between
-  floating panels and CodeMirror autocomplete.
+  - `aria-live="polite"`) renders the `getByCell` intersection grouped
+    by scope. Severity filter (`setSeverityFilter`) is a view concern —
+    data is unchanged; the rendering layer reads the flags and hides
+    non-matching annotations. CSS tokens: `--dt-annotation-{error,
+warning, info}-{fg,bg,bdr}` plus derived `-bg-hover` variants in
+    light + dark; new z-index `--dt-z-annotation-popover: 55` between
+    floating panels and CodeMirror autocomplete.
 - **Programmatic column-header tooltip popover.** New
   `table.actions.setColumnHeaderTooltip(column, content | string |
-  null)` and `getColumnHeaderTooltip(column)`. Structured content
+null)` and `getColumnHeaderTooltip(column)`. Structured content
   shape: `{ title?, description?, items?: Array<{ label, value:
-  string | string[] }> }`. String shorthand normalises to `{
-  description }`; `null` (or any input that normalises to empty)
+string | string[] }> }`. String shorthand normalises to `{
+description }`; `null` (or any input that normalises to empty)
   clears the override. Every text field is rendered via
   `.textContent` — HTML strings, DOM nodes, and render functions are
   not accepted. Persisted into `SessionSnapshot.columnHeaderTooltips`
@@ -234,7 +614,7 @@ label. Releases with breaking changes also get a dedicated walkthrough under
   `fetchData()` composes `filtersToWhereClause(this.options.filters)`
   into its aggregation, so the map re-shades whenever filters change.
 - **Browser feature detection.** New `checkBrowserSupport(): { supported,
-  missing }` sync probe of `Worker`, `WebAssembly`, `indexedDB`,
+missing }` sync probe of `Worker`, `WebAssembly`, `indexedDB`,
   `ResizeObserver`, `BigInt`, and `structuredClone`. New
   `strictBrowserCheck?: boolean` option on `createDataTable` — when `true`,
   rejects with `WorkerInitError` (`code: 'WORKER_UNSUPPORTED'`,
@@ -264,7 +644,7 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 - `ready` event now emits inside a microtask after `createDataTable()`
   resolves, and replays exactly once per late subscriber so the event is
   no longer missed by `const t = await createDataTable(...); t.on('ready',
-  …)`.
+…)`.
 - `EventEmitter` wraps each listener in try/catch so one throwing
   subscriber no longer blocks the rest.
 - The `ConfigurationError` subclass now surfaces option-validation failures
@@ -334,14 +714,14 @@ label. Releases with breaking changes also get a dedicated walkthrough under
 ### Migration
 
 - `import { EventEmitter, StateActions, createTableState, UndoManager,
-  TableContainer, FilterBar, ExportDialog, AutoSave, BaseVisualization,
-  ... } from '@jeyabbalas/data-table'`
+TableContainer, FilterBar, ExportDialog, AutoSave, BaseVisualization,
+... } from '@jeyabbalas/data-table'`
   → update the specifier to `'@jeyabbalas/data-table/advanced'`.
 - Tier-3 symbols are no longer exported. If you relied on one, please file
   an issue describing the use case so it can be re-evaluated.
 - `import { getDefaultBridge } from '@jeyabbalas/data-table'` →
   `import { WorkerBridge } from '@jeyabbalas/data-table'; const bridge =
-  new WorkerBridge(); await bridge.initialize();`. Pass the bridge into
+new WorkerBridge(); await bridge.initialize();`. Pass the bridge into
   `createDataTable({ bridge })` if you want to share one across tables.
 - `VisualizationFactory.register({ … })` →
   `defaultVisualizationRegistry.register({ … })` for the shared default, or

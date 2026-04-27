@@ -51,6 +51,33 @@ for (const radio of themeRadios) {
   });
 }
 
+// ----- Shareable URL params (demo-only) -----
+// `?url=…` lets a user copy the demo URL and have a friend open the same
+// dataset on the deployed GitHub Pages site. We use replaceState so loading
+// a dataset doesn't pollute the back/forward stack.
+const URL_PARAM_KEY = 'url';
+
+function getUrlParam(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get(URL_PARAM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setUrlParam(url: string | null): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (url) params.set(URL_PARAM_KEY, url);
+    else params.delete(URL_PARAM_KEY);
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
+    window.history.replaceState(null, '', next);
+  } catch {
+    /* history API unavailable */
+  }
+}
+
 // ----- Session cache (demo-only; not a library responsibility) -----
 // Keeps a Parquet snapshot of the loaded table in IndexedDB so a page refresh
 // can auto-restore without re-prompting for the file.
@@ -221,6 +248,12 @@ async function loadSource(source: File | string, overrideTableName?: string): Pr
       /* unavailable in some browsers */
     }
 
+    // Keep the shareable `?url=` param in sync with what was just loaded.
+    // File loads aren't shareable, so wipe any stale param the page was
+    // opened with — otherwise a refresh would load the (no longer relevant)
+    // shared dataset on top of the user's local data.
+    setUrlParam(typeof source === 'string' ? source : null);
+
     // Cache the loaded table as Parquet so a refresh restores without a prompt.
     // Export only original source columns — excluding system columns
     // (e.g. `__rowid__`) and derived columns — so the round-tripped cache
@@ -308,6 +341,7 @@ clearSessionBtn.addEventListener('click', async () => {
   } catch {
     /* ignore */
   }
+  setUrlParam(null);
   fileInput.value = '';
   urlInput.value = '';
   updateInfo('Session cleared. Load a file or URL to start fresh.');
@@ -328,6 +362,18 @@ urlInput.addEventListener('keydown', (e) => {
   }
 });
 
+// Example dataset chips — clicking loads the URL through the same path as the
+// URL input, so format auto-detection (DataLoader.detectFormatFromURL) and
+// `?url=` syncing both happen for free.
+for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]')) {
+  chip.addEventListener('click', () => {
+    const url = chip.dataset.url;
+    if (!url || loadUrlBtn.disabled) return;
+    urlInput.value = url;
+    void loadSource(url);
+  });
+}
+
 // ----- Init + auto-restore -----
 (async () => {
   initStatusEl.textContent = 'DuckDB Ready';
@@ -335,6 +381,18 @@ urlInput.addEventListener('keydown', (e) => {
   loadFileBtn.disabled = false;
   loadUrlBtn.disabled = false;
   updateInfo('Load a file or URL to get started.');
+
+  // Shared `?url=` deep links take precedence over the localStorage
+  // session-restore. A friend opening the link expects to see the dataset
+  // referenced by the URL, not whatever happened to be in this browser's
+  // last session.
+  const sharedUrl = getUrlParam();
+  if (sharedUrl) {
+    urlInput.value = sharedUrl;
+    updateInfo(`Loading shared dataset: <strong>${sharedUrl}</strong>...`);
+    void loadSource(sharedUrl);
+    return;
+  }
 
   try {
     const raw = localStorage.getItem(LAST_SESSION_KEY);

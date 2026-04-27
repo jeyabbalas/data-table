@@ -250,8 +250,26 @@ describe('Event payload immutability — A1 (Phase 8)', () => {
         seen.push(filters);
       });
 
+      // `filterChange` now emits at the trailing edge of each filter cycle
+      // (after the async row-count refresh in CrossfilterCoordinator), so we
+      // wait for each cycle to settle before kicking off the next one. Two
+      // synchronous `.set()`s back-to-back would coalesce into a single emit
+      // for the latest filter state, which is the correct UX but doesn't
+      // exercise the per-emit independent-payload contract this test cares about.
+      const settle = (): Promise<void> =>
+        new Promise((resolve) => {
+          const off = table.on('filterChange', () => {
+            off();
+            resolve();
+          });
+        });
+
+      let pending = settle();
       table.state.filters.set([{ type: 'point', column: 'a', value: 1 }]);
+      await pending;
+      pending = settle();
       table.state.filters.set([{ type: 'point', column: 'b', value: 2 }]);
+      await pending;
 
       expect(seen).toHaveLength(2);
       expect(seen[0]).not.toBe(seen[1]);

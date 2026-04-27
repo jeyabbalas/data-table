@@ -501,9 +501,32 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     });
   }
 
+  // -------- Lifecycle flag (hoisted so the coordinator's emit callback
+  // below can short-circuit during teardown). The full event-bus wiring
+  // sits further down where the unsubscribe array is built. --------
+  let destroyed = false;
+
   // -------- Visualizations (auto-attach) --------
   const interactionManager = opts.visualizations === false ? null : new InteractionManager();
-  let coordinator: CrossfilterCoordinator | null = null;
+  // The crossfilter coordinator is the single source of `filterChange`
+  // emissions for the public TableEvents API: it owns the async
+  // `state.filteredRows` recompute and fires `onFilterCycleComplete` only
+  // *after* that count has settled, so the event payload is never one cycle
+  // behind. We create one instance per DataTable and reuse it across data
+  // loads — the live `state.tableName` is read at query time, so no per-load
+  // recreation is needed. Visualization instances are registered into it
+  // inside `attachVisualizations`; with `visualizations: false` it simply
+  // serves as the row-count-update + event-emit pipeline.
+  const coordinator = new CrossfilterCoordinator(state, actions, bridge, undefined, {
+    onFilterCycleComplete: (filters) => {
+      if (destroyed) return;
+      emitter.emit('filterChange', {
+        filters: [...filters],
+        filteredRowCount: state.filteredRows.get(),
+        totalRowCount: state.totalRows.get(),
+      });
+    },
+  });
   let activeVisualizations: BaseVisualization[] = [];
   const brushStates = new Map<string, BrushState>();
   const selectionStates = new Map<string, SelectionStateSnapshot>();
@@ -547,12 +570,19 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
 
   // Auto-attach/detach visualizations as the schema changes. This replaces
   // the ~200 lines of manual wiring that every consumer used to have to write.
+  //
+  // The crossfilter coordinator above is a singleton-per-DataTable so the
+  // public `filterChange` event always emits with a fresh row count, even
+  // before the first data load. Each attach pass only registers/unregisters
+  // viz instances on it. Per-column viz creation is gated by
+  // `opts.visualizations`.
   const attachVisualizations = (): void => {
-    if (opts.visualizations === false) return;
+    const vizEnabled = opts.visualizations !== false;
     const tableName = state.tableName.get();
     if (!tableName) return;
 
     // Save brush/selection state so it survives a schema-change reattach.
+    // (No-op when viz is disabled — `activeVisualizations` is always empty.)
     for (const viz of activeVisualizations) {
       const column = viz.getColumn();
       if (
@@ -579,10 +609,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
 
     // Tear down previous visualizations and their registrations.
-    if (coordinator) {
-      for (const viz of activeVisualizations) {
-        coordinator.unregister(viz.getColumn().name);
-      }
+    for (const viz of activeVisualizations) {
+      coordinator.unregister(viz.getColumn().name);
     }
     for (const viz of activeVisualizations) viz.destroy();
     activeVisualizations = [];
@@ -599,14 +627,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
     activeStatsPanels.clear();
 
-    // Recreate coordinator for this table; it reads state.tableName dynamically.
-    if (coordinator) coordinator.destroy();
-    coordinator = new CrossfilterCoordinator(state, actions, bridge);
-
     // Recreate stats panel coordinator. Panels for non-viz columns still need
     // filter-aware updates, so we keep this coordinator independent of the viz one.
     if (statsPanelCoordinator) statsPanelCoordinator.destroy();
     statsPanelCoordinator = new StatsPanelCoordinator(state);
+
+    // Per-column work (viz instances + custom stats panels) is gated by the
+    // `visualizations` opt; the coordinator above is now wired regardless so
+    // the public `filterChange` event always carries a fresh row count.
+    if (!vizEnabled) return;
 
     // Create a visualization per applicable column.
     const headers = tableContainer.getColumnHeaders();
@@ -701,7 +730,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         bridge,
         filters: state.filters.get(),
         onFilterChange: (filter: Filter | null) => {
-          coordinator!.handleFilterChange(column.name, filter);
+          coordinator.handleFilterChange(column.name, filter);
         },
         onDefaultStatsChange: (stats: ColumnStatsData) => {
           if (panel) {
@@ -869,7 +898,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
 
   // -------- Re-emit signals as typed events --------
   const unsubscribes: (() => void)[] = [];
-  let destroyed = false;
+  // `destroyed` is declared near the top of this factory because the
+  // crossfilter coordinator's `onFilterCycleComplete` callback (used to emit
+  // `filterChange`) needs to short-circuit during teardown.
   // Sticky-replay payload for the `ready` lifecycle event. Set once when
   // `ready` fires; late subscribers via `table.on('ready', …)` receive a
   // microtask-scheduled replay so they never miss it regardless of whether
@@ -882,15 +913,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // inside the arrays (Filter, SortColumn, ColumnSchema, …) are not
   // deep-cloned — the immutability contract is "the collection is
   // yours; the items inside are still shared, treat them read-only".
-  unsubscribes.push(
-    state.filters.subscribe((filters: Filter[]) => {
-      emitter.emit('filterChange', {
-        filters: [...filters],
-        filteredRowCount: state.filteredRows.get(),
-        totalRowCount: state.totalRows.get(),
-      });
-    }),
-  );
+  //
+  // `filterChange` is intentionally *not* emitted from
+  // `state.filters.subscribe` — the row-count refresh that backs
+  // `filteredRowCount` runs asynchronously inside CrossfilterCoordinator,
+  // so a synchronous emit here would always carry the previous cycle's
+  // count. The coordinator drives the emission via its
+  // `onFilterCycleComplete` hook (wired in `attachVisualizations`) at the
+  // trailing edge of each cycle, when both viz updates and the COUNT(*)
+  // query have settled.
   unsubscribes.push(
     state.sortColumns.subscribe((sortColumns: SortColumn[]) => {
       emitter.emit('sortChange', { sortColumns: [...sortColumns] });
@@ -1114,8 +1145,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     for (const viz of activeVisualizations) viz.destroy();
     activeVisualizations = [];
     interactionManager?.destroy();
-    coordinator?.destroy();
-    coordinator = null;
+    coordinator.destroy();
 
     for (const [colName, panel] of activeStatsPanels) {
       try {

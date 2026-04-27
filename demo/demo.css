@@ -96,6 +96,13 @@ h2 {
   margin-bottom: 0.5rem;
 }
 
+/* Space the example-dataset chips below the URL input row so they read as
+   a separate "or try one of these" affordance rather than a continuation
+   of the URL input. */
+.row--examples {
+  margin-top: 0.75rem;
+}
+
 /* ===========================================
    Form Elements
    ===========================================
@@ -170,6 +177,66 @@ button:disabled {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+/* ===========================================
+   Example dataset chips
+   =========================================== */
+
+/* Inline label that introduces the chip row. Muted in both color schemes
+   so the chips themselves are the visual anchor of the row. */
+.row-label {
+  align-self: center;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+  .row-label {
+    color: #94a3b8;
+  }
+}
+
+/* `.chip` is a deliberately lower-contrast secondary action — distinct from
+   the primary blue `<button>` so users perceive it as a shortcut, not a
+   submit. Uses fixed colors (rather than --dt-* tokens) because the demo
+   page chrome lives outside the data-table widget and stays on its own
+   palette. */
+.chip {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: #eef2ff;
+  color: #1e40af;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.chip:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.chip:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chip {
+    background: #334155;
+    color: #e2e8f0;
+    border-color: #475569;
+  }
+
+  .chip:hover {
+    background: #475569;
+    border-color: #64748b;
+  }
 }
 
 /* ===========================================

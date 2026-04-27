@@ -32,6 +32,16 @@ import type { BaseVisualization } from './BaseVisualization';
 const DEFAULT_VIZ_CONCURRENCY = 4;
 
 /**
+ * Optional hooks the facade can pass into the coordinator. `onFilterCycleComplete`
+ * fires at the trailing edge of every filter cycle, *after* the async row-count
+ * query has settled — that's the contract the public `filterChange` event
+ * relies on so its `filteredRowCount` payload is never stale.
+ */
+export interface CrossfilterCoordinatorOptions {
+  onFilterCycleComplete?: (filters: Filter[]) => void;
+}
+
+/**
  * Coordinates filter rebroadcasting across all column-header visualizations
  * on a table. Composed by the facade; rarely needed directly. Bounds in-flight
  * fan-out via a small concurrency cap so DuckDB-WASM (single-threaded) stays
@@ -42,14 +52,17 @@ export class CrossfilterCoordinator {
   private unsubscribe: (() => void) | null = null;
   private filterSequence = 0;
   private readonly concurrency: number;
+  private readonly options: CrossfilterCoordinatorOptions;
 
   constructor(
     private state: TableState,
     private actions: StateActions,
     private bridge: WorkerBridge,
     concurrency: number = DEFAULT_VIZ_CONCURRENCY,
+    options: CrossfilterCoordinatorOptions = {},
   ) {
     this.concurrency = Math.max(1, concurrency);
+    this.options = options;
     this.unsubscribe = state.filters.subscribe((filters) => void this.onFiltersChanged(filters));
   }
 
@@ -69,7 +82,11 @@ export class CrossfilterCoordinator {
   syncExistingFilters(): void {
     const filters = this.state.filters.get();
     if (filters.length > 0) {
-      void this.updateFilteredRowCount(filters, ++this.filterSequence);
+      const seq = ++this.filterSequence;
+      void this.updateFilteredRowCount(filters, seq).then(() => {
+        if (seq !== this.filterSequence) return;
+        this.options.onFilterCycleComplete?.(filters);
+      });
     }
   }
 
@@ -97,6 +114,13 @@ export class CrossfilterCoordinator {
     // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
     // single-threaded worker on wide tables.
     await Promise.all([this.runLimited(vizTasks), this.updateFilteredRowCount(filters, seq)]);
+
+    // Trailing-edge hook: fires *after* state.filteredRows has settled so the
+    // public `filterChange` event payload carries an up-to-date count. Skip
+    // when a newer filter cycle has already started — the latest cycle will
+    // emit its own event and we don't want a stale snapshot to overwrite it.
+    if (seq !== this.filterSequence) return;
+    this.options.onFilterCycleComplete?.(filters);
   }
 
   /** Run async tasks with a ceiling on simultaneous in-flight count.

@@ -12,6 +12,7 @@
 - [AnnotationPopover](classes/AnnotationPopover.md)
 - [AnnotationStore](classes/AnnotationStore.md)
 - [AutoSave](classes/AutoSave.md)
+- [BaseStatsPanel](classes/BaseStatsPanel.md)
 - [BaseVisualization](classes/BaseVisualization.md)
 - [CellRenderer](classes/CellRenderer.md)
 - [CodeMirrorExpressionEditor](classes/CodeMirrorExpressionEditor.md)
@@ -38,6 +39,7 @@
 - [KeyboardNavigator](classes/KeyboardNavigator.md)
 - [SQLFilterModal](classes/SQLFilterModal.md)
 - [StateActions](classes/StateActions.md)
+- [StatsPanelCoordinator](classes/StatsPanelCoordinator.md)
 - [TableBody](classes/TableBody.md)
 - [TableContainer](classes/TableContainer.md)
 - [TimeHistogram](classes/TimeHistogram.md)
@@ -53,6 +55,7 @@
 - [AnnotationStoreOptions](interfaces/AnnotationStoreOptions.md)
 - [AutoSaveOptions](interfaces/AutoSaveOptions.md)
 - [BaseColumnStats](interfaces/BaseColumnStats.md)
+- [BrushCapable](interfaces/BrushCapable.md)
 - [CategoricalColumnStats](interfaces/CategoricalColumnStats.md)
 - [CategorySegment](interfaces/CategorySegment.md)
 - [CellOptions](interfaces/CellOptions.md)
@@ -61,10 +64,10 @@
 - [ColumnReorderOptions](interfaces/ColumnReorderOptions.md)
 - [DateHistogramBin](interfaces/DateHistogramBin.md)
 - [DateHistogramData](interfaces/DateHistogramData.md)
-- [DateWrapper](interfaces/DateWrapper.md)
 - [DerivedColumnEditPanelOptions](interfaces/DerivedColumnEditPanelOptions.md)
 - [DerivedColumnInfo](interfaces/DerivedColumnInfo.md)
 - [DerivedColumnModalOptions](interfaces/DerivedColumnModalOptions.md)
+- [DuckDBFunctionInfo](interfaces/DuckDBFunctionInfo.md)
 - [ExportContext](interfaces/ExportContext.md)
 - [ExportDialogOptions](interfaces/ExportDialogOptions.md)
 - [ExportOptions](interfaces/ExportOptions.md)
@@ -83,13 +86,18 @@
 - [JSONExportOptions](interfaces/JSONExportOptions.md)
 - [KeyboardNavigatorOptions](interfaces/KeyboardNavigatorOptions.md)
 - [LoadDataOptions](interfaces/LoadDataOptions.md)
+- [LoadJSONOptions](interfaces/LoadJSONOptions.md)
 - [NumericColumnStats](interfaces/NumericColumnStats.md)
 - [ParquetExportOptions](interfaces/ParquetExportOptions.md)
 - [PooledVectorColumnRef](interfaces/PooledVectorColumnRef.md)
+- [SelectionCapable](interfaces/SelectionCapable.md)
 - [SerializedStateSnapshot](interfaces/SerializedStateSnapshot.md)
 - [SessionSnapshot](interfaces/SessionSnapshot.md)
+- [SqlExtensionOptions](interfaces/SqlExtensionOptions.md)
 - [SQLFilterModalOptions](interfaces/SQLFilterModalOptions.md)
 - [StateSnapshot](interfaces/StateSnapshot.md)
+- [StatsPanelErrorContext](interfaces/StatsPanelErrorContext.md)
+- [StatsPanelOptions](interfaces/StatsPanelOptions.md)
 - [TableBodyOptions](interfaces/TableBodyOptions.md)
 - [TableContainerOptions](interfaces/TableContainerOptions.md)
 - [TableState](interfaces/TableState.md)
@@ -106,26 +114,34 @@
 ## Type Aliases
 
 - [ColumnStatsData](type-aliases/ColumnStatsData.md)
+- [DuckDBFunctionCategory](type-aliases/DuckDBFunctionCategory.md)
 - [InteractiveVisualization](type-aliases/InteractiveVisualization.md)
+- [ListenerErrorHandler](type-aliases/ListenerErrorHandler.md)
 - [ReorderCallback](type-aliases/ReorderCallback.md)
 - [ResizeCallback](type-aliases/ResizeCallback.md)
 - [RowData](type-aliases/RowData.md)
 - [ScrollAlign](type-aliases/ScrollAlign.md)
 - [ScrollCallback](type-aliases/ScrollCallback.md)
 - [SerializedDerivedColumnDef](type-aliases/SerializedDerivedColumnDef.md)
+- [StatsPanelErrorPhase](type-aliases/StatsPanelErrorPhase.md)
 - [TimeInterval](type-aliases/TimeInterval.md)
 
 ## Variables
 
+- [dataTableHighlighting](variables/dataTableHighlighting.md)
+- [dataTableTheme](variables/dataTableTheme.md)
+- [DUCKDB\_FUNCTION\_DETAILS](variables/DUCKDB_FUNCTION_DETAILS.md)
 - [DUCKDB\_FUNCTIONS](variables/DUCKDB_FUNCTIONS.md)
 - [SNAPSHOT\_VERSION](variables/SNAPSHOT_VERSION.md)
 
 ## Functions
 
 - [applySnapshot](functions/applySnapshot.md)
+- [buildCompletionContext](functions/buildCompletionContext.md)
 - [captureSnapshot](functions/captureSnapshot.md)
 - [copyRowsToClipboard](functions/copyRowsToClipboard.md)
 - [copyToClipboard](functions/copyToClipboard.md)
+- [createSqlExtensions](functions/createSqlExtensions.md)
 - [createTableState](functions/createTableState.md)
 - [derivedColumnsEqual](functions/derivedColumnsEqual.md)
 - [exportFromState](functions/exportFromState.md)
@@ -150,3 +166,9 @@
 - [needsVisualization](functions/needsVisualization.md)
 - [resetTableState](functions/resetTableState.md)
 - [statsKindForDataType](functions/statsKindForDataType.md)
+
+## References
+
+### DateWrapper
+
+Re-exports [DateWrapper](../index/interfaces/DateWrapper.md)

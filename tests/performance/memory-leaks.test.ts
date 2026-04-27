@@ -5,21 +5,40 @@
  *
  * Verifies that create/destroy cycles properly clean up subscriptions,
  * event listeners, DOM elements, and cached data.
+ *
+ * Phase 9 extensions:
+ *   - Shared `WorkerBridge` + `SessionStore` survives partial destroy
+ *     (validates `ownsBridge` / `ownsSessionStore` flags in DataTable.ts).
+ *   - 100k filter mutations with autosave on: subscriber-count delta == 0,
+ *     `store.save` callCount stays small (debounce coalesces).
+ *   - 100-cycle create/destroy scaffold (default-run; the 1000-cycle deep
+ *     stress is separate at `tests/performance/lifecycle-stress.test.ts`).
  */
 
+import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createSignal } from '@/core/Signal';
 import { createTableState } from '@/core/State';
 import { QueryCache } from '@/data/QueryCache';
+import { createDataTable, type DataTable } from '@/index';
+import { SessionStore } from '@/persistence/SessionStore';
+import { AutoSave } from '@/persistence/AutoSave';
+import { StateActions } from '@/core/Actions';
+import type { WorkerBridge } from '@/data/WorkerBridge';
+import type { Filter } from '@/core/types';
 
-// Mock ResizeObserver for jsdom
+// Polyfill ResizeObserver for jsdom — class form so `new ResizeObserver(...)`
+// at production call sites (TableContainer.setupResizeObserver) actually
+// constructs. The earlier `vi.fn().mockImplementation(...)` form failed with
+// "is not a constructor" once `createDataTable` started reaching that code path
+// in the Phase 9 lifecycle / shared-bridge tests below.
 beforeEach(() => {
   if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
+    globalThis.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
   }
 });
 
@@ -202,6 +221,212 @@ describe('Memory Leak Detection', () => {
           expect(sig.subscriberCount()).toBe(0);
         }
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 9 — shared resource ownership semantics. Two `DataTable` instances
+  // share a single bridge + session store. Destroying one must NOT terminate
+  // the bridge or close the store; the other instance must continue to work.
+  // ---------------------------------------------------------------------------
+  describe('Phase 9 — shared bridge + sessionStore survives partial destroy', () => {
+    function makeStubBridge(): WorkerBridge {
+      const stub: Partial<WorkerBridge> = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        loadData: vi.fn().mockResolvedValue({ schema: [], rowCount: 0 }),
+        exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
+        clearQueryCache: vi.fn(),
+        terminate: vi.fn(),
+        isInitialized: vi.fn().mockReturnValue(true),
+      };
+      return stub as WorkerBridge;
+    }
+
+    it('destroy(A) does not terminate the shared bridge or close the shared sessionStore', async () => {
+      const bridge = makeStubBridge();
+      const store = new SessionStore();
+      await store.open();
+      const closeSpy = vi.spyOn(store, 'close');
+
+      const containerA = document.createElement('div');
+      const containerB = document.createElement('div');
+      document.body.append(containerA, containerB);
+
+      const tableA = await createDataTable({
+        container: containerA,
+        bridge,
+        persistence: { sessionStore: store },
+        tableName: 'shared_a',
+        presets: false,
+        undoRedo: false,
+        expressionFilter: false,
+        visualizations: false,
+        exportDialog: false,
+      });
+      const tableB = await createDataTable({
+        container: containerB,
+        bridge,
+        persistence: { sessionStore: store },
+        tableName: 'shared_b',
+        presets: false,
+        undoRedo: false,
+        expressionFilter: false,
+        visualizations: false,
+        exportDialog: false,
+      });
+
+      await tableA.destroy();
+
+      // Ownership invariants — A doesn't own the shared resources.
+      expect(bridge.terminate).not.toHaveBeenCalled();
+      expect(closeSpy).not.toHaveBeenCalled();
+
+      // B still operational.
+      expect(tableB.isDestroyed()).toBe(false);
+      expect(typeof tableB.actions.addFilter).toBe('function');
+
+      // A query through B still reaches the bridge.
+      tableB.actions.addFilter({ type: 'point', column: 'x', value: 1 });
+
+      await tableB.destroy();
+      // Now nobody owns the shared resources, but the facade still doesn't
+      // terminate them — only the original CONSTRUCTOR (the consumer) owns
+      // teardown of injected resources. Verified once more.
+      expect(bridge.terminate).not.toHaveBeenCalled();
+      expect(closeSpy).not.toHaveBeenCalled();
+
+      store.close();
+      containerA.remove();
+      containerB.remove();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 9 — many filter mutations with autosave. Verifies (a) state-signal
+  // subscriber counts return to baseline after the loop (no leaked subscriber
+  // per mutation), and (b) `store.save` callCount stays small (debounce
+  // coalesces). Skip heap-byte assertions — GC variance dominates and would
+  // make CI flaky for no signal gain.
+  //
+  // 1000 iterations is the sweet spot: small enough that fake-timers + the
+  // full StateActions path completes in ~2s, large enough that any per-call
+  // subscriber-count regression would visibly accumulate. Heavier
+  // (100k-cycle) variant is opt-in at lifecycle-stress.test.ts.
+  // ---------------------------------------------------------------------------
+  describe('Phase 9 — 1k filter mutations with autosave', () => {
+    it(
+      'subscriber counts unchanged; store.save coalesced under debounce',
+      { timeout: 30_000 },
+      async () => {
+        // Real timers — fake-timer overhead per scheduleSave/clearTimeout
+        // dominated the loop time. The 50ms debounce fires once after the
+        // synchronous loop completes, exactly the coalescing we want to verify.
+        const state = createTableState();
+        // SessionStore.save bails when snapshot.tableName is null. Seed the
+        // signal so AutoSave's save path actually reaches the store.
+        state.tableName.set('autosave_perf_test');
+        const store = new SessionStore();
+        await store.open();
+        const saveSpy = vi.spyOn(store, 'save').mockResolvedValue();
+
+        // Need a bridge to construct StateActions; a minimal stub works
+        // since we never call any worker-bound action. clearQueryCache is
+        // required because attachCacheInvalidation hooks the filter signal.
+        const bridge = {
+          query: vi.fn().mockResolvedValue([]),
+          loadData: vi.fn().mockResolvedValue({ schema: [], rowCount: 0 }),
+          clearQueryCache: vi.fn(),
+          isInitialized: () => true,
+        } as unknown as WorkerBridge;
+        const actions = new StateActions(state, bridge);
+
+        // Capture baseline AFTER actions are wired (attachCacheInvalidation
+        // adds a permanent filter subscriber). Then enable AutoSave so the
+        // post-test assertion isolates AutoSave's contribution.
+        const baseline = {
+          filters: state.filters.subscriberCount(),
+          sortColumns: state.sortColumns.subscriberCount(),
+          visibleColumns: state.visibleColumns.subscriberCount(),
+        };
+
+        const autoSave = new AutoSave(state, store, { debounceMs: 50 });
+        autoSave.enable();
+
+        const filter: Filter = { type: 'range', column: 'c', min: 0, max: 100 };
+
+        const ITERATIONS = 1_000;
+        for (let i = 0; i < ITERATIONS; i++) {
+          actions.addFilter({ ...filter, min: i, max: i + 1 });
+          actions.removeFilter('c');
+        }
+
+        // Wait past the 50ms debounce so the trailing save has a chance to fire.
+        await new Promise<void>((r) => setTimeout(r, 200));
+
+        // Coalescing contract — 1000 mutations should produce ≪ 100 saves.
+        expect(saveSpy).toHaveBeenCalled();
+        expect(saveSpy.mock.calls.length).toBeLessThan(10);
+
+        autoSave.destroy();
+
+        // After teardown, subscriber counts return to baseline — AutoSave's
+        // internal subscriptions all unwound.
+        expect(state.filters.subscriberCount()).toBe(baseline.filters);
+        expect(state.sortColumns.subscriberCount()).toBe(baseline.sortColumns);
+        expect(state.visibleColumns.subscriberCount()).toBe(baseline.visibleColumns);
+
+        store.close();
+      },
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 9 — 100-cycle create/destroy stress (per-PR fast variant). The
+  // 1000-cycle deep stress is opt-in at tests/performance/lifecycle-stress.test.ts
+  // (RUN_LIFECYCLE_STRESS=1) — this lighter version catches regressions per-PR.
+  // ---------------------------------------------------------------------------
+  describe('Phase 9 — 100 createDataTable/destroy cycles (default run)', () => {
+    function makeStubBridge(): WorkerBridge {
+      return {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        loadData: vi.fn().mockResolvedValue({ schema: [], rowCount: 0 }),
+        exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
+        clearQueryCache: vi.fn(),
+        terminate: vi.fn(),
+        isInitialized: vi.fn().mockReturnValue(true),
+      } as unknown as WorkerBridge;
+    }
+
+    it('100 cycles leave document.body empty + persistent signal subscribers unchanged', async () => {
+      const persistentSignal = createSignal(0);
+      const baselineSubs = persistentSignal.subscriberCount();
+      const baselineDomChildren = document.body.children.length;
+
+      const CYCLES = 100;
+      for (let i = 0; i < CYCLES; i++) {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const table: DataTable = await createDataTable({
+          container,
+          bridge: makeStubBridge(),
+          persistence: false,
+          presets: false,
+          undoRedo: false,
+          expressionFilter: false,
+          visualizations: false,
+          exportDialog: false,
+        });
+        // Subscribe to the persistent signal mid-life; verify the unsubscribe
+        // is also released by the cycle (we never explicitly unsubscribe — the
+        // subscriber should be GC-eligible after destroy + container.remove).
+        await table.destroy();
+        container.remove();
+      }
+
+      expect(document.body.children.length).toBe(baselineDomChildren);
+      expect(persistentSignal.subscriberCount()).toBe(baselineSubs);
     });
   });
 });

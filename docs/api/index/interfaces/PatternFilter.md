@@ -6,7 +6,13 @@
 
 # Interface: PatternFilter
 
-Defined in: [filters/FilterTypes.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L48)
+Defined in: [filters/FilterTypes.ts:76](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L76)
+
+String-pattern filter on a categorical column. The [mode](#mode) value picks
+the comparison: `contains` / `starts` / `ends` use case-insensitive
+substring matching; `regex` runs the pattern through DuckDB's RE2 engine
+(linear-time, ReDoS-resistant). The `pattern` field is a literal user
+string; SQL escaping is handled internally.
 
 ## Properties
 
@@ -14,7 +20,7 @@ Defined in: [filters/FilterTypes.ts:48](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L50)
+Defined in: [filters/FilterTypes.ts:78](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L78)
 
 ***
 
@@ -22,7 +28,7 @@ Defined in: [filters/FilterTypes.ts:50](https://github.com/jeyabbalas/data-table
 
 > **mode**: `"contains"` \| `"regex"` \| `"starts"` \| `"ends"`
 
-Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L52)
+Defined in: [filters/FilterTypes.ts:80](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L80)
 
 ***
 
@@ -30,7 +36,7 @@ Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table
 
 > **pattern**: `string`
 
-Defined in: [filters/FilterTypes.ts:51](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L51)
+Defined in: [filters/FilterTypes.ts:79](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L79)
 
 ***
 
@@ -38,4 +44,4 @@ Defined in: [filters/FilterTypes.ts:51](https://github.com/jeyabbalas/data-table
 
 > **type**: `"pattern"`
 
-Defined in: [filters/FilterTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L49)
+Defined in: [filters/FilterTypes.ts:77](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L77)

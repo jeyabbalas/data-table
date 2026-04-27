@@ -6,7 +6,7 @@
 
 # Interface: FilterPanelOptions
 
-Defined in: [filters/FilterPanel.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L43)
+Defined in: [filters/FilterPanel.ts:43](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPanel.ts#L43)
 
 Options for FilterPanel
 
@@ -16,7 +16,7 @@ Options for FilterPanel
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L45)
+Defined in: [filters/FilterPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPanel.ts#L45)
 
 CSS class prefix (default: 'dt')
 
@@ -26,11 +26,12 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/FilterPanel.ts:51](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L51)
+Defined in: [filters/FilterPanel.ts:52](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPanel.ts#L52)
 
 Element to mirror `data-dt-color-scheme` from (typically the owning
 table's `.dt-root`). Keeps the panel's theming in sync when the table's
-color scheme changes at runtime via DataTable.setColorScheme.
+color scheme changes at runtime (see `DataTable.setColorScheme` on the
+facade).
 
 ***
 
@@ -38,6 +39,6 @@ color scheme changes at runtime via DataTable.setColorScheme.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPanel.ts:53](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPanel.ts#L53)
+Defined in: [filters/FilterPanel.ts:54](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPanel.ts#L54)
 
 Resolved i18n strings. Defaults to English.

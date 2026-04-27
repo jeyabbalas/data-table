@@ -10,15 +10,18 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: ['node_modules/', 'dist/', '**/*.config.*', 'tests/'],
-      // Initial thresholds set at Phase 0 baseline minus ~1 percentage point
-      // (statements 72.65, branches 59.53, functions 77.71, lines 74.45).
-      // Phase 9 tightens these once subsystem-specific gaps in worker loaders,
-      // valuecounts, and histogram are closed.
+      // Phase 9 tightening — actuals minus ~1 percentage point.
+      // Phase 8 actuals: statements 77.11, branches 64.14, functions 82.33,
+      // lines 78.96. Each subsystem phase added 1.5–2 pp; reaching the
+      // review-plan §4 long-term targets (90/85/90/90) needs roughly 5 more
+      // focused subsystem-coverage phases — branches dominate the remaining
+      // gap (CSV/format/error branches in src/data/ + worker glue). Tracked
+      // as a post-1.0 follow-up.
       thresholds: {
-        statements: 71,
-        branches: 58,
-        functions: 76,
-        lines: 73,
+        statements: 76,
+        branches: 63,
+        functions: 81,
+        lines: 77,
       },
     },
   },

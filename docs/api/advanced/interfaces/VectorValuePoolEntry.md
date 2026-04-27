@@ -6,9 +6,22 @@
 
 # Interface: VectorValuePoolEntry
 
-Defined in: [persistence/types.ts:80](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L80)
+Defined in: [persistence/types.ts:116](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L116)
 
 Entry in the vector value pool.
+
+**Dedup is reference-identity, not content-hash.** `snapshotFromState`
+walks the undo/redo stacks once and groups entries by JS array reference
+(`Map<ArrayLike, key>`); two entries that hold the same array literal
+but different references each produce their own pool entry. This
+intentionally trades a small storage redundancy on the rare
+"structurally-identical-but-distinct" case for O(n) snapshot
+serialisation — `captureSnapshot` (`src/core/UndoManager.ts`) reuses the
+derived-column array ref across stack entries that didn't mutate the
+vector, so reference identity covers the common case.
+
+Consumers building their own undo stacks via the `/advanced` entry get
+dedup only when they share array references explicitly.
 
 ## Properties
 
@@ -16,7 +29,7 @@ Entry in the vector value pool.
 
 > **values**: `unknown`[]
 
-Defined in: [persistence/types.ts:82](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L82)
+Defined in: [persistence/types.ts:118](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L118)
 
 ***
 
@@ -24,4 +37,4 @@ Defined in: [persistence/types.ts:82](https://github.com/jeyabbalas/data-table/b
 
 > **vectorType**: `string`
 
-Defined in: [persistence/types.ts:81](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L81)
+Defined in: [persistence/types.ts:117](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L117)

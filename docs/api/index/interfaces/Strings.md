@@ -6,7 +6,14 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L25)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L33)
+
+Typed shape of every user-facing string the library renders. Pass a
+`messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
+localize button labels, placeholder text, ARIA announcements, and stats
+templates; missing leaves fall back to the English values in
+[defaultStrings](../variables/defaultStrings.md). Function-typed leaves take runtime arguments
+directly so locale grammar stays inside the consumer's translation.
 
 ## Properties
 
@@ -14,7 +21,7 @@ Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/c
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:323](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L323)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -134,6 +141,22 @@ Header hide button.
 
 > **hideColumnTitle**: `string`
 
+#### loadingRowLabel
+
+> **loadingRowLabel**: (`rowNumber`) => `string`
+
+Placeholder text shown for not-yet-fetched rows during fast scroll.
+
+##### Parameters
+
+###### rowNumber
+
+`number`
+
+##### Returns
+
+`string`
+
 #### multiFilteredSuffix
 
 > **multiFilteredSuffix**: (`count`) => `string`
@@ -183,6 +206,12 @@ Header pin button.
 #### pinColumnTitle
 
 > **pinColumnTitle**: `string`
+
+#### resizeHandleLabel
+
+> **resizeHandleLabel**: `string`
+
+Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 #### showColumn
 
@@ -300,7 +329,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:29](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L29)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -364,11 +393,17 @@ Defined in: [core/Strings.ts:29](https://github.com/jeyabbalas/data-table/blob/c
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:266](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L266)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
 > **addButtonLabel**: `string`
+
+#### availableColumnsLabel
+
+> **availableColumnsLabel**: `string`
+
+Prefix shown before the comma-separated column-hint list (DefaultExpressionEditor).
 
 #### closeEditLabel
 
@@ -433,6 +468,12 @@ Panel header with column name — "Edit: my_col".
 #### expressionModeLabel
 
 > **expressionModeLabel**: `string`
+
+#### expressionPlaceholder
+
+> **expressionPlaceholder**: `string`
+
+Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor).
 
 #### expressionRequired
 
@@ -746,7 +787,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:398](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L398)
+Defined in: [core/Strings.ts:417](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L417)
 
 #### stylesheetMissing
 
@@ -758,7 +799,7 @@ Defined in: [core/Strings.ts:398](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L215)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -848,6 +889,12 @@ Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/
 
 > **parquet**: `string`
 
+#### includeSystemColumnsLabel
+
+> **includeSystemColumnsLabel**: `string`
+
+Label on the "include system columns (e.g. __rowid__)" checkbox.
+
 #### json
 
 > **json**: `object`
@@ -902,7 +949,7 @@ Defined in: [core/Strings.ts:215](https://github.com/jeyabbalas/data-table/blob/
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L49)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1542,7 +1589,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:193](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L193)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1652,7 +1699,7 @@ Defined in: [core/Strings.ts:193](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:377](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L377)
+Defined in: [core/Strings.ts:396](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L396)
 
 #### allNull
 

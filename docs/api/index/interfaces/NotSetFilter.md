@@ -6,7 +6,9 @@
 
 # Interface: NotSetFilter
 
-Defined in: [filters/FilterTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L35)
+Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L52)
+
+Set-exclusion filter (`column NOT IN (values)`). Mirror of [SetFilter](SetFilter.md).
 
 ## Properties
 
@@ -14,7 +16,7 @@ Defined in: [filters/FilterTypes.ts:35](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:37](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L37)
+Defined in: [filters/FilterTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L54)
 
 ***
 
@@ -22,7 +24,7 @@ Defined in: [filters/FilterTypes.ts:37](https://github.com/jeyabbalas/data-table
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:40](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L40)
+Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L57)
 
 When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`).
 
@@ -32,7 +34,7 @@ When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`).
 
 > **type**: `"not-set"`
 
-Defined in: [filters/FilterTypes.ts:36](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L36)
+Defined in: [filters/FilterTypes.ts:53](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L53)
 
 ***
 
@@ -40,4 +42,4 @@ Defined in: [filters/FilterTypes.ts:36](https://github.com/jeyabbalas/data-table
 
 > **values**: `unknown`[]
 
-Defined in: [filters/FilterTypes.ts:38](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L38)
+Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L55)

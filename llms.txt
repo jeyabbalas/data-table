@@ -12,7 +12,8 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 ## Reference
 
 - [docs/api-reference.md](./docs/api-reference.md): Every public export, option, event, action, error code, filter shape, derived-column type.
-- [docs/troubleshooting.md](./docs/troubleshooting.md): 34 error codes and 19 common-issue FAQs with fix snippets.
+- [docs/troubleshooting.md](./docs/troubleshooting.md): Error and warning code reference plus common-issue FAQs with fix snippets.
+- [docs/api/](./docs/api/): TypeDoc-generated API reference (markdown). Regenerated via `npm run docs:api`; do not hand-edit.
 - [docs/performance.md](./docs/performance.md): Architectural limits, tuning guidance, self-benchmarking methodology.
 
 ## Guides (task-oriented walkthroughs)
@@ -63,4 +64,5 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 ## Optional
 
 - [CHANGELOG.md](./CHANGELOG.md): Release notes in [Keep a Changelog](https://keepachangelog.com) format.
+- [docs/migration-guides/](./docs/migration-guides/): Per-release migration entries for every behavior or type change consumers need to action.
 - [LICENSE](./LICENSE): MIT.

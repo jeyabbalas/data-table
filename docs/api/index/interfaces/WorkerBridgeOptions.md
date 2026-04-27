@@ -6,7 +6,7 @@
 
 # Interface: WorkerBridgeOptions
 
-Defined in: [data/WorkerBridge.ts:41](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L41)
+Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L51)
 
 Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
@@ -14,9 +14,9 @@ Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
 ### cache?
 
-> `optional` **cache?**: `Partial`\<`QueryCacheOptions`\>
+> `optional` **cache?**: `Partial`\<[`QueryCacheOptions`](QueryCacheOptions.md)\>
 
-Defined in: [data/WorkerBridge.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L43)
+Defined in: [data/WorkerBridge.ts:53](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L53)
 
 Query cache configuration (LRU size, TTL).
 
@@ -26,11 +26,17 @@ Query cache configuration (LRU size, TTL).
 
 > `optional` **duckdbBundles?**: `DuckDBBundles`
 
-Defined in: [data/WorkerBridge.ts:68](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L68)
+Defined in: [data/WorkerBridge.ts:94](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L94)
 
 DuckDB WASM bundles override for offline / self-hosted deployments.
 Forwarded to the worker on init; when omitted the worker falls back
 to `getJsDelivrBundles()`.
+
+**Trust boundary.** The bundle URLs are passed verbatim to
+`@duckdb/duckdb-wasm`'s `selectBundle`, which `fetch`-es them and
+instantiates WASM. Treat as developer-controlled — never derived from
+end-user input. See `docs/integrations/csp-and-offline.md` for the
+recommended self-hosting pattern.
 
 ***
 
@@ -38,7 +44,7 @@ to `getJsDelivrBundles()`.
 
 > `optional` **initializeTimeoutMs?**: `number`
 
-Defined in: [data/WorkerBridge.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L49)
+Defined in: [data/WorkerBridge.ts:59](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L59)
 
 Maximum time (ms) to wait for the worker to signal ready and for
 DuckDB to initialize. Rejects `initialize()` with a descriptive
@@ -50,12 +56,17 @@ error if exceeded. Default: 30000.
 
 > `optional` **workerFactory?**: () => `Worker`
 
-Defined in: [data/WorkerBridge.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L56)
+Defined in: [data/WorkerBridge.ts:71](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L71)
 
 Custom worker factory. Takes precedence over [workerUrl](#workerurl) and the
 built-in default. Useful for strict-CSP / bundler-specific deployments
 where the default `new Worker(new URL(...), { type: 'module' })` cannot
 be used. The caller is responsible for passing `{ type: 'module' }`.
+
+**Trust boundary.** The returned `Worker` runs JavaScript with full
+access to the calling page's origin. Treat this option as
+developer-controlled — never invoke the factory with values derived
+from end-user input.
 
 #### Returns
 
@@ -67,8 +78,13 @@ be used. The caller is responsible for passing `{ type: 'module' }`.
 
 > `optional` **workerUrl?**: `string` \| `URL`
 
-Defined in: [data/WorkerBridge.ts:62](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/WorkerBridge.ts#L62)
+Defined in: [data/WorkerBridge.ts:82](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/WorkerBridge.ts#L82)
 
 Custom URL/path for the worker script. Instantiated via
 `new Worker(workerUrl, { type: 'module' })`. Ignored if
 [workerFactory](#workerfactory) is set.
+
+**Trust boundary.** The library does NOT validate the scheme, origin,
+or content-type of `workerUrl`. Passing user-derived input here lets
+an attacker run arbitrary JavaScript in your origin. Pin to a static
+same-origin URL (or one served with appropriate CORS headers).

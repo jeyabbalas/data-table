@@ -6,7 +6,10 @@
 
 # Interface: NullFilter
 
-Defined in: [filters/FilterTypes.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L43)
+Defined in: [filters/FilterTypes.ts:64](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L64)
+
+NULL / NOT-NULL predicate filter — `column IS NULL` or `column IS NOT NULL`
+depending on the discriminator value of `type`.
 
 ## Properties
 
@@ -14,7 +17,7 @@ Defined in: [filters/FilterTypes.ts:43](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:45](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L45)
+Defined in: [filters/FilterTypes.ts:66](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L66)
 
 ***
 
@@ -22,4 +25,4 @@ Defined in: [filters/FilterTypes.ts:45](https://github.com/jeyabbalas/data-table
 
 > **type**: `"null"` \| `"not-null"`
 
-Defined in: [filters/FilterTypes.ts:44](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L44)
+Defined in: [filters/FilterTypes.ts:65](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L65)

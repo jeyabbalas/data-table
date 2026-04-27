@@ -6,12 +6,19 @@
 
 # ~~Class: VisualizationFactory~~
 
-Defined in: [visualizations/VisualizationFactory.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L48)
+Defined in: [visualizations/VisualizationFactory.ts:55](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L55)
+
+Legacy static wrapper that forwards every method to the shared
+`defaultVisualizationRegistry` (exported from the root entry). Kept
+reachable on `/advanced` only for source-compatibility while consumers
+migrate.
 
 ## Deprecated
 
-Static wrapper that forwards to `defaultVisualizationRegistry`.
-Prefer constructing a `VisualizationRegistry` instance per table.
+Construct a `VisualizationRegistry` per table and pass it via
+`createDataTable({ visualizationRegistry })`, or register on
+`defaultVisualizationRegistry` directly. The static wrapper will be
+removed in a future minor.
 
 ## Constructors
 
@@ -29,7 +36,7 @@ Prefer constructing a `VisualizationRegistry` instance per table.
 
 > `static` **create**(`container`, `column`, `options`): [`BaseVisualization`](BaseVisualization.md) \| `null`
 
-Defined in: [visualizations/VisualizationFactory.ts:62](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L62)
+Defined in: [visualizations/VisualizationFactory.ts:69](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L69)
 
 #### Parameters
 
@@ -59,7 +66,7 @@ Use `VisualizationRegistry#create` on an instance.
 
 > `static` **getRegisteredTypes**(): `string`[]
 
-Defined in: [visualizations/VisualizationFactory.ts:78](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L78)
+Defined in: [visualizations/VisualizationFactory.ts:85](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L85)
 
 #### Returns
 
@@ -75,7 +82,7 @@ Use `VisualizationRegistry#getRegisteredTypes` on an instance.
 
 > `static` **isApplicable**(`column`): `boolean`
 
-Defined in: [visualizations/VisualizationFactory.ts:72](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L72)
+Defined in: [visualizations/VisualizationFactory.ts:79](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L79)
 
 #### Parameters
 
@@ -97,7 +104,7 @@ Use `VisualizationRegistry#isApplicable` on an instance.
 
 > `static` **register**(`registration`): `void`
 
-Defined in: [visualizations/VisualizationFactory.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L50)
+Defined in: [visualizations/VisualizationFactory.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L57)
 
 #### Parameters
 
@@ -119,7 +126,7 @@ Use `VisualizationRegistry#register` on an instance.
 
 > `static` **resetToDefaults**(): `void`
 
-Defined in: [visualizations/VisualizationFactory.ts:84](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L84)
+Defined in: [visualizations/VisualizationFactory.ts:91](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L91)
 
 #### Returns
 
@@ -135,7 +142,7 @@ Use `VisualizationRegistry#resetToDefaults` on an instance.
 
 > `static` **unregister**(`name`): `boolean`
 
-Defined in: [visualizations/VisualizationFactory.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/VisualizationFactory.ts#L56)
+Defined in: [visualizations/VisualizationFactory.ts:63](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationFactory.ts#L63)
 
 #### Parameters
 

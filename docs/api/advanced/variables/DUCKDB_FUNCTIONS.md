@@ -6,9 +6,11 @@
 
 # Variable: DUCKDB\_FUNCTIONS
 
-> `const` **DUCKDB\_FUNCTIONS**: `string`[]
+> `const` **DUCKDB\_FUNCTIONS**: readonly `string`[]
 
-Defined in: [sql-editor/duckdbFunctions.ts:5](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/sql-editor/duckdbFunctions.ts#L5)
+Defined in: [sql-editor/duckdbFunctions.ts:18](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/sql-editor/duckdbFunctions.ts#L18)
 
-Curated list of DuckDB SQL functions for autocomplete.
-Organized by category. Avoids requiring a live DuckDB connection.
+Names-only view of the curated DuckDB function list. Derived at module
+load from [DUCKDB\_FUNCTION\_DETAILS](DUCKDB_FUNCTION_DETAILS.md) so the two cannot drift. Pass
+to [createSqlExtensions](../functions/createSqlExtensions.md) via `options.functions` when only the
+autocomplete name list is needed (no category chip / description panel).

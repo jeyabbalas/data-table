@@ -39,10 +39,13 @@ export type TableErrorSource =
  *
  * **Payload immutability.** Every payload field carrying a mutable
  * collection (`Filter[]`, `Set<number>`, `string[]`, `DerivedColumnDef[]`,
- * `ColumnSchema[]`, …) is a fresh shallow copy at emit time. Handlers
- * may destructure and mutate those collections without corrupting the
- * library's internal state. Item identity inside the collection is not
- * deep-cloned — treat the items themselves as read-only.
+ * `ColumnSchema[]`, …) is a fresh shallow copy at emit time AND is typed
+ * `readonly` (Phase 9 type-tightening) so handler-side mutation fails to
+ * compile under `--strict`. The runtime clone is the load-bearing safety
+ * net (Phase 8); the `readonly` markers surface intent at the type
+ * level. Item identity inside the collection is not deep-cloned — treat
+ * the items themselves as read-only too. If you need a mutable copy,
+ * call `.slice()` / `new Set(...)` / `new Map(...)` at the consumer.
  */
 export type TableEvents = {
   /** Fired after `initialize()` completes and the worker is ready. */
@@ -58,7 +61,7 @@ export type TableEvents = {
   loadComplete: {
     tableName: string;
     rowCount: number;
-    schema: ColumnSchema[];
+    schema: readonly ColumnSchema[];
   };
 
   /** Fired if a load fails. The `error` is always a typed DataTableError (subclass of Error). */
@@ -108,22 +111,22 @@ export type TableEvents = {
 
   /** Fired on any change to the active filter list. */
   filterChange: {
-    filters: Filter[];
+    filters: readonly Filter[];
     filteredRowCount: number;
     totalRowCount: number;
   };
 
   /** Fired on sort changes. */
-  sortChange: { sortColumns: SortColumn[] };
+  sortChange: { sortColumns: readonly SortColumn[] };
 
   /** Fired when the selected-row set changes. */
-  selectionChange: { selectedRows: Set<number> };
+  selectionChange: { selectedRows: ReadonlySet<number> };
 
   /** Fired when visibility, order, pin state, or widths change. */
   columnChange: {
-    visibleColumns: string[];
-    pinnedColumns: string[];
-    columnOrder: string[];
+    visibleColumns: readonly string[];
+    pinnedColumns: readonly string[];
+    columnOrder: readonly string[];
   };
 
   /**
@@ -136,7 +139,7 @@ export type TableEvents = {
    *   columns may change in one step).
    */
   derivedChange: {
-    derivedColumns: DerivedColumnDef[];
+    derivedColumns: readonly DerivedColumnDef[];
     kind: 'added' | 'removed' | 'updated' | 'replaced';
     columnName?: string | undefined;
   };

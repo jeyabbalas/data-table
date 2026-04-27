@@ -6,7 +6,11 @@
 
 # Class: FilterPresetManager
 
-Defined in: [filters/FilterPresets.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L49)
+Defined in: [filters/FilterPresets.ts:61](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L61)
+
+In-memory store for named filter presets with JSON import / export. Pass
+one to [createDataTable](../functions/createDataTable.md) via `presets: { manager }` to share preset
+state across multiple tables on a page.
 
 ## Constructors
 
@@ -14,7 +18,7 @@ Defined in: [filters/FilterPresets.ts:49](https://github.com/jeyabbalas/data-tab
 
 > **new FilterPresetManager**(): `FilterPresetManager`
 
-Defined in: [filters/FilterPresets.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L52)
+Defined in: [filters/FilterPresets.ts:64](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L64)
 
 #### Returns
 
@@ -26,7 +30,7 @@ Defined in: [filters/FilterPresets.ts:52](https://github.com/jeyabbalas/data-tab
 
 > `readonly` **presets**: `Signal`\<[`FilterPreset`](../interfaces/FilterPreset.md)[]\>
 
-Defined in: [filters/FilterPresets.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L50)
+Defined in: [filters/FilterPresets.ts:62](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L62)
 
 ## Methods
 
@@ -34,7 +38,7 @@ Defined in: [filters/FilterPresets.ts:50](https://github.com/jeyabbalas/data-tab
 
 > **delete**(`id`): `void`
 
-Defined in: [filters/FilterPresets.ts:102](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L102)
+Defined in: [filters/FilterPresets.ts:126](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L126)
 
 Delete a preset by id.
 
@@ -54,7 +58,7 @@ Delete a preset by id.
 
 > **exportToJSON**(): `string`
 
-Defined in: [filters/FilterPresets.ts:136](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L136)
+Defined in: [filters/FilterPresets.ts:174](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L174)
 
 Export all presets as a JSON string.
 
@@ -68,7 +72,7 @@ Export all presets as a JSON string.
 
 > **getPresets**(): [`FilterPreset`](../interfaces/FilterPreset.md)[]
 
-Defined in: [filters/FilterPresets.ts:263](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L263)
+Defined in: [filters/FilterPresets.ts:328](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L328)
 
 Get all presets (convenience for non-reactive access).
 
@@ -82,7 +86,7 @@ Get all presets (convenience for non-reactive access).
 
 > **importFromJSON**(`json`): `object`
 
-Defined in: [filters/FilterPresets.ts:148](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L148)
+Defined in: [filters/FilterPresets.ts:186](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L186)
 
 Import presets from a JSON string. Assigns new IDs to avoid collisions.
 Returns the count of successfully imported presets and any validation errors.
@@ -111,7 +115,7 @@ Returns the count of successfully imported presets and any validation errors.
 
 > **load**(`id`, `actions`): `void`
 
-Defined in: [filters/FilterPresets.ts:91](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L91)
+Defined in: [filters/FilterPresets.ts:115](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L115)
 
 Load a preset by id: clears existing filters and applies the preset's
 filters (and optionally sort state) in a single undo step.
@@ -136,7 +140,7 @@ filters (and optionally sort state) in a single undo step.
 
 > **loadPresets**(`presets`): `void`
 
-Defined in: [filters/FilterPresets.ts:256](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L256)
+Defined in: [filters/FilterPresets.ts:321](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L321)
 
 Replace all presets (used for session restore).
 
@@ -156,9 +160,14 @@ Replace all presets (used for session restore).
 
 > **rename**(`id`, `newName`): `void`
 
-Defined in: [filters/FilterPresets.ts:109](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L109)
+Defined in: [filters/FilterPresets.ts:138](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L138)
 
 Rename a preset.
+
+Throws `ConfigurationError({ code: 'PRESET_DUPLICATE_NAME' })` when
+`newName` collides with another preset's name. Renaming a preset to its
+own current name is a no-op. Empty / whitespace-only `newName` is also a
+no-op.
 
 #### Parameters
 
@@ -180,9 +189,14 @@ Rename a preset.
 
 > **save**(`name`, `filters`, `sortColumns?`, `description?`): [`FilterPreset`](../interfaces/FilterPreset.md)
 
-Defined in: [filters/FilterPresets.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L59)
+Defined in: [filters/FilterPresets.ts:76](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L76)
 
 Save current filters as a named preset.
+
+Names are unique within a manager. Calling `save` with a name that
+already exists throws `ConfigurationError({ code: 'PRESET_DUPLICATE_NAME' })`
+— call `update(id, …)` to overwrite an existing preset, or pick a
+different name.
 
 #### Parameters
 
@@ -212,7 +226,7 @@ Save current filters as a named preset.
 
 > **update**(`id`, `filters`): `void`
 
-Defined in: [filters/FilterPresets.ts:123](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresets.ts#L123)
+Defined in: [filters/FilterPresets.ts:161](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresets.ts#L161)
 
 Update a preset's filters with the current set.
 

@@ -6,7 +6,7 @@
 
 # Interface: CategoricalColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:45](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L45)
+Defined in: [statistics/ColumnStatsTypes.ts:45](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L45)
 
 Stats for categorical columns (string, boolean, uuid).
 Line 2 varies by DataType:
@@ -24,7 +24,7 @@ Line 2 varies by DataType:
 
 > **distinctCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:47](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L47)
+Defined in: [statistics/ColumnStatsTypes.ts:47](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L47)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:47](https://github.com/jeyabbalas/da
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -46,7 +46,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"categorical"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L46)
+Defined in: [statistics/ColumnStatsTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L46)
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:46](https://github.com/jeyabbalas/da
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -68,7 +68,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -82,7 +82,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 
@@ -96,6 +96,6 @@ Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 
 > `optional` **trueCount?**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/statistics/ColumnStatsTypes.ts#L49)
+Defined in: [statistics/ColumnStatsTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/statistics/ColumnStatsTypes.ts#L49)
 
 Count of true values (boolean columns only)

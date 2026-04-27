@@ -336,7 +336,7 @@ table.actions.setColumnHeaderTooltip('fare_amount', 'Base fare in USD.'); // str
 table.actions.setColumnHeaderTooltip('total_amount', null); // clear
 ```
 
-Every text field is rendered via `.textContent` — HTML strings are not parsed. Tooltips persist into `SessionSnapshot.columnHeaderTooltips` by default; pass `persistence: false` if the embedding app already owns its column catalogue (recommended pattern in `examples/12-column-header-tooltips/`).
+Every text field is rendered via `.textContent` — HTML strings are not parsed. Tooltips persist into `SessionSnapshot.columnHeaderTooltips` by default. If the embedding app already owns its column catalogue (and so should re-apply tooltips itself on every mount), opt out by disabling session persistence on the whole table via `createDataTable({ persistence: false, ... })` — see `examples/12-column-header-tooltips/main.ts:24` for the canonical pattern. There is no per-tooltip persistence flag on `setColumnHeaderTooltip(name, content)`; the toggle is global.
 
 ### (m) Custom stats panel — replace the column-stats slot
 

@@ -132,6 +132,7 @@ const MUST_EXIST_AT_ROOT = [
   'SQLValidationError',
   'DerivedColumnError',
   'PersistenceError',
+  'AnnotationError',
   'ExportError',
   'ConfigurationError',
   'DestroyedError',

@@ -168,6 +168,12 @@ describe('Event payload immutability — A1 (Phase 8)', () => {
       table.state.visibleColumns.set(['a', 'b']);
       table.state.pinnedColumns.set(['a']);
 
+      // Drain the queueMicrotask-coalesced columnChange dispatch (Phase 9
+      // dedupe — visibleColumns + pinnedColumns subscribers now coalesce
+      // into one microtask emit) so the handler actually fires and exercises
+      // the immutability contract.
+      await Promise.resolve();
+
       expect(table.state.visibleColumns.get()).toEqual(['a', 'b']);
       expect(table.state.pinnedColumns.get()).toEqual(['a']);
       expect(table.state.columnOrder.get()).toEqual(['a', 'b']);

@@ -8,10 +8,24 @@
 
 > **formatSQLValue**(`value`): `string`
 
-Defined in: [filters/FilterSQL.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterSQL.ts#L23)
+Defined in: [filters/FilterSQL.ts:61](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterSQL.ts#L61)
 
-Format a value for use in SQL queries
-Handles proper escaping and quoting
+Format a JS value as a SQL literal for splicing into a query string.
+
+Type handling:
+ - `null` / `undefined` → `NULL`
+ - `number` (finite)   → bare numeric literal (`42`, `-3.14`)
+ - `number` (NaN/±∞)   → `NULL` (DuckDB has no NaN literal)
+ - `bigint`            → bare numeric literal (`9223372036854775807`).
+                         NOT quoted: BIGINT in DuckDB is numeric, and
+                         quoting would force an implicit cast that is
+                         fragile near the BIGINT range bounds.
+ - `boolean`           → `TRUE` / `FALSE`
+ - `Date`              → `'<ISO-8601>'`, single-quoted ISO string
+ - everything else     → `'<String(value)>'` with single quotes doubled
+
+Identifier-quoting (column/table names) lives in `quoteIdentifier`; this
+function is exclusively for value literals.
 
 ## Parameters
 

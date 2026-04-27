@@ -6,7 +6,11 @@
 
 # Class: ExportDialog
 
-Defined in: [export/ExportDialog.ts:52](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L52)
+Defined in: [export/ExportDialog.ts:92](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L92)
+
+Modal dialog for exporting data — CSV / JSON / Parquet, with row-scope
+(filtered / all / selected) and column inclusion toggles. Composed by the
+facade; reach for it directly when assembling a custom export pipeline.
 
 ## Constructors
 
@@ -14,7 +18,7 @@ Defined in: [export/ExportDialog.ts:52](https://github.com/jeyabbalas/data-table
 
 > **new ExportDialog**(`state`, `bridge`, `options?`): `ExportDialog`
 
-Defined in: [export/ExportDialog.ts:100](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L100)
+Defined in: [export/ExportDialog.ts:140](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L140)
 
 #### Parameters
 
@@ -40,7 +44,7 @@ Defined in: [export/ExportDialog.ts:100](https://github.com/jeyabbalas/data-tabl
 
 > **close**(): `void`
 
-Defined in: [export/ExportDialog.ts:512](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L512)
+Defined in: [export/ExportDialog.ts:562](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L562)
 
 #### Returns
 
@@ -52,7 +56,7 @@ Defined in: [export/ExportDialog.ts:512](https://github.com/jeyabbalas/data-tabl
 
 > **destroy**(): `void`
 
-Defined in: [export/ExportDialog.ts:751](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L751)
+Defined in: [export/ExportDialog.ts:841](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L841)
 
 #### Returns
 
@@ -64,7 +68,7 @@ Defined in: [export/ExportDialog.ts:751](https://github.com/jeyabbalas/data-tabl
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [export/ExportDialog.ts:743](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L743)
+Defined in: [export/ExportDialog.ts:833](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L833)
 
 #### Returns
 
@@ -76,7 +80,7 @@ Defined in: [export/ExportDialog.ts:743](https://github.com/jeyabbalas/data-tabl
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [export/ExportDialog.ts:747](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L747)
+Defined in: [export/ExportDialog.ts:837](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L837)
 
 #### Returns
 
@@ -88,7 +92,7 @@ Defined in: [export/ExportDialog.ts:747](https://github.com/jeyabbalas/data-tabl
 
 > **open**(): `void`
 
-Defined in: [export/ExportDialog.ts:463](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L463)
+Defined in: [export/ExportDialog.ts:513](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L513)
 
 #### Returns
 
@@ -100,11 +104,16 @@ Defined in: [export/ExportDialog.ts:463](https://github.com/jeyabbalas/data-tabl
 
 > **setSourceName**(`name`): `void`
 
-Defined in: [export/ExportDialog.ts:737](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/ExportDialog.ts#L737)
+Defined in: [export/ExportDialog.ts:826](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/ExportDialog.ts#L826)
 
 Set the source file name used as the base for exported file names.
 Pass the original filename (e.g. "sales_data.csv") — the extension
 will be stripped and replaced with the chosen export format's extension.
+
+The stem is sanitised to remove path separators, NUL/control characters,
+leading dots, and runs of `..`, then capped at 100 characters so the
+full `<stem>_export.<ext>` name comfortably fits the typical 255-char
+filesystem limit.
 
 #### Parameters
 

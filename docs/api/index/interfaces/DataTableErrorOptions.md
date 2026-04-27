@@ -6,7 +6,13 @@
 
 # Interface: DataTableErrorOptions
 
-Defined in: [core/errors.ts:30](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L30)
+Defined in: [core/errors.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L37)
+
+Constructor options for [DataTableError](../classes/DataTableError.md) and its subclasses. All
+fields are optional; `code` defaults to `'UNKNOWN'` (subclasses pass a
+type-specific default), `cause` chains via the standard `Error.cause`
+mechanism, and `details` is a free-form structured payload that consumers
+read off `err.details` after narrowing on `err.code`.
 
 ## Properties
 
@@ -14,7 +20,7 @@ Defined in: [core/errors.ts:30](https://github.com/jeyabbalas/data-table/blob/c5
 
 > `optional` **cause?**: `unknown`
 
-Defined in: [core/errors.ts:32](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L32)
+Defined in: [core/errors.ts:39](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L39)
 
 ***
 
@@ -22,7 +28,7 @@ Defined in: [core/errors.ts:32](https://github.com/jeyabbalas/data-table/blob/c5
 
 > `optional` **code?**: `string`
 
-Defined in: [core/errors.ts:31](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L31)
+Defined in: [core/errors.ts:38](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L38)
 
 ***
 
@@ -30,4 +36,4 @@ Defined in: [core/errors.ts:31](https://github.com/jeyabbalas/data-table/blob/c5
 
 > `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:33](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L33)
+Defined in: [core/errors.ts:40](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L40)

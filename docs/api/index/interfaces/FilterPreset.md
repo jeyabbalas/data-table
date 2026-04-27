@@ -6,7 +6,12 @@
 
 # Interface: FilterPreset
 
-Defined in: [filters/FilterPresetTypes.ts:12](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L12)
+Defined in: [filters/FilterPresetTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L18)
+
+One named filter preset — a saved snapshot of `state.filters` plus optional
+`state.sortColumns`. Stored by [FilterPresetManager](../classes/FilterPresetManager.md); round-trips
+through `exportToJSON` / `importFromJSON` for handoff to downstream apps
+(data-quality rule editors, dashboards).
 
 ## Properties
 
@@ -14,7 +19,7 @@ Defined in: [filters/FilterPresetTypes.ts:12](https://github.com/jeyabbalas/data
 
 > **createdAt**: `number`
 
-Defined in: [filters/FilterPresetTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L18)
+Defined in: [filters/FilterPresetTypes.ts:24](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L24)
 
 ***
 
@@ -22,7 +27,7 @@ Defined in: [filters/FilterPresetTypes.ts:18](https://github.com/jeyabbalas/data
 
 > `optional` **description?**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:15](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L15)
+Defined in: [filters/FilterPresetTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L21)
 
 ***
 
@@ -30,7 +35,7 @@ Defined in: [filters/FilterPresetTypes.ts:15](https://github.com/jeyabbalas/data
 
 > **filters**: [`SerializedFilter`](../type-aliases/SerializedFilter.md)[]
 
-Defined in: [filters/FilterPresetTypes.ts:16](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L16)
+Defined in: [filters/FilterPresetTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L22)
 
 ***
 
@@ -38,7 +43,7 @@ Defined in: [filters/FilterPresetTypes.ts:16](https://github.com/jeyabbalas/data
 
 > **id**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:13](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L13)
+Defined in: [filters/FilterPresetTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L19)
 
 ***
 
@@ -46,7 +51,7 @@ Defined in: [filters/FilterPresetTypes.ts:13](https://github.com/jeyabbalas/data
 
 > **name**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:14](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L14)
+Defined in: [filters/FilterPresetTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L20)
 
 ***
 
@@ -54,7 +59,7 @@ Defined in: [filters/FilterPresetTypes.ts:14](https://github.com/jeyabbalas/data
 
 > `optional` **sortColumns?**: [`SortColumn`](SortColumn.md)[]
 
-Defined in: [filters/FilterPresetTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L17)
+Defined in: [filters/FilterPresetTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L23)
 
 ***
 
@@ -62,4 +67,4 @@ Defined in: [filters/FilterPresetTypes.ts:17](https://github.com/jeyabbalas/data
 
 > **updatedAt**: `number`
 
-Defined in: [filters/FilterPresetTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetTypes.ts#L19)
+Defined in: [filters/FilterPresetTypes.ts:25](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetTypes.ts#L25)

@@ -6,7 +6,13 @@
 
 # Class: KeyboardNavigator
 
-Defined in: [table/KeyboardNavigator.ts:39](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L39)
+Defined in: [table/KeyboardNavigator.ts:47](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L47)
+
+WCAG-oriented keyboard navigation controller for the table grid: arrow
+keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
+(header) or select (body), and Ctrl/Cmd+C to copy the selection.
+Composed by [TableContainer](TableContainer.md); reach for it directly only when
+assembling a custom container shell.
 
 ## Constructors
 
@@ -14,7 +20,7 @@ Defined in: [table/KeyboardNavigator.ts:39](https://github.com/jeyabbalas/data-t
 
 > **new KeyboardNavigator**(`opts`): `KeyboardNavigator`
 
-Defined in: [table/KeyboardNavigator.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L50)
+Defined in: [table/KeyboardNavigator.ts:58](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L58)
 
 #### Parameters
 
@@ -32,7 +38,7 @@ Defined in: [table/KeyboardNavigator.ts:50](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [table/KeyboardNavigator.ts:62](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L62)
+Defined in: [table/KeyboardNavigator.ts:70](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L70)
 
 #### Returns
 

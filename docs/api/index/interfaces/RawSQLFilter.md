@@ -6,7 +6,10 @@
 
 # Interface: RawSQLFilter
 
-Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L55)
+Defined in: [filters/FilterTypes.ts:87](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L87)
+
+Raw-SQL `WHERE`-clause fragment filter. Spliced verbatim into the active
+query — see the trust-boundary note on [RawSQLFilter.sql](#sql).
 
 ## Properties
 
@@ -14,7 +17,7 @@ Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L57)
+Defined in: [filters/FilterTypes.ts:89](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L89)
 
 ***
 
@@ -22,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table
 
 > **id**: `string`
 
-Defined in: [filters/FilterTypes.ts:60](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L60)
+Defined in: [filters/FilterTypes.ts:107](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L107)
 
 ***
 
@@ -30,7 +33,11 @@ Defined in: [filters/FilterTypes.ts:60](https://github.com/jeyabbalas/data-table
 
 > `optional` **label?**: `string`
 
-Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L59)
+Defined in: [filters/FilterTypes.ts:106](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L106)
+
+Human-readable label for the filter chip. Widened to allow explicit
+`undefined` so call sites that pass through an optional caller-supplied
+label don't have to conditionally spread.
 
 ***
 
@@ -38,7 +45,16 @@ Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table
 
 > **sql**: `string`
 
-Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L58)
+Defined in: [filters/FilterTypes.ts:100](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L100)
+
+SQL WHERE-clause fragment (no `WHERE` keyword).
+
+**Trust boundary.** Spliced verbatim into the query when filters are
+evaluated. The library validates parseability via DuckDB
+(`actions.validateSQLFilter`) but does not constrain semantics —
+subqueries, UNIONs, and CTEs that DuckDB accepts will run with the
+library's data access. Treat as trusted developer input; sanitise
+at the host application layer if end users author the SQL.
 
 ***
 
@@ -46,4 +62,4 @@ Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table
 
 > **type**: `"raw-sql"`
 
-Defined in: [filters/FilterTypes.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterTypes.ts#L56)
+Defined in: [filters/FilterTypes.ts:88](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterTypes.ts#L88)

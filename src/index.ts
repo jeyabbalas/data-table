@@ -11,7 +11,7 @@
  */
 
 /** Library semantic-version string. Matches `package.json#version`. */
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 // ---- Facade ----
 // High-level entry point for most consumers. Wraps worker + state + actions
@@ -89,6 +89,7 @@ export type { DataFormat, LoadResult } from './data/DataLoader';
 // `serializeFilter` / `deserializeFilter` let apps round-trip filter
 // state into their own stores (URL params, cloud sync, etc.).
 export { SessionStore, serializeFilter, deserializeFilter } from './persistence/SessionStore';
+export type { SessionStoreOptions } from './persistence/SessionStore';
 export type {
   SerializedFilter,
   SerializedRangeFilter,

@@ -8,9 +8,13 @@
 
 > **filtersToWhereClause**(`filters`, `excludeColumn?`): `string`
 
-Defined in: [filters/FilterSQL.ts:173](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterSQL.ts#L173)
+Defined in: [filters/FilterSQL.ts:235](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterSQL.ts#L235)
 
-Convert an array of filters to a SQL WHERE clause
+Convert an array of filters to a SQL WHERE clause fragment.
+
+Returns the predicates `AND`-joined **without** surrounding parentheses
+— callers must wrap the result in `WHERE (...)` (or equivalent) when
+concatenating with other predicates so operator precedence stays correct.
 
 ## Parameters
 
@@ -18,17 +22,27 @@ Convert an array of filters to a SQL WHERE clause
 
 [`Filter`](../type-aliases/Filter.md)[]
 
-Array of filters to convert
+Array of filters to convert.
 
 ### excludeColumn?
 
 `string`
 
-Optional column name to exclude from the WHERE clause
-                       (used for crossfilter behavior)
+Optional column name to exclude from the WHERE
+  clause (used for crossfilter behavior). Raw-SQL filters are never
+  excluded — their synthetic column keys never match real columns.
 
 ## Returns
 
 `string`
 
-SQL WHERE clause (without the WHERE keyword), or empty string if no filters
+SQL fragment (no WHERE keyword), or empty string if no filters.
+
+## Example
+
+```ts
+const where = filtersToWhereClause(filters);
+const sql = where
+  ? `SELECT * FROM ${tableId} WHERE ${where}`
+  : `SELECT * FROM ${tableId}`;
+```

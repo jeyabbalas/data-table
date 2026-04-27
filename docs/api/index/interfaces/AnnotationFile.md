@@ -6,7 +6,7 @@
 
 # Interface: AnnotationFile
 
-Defined in: [annotations/types.ts:106](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L106)
+Defined in: [annotations/types.ts:110](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L110)
 
 JSON file shape emitted by `AnnotationStore.toJSON` and consumed by
 `loadJSON`. Unknown top-level keys survive round-trip (the index signature
@@ -24,7 +24,7 @@ Unknown top-level fields are preserved verbatim across round-trips.
 
 > **annotations**: [`Annotation`](../type-aliases/Annotation.md)[]
 
-Defined in: [annotations/types.ts:111](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L111)
+Defined in: [annotations/types.ts:115](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L115)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [annotations/types.ts:111](https://github.com/jeyabbalas/data-table/
 
 > `optional` **createdAt?**: `string`
 
-Defined in: [annotations/types.ts:109](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L109)
+Defined in: [annotations/types.ts:113](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L113)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [annotations/types.ts:109](https://github.com/jeyabbalas/data-table/
 
 > `optional` **tableName?**: `string`
 
-Defined in: [annotations/types.ts:108](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L108)
+Defined in: [annotations/types.ts:112](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L112)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [annotations/types.ts:108](https://github.com/jeyabbalas/data-table/
 
 > `optional` **updatedAt?**: `string`
 
-Defined in: [annotations/types.ts:110](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L110)
+Defined in: [annotations/types.ts:114](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L114)
 
 ***
 
@@ -56,4 +56,4 @@ Defined in: [annotations/types.ts:110](https://github.com/jeyabbalas/data-table/
 
 > **version**: `number`
 
-Defined in: [annotations/types.ts:107](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/types.ts#L107)
+Defined in: [annotations/types.ts:111](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L111)

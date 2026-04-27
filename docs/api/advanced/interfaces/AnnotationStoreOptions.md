@@ -6,9 +6,11 @@
 
 # Interface: AnnotationStoreOptions
 
-Defined in: [annotations/AnnotationStore.ts:48](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/AnnotationStore.ts#L48)
+Defined in: [annotations/AnnotationStore.ts:52](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/AnnotationStore.ts#L52)
 
-Options for constructing an [AnnotationStore](../classes/AnnotationStore.md).
+Construction options for [AnnotationStore](../classes/AnnotationStore.md). All fields are optional;
+the facade passes `tableName` as a reactive `Signal` so the store's
+`toJSON` output tracks loader-assigned table renames.
 
 ## Properties
 
@@ -16,7 +18,7 @@ Options for constructing an [AnnotationStore](../classes/AnnotationStore.md).
 
 > `optional` **idGenerator?**: () => `string`
 
-Defined in: [annotations/AnnotationStore.ts:58](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/AnnotationStore.ts#L58)
+Defined in: [annotations/AnnotationStore.ts:62](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/AnnotationStore.ts#L62)
 
 Injected id generator (for deterministic tests).
 
@@ -30,7 +32,7 @@ Injected id generator (for deterministic tests).
 
 > `optional` **now?**: () => `string`
 
-Defined in: [annotations/AnnotationStore.ts:60](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/AnnotationStore.ts#L60)
+Defined in: [annotations/AnnotationStore.ts:64](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/AnnotationStore.ts#L64)
 
 Injected ISO timestamp factory (for deterministic tests).
 
@@ -44,7 +46,7 @@ Injected ISO timestamp factory (for deterministic tests).
 
 > `optional` **tableName?**: `string` \| `Signal`\<`string` \| `null`\> \| `null`
 
-Defined in: [annotations/AnnotationStore.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/annotations/AnnotationStore.ts#L56)
+Defined in: [annotations/AnnotationStore.ts:60](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/AnnotationStore.ts#L60)
 
 Table name the store's `toJSON()` output tags with. When a Signal is
 passed (the facade passes `state.baseTableName`), the value is read at

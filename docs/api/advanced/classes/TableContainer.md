@@ -6,7 +6,7 @@
 
 # Class: TableContainer
 
-Defined in: [table/TableContainer.ts:142](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L142)
+Defined in: [table/TableContainer.ts:137](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L137)
 
 TableContainer manages the DOM structure and lifecycle for the data table.
 
@@ -27,7 +27,7 @@ table.destroy();
 
 > **new TableContainer**(`container`, `state`, `actions?`, `bridge?`, `options?`): `TableContainer`
 
-Defined in: [table/TableContainer.ts:195](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L195)
+Defined in: [table/TableContainer.ts:190](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L190)
 
 #### Parameters
 
@@ -61,7 +61,7 @@ Defined in: [table/TableContainer.ts:195](https://github.com/jeyabbalas/data-tab
 
 > **destroy**(): `void`
 
-Defined in: [table/TableContainer.ts:1470](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1470)
+Defined in: [table/TableContainer.ts:1467](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1467)
 
 Destroy the table container and clean up resources
 
@@ -75,7 +75,7 @@ Destroy the table container and clean up resources
 
 > **getBodyContainer**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1394](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1394)
+Defined in: [table/TableContainer.ts:1391](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1391)
 
 Get the body container element
 
@@ -87,15 +87,15 @@ Get the body container element
 
 ### getColorScheme()
 
-> **getColorScheme**(): `ContainerColorScheme`
+> **getColorScheme**(): [`ColorScheme`](../../index/type-aliases/ColorScheme.md)
 
-Defined in: [table/TableContainer.ts:416](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L416)
+Defined in: [table/TableContainer.ts:415](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L415)
 
 Returns the currently-applied color scheme.
 
 #### Returns
 
-`ContainerColorScheme`
+[`ColorScheme`](../../index/type-aliases/ColorScheme.md)
 
 ***
 
@@ -103,7 +103,7 @@ Returns the currently-applied color scheme.
 
 > **getColumnHeaders**(): [`ColumnHeader`](ColumnHeader.md)[]
 
-Defined in: [table/TableContainer.ts:1449](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1449)
+Defined in: [table/TableContainer.ts:1446](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1446)
 
 Get all column header instances.
 Useful for accessing visualization containers in each header.
@@ -118,7 +118,7 @@ Useful for accessing visualization containers in each header.
 
 > **getDimensions**(): `object`
 
-Defined in: [table/TableContainer.ts:1420](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1420)
+Defined in: [table/TableContainer.ts:1417](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1417)
 
 Get current container dimensions
 
@@ -140,7 +140,7 @@ Get current container dimensions
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1380](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1380)
+Defined in: [table/TableContainer.ts:1377](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1377)
 
 Get the root element
 
@@ -154,7 +154,7 @@ Get the root element
 
 > **getFilterBar**(): [`FilterBar`](FilterBar.md) \| `null`
 
-Defined in: [table/TableContainer.ts:1456](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1456)
+Defined in: [table/TableContainer.ts:1453](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1453)
 
 Get the filter bar instance
 
@@ -168,7 +168,7 @@ Get the filter bar instance
 
 > **getFilterPanel**(): [`FilterPanel`](FilterPanel.md) \| `null`
 
-Defined in: [table/TableContainer.ts:1463](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1463)
+Defined in: [table/TableContainer.ts:1460](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1460)
 
 Get the filter panel instance
 
@@ -182,7 +182,7 @@ Get the filter panel instance
 
 > **getHeaderRow**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1387](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1387)
+Defined in: [table/TableContainer.ts:1384](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1384)
 
 Get the header row element
 
@@ -196,7 +196,7 @@ Get the header row element
 
 > **getHeaderScroll**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1413](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1413)
+Defined in: [table/TableContainer.ts:1410](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1410)
 
 Get the header scroll element
 
@@ -213,7 +213,7 @@ It should be synced with the body scroll.
 
 > **getOptions**(): `Required`\<[`TableContainerOptions`](../interfaces/TableContainerOptions.md)\>
 
-Defined in: [table/TableContainer.ts:1427](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1427)
+Defined in: [table/TableContainer.ts:1424](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1424)
 
 Get the resolved options
 
@@ -227,7 +227,7 @@ Get the resolved options
 
 > **getPortalTarget**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1344](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1344)
+Defined in: [table/TableContainer.ts:1341](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1341)
 
 Where fixed-position modals owned by this table mount. Returns the
 `portalTarget` option if supplied, otherwise `document.body`. Exposed
@@ -245,7 +245,7 @@ without re-implementing the fallback.
 
 > **getScrollContainer**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:1403](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1403)
+Defined in: [table/TableContainer.ts:1400](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1400)
 
 Get the scroll container element (body scroll)
 
@@ -261,7 +261,7 @@ This is the container that handles both horizontal and vertical scrolling for th
 
 > **getTableBody**(): [`TableBody`](TableBody.md) \| `null`
 
-Defined in: [table/TableContainer.ts:1441](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1441)
+Defined in: [table/TableContainer.ts:1438](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1438)
 
 Get the table body instance
 
@@ -275,7 +275,7 @@ Get the table body instance
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/TableContainer.ts:1434](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L1434)
+Defined in: [table/TableContainer.ts:1431](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L1431)
 
 Check if the container has been destroyed
 
@@ -289,7 +289,7 @@ Check if the container has been destroyed
 
 > **onResize**(`callback`): () => `void`
 
-Defined in: [table/TableContainer.ts:524](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L524)
+Defined in: [table/TableContainer.ts:523](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L523)
 
 Subscribe to resize events
 
@@ -313,7 +313,7 @@ Unsubscribe function
 
 > **render**(): `void`
 
-Defined in: [table/TableContainer.ts:914](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L914)
+Defined in: [table/TableContainer.ts:912](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L912)
 
 Render the table container
 
@@ -330,7 +330,7 @@ placeholder content for the body (to be implemented in Task 3.4).
 
 > **setColorScheme**(`scheme`): `void`
 
-Defined in: [table/TableContainer.ts:409](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/TableContainer.ts#L409)
+Defined in: [table/TableContainer.ts:408](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableContainer.ts#L408)
 
 Switch the light/dark theme for this container at runtime. Updates the
 `data-dt-color-scheme` attribute on the root element; open body-portalled
@@ -341,7 +341,7 @@ when they were opened) and re-sync automatically.
 
 ##### scheme
 
-`ContainerColorScheme`
+[`ColorScheme`](../../index/type-aliases/ColorScheme.md)
 
 #### Returns
 

@@ -6,14 +6,15 @@
 
 # Class: AnnotationError
 
-Defined in: [core/errors.ts:214](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L214)
+Defined in: [core/errors.ts:222](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L222)
 
 Annotation CRUD, JSON I/O, or session-restore error.
 
 Codes: `ANNOTATION_DUPLICATE_ID`, `ANNOTATION_NOT_FOUND`,
 `ANNOTATION_INVALID_SHAPE`, `ANNOTATION_VERSION_UNSUPPORTED`,
-`ANNOTATION_SCOPE_IMMUTABLE`, `ANNOTATION_ROWID_IMMUTABLE`,
-`ANNOTATION_COLUMN_IMMUTABLE`, default `ANNOTATION_FAILED`.
+`ANNOTATION_ID_IMMUTABLE`, `ANNOTATION_SCOPE_IMMUTABLE`,
+`ANNOTATION_ROWID_IMMUTABLE`, `ANNOTATION_COLUMN_IMMUTABLE`,
+`ANNOTATION_TABLENAME_MISMATCH`, default `ANNOTATION_FAILED`.
 
 ## Example
 
@@ -36,7 +37,7 @@ catch (err) {
 
 > **new AnnotationError**(`message`, `options?`): `AnnotationError`
 
-Defined in: [core/errors.ts:215](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L215)
+Defined in: [core/errors.ts:223](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L223)
 
 #### Parameters
 
@@ -62,7 +63,7 @@ Defined in: [core/errors.ts:215](https://github.com/jeyabbalas/data-table/blob/c
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L49)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -74,7 +75,7 @@ Defined in: [core/errors.ts:49](https://github.com/jeyabbalas/data-table/blob/c5
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L50)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -86,7 +87,7 @@ Defined in: [core/errors.ts:50](https://github.com/jeyabbalas/data-table/blob/c5
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/errors.ts#L59)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/errors.ts#L66)
 
 #### Returns
 

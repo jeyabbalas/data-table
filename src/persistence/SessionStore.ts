@@ -153,32 +153,78 @@ const REQUIRED_SNAPSHOT_KEYS = [
   'hiddenColumnInfo',
 ] as const;
 
-function coerceLoadedSnapshot(raw: unknown): SessionSnapshot | null {
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw !== 'object') return null;
+/**
+ * Phase 9: classify the rejection reason so `load()` can surface a
+ * `PERSISTENCE_VERSION_REJECTED` warning when the stored snapshot is
+ * from a future library version (vs. silently returning null and
+ * indistinguishable from "no snapshot exists").
+ */
+type CoerceResult =
+  | { ok: true; snapshot: SessionSnapshot }
+  | { ok: false; reason: 'absent' | 'shape' }
+  | { ok: false; reason: 'version'; version: number };
+
+function coerceLoadedSnapshotWithStatus(raw: unknown): CoerceResult {
+  if (raw === null || raw === undefined) return { ok: false, reason: 'absent' };
+  if (typeof raw !== 'object') return { ok: false, reason: 'shape' };
   const obj = raw as Record<string, unknown>;
   for (const key of REQUIRED_SNAPSHOT_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(obj, key)) return null;
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return { ok: false, reason: 'shape' };
   }
-  if (typeof obj['tableName'] !== 'string') return null;
-  if (typeof obj['version'] !== 'number') return null;
+  if (typeof obj['tableName'] !== 'string') return { ok: false, reason: 'shape' };
+  if (typeof obj['version'] !== 'number') return { ok: false, reason: 'shape' };
   // Reject snapshots from future library versions (forward incompat) and
   // invalid sentinel versions (≤ 0). Pre-v5 snapshots that happen to have
   // the required fields keep loading via the lenient field-by-field shape
   // check below — pre-1.0 clean break, no migration framework.
   const ver = obj['version'] as number;
-  if (!Number.isInteger(ver) || ver < 1 || ver > SNAPSHOT_VERSION) return null;
-  if (!Array.isArray(obj['filters'])) return null;
-  if (!Array.isArray(obj['sortColumns'])) return null;
-  if (!Array.isArray(obj['visibleColumns'])) return null;
-  if (!Array.isArray(obj['columnOrder'])) return null;
-  if (!Array.isArray(obj['pinnedColumns'])) return null;
-  if (typeof obj['columnWidths'] !== 'object' || obj['columnWidths'] === null) return null;
-  if (typeof obj['hiddenColumnInfo'] !== 'object' || obj['hiddenColumnInfo'] === null) return null;
-  return obj as unknown as SessionSnapshot;
+  if (!Number.isInteger(ver) || ver < 1 || ver > SNAPSHOT_VERSION) {
+    return { ok: false, reason: 'version', version: ver };
+  }
+  if (!Array.isArray(obj['filters'])) return { ok: false, reason: 'shape' };
+  if (!Array.isArray(obj['sortColumns'])) return { ok: false, reason: 'shape' };
+  if (!Array.isArray(obj['visibleColumns'])) return { ok: false, reason: 'shape' };
+  if (!Array.isArray(obj['columnOrder'])) return { ok: false, reason: 'shape' };
+  if (!Array.isArray(obj['pinnedColumns'])) return { ok: false, reason: 'shape' };
+  if (typeof obj['columnWidths'] !== 'object' || obj['columnWidths'] === null) {
+    return { ok: false, reason: 'shape' };
+  }
+  if (typeof obj['hiddenColumnInfo'] !== 'object' || obj['hiddenColumnInfo'] === null) {
+    return { ok: false, reason: 'shape' };
+  }
+  return { ok: true, snapshot: obj as unknown as SessionSnapshot };
 }
 
 // --- SessionStore class ---
+
+/**
+ * Optional per-instance configuration for {@link SessionStore}. When omitted,
+ * `SessionStore` is a pure read/write wrapper around IndexedDB; supplying
+ * `onLoadIssue` enables structured surfacing of load-time problems that
+ * don't merit a thrown error (today: future-version snapshot rejection,
+ * surfaced as `code: 'PERSISTENCE_VERSION_REJECTED'`).
+ *
+ * The facade wires this automatically when constructing an internal
+ * `SessionStore`; consumers passing their own store can wire it themselves
+ * to route the warning through the same path.
+ */
+export interface SessionStoreOptions {
+  /**
+   * Called when `load()` rejects a stored snapshot for a reason the
+   * consumer may want to surface as a warning (currently: a snapshot
+   * whose `version` is outside `[1, SNAPSHOT_VERSION]`). Other
+   * rejections — generic shape mismatch, IDB read failure, missing
+   * snapshot — silently return `null` from `load` and do NOT call this.
+   *
+   * `tableName` echoes the requested key. `details.version` is the
+   * rejected version number; `details.expectedMax` is `SNAPSHOT_VERSION`.
+   */
+  onLoadIssue?: (issue: {
+    code: 'PERSISTENCE_VERSION_REJECTED';
+    tableName: string;
+    details: { version: number; expectedMax: number };
+  }) => void;
+}
 
 /**
  * IndexedDB-backed persistence store for `SessionSnapshot` records, keyed by
@@ -220,6 +266,11 @@ function coerceLoadedSnapshot(raw: unknown): SessionSnapshot | null {
 export class SessionStore {
   private db: IDBDatabase | null = null;
   private opening: Promise<boolean> | null = null;
+  private readonly onLoadIssue: SessionStoreOptions['onLoadIssue'];
+
+  constructor(options?: SessionStoreOptions) {
+    this.onLoadIssue = options?.onLoadIssue;
+  }
 
   /** Open the IndexedDB database. Returns true on success, false if unavailable. */
   async open(): Promise<boolean> {
@@ -327,7 +378,17 @@ export class SessionStore {
         const tx = this.db!.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
         const request = store.get(tableName);
-        request.onsuccess = () => resolve(coerceLoadedSnapshot(request.result));
+        request.onsuccess = () => {
+          const result = coerceLoadedSnapshotWithStatus(request.result);
+          if (!result.ok && result.reason === 'version') {
+            this.onLoadIssue?.({
+              code: 'PERSISTENCE_VERSION_REJECTED',
+              tableName,
+              details: { version: result.version, expectedMax: SNAPSHOT_VERSION },
+            });
+          }
+          resolve(result.ok ? result.snapshot : null);
+        };
         request.onerror = () => resolve(null);
       } catch {
         resolve(null);

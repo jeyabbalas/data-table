@@ -220,14 +220,50 @@ files exist) or runs `changeset publish` once that PR merges. npm provenance
 The workflow is committed in a safe, secret-gated state:
 
 1. Add an `NPM_TOKEN` repository secret with publish access to
-   `@jeyabbalas/data-table`, **or** enable npm OIDC trusted publishing on
-   `https://www.npmjs.com/package/@jeyabbalas/data-table/access` and remove
-   the `NPM_TOKEN` reference from the workflow.
+   `@jeyabbalas/data-table`, **or** enable npm OIDC trusted publishing
+   (recommended — see "Trusted publishing (npm OIDC)" below).
 2. Settings → Actions → General → check **"Allow GitHub Actions to create
    and approve pull requests"** so the changesets action can open the
    "Version Packages" PR.
 
 Until both are configured, the publish step is a no-op.
+
+### Trusted publishing (npm OIDC)
+
+OIDC trusted publishing replaces the long-lived `NPM_TOKEN` secret with
+short-lived tokens minted by GitHub Actions per-publish. Recommended for
+new repos — no secret rotation, smaller blast radius if the workflow is
+compromised.
+
+**Setup (one time, in this order):**
+
+1. **npm side.** Visit
+   `https://www.npmjs.com/package/@jeyabbalas/data-table/access`
+   (or the package's "Settings" tab) and add a **Trusted Publisher**:
+   - Provider: `GitHub Actions`
+   - Repository: `jeyabbalas/data-table`
+   - Workflow filename: `release.yml`
+   - Job name: `release` (matches `.github/workflows/release.yml`)
+   - Environment: leave blank (no `environment:` declared in the job)
+
+2. **GitHub side.** The workflow already declares `permissions: id-token:
+write` (required for OIDC token minting). Confirm by inspecting
+   `.github/workflows/release.yml` — line ~43.
+
+3. **Remove the legacy secret.** Once OIDC is verified working on the
+   first publish, delete the `NPM_TOKEN` repository secret and remove the
+   `NPM_TOKEN` env line from `release.yml`. `npm publish` (npm CLI ≥ 9.5)
+   discovers the OIDC token automatically; provenance attestation is
+   issued in the same step.
+
+**Verifying without publishing.** Run `npm publish --dry-run --provenance`
+locally — outside CI it prints a banner explaining the OIDC requirement.
+The workflow's first real publish is the only smoke test for the trust
+binding; rehearse the manual fallback (below) once before that publish so
+you have a clean rollback path.
+
+Until OIDC is configured AND the first publish succeeds, leave the
+`NPM_TOKEN` secret in place as a fallback.
 
 ### Day-to-day flow
 

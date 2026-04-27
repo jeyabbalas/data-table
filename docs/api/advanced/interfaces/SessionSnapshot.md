@@ -6,7 +6,7 @@
 
 # Interface: SessionSnapshot
 
-Defined in: [persistence/types.ts:119](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L119)
+Defined in: [persistence/types.ts:155](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L155)
 
 A serialized snapshot of table state, keyed by tableName in IndexedDB
 
@@ -16,9 +16,22 @@ A serialized snapshot of table state, keyed by tableName in IndexedDB
 
 > `optional` **annotations?**: [`AnnotationFile`](../../index/interfaces/AnnotationFile.md)
 
-Defined in: [persistence/types.ts:140](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L140)
+Defined in: [persistence/types.ts:176](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L176)
 
 Saved annotations. Absent in pre-v5 snapshots.
+
+***
+
+### annotationSeverityFilter?
+
+> `optional` **annotationSeverityFilter?**: [`SeverityFilter`](../../index/interfaces/SeverityFilter.md)
+
+Defined in: [persistence/types.ts:183](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L183)
+
+Annotation severity-filter state (visual-only). Present only when the
+user has toggled at least one severity off; the all-true default is
+omitted to keep snapshots clean. Back-compat by absence — pre-fix
+snapshots restore with the all-true default.
 
 ***
 
@@ -26,7 +39,7 @@ Saved annotations. Absent in pre-v5 snapshots.
 
 > `optional` **columnHeaderTooltips?**: `Record`\<`string`, `string` \| [`ColumnHeaderTooltipContent`](../../index/interfaces/ColumnHeaderTooltipContent.md)\>
 
-Defined in: [persistence/types.ts:148](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L148)
+Defined in: [persistence/types.ts:191](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L191)
 
 App-controlled column-header tooltip overrides.
 
@@ -40,7 +53,7 @@ Object entries are validated field-by-field; malformed fields drop.
 
 > **columnOrder**: `string`[]
 
-Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L126)
+Defined in: [persistence/types.ts:162](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L162)
 
 ***
 
@@ -48,7 +61,7 @@ Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/
 
 > **columnWidths**: `Record`\<`string`, `number`\>
 
-Defined in: [persistence/types.ts:127](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L127)
+Defined in: [persistence/types.ts:163](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L163)
 
 ***
 
@@ -56,7 +69,7 @@ Defined in: [persistence/types.ts:127](https://github.com/jeyabbalas/data-table/
 
 > **derivedColumns**: [`DerivedColumnDef`](../../index/type-aliases/DerivedColumnDef.md)[]
 
-Defined in: [persistence/types.ts:130](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L130)
+Defined in: [persistence/types.ts:166](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L166)
 
 ***
 
@@ -64,7 +77,7 @@ Defined in: [persistence/types.ts:130](https://github.com/jeyabbalas/data-table/
 
 > `optional` **filterPresets?**: [`FilterPreset`](../../index/interfaces/FilterPreset.md)[]
 
-Defined in: [persistence/types.ts:138](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L138)
+Defined in: [persistence/types.ts:174](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L174)
 
 Saved filter presets. Absent in pre-v3 snapshots.
 
@@ -74,7 +87,7 @@ Saved filter presets. Absent in pre-v3 snapshots.
 
 > **filters**: [`SerializedFilter`](../../index/type-aliases/SerializedFilter.md)[]
 
-Defined in: [persistence/types.ts:123](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L123)
+Defined in: [persistence/types.ts:159](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L159)
 
 ***
 
@@ -82,7 +95,7 @@ Defined in: [persistence/types.ts:123](https://github.com/jeyabbalas/data-table/
 
 > **hiddenColumnInfo**: `Record`\<`string`, [`HiddenColumnInfo`](HiddenColumnInfo.md)\>
 
-Defined in: [persistence/types.ts:129](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L129)
+Defined in: [persistence/types.ts:165](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L165)
 
 ***
 
@@ -90,7 +103,7 @@ Defined in: [persistence/types.ts:129](https://github.com/jeyabbalas/data-table/
 
 > **pinnedColumns**: `string`[]
 
-Defined in: [persistence/types.ts:128](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L128)
+Defined in: [persistence/types.ts:164](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L164)
 
 ***
 
@@ -98,7 +111,7 @@ Defined in: [persistence/types.ts:128](https://github.com/jeyabbalas/data-table/
 
 > `optional` **redoStack?**: [`SerializedStateSnapshot`](SerializedStateSnapshot.md)[]
 
-Defined in: [persistence/types.ts:134](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L134)
+Defined in: [persistence/types.ts:170](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L170)
 
 Persisted redo stack (oldest → newest). Absent in pre-v1 snapshots.
 
@@ -108,7 +121,7 @@ Persisted redo stack (oldest → newest). Absent in pre-v1 snapshots.
 
 > **sortColumns**: [`SortColumn`](../../index/interfaces/SortColumn.md)[]
 
-Defined in: [persistence/types.ts:124](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L124)
+Defined in: [persistence/types.ts:160](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L160)
 
 ***
 
@@ -116,7 +129,7 @@ Defined in: [persistence/types.ts:124](https://github.com/jeyabbalas/data-table/
 
 > **tableName**: `string` \| `null`
 
-Defined in: [persistence/types.ts:122](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L122)
+Defined in: [persistence/types.ts:158](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L158)
 
 ***
 
@@ -124,7 +137,7 @@ Defined in: [persistence/types.ts:122](https://github.com/jeyabbalas/data-table/
 
 > **timestamp**: `number`
 
-Defined in: [persistence/types.ts:121](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L121)
+Defined in: [persistence/types.ts:157](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L157)
 
 ***
 
@@ -132,7 +145,7 @@ Defined in: [persistence/types.ts:121](https://github.com/jeyabbalas/data-table/
 
 > `optional` **undoStack?**: [`SerializedStateSnapshot`](SerializedStateSnapshot.md)[]
 
-Defined in: [persistence/types.ts:132](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L132)
+Defined in: [persistence/types.ts:168](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L168)
 
 Persisted undo stack (oldest → newest). Absent in pre-v1 snapshots.
 
@@ -142,7 +155,7 @@ Persisted undo stack (oldest → newest). Absent in pre-v1 snapshots.
 
 > `optional` **vectorValuePool?**: `Record`\<`string`, [`VectorValuePoolEntry`](VectorValuePoolEntry.md)\>
 
-Defined in: [persistence/types.ts:136](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L136)
+Defined in: [persistence/types.ts:172](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L172)
 
 Deduplicated vector column values shared across undo/redo stack entries. Absent in pre-v4 snapshots.
 
@@ -152,7 +165,7 @@ Deduplicated vector column values shared across undo/redo stack entries. Absent 
 
 > **version**: `number`
 
-Defined in: [persistence/types.ts:120](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L120)
+Defined in: [persistence/types.ts:156](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L156)
 
 ***
 
@@ -160,4 +173,4 @@ Defined in: [persistence/types.ts:120](https://github.com/jeyabbalas/data-table/
 
 > **visibleColumns**: `string`[]
 
-Defined in: [persistence/types.ts:125](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/persistence/types.ts#L125)
+Defined in: [persistence/types.ts:161](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/types.ts#L161)

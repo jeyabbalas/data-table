@@ -6,7 +6,11 @@
 
 # Interface: LoadResult
 
-Defined in: [data/DataLoader.ts:11](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/DataLoader.ts#L11)
+Defined in: [data/DataLoader.ts:17](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/DataLoader.ts#L17)
+
+Outcome of a successful `DataLoader.load`: the DuckDB table name the
+data landed in, the row count, the column-name list, and the resolved
+schema. Surfaced on the `loadComplete` event payload.
 
 ## Properties
 
@@ -14,7 +18,7 @@ Defined in: [data/DataLoader.ts:11](https://github.com/jeyabbalas/data-table/blo
 
 > **columns**: `string`[]
 
-Defined in: [data/DataLoader.ts:14](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/DataLoader.ts#L14)
+Defined in: [data/DataLoader.ts:20](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/DataLoader.ts#L20)
 
 ***
 
@@ -22,7 +26,7 @@ Defined in: [data/DataLoader.ts:14](https://github.com/jeyabbalas/data-table/blo
 
 > **rowCount**: `number`
 
-Defined in: [data/DataLoader.ts:13](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/DataLoader.ts#L13)
+Defined in: [data/DataLoader.ts:19](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/DataLoader.ts#L19)
 
 ***
 
@@ -30,7 +34,7 @@ Defined in: [data/DataLoader.ts:13](https://github.com/jeyabbalas/data-table/blo
 
 > **schema**: [`ColumnSchema`](ColumnSchema.md)[]
 
-Defined in: [data/DataLoader.ts:15](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/DataLoader.ts#L15)
+Defined in: [data/DataLoader.ts:21](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/DataLoader.ts#L21)
 
 ***
 
@@ -38,4 +42,4 @@ Defined in: [data/DataLoader.ts:15](https://github.com/jeyabbalas/data-table/blo
 
 > **tableName**: `string`
 
-Defined in: [data/DataLoader.ts:12](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/data/DataLoader.ts#L12)
+Defined in: [data/DataLoader.ts:18](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/data/DataLoader.ts#L18)

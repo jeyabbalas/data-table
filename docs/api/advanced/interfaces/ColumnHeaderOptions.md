@@ -6,7 +6,7 @@
 
 # Interface: ColumnHeaderOptions
 
-Defined in: [table/ColumnHeader.ts:29](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L29)
+Defined in: [table/ColumnHeader.ts:27](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L27)
 
 Options for configuring the ColumnHeader
 
@@ -16,7 +16,7 @@ Options for configuring the ColumnHeader
 
 > `optional` **annotationPopover?**: [`AnnotationPopover`](../classes/AnnotationPopover.md)
 
-Defined in: [table/ColumnHeader.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L43)
+Defined in: [table/ColumnHeader.ts:41](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L41)
 
 Shared popover singleton used to display column-scope annotations on hover / focus.
 
@@ -26,7 +26,7 @@ Shared popover singleton used to display column-scope annotations on hover / foc
 
 > `optional` **annotations?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [table/ColumnHeader.ts:41](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L41)
+Defined in: [table/ColumnHeader.ts:39](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L39)
 
 Shared annotation store for column-scope annotation classes + popover.
 
@@ -36,7 +36,7 @@ Shared annotation store for column-scope annotation classes + popover.
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/ColumnHeader.ts:31](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L31)
+Defined in: [table/ColumnHeader.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L29)
 
 CSS class prefix (default: 'dt')
 
@@ -46,7 +46,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colIndex?**: `number`
 
-Defined in: [table/ColumnHeader.ts:37](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L37)
+Defined in: [table/ColumnHeader.ts:35](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L35)
 
 1-based column index in the full schema (for aria-colindex)
 
@@ -56,7 +56,7 @@ Defined in: [table/ColumnHeader.ts:37](https://github.com/jeyabbalas/data-table/
 
 > `optional` **columnHeaderTooltipPopover?**: [`ColumnHeaderTooltipPopover`](../classes/ColumnHeaderTooltipPopover.md)
 
-Defined in: [table/ColumnHeader.ts:45](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L45)
+Defined in: [table/ColumnHeader.ts:43](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L43)
 
 Shared singleton used to display the app-controlled column-name tooltip popover.
 
@@ -66,7 +66,7 @@ Shared singleton used to display the app-controlled column-name tooltip popover.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/ColumnHeader.ts:39](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L39)
+Defined in: [table/ColumnHeader.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L37)
 
 Resolved i18n strings. Defaults to English.
 
@@ -76,7 +76,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onDerivedIconClick?**: (`columnName`, `buttonElement`) => `void`
 
-Defined in: [table/ColumnHeader.ts:35](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L35)
+Defined in: [table/ColumnHeader.ts:33](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L33)
 
 Called when the f(x) icon on a derived column is clicked
 
@@ -100,7 +100,7 @@ Called when the f(x) icon on a derived column is clicked
 
 > `optional` **onFilterClick?**: (`column`, `buttonElement`) => `void`
 
-Defined in: [table/ColumnHeader.ts:33](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/ColumnHeader.ts#L33)
+Defined in: [table/ColumnHeader.ts:31](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/ColumnHeader.ts#L31)
 
 Called when the filter button is clicked, with column name and button element for positioning
 

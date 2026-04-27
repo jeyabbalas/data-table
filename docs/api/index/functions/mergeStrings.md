@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:768](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/Strings.ts#L768)
+Defined in: [core/Strings.ts:799](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/Strings.ts#L799)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -28,7 +28,7 @@ shape rather than the compile-time type.
 
 #### a11y?
 
-\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
+\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
 
 #### a11y.ascending?
 
@@ -100,6 +100,12 @@ Header hide button.
 
 `string`
 
+#### a11y.loadingRowLabel?
+
+\{ \}
+
+Placeholder text shown for not-yet-fetched rows during fast scroll.
+
 #### a11y.multiFilteredSuffix?
 
 \{ \}
@@ -119,6 +125,12 @@ Header pin button.
 #### a11y.pinColumnTitle?
 
 `string`
+
+#### a11y.resizeHandleLabel?
+
+`string`
+
+Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 #### a11y.showColumn?
 
@@ -228,11 +240,17 @@ Column-header aria-label fragments.
 
 #### derived?
 
-\{ `addButtonLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: \{ \}; `editTitle?`: `string`; `editTitleForColumn?`: \{ \}; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: \{ \}; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: \{ \}; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: \{ \}; `vectorInfo?`: \{ \}; `vectorInfoText?`: \{ \}; `vectorInvalidBoolean?`: \{ \}; `vectorInvalidDate?`: \{ \}; `vectorInvalidDecimal?`: \{ \}; `vectorInvalidFloat?`: \{ \}; `vectorInvalidInteger?`: \{ \}; `vectorInvalidInterval?`: \{ \}; `vectorInvalidTime?`: \{ \}; `vectorInvalidTimestamp?`: \{ \}; `vectorInvalidUUID?`: \{ \}; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
+\{ `addButtonLabel?`: `string`; `availableColumnsLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: \{ \}; `editTitle?`: `string`; `editTitleForColumn?`: \{ \}; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionPlaceholder?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: \{ \}; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: \{ \}; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: \{ \}; `vectorInfo?`: \{ \}; `vectorInfoText?`: \{ \}; `vectorInvalidBoolean?`: \{ \}; `vectorInvalidDate?`: \{ \}; `vectorInvalidDecimal?`: \{ \}; `vectorInvalidFloat?`: \{ \}; `vectorInvalidInteger?`: \{ \}; `vectorInvalidInterval?`: \{ \}; `vectorInvalidTime?`: \{ \}; `vectorInvalidTimestamp?`: \{ \}; `vectorInvalidUUID?`: \{ \}; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
 
 #### derived.addButtonLabel?
 
 `string`
+
+#### derived.availableColumnsLabel?
+
+`string`
+
+Prefix shown before the comma-separated column-hint list (DefaultExpressionEditor).
 
 #### derived.closeEditLabel?
 
@@ -277,6 +295,12 @@ Panel header with column name — "Edit: my_col".
 #### derived.expressionModeLabel?
 
 `string`
+
+#### derived.expressionPlaceholder?
+
+`string`
+
+Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor).
 
 #### derived.expressionRequired?
 
@@ -406,7 +430,7 @@ Modal: "New Derived Column".
 
 #### export?
 
-\{ `cancelButton?`: `string`; `closeLabel?`: `string`; `copiedFeedback?`: `string`; `copyButton?`: `string`; `copyFailedFallback?`: `string`; `csv?`: \{ `delimiterLabel?`: `string`; `delimiters?`: \{ `comma?`: `string`; `pipe?`: `string`; `semicolon?`: `string`; `tab?`: `string`; \}; `headersLabel?`: `string`; `nullValueLabel?`: `string`; `nullValuePlaceholder?`: `string`; \}; `downloadButton?`: `string`; `exportFailedFallback?`: `string`; `formatLabel?`: `string`; `formats?`: \{ `csv?`: `string`; `json?`: `string`; `parquet?`: `string`; \}; `json?`: \{ `formatLabel?`: `string`; `formats?`: \{ `array?`: `string`; `ndjson?`: `string`; \}; `prettyLabel?`: `string`; \}; `scopeLabel?`: `string`; `scopes?`: \{ `all?`: `string`; `filtered?`: `string`; `selected?`: `string`; \}; `title?`: `string`; \}
+\{ `cancelButton?`: `string`; `closeLabel?`: `string`; `copiedFeedback?`: `string`; `copyButton?`: `string`; `copyFailedFallback?`: `string`; `csv?`: \{ `delimiterLabel?`: `string`; `delimiters?`: \{ `comma?`: `string`; `pipe?`: `string`; `semicolon?`: `string`; `tab?`: `string`; \}; `headersLabel?`: `string`; `nullValueLabel?`: `string`; `nullValuePlaceholder?`: `string`; \}; `downloadButton?`: `string`; `exportFailedFallback?`: `string`; `formatLabel?`: `string`; `formats?`: \{ `csv?`: `string`; `json?`: `string`; `parquet?`: `string`; \}; `includeSystemColumnsLabel?`: `string`; `json?`: \{ `formatLabel?`: `string`; `formats?`: \{ `array?`: `string`; `ndjson?`: `string`; \}; `prettyLabel?`: `string`; \}; `scopeLabel?`: `string`; `scopes?`: \{ `all?`: `string`; `filtered?`: `string`; `selected?`: `string`; \}; `title?`: `string`; \}
 
 #### export.cancelButton?
 
@@ -495,6 +519,12 @@ Modal: "New Derived Column".
 #### export.formats.parquet?
 
 `string`
+
+#### export.includeSystemColumnsLabel?
+
+`string`
+
+Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 #### export.json?
 

@@ -6,7 +6,12 @@
 
 # Class: InteractionManager
 
-Defined in: [visualizations/InteractionManager.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L43)
+Defined in: [visualizations/InteractionManager.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L57)
+
+LIFO interaction stack for per-column brush / selection state across all
+mounted visualizations. Owns a global `keydown` listener so pressing
+Escape clears the most recent interaction. Composed by the facade; reach
+for it directly only when wiring custom visualization shells.
 
 ## Constructors
 
@@ -14,7 +19,7 @@ Defined in: [visualizations/InteractionManager.ts:43](https://github.com/jeyabba
 
 > **new InteractionManager**(): `InteractionManager`
 
-Defined in: [visualizations/InteractionManager.ts:47](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L47)
+Defined in: [visualizations/InteractionManager.ts:61](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L61)
 
 #### Returns
 
@@ -28,7 +33,7 @@ Defined in: [visualizations/InteractionManager.ts:47](https://github.com/jeyabba
 
 > **get** **size**(): `number`
 
-Defined in: [visualizations/InteractionManager.ts:128](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L128)
+Defined in: [visualizations/InteractionManager.ts:142](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L142)
 
 Get the number of active interactions
 
@@ -42,7 +47,7 @@ Get the number of active interactions
 
 > **clear**(): `void`
 
-Defined in: [visualizations/InteractionManager.ts:133](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L133)
+Defined in: [visualizations/InteractionManager.ts:147](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L147)
 
 Clear all interactions from the stack (does not clear the visualizations)
 
@@ -56,7 +61,7 @@ Clear all interactions from the stack (does not clear the visualizations)
 
 > **clearColumn**(`columnName`): `void`
 
-Defined in: [visualizations/InteractionManager.ts:87](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L87)
+Defined in: [visualizations/InteractionManager.ts:101](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L101)
 
 Clear and remove all interactions for a given column.
 Unlike removeColumn(), this also calls clearBrush/clearSelection on the visualization.
@@ -77,7 +82,7 @@ Unlike removeColumn(), this also calls clearBrush/clearSelection on the visualiz
 
 > **clearLast**(): `boolean`
 
-Defined in: [visualizations/InteractionManager.ts:107](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L107)
+Defined in: [visualizations/InteractionManager.ts:121](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L121)
 
 Clear the most recent interaction (LIFO).
 Returns true if an interaction was cleared, false if the stack was empty.
@@ -92,7 +97,7 @@ Returns true if an interaction was cleared, false if the stack was empty.
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/InteractionManager.ts:138](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L138)
+Defined in: [visualizations/InteractionManager.ts:152](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L152)
 
 Destroy the manager, removing the keyboard listener
 
@@ -106,7 +111,7 @@ Destroy the manager, removing the keyboard listener
 
 > **pushBrush**(`columnName`, `viz`): `void`
 
-Defined in: [visualizations/InteractionManager.ts:62](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L62)
+Defined in: [visualizations/InteractionManager.ts:76](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L76)
 
 Push a brush interaction onto the stack.
 Removes any existing interaction for the same column first.
@@ -131,7 +136,7 @@ Removes any existing interaction for the same column first.
 
 > **pushSelection**(`columnName`, `viz`): `void`
 
-Defined in: [visualizations/InteractionManager.ts:71](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L71)
+Defined in: [visualizations/InteractionManager.ts:85](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L85)
 
 Push a selection interaction onto the stack.
 Removes any existing interaction for the same column first.
@@ -156,7 +161,7 @@ Removes any existing interaction for the same column first.
 
 > **removeColumn**(`columnName`): `void`
 
-Defined in: [visualizations/InteractionManager.ts:79](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/InteractionManager.ts#L79)
+Defined in: [visualizations/InteractionManager.ts:93](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/InteractionManager.ts#L93)
 
 Remove all interactions for a given column (does not clear the visualizations).
 

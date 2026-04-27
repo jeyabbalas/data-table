@@ -6,7 +6,9 @@
 
 # Interface: KeyboardNavigatorOptions
 
-Defined in: [table/KeyboardNavigator.ts:24](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L24)
+Defined in: [table/KeyboardNavigator.ts:25](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L25)
+
+Construction options for [KeyboardNavigator](../classes/KeyboardNavigator.md).
 
 ## Properties
 
@@ -14,7 +16,7 @@ Defined in: [table/KeyboardNavigator.ts:24](https://github.com/jeyabbalas/data-t
 
 > **actions**: [`StateActions`](../classes/StateActions.md)
 
-Defined in: [table/KeyboardNavigator.ts:32](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L32)
+Defined in: [table/KeyboardNavigator.ts:33](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L33)
 
 State mutation surface.
 
@@ -24,7 +26,7 @@ State mutation surface.
 
 > **bodyScroll**: `HTMLElement`
 
-Defined in: [table/KeyboardNavigator.ts:28](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L28)
+Defined in: [table/KeyboardNavigator.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L29)
 
 Body horizontal-scroll container (for horizontal cell scroll).
 
@@ -34,7 +36,7 @@ Body horizontal-scroll container (for horizontal cell scroll).
 
 > `optional` **getBridge?**: () => [`WorkerBridge`](../../index/classes/WorkerBridge.md) \| `undefined`
 
-Defined in: [table/KeyboardNavigator.ts:36](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L36)
+Defined in: [table/KeyboardNavigator.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L37)
 
 Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op.
 
@@ -48,7 +50,7 @@ Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op.
 
 > **getTableBody**: () => [`TableBody`](../classes/TableBody.md) \| `null`
 
-Defined in: [table/KeyboardNavigator.ts:34](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L34)
+Defined in: [table/KeyboardNavigator.ts:35](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L35)
 
 Late-bound accessor for the TableBody (may be recreated on data loads).
 
@@ -62,7 +64,7 @@ Late-bound accessor for the TableBody (may be recreated on data loads).
 
 > **rootElement**: `HTMLElement`
 
-Defined in: [table/KeyboardNavigator.ts:26](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L26)
+Defined in: [table/KeyboardNavigator.ts:27](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L27)
 
 Grid root element that owns focus and receives keydown events.
 
@@ -72,6 +74,6 @@ Grid root element that owns focus and receives keydown events.
 
 > **state**: [`TableState`](TableState.md)
 
-Defined in: [table/KeyboardNavigator.ts:30](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/table/KeyboardNavigator.ts#L30)
+Defined in: [table/KeyboardNavigator.ts:31](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/KeyboardNavigator.ts#L31)
 
 Reactive state for the grid.

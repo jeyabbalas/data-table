@@ -67,6 +67,10 @@ const ALLOWLISTED_LITERAL_CODES = new Set<string>([
   // error-code table, not the error-code table itself.
   'STYLESHEET_MISSING',
   'PERSISTENCE_UNAVAILABLE',
+  // Phase 9 — `SessionStore.load()` emits this warning when a stored snapshot
+  // version is outside [1, SNAPSHOT_VERSION] (typically a downgraded library).
+  // Documented in the "Warning events" table.
+  'PERSISTENCE_VERSION_REJECTED',
 ]);
 
 // ---------------------------------------------------------------------------

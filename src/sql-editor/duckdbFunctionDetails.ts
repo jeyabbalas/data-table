@@ -11,6 +11,18 @@
  * exhaustive signatures. Hosts that need precise signatures should consult
  * the DuckDB reference. The list is intentionally not exhaustive — it covers
  * the functions commonly typed in expression / filter editors.
+ *
+ * **Freshness.** This list is hand-curated against the `@duckdb/duckdb-wasm`
+ * peer-dep range (`^1.33.x` at the time of writing). When the peer-dep upper
+ * bound moves to a newer DuckDB release, refresh by:
+ *   1. Diffing the DuckDB function reference between the old and new versions
+ *      (https://duckdb.org/docs/sql/functions/overview).
+ *   2. Adding new functions in the appropriate category section below; the
+ *      `DUCKDB_FUNCTIONS` `Set` in `duckdbFunctions.ts` rebuilds automatically
+ *      since it derives from this array.
+ *   3. Re-running `npm run docs:api` so the autocomplete reference doc reflects
+ *      the additions.
+ * Tracked as a recurring task on the data-table roadmap.
  */
 
 /** Category labels surfaced in the autocomplete `detail` slot. */

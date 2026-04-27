@@ -8,7 +8,7 @@
 
 > **exportToJSON**(`tableName`, `options`, `context`, `signal?`): `Promise`\<`string`\>
 
-Defined in: [export/JSONExport.ts:104](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/export/JSONExport.ts#L104)
+Defined in: [export/JSONExport.ts:123](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/export/JSONExport.ts#L123)
 
 Export table data as a JSON string.
 

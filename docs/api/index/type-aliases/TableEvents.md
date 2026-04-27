@@ -8,7 +8,28 @@
 
 > **TableEvents** = `object`
 
-Defined in: [core/TableEvents.ts:32](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L32)
+Defined in: [core/TableEvents.ts:50](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L50)
+
+Discriminated event map for the [DataTable](../interfaces/DataTable.md) facade. Subscribe via
+`table.on(event, handler)` (returns an unsubscribe function) or
+`table.off(event, handler)`. Each key below documents the payload shape
+the handler receives.
+
+## Remarks
+
+Defined as a `type` (not `interface`) so it satisfies
+`Record<string, unknown>` for `EventEmitter`. Interfaces with named
+keys in TypeScript don't auto-satisfy that constraint.
+
+**Payload immutability.** Every payload field carrying a mutable
+collection (`Filter[]`, `Set<number>`, `string[]`, `DerivedColumnDef[]`,
+`ColumnSchema[]`, …) is a fresh shallow copy at emit time AND is typed
+`readonly` (Phase 9 type-tightening) so handler-side mutation fails to
+compile under `--strict`. The runtime clone is the load-bearing safety
+net (Phase 8); the `readonly` markers surface intent at the type
+level. Item identity inside the collection is not deep-cloned — treat
+the items themselves as read-only too. If you need a mutable copy,
+call `.slice()` / `new Set(...)` / `new Map(...)` at the consumer.
 
 ## Properties
 
@@ -16,21 +37,21 @@ Defined in: [core/TableEvents.ts:32](https://github.com/jeyabbalas/data-table/bl
 
 > **columnChange**: `object`
 
-Defined in: [core/TableEvents.ts:108](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L108)
+Defined in: [core/TableEvents.ts:126](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L126)
 
 Fired when visibility, order, pin state, or widths change.
 
 #### columnOrder
 
-> **columnOrder**: `string`[]
+> **columnOrder**: readonly `string`[]
 
 #### pinnedColumns
 
-> **pinnedColumns**: `string`[]
+> **pinnedColumns**: readonly `string`[]
 
 #### visibleColumns
 
-> **visibleColumns**: `string`[]
+> **visibleColumns**: readonly `string`[]
 
 ***
 
@@ -38,7 +59,7 @@ Fired when visibility, order, pin state, or widths change.
 
 > **derivedChange**: `object`
 
-Defined in: [core/TableEvents.ts:123](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L123)
+Defined in: [core/TableEvents.ts:141](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L141)
 
 Fired when derived columns are added, updated, removed, or replaced.
 
@@ -48,7 +69,7 @@ Fired when derived columns are added, updated, removed, or replaced.
 
 #### derivedColumns
 
-> **derivedColumns**: [`DerivedColumnDef`](DerivedColumnDef.md)[]
+> **derivedColumns**: readonly [`DerivedColumnDef`](DerivedColumnDef.md)[]
 
 #### kind
 
@@ -60,7 +81,7 @@ Fired when derived columns are added, updated, removed, or replaced.
 
 > **destroy**: `Record`\<`string`, `never`\>
 
-Defined in: [core/TableEvents.ts:133](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L133)
+Defined in: [core/TableEvents.ts:151](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L151)
 
 Fired on the library's own teardown, before signals are disposed.
 
@@ -70,7 +91,7 @@ Fired on the library's own teardown, before signals are disposed.
 
 > **error**: `object`
 
-Defined in: [core/TableEvents.ts:70](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L70)
+Defined in: [core/TableEvents.ts:88](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L88)
 
 General error event. Fired for any recoverable typed error the library
 surfaces at runtime — load failures, SQL validation, export failures,
@@ -106,7 +127,7 @@ table.on('error', ({ error, source }) => {
 
 > **filterChange**: `object`
 
-Defined in: [core/TableEvents.ts:95](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L95)
+Defined in: [core/TableEvents.ts:113](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L113)
 
 Fired on any change to the active filter list.
 
@@ -116,7 +137,7 @@ Fired on any change to the active filter list.
 
 #### filters
 
-> **filters**: [`Filter`](Filter.md)[]
+> **filters**: readonly [`Filter`](Filter.md)[]
 
 #### totalRowCount
 
@@ -128,7 +149,7 @@ Fired on any change to the active filter list.
 
 > **loadComplete**: `object`
 
-Defined in: [core/TableEvents.ts:43](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L43)
+Defined in: [core/TableEvents.ts:61](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L61)
 
 Fired after data is loaded and schema is known.
 
@@ -138,7 +159,7 @@ Fired after data is loaded and schema is known.
 
 #### schema
 
-> **schema**: [`ColumnSchema`](../interfaces/ColumnSchema.md)[]
+> **schema**: readonly [`ColumnSchema`](../interfaces/ColumnSchema.md)[]
 
 #### tableName
 
@@ -150,7 +171,7 @@ Fired after data is loaded and schema is known.
 
 > **loadError**: `object`
 
-Defined in: [core/TableEvents.ts:50](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L50)
+Defined in: [core/TableEvents.ts:68](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L68)
 
 Fired if a load fails. The `error` is always a typed DataTableError (subclass of Error).
 
@@ -164,7 +185,7 @@ Fired if a load fails. The `error` is always a typed DataTableError (subclass of
 
 > **loadProgress**: [`ProgressInfo`](../interfaces/ProgressInfo.md)
 
-Defined in: [core/TableEvents.ts:40](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L40)
+Defined in: [core/TableEvents.ts:58](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L58)
 
 Per-chunk progress while loading (bytes, percent, stage).
 
@@ -174,7 +195,7 @@ Per-chunk progress while loading (bytes, percent, stage).
 
 > **loadStart**: `object`
 
-Defined in: [core/TableEvents.ts:37](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L37)
+Defined in: [core/TableEvents.ts:55](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L55)
 
 Fired when a load operation begins.
 
@@ -188,7 +209,7 @@ Fired when a load operation begins.
 
 > **ready**: `object`
 
-Defined in: [core/TableEvents.ts:34](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L34)
+Defined in: [core/TableEvents.ts:52](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L52)
 
 Fired after `initialize()` completes and the worker is ready.
 
@@ -202,13 +223,13 @@ Fired after `initialize()` completes and the worker is ready.
 
 > **selectionChange**: `object`
 
-Defined in: [core/TableEvents.ts:105](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L105)
+Defined in: [core/TableEvents.ts:123](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L123)
 
 Fired when the selected-row set changes.
 
 #### selectedRows
 
-> **selectedRows**: `Set`\<`number`\>
+> **selectedRows**: `ReadonlySet`\<`number`\>
 
 ***
 
@@ -216,13 +237,13 @@ Fired when the selected-row set changes.
 
 > **sortChange**: `object`
 
-Defined in: [core/TableEvents.ts:102](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L102)
+Defined in: [core/TableEvents.ts:120](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L120)
 
 Fired on sort changes.
 
 #### sortColumns
 
-> **sortColumns**: [`SortColumn`](../interfaces/SortColumn.md)[]
+> **sortColumns**: readonly [`SortColumn`](../interfaces/SortColumn.md)[]
 
 ***
 
@@ -230,7 +251,7 @@ Fired on sort changes.
 
 > **undoChange**: `object`
 
-Defined in: [core/TableEvents.ts:130](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L130)
+Defined in: [core/TableEvents.ts:148](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L148)
 
 Fired whenever canUndo/canRedo changes (e.g., after any action or an undo/redo).
 
@@ -248,7 +269,7 @@ Fired whenever canUndo/canRedo changes (e.g., after any action or an undo/redo).
 
 > **warning**: `object`
 
-Defined in: [core/TableEvents.ts:88](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/core/TableEvents.ts#L88)
+Defined in: [core/TableEvents.ts:106](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L106)
 
 Non-fatal warning event. Emitted when the library continues operating
 in a degraded mode (e.g., stylesheet missing, IndexedDB unavailable).

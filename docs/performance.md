@@ -276,19 +276,85 @@ Don't manually remove the container's children before `destroy()` — the
 library expects to do that itself. Call `destroy()`, await it, and then
 remove the container if you need to.
 
-## Known slow paths (as of v0.1.0)
+## Known slow paths (as of v0.2.0)
 
 - **Initial schema detection on very wide tables.** Tables with hundreds of columns spend measurable time in `DESCRIBE` queries during load.
 - **First-run WASM compilation.** A cold browser takes a few seconds to compile DuckDB's WASM. Subsequent loads hit the HTTP cache.
 - **Filter changes that shrink the dataset to near-zero.** Some visualizations (e.g., date histogram) recalculate bins, which has a fixed cost that dominates when the result set is tiny. Usually < 300 ms total; on 10M-row datasets it can approach 1 s.
+- **Sub-second `INTERVAL` bin assignment.** The histogram `min` value goes through `MIN(col)::VARCHAR + parseIntervalToSeconds` on the JS side while the bin SQL extracts seconds via `EXTRACT(...)`. The two paths can disagree at the 4th decimal for sub-second intervals; the resulting drift is locked behind `tests/visualizations/histogram/IntervalHistogram.duckdb.test.ts`. A future fix would compute `min_seconds` server-side so both paths agree by construction.
+
+## Phase-9 benchmark snapshot (2026-04-26, 0.2.0 baseline)
+
+These numbers were captured locally on an M1 MacBook Pro running Node 20 +
+DuckDB-WASM 1.33.x. Treat them as an order-of-magnitude reference, not a
+precise SLA — they vary 2-3× between hardware classes and 4-5× under CI
+runners. The opt-in `npm run test:perf` (`RUN_DUCKDB_PERF=1
+RUN_LIFECYCLE_STRESS=1`) re-runs the full perf suite locally.
+
+### Real-DuckDB load + filter (fixtures shipped with the test suite)
+
+| Scenario                                         | Local median | Per-test budget | Notes                                          |
+| ------------------------------------------------ | ------------ | --------------- | ---------------------------------------------- |
+| `createNodeDuckDB()` boot                        | 600–800 ms   | 4000 ms         | Node `worker_threads`; browser cold-start TBD  |
+| `nyc_taxi.parquet` load (100 k × 19 cols)        | ~600 ms      | 8000 ms         | The recommended fixture for first-load testing |
+| `nyc_taxi.csv` load (100 k × 19 cols)            | ~3500 ms     | 15 000 ms       | CSV parse is ~6× the Parquet path              |
+| 100 cached `SELECT` round-trips                  | ~25 ms       | 150 ms          | Pure cache hit                                 |
+| 100 uncached `COUNT(*)` queries                  | ~700 ms      | 3000 ms         | Distinct WHERE clause each iteration           |
+| 1 M-row range filter `COUNT(*) WHERE BETWEEN`    | ~300 ms      | 1500 ms         | Synthetic `range(1_000_000)` table             |
+| 1 M-row set filter `COUNT(*) WHERE col IN (10)`  | ~400 ms      | 2000 ms         | Same synthetic table                           |
+| 1 M-row pattern filter `COUNT(*) WHERE LIKE 'x'` | ~800 ms      | 4000 ms         | Same synthetic table                           |
+
+### Pure-JS micro-benchmarks (run on every `npm test`)
+
+| Scenario                                  | Local median | Per-test budget | Notes                                                     |
+| ----------------------------------------- | ------------ | --------------- | --------------------------------------------------------- |
+| `AnnotationStore.addMany(10_000)`         | ~50 ms       | 250 ms          | Mixed row/column/cell scope                               |
+| 1000 random `getByCell` against 10 k anns | ~120 ms      | 500 ms          | ~150 column-anns per col; sort by severity rank dominates |
+| `VirtualScroller` scroll handler (median) | ~0.05 ms     | 1 ms            | `setTotalRows(1_000_000)` then 1000 synthetic dispatches  |
+| `VirtualScroller` scroll handler (p99)    | ~0.2 ms      | 16.6 ms         | Synthetic 60 fps frame budget                             |
+
+### Memory-leak gates (run on every `npm test`)
+
+The default `tests/performance/memory-leaks.test.ts` covers signal sub/unsub
+cleanup, TableState baseline subscriber counts, QueryCache bounds, DOM
+pooling, shared-bridge ownership semantics, 1k-mutation autosave coalescing,
+and 100 create/destroy cycles. The deeper 1000-cycle stress lives at
+`tests/performance/lifecycle-stress.test.ts` (`RUN_LIFECYCLE_STRESS=1`).
+
+### Bundle-size budgets
+
+`npm run size` enforces brotli-compressed caps with ~5 % headroom. Phase-9
+post-build actuals (2026-04-26):
+
+| Entry                           | Actual   | Cap    |
+| ------------------------------- | -------- | ------ |
+| Root entry · ESM                | 7.33 kB  | 7.7 kB |
+| Root entry · CJS                | 6.46 kB  | 6.8 kB |
+| `/advanced` entry · ESM         | 2.36 kB  | 2.5 kB |
+| `/advanced` entry · CJS         | 2.01 kB  | 2.2 kB |
+| Stylesheet                      | 16.14 kB | 17 kB  |
+| Lazy `ExportDialog` chunk · ESM | 77.43 kB | 81 kB  |
+| Lazy `ExportDialog` chunk · CJS | 71.85 kB | 76 kB  |
+
+The lazy `ExportDialog` chunk dominates because it pulls in the Parquet
+encoder; the root entry stays tiny (under 8 kB) so consumers paying first
+paint don't pay for export.
+
+### Tarball composition
+
+`npm pack --dry-run` shows 250 files, 1.4 MB tarball, 6.1 MB unpacked.
+Sourcemaps account for ~4 MB of the unpacked size; the library deliberately
+ships them so consumers can debug into library source frames in DevTools.
+Trimming sourcemaps is a deferred consumer-DX trade-off — open an issue if
+your environment requires it.
 
 ## Future benchmark tracking
 
 Planned for a follow-up release:
 
-- A benchmark harness measuring load time, filter latency, visualization refresh for fixed workloads (100 K, 1 M, 10 M rows; CSV vs Parquet)
 - A reference-machine configuration so numbers are comparable across releases
-- CI integration so regressions surface in PRs
+- A Playwright nightly job for real-browser frame timing and WASM cold-start
+- 10 M-row scaling profiles (today the docs assume 100 K – 1 M)
 
 Until that's in place, this doc stays methodology-first. If you
 measure something interesting about your workload, share it in an issue

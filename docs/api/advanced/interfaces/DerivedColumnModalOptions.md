@@ -6,7 +6,9 @@
 
 # Interface: DerivedColumnModalOptions
 
-Defined in: [derived/DerivedColumnModal.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L17)
+Defined in: [derived/DerivedColumnModal.ts:19](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L19)
+
+Construction options for [DerivedColumnModal](../classes/DerivedColumnModal.md).
 
 ## Properties
 
@@ -14,7 +16,7 @@ Defined in: [derived/DerivedColumnModal.ts:17](https://github.com/jeyabbalas/dat
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [derived/DerivedColumnModal.ts:18](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L18)
+Defined in: [derived/DerivedColumnModal.ts:20](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L20)
 
 ***
 
@@ -22,7 +24,7 @@ Defined in: [derived/DerivedColumnModal.ts:18](https://github.com/jeyabbalas/dat
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [derived/DerivedColumnModal.ts:35](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L35)
+Defined in: [derived/DerivedColumnModal.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L37)
 
 Element to mirror `data-dt-color-scheme` from. The modal backdrop
 portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
@@ -34,7 +36,7 @@ pass the `.dt-root` element here to keep it theme-synced.
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../../index/type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [derived/DerivedColumnModal.ts:27](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L27)
+Defined in: [derived/DerivedColumnModal.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L29)
 
 Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEditor.
 
@@ -44,7 +46,7 @@ Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEdit
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [derived/DerivedColumnModal.ts:25](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L25)
+Defined in: [derived/DerivedColumnModal.ts:27](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L27)
 
 Unique per-instance identifier mixed into element IDs so two tables on
 the same page don't collide on `aria-labelledby` targets. Normally
@@ -57,7 +59,7 @@ for standalone/test construction.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [derived/DerivedColumnModal.ts:37](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L37)
+Defined in: [derived/DerivedColumnModal.ts:39](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L39)
 
 Resolved i18n strings. Defaults to English.
 
@@ -67,7 +69,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onCreated?**: () => `void`
 
-Defined in: [derived/DerivedColumnModal.ts:29](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/DerivedColumnModal.ts#L29)
+Defined in: [derived/DerivedColumnModal.ts:31](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/DerivedColumnModal.ts#L31)
 
 Called after a derived column is successfully created.
 

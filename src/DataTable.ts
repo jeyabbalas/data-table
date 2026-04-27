@@ -412,7 +412,21 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (persistConfig.sessionStore) {
       sessionStore = persistConfig.sessionStore;
     } else {
-      sessionStore = new SessionStore();
+      // Wire SessionStore.onLoadIssue → table.on('warning') so consumers can
+      // distinguish "fresh user / no snapshot" from "stored snapshot was
+      // rejected because its version is outside [1, SNAPSHOT_VERSION]"
+      // (typically a downgrade from a newer library version that wrote the
+      // IDB row). Phase 7 deferred this; Phase 9 surfaces it.
+      sessionStore = new SessionStore({
+        onLoadIssue: (issue) => {
+          if (destroyed) return;
+          emitter.emit('warning', {
+            code: issue.code,
+            message: `Persisted session for "${issue.tableName}" was rejected: version ${issue.details.version} is outside the supported range [1, ${issue.details.expectedMax}]. Booting fresh.`,
+            details: { tableName: issue.tableName, ...issue.details },
+          });
+        },
+      });
       ownsSessionStore = true;
     }
     try {
@@ -887,24 +901,28 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       emitter.emit('selectionChange', { selectedRows: new Set(selectedRows) });
     }),
   );
-  unsubscribes.push(
-    state.visibleColumns.subscribe(() => {
-      emitter.emit('columnChange', {
-        visibleColumns: [...state.visibleColumns.get()],
-        pinnedColumns: [...state.pinnedColumns.get()],
-        columnOrder: [...state.columnOrder.get()],
-      });
-    }),
-  );
-  unsubscribes.push(
-    state.pinnedColumns.subscribe(() => {
-      emitter.emit('columnChange', {
-        visibleColumns: [...state.visibleColumns.get()],
-        pinnedColumns: [...state.pinnedColumns.get()],
-        columnOrder: [...state.columnOrder.get()],
-      });
-    }),
-  );
+  // visibleColumns and pinnedColumns are independent signals — but pinning a
+  // column moves it from one to the other, firing both subscribers in the
+  // same tick. Coalesce via a queueMicrotask flag so consumers see exactly
+  // one columnChange event per logical change instead of two duplicate ones.
+  let columnChangePending = false;
+  const flushColumnChange = (): void => {
+    if (!columnChangePending) return;
+    columnChangePending = false;
+    if (destroyed) return;
+    emitter.emit('columnChange', {
+      visibleColumns: [...state.visibleColumns.get()],
+      pinnedColumns: [...state.pinnedColumns.get()],
+      columnOrder: [...state.columnOrder.get()],
+    });
+  };
+  const scheduleColumnChange = (): void => {
+    if (columnChangePending) return;
+    columnChangePending = true;
+    queueMicrotask(flushColumnChange);
+  };
+  unsubscribes.push(state.visibleColumns.subscribe(scheduleColumnChange));
+  unsubscribes.push(state.pinnedColumns.subscribe(scheduleColumnChange));
   // derivedChange is emitted explicitly from the action call sites (see
   // src/core/Actions.ts) so the payload can carry the `kind` discriminator
   // and the specific `columnName` that changed. Undo/redo and session
@@ -1031,7 +1049,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),
-        schema: state.schema.get(),
+        // Defensive shallow clone — same contract as filterChange/sortChange/
+        // selectionChange/columnChange (Phase 8). Handlers that destructure
+        // and mutate `schema` cannot corrupt the live state signal value.
+        schema: [...state.schema.get()],
       });
     } catch (error) {
       const typed =

@@ -6,7 +6,12 @@
 
 # Class: CrossfilterCoordinator
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:34](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L34)
+Defined in: [visualizations/CrossfilterCoordinator.ts:40](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L40)
+
+Coordinates filter rebroadcasting across all column-header visualizations
+on a table. Composed by the facade; rarely needed directly. Bounds in-flight
+fan-out via a small concurrency cap so DuckDB-WASM (single-threaded) stays
+responsive on wide tables.
 
 ## Constructors
 
@@ -14,7 +19,7 @@ Defined in: [visualizations/CrossfilterCoordinator.ts:34](https://github.com/jey
 
 > **new CrossfilterCoordinator**(`state`, `actions`, `bridge`, `concurrency?`): `CrossfilterCoordinator`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:40](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L40)
+Defined in: [visualizations/CrossfilterCoordinator.ts:46](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L46)
 
 #### Parameters
 
@@ -44,7 +49,7 @@ Defined in: [visualizations/CrossfilterCoordinator.ts:40](https://github.com/jey
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:134](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L134)
+Defined in: [visualizations/CrossfilterCoordinator.ts:141](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L141)
 
 Clean up signal subscription and clear registrations
 
@@ -58,7 +63,7 @@ Clean up signal subscription and clear registrations
 
 > **handleFilterChange**(`columnName`, `filter`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:71](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L71)
+Defined in: [visualizations/CrossfilterCoordinator.ts:77](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L77)
 
 Route a visualization's onFilterChange to StateActions
 
@@ -82,7 +87,7 @@ Route a visualization's onFilterChange to StateActions
 
 > **register**(`columnName`, `viz`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:51](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L51)
+Defined in: [visualizations/CrossfilterCoordinator.ts:57](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L57)
 
 Register a visualization for crossfilter updates
 
@@ -106,7 +111,7 @@ Register a visualization for crossfilter updates
 
 > **syncExistingFilters**(): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:63](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L63)
+Defined in: [visualizations/CrossfilterCoordinator.ts:69](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L69)
 
 Sync filtered row count with current filter state.
 Call after registering all visualizations when filters may have been
@@ -122,7 +127,7 @@ restored from persistence before the coordinator was created.
 
 > **unregister**(`columnName`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:56](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/visualizations/CrossfilterCoordinator.ts#L56)
+Defined in: [visualizations/CrossfilterCoordinator.ts:62](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/CrossfilterCoordinator.ts#L62)
 
 Unregister a visualization
 

@@ -1,6 +1,6 @@
 {
   "name": "@jeyabbalas/data-table",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A client-side JavaScript library for interactive, explorable data tables using DuckDB WASM",
   "type": "module",
   "main": "./dist/data-table.cjs",
@@ -40,6 +40,7 @@
     "preview": "vite preview --config vite.demo.config.ts",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:perf": "RUN_DUCKDB_PERF=1 RUN_LIFECYCLE_STRESS=1 vitest run --config vitest.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache --cache-strategy content",
     "lint:fix": "eslint . --fix --cache --cache-strategy content",

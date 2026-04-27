@@ -6,7 +6,11 @@
 
 # Class: FilterPresetPanel
 
-Defined in: [filters/FilterPresetPanel.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L23)
+Defined in: [filters/FilterPresetPanel.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L29)
+
+Floating panel that hosts the save / load / import / export UI for filter
+presets. Composed by the facade when `presets` is enabled; reach for it
+directly to embed the preset list inside a custom shell.
 
 ## Constructors
 
@@ -14,7 +18,7 @@ Defined in: [filters/FilterPresetPanel.ts:23](https://github.com/jeyabbalas/data
 
 > **new FilterPresetPanel**(`presetManager`, `state`, `actions`, `options?`): `FilterPresetPanel`
 
-Defined in: [filters/FilterPresetPanel.ts:41](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L41)
+Defined in: [filters/FilterPresetPanel.ts:47](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L47)
 
 #### Parameters
 
@@ -44,7 +48,7 @@ Defined in: [filters/FilterPresetPanel.ts:41](https://github.com/jeyabbalas/data
 
 > **close**(): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:252](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L252)
+Defined in: [filters/FilterPresetPanel.ts:258](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L258)
 
 #### Returns
 
@@ -56,7 +60,7 @@ Defined in: [filters/FilterPresetPanel.ts:252](https://github.com/jeyabbalas/dat
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:497](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L497)
+Defined in: [filters/FilterPresetPanel.ts:503](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L503)
 
 #### Returns
 
@@ -68,7 +72,7 @@ Defined in: [filters/FilterPresetPanel.ts:497](https://github.com/jeyabbalas/dat
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterPresetPanel.ts:489](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L489)
+Defined in: [filters/FilterPresetPanel.ts:495](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L495)
 
 #### Returns
 
@@ -80,7 +84,7 @@ Defined in: [filters/FilterPresetPanel.ts:489](https://github.com/jeyabbalas/dat
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/FilterPresetPanel.ts:493](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L493)
+Defined in: [filters/FilterPresetPanel.ts:499](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L499)
 
 #### Returns
 
@@ -92,7 +96,7 @@ Defined in: [filters/FilterPresetPanel.ts:493](https://github.com/jeyabbalas/dat
 
 > **open**(`anchorElement`): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:231](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L231)
+Defined in: [filters/FilterPresetPanel.ts:237](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L237)
 
 #### Parameters
 
@@ -110,7 +114,7 @@ Defined in: [filters/FilterPresetPanel.ts:231](https://github.com/jeyabbalas/dat
 
 > **toggle**(`anchorElement`): `void`
 
-Defined in: [filters/FilterPresetPanel.ts:223](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/filters/FilterPresetPanel.ts#L223)
+Defined in: [filters/FilterPresetPanel.ts:229](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/FilterPresetPanel.ts#L229)
 
 #### Parameters
 

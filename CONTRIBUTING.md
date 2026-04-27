@@ -49,8 +49,14 @@ Use the **Feature request** issue template. Before proposing:
    - `npm run typecheck`
    - `npm run test:coverage`
    - `npm run build`
+   - `npm run size` (bundle-size budgets — fails on > 5 % regression)
+   - `npm run docs:api:check` (typedoc dry-run; catches broken JSDoc references)
 
    `npm run lint:fix` and `npm run format` can fix most mechanical issues.
+
+   The opt-in performance gate `npm run test:perf` (sets
+   `RUN_DUCKDB_PERF=1` and `RUN_LIFECYCLE_STRESS=1`) is for nightly /
+   manual runs — not required per PR.
 
 5. Add a changeset describing the change:
    ```bash

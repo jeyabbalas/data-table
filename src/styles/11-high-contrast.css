@@ -1,0 +1,65 @@
+/*
+ * High-contrast + forced-colors accessibility (Phase 9).
+ *
+ * MUST be last in cascade order so the contrast/forced-color overrides
+ * win against the per-component base styles in 02–10.
+ *
+ * Two scenarios:
+ *
+ *   1. `prefers-contrast: more` (Safari, Edge, Chrome) — the user has
+ *      asked the OS for higher-contrast UI. We thicken filter chip
+ *      borders so the chip boundary remains visible against the user's
+ *      preferred palette without overriding it.
+ *
+ *   2. `forced-colors: active` (Windows High Contrast Mode, "Contrast
+ *      themes" — replaces author colors with system-defined ones).
+ *      We opt the visualization canvas / SVG out of the color flattening
+ *      so brushes and histograms remain meaningful (DuckDB-driven data
+ *      vis is not decorative — losing color removes information). We
+ *      also pin filter-chip and disabled-button colors to the system
+ *      palette so they remain legible.
+ *
+ * Selectors are limited to classes verified in src/ (`.dt-filter-chip`,
+ * canvas/SVG inside visualization slots) — not all conceivable
+ * a11y-relevant elements have an existing target class. Phase 9 ships
+ * the additive surface; future a11y work can tighten the rest.
+ */
+
+@media (prefers-contrast: more) {
+  /* Filter chips: thicker borders so the chip boundary is visually distinct
+     from surrounding chips at the user's preferred contrast level. */
+  .dt-filter-chip {
+    border-width: 2px;
+  }
+}
+
+@media (forced-colors: active) {
+  /* Visualization canvas / SVG: the brush, bar fills, axis colors carry
+     real meaning — opt out of the user-agent color override so the data
+     remains legible. The user can still toggle their high-contrast theme
+     off if any individual chart is too colorful. Targets every canvas
+     and svg below the .dt-vis-canvas / .dt-stats-panel slots; the
+     selector is permissive on purpose so custom BaseVisualization
+     subclasses also benefit without per-class additions. */
+  .dt-vis-canvas,
+  .dt-vis-canvas canvas,
+  .dt-vis-canvas svg,
+  .dt-stats-panel canvas,
+  .dt-stats-panel svg {
+    forced-color-adjust: none;
+  }
+
+  /* Filter chips: explicitly map to system colors so they're guaranteed
+     visible (rather than relying on the user-agent's own choice). */
+  .dt-filter-chip {
+    border: 1px solid CanvasText;
+    color: CanvasText;
+  }
+
+  /* Buttons: ensure the disabled state is distinguishable in forced colors. */
+  .dt-btn:disabled,
+  button:disabled {
+    color: GrayText;
+    border-color: GrayText;
+  }
+}

@@ -8,14 +8,6 @@
 
 > `const` **VERSION**: `"0.1.0"` = `'0.1.0'`
 
-Defined in: [index.ts:13](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/index.ts#L13)
+Defined in: [index.ts:14](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/index.ts#L14)
 
-Interactive Data Table Library
-
-A client-side JavaScript library for interactive, explorable data tables
-using DuckDB WASM for in-browser analytics.
-
-This is the root entry (`@jeyabbalas/data-table`) — the public surface.
-Advanced building blocks (low-level state, UI components, export helpers,
-visualization internals, persistence snapshot serializers, `AutoSave`)
-live at `@jeyabbalas/data-table/advanced`.
+Library semantic-version string. Matches `package.json#version`.

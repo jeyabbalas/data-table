@@ -6,7 +6,11 @@
 
 # Class: AddColumnButton
 
-Defined in: [derived/AddColumnButton.ts:17](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L17)
+Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/AddColumnButton.ts#L23)
+
+Vertical "+" affordance positioned at the table's right edge that opens the
+derived-column modal. Composed by the facade when derived-column UI is
+enabled.
 
 ## Constructors
 
@@ -14,7 +18,7 @@ Defined in: [derived/AddColumnButton.ts:17](https://github.com/jeyabbalas/data-t
 
 > **new AddColumnButton**(`options?`): `AddColumnButton`
 
-Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L23)
+Defined in: [derived/AddColumnButton.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/AddColumnButton.ts#L29)
 
 #### Parameters
 
@@ -32,7 +36,7 @@ Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [derived/AddColumnButton.ts:59](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L59)
+Defined in: [derived/AddColumnButton.ts:65](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/AddColumnButton.ts#L65)
 
 #### Returns
 
@@ -44,7 +48,7 @@ Defined in: [derived/AddColumnButton.ts:59](https://github.com/jeyabbalas/data-t
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [derived/AddColumnButton.ts:55](https://github.com/jeyabbalas/data-table/blob/c5d52215a48c74afb80aea408ab8f07a3a1f5538/src/derived/AddColumnButton.ts#L55)
+Defined in: [derived/AddColumnButton.ts:61](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/derived/AddColumnButton.ts#L61)
 
 #### Returns
 

@@ -1,10 +1,10 @@
 /**
  * Phase 4: worker-side cancel.
  *
- * Phase-3 baseline: `case 'cancel'` was a no-op (`// TODO`). Phase 4 wires
- * it to `connection.cancelSent()` and tracks an in-flight reference so a
- * cancel only fires when its `targetId` matches. Errors from a DuckDB
- * interrupt are mapped to the new `QUERY_CANCELLED` code.
+ * The dispatcher routes `case 'cancel'` to `connection.cancelSent()` and
+ * tracks an in-flight reference so a cancel only fires when its `targetId`
+ * matches. Errors from a DuckDB interrupt are mapped to the
+ * `QUERY_CANCELLED` code.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 

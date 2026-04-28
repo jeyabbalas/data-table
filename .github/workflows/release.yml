@@ -1,23 +1,31 @@
 name: Release
 
-# Triggered on push to main. Either:
-#   1. Opens a "Version Packages" PR that bumps `package.json` + writes
-#      `CHANGELOG.md` from accumulated `.changeset/*.md` files, or
-#   2. Once that PR merges, publishes the new version to npm with provenance.
+# Triggered on push to main. Two responsibilities, split across two
+# steps:
+#
+#   1. The "Publish to npm (direct, with provenance)" step publishes any
+#      version that's in `package.json` but not yet on the registry. It
+#      uses the .npmrc that `actions/setup-node` already wired up against
+#      `NPM_TOKEN`, which `npm whoami` validates in the diagnostic step
+#      above it. This is the path that actually writes to npm.
+#
+#   2. The "Version PR (changesets/action)" step opens / updates the
+#      "Version Packages" PR off any pending `.changeset/*.md` files.
+#      `publish:` is intentionally NOT passed — its publish path failed
+#      with E404-masks-403 against this token even when `npm whoami`
+#      succeeded, which is why step (1) exists. Leaving the publish input
+#      off means changesets/action only manages the version PR; no second
+#      publish attempt, no spurious red.
 #
 # Manual prerequisites the maintainer enables before this workflow does
 # anything dangerous on `main`:
 #   - Add `NPM_TOKEN` repository secret with publish access to
-#     `@jeyabbalas/data-table` (or enable npm OIDC trusted publishing on the
-#     package settings page; in that case `NPM_TOKEN` is unused but
+#     `@jeyabbalas/data-table` (or enable npm OIDC trusted publishing on
+#     the package settings page; in that case `NPM_TOKEN` is unused but
 #     `id-token: write` is required).
-#   - In the repo Settings → Actions → General, enable "Allow GitHub Actions
-#     to create and approve pull requests" so the changesets action can open
-#     the version PR.
-#
-# Until both are configured, the `publish` step is a no-op (no token, the
-# changesets action skips publishing). The "Version Packages" PR can still
-# open even without a token.
+#   - In the repo Settings → Actions → General, enable "Allow GitHub
+#     Actions to create and approve pull requests" so changesets/action
+#     can open the version PR.
 
 on:
   push:
@@ -68,12 +76,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Direct publish bypasses changesets/action's internal .npmrc
-      # writing — its publish path was rejected with E404-masks-403 even
-      # after `npm whoami` succeeded with the same token. This step is
-      # idempotent: if the current version is already on the registry,
-      # it no-ops, so changesets/action below can stay in charge of the
-      # version-PR flow.
+      # The actual publish step. Idempotent: if the current version is
+      # already on the registry, it no-ops, so re-runs and unrelated
+      # pushes to main don't republish or fail.
       - name: Publish to npm (direct, with provenance)
         run: |
           set -euo pipefail
@@ -87,16 +92,13 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create release PR or publish
+      # Version-PR creation only. No `publish:` input — see the workflow
+      # header comment for why.
+      - name: Version PR (changesets/action)
         uses: changesets/action@v1
         with:
-          # Runs `changeset publish` once the "Version Packages" PR merges.
-          # Provenance + access:public come from the npm publish flag below.
-          publish: npm run release
           version: npm run version
           commit: 'chore: version packages'
           title: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'

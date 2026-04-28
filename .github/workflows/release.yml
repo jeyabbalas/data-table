@@ -68,6 +68,25 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # Direct publish bypasses changesets/action's internal .npmrc
+      # writing — its publish path was rejected with E404-masks-403 even
+      # after `npm whoami` succeeded with the same token. This step is
+      # idempotent: if the current version is already on the registry,
+      # it no-ops, so changesets/action below can stay in charge of the
+      # version-PR flow.
+      - name: Publish to npm (direct, with provenance)
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(node -p 'require("./package.json").version')
+          if npm view "@jeyabbalas/data-table@$PACKAGE_VERSION" version --silent >/dev/null 2>&1; then
+            echo "@jeyabbalas/data-table@$PACKAGE_VERSION already on registry; skipping"
+          else
+            echo "Publishing @jeyabbalas/data-table@$PACKAGE_VERSION"
+            npm publish --access public --provenance
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:

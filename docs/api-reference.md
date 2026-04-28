@@ -142,7 +142,7 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 
 | Symbol                | Kind      | Purpose                                                         |
 | --------------------- | --------- | --------------------------------------------------------------- |
-| `WorkerBridge`        | class     | DuckDB worker bridge; owns the worker and query cache.          |
+| `WorkerBridge`        | class     | DuckDB worker bridge; owns the worker and query cache; exposes `dropTable()` for ad-hoc table cleanup. |
 | `LoadOptions`         | interface | CSV/JSON/Parquet per-format options.                            |
 | `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initTimeoutMs`. |
 | `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                 |

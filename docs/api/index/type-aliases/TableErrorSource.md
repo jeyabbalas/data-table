@@ -8,6 +8,6 @@
 
 > **TableErrorSource** = `"load"` \| `"query"` \| `"export"` \| `"persistence"` \| `"visualization"` \| `"stats-panel"` \| `"sql-validation"` \| `"derived-column"` \| `"listener"` \| `"unknown"`
 
-Defined in: [core/TableEvents.ts:18](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/core/TableEvents.ts#L18)
+Defined in: [core/TableEvents.ts:18](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/TableEvents.ts#L18)
 
 Origin of an `error` event — which subsystem surfaced the failure.

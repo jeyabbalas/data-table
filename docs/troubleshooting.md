@@ -268,13 +268,32 @@ The same pattern handles navigation-driven unmounts.
 
 ### 8. Memory grows across successive `loadData()` calls
 
-Cause: each `loadData()` registers a new DuckDB table. If you also add derived columns between loads, the old VIEW stays registered until the bridge is torn down.
+Cause: most of the obvious culprits are already cleaned up by the library:
 
-Fix:
+- The previous base table is dropped on `loadData` when `tableName`
+  differs; same-`tableName` reload uses `CREATE OR REPLACE TABLE`, so
+  the catalog never accumulates orphans across reloads.
+- Derived-column VIEWs are namespaced per `tableName` and dropped by
+  `DerivedColumnManager.destroy()` when the table is destroyed.
+- The query cache is flushed on each load.
 
-- For a clean slate, call `await table.clearSession()` (also wipes IndexedDB) before `loadData()`.
-- For in-place replacement with the same schema, `loadData()` reuses the existing table name.
-- For a full tear-down between unrelated datasets, `await table.destroy()` and create a fresh instance.
+What's left to check when memory still climbs:
+
+- **Consumer-created tables.** Tables you registered yourself via
+  `bridge.query('CREATE TABLE foo AS …')` are not tracked by any
+  `DataTable`, so they outlive every load. Drop them explicitly with
+  `await bridge.dropTable('foo')`.
+- **References held by your app code.** A destroyed `DataTable` still
+  in a closure or array prevents the worker, snapshots, and DOM from
+  being garbage-collected. Null out the reference after `destroy()`.
+- **Very large dataset swaps.** Both buffers coexist briefly while the
+  new load is in flight. For peak-memory-sensitive paths, prefer
+  `await table.destroy(); table = await createDataTable({ … })` over
+  `loadData()`.
+
+For a clean UI slate without releasing the underlying DuckDB table,
+call `await table.clearSession()` — the table stays queryable until
+the next `loadData` or `destroy()`.
 
 ---
 

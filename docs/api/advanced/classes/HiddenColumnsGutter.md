@@ -6,7 +6,7 @@
 
 # Class: HiddenColumnsGutter
 
-Defined in: [table/HiddenColumnsGutter.ts:26](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/HiddenColumnsGutter.ts#L26)
+Defined in: [table/HiddenColumnsGutter.ts:26](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/HiddenColumnsGutter.ts#L26)
 
 HiddenColumnsGutter renders a horizontal bar of chips for hidden columns.
 It auto-shows when columns are hidden and collapses when all are visible.
@@ -17,7 +17,7 @@ It auto-shows when columns are hidden and collapses when all are visible.
 
 > **new HiddenColumnsGutter**(`state`, `actions`, `options?`): `HiddenColumnsGutter`
 
-Defined in: [table/HiddenColumnsGutter.ts:35](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/HiddenColumnsGutter.ts#L35)
+Defined in: [table/HiddenColumnsGutter.ts:35](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/HiddenColumnsGutter.ts#L35)
 
 #### Parameters
 
@@ -43,7 +43,7 @@ Defined in: [table/HiddenColumnsGutter.ts:35](https://github.com/jeyabbalas/data
 
 > **destroy**(): `void`
 
-Defined in: [table/HiddenColumnsGutter.ts:157](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/HiddenColumnsGutter.ts#L157)
+Defined in: [table/HiddenColumnsGutter.ts:157](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/HiddenColumnsGutter.ts#L157)
 
 Destroy and clean up
 
@@ -57,7 +57,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/HiddenColumnsGutter.ts:150](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/HiddenColumnsGutter.ts#L150)
+Defined in: [table/HiddenColumnsGutter.ts:150](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/HiddenColumnsGutter.ts#L150)
 
 Get the gutter's DOM element
 

@@ -456,7 +456,8 @@ See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations
 ### WorkerBridge
 
 The RPC layer between the main thread and the DuckDB Web Worker.
-Promise-based (`initialize()`, `load()`, `query()`, `export()`,
+Promise-based (`initialize()`, `loadData()`, `query()`,
+`exportToBuffer()`, `clearQueryCache()`, `dropTable()`,
 `terminate()`); supports abort signals, progress callbacks, and query
 caching. One bridge can be shared across multiple `DataTable` instances via
 `createDataTable({ bridge })` to keep a single DuckDB context for all tables on

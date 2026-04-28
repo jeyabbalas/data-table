@@ -6,7 +6,7 @@
 
 # Interface: DataTable
 
-Defined in: [DataTable.ts:235](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L235)
+Defined in: [DataTable.ts:235](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L235)
 
 The returned object from [createDataTable](../functions/createDataTable.md).
 
@@ -16,7 +16,7 @@ The returned object from [createDataTable](../functions/createDataTable.md).
 
 > `readonly` **actions**: [`StateActions`](../../advanced/classes/StateActions.md)
 
-Defined in: [DataTable.ts:239](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L239)
+Defined in: [DataTable.ts:239](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L239)
 
 Command/mutation layer.
 
@@ -26,7 +26,7 @@ Command/mutation layer.
 
 > `readonly` **annotations**: [`AnnotationStore`](../../advanced/classes/AnnotationStore.md)
 
-Defined in: [DataTable.ts:250](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L250)
+Defined in: [DataTable.ts:250](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L250)
 
 Programmatic row / column / cell annotation store. Annotations are
 app-authored metadata (validation errors, QC notes) that overlay the
@@ -39,7 +39,7 @@ independently via `SessionSnapshot`.
 
 > `readonly` **bridge**: [`WorkerBridge`](../classes/WorkerBridge.md)
 
-Defined in: [DataTable.ts:241](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L241)
+Defined in: [DataTable.ts:241](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L241)
 
 DuckDB worker bridge for custom SQL queries.
 
@@ -49,7 +49,7 @@ DuckDB worker bridge for custom SQL queries.
 
 > `readonly` **container**: [`TableContainer`](../../advanced/classes/TableContainer.md)
 
-Defined in: [DataTable.ts:243](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L243)
+Defined in: [DataTable.ts:243](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L243)
 
 UI container. Rarely needed directly; prefer the event bus.
 
@@ -59,7 +59,7 @@ UI container. Rarely needed directly; prefer the event bus.
 
 > `readonly` **instanceId**: `string`
 
-Defined in: [DataTable.ts:257](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L257)
+Defined in: [DataTable.ts:257](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L257)
 
 Unique per-instance identifier, e.g. `'t1-a3f9'`. Mixed into modal
 element IDs to keep two tables on the same page from colliding on
@@ -71,7 +71,7 @@ element IDs to keep two tables on the same page from colliding on
 
 > `readonly` **state**: [`TableState`](../../advanced/interfaces/TableState.md)
 
-Defined in: [DataTable.ts:237](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L237)
+Defined in: [DataTable.ts:237](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L237)
 
 Reactive state signals — advanced users can subscribe directly.
 
@@ -81,7 +81,7 @@ Reactive state signals — advanced users can subscribe directly.
 
 > **clearSession**(): `Promise`\<`void`\>
 
-Defined in: [DataTable.ts:284](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L284)
+Defined in: [DataTable.ts:284](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L284)
 
 Wipe the persisted UI snapshot for the current table AND reset in-memory
 state. Clears filters, sort, columns, derived columns, undo/redo stacks,
@@ -100,7 +100,7 @@ IndexedDB delete is skipped).
 
 > **destroy**(): `Promise`\<`void`\>
 
-Defined in: [DataTable.ts:290](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L290)
+Defined in: [DataTable.ts:290](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L290)
 
 Tear down everything this table owns: DOM, subscriptions, worker (if owned),
 session store (if owned). Call when unmounting from the DOM.
@@ -115,7 +115,7 @@ session store (if owned). Call when unmounting from the DOM.
 
 > **getColorScheme**(): [`ColorScheme`](../type-aliases/ColorScheme.md)
 
-Defined in: [DataTable.ts:319](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L319)
+Defined in: [DataTable.ts:319](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L319)
 
 The currently-applied color scheme. Reflects the last [setColorScheme](#setcolorscheme) call (or the initial option).
 
@@ -129,7 +129,7 @@ The currently-applied color scheme. Reflects the last [setColorScheme](#setcolor
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [DataTable.ts:297](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L297)
+Defined in: [DataTable.ts:297](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L297)
 
 `true` once [destroy](#destroy) has been called. Useful as a guard in
 framework cleanup callbacks (e.g., React `useEffect` returns) that may
@@ -145,7 +145,7 @@ run after an earlier destroy.
 
 > **isPersistenceActive**(): `boolean`
 
-Defined in: [DataTable.ts:305](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L305)
+Defined in: [DataTable.ts:305](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L305)
 
 `true` if IndexedDB-backed session persistence is active. Returns `false`
 when persistence was disabled via options OR when IndexedDB was
@@ -162,7 +162,7 @@ unavailable at init time (check for a `warning` event with code
 
 > **loadData**(`source`, `opts?`): `Promise`\<`void`\>
 
-Defined in: [DataTable.ts:263](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L263)
+Defined in: [DataTable.ts:263](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L263)
 
 Load a new data source into the table. Re-uses the existing worker.
 Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
@@ -187,7 +187,7 @@ Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
 
 > **off**\<`K`\>(`event`, `handler`): `void`
 
-Defined in: [DataTable.ts:271](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L271)
+Defined in: [DataTable.ts:271](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L271)
 
 Alternative to the return value of `on`.
 
@@ -217,7 +217,7 @@ Alternative to the return value of `on`.
 
 > **on**\<`K`\>(`event`, `handler`): () => `void`
 
-Defined in: [DataTable.ts:269](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L269)
+Defined in: [DataTable.ts:269](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L269)
 
 Subscribe to an event. Returns an unsubscribe function.
 
@@ -247,7 +247,7 @@ Subscribe to an event. Returns an unsubscribe function.
 
 > **openExportDialog**(): `void`
 
-Defined in: [DataTable.ts:274](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L274)
+Defined in: [DataTable.ts:274](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L274)
 
 Open the export dialog. No-op if `exportDialog: false`.
 
@@ -261,7 +261,7 @@ Open the export dialog. No-op if `exportDialog: false`.
 
 > **setColorScheme**(`scheme`): `void`
 
-Defined in: [DataTable.ts:316](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/DataTable.ts#L316)
+Defined in: [DataTable.ts:316](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/DataTable.ts#L316)
 
 Switch the light/dark theme at runtime. `'light'` / `'dark'` force the
 corresponding theme; `'auto'` clears the override and lets

@@ -84,14 +84,13 @@ let sharedBuffer: ArrayBuffer | null = null;
   // Full-session wipe for both tables: deletes both IDB rows, empties the
   // shared preset list, clears each table's undo stack, then reloads the
   // parquet buffer into both tables so the page stays usable. `clearSession`
-  // resets JS state only — the DuckDB tables survive, so drop them before
-  // the second loadData or `CREATE TABLE` throws "already exists".
+  // resets JS state and the IDB snapshot only; the loader's
+  // `CREATE OR REPLACE TABLE` handles the same-`tableName` reload of the
+  // underlying DuckDB tables atomically.
   document.getElementById('clear-session')!.addEventListener('click', async () => {
     if (!sharedBuffer) return;
     await a!.clearSession();
     await b!.clearSession();
-    await sharedBridge.query('DROP TABLE IF EXISTS "trips_a"');
-    await sharedBridge.query('DROP TABLE IF EXISTS "trips_b"');
     await a!.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_a' });
     await b!.loadData(sharedBuffer, { sourceFormat: 'parquet', tableName: 'trips_b' });
     console.log('[09] session cleared and both tables reloaded');

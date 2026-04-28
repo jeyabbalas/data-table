@@ -6,7 +6,7 @@
 
 # Class: SessionStore
 
-Defined in: [persistence/SessionStore.ts:266](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L266)
+Defined in: [persistence/SessionStore.ts:266](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L266)
 
 IndexedDB-backed persistence store for `SessionSnapshot` records, keyed by
 `tableName` (which defaults to the table's `instanceId`).
@@ -55,7 +55,7 @@ const snapshot = await store.load('my-table');
 
 > **new SessionStore**(`options?`): `SessionStore`
 
-Defined in: [persistence/SessionStore.ts:271](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L271)
+Defined in: [persistence/SessionStore.ts:271](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L271)
 
 #### Parameters
 
@@ -73,7 +73,7 @@ Defined in: [persistence/SessionStore.ts:271](https://github.com/jeyabbalas/data
 
 > **close**(): `void`
 
-Defined in: [persistence/SessionStore.ts:434](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L434)
+Defined in: [persistence/SessionStore.ts:434](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L434)
 
 Close the database connection and reset state.
 
@@ -87,7 +87,7 @@ Close the database connection and reset state.
 
 > **delete**(`tableName`): `Promise`\<`void`\>
 
-Defined in: [persistence/SessionStore.ts:400](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L400)
+Defined in: [persistence/SessionStore.ts:400](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L400)
 
 Delete a snapshot by table name. No-op if db unavailable.
 
@@ -107,7 +107,7 @@ Delete a snapshot by table name. No-op if db unavailable.
 
 > **list**(): `Promise`\<`string`[]\>
 
-Defined in: [persistence/SessionStore.ts:417](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L417)
+Defined in: [persistence/SessionStore.ts:417](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L417)
 
 List all stored table names. Returns [] if db unavailable.
 
@@ -121,7 +121,7 @@ List all stored table names. Returns [] if db unavailable.
 
 > **load**(`tableName`): `Promise`\<[`SessionSnapshot`](../../advanced/interfaces/SessionSnapshot.md) \| `null`\>
 
-Defined in: [persistence/SessionStore.ts:373](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L373)
+Defined in: [persistence/SessionStore.ts:373](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L373)
 
 Load a snapshot by table name. Returns `null` if not found, if IDB is
 unavailable, or if the stored value fails a structural shape check (a
@@ -144,7 +144,7 @@ a future schema version we can't recognise).
 
 > **open**(): `Promise`\<`boolean`\>
 
-Defined in: [persistence/SessionStore.ts:276](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L276)
+Defined in: [persistence/SessionStore.ts:276](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L276)
 
 Open the IndexedDB database. Returns true on success, false if unavailable.
 
@@ -158,7 +158,7 @@ Open the IndexedDB database. Returns true on success, false if unavailable.
 
 > **save**(`snapshot`): `Promise`\<`void`\>
 
-Defined in: [persistence/SessionStore.ts:331](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L331)
+Defined in: [persistence/SessionStore.ts:331](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L331)
 
 Store a snapshot. No-op if `tableName` is null or IDB is unavailable
 (private browsing, opt-out, no-IDB environment).
@@ -185,7 +185,7 @@ no-IDB fallback; quota and abort errors must reach the consumer.
 
 > **saveSync**(`snapshot`): `void`
 
-Defined in: [persistence/SessionStore.ts:359](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/persistence/SessionStore.ts#L359)
+Defined in: [persistence/SessionStore.ts:359](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/SessionStore.ts#L359)
 
 Synchronous save — enqueues an IDB put without yielding to the microtask
 queue. Use this in page lifecycle handlers (beforeunload, visibilitychange)

@@ -6,7 +6,7 @@
 
 # Interface: TableBodyOptions
 
-Defined in: [table/TableBody.ts:24](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L24)
+Defined in: [table/TableBody.ts:24](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L24)
 
 Options for configuring the TableBody
 
@@ -16,7 +16,7 @@ Options for configuring the TableBody
 
 > `optional` **annotationPopover?**: [`AnnotationPopover`](../classes/AnnotationPopover.md)
 
-Defined in: [table/TableBody.ts:45](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L45)
+Defined in: [table/TableBody.ts:45](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L45)
 
 Shared popover singleton used to display cell-scope annotations on
 hover / focus of an annotated cell.
@@ -27,7 +27,7 @@ hover / focus of an annotated cell.
 
 > `optional` **annotations?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [table/TableBody.ts:40](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L40)
+Defined in: [table/TableBody.ts:40](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L40)
 
 Shared annotation store. When provided, the body applies
 `dt-row--annotated` / `dt-cell--annotated` classes at render time and
@@ -39,7 +39,7 @@ subscribes to `change` events to keep visible rows in sync.
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/TableBody.ts:28](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L28)
+Defined in: [table/TableBody.ts:28](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L28)
 
 CSS class prefix (default: 'dt')
 
@@ -49,7 +49,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/TableBody.ts:47](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L47)
+Defined in: [table/TableBody.ts:47](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L47)
 
 Resolved i18n strings (used for the placeholder-row label). Defaults to English.
 
@@ -59,7 +59,7 @@ Resolved i18n strings (used for the placeholder-row label). Defaults to English.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [table/TableBody.ts:26](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L26)
+Defined in: [table/TableBody.ts:26](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L26)
 
 Fixed height per row in pixels (default: 32)
 
@@ -69,7 +69,7 @@ Fixed height per row in pixels (default: 32)
 
 > `optional` **scrollContainer?**: `HTMLElement`
 
-Defined in: [table/TableBody.ts:34](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/table/TableBody.ts#L34)
+Defined in: [table/TableBody.ts:34](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/table/TableBody.ts#L34)
 
 External scroll container for unified scrolling.
 When provided, VirtualScroller will use this container for scroll events

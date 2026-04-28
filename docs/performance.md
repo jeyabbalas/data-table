@@ -215,16 +215,22 @@ vector columns are accumulating.
 
 ## Common performance pitfalls
 
-### Reloading data without destroy-first
+### Peak memory during a large dataset swap
+
+`loadData()` drops the previous DuckDB base table after the new one
+is live (or replaces it atomically when the `tableName` matches), so
+the catalog does not accumulate orphans across reloads. While the
+new load is in flight, both buffers coexist briefly — for very large
+dataset swaps where peak main-thread memory matters, `destroy()` +
+recreate releases the previous buffers earlier than `loadData()`:
 
 ```ts
-// Each loadData() keeps the previous DuckDB table until overwritten.
-// Memory accumulates across loads.
+// Both buffers coexist briefly during the swap.
 await table.loadData(largeSource1);
 await table.loadData(largeSource2);
-await table.loadData(largeSource3);
 
-// Prefer destroy + recreate when loading a very different dataset:
+// Prefer destroy + recreate when peak memory matters more than
+// preserving the table instance:
 await table.destroy();
 table = await createDataTable({ container, source: largeSource3 });
 ```
@@ -268,6 +274,10 @@ cached signature before re-querying.
 `table.destroy()` is authoritative — after it resolves:
 
 - The worker is terminated (unless shared)
+- The DuckDB base table is dropped from the worker when the bridge
+  is shared (i.e. you passed it in via `bridge: …`); when the table
+  owns its bridge, `terminate()` discards the worker entirely so the
+  drop is unnecessary
 - All DOM is removed
 - Signal subscriptions are disposed
 - IDB connections close (if owned; shared stores are your responsibility)

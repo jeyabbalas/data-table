@@ -90,6 +90,14 @@ opt-in (see [Multi-table dashboards](./multi-table.md)). The annotation
 store and query cache are always per-DataTable, so they're unconditionally
 cleared.
 
+The DuckDB-side cleanup is symmetric:
+
+- If the new load uses a **different** `tableName`, the previous base
+  table is dropped from the worker after the new one is live. Same-
+  `tableName` reloads skip the drop — the loader's
+  `CREATE OR REPLACE TABLE` handles the catalog conflict atomically.
+  A failed load leaves the previous data queryable as a fallback.
+
 Practical consequence: in a single-table app, saving a filter preset on
 dataset A then loading dataset B starts B with no presets. Refreshing the
 browser on the same dataset still restores the saved presets via the
@@ -222,6 +230,10 @@ Effect:
 - Annotations cleared
 - Filter presets cleared **only when the manager is owned by this table**
   (i.e. you didn't pass a shared `presets: { manager }`)
+- The DuckDB table is **not** dropped — its rows remain queryable via
+  `bridge.query()` until the next `loadData()` (or `destroy()` on a
+  shared bridge) evicts it. Use `bridge.dropTable(tableName)` to
+  release that worker memory immediately if you need to.
 
 After `clearSession()`, the table is fresh. Call `loadData()` to re-populate
 it (or pass a new `source` and mount a new table).

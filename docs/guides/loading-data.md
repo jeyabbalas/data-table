@@ -148,8 +148,19 @@ The library reuses the existing worker and clears query-cache entries
 invalidated by the new schema. Filters and derived columns tied to column
 names that don't exist in the new data are dropped on session restore.
 
-If the new dataset is enormous and you want to reclaim memory from the
-previous one, destroy and recreate the table instead:
+The previous DuckDB base table is reclaimed automatically:
+
+- If the new load uses a **different** `tableName`, the previous base
+  table is dropped from the worker after the new load resolves. A
+  failed load leaves the previous data queryable as a fallback.
+- If the new load reuses the **same** `tableName`, the loader's
+  `CREATE OR REPLACE TABLE` swaps the contents atomically — no
+  separate drop is needed.
+
+For very large dataset swaps where peak main-thread memory matters
+(loading a 200 MB source on top of an existing 200 MB table),
+`destroy()` + recreate releases the previous buffers earlier than
+`loadData()`:
 
 ```ts
 await table.destroy();
@@ -237,7 +248,7 @@ for a runnable demo.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
-- **Memory growth across loads.** Each `loadData()` keeps DuckDB's prior tables until they're overwritten. For large-to-large loads, `destroy()` + recreate is cleaner than `loadData()`.
+- **Peak memory during a large swap.** `loadData()` drops the previous DuckDB base table after the new one is live (or replaces it atomically when the `tableName` matches), so the catalog stays clean across reloads. While the new load is in flight, both buffers coexist briefly — for very large dataset swaps where peak main-thread memory matters, `destroy()` + recreate releases the previous buffers earlier.
 - **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
 
 ## Related

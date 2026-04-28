@@ -6,7 +6,7 @@
 
 # Interface: SQLFilterModalOptions
 
-Defined in: [filters/SQLFilterModal.ts:19](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L19)
+Defined in: [filters/SQLFilterModal.ts:19](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L19)
 
 Construction options for [SQLFilterModal](../classes/SQLFilterModal.md).
 
@@ -16,7 +16,7 @@ Construction options for [SQLFilterModal](../classes/SQLFilterModal.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/SQLFilterModal.ts:20](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L20)
+Defined in: [filters/SQLFilterModal.ts:20](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L20)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [filters/SQLFilterModal.ts:20](https://github.com/jeyabbalas/data-ta
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/SQLFilterModal.ts:35](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L35)
+Defined in: [filters/SQLFilterModal.ts:35](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L35)
 
 Element to mirror `data-dt-color-scheme` from. The modal backdrop
 portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
@@ -36,7 +36,7 @@ pass the `.dt-root` element here to keep it theme-synced.
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../../index/type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [filters/SQLFilterModal.ts:29](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L29)
+Defined in: [filters/SQLFilterModal.ts:29](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L29)
 
 Custom editor factory. If omitted, uses CodeMirrorExpressionEditor.
 
@@ -46,7 +46,7 @@ Custom editor factory. If omitted, uses CodeMirrorExpressionEditor.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [filters/SQLFilterModal.ts:27](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L27)
+Defined in: [filters/SQLFilterModal.ts:27](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L27)
 
 Unique per-instance identifier mixed into element IDs so two tables on
 the same page don't collide on `aria-labelledby` targets. Normally
@@ -59,6 +59,6 @@ for standalone/test construction.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/SQLFilterModal.ts:37](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/filters/SQLFilterModal.ts#L37)
+Defined in: [filters/SQLFilterModal.ts:37](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/SQLFilterModal.ts#L37)
 
 Resolved i18n strings. Defaults to English.

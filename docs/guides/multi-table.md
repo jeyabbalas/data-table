@@ -78,6 +78,12 @@ caller-owned bridge is terminated when a table's `destroy()` runs
 constructed yourself survives every table's destruction — call
 `bridge.terminate()` when you're done with the page.
 
+Each table also drops its own base table from the shared bridge when
+`destroy()` runs, so unmounting one of N tables in a multi-table
+dashboard reclaims that table's DuckDB memory without touching the
+others. Sibling tables on the bridge keep their tables and continue
+working.
+
 **Requirements when sharing:**
 
 - **Distinct `tableName` per table.** DuckDB creates one table per call;
@@ -99,6 +105,11 @@ constructed yourself survives every table's destruction — call
   visualization queries at 4 per bridge), but avoid sharing when one table
   routinely runs multi-second analytical queries that shouldn't head-of-line
   block the other.
+- Ad-hoc tables you create yourself via `bridge.query('CREATE TABLE …')`
+  are not tracked by any `DataTable`, so they outlive every table's
+  `destroy()`. Use `bridge.dropTable(name)` to clean them up — it
+  shares the loaders' identifier-quoting rules and is idempotent
+  (`DROP TABLE IF EXISTS`).
 
 ### When to keep `WorkerBridge` per-table
 
@@ -205,7 +216,10 @@ sharedStore.close();
 
 Tables skip `bridge.terminate()` when they don't own the bridge
 (`ownsBridge` in `src/DataTable.ts:372,:956`), so a shared bridge survives
-both `destroy()` calls and must be terminated explicitly.
+both `destroy()` calls and must be terminated explicitly. Each table
+does drop its own base table from the bridge before exiting, so the
+bridge's DuckDB catalog stays clean even when you destroy tables one
+at a time without ever calling `terminate()`.
 
 Closing the store before destroying tables is benign (auto-save may skip a
 final flush) but not fatal — `SessionStore.saveSync()` silently no-ops on a

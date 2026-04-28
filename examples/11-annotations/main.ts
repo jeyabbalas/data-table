@@ -146,11 +146,12 @@ let table: DataTable | undefined;
   wireFilter('filter-info', 'info');
 
   // Clear session — full wipe (annotations + filters + sort + presets + IDB),
-  // then reload the dataset so the example stays interactive.
+  // then reload the dataset so the example stays interactive. The loader's
+  // `CREATE OR REPLACE TABLE` handles the same-`tableName` reload of the
+  // underlying DuckDB table atomically.
   $<HTMLButtonElement>('btn-clear-session').onclick = async () => {
     try {
       await table!.clearSession();
-      await table!.bridge.query('DROP TABLE IF EXISTS "nyc_taxi_annotations"');
       await table!.loadData(DATA_URL, {
         sourceFormat: 'parquet',
         tableName: 'nyc_taxi_annotations',

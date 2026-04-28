@@ -8,7 +8,7 @@
 
 > `const` **defaultVisualizationRegistry**: [`VisualizationRegistry`](../classes/VisualizationRegistry.md)
 
-Defined in: [visualizations/VisualizationRegistry.ts:234](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/visualizations/VisualizationRegistry.ts#L234)
+Defined in: [visualizations/VisualizationRegistry.ts:234](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/VisualizationRegistry.ts#L234)
 
 Shared module-scoped registry. Used by the deprecated
 `VisualizationFactory` static wrapper and as the fallback when

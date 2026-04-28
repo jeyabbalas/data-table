@@ -8,6 +8,6 @@
 
 > **Annotation** = [`RowAnnotation`](../interfaces/RowAnnotation.md) \| [`ColumnAnnotation`](../interfaces/ColumnAnnotation.md) \| [`CellAnnotation`](../interfaces/CellAnnotation.md)
 
-Defined in: [annotations/types.ts:91](https://github.com/jeyabbalas/data-table/blob/f22a19ec87341b8bb1fcc88431dd0ee7f9f703fb/src/annotations/types.ts#L91)
+Defined in: [annotations/types.ts:91](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/annotations/types.ts#L91)
 
 Discriminated union of every annotation variant.

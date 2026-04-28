@@ -1,7 +1,15 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
 
 export default defineConfig({
+  define: {
+    __DT_VERSION__: JSON.stringify(pkg.version),
+  },
   test: {
     globals: true,
     environment: 'node',

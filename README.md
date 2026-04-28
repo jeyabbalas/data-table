@@ -64,6 +64,49 @@ table.on('filterChange', ({ filters, filteredRowCount }) => {
 await table.destroy();
 ```
 
+For file pickers, URL inputs, or "swap dataset" flows, mount once and load
+on user action — no `destroy()`/recreate dance needed:
+
+```ts
+const table = await createDataTable({
+  container: document.getElementById('my-table')!,
+});
+
+document.getElementById('file-picker')!.addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) await table.loadData(file);
+});
+```
+
+`loadData(source)` accepts a `File`, an absolute URL (`https://…`,
+`http://…`, `file:`, `data:`, `blob:`), a protocol-relative URL
+(`//host/…`), a root-relative path (`/data.csv`), a dot-prefixed relative
+path (`./data.csv`, `../data.csv`), an `ArrayBuffer`, a `Blob`, or inline
+CSV/JSON content (multi-line text, or a string starting with `[` / `{`).
+Relative URLs resolve against `window.location` — the same way `<img src>`
+and `fetch` behave. Ambiguous strings (a single-line `sample.csv` with no
+leading slash, for example) throw `LoadError` with code `SOURCE_AMBIGUOUS`
+rather than silently parsing the literal text as CSV content.
+
+Probe required browser APIs before mounting:
+
+```ts
+import { checkBrowserSupport } from '@jeyabbalas/data-table';
+
+const support = checkBrowserSupport();
+if (!support.supported) {
+  renderUnsupportedScreen(support.missing); // ['Worker', 'WebAssembly', …]
+  return;
+}
+// safe to call createDataTable(...) here
+```
+
+The library is **ESM-only** since v0.4.0. Use `import` syntax (every modern
+bundler — Vite, webpack 5, Rollup, esbuild, Bun — resolves the ESM build
+by default). It is browser-only and not safe to evaluate during SSR — see
+[Framework integration](#framework-integration) below for client-side
+mounting patterns.
+
 ## Documentation
 
 Full documentation lives under [`docs/`](./docs/README.md). A quick index:

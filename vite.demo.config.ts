@@ -2,6 +2,10 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
+
 const FIXTURES_ROOT = resolve(__dirname, 'tests/fixtures/datasets');
 
 const EXAMPLES = [
@@ -24,6 +28,9 @@ const EXAMPLES = [
 export default defineConfig({
   // root defaults to '.'
   base: '/data-table/', // GitHub repo name for GitHub Pages
+  define: {
+    __DT_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

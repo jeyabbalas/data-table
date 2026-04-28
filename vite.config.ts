@@ -2,6 +2,10 @@ import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
+
 /**
  * Plugin to concatenate CSS module files into a single dist/data-table.css.
  *
@@ -33,21 +37,53 @@ function buildStylesPlugin(): Plugin {
   };
 }
 
+/**
+ * Plugin to emit a one-line type-stub at dist/styles.d.ts so that
+ * `import '@jeyabbalas/data-table/styles'` typechecks under strict TS
+ * (TS2882 otherwise — bare CSS exports have no type declaration).
+ */
+function emitStylesTypeStubPlugin(): Plugin {
+  return {
+    name: 'emit-styles-dts',
+    writeBundle() {
+      const distDir = resolve(__dirname, 'dist');
+      if (!existsSync(distDir)) {
+        mkdirSync(distDir, { recursive: true });
+      }
+      writeFileSync(
+        resolve(distDir, 'styles.d.ts'),
+        '// Side-effect import — bundles the prebuilt CSS at "./data-table.css".\nexport {};\n',
+        'utf8',
+      );
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [buildStylesPlugin()],
+  plugins: [buildStylesPlugin(), emitStylesTypeStubPlugin()],
+  // Asset URLs (used by `new Worker(new URL(...), import.meta.url)` rewrites)
+  // must be relative so they resolve correctly from the bundle's installed
+  // location in `node_modules/@jeyabbalas/data-table/dist/`. The default `/`
+  // produced absolute paths that 404'd at the consumer's site root.
+  base: './',
+  define: {
+    __DT_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     lib: {
-      // Two entry points:
-      //   `.`        → dist/data-table.{js,cjs}
-      //   `./advanced` → dist/advanced.{js,cjs}
+      // Two entry points (ESM only — the library is browser-only and the
+      // worker bundle is itself an ES module, so a CJS wrapper can't load
+      // it as `{ type: 'module' }` even with Terser fixes).
+      //   `.`         → dist/data-table.js
+      //   `./advanced` → dist/advanced.js
       // package.json's `exports` field advertises which ones are public.
       entry: {
         'data-table': resolve(__dirname, 'src/index.ts'),
         advanced: resolve(__dirname, 'src/advanced.ts'),
       },
       name: 'DataTable',
-      fileName: (format, entryName) => (format === 'es' ? `${entryName}.js` : `${entryName}.cjs`),
-      formats: ['es', 'cjs'],
+      fileName: (_format, entryName) => `${entryName}.js`,
+      formats: ['es'],
     },
     rollupOptions: {
       // Externalize peer dependencies — consumers install them once in their app

@@ -3,21 +3,22 @@
   "version": "0.3.1",
   "description": "A client-side JavaScript library for interactive, explorable data tables using DuckDB WASM",
   "type": "module",
-  "main": "./dist/data-table.cjs",
+  "main": "./dist/data-table.js",
   "module": "./dist/data-table.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/data-table.js",
-      "require": "./dist/data-table.cjs"
+      "import": "./dist/data-table.js"
     },
     "./advanced": {
       "types": "./dist/advanced.d.ts",
-      "import": "./dist/advanced.js",
-      "require": "./dist/advanced.cjs"
+      "import": "./dist/advanced.js"
     },
-    "./styles": "./dist/data-table.css",
+    "./styles": {
+      "types": "./dist/styles.d.ts",
+      "default": "./dist/data-table.css"
+    },
     "./styles.css": "./dist/data-table.css"
   },
   "files": [

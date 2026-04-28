@@ -10,8 +10,15 @@
  * live at `@jeyabbalas/data-table/advanced`.
  */
 
-/** Library semantic-version string. Matches `package.json#version`. */
-export const VERSION = '0.2.0';
+declare const __DT_VERSION__: string;
+
+/**
+ * Library semantic-version string. Matches `package.json#version`.
+ *
+ * Substituted at build time via Vite's `define` (see `vite.config.ts`)
+ * so the published value can never drift from the manifest.
+ */
+export const VERSION: string = __DT_VERSION__;
 
 // ---- Facade ----
 // High-level entry point for most consumers. Wraps worker + state + actions

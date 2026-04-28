@@ -48,16 +48,8 @@ describe('loaders — idempotent reload under the same tableName', () => {
 
   it('loadCSV — re-loading identical bytes under the same tableName succeeds', async () => {
     const tableName = 'idem_csv_same_bytes';
-    const first = await loadCSV(
-      await readBinaryFixture('csv', 'titanic'),
-      { tableName },
-      ctx(),
-    );
-    const second = await loadCSV(
-      await readBinaryFixture('csv', 'titanic'),
-      { tableName },
-      ctx(),
-    );
+    const first = await loadCSV(await readBinaryFixture('csv', 'titanic'), { tableName }, ctx());
+    const second = await loadCSV(await readBinaryFixture('csv', 'titanic'), { tableName }, ctx());
     expect(first.rowCount).toBe(891);
     expect(second.rowCount).toBe(891);
     expect(second.columns).toEqual(first.columns);
@@ -65,11 +57,7 @@ describe('loaders — idempotent reload under the same tableName', () => {
 
   it('loadCSV — replacing the table with different content under the same name', async () => {
     const tableName = 'idem_csv_replace';
-    const first = await loadCSV(
-      await readBinaryFixture('csv', 'titanic'),
-      { tableName },
-      ctx(),
-    );
+    const first = await loadCSV(await readBinaryFixture('csv', 'titanic'), { tableName }, ctx());
     expect(first.rowCount).toBe(891);
 
     const second = await loadCSV(
@@ -84,16 +72,8 @@ describe('loaders — idempotent reload under the same tableName', () => {
 
   it('loadJSON — re-loading identical bytes under the same tableName succeeds', async () => {
     const tableName = 'idem_json_same_bytes';
-    const first = await loadJSON(
-      await readBinaryFixture('json', 'titanic'),
-      { tableName },
-      ctx(),
-    );
-    const second = await loadJSON(
-      await readBinaryFixture('json', 'titanic'),
-      { tableName },
-      ctx(),
-    );
+    const first = await loadJSON(await readBinaryFixture('json', 'titanic'), { tableName }, ctx());
+    const second = await loadJSON(await readBinaryFixture('json', 'titanic'), { tableName }, ctx());
     expect(first.rowCount).toBe(891);
     expect(second.rowCount).toBe(891);
     expect(second.columns).toEqual(first.columns);
@@ -101,11 +81,7 @@ describe('loaders — idempotent reload under the same tableName', () => {
 
   it('loadJSON — replacing the table with different content under the same name', async () => {
     const tableName = 'idem_json_replace';
-    const first = await loadJSON(
-      await readBinaryFixture('json', 'titanic'),
-      { tableName },
-      ctx(),
-    );
+    const first = await loadJSON(await readBinaryFixture('json', 'titanic'), { tableName }, ctx());
     expect(first.rowCount).toBe(891);
 
     const second = await loadJSON(

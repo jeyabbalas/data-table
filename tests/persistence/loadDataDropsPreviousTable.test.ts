@@ -65,7 +65,10 @@ function makeBridge(): WorkerBridge {
   } as unknown as WorkerBridge;
 }
 
-function emptySnapshot(tableName: string, overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+function emptySnapshot(
+  tableName: string,
+  overrides: Partial<SessionSnapshot> = {},
+): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -87,9 +90,7 @@ function makeSessionStore(snapshots: Record<string, SessionSnapshot | null> = {}
     open: vi.fn().mockResolvedValue(true),
     save: vi.fn().mockResolvedValue(undefined),
     saveSync: vi.fn(),
-    load: vi
-      .fn()
-      .mockImplementation((name: string) => Promise.resolve(snapshots[name] ?? null)),
+    load: vi.fn().mockImplementation((name: string) => Promise.resolve(snapshots[name] ?? null)),
     delete: vi.fn().mockResolvedValue(undefined),
     list: vi.fn().mockResolvedValue([]),
     close: vi.fn(),
@@ -168,12 +169,10 @@ describe('loadData / destroy — drops previous base table', () => {
 
     // Make the next load reject. State should not be mutated to "B"; the
     // previous tableName is still A in DuckDB; we must not drop it.
-    (bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }).mockRejectedValueOnce(
-      new Error('boom'),
-    );
-    await expect(
-      table.loadData(new File([''], 'b.csv'), { tableName: 'B' }),
-    ).rejects.toThrow();
+    (
+      bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }
+    ).mockRejectedValueOnce(new Error('boom'));
+    await expect(table.loadData(new File([''], 'b.csv'), { tableName: 'B' })).rejects.toThrow();
 
     expect(bridge.dropTable).not.toHaveBeenCalled();
     await table.destroy();

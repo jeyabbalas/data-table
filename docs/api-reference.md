@@ -140,13 +140,13 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 
 ### Data layer
 
-| Symbol                | Kind      | Purpose                                                         |
-| --------------------- | --------- | --------------------------------------------------------------- |
+| Symbol                | Kind      | Purpose                                                                                                |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
 | `WorkerBridge`        | class     | DuckDB worker bridge; owns the worker and query cache; exposes `dropTable()` for ad-hoc table cleanup. |
-| `LoadOptions`         | interface | CSV/JSON/Parquet per-format options.                            |
-| `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initTimeoutMs`. |
-| `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                 |
-| `LoadResult`          | interface | `{ tableName, rowCount, schema }` returned by the bridge.       |
+| `LoadOptions`         | interface | CSV/JSON/Parquet per-format options.                                                                   |
+| `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initTimeoutMs`.                                        |
+| `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                                                        |
+| `LoadResult`          | interface | `{ tableName, rowCount, schema }` returned by the bridge.                                              |
 
 ### Persistence
 

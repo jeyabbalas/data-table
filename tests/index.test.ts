@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import * as rootModule from '../src/index';
 import { VERSION } from '../src/index';
 
-const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, '..', 'package.json'), 'utf8'),
-) as { version: string };
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '..', 'package.json'), 'utf8')) as {
+  version: string;
+};
 
 describe('Data Table Library', () => {
   it('exports VERSION matching package.json#version', () => {

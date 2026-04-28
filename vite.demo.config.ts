@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 
-const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
-) as { version: string };
+const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as {
+  version: string;
+};
 
 const FIXTURES_ROOT = resolve(__dirname, 'tests/fixtures/datasets');
 

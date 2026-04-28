@@ -46,7 +46,10 @@ function makeBridge(): WorkerBridge {
   } as unknown as WorkerBridge;
 }
 
-function emptySnapshot(tableName: string, overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+function emptySnapshot(
+  tableName: string,
+  overrides: Partial<SessionSnapshot> = {},
+): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
     timestamp: Date.now(),
@@ -84,7 +87,12 @@ async function makeTable(
     presets?: boolean | { manager: FilterPresetManager };
     tableName?: string;
   } = {},
-): Promise<{ table: DataTable; container: HTMLElement; bridge: WorkerBridge; store: SessionStore }> {
+): Promise<{
+  table: DataTable;
+  container: HTMLElement;
+  bridge: WorkerBridge;
+  store: SessionStore;
+}> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const bridge = overrides.bridge ?? makeBridge();
@@ -148,11 +156,13 @@ describe('loadData — resets per-dataset state', () => {
       await vi.advanceTimersByTimeAsync(2000);
 
       // Switch to B (no snapshot exists for B in `snapshots`).
-      (bridge.loadData as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue({
-        tableName: 'B',
-        rowCount: 0,
-        schema: schemaB,
-      });
+      (bridge.loadData as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue(
+        {
+          tableName: 'B',
+          rowCount: 0,
+          schema: schemaB,
+        },
+      );
       await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
 
       // Trigger a state mutation so AutoSave schedules a save under B's

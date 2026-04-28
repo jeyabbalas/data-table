@@ -54,9 +54,7 @@ function makeSnapshotWithPreset(): SessionSnapshot {
     pinnedColumns: [],
     hiddenColumnInfo: {},
     derivedColumns: [],
-    filterPresets: [
-      { id: 'p1', name: 'restored-preset', filters: [], createdAt: 0, updatedAt: 0 },
-    ],
+    filterPresets: [{ id: 'p1', name: 'restored-preset', filters: [], createdAt: 0, updatedAt: 0 }],
   };
 }
 

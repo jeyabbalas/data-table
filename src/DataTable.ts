@@ -1229,10 +1229,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         try {
           await bridge.dropTable(baseToDrop);
         } catch (err) {
-          console.warn(
-            `[data-table] Failed to drop base table "${baseToDrop}" on destroy:`,
-            err,
-          );
+          console.warn(`[data-table] Failed to drop base table "${baseToDrop}" on destroy:`, err);
         }
       }
     }

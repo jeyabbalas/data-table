@@ -2,9 +2,9 @@ import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
-const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
-) as { version: string };
+const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as {
+  version: string;
+};
 
 /**
  * Plugin to concatenate CSS module files into a single dist/data-table.css.

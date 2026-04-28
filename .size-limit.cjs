@@ -15,16 +15,17 @@
  * so we glob; the underlying chunk is always reachable via the
  * `lazyExportDialog` dynamic import in `src/DataTable.ts`.
  *
+ * CJS bundles were dropped in 0.4.0 (see `.changeset/fix-worker-url-and-cjs-drop.md`)
+ * — the library is browser-only and the worker is itself an ES module that a CJS
+ * wrapper cannot load. Only ESM + CSS are measured now.
+ *
  * Phase-9 baseline (brotli, captured 2026-04-26 after the
  * splitCrossfilterFilters removal, columnChange dedupe, loadComplete clone,
  * SESSION_VERSION_REJECTED warning, and high-contrast.css addition):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap (5.0 %)
- *   root entry · CJS        6.46 kB   →   6.8 kB cap (5.3 %)
  *   advanced entry · ESM    2.36 kB   →   2.5 kB cap (5.9 %)
- *   advanced entry · CJS    2.01 kB   →   2.2 kB cap (9.5 %)
  *   stylesheet             16.14 kB   →  17 kB   cap (5.3 %)
  *   lazy chunk · ESM       77.43 kB   →  81 kB   cap (4.6 %)
- *   lazy chunk · CJS       71.85 kB   →  76 kB   cap (5.8 %)
  *
  * Phase-2 baseline pre-tightening (kept for diff context):
  *   root entry · ESM        7.01 kB   →   8 kB
@@ -42,19 +43,9 @@ module.exports = [
     limit: '7.7 kB',
   },
   {
-    name: 'root entry · CJS (dist/data-table.cjs)',
-    path: 'dist/data-table.cjs',
-    limit: '6.8 kB',
-  },
-  {
     name: 'advanced entry · ESM (dist/advanced.js)',
     path: 'dist/advanced.js',
     limit: '2.5 kB',
-  },
-  {
-    name: 'advanced entry · CJS (dist/advanced.cjs)',
-    path: 'dist/advanced.cjs',
-    limit: '2.2 kB',
   },
   {
     name: 'stylesheet (dist/data-table.css)',
@@ -65,10 +56,5 @@ module.exports = [
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
     limit: '81 kB',
-  },
-  {
-    name: 'lazy ExportDialog chunk · CJS',
-    path: 'dist/VisualizationRegistry-*.cjs',
-    limit: '76 kB',
   },
 ];

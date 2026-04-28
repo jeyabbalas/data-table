@@ -347,10 +347,7 @@ interface LoadBytesOptions {
   skipParquetCache?: boolean;
 }
 
-async function loadBytes(
-  prepared: PreparedSource,
-  opts: LoadBytesOptions,
-): Promise<void> {
+async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Promise<void> {
   updateInfo('Loading data...');
 
   // tableName policy:
@@ -522,9 +519,8 @@ async function loadBytes(
 async function loadSource(source: File | string): Promise<void> {
   try {
     const prepared = await prepareSource(source);
-    const meta: LoadBytesOptions['meta'] = source instanceof File
-      ? { type: 'file', source: source.name }
-      : { type: 'url', source };
+    const meta: LoadBytesOptions['meta'] =
+      source instanceof File ? { type: 'file', source: source.name } : { type: 'url', source };
     await loadBytes(prepared, { meta });
     // Reset the file picker so the user can immediately re-select the same
     // file (browsers suppress the change event on identical reselection).

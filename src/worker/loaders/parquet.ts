@@ -89,7 +89,7 @@ export async function loadParquet(
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
     // the rationale (single typed-array shape on read, symmetry across
     // loaders). The reserved-name guard above is case-sensitive.
-    const createSql = `CREATE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
     try {
       await conn.query(createSql);
     } catch (err) {

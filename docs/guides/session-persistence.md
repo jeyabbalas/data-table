@@ -72,6 +72,34 @@ overwrites the first. Either provide unique `tableName` values when mounting
 multiple tables, or pass a shared `SessionStore` (see below) and rely on the
 keying.
 
+### Per-dataset state is reset on `loadData`
+
+`loadData` resets the table's per-dataset state before loading the new
+dataset, then re-populates it from the new dataset's snapshot if one
+exists. Specifically, `loadData` clears:
+
+- the active filter / sort / column layout / undo–redo history (already
+  done — `loadData` always reset these),
+- the **owned** `FilterPresetManager`'s presets,
+- the `AnnotationStore`,
+- the worker bridge's SQL query cache.
+
+A user-supplied (shared) `FilterPresetManager` passed via
+`presets: { manager }` is **not** cleared — sharing across tables is
+opt-in (see [Multi-table dashboards](./multi-table.md)). The annotation
+store and query cache are always per-DataTable, so they're unconditionally
+cleared.
+
+Practical consequence: in a single-table app, saving a filter preset on
+dataset A then loading dataset B starts B with no presets. Refreshing the
+browser on the same dataset still restores the saved presets via the
+snapshot — the clear-then-restore order means restoration wins on the
+same-`tableName` path.
+
+`clearSession` follows the same ownership rule: it clears the
+`FilterPresetManager` only when this DataTable owns it, so a multi-table
+dashboard's shared presets survive when one table is wiped.
+
 ## Opting out
 
 ```ts
@@ -191,7 +219,9 @@ Effect:
 - Filters, sort, column layout, derived columns reset
 - Undo/redo stacks cleared
 - Query cache flushed
-- Filter presets cleared (if presets are enabled via the default manager)
+- Annotations cleared
+- Filter presets cleared **only when the manager is owned by this table**
+  (i.e. you didn't pass a shared `presets: { manager }`)
 
 After `clearSession()`, the table is fresh. Call `loadData()` to re-populate
 it (or pass a new `source` and mount a new table).

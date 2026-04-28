@@ -125,7 +125,7 @@ export async function loadCSV(
     // (BigInt64Array) for the rowid column. The reserved-name guard above
     // is case-sensitive (DuckDB-correct): "__RowID__" would slip through
     // and would not collide with our injected "__rowid__".
-    const createSql = `CREATE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_csv_auto('${fileName}'${optionsStr})`;
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_csv_auto('${fileName}'${optionsStr})`;
     try {
       await conn.query(createSql);
     } catch (err) {

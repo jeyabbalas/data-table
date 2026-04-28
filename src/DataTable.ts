@@ -445,9 +445,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   }
 
   // -------- Presets --------
+  // `ownsPresetManager` is true when this DataTable created the manager
+  // itself (no `presets.manager` option). User-supplied shared managers
+  // (multi-table dashboards) must NOT be cleared on per-table loadData /
+  // clearSession — sharing across tables is opt-in.
   let presetManager: FilterPresetManager | null = null;
+  let ownsPresetManager = false;
   if (opts.presets !== false) {
     const presetConfig = typeof opts.presets === 'object' ? opts.presets : {};
+    ownsPresetManager = presetConfig.manager === undefined;
     presetManager = presetConfig.manager ?? new FilterPresetManager();
   }
 
@@ -1062,6 +1068,18 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      // Clear per-dataset state before loading the new dataset. AutoSave
+      // is disabled here, so these mutations don't fire spurious saves.
+      // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
+      // re-populate presets / annotations from the new dataset's snapshot
+      // if one exists. Shared `FilterPresetManager`s (user-supplied) are
+      // left untouched so multi-table dashboards keep their cross-table
+      // state. The annotation store is always per-DataTable, so its
+      // clear is unconditional. Bridge query cache is invalidated to
+      // avoid stale plans bound to the previous dataset's columns.
+      if (ownsPresetManager) presetManager?.presets.set([]);
+      annotationStore.clear('all');
+      bridge.clearQueryCache();
       const mergedOpts: LoadDataOptions = {
         ...(loadOpts ?? {}),
         format: loadOpts?.sourceFormat ?? loadOpts?.format,
@@ -1199,7 +1217,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       }
       resetTableState(state);
       undoManager?.clear();
-      presetManager?.presets.set([]);
+      // Only clear presets we own. A user-supplied shared
+      // `FilterPresetManager` (multi-table dashboards) outlives any
+      // single table's session — clearing it here would wipe other
+      // tables' presets too.
+      if (ownsPresetManager) presetManager?.presets.set([]);
       annotationStore.clear('all');
       bridge.clearQueryCache();
     } finally {

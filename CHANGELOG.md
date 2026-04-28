@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.1
+
+### Patch Changes
+
+- b4b0a61: Fix: `loadData` and `clearSession` no longer leak per-dataset session state across dataset switches or shared preset managers.
+  - `loadData` now clears the owned filter-preset manager, the annotation store, and the bridge query cache before loading the new dataset. The next snapshot persisted by `AutoSave` therefore reflects only the current dataset, not state inherited from whichever dataset was loaded previously.
+  - `clearSession` now only clears `FilterPresetManager` instances created by the library itself. User-supplied managers passed via `presets: { manager }` (multi-table dashboards) are left untouched, since wiping them would destroy the other tables' presets.
+  - A single table that uses the default `presets: true` is unaffected by the second change — its manager is owned, so `clearSession` keeps clearing it as before.
+
+  Symptom this fixes: in a single-table app, saving a filter preset on dataset A and then loading dataset B left A's preset visible on B. After this change, the preset list resets between datasets, while session-restore on the same dataset (matching `tableName`) still re-populates it from the saved snapshot.
+
+- 96b7f96: Fix: loading a new dataset (or destroying the DataTable on a shared bridge) now drops the previous base table from DuckDB instead of leaking it. Long-running dashboards that reload data many times in one page lifetime — or unmount tables in a multi-table dashboard — no longer accumulate orphan tables in the worker's DuckDB catalog.
+  - `loadData` captures `state.baseTableName` before the new load and, on success, issues `DROP TABLE IF EXISTS` for the previous name. Skipped when the new load reuses the same name (`CREATE OR REPLACE TABLE` already replaced it atomically). A failed load leaves the previous data queryable.
+  - `destroy()` drops `state.baseTableName` when the bridge is shared (`ownsBridge=false`). When the DataTable owns the bridge, `bridge.terminate()` discards the entire worker, so the drop is skipped.
+  - `clearSession()` is unchanged — it still clears UI state and the IndexedDB snapshot but leaves the DuckDB table queryable until the next `loadData`.
+
+  New API: `WorkerBridge.dropTable(tableName)`. Convenience for consumers managing ad-hoc tables via `bridge.query('CREATE TABLE …')`. Idempotent (uses `DROP TABLE IF EXISTS`) and quotes the identifier the same way the worker-side loaders do.
+
+- b4b0a61: Fix: calling `loadData` twice with the same `tableName` no longer throws a DuckDB "Catalog Error: Table with name 'X' already exists!".
+
+  The CSV / JSON / Parquet worker loaders now use `CREATE OR REPLACE TABLE` instead of `CREATE TABLE`, so a reload under the same name atomically replaces the previous registration. This came up in the demo when re-uploading a file whose content hash drove the same `tableName` as the prior load — the `loadData` call hit the conflict before the library could surface a useful error.
+
+  Behavior with a brand-new `tableName` is unchanged.
+
 ## 0.3.0
 
 ### Minor Changes

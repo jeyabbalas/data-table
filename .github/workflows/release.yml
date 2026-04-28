@@ -59,6 +59,15 @@ jobs:
       - name: Run tests
         run: npm run test:coverage
 
+      - name: Verify npm authentication
+        run: |
+          echo "registry: $(npm config get registry)"
+          echo "always-auth: $(npm config get always-auth)"
+          echo "whoami:"
+          npm whoami --registry https://registry.npmjs.org
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:

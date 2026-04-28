@@ -1068,6 +1068,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      // Capture the previous base table NOW, before `actions.loadData`
+      // resets state. We drop it AFTER the new load resolves successfully —
+      // a failed load leaves the previous data queryable as a fallback.
+      // `state.baseTableName` takes precedence so a derived-VIEW tableName
+      // doesn't shadow the underlying physical table name.
+      const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
@@ -1103,6 +1109,27 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // and mutate `schema` cannot corrupt the live state signal value.
         schema: [...state.schema.get()],
       });
+      // Reclaim the previous base table now that the new one is live.
+      // Skip when names match — `CREATE OR REPLACE TABLE` already
+      // replaced it atomically in the loader, and a redundant DROP would
+      // race with the live table. Best-effort: a DROP failure must not
+      // turn a successful load into a thrown error — we only leak one
+      // orphan in that worst case.
+      const newBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+      if (
+        previousBaseTableName &&
+        previousBaseTableName !== newBaseTableName &&
+        typeof bridge.dropTable === 'function'
+      ) {
+        try {
+          await bridge.dropTable(previousBaseTableName);
+        } catch (err) {
+          console.warn(
+            `[data-table] Failed to drop previous table "${previousBaseTableName}":`,
+            err,
+          );
+        }
+      }
     } catch (error) {
       const typed =
         error instanceof DataTableError
@@ -1186,6 +1213,27 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         sessionStore.close();
       } catch {
         // ignore
+      }
+    }
+
+    // Reclaim the base table from the worker before tearing down. Skipped
+    // when we own the bridge — `terminate()` discards the whole worker
+    // (and its DuckDB context) below, so the DROP would be wasted IPC.
+    // When the bridge is shared (multi-table dashboards), the worker
+    // outlives this DataTable, and the table would orphan if we didn't
+    // drop it here. Best-effort: a failure must not turn `destroy()` into
+    // a thrown error.
+    if (!ownsBridge && typeof bridge.dropTable === 'function') {
+      const baseToDrop = state.baseTableName.get() ?? state.tableName.get();
+      if (baseToDrop) {
+        try {
+          await bridge.dropTable(baseToDrop);
+        } catch (err) {
+          console.warn(
+            `[data-table] Failed to drop base table "${baseToDrop}" on destroy:`,
+            err,
+          );
+        }
       }
     }
 

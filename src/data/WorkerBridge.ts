@@ -376,6 +376,23 @@ export class WorkerBridge {
   }
 
   /**
+   * Drop a table from DuckDB if it exists. The identifier is double-quoted
+   * (matching the worker-side loaders), so any tableName the bridge issued
+   * to a `loadData` call is safe to pass back here.
+   *
+   * Idempotent — a missing table is not an error. Used by `DataTable` to
+   * reclaim the previous base table on reload and on `destroy()` over a
+   * shared bridge. Exposed publicly so consumers managing ad-hoc tables
+   * via `bridge.query('CREATE TABLE …')` have a symmetric drop helper
+   * without re-implementing identifier quoting.
+   */
+  async dropTable(tableName: string): Promise<void> {
+    this.ensureInitialized();
+    const quoted = `"${tableName.replace(/"/g, '""')}"`;
+    await this.query(`DROP TABLE IF EXISTS ${quoted}`);
+  }
+
+  /**
    * Check if the bridge is initialized
    */
   isInitialized(): boolean {

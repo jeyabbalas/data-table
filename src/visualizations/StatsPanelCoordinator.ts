@@ -92,13 +92,18 @@ export class StatsPanelCoordinator {
 
   /**
    * Re-broadcast the current filter array to every registered panel.
+   * Returns a promise that resolves once every panel's `updateFilters` call
+   * settles (per-panel errors are swallowed by `callUpdateFilters`). The
+   * facade awaits this during `loadData` so `loadComplete` doesn't fire
+   * while initial panel queries are still in flight.
+   *
    * Useful after registering new panels so they see filters that were
    * already in state (e.g., restored from persistence) before the
    * coordinator was created or the panel was registered.
    */
-  syncExistingFilters(filters: Filter[]): void {
-    if (this.destroyed) return;
-    void this.onFiltersChanged(filters);
+  syncExistingFilters(filters: Filter[]): Promise<void> {
+    if (this.destroyed) return Promise.resolve();
+    return this.onFiltersChanged(filters);
   }
 
   private async onFiltersChanged(filters: Filter[]): Promise<void> {

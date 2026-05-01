@@ -234,4 +234,33 @@ describe('CrossfilterCoordinator — filter flow', () => {
 
     expect(state.filteredRows.get()).toBe(7);
   });
+
+  it('syncExistingFilters() returns Promise.resolve() when no filters are in state', async () => {
+    coord = new CrossfilterCoordinator(state, actions, bridge);
+    // No filters in state — should short-circuit and not issue a query.
+    const result = coord.syncExistingFilters();
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toBeUndefined();
+    expect(bridge.query).not.toHaveBeenCalled();
+  });
+
+  it('syncExistingFilters() returns a promise that resolves AFTER the COUNT(*) query settles', async () => {
+    bridge = makeBridge(42);
+    actions = new StateActions(state, bridge);
+    coord = new CrossfilterCoordinator(state, actions, bridge);
+
+    // Pre-populate filters so syncExistingFilters has work to do.
+    state.filters.set([{ type: 'point', column: 'age', value: 30 } as Filter]);
+    // Drain the broadcast triggered by state.filters.set so we can
+    // observe syncExistingFilters' return promise in isolation.
+    await new Promise((r) => setTimeout(r, 20));
+    (bridge.query as ReturnType<typeof vi.fn>).mockClear();
+
+    // Now syncExistingFilters should issue a COUNT(*) query and the
+    // returned promise should not resolve until that query settles.
+    const promise = coord.syncExistingFilters();
+    expect(promise).toBeInstanceOf(Promise);
+    await promise;
+    expect(bridge.query).toHaveBeenCalled();
+  });
 });

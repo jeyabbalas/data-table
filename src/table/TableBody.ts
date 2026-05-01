@@ -680,8 +680,25 @@ export class TableBody {
         this.rowElementMap.set(i, rowEl);
         this.insertRowInOrder(viewport, rowEl, i);
       } else if (rowData) {
-        // Row exists, update content if needed (e.g., after sort)
-        this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+        // The map can hold either a data row (visibleColumns.length cells,
+        // listeners attached) or a placeholder (1 cell, no listeners).
+        // updateRowContent's loop is bounded by min(columns, cells), so
+        // calling it on a placeholder leaves columns 1..N-1 unrendered AND
+        // the row inert — the partial-render bug. Cell-count mismatch is
+        // the durable signal (the dt-row--loading class is stripped by
+        // updateRowContent on first call); replace from the pool when it
+        // doesn't match.
+        if (rowEl.children.length !== visibleColumns.length) {
+          rowEl.remove();
+          rowEl = this.getOrCreateRow(visibleColumns.length);
+          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          this.attachRowEventListeners(rowEl, i);
+          this.rowElementMap.set(i, rowEl);
+          this.insertRowInOrder(viewport, rowEl, i);
+        } else {
+          // Row exists, update content if needed (e.g., after sort)
+          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+        }
       }
 
       // Apply selection/hover styles
@@ -833,6 +850,18 @@ export class TableBody {
    * Return a row element to the pool for reuse
    */
   private returnRowToPool(rowEl: HTMLElement): void {
+    // Skip placeholder-shaped rows (1 cell carrying dt-cell--placeholder).
+    // Pooling them lets `getOrCreateRow` later append blank cells alongside
+    // the placeholder cell — the appended cells are fine, but the original
+    // placeholder cell keeps its dt-cell--placeholder class and would render
+    // its column's data in tertiary text colour. GC overhead is trivial:
+    // placeholders are cheap to recreate when the data hasn't arrived yet.
+    const placeholderClass = `${this.classPrefix}-cell--placeholder`;
+    const firstChild = rowEl.firstElementChild as HTMLElement | null;
+    if (firstChild?.classList.contains(placeholderClass)) {
+      return;
+    }
+
     // Clone the element to remove all event listeners
     // When reused, new listeners will be attached via attachRowEventListeners
     const cleanEl = rowEl.cloneNode(true) as HTMLElement;

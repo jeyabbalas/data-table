@@ -156,9 +156,6 @@ export class ValueCounts extends BaseVisualization {
   // Fetch sequence counter for stale result protection
   private fetchSequence = 0;
 
-  // Promise for initial data load (used by waitForData)
-  private dataPromise: Promise<void>;
-
   // Interaction state - index into renderSegments array
   private hoveredSegment: number | null = null;
 
@@ -1624,14 +1621,6 @@ export class ValueCounts extends BaseVisualization {
   // =========================================
   // Public State Getters/Setters
   // =========================================
-
-  /**
-   * Wait for initial data to be loaded without triggering a new fetch.
-   * Use this when you need to restore state after visualization creation.
-   */
-  public waitForData(): Promise<void> {
-    return this.dataPromise;
-  }
 
   /**
    * Get the current selection state for persistence

@@ -76,18 +76,21 @@ export class CrossfilterCoordinator {
     this.visualizations.delete(columnName);
   }
 
-  /** Sync filtered row count with current filter state.
+  /** Sync filtered row count with current filter state. Returns a promise
+   * that resolves once the row-count query settles (or immediately when
+   * there are no filters in state). The facade awaits this during `loadData`
+   * so `loadComplete` doesn't fire while the count query is still in flight.
+   *
    * Call after registering all visualizations when filters may have been
    * restored from persistence before the coordinator was created. */
-  syncExistingFilters(): void {
+  syncExistingFilters(): Promise<void> {
     const filters = this.state.filters.get();
-    if (filters.length > 0) {
-      const seq = ++this.filterSequence;
-      void this.updateFilteredRowCount(filters, seq).then(() => {
-        if (seq !== this.filterSequence) return;
-        this.options.onFilterCycleComplete?.(filters);
-      });
-    }
+    if (filters.length === 0) return Promise.resolve();
+    const seq = ++this.filterSequence;
+    return this.updateFilteredRowCount(filters, seq).then(() => {
+      if (seq !== this.filterSequence) return;
+      this.options.onFilterCycleComplete?.(filters);
+    });
   }
 
   /** Route a visualization's onFilterChange to StateActions */

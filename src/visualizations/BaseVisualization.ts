@@ -156,6 +156,13 @@ export abstract class BaseVisualization {
   // mid-await.
   private filterUpdateSequence = 0;
 
+  // Tracks the initial `fetchData()` call subclasses kick off in their
+  // constructor (`SharedHistogramBase`, `ValueCounts` reassign this
+  // immediately after `super(...)`). Surfaced via `waitForData()` so the
+  // facade can gate `loadComplete` on first-paint readiness. Subclasses
+  // with no eager fetch leave it `Promise.resolve()` — "ready immediately".
+  protected dataPromise: Promise<void> = Promise.resolve();
+
   // Bound event handlers for proper cleanup
   private boundMouseMove: (e: MouseEvent) => void;
   private boundMouseLeave: (e: MouseEvent) => void;
@@ -429,6 +436,19 @@ export abstract class BaseVisualization {
    */
   isDestroyed(): boolean {
     return this.destroyed;
+  }
+
+  /**
+   * Resolves once the visualization's initial `fetchData()` settles. The
+   * facade awaits this during `loadData` so a consumer chaining `addFilter`
+   * after `await createDataTable` doesn't race the unfiltered first fetch.
+   *
+   * Subclasses that don't fetch in their constructor return a pre-resolved
+   * promise. Resolves on success, rejection (observable via
+   * `options.onError`), and post-destroy. Never hangs.
+   */
+  public waitForData(): Promise<void> {
+    return this.dataPromise;
   }
 
   /**

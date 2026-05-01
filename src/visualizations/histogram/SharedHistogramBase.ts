@@ -138,9 +138,6 @@ export abstract class SharedHistogramBase<
   // Fetch sequence counter for stale result protection
   protected fetchSequence = 0;
 
-  // Promise for initial data load (used by waitForData)
-  protected dataPromise: Promise<void>;
-
   // Interaction state
   protected hoveredBin: number | null = null;
   protected hoveredNull = false;
@@ -1535,14 +1532,6 @@ export abstract class SharedHistogramBase<
   // =========================================
   // Public State Getters/Setters
   // =========================================
-
-  /**
-   * Wait for initial data to be loaded without triggering a new fetch.
-   * Use this when you need to restore state after histogram creation.
-   */
-  public waitForData(): Promise<void> {
-    return this.dataPromise;
-  }
 
   /**
    * Get the current brush state for persistence

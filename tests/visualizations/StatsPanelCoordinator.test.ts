@@ -187,16 +187,26 @@ describe('StatsPanelCoordinator', () => {
     const a = makeStubPanel();
     coord.register('age', a);
 
-    coord.syncExistingFilters([dummyFilter]);
-    const start = Date.now();
-    while (a.calls.length === 0 && Date.now() - start < 1000) {
-      await new Promise((r) => setTimeout(r, 5));
-    }
+    // Now returns a Promise that resolves after every panel's updateFilters
+    // settles — no more polling-loop. The facade awaits this during loadData
+    // to gate `loadComplete` on first-fetch readiness.
+    await coord.syncExistingFilters([dummyFilter]);
 
     expect(a.calls).toHaveLength(1);
     expect(a.calls[0]).toEqual([dummyFilter]);
 
     coord.destroy();
+  });
+
+  it('syncExistingFilters() returns Promise.resolve() when destroyed', async () => {
+    const state = createTableState();
+    state.tableName.set('t');
+    const coord = new StatsPanelCoordinator(state);
+    coord.destroy();
+
+    const result = coord.syncExistingFilters([dummyFilter]);
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toBeUndefined();
   });
 
   it('caps concurrent updateFilters calls at the configured ceiling', async () => {

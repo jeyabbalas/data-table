@@ -534,6 +534,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     },
   });
   let activeVisualizations: BaseVisualization[] = [];
+  // Tracks the most recent attachVisualizations pass's initial work
+  // (each viz's first fetchData + both coordinators' syncExistingFilters).
+  // loadDataImpl awaits this in parallel with whenBodyReady before resolving
+  // the public load promise, mirroring TableContainer.currentBodyInit.
+  // Wrapped in Promise.allSettled so individual failures (already routed
+  // through options.onError → 'error' event) don't reject the public promise.
+  let pendingVizInit: Promise<void> = Promise.resolve();
   const brushStates = new Map<string, BrushState>();
   const selectionStates = new Map<string, SelectionStateSnapshot>();
   const vizRegistry: VisualizationRegistry =
@@ -641,7 +648,18 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Per-column work (viz instances + custom stats panels) is gated by the
     // `visualizations` opt; the coordinator above is now wired regardless so
     // the public `filterChange` event always carries a fresh row count.
-    if (!vizEnabled) return;
+    if (!vizEnabled) {
+      // No vizs created and no syncExistingFilters call below — reset
+      // pendingVizInit so loadDataImpl doesn't await a stale promise from a
+      // previous (vizEnabled) attach pass.
+      pendingVizInit = Promise.resolve();
+      return;
+    }
+
+    // Collect the first-fetch promises from every viz constructor + each
+    // coordinator's filter-sync work. Surfaced via pendingVizInit so the
+    // public load promise can wait on first-paint readiness.
+    const initPromises: Promise<unknown>[] = [];
 
     // Create a visualization per applicable column.
     const headers = tableContainer.getColumnHeaders();
@@ -818,6 +836,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       viz = created as VisualizationType;
       activeVisualizations.push(viz);
       coordinator.register(column.name, viz);
+      // Track the viz's eager first fetch (kicked off in its constructor)
+      // so loadDataImpl can await it before resolving the public promise.
+      initPromises.push(viz.waitForData());
 
       // Restore saved interaction state on the next data frame.
       const savedBrush = brushStates.get(column.name);
@@ -866,11 +887,19 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
 
     // Rebroadcast any filters already in state (e.g., restored from session).
-    coordinator.syncExistingFilters();
+    // Both coordinators now return a Promise; we feed those into pendingVizInit
+    // so loadDataImpl can await them in parallel with the table body's first
+    // SELECT. Errors per task are swallowed by allSettled below — viz fetch
+    // errors already route via options.onError → 'error' event with
+    // source: 'visualization'; panel errors via source: 'stats-panel'; the
+    // count query in updateFilteredRowCount is best-effort.
+    initPromises.push(coordinator.syncExistingFilters());
     // Same for stats panels — give them the current filter array up-front so
     // panels with their own DuckDB queries don't have to wait for the next
     // user-driven filter change.
-    statsPanelCoordinator.syncExistingFilters(state.filters.get());
+    initPromises.push(statsPanelCoordinator.syncExistingFilters(state.filters.get()));
+
+    pendingVizInit = Promise.allSettled(initPromises).then(() => undefined);
   };
 
   // -------- AutoSave --------
@@ -1101,17 +1130,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // surface a destroy error so consumers know the load was aborted.
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      // Wait for the surviving TableBody's first SELECT to settle before
-      // resolving the public load promise. Otherwise consumers who chain
-      // `await createDataTable({source})` → `addFilter(...)` race the
-      // body's unfiltered initial fetch (the v0.4.0 bug). State setters
-      // inside `actions.loadData` fan out synchronously, so by this point
-      // every triggered `TableContainer.render()` has run and
-      // `currentBodyInit` references the last (surviving) body.
-      // `whenBodyReady()` resolves on success, body-init error (swallowed),
-      // destroy mid-init, and the no-fetch paths — never rejects, never
-      // hangs.
-      await tableContainer.whenBodyReady();
+      // Wait in parallel for the body's first SELECT and the per-column
+      // visualization/stats-panel initial fetches + filter-sync queries.
+      // Both promises swallow internally (whenBodyReady catches body-init
+      // errors; pendingVizInit wraps in allSettled and errors route through
+      // the `error` event), so Promise.all here can never short-circuit.
+      // Awaiting in parallel saves wall time over chaining since these
+      // workloads are independent at the worker boundary.
+      //
+      // State setters inside `actions.loadData` fan out synchronously, so by
+      // this point every triggered `TableContainer.render()` and
+      // `attachVisualizations()` has run; `currentBodyInit` references the
+      // last (surviving) body and `pendingVizInit` references the latest
+      // attach pass's collected work.
+      await Promise.all([tableContainer.whenBodyReady(), pendingVizInit]);
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }

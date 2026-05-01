@@ -35,7 +35,11 @@ describe('buildParquetQuery', () => {
       baseContext,
     );
 
-    expect(sql).toBe('SELECT "id", "name", "price" FROM "test_table"');
+    // ORDER BY "__rowid__" ASC is always emitted so re-exports of the
+    // same table produce byte-identical Parquet files even when the
+    // user's `sortColumns` is empty (DuckDB's parallel scan order is
+    // otherwise non-deterministic).
+    expect(sql).toBe('SELECT "id", "name", "price" FROM "test_table" ORDER BY "__rowid__" ASC');
     expect(sql).not.toContain('WHERE');
     expect(sql).not.toContain('LIMIT');
   });
@@ -53,7 +57,7 @@ describe('buildParquetQuery', () => {
       context,
     );
 
-    expect(sql).toContain('ORDER BY "name" ASC');
+    expect(sql).toContain('ORDER BY "name" ASC, "__rowid__" ASC');
   });
 
   it('should include WHERE for scope filtered', () => {
@@ -90,7 +94,13 @@ describe('buildParquetQuery', () => {
     expect(sql).not.toContain('WHERE');
   });
 
-  it('should use WHERE FALSE for selected scope with no selection', () => {
+  it('should use LIMIT 0 for selected scope with no selection (empty Parquet, schema preserved)', () => {
+    // Switched from WHERE FALSE to LIMIT 0 because buildSelectQuery
+    // now always emits an ORDER BY tail (the __rowid__ determinism
+    // tiebreaker), and SQL requires WHERE to precede ORDER BY. LIMIT
+    // 0 has the same observable effect (zero-row Parquet with the
+    // right column schema) and composes cleanly with the trailing
+    // ORDER BY.
     const sql = buildParquetQuery(
       'test_table',
       ['id', 'name'],
@@ -98,7 +108,8 @@ describe('buildParquetQuery', () => {
       baseContext,
     );
 
-    expect(sql).toContain('WHERE FALSE');
+    expect(sql).toContain('LIMIT 0');
+    expect(sql).not.toContain('WHERE');
   });
 
   it('should use LIMIT/OFFSET for contiguous selected rows', () => {
@@ -150,7 +161,7 @@ describe('buildParquetQuery', () => {
       context,
     );
 
-    expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" DESC)');
+    expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" DESC, "__rowid__" ASC)');
   });
 
   it('should include filters in selected rows query', () => {
@@ -255,7 +266,10 @@ describe('exportToParquet', () => {
     await exportToParquet('test', { scope: 'selected' }, baseContext);
 
     const sql = mockBridge.exportToBuffer.mock.calls[0][0] as string;
-    expect(sql).toContain('WHERE FALSE');
+    // The empty-selection branch switched from `WHERE FALSE` to
+    // `LIMIT 0` to compose with the trailing
+    // `ORDER BY "__rowid__" ASC` tiebreaker (see buildParquetQuery).
+    expect(sql).toContain('LIMIT 0');
   });
 
   it('should export all columns when columns is "all"', async () => {

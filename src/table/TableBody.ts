@@ -11,7 +11,7 @@ import type { Annotation } from '../annotations/types';
 import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import type { ColumnSchema, SortColumn, Filter } from '../core/types';
+import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationPopover } from './AnnotationPopover';
@@ -587,9 +587,9 @@ export class TableBody {
     // returns strings instead of Arrow MonthDayNano objects. Also drop any
     // accidental __rowid__ appearance in `columns` — we always prepend it
     // ourselves below (keeps the projection deterministic).
-    const parts: string[] = [quoteIdentifier('__rowid__')];
+    const parts: string[] = [quoteIdentifier(ROWID_COLUMN)];
     for (const col of columns) {
-      if (col === '__rowid__') continue;
+      if (col === ROWID_COLUMN) continue;
       const quoted = quoteIdentifier(col);
       if (schemaMap.get(col)?.type === 'interval') {
         parts.push(`CAST(${quoted} AS VARCHAR) AS ${quoted}`);
@@ -609,13 +609,25 @@ export class TableBody {
       }
     }
 
-    // Add ORDER BY if sorting is active
-    if (sortColumns.length > 0) {
-      const orderBy = sortColumns
-        .map((s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`)
-        .join(', ');
-      sql += ` ORDER BY ${orderBy}`;
+    // Always emit ORDER BY with __rowid__ as the final tiebreaker. DuckDB's
+    // ORDER BY is non-deterministic for ties, so without a tiebreaker two
+    // paginated queries with overlapping LIMIT/OFFSET ranges (which the
+    // scroll path issues whenever the visible window shifts by even one
+    // row, see `checkNeedsFetch` + `fetchRows`) can return *different*
+    // rows for the same logical positions. The cache write at
+    // `rowDataCache.set(start + index, row)` then overwrites with shuffled
+    // data and the user sees row contents change while scrolling. The
+    // empty-sort branch also emits `ORDER BY __rowid__` so filter+scroll
+    // (no user sort) is deterministic against any DuckDB parallel-scan
+    // permutation. Skipped if the user already sorts on __rowid__ (they
+    // own the order and don't want a redundant tail clause).
+    const orderParts = sortColumns.map(
+      (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
+    );
+    if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
+      orderParts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
     }
+    sql += ` ORDER BY ${orderParts.join(', ')}`;
 
     sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
@@ -907,7 +919,7 @@ export class TableBody {
     // SELECT in buildRowQuery). DuckDB returns BIGINT as bigint or number
     // depending on the driver; Number(…) coerces safely since our row
     // counts stay well below 2^53.
-    const rawRowId = data['__rowid__'];
+    const rawRowId = data[ROWID_COLUMN];
     const rowId =
       typeof rawRowId === 'bigint'
         ? Number(rawRowId)
@@ -1154,7 +1166,7 @@ export class TableBody {
     for (const [index, rowEl] of this.rowElementMap) {
       const rowData = this.rowDataCache.get(index);
       if (!rowData) continue;
-      const rawRowId = rowData['__rowid__'];
+      const rawRowId = rowData[ROWID_COLUMN];
       const rowId =
         typeof rawRowId === 'bigint'
           ? Number(rawRowId)

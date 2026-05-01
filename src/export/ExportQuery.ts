@@ -5,7 +5,7 @@
  * column resolution used by both CSV and JSON exporters.
  */
 
-import type { ColumnSchema, Filter, SortColumn } from '../core/types';
+import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { quoteIdentifier, filtersToWhereClause } from '../filters/FilterSQL';
 
@@ -78,9 +78,27 @@ export function isContiguousRange(
 // SQL query builders
 // ---------------------------------------------------------------------------
 
+/**
+ * Build an `ORDER BY` clause for export queries.
+ *
+ * Always appends `__rowid__ ASC` as the final tiebreaker (skipping the
+ * append if the user already sorts on `__rowid__`). DuckDB's ORDER BY is
+ * non-deterministic for ties, so without a tiebreaker:
+ * - `fetchBatchedRows` issues `LIMIT … OFFSET …` queries with monotonically
+ *   increasing OFFSET; ties at batch boundaries can duplicate or skip rows
+ *   in the resulting CSV/JSON file.
+ * - `buildSelectQuery` (single-shot Parquet export) produces files that
+ *   differ in row order within tie groups across re-exports
+ *   (reproducibility issue).
+ *
+ * Mirrors the idiom used in `Actions.getColumnValues` (Actions.ts:1769) and
+ * the loader's table-recreation paths (worker/loaders/common.ts).
+ */
 export function buildOrderByClause(sortColumns: SortColumn[]): string {
-  if (sortColumns.length === 0) return '';
   const parts = sortColumns.map((s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`);
+  if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
+    parts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
+  }
   return ` ORDER BY ${parts.join(', ')}`;
 }
 
@@ -140,15 +158,19 @@ export function buildSelectedRowsQuery(
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
 
-  let overClause: string;
-  if (sortColumns.length > 0) {
-    const orderParts = sortColumns.map(
-      (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
-    );
-    overClause = `ORDER BY ${orderParts.join(', ')}`;
-  } else {
-    overClause = '';
+  // Always seed the OVER clause with `__rowid__` ASC as the final
+  // tiebreaker. The same non-determinism that affects ORDER BY also
+  // affects ROW_NUMBER(): without it, `__row_idx__` is assigned to ties
+  // in arbitrary order, so a user's selection set (which keys on these
+  // indices) drifts across runs. Skipped if the user already sorts on
+  // `__rowid__` (their direction stays authoritative).
+  const orderParts = sortColumns.map(
+    (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
+  );
+  if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
+    orderParts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
   }
+  const overClause = `ORDER BY ${orderParts.join(', ')}`;
 
   let innerSql = `SELECT ${columnList}, ROW_NUMBER() OVER(${overClause}) - 1 AS __row_idx__ FROM ${quoteIdentifier(tableName)}`;
 

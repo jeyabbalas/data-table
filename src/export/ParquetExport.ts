@@ -47,8 +47,14 @@ export function buildParquetQuery(
 
   if (opts.scope === 'selected') {
     if (context.selectedRows.size === 0) {
-      // Produce an empty result set with the correct schema
-      return buildSelectQuery(tableName, columns, [], []) + ' WHERE FALSE';
+      // Produce an empty result set with the correct schema. We can't
+      // append `WHERE FALSE` after `buildSelectQuery` because that
+      // builder now always emits `ORDER BY "__rowid__" ASC` (the
+      // determinism tiebreaker — see ExportQuery.buildOrderByClause)
+      // and `WHERE` must precede `ORDER BY` in SQL syntax. Append
+      // `LIMIT 0` instead — the projection still determines the
+      // Parquet schema and DuckDB short-circuits the scan.
+      return buildSelectQuery(tableName, columns, [], []) + ' LIMIT 0';
     }
 
     const sortedIndices = Array.from(context.selectedRows).sort((a, b) => a - b);

@@ -57,7 +57,13 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
 
   it("scope: 'all' → exported Parquet round-trips with mixed types", async () => {
     const tn = uniqueTableName('rt_all');
+    // Production tables always carry `__rowid__` (the loaders inject
+    // it as `row_number() OVER () - 1`; see worker/loaders/csv.ts:128
+    // et al.). The library's export query builders now always emit
+    // `ORDER BY "__rowid__" ASC` as the determinism tiebreaker, so
+    // round-trip tests must include `__rowid__` to match production.
     await conn.query(`CREATE TABLE ${tn} (
+      __rowid__ BIGINT,
       id INTEGER,
       name VARCHAR,
       price DOUBLE,
@@ -67,9 +73,9 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
     )`);
     await conn.query(
       `INSERT INTO ${tn} VALUES
-       (1, 'alpha', 9.99, TIMESTAMP '2024-01-15 12:30:00', DATE '2024-01-15', TRUE),
-       (2, 'beta', 19.99, TIMESTAMP '2024-02-20 09:00:00', DATE '2024-02-20', FALSE),
-       (3, NULL, NULL, NULL, NULL, NULL)`,
+       (0, 1, 'alpha', 9.99, TIMESTAMP '2024-01-15 12:30:00', DATE '2024-01-15', TRUE),
+       (1, 2, 'beta', 19.99, TIMESTAMP '2024-02-20 09:00:00', DATE '2024-02-20', FALSE),
+       (2, 3, NULL, NULL, NULL, NULL, NULL)`,
     );
 
     const columns = ['id', 'name', 'price', 'ts', 'd', 'live'];
@@ -110,8 +116,10 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
 
   it("scope: 'selected' contiguous range → only the selected rows survive the round-trip", async () => {
     const tn = uniqueTableName('rt_sel_contig');
-    await conn.query(`CREATE TABLE ${tn} (id INTEGER, label VARCHAR)`);
-    await conn.query(`INSERT INTO ${tn} VALUES (0, 'a'), (1, 'b'), (2, 'c'), (3, 'd'), (4, 'e')`);
+    await conn.query(`CREATE TABLE ${tn} (__rowid__ BIGINT, id INTEGER, label VARCHAR)`);
+    await conn.query(
+      `INSERT INTO ${tn} VALUES (0, 0, 'a'), (1, 1, 'b'), (2, 2, 'c'), (3, 3, 'd'), (4, 4, 'e')`,
+    );
 
     const columns = ['id', 'label'];
     const schema: ColumnSchema[] = [
@@ -141,8 +149,10 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
 
   it("scope: 'selected' non-contiguous → CTE+ROW_NUMBER carves out the right rows", async () => {
     const tn = uniqueTableName('rt_sel_non');
-    await conn.query(`CREATE TABLE ${tn} (id INTEGER, label VARCHAR)`);
-    await conn.query(`INSERT INTO ${tn} VALUES (0, 'a'), (1, 'b'), (2, 'c'), (3, 'd'), (4, 'e')`);
+    await conn.query(`CREATE TABLE ${tn} (__rowid__ BIGINT, id INTEGER, label VARCHAR)`);
+    await conn.query(
+      `INSERT INTO ${tn} VALUES (0, 0, 'a'), (1, 1, 'b'), (2, 2, 'c'), (3, 3, 'd'), (4, 4, 'e')`,
+    );
 
     const columns = ['id', 'label'];
     const schema: ColumnSchema[] = [
@@ -173,8 +183,8 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
 
   it("scope: 'selected' with empty selection → empty Parquet (zero rows, valid schema)", async () => {
     const tn = uniqueTableName('rt_sel_empty');
-    await conn.query(`CREATE TABLE ${tn} (id INTEGER, label VARCHAR)`);
-    await conn.query(`INSERT INTO ${tn} VALUES (0, 'a'), (1, 'b')`);
+    await conn.query(`CREATE TABLE ${tn} (__rowid__ BIGINT, id INTEGER, label VARCHAR)`);
+    await conn.query(`INSERT INTO ${tn} VALUES (0, 0, 'a'), (1, 1, 'b')`);
 
     const columns = ['id', 'label'];
     const schema: ColumnSchema[] = [
@@ -200,8 +210,10 @@ describe('ParquetExport — round-trip via real DuckDB', () => {
 
   it('column subset → only requested columns are exported and round-trip', async () => {
     const tn = uniqueTableName('rt_subset');
-    await conn.query(`CREATE TABLE ${tn} (id INTEGER, name VARCHAR, price DOUBLE)`);
-    await conn.query(`INSERT INTO ${tn} VALUES (1, 'alpha', 9.99), (2, 'beta', 19.99)`);
+    await conn.query(
+      `CREATE TABLE ${tn} (__rowid__ BIGINT, id INTEGER, name VARCHAR, price DOUBLE)`,
+    );
+    await conn.query(`INSERT INTO ${tn} VALUES (0, 1, 'alpha', 9.99), (1, 2, 'beta', 19.99)`);
 
     const columns = ['id', 'name', 'price'];
     const schema: ColumnSchema[] = [

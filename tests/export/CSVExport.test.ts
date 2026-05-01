@@ -429,7 +429,11 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'all' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ORDER BY "name" ASC');
+      // Tiebreaker: __rowid__ ASC is appended so paginated batched
+      // exports don't duplicate/skip rows across batch boundaries when
+      // the user-specified sort key has ties (DuckDB ORDER BY is
+      // non-deterministic for ties without an explicit unique tail).
+      expect(sql).toContain('ORDER BY "name" ASC, "__rowid__" ASC');
     });
 
     it('should handle multi-sort', async () => {
@@ -446,7 +450,7 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'all' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ORDER BY "name" ASC, "price" DESC');
+      expect(sql).toContain('ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC');
     });
   });
 
@@ -546,10 +550,10 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'selected' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" ASC)');
+      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" ASC, "__rowid__" ASC)');
     });
 
-    it('should use empty OVER clause when no sorting', async () => {
+    it('should use __rowid__ ASC OVER clause when no sorting', async () => {
       mockBridge.query.mockResolvedValueOnce([]);
 
       const context = {
@@ -561,7 +565,11 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'selected' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ROW_NUMBER() OVER()');
+      // __rowid__ ASC is now seeded even when the user has no sort, so
+      // ROW_NUMBER() assigns __row_idx__ in a deterministic, repeatable
+      // order. Without it, repeat exports could map the same selection
+      // indices to different rows under DuckDB's parallel scan.
+      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "__rowid__" ASC)');
     });
 
     it('should include filters in selected rows CTE', async () => {
@@ -777,7 +785,12 @@ describe('exportToCSV — __rowid__ default-exclusion + opt-in', () => {
     const csv = await exportToCSV('t', { scope: 'all', columns: 'all' }, baseContext);
     expect(csv).toBe('id,label\n1,a');
     const sql = mockBridge.query.mock.calls[0][0] as string;
-    expect(sql).not.toContain('"__rowid__"');
+    // __rowid__ must not appear in the SELECT projection (the
+    // user-visible CSV columns). It DOES appear in the ORDER BY tail
+    // as the determinism tiebreaker — that's a SQL-level concern
+    // about scan order, not about which columns are exported.
+    const selectClause = sql.split(/\bFROM\b/i)[0]!;
+    expect(selectClause).not.toContain('"__rowid__"');
     expect(sql).toContain('"id"');
     expect(sql).toContain('"label"');
   });

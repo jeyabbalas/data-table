@@ -74,6 +74,14 @@ export class TableBody {
   private pendingFetch: { start: number; end: number } | null = null;
   private isAnimatingScroll = false;
   private scrollAnimationId: number | null = null;
+  // Monotonic counter used to drop stale row-fetch results: bumped at the
+  // start of every `fetchRows` AND from `invalidateCacheAndRefresh` /
+  // `destroy()`. After awaiting `bridge.query`, a fetch that finds its seq
+  // no longer matches discards its rows instead of polluting `rowDataCache`
+  // with data for a state (filters/sort/visibleColumns/tableName) that has
+  // since changed. Mirrors `CrossfilterCoordinator.filterSequence` and
+  // `BaseVisualization.fetchSequence`.
+  private fetchSequence = 0;
 
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
@@ -367,6 +375,13 @@ export class TableBody {
    * Invalidate cache and refresh visible rows
    */
   private invalidateCacheAndRefresh(): void {
+    // Bump so any in-flight `fetchRows` result is dropped instead of
+    // being written into the just-cleared cache. Without this, an
+    // unfiltered fetch started during `initialize()` could cache its
+    // rows after a filter mutation and the next `checkNeedsFetch` would
+    // see a "full" cache and skip the re-fetch.
+    this.fetchSequence++;
+
     // Clear data cache
     this.rowDataCache.clear();
 
@@ -429,8 +444,13 @@ export class TableBody {
     this.fetchInProgress = true;
 
     try {
-      await this.fetchRows(start, end);
-      this.renderVisibleRows();
+      const cached = await this.fetchRows(start, end);
+      // Skip the immediate render when the fetch was superseded — the
+      // cache is empty and the trailing `pendingFetch` (queued by whatever
+      // bumped fetchSequence, e.g. `invalidateCacheAndRefresh`) will run
+      // a fresh fetch + render in the `finally` below. Rendering here
+      // would paint placeholders for a viewport that's about to be filled.
+      if (cached) this.renderVisibleRows();
     } finally {
       this.fetchInProgress = false;
 
@@ -452,18 +472,27 @@ export class TableBody {
   // =========================================
 
   /**
-   * Fetch rows from DuckDB for the given range
+   * Fetch rows from DuckDB for the given range.
+   *
+   * Returns `true` when fresh rows landed in `rowDataCache`, `false` when
+   * the call was a no-op (no table / no visible columns) OR was superseded
+   * mid-flight by a `fetchSequence` bump (see `invalidateCacheAndRefresh`).
+   * Callers gate their post-fetch render on this so a stale fetch does not
+   * paint placeholders into a viewport that's about to be filled by the
+   * pending re-fetch.
    */
-  private async fetchRows(start: number, end: number): Promise<void> {
+  private async fetchRows(start: number, end: number): Promise<boolean> {
+    const seq = ++this.fetchSequence;
+
     const tableName = this.state.tableName.get();
-    if (!tableName) return;
+    if (!tableName) return false;
 
     const visibleColumns = this.state.visibleColumns.get();
     const sortColumns = this.state.sortColumns.get();
     const filters = this.state.filters.get();
     const schema = this.state.schema.get();
 
-    if (visibleColumns.length === 0) return;
+    if (visibleColumns.length === 0) return false;
 
     // Build SQL query
     const sql = this.buildRowQuery(
@@ -479,6 +508,12 @@ export class TableBody {
     try {
       const rows = await this.bridge.query<RowData>(sql);
 
+      // Drop stale results: a newer fetch (or `invalidateCacheAndRefresh`)
+      // bumped fetchSequence while we were awaiting the worker, so caching
+      // these rows would pollute the cache with stale-state data and the
+      // next `checkNeedsFetch` would short-circuit without re-fetching.
+      if (seq !== this.fetchSequence || this.destroyed) return false;
+
       // Cache the fetched rows
       rows.forEach((row, index) => {
         this.rowDataCache.set(start + index, row);
@@ -486,8 +521,10 @@ export class TableBody {
 
       // Evict distant rows to bound memory usage
       this.evictDistantRows(start, end);
+      return true;
     } catch (error) {
       console.error('Error fetching rows:', error);
+      return false;
     }
   }
 
@@ -1460,6 +1497,11 @@ export class TableBody {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    // Belt-and-braces: `fetchRows` already bails on `this.destroyed`, but
+    // bumping fetchSequence keeps this consistent with the seq-guarded
+    // pattern used by `CrossfilterCoordinator` / `BaseVisualization` and
+    // covers any future post-await write paths added inside `fetchRows`.
+    this.fetchSequence++;
 
     // Cancel any ongoing scroll animation
     if (this.scrollAnimationId !== null) {

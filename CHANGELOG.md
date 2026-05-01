@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- 1ead118: Fix: overlapping `BaseVisualization.updateFilters` calls no longer leave the brush / selection overlay desynced from the chart's data.
+
+  `BaseVisualization` used a shared `isFilterUpdate` boolean to gate `syncVisualStateFromFilter`. When two `updateFilters` calls overlapped, the _first_ call's `finally` block reset the flag to `false` while the _second_ was still mid-await — so the second call's post-await read saw a stale `false` and skipped the brush / selection reset that should have happened for the latest filter state.
+
+  `updateFilters` now bumps a `filterUpdateSequence` counter on entry, captures the local sequence, and the `finally` block only clears `isFilterUpdate` when its captured sequence still matches the current counter. Older calls' `finally` blocks become no-ops, so the flag stays `true` across the entire overlap window and every concurrent call observes the correct value after its await.
+
+  Symptom this fixes: rapid brush-then-clear-then-brush gestures on a histogram (or any pattern that fired two `updateFilters` calls before the first resolved) could leave the brush rectangle painted on top of a chart whose underlying query had already moved on, so the visual selection no longer matched what was filtered in the table.
+
+- 1ead118: Fix: `await createDataTable({ source })` and `await table.loadData(...)` now resolve only after the first table-body paint completes.
+
+  Previously the public load promise resolved as soon as `loadDataImpl` returned, which happened _before_ the body's `initialize()` chain settled. The first SELECT was therefore still in flight when consumer code resumed after the `await`, so any action issued in that window (most visibly an `addFilter`) raced the unfiltered first fetch — and could be undone by the unfiltered result landing afterwards.
+  - `TableContainer` now tracks `currentBodyInit: Promise<void>` (capturing each `TableBody.initialize()` chain, with a `.catch` that swallows transient body-init errors so they don't reject the public load promise) and exposes `whenBodyReady(): Promise<void>`.
+  - `DataTable.loadDataImpl` awaits `tableContainer.whenBodyReady()` before emitting `loadComplete`, with a final `if (this.destroyed)` guard so a torn-down table fails loudly rather than leaking events to detached subscribers.
+  - `TableBody.initialize` reorders work — subscribe to state first, run the manual `handleScroll` (when data is present), _then_ attach the virtual scroller's `onScroll` callback. Stops the scroller's auto-fired callback from racing the first manual fetch during `initialize`'s own await.
+
+  This strictly tightens the existing timing contract — consumers can now rely on the first paint having happened by the time `await` returns. Callers that did not depend on the previous (looser) timing are unaffected.
+
+  Symptom this fixes: code that did `const t = await createDataTable({ source }); t.actions.<...>` could observe the table empty for a few hundred ms after the await, and any actions issued in that window raced the first SELECT — most visibly, filters added before the body's initial fetch landed could be undone by the unfiltered result.
+
+- 1ead118: Fix: CSV / JSON / Parquet exports and table scrolling no longer reorder rows within tie groups.
+
+  DuckDB's `ORDER BY` is non-deterministic for tied keys, so two queries with the same `ORDER BY <user_sort>` could shuffle ties differently across runs. Without a tiebreaker:
+  - Repeating an export of the same dataset with the same sort produced files with rows shuffled within tie groups (non-reproducible exports).
+  - "Export selected rows" computed selection indices via `ROW_NUMBER() OVER(ORDER BY <user_sort>)`, then issued the export query with the same `ORDER BY`. The two orderings of tied rows could disagree, so the indices addressed _different_ underlying rows on the export — writing rows the user had not selected.
+  - The scroll path re-fetched overlapping `LIMIT`/`OFFSET` windows, so rows could shuffle in place as the viewport moved.
+
+  `ExportQuery.buildOrderByClause`, `ExportQuery.buildBaseQuery`, `ExportQuery.buildSelectedRowsQuery`, and `TableBody.buildRowQuery` now append `"__rowid__" ASC` as the final tiebreaker on every ordered query (skipped only when the user's sort already includes `__rowid__`). Empty-sort branches now emit `ORDER BY "__rowid__" ASC` instead of no `ORDER BY`. The Parquet empty-selection path switched from `WHERE FALSE` to `LIMIT 0` because `WHERE` must precede `ORDER BY` in the rewritten query.
+
+  Symptom this fixes: exporting twice from the same filtered + sorted view yielded files with rows shuffled within ties, and "Export selected rows" could write rows the user hadn't actually selected when the sort column had duplicates.
+
+- 1ead118: Fix: filters added immediately after `await createDataTable(...)` no longer briefly render unfiltered rows.
+
+  `TableBody.fetchRows` had no way to drop late-arriving results when state changed mid-fetch. The body's initial unfiltered SELECT (kicked off during `initialize()`) could land in `rowDataCache` _after_ `invalidateCacheAndRefresh()` had cleared it, and `checkNeedsFetch` would then short-circuit because the cache appeared "full" — leaving the unfiltered rows on screen with no follow-up filtered query to correct them.
+  - `fetchRows` now bumps a monotonic `fetchSequence` on entry and re-checks it after the worker resolves; superseded results are dropped _before_ they touch `rowDataCache`. The same counter is bumped in `invalidateCacheAndRefresh` and `destroy()` so cache invalidation and teardown both win against any in-flight fetch.
+  - `fetchRows` now returns `boolean` — `true` when fresh rows landed, `false` when the fetch was dropped (superseded, no table, no visible columns, or destroyed). `fetchAndRender` skips the immediate render on `false` because the `finally` block has already queued a follow-up fetch that will paint the correct result.
+
+  Symptom this fixes: code that does `const t = await createDataTable({ source }); t.actions.addFilter(...)` could see the unfiltered dataset render briefly before being replaced — and on some interleavings the filtered re-fetch was skipped entirely, so the unfiltered rows stayed on screen.
+
+- 1ead118: Fix: filters issued right after `await createDataTable(...)` no longer race visualization init, and recycled placeholder rows no longer render with empty trailing cells.
+
+  Two coupled fixes that both protect the post-`createDataTable` window when header visualizations are attached:
+  - **Visualization first-paint barrier.** `attachVisualizations` now collects the initial `fetchData` promises from every visualization (via a new `BaseVisualization.waitForData(): Promise<void>`) and from both coordinators' `syncExistingFilters` calls (now `Promise<void>`-returning). `loadDataImpl` awaits `Promise.all([tableContainer.whenBodyReady(), pendingVizInit])` before emitting `loadComplete`, so a consumer's `addFilter` issued synchronously after `await createDataTable(...)` can no longer race viz init or land while a coordinator's filter-sync is still in flight.
+  - **Placeholder row shape mismatch.** `TableBody.rowElementMap` could hold two structurally incompatible row shapes — full data rows (`visibleColumns.length` cells) and 1-cell loading placeholders. When a placeholder was promoted in place via `updateRowContent`, the loop's `min(columns, cells)` bound only rendered column 0, leaving columns 1..N empty and stripped of event listeners. `renderVisibleRows` now detects the cell-count mismatch, swaps in a fresh pool element with the correct shape, and refuses to return placeholder-shaped rows to the pool so they cannot contaminate later renders.
+
+  Symptom this fixes: with header visualizations enabled, an `addFilter` issued synchronously after `await createDataTable(...)` could be silently ignored or applied against stale viz state. Separately, when a brush change rapidly grew the visible row count (e.g. 4 → 64), the new rows showed only the first column with empty space across the rest until the next render pass.
+
+- 1ead118: Fix: histograms and value-counts no longer paint with stale aggregates when an in-flight fetch is superseded.
+
+  The no-filter branch of `fetchData` in `Histogram`, `DateHistogram`, `TimeHistogram`, `IntervalHistogram`, and `ValueCounts` assigned `this.data = await fetch...()` _before_ running its post-await `seq !== this.fetchSequence || this.destroyed` guard. A stale result therefore wrote into `this.data`, repainted the canvas, and was only corrected when the newer fetch completed — producing a visible flash of outdated bins or category counts.
+
+  Each subclass now stores the awaited result in a local variable, runs the guard, and only mutates `this.data` if the fetch is still current. This matches the existing guard already in place on the filtered branch and mirrors the `filterSequence` pattern in `CrossfilterCoordinator`.
+
+  Symptom this fixes: rapidly toggling filters that hit a column's histogram (or value-count chart) caused a brief flash of outdated bin counts or category aggregates before the latest query corrected the canvas.
+
 ## 0.4.0
 
 ### Minor Changes

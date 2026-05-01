@@ -240,7 +240,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       } else {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
-        this.data = await fetchHistogramData(
+        const fetched = await fetchHistogramData(
           this.options.tableName,
           this.column.name,
           maxBins,
@@ -248,6 +248,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           this.options.bridge,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
+        this.data = fetched;
         this.backgroundData = null;
         this.initialData = this.data;
       }

@@ -185,7 +185,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       } else {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
-        this.data = await fetchDateHistogramData(
+        const fetched = await fetchDateHistogramData(
           this.options.tableName,
           this.column.name,
           allFilters,
@@ -193,6 +193,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
           maxBins,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
+        this.data = fetched;
         this.backgroundData = null;
         this.initialData = this.data;
       }

@@ -166,16 +166,22 @@ describe('ValueCounts — fetchSequence stale-result guard', () => {
     expect(fetchValueCountsDataDeferreds.length).toBe(3);
 
     // Sentinel: render() invokes ctx.clearRect at the top. Count delta tells
-    // us whether the stale fetch's branch reached render(). The seq-guard
-    // sits between `this.data = await ...` and the cache + render path, so
-    // a stale fetch *will* mutate `this.data` (separate stale-state leak,
-    // surfaced in the phase report) but must *not* trigger render().
+    // us whether the stale fetch's branch reached render(). With the
+    // local-then-guard-then-assign pattern, a stale fetch lands its result
+    // in a local var, the seq guard sees a newer fetchSequence and bails
+    // before assigning `this.data` or calling render().
     const clearsBeforeStale = mockContext.clearRect.mock.calls.length;
 
     fetchValueCountsDataDeferreds[1]!.resolve(makeData('STALE'));
     await p1;
     const clearsAfterStale = mockContext.clearRect.mock.calls.length;
     expect(clearsAfterStale).toBe(clearsBeforeStale);
+    // The post-await guard runs *before* `this.data = fetched`, so the stale
+    // value never reaches the field.
+    const dataAfterStale = (
+      viz as unknown as { data: { segments: { value: string }[] } | null }
+    ).data;
+    expect(dataAfterStale?.segments[0]?.value).not.toBe('STALE');
 
     // Resolve the NEWER → wins; render() runs again.
     fetchValueCountsDataDeferreds[2]!.resolve(makeData('FRESH'));
@@ -231,15 +237,14 @@ describe('ValueCounts — fetchSequence stale-result guard', () => {
     await (viz as unknown as { dataPromise: Promise<void> }).dataPromise;
 
     // The post-await guard (`seq !== fetchSequence || destroyed`) returns
-    // before caching `initialCategoryOrder` and before invoking `render()`.
-    // (Note: `this.data` is assigned before the guard line, so it carries
-    // the late-resolved value — that's a separate stale-state leak we
-    // surface in the phase report. The contract that matters here is "no
-    // render after destroy", which we lock by counting `ctx.clearRect`.)
+    // before assigning `this.data`, before caching `initialCategoryOrder`,
+    // and before invoking `render()`. With the local-then-guard-then-assign
+    // pattern, the late-resolved value is never written to `this.data`.
     const renderClearsAfter = mockContext.clearRect.mock.calls.length;
     expect(renderClearsAfter).toBe(renderClearsBefore);
     const initialCategoryOrder = (viz as unknown as { initialCategoryOrder: string[] | null })
       .initialCategoryOrder;
     expect(initialCategoryOrder).toBeNull();
+    expect((viz as unknown as { data: unknown }).data).toBeNull();
   });
 });

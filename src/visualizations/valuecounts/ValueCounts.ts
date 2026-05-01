@@ -275,7 +275,7 @@ export class ValueCounts extends BaseVisualization {
         this.backgroundData = this.initialData;
       } else {
         // Branch A: no filters → simple fetch, cache initial
-        this.data = await fetchValueCountsData(
+        const fetched = await fetchValueCountsData(
           this.options.tableName,
           this.column.name,
           allFilters,
@@ -283,6 +283,7 @@ export class ValueCounts extends BaseVisualization {
           MAX_CATEGORIES,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
+        this.data = fetched;
         this.backgroundData = null;
 
         // Cache initial order and counts on first unfiltered fetch

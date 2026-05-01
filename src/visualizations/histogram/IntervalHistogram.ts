@@ -151,7 +151,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
       } else {
         // Branch A: no filters → simple fetch, cache initial
         const maxBins = this.options.maxBins ?? 15;
-        this.data = await fetchIntervalHistogramData(
+        const fetched = await fetchIntervalHistogramData(
           this.options.tableName,
           this.column.name,
           allFilters,
@@ -159,6 +159,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
           maxBins,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
+        this.data = fetched;
         this.backgroundData = null;
         this.initialData = this.data;
       }

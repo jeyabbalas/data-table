@@ -1101,6 +1101,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // surface a destroy error so consumers know the load was aborted.
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      // Wait for the surviving TableBody's first SELECT to settle before
+      // resolving the public load promise. Otherwise consumers who chain
+      // `await createDataTable({source})` → `addFilter(...)` race the
+      // body's unfiltered initial fetch (the v0.4.0 bug). State setters
+      // inside `actions.loadData` fan out synchronously, so by this point
+      // every triggered `TableContainer.render()` has run and
+      // `currentBodyInit` references the last (surviving) body.
+      // `whenBodyReady()` resolves on success, body-init error (swallowed),
+      // destroy mid-init, and the no-fetch paths — never rejects, never
+      // hangs.
+      await tableContainer.whenBodyReady();
+      if (destroyed) {
+        throw new DestroyedError('DataTable is destroyed; load aborted.');
+      }
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),

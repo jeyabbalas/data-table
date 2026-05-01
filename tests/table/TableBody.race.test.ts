@@ -231,6 +231,15 @@ describe('TableBody — race protection (fetchSequence)', () => {
 
     expect(queryQueue.length).toBe(2);
 
+    // Resolve the pending sorted fetch so initialize() can settle. (Since
+    // the contract fix, initialize() awaits first paint — including the
+    // pendingFetch processed in `fetchAndRender`'s finally — instead of
+    // returning early. Leaving queryQueue[1] unresolved would hang
+    // initPromise indefinitely.)
+    queryQueue[1]!.resolve([{ __rowid__: 0, id: 0, tag: 'A' }]);
+    await Promise.resolve();
+    await Promise.resolve();
+
     body.destroy();
     await initPromise.catch(() => {});
   });

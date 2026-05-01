@@ -162,7 +162,28 @@ export class TableBody {
       filters.length > 0 ? this.state.filteredRows.get() : this.state.totalRows.get();
     this.virtualScroller.setTotalRows(effectiveTotal);
 
-    // Subscribe to scroll events
+    // Subscribe to state changes BEFORE the initial fetch so any state mutation
+    // mid-fetch is tracked (and seq-guarded by `fetchSequence`).
+    this.subscribeToState();
+
+    // Perform initial render if we have data. We do this BEFORE subscribing to
+    // onScroll: the scroller's `onScroll(callback)` auto-fires the callback
+    // synchronously when `totalRows > 0` (see VirtualScroller.onScroll), and
+    // the callback's `void this.handleScroll(...)` is fire-and-forget — so if
+    // we subscribed first, the auto-fire would start the real fetch while
+    // this awaited handleScroll became a no-op (sees `fetchInProgress=true`,
+    // queues `pendingFetch`, returns), and `initialize()` would resolve
+    // before the first SELECT lands. Awaiting the manual call first means
+    // the cache is populated by the time onScroll subscribes; the auto-fire
+    // then becomes a `renderVisibleRows()` no-op against the warm cache.
+    if (effectiveTotal > 0) {
+      const range = this.virtualScroller.getVisibleRange();
+      await this.handleScroll(range);
+    }
+
+    // Subscribe to scroll events. Safe to do after the initial fetch — the
+    // auto-fire is a cache-warm no-op; subsequent user-driven scrolls go
+    // through handleScroll normally.
     const unsubScroll = this.virtualScroller.onScroll((range) => {
       if (this.isAnimatingScroll) {
         // During scroll animation: update range and re-render with cached data
@@ -174,15 +195,6 @@ export class TableBody {
       void this.handleScroll(range);
     });
     this.unsubscribes.push(unsubScroll);
-
-    // Subscribe to state changes
-    this.subscribeToState();
-
-    // Perform initial render if we have data
-    if (effectiveTotal > 0) {
-      const range = this.virtualScroller.getVisibleRange();
-      await this.handleScroll(range);
-    }
   }
 
   // =========================================

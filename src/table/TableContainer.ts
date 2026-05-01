@@ -149,6 +149,12 @@ export class TableContainer {
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
   private columnHeaders: ColumnHeader[] = [];
   private tableBody: TableBody | null = null;
+  // Tracks the surviving TableBody's `initialize()` so the public
+  // `loadDataImpl` can await first paint before resolving. Each `render()`
+  // reassigns this; state setters fan out synchronously, so by the time
+  // `await actions.loadData(...)` returns, this holds the last body's
+  // promise. See `whenBodyReady()` and the comment at the call site below.
+  private currentBodyInit: Promise<void> = Promise.resolve();
   private columnReorder: ColumnReorder | null = null;
   private filterBar: FilterBar | null = null;
   private filterPanel: FilterPanel | null = null;
@@ -1056,8 +1062,13 @@ export class TableContainer {
           this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
         }
 
-        // Initialize table body asynchronously
-        this.tableBody.initialize().catch((error) => {
+        // Initialize table body asynchronously, but track the promise so
+        // `whenBodyReady()` can resolve only after the surviving body's
+        // first SELECT settles. The `.catch` swallows so a transient init
+        // error never rejects the public `await createDataTable(...)` /
+        // `await table.loadData(...)` promise — current behavior is to log
+        // and continue, which we preserve.
+        this.currentBodyInit = this.tableBody.initialize().catch((error) => {
           console.error('Error initializing table body:', error);
         });
       } else {
@@ -1369,6 +1380,22 @@ export class TableContainer {
         setTimeout(onEnd, 600);
       });
     });
+  }
+
+  /**
+   * Resolves once the surviving `TableBody`'s first paint has settled.
+   *
+   * Used by `loadDataImpl` so `await createDataTable({ source })` and
+   * `await table.loadData(source)` only resolve after the first row
+   * fetch lands — closing the contract gap where consumers could call
+   * `addFilter` synchronously and race the unfiltered initial SELECT.
+   *
+   * Resolves (never rejects) on every path: success, body-init error
+   * (swallowed at the assignment site), `destroy()` mid-init, and the
+   * no-fetch paths (zero rows, empty `visibleColumns`).
+   */
+  whenBodyReady(): Promise<void> {
+    return this.currentBodyInit;
   }
 
   /**

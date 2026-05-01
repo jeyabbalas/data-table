@@ -149,6 +149,12 @@ export abstract class BaseVisualization {
   protected dpr: number;
   protected destroyed = false;
   protected isFilterUpdate = false;
+  // Sequence token for `updateFilters` calls. Mirrors `fetchSequence` in
+  // subclasses and `filterSequence` in CrossfilterCoordinator: only the
+  // latest call's `finally` resets `isFilterUpdate`, so an older call that
+  // resolves mid-overlap can't flip the flag while a newer call is still
+  // mid-await.
+  private filterUpdateSequence = 0;
 
   // Bound event handlers for proper cleanup
   private boundMouseMove: (e: MouseEvent) => void;
@@ -432,6 +438,7 @@ export abstract class BaseVisualization {
    */
   public async updateFilters(filters: Filter[]): Promise<void> {
     if (this.destroyed) return;
+    const seq = ++this.filterUpdateSequence;
     this.options = { ...this.options, filters };
     this.isFilterUpdate = true;
     try {
@@ -449,7 +456,13 @@ export abstract class BaseVisualization {
         stage: 'filter',
       });
     } finally {
-      this.isFilterUpdate = false;
+      // Only the latest call resets the shared flag. An older call's `finally`
+      // running while a newer call is still mid-await would otherwise flip
+      // `isFilterUpdate` to false and corrupt subclasses' post-await checks
+      // (e.g. the `syncVisualStateFromFilter` gate in Histogram/ValueCounts).
+      if (seq === this.filterUpdateSequence) {
+        this.isFilterUpdate = false;
+      }
     }
   }
 

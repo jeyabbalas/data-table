@@ -42,9 +42,7 @@ describe('ExportQuery — __rowid__ tiebreaker (buildOrderByClause)', () => {
       { column: 'name', direction: 'asc' },
       { column: 'price', direction: 'desc' },
     ];
-    expect(buildOrderByClause(sort)).toBe(
-      ' ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC',
-    );
+    expect(buildOrderByClause(sort)).toBe(' ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC');
   });
 
   it('emits ORDER BY "__rowid__" ASC when user sort is empty (was: empty string)', () => {
@@ -116,9 +114,7 @@ describe('ExportQuery — buildSelectedRowsQuery (ROW_NUMBER CTE path)', () => {
       { column: 'price', direction: 'desc' },
     ];
     const sql = buildSelectedRowsQuery('t', ['id'], [], sort, [0, 5]);
-    expect(sql).toContain(
-      'ROW_NUMBER() OVER(ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC)',
-    );
+    expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC)');
   });
 
   it('does not duplicate __rowid__ when the user sort already includes it', () => {

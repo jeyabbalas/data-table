@@ -178,9 +178,8 @@ describe('ValueCounts — fetchSequence stale-result guard', () => {
     expect(clearsAfterStale).toBe(clearsBeforeStale);
     // The post-await guard runs *before* `this.data = fetched`, so the stale
     // value never reaches the field.
-    const dataAfterStale = (
-      viz as unknown as { data: { segments: { value: string }[] } | null }
-    ).data;
+    const dataAfterStale = (viz as unknown as { data: { segments: { value: string }[] } | null })
+      .data;
     expect(dataAfterStale?.segments[0]?.value).not.toBe('STALE');
 
     // Resolve the NEWER → wins; render() runs again.

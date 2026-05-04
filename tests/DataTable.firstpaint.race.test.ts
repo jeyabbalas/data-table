@@ -23,10 +23,7 @@ import type { SessionStore } from '@/persistence/SessionStore';
 // to test: with no fetch issued, whenBodyReady() resolves trivially and the
 // "races first paint" assertion is meaningless. Patch clientHeight so a real
 // visible range materializes — exactly what production browsers compute.
-const originalClientHeight = Object.getOwnPropertyDescriptor(
-  HTMLElement.prototype,
-  'clientHeight',
-);
+const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
 
 beforeAll(() => {
   if (!window.ResizeObserver) {

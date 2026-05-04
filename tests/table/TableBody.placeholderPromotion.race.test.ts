@@ -145,9 +145,8 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     ]);
     await initPromise;
 
-    const rowElementMap = (
-      body as unknown as { rowElementMap: Map<number, HTMLElement> }
-    ).rowElementMap;
+    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
+      .rowElementMap;
     expect(rowElementMap.size).toBe(4);
     // Each row at this point is a full data row (2 visible cols).
     for (const [, rowEl] of rowElementMap) {
@@ -265,9 +264,8 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     }
     await drainMicrotasks(4);
 
-    const rowElementMap = (
-      body as unknown as { rowElementMap: Map<number, HTMLElement> }
-    ).rowElementMap;
+    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
+      .rowElementMap;
     const visibleColumnCount = state.visibleColumns.get().length;
     for (const [idx, rowEl] of rowElementMap) {
       expect(rowEl.children.length, `row ${idx} cell count`).toBe(visibleColumnCount);
@@ -347,9 +345,8 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     }
     await drainMicrotasks(4);
 
-    const rowElementMap = (
-      body as unknown as { rowElementMap: Map<number, HTMLElement> }
-    ).rowElementMap;
+    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
+      .rowElementMap;
     // Pick a row that was originally a placeholder (index >= 4 came from
     // the placeholder branch) and verify the hover signal flows.
     const promoted = rowElementMap.get(8);

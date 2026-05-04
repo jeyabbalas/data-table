@@ -21,10 +21,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { createDataTable, VisualizationRegistry, type DataTable } from '@/index';
 import { DestroyedError } from '@/core/errors';
-import {
-  BaseVisualization,
-  type VisualizationOptions,
-} from '@/visualizations/BaseVisualization';
+import { BaseVisualization, type VisualizationOptions } from '@/visualizations/BaseVisualization';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { SessionStore } from '@/persistence/SessionStore';
@@ -33,10 +30,7 @@ import type { SessionStore } from '@/persistence/SessionStore';
 // VirtualScroller.getVisibleRange to {start:0,end:0,offsetY:0} and the body
 // skips its first SELECT entirely. Patch clientHeight so a real visible
 // range materializes — mirrors the firstpaint.race test setup.
-const originalClientHeight = Object.getOwnPropertyDescriptor(
-  HTMLElement.prototype,
-  'clientHeight',
-);
+const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
 
 beforeAll(() => {
   if (!window.ResizeObserver) {

@@ -150,9 +150,7 @@ describe('createDataTable — expressionFilter flag', () => {
     });
     await Promise.resolve();
 
-    const removeBtn = container.querySelector(
-      '.dt-filter-chip-remove',
-    ) as HTMLButtonElement | null;
+    const removeBtn = container.querySelector('.dt-filter-chip-remove') as HTMLButtonElement | null;
     expect(removeBtn).not.toBeNull();
     removeBtn!.click();
     expect(table.state.filters.get()).toHaveLength(0);

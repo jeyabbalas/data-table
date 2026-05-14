@@ -212,15 +212,15 @@ Check `table.isDestroyed()` in long-lived closures before calling them.
 
 All features are on by default; pass `false` or a config object to customize:
 
-| Option             | Default | Notes                                                              |
-| ------------------ | ------- | ------------------------------------------------------------------ |
-| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                        |
-| `presets`          | `true`  | Show the "Presets" button for saving filter sets                   |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                           |
-| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                      |
-| `derivedColumns`   | `true`  | Show the "+" add-column button and per-header `f(x)` edit icon     |
-| `visualizations`   | `true`  | Auto-attach column header histograms / value counts                |
-| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal          |
+| Option             | Default | Notes                                                          |
+| ------------------ | ------- | -------------------------------------------------------------- |
+| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                    |
+| `presets`          | `true`  | Show the "Presets" button for saving filter sets               |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                       |
+| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                  |
+| `derivedColumns`   | `true`  | Show the "+" add-column button and per-header `f(x)` edit icon |
+| `visualizations`   | `true`  | Auto-attach column header histograms / value counts            |
+| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal      |
 
 For the full options surface (mounting, worker, UI, customization), see
 [docs/api-reference.md#createdatatableoptions](./docs/api-reference.md#createdatatableoptions).

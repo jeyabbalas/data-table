@@ -31,6 +31,12 @@ export interface ColumnHeaderOptions {
   onFilterClick?: ((column: string, buttonElement: HTMLElement) => void) | undefined;
   /** Called when the f(x) icon on a derived column is clicked */
   onDerivedIconClick?: ((columnName: string, buttonElement: HTMLElement) => void) | undefined;
+  /**
+   * Show the f(x) edit icon on derived columns (default: true). When `false`,
+   * the icon is not mounted and `onDerivedIconClick` is unreachable. Set by
+   * the facade via the public `derivedColumns` option.
+   */
+  showDerivedEditIcon?: boolean | undefined;
   /** 1-based column index in the full schema (for aria-colindex) */
   colIndex?: number | undefined;
   /** Resolved i18n strings. Defaults to English. */
@@ -150,8 +156,10 @@ export class ColumnHeader {
         <circle cx="11" cy="12" r="1.5" />
       </svg>
     `;
-    // Derived column f(x) icon button (click handler wired in Task 8.6.2)
-    if (this.column.isDerived) {
+    // Derived column f(x) edit icon. Gated by `showDerivedEditIcon` so consumers
+    // with `derivedColumns: false` can fully skip the CodeMirror-bound edit
+    // panel (the icon is the only entry point to it).
+    if (this.column.isDerived && this.options.showDerivedEditIcon !== false) {
       const iconBtn = document.createElement('button');
       iconBtn.className = `${this.classPrefix}-derived-icon-btn`;
       iconBtn.setAttribute('type', 'button');

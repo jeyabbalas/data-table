@@ -212,17 +212,31 @@ Check `table.isDestroyed()` in long-lived closures before calling them.
 
 All features are on by default; pass `false` or a config object to customize:
 
-| Option             | Default | Notes                                                     |
-| ------------------ | ------- | --------------------------------------------------------- |
-| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB               |
-| `presets`          | `true`  | Show the "Presets" button for saving filter sets          |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                  |
-| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button             |
-| `visualizations`   | `true`  | Auto-attach column header histograms / value counts       |
-| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal |
+| Option             | Default | Notes                                                              |
+| ------------------ | ------- | ------------------------------------------------------------------ |
+| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                        |
+| `presets`          | `true`  | Show the "Presets" button for saving filter sets                   |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                           |
+| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                      |
+| `derivedColumns`   | `true`  | Show the "+" add-column button and per-header `f(x)` edit icon     |
+| `visualizations`   | `true`  | Auto-attach column header histograms / value counts                |
+| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal          |
 
 For the full options surface (mounting, worker, UI, customization), see
 [docs/api-reference.md#createdatatableoptions](./docs/api-reference.md#createdatatableoptions).
+
+### Skipping CodeMirror
+
+When both `expressionFilter: false` and `derivedColumns: false` are set, the
+library no longer reaches the CodeMirror-bound modals at runtime. Consumers in
+this configuration can omit the `@codemirror/*` and `@lezer/highlight` peer
+dependencies (already marked `optional` in `peerDependenciesMeta`) — modern
+bundlers chunk-split the modals into separate runtime modules that the
+unreachable code paths never load. The programmatic API
+(`actions.addFilter({ type: 'raw-sql' })`, `actions.addDerivedColumn`,
+`FilterPresetManager`) keeps working in this mode. When the flags are on, the
+first click of an SQL or derived-column button now fetches a small modal chunk
+on demand instead of loading it eagerly on table mount.
 
 ## Events
 

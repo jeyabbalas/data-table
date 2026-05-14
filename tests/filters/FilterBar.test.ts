@@ -260,4 +260,43 @@ describe('FilterBar', () => {
 
     bar.destroy();
   });
+
+  describe('raw-SQL chip edit gating (expressionFilter flag)', () => {
+    const rawSqlFilter: Filter = {
+      type: 'raw-sql',
+      id: 'sql1',
+      column: '__raw_sql_sql1__',
+      sql: 'x > 0',
+      label: 'x > 0',
+    };
+
+    it('omits the --clickable class and click listener when onRawSQLEdit is undefined', () => {
+      const bar = new FilterBar(state, actions, {});
+      actions.addFilter(rawSqlFilter);
+
+      const label = bar.getElement().querySelector('.dt-filter-chip-label') as HTMLElement;
+      expect(label).not.toBeNull();
+      expect(label.classList.contains('dt-filter-chip-label--clickable')).toBe(false);
+
+      // Clicking the label is a no-op (no callback to invoke). Asserting no
+      // error is enough — the absence of the click listener is what we care
+      // about; the row directly above already verifies the visual treatment.
+      label.click();
+
+      bar.destroy();
+    });
+
+    it('adds the --clickable class and wires the callback when onRawSQLEdit is provided', () => {
+      const onEdit = vi.fn();
+      const bar = new FilterBar(state, actions, { onRawSQLEdit: onEdit });
+      actions.addFilter(rawSqlFilter);
+
+      const label = bar.getElement().querySelector('.dt-filter-chip-label') as HTMLElement;
+      expect(label.classList.contains('dt-filter-chip-label--clickable')).toBe(true);
+      label.click();
+      expect(onEdit).toHaveBeenCalledWith('sql1');
+
+      bar.destroy();
+    });
+  });
 });

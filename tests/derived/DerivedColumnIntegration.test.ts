@@ -152,6 +152,51 @@ describe('TableContainer showAddColumnButton option', () => {
   });
 });
 
+describe('TableContainer showDerivedColumnEditIcon option', () => {
+  let container: HTMLElement;
+  let state: TableState;
+
+  const derivedSchema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    {
+      name: 'doubled',
+      type: 'integer',
+      nullable: false,
+      originalType: 'INTEGER',
+      isDerived: true,
+    },
+  ];
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    state = createTableState();
+    state.tableName.set('test_table');
+    state.schema.set(derivedSchema);
+    initializeColumnsFromSchema(state, derivedSchema);
+  });
+
+  afterEach(() => {
+    container.remove();
+  });
+
+  it('shows the f(x) edit icon on a derived-column header by default', () => {
+    const mockActions = {} as any;
+    const tc = new TableContainer(container, state, mockActions, undefined);
+    expect(container.querySelector('.dt-derived-icon-btn')).not.toBeNull();
+    tc.destroy();
+  });
+
+  it('hides the f(x) edit icon when showDerivedColumnEditIcon is false', () => {
+    const mockActions = {} as any;
+    const tc = new TableContainer(container, state, mockActions, undefined, {
+      showDerivedColumnEditIcon: false,
+    });
+    expect(container.querySelector('.dt-derived-icon-btn')).toBeNull();
+    tc.destroy();
+  });
+});
+
 describe('TableContainer editorFactory option', () => {
   let container: HTMLElement;
   let state: TableState;
@@ -198,7 +243,7 @@ describe('TableContainer modal close on schema change', () => {
     container.remove();
   });
 
-  it('closes derived modal when schema changes (simulating data reload)', () => {
+  it('closes derived modal when schema changes (simulating data reload)', async () => {
     const mockActions = {
       addDerivedColumn: vi.fn().mockResolvedValue({ success: true }),
       validateExpression: vi
@@ -209,21 +254,25 @@ describe('TableContainer modal close on schema change', () => {
 
     const tc = new TableContainer(container, state, mockActions, undefined);
 
-    // Trigger the add column button click to create and open the modal
+    // Trigger the add column button click to create and open the modal.
+    // The handler dynamic-imports DerivedColumnModal so we wait for the modal
+    // to mount via vi.waitFor rather than asserting synchronously.
     const addBtn = container.querySelector('.dt-add-column-btn') as HTMLButtonElement;
     expect(addBtn).not.toBeNull();
     addBtn.click();
 
-    // Modal should be open (appended to document.body)
-    const backdrop = document.querySelector('.dt-derived-modal-backdrop');
-    expect(backdrop).not.toBeNull();
-    expect(backdrop!.classList.contains('dt-derived-modal-backdrop--open')).toBe(true);
+    const backdrop = await vi.waitFor(() => {
+      const el = document.querySelector('.dt-derived-modal-backdrop');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(backdrop.classList.contains('dt-derived-modal-backdrop--open')).toBe(true);
 
     // Simulate schema change (data reload)
     state.schema.set([{ name: 'col_a', type: 'string', nullable: false, originalType: 'VARCHAR' }]);
 
     // Modal should be closed
-    expect(backdrop!.classList.contains('dt-derived-modal-backdrop--open')).toBe(false);
+    expect(backdrop.classList.contains('dt-derived-modal-backdrop--open')).toBe(false);
 
     tc.destroy();
   });

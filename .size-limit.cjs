@@ -5,47 +5,47 @@
  * Sizes are reported in **brotli-compressed** form (size-limit's default,
  * matching what browsers receive over HTTPS).
  *
- * Phase 9 (2026-04-26) actuals + ~5 % headroom — the review-plan §3 example
- * caps (root <30 kB, advanced <10 kB, lazy <150 kB) would mask real
- * regressions, so we deliberately key off measured size instead. The 5 %
- * headroom matches `size-limit`'s default regression threshold so any
- * meaningful unintended growth surfaces in CI.
+ * Caps key off measured size + ~5 % headroom (matches size-limit's default
+ * regression threshold) so unintended growth surfaces in CI.
  *
- * Lazy-chunk filenames are content-hashed by Vite (`VisualizationRegistry-*`),
- * so we glob; the underlying chunk is always reachable via the
- * `lazyExportDialog` dynamic import in `src/DataTable.ts`.
+ * Lazy-chunk filenames are content-hashed by Vite (e.g. `VisualizationRegistry-*`,
+ * `SQLFilterModal-*`), so we glob; the underlying chunks are reached via
+ * dynamic `import()` boundaries: `lazyExportDialog` in `src/DataTable.ts`
+ * and the modal-open handlers in `src/table/TableContainer.ts`.
  *
  * CJS bundles were dropped in 0.4.0 (see `.changeset/fix-worker-url-and-cjs-drop.md`)
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Phase-9 baseline (brotli, captured 2026-04-26 after the
- * splitCrossfilterFilters removal, columnChange dedupe, loadComplete clone,
- * SESSION_VERSION_REJECTED warning, and high-contrast.css addition):
- *   root entry · ESM        7.33 kB   →   7.7 kB cap (5.0 %)
- *   advanced entry · ESM    2.36 kB   →   2.5 kB cap (5.9 %)
- *   stylesheet             16.14 kB   →  17 kB   cap (5.3 %)
- *   lazy chunk · ESM       77.43 kB   →  81 kB   cap (4.6 %)
+ * Current baseline (brotli, captured after the modal-lazy-import refactor that
+ * introduced `derivedColumns` and dynamic-imported SQLFilterModal,
+ * DerivedColumnModal, DerivedColumnEditPanel, FilterPresetPanel):
+ *   root entry · ESM                7.67 kB   →   8.1 kB cap (5.6 %)
+ *   advanced entry · ESM            2.44 kB   →   2.6 kB cap (6.6 %)
+ *   stylesheet                     16.14 kB   →  17 kB   cap (5.3 %)
+ *   lazy ExportDialog chunk        63.29 kB   →  67 kB   cap (5.9 %)
+ *   lazy SQLFilterModal chunk       2.48 kB   →   2.6 kB cap (4.8 %)
+ *   lazy DerivedColumnModal         3.58 kB   →   3.8 kB cap (6.1 %)
+ *   lazy DerivedColumnEditPanel     2.95 kB   →   3.1 kB cap (5.1 %)
+ *   lazy FilterPresetPanel          2.50 kB   →   2.7 kB cap (8.0 %)
+ *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *   lazy ModalHost (shared)         5.25 kB   →   5.6 kB cap (6.7 %)
  *
- * Phase-2 baseline pre-tightening (kept for diff context):
- *   root entry · ESM        7.01 kB   →   8 kB
- *   root entry · CJS        6.17 kB   →   7 kB
- *   advanced entry · ESM    2.30 kB   →   3 kB
- *   advanced entry · CJS    2.00 kB   →   2.5 kB
- *   stylesheet             15.28 kB   →  18 kB
- *   lazy chunk · ESM       76.51 kB   →  90 kB
- *   lazy chunk · CJS       71.26 kB   →  85 kB
+ * Phase-9 baseline pre-refactor (kept for diff context):
+ *   root entry · ESM        7.33 kB   →   7.7 kB cap
+ *   advanced entry · ESM    2.36 kB   →   2.5 kB cap
+ *   lazy chunk · ESM       77.43 kB   →  81 kB   cap (modal classes now split out)
  */
 module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '7.7 kB',
+    limit: '8.1 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',
     path: 'dist/advanced.js',
-    limit: '2.5 kB',
+    limit: '2.6 kB',
   },
   {
     name: 'stylesheet (dist/data-table.css)',
@@ -55,6 +55,36 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '81 kB',
+    limit: '67 kB',
+  },
+  {
+    name: 'lazy SQLFilterModal chunk · ESM',
+    path: 'dist/SQLFilterModal-*.js',
+    limit: '2.6 kB',
+  },
+  {
+    name: 'lazy DerivedColumnModal chunk · ESM',
+    path: 'dist/DerivedColumnModal-*.js',
+    limit: '3.8 kB',
+  },
+  {
+    name: 'lazy DerivedColumnEditPanel chunk · ESM',
+    path: 'dist/DerivedColumnEditPanel-*.js',
+    limit: '3.1 kB',
+  },
+  {
+    name: 'lazy FilterPresetPanel chunk · ESM',
+    path: 'dist/FilterPresetPanel-*.js',
+    limit: '2.7 kB',
+  },
+  {
+    name: 'lazy CodeMirror editor chunk · ESM',
+    path: 'dist/CodeMirrorExpressionEditor-*.js',
+    limit: '5.5 kB',
+  },
+  {
+    name: 'lazy ModalHost shared chunk · ESM',
+    path: 'dist/ModalHost-*.js',
+    limit: '5.6 kB',
   },
 ];

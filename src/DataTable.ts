@@ -146,6 +146,22 @@ export interface CreateDataTableOptions {
   /** Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `true`. */
   expressionFilter?: boolean;
 
+  /**
+   * Show the derived-column UI: the "+" button at the table's right edge and
+   * the f(x) edit icon on every derived-column header. The programmatic API
+   * (`actions.addDerivedColumn`, `actions.removeDerivedColumn`,
+   * `actions.updateDerivedColumn`) is unaffected by this flag — only the
+   * user-visible affordances are removed.
+   *
+   * Set this to `false` together with `expressionFilter: false` to skip
+   * loading CodeMirror entirely. Consumers in that mode can omit the
+   * `@codemirror/*` and `@lezer/highlight` peer dependencies (already marked
+   * `optional` in `peerDependenciesMeta`).
+   *
+   * Default: `true`.
+   */
+  derivedColumns?: boolean;
+
   /** Enable auto-attached column header visualizations (histograms, value counts). Default: `true`. */
   visualizations?: boolean;
 
@@ -481,6 +497,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     classPrefix: opts.classPrefix ?? 'dt',
     instanceId,
     showExpressionFilter: opts.expressionFilter !== false,
+    showAddColumnButton: opts.derivedColumns !== false,
+    showDerivedColumnEditIcon: opts.derivedColumns !== false,
     editorFactory: opts.editorFactory,
     presetManager: presetManager ?? undefined,
     portalTarget: opts.portalTarget,

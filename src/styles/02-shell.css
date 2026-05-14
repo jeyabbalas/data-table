@@ -192,11 +192,12 @@
   cursor: pointer;
 }
 
-/* SQL filter chip — clickable label */
-.dt-filter-chip-label--sql {
-  cursor: pointer;
-}
-.dt-filter-chip-label--sql:hover {
+/* SQL filter chip — link-like hover underline only when the chip is clickable
+   (i.e. an onEdit handler is wired, which the FilterBar gates on the
+   `expressionFilter` option). Cursor is handled by --clickable above, so a
+   non-editable raw-SQL chip renders visually identical to any other static
+   chip. */
+.dt-filter-chip-label--sql.dt-filter-chip-label--clickable:hover {
   text-decoration: underline;
   text-decoration-color: var(--dt-primary);
 }

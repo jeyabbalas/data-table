@@ -37,14 +37,14 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
-import { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
-import { DerivedColumnModal } from '../derived/DerivedColumnModal';
+import type { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
+import type { DerivedColumnModal } from '../derived/DerivedColumnModal';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
 import { FilterBar } from '../filters/FilterBar';
 import { FilterPanel } from '../filters/FilterPanel';
-import { FilterPresetPanel } from '../filters/FilterPresetPanel';
+import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
-import { SQLFilterModal } from '../filters/SQLFilterModal';
+import type { SQLFilterModal } from '../filters/SQLFilterModal';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
@@ -77,6 +77,12 @@ export interface TableContainerOptions {
   editorFactory?: ExpressionEditorFactory | undefined;
   /** Show "+" add column button at right edge (default: true) */
   showAddColumnButton?: boolean | undefined;
+  /**
+   * Show the f(x) edit icon on every derived-column header (default: true).
+   * Independent of `showAddColumnButton` so `/advanced` callers can mix and
+   * match. The facade ties both to the public `derivedColumns` option.
+   */
+  showDerivedColumnEditIcon?: boolean | undefined;
   /** Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true) */
   showExpressionFilter?: boolean | undefined;
   /** FilterPresetManager instance — enables the Presets button and preset panel */
@@ -210,6 +216,7 @@ export class TableContainer {
       onFilterRemove: undefined as unknown as (column: string) => void,
       editorFactory: undefined as unknown as ExpressionEditorFactory,
       showAddColumnButton: true,
+      showDerivedColumnEditIcon: true,
       showExpressionFilter: true,
       presetManager: undefined as unknown as FilterPresetManager,
       portalTarget: undefined as unknown as HTMLElement,
@@ -257,11 +264,14 @@ export class TableContainer {
           !!this.resolvedOptions.presetManager,
         onAddSQLFilter:
           this.resolvedOptions.showExpressionFilter !== false
-            ? () => this.openSQLFilterModal()
+            ? () => void this.openSQLFilterModal()
             : undefined,
-        onRawSQLEdit: (id: string) => this.openSQLFilterModalForEdit(id),
+        onRawSQLEdit:
+          this.resolvedOptions.showExpressionFilter !== false
+            ? (id: string) => void this.openSQLFilterModalForEdit(id)
+            : undefined,
         onPresetsClick: this.resolvedOptions.presetManager
-          ? () => this.handlePresetsClick()
+          ? () => void this.handlePresetsClick()
           : undefined,
         messages: this.messages,
       });
@@ -291,7 +301,7 @@ export class TableContainer {
     if (this.resolvedOptions.showAddColumnButton !== false && this.actions) {
       this.addColumnButton = new AddColumnButton({
         classPrefix: this.resolvedOptions.classPrefix,
-        onClick: () => this.handleAddColumnClick(),
+        onClick: () => void this.handleAddColumnClick(),
         messages: this.messages,
       });
 
@@ -983,9 +993,10 @@ export class TableContainer {
               classPrefix: this.resolvedOptions.classPrefix,
               onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
               onDerivedIconClick: (column, buttonEl) =>
-                this.handleDerivedIconClick(column, buttonEl),
+                void this.handleDerivedIconClick(column, buttonEl),
               colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
               messages: this.messages,
+              showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
               annotations: this.resolvedOptions.annotations,
               annotationPopover: this.resolvedOptions.annotationPopover,
               columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
@@ -1184,9 +1195,15 @@ export class TableContainer {
 
   /**
    * Handle derived column icon click from a column header.
-   * Creates the DerivedColumnEditPanel lazily and toggles it.
+   * Dynamic-imports + lazily constructs the DerivedColumnEditPanel on first
+   * click, then toggles it. The dynamic import keeps `CodeMirrorExpressionEditor`
+   * (and its `@codemirror/*` peer deps) out of the consumer's static graph so
+   * tables with `derivedColumns: false` ship without the editor chunk.
    */
-  private handleDerivedIconClick(columnName: string, anchorElement: HTMLElement): void {
+  private async handleDerivedIconClick(
+    columnName: string,
+    anchorElement: HTMLElement,
+  ): Promise<void> {
     if (!this.actions) return;
 
     // Mutual exclusion: close other panels/modals if open
@@ -1200,25 +1217,30 @@ export class TableContainer {
       this.presetPanel.close();
     }
 
-    // Create panel lazily on first click
     if (!this.derivedEditPanel) {
-      this.derivedEditPanel = new DerivedColumnEditPanel(this.state, this.actions, {
-        classPrefix: this.resolvedOptions.classPrefix,
-        editorFactory: this.resolvedOptions.editorFactory,
-        colorSchemeSource: this.element,
-        messages: this.messages,
-      });
-      this.element.appendChild(this.derivedEditPanel.getElement());
+      const { DerivedColumnEditPanel } = await import('../derived/DerivedColumnEditPanel');
+      if (this.destroyed) return;
+      if (!this.derivedEditPanel) {
+        this.derivedEditPanel = new DerivedColumnEditPanel(this.state, this.actions, {
+          classPrefix: this.resolvedOptions.classPrefix,
+          editorFactory: this.resolvedOptions.editorFactory,
+          colorSchemeSource: this.element,
+          messages: this.messages,
+        });
+        this.element.appendChild(this.derivedEditPanel.getElement());
+      }
     }
 
+    if (this.destroyed || !this.derivedEditPanel) return;
     this.derivedEditPanel.toggle(columnName, anchorElement);
   }
 
   /**
    * Handle "+" add column button click.
-   * Opens the DerivedColumnModal for creating a new derived column.
+   * Dynamic-imports + opens the DerivedColumnModal for creating a new derived
+   * column. Chunk-splits CodeMirror out of the consumer's main bundle.
    */
-  private handleAddColumnClick(): void {
+  private async handleAddColumnClick(): Promise<void> {
     if (!this.actions) return;
 
     // Close other floating panels/modals (mutual exclusion)
@@ -1227,38 +1249,39 @@ export class TableContainer {
     if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
     if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
 
-    // Create modal lazily on first click
     if (!this.derivedModal) {
-      this.derivedModal = new DerivedColumnModal(this.state, this.actions, {
-        classPrefix: this.resolvedOptions.classPrefix,
-        instanceId: this.resolvedOptions.instanceId,
-        editorFactory: this.resolvedOptions.editorFactory,
-        onCreated: () => this.scrollToRightEnd(),
-        colorSchemeSource: this.element,
-        messages: this.messages,
-      });
-      // Mount in the configured portal target (defaults to <body>). Fixed-
-      // position modals need a root that isn't inside a transformed/filtered
-      // ancestor so they can cover the viewport without stacking-context surprises.
-      this.getPortalTarget().appendChild(this.derivedModal.getElement());
+      const { DerivedColumnModal } = await import('../derived/DerivedColumnModal');
+      if (this.destroyed) return;
+      if (!this.derivedModal) {
+        this.derivedModal = new DerivedColumnModal(this.state, this.actions, {
+          classPrefix: this.resolvedOptions.classPrefix,
+          instanceId: this.resolvedOptions.instanceId,
+          editorFactory: this.resolvedOptions.editorFactory,
+          onCreated: () => this.scrollToRightEnd(),
+          colorSchemeSource: this.element,
+          messages: this.messages,
+        });
+        // Mount in the configured portal target (defaults to <body>). Fixed-
+        // position modals need a root that isn't inside a transformed/filtered
+        // ancestor so they can cover the viewport without stacking-context surprises.
+        this.getPortalTarget().appendChild(this.derivedModal.getElement());
+      }
     }
 
+    if (this.destroyed || !this.derivedModal) return;
     this.derivedModal.open();
   }
 
   /**
-   * Open the SQL filter modal in create mode.
+   * Dynamic-import + lazy-construct the SQL filter modal. Shared by
+   * `openSQLFilterModal` (create mode) and `openSQLFilterModalForEdit` so
+   * both call sites hit a single chunk boundary.
    */
-  private openSQLFilterModal(): void {
-    if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-
-    // Lazy creation
+  private async ensureSqlFilterModal(): Promise<SQLFilterModal | null> {
+    if (!this.actions) return null;
+    if (this.sqlFilterModal) return this.sqlFilterModal;
+    const { SQLFilterModal } = await import('../filters/SQLFilterModal');
+    if (this.destroyed) return null;
     if (!this.sqlFilterModal) {
       this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
@@ -1269,14 +1292,30 @@ export class TableContainer {
       });
       this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
     }
+    return this.sqlFilterModal;
+  }
 
-    this.sqlFilterModal.open();
+  /**
+   * Open the SQL filter modal in create mode.
+   */
+  private async openSQLFilterModal(): Promise<void> {
+    if (!this.actions) return;
+
+    // Mutual exclusion: close other panels/modals
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+
+    const modal = await this.ensureSqlFilterModal();
+    if (this.destroyed || !modal) return;
+    modal.open();
   }
 
   /**
    * Open the SQL filter modal in edit mode for the given filter id.
    */
-  private openSQLFilterModalForEdit(filterId: string): void {
+  private async openSQLFilterModalForEdit(filterId: string): Promise<void> {
     if (!this.actions) return;
 
     // Mutual exclusion
@@ -1285,26 +1324,18 @@ export class TableContainer {
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
     if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
 
-    // Lazy creation
-    if (!this.sqlFilterModal) {
-      this.sqlFilterModal = new SQLFilterModal(this.state, this.actions, {
-        classPrefix: this.resolvedOptions.classPrefix,
-        instanceId: this.resolvedOptions.instanceId,
-        editorFactory: this.resolvedOptions.editorFactory,
-        colorSchemeSource: this.element,
-        messages: this.messages,
-      });
-      this.getPortalTarget().appendChild(this.sqlFilterModal.getElement());
-    }
-
-    this.sqlFilterModal.openForEdit(filterId);
+    const modal = await this.ensureSqlFilterModal();
+    if (this.destroyed || !modal) return;
+    modal.openForEdit(filterId);
   }
 
   /**
    * Handle "Presets" button click from filter bar.
-   * Creates the FilterPresetPanel lazily and toggles it.
+   * Dynamic-imports the FilterPresetPanel on first click (FilterPresetPanel
+   * does not pull CodeMirror today, but the lazy boundary stays symmetric
+   * with the other modal handlers).
    */
-  private handlePresetsClick(): void {
+  private async handlePresetsClick(): Promise<void> {
     if (!this.actions || !this.resolvedOptions.presetManager) return;
 
     // Mutual exclusion: close other panels/modals
@@ -1313,20 +1344,25 @@ export class TableContainer {
     if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
 
-    // Lazy creation
     if (!this.presetPanel) {
-      this.presetPanel = new FilterPresetPanel(
-        this.resolvedOptions.presetManager,
-        this.state,
-        this.actions,
-        {
-          classPrefix: this.resolvedOptions.classPrefix,
-          colorSchemeSource: this.element,
-          messages: this.messages,
-        },
-      );
-      this.element.appendChild(this.presetPanel.getElement());
+      const { FilterPresetPanel } = await import('../filters/FilterPresetPanel');
+      if (this.destroyed) return;
+      if (!this.presetPanel) {
+        this.presetPanel = new FilterPresetPanel(
+          this.resolvedOptions.presetManager,
+          this.state,
+          this.actions,
+          {
+            classPrefix: this.resolvedOptions.classPrefix,
+            colorSchemeSource: this.element,
+            messages: this.messages,
+          },
+        );
+        this.element.appendChild(this.presetPanel.getElement());
+      }
     }
+
+    if (this.destroyed || !this.presetPanel) return;
 
     // Find the presets button as anchor for positioning
     const presetsBtn = this.filterBar

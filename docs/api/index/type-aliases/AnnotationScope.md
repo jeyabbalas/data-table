@@ -8,6 +8,6 @@
 
 > **AnnotationScope** = `"row"` \| `"column"` \| `"cell"`
 
-Defined in: [annotations/types.ts:23](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/annotations/types.ts#L23)
+Defined in: [annotations/types.ts:23](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L23)
 
 Scope discriminator for an annotation. Immutable after creation.

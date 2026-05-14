@@ -6,7 +6,7 @@
 
 # Interface: LoadDataOptions
 
-Defined in: [core/Actions.ts:68](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/Actions.ts#L68)
+Defined in: [core/Actions.ts:68](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Actions.ts#L68)
 
 Options for loading data
 
@@ -20,7 +20,7 @@ Options for loading data
 
 > `optional` **annotationStore?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [core/Actions.ts:74](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/Actions.ts#L74)
+Defined in: [core/Actions.ts:74](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Actions.ts#L74)
 
 If provided, restores saved annotations after loading
 
@@ -30,7 +30,7 @@ If provided, restores saved annotations after loading
 
 > `optional` **format?**: [`DataFormat`](../../index/type-aliases/DataFormat.md)
 
-Defined in: [data/DataLoader.ts:26](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/data/DataLoader.ts#L26)
+Defined in: [data/DataLoader.ts:26](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/data/DataLoader.ts#L26)
 
 #### Inherited from
 
@@ -42,7 +42,7 @@ Defined in: [data/DataLoader.ts:26](https://github.com/jeyabbalas/data-table/blo
 
 > `optional` **presetManager?**: [`FilterPresetManager`](../../index/classes/FilterPresetManager.md)
 
-Defined in: [core/Actions.ts:72](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/Actions.ts#L72)
+Defined in: [core/Actions.ts:72](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Actions.ts#L72)
 
 If provided, restores saved filter presets after loading
 
@@ -52,7 +52,7 @@ If provided, restores saved filter presets after loading
 
 > `optional` **sessionStore?**: [`SessionStore`](../../index/classes/SessionStore.md)
 
-Defined in: [core/Actions.ts:70](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/Actions.ts#L70)
+Defined in: [core/Actions.ts:70](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Actions.ts#L70)
 
 If provided, restores saved session state after loading
 
@@ -62,7 +62,7 @@ If provided, restores saved session state after loading
 
 > `optional` **tableName?**: `string`
 
-Defined in: [data/DataLoader.ts:25](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/data/DataLoader.ts#L25)
+Defined in: [data/DataLoader.ts:25](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/data/DataLoader.ts#L25)
 
 #### Inherited from
 

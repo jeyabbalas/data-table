@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:799](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/Strings.ts#L799)
+Defined in: [core/Strings.ts:799](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L799)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested

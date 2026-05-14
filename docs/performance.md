@@ -151,12 +151,21 @@ await createDataTable({
   visualizations: false, // no column-header charts
   presets: false, // no preset panel
   exportDialog: false, // no export modal
-  expressionFilter: false, // no raw-SQL filter (drops CodeMirror)
+  expressionFilter: false, // no raw-SQL filter button
+  derivedColumns: false, // no "+" add-column button / f(x) edit icon
 });
 ```
 
 For a read-only display table, turning these off reduces initial JS +
 CSS footprint measurably.
+
+With both `expressionFilter: false` and `derivedColumns: false`, the modals
+that bind CodeMirror are unreachable, so consumers can drop the
+`@codemirror/*` and `@lezer/highlight` peer dependencies entirely. See
+[`README.md` → Skipping CodeMirror](../README.md#skipping-codemirror) for the
+full peer-dep list. The corresponding programmatic APIs
+(`actions.addFilter({ type: 'raw-sql' })`, `actions.addDerivedColumn`,
+`FilterPresetManager`) keep working in this mode.
 
 ## Measuring your workload
 

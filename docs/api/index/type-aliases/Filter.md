@@ -8,7 +8,7 @@
 
 > **Filter** = [`RangeFilter`](../interfaces/RangeFilter.md) \| [`PointFilter`](../interfaces/PointFilter.md) \| [`SetFilter`](../interfaces/SetFilter.md) \| [`NotSetFilter`](../interfaces/NotSetFilter.md) \| [`NullFilter`](../interfaces/NullFilter.md) \| [`PatternFilter`](../interfaces/PatternFilter.md) \| [`RawSQLFilter`](../interfaces/RawSQLFilter.md)
 
-Defined in: [filters/FilterTypes.ts:115](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/filters/FilterTypes.ts#L115)
+Defined in: [filters/FilterTypes.ts:115](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/filters/FilterTypes.ts#L115)
 
 Discriminated union of every filter shape understood by the library.
 `actions.addFilter`, `state.filters`, the export pipeline, and

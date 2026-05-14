@@ -6,8 +6,11 @@
 
 # Variable: VERSION
 
-> `const` **VERSION**: `"0.2.0"` = `'0.2.0'`
+> `const` **VERSION**: `string` = `__DT_VERSION__`
 
-Defined in: [index.ts:14](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/index.ts#L14)
+Defined in: [index.ts:21](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/index.ts#L21)
 
 Library semantic-version string. Matches `package.json#version`.
+
+Substituted at build time via Vite's `define` (see `vite.config.ts`)
+so the published value can never drift from the manifest.

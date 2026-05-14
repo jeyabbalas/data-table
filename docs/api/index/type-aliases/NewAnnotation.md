@@ -8,7 +8,7 @@
 
 > **NewAnnotation** = `Omit`\<[`RowAnnotation`](../interfaces/RowAnnotation.md), `"id"`\> & `object` \| `Omit`\<[`ColumnAnnotation`](../interfaces/ColumnAnnotation.md), `"id"`\> & `object` \| `Omit`\<[`CellAnnotation`](../interfaces/CellAnnotation.md), `"id"`\> & `object`
 
-Defined in: [annotations/types.ts:97](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/annotations/types.ts#L97)
+Defined in: [annotations/types.ts:97](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L97)
 
 Input shape accepted by `AnnotationStore.add` / `addMany`: any of the three
 concrete variants with `id` optional (the store generates one when absent).

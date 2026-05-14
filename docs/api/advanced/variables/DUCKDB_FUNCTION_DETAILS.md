@@ -8,7 +8,7 @@
 
 > `const` **DUCKDB\_FUNCTION\_DETAILS**: readonly [`DuckDBFunctionInfo`](../interfaces/DuckDBFunctionInfo.md)[]
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:57](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/sql-editor/duckdbFunctionDetails.ts#L57)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:57](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/sql-editor/duckdbFunctionDetails.ts#L57)
 
 Curated DuckDB function metadata array used to populate the autocomplete
 `detail` (category chip) and `info` (one-line description) slots. Frozen

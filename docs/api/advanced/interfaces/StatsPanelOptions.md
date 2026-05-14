@@ -6,7 +6,7 @@
 
 # Interface: StatsPanelOptions
 
-Defined in: [visualizations/BaseStatsPanel.ts:92](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L92)
+Defined in: [visualizations/BaseStatsPanel.ts:92](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L92)
 
 Options passed to a stats panel constructor and refreshed on filter
 changes. Mirrors the shape of [VisualizationOptions](VisualizationOptions.md) so panel
@@ -19,7 +19,7 @@ the visualizations use.
 
 > **bridge**: [`WorkerBridge`](../../index/classes/WorkerBridge.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:96](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L96)
+Defined in: [visualizations/BaseStatsPanel.ts:96](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L96)
 
 Bridge for executing custom SQL against DuckDB-WASM.
 
@@ -29,7 +29,7 @@ Bridge for executing custom SQL against DuckDB-WASM.
 
 > **filters**: [`Filter`](../../index/type-aliases/Filter.md)[]
 
-Defined in: [visualizations/BaseStatsPanel.ts:98](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L98)
+Defined in: [visualizations/BaseStatsPanel.ts:98](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L98)
 
 Currently active filters. Refreshed on each `updateFilters` call.
 
@@ -39,7 +39,7 @@ Currently active filters. Refreshed on each `updateFilters` call.
 
 > **messages**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:100](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L100)
+Defined in: [visualizations/BaseStatsPanel.ts:100](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L100)
 
 Resolved i18n strings; use these to localize any text the panel renders.
 
@@ -49,7 +49,7 @@ Resolved i18n strings; use these to localize any text the panel renders.
 
 > `optional` **onError?**: (`error`, `context`) => `void`
 
-Defined in: [visualizations/BaseStatsPanel.ts:105](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L105)
+Defined in: [visualizations/BaseStatsPanel.ts:105](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L105)
 
 Called when the panel fails to fetch, render, or update. The facade
 routes these to the `error` event with `source: 'statsPanel'`.
@@ -74,6 +74,6 @@ routes these to the `error` event with `source: 'statsPanel'`.
 
 > **tableName**: `string`
 
-Defined in: [visualizations/BaseStatsPanel.ts:94](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/BaseStatsPanel.ts#L94)
+Defined in: [visualizations/BaseStatsPanel.ts:94](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/BaseStatsPanel.ts#L94)
 
 Name of the DuckDB table the panel can query.

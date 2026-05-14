@@ -6,7 +6,7 @@
 
 # Interface: SerializedSetFilter
 
-Defined in: [persistence/types.ts:48](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/types.ts#L48)
+Defined in: [persistence/types.ts:48](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/types.ts#L48)
 
 JSON-safe form of [SetFilter](SetFilter.md); values pass through `serializeValue`.
 
@@ -16,7 +16,7 @@ JSON-safe form of [SetFilter](SetFilter.md); values pass through `serializeValue
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:50](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/types.ts#L50)
+Defined in: [persistence/types.ts:50](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/types.ts#L50)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:50](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [persistence/types.ts:52](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/types.ts#L52)
+Defined in: [persistence/types.ts:52](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/types.ts#L52)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [persistence/types.ts:52](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"set"`
 
-Defined in: [persistence/types.ts:49](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/types.ts#L49)
+Defined in: [persistence/types.ts:49](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/types.ts#L49)
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: [persistence/types.ts:49](https://github.com/jeyabbalas/data-table/b
 
 > **values**: `unknown`[]
 
-Defined in: [persistence/types.ts:51](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/persistence/types.ts#L51)
+Defined in: [persistence/types.ts:51](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/types.ts#L51)

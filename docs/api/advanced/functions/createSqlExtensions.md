@@ -8,7 +8,7 @@
 
 > **createSqlExtensions**(`context`, `options?`): `Extension`[]
 
-Defined in: [sql-editor/extensions.ts:133](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/sql-editor/extensions.ts#L133)
+Defined in: [sql-editor/extensions.ts:133](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/sql-editor/extensions.ts#L133)
 
 Build the CodeMirror extensions that make any editor SQL-, schema-, and
 DuckDB-aware. The returned array can be combined with any other

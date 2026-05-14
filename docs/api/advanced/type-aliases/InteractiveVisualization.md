@@ -8,7 +8,7 @@
 
 > **InteractiveVisualization** = [`BrushCapable`](../interfaces/BrushCapable.md) \| [`SelectionCapable`](../interfaces/SelectionCapable.md) & `object`
 
-Defined in: [visualizations/InteractionManager.ts:40](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/InteractionManager.ts#L40)
+Defined in: [visualizations/InteractionManager.ts:40](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/InteractionManager.ts#L40)
 
 A visualization that supports at least one of brush or selection clearing
 

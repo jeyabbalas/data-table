@@ -8,7 +8,7 @@
 
 > **applySnapshot**(`state`, `snapshot`): `void`
 
-Defined in: [core/UndoManager.ts:208](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/core/UndoManager.ts#L208)
+Defined in: [core/UndoManager.ts:208](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/UndoManager.ts#L208)
 
 Apply a StateSnapshot to a TableState.
 

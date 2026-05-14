@@ -8,7 +8,7 @@
 
 > **isNumericType**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:67](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/visualizations/VisualizationRegistry.ts#L67)
+Defined in: [visualizations/VisualizationRegistry.ts:67](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/visualizations/VisualizationRegistry.ts#L67)
 
 Check if a column type is numeric (suitable for numeric histogram).
 

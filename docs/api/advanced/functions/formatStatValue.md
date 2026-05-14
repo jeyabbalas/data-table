@@ -8,7 +8,7 @@
 
 > **formatStatValue**(`value`): `string`
 
-Defined in: [statistics/StatsFormatters.ts:26](https://github.com/jeyabbalas/data-table/blob/96b7f96026f039095bbc0aa0297473860140213d/src/statistics/StatsFormatters.ts#L26)
+Defined in: [statistics/StatsFormatters.ts:26](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/statistics/StatsFormatters.ts#L26)
 
 Format a data value for display in the stats panel.
 

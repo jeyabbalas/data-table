@@ -17,19 +17,22 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, captured after the modal-lazy-import refactor that
- * introduced `derivedColumns` and dynamic-imported SQLFilterModal,
- * DerivedColumnModal, DerivedColumnEditPanel, FilterPresetPanel):
- *   root entry · ESM                7.67 kB   →   8.1 kB cap (5.6 %)
- *   advanced entry · ESM            2.44 kB   →   2.6 kB cap (6.6 %)
- *   stylesheet                     16.14 kB   →  17 kB   cap (5.3 %)
- *   lazy ExportDialog chunk        63.29 kB   →  67 kB   cap (5.9 %)
- *   lazy SQLFilterModal chunk       2.48 kB   →   2.6 kB cap (4.8 %)
- *   lazy DerivedColumnModal         3.58 kB   →   3.8 kB cap (6.1 %)
- *   lazy DerivedColumnEditPanel     2.95 kB   →   3.1 kB cap (5.1 %)
- *   lazy FilterPresetPanel          2.50 kB   →   2.7 kB cap (8.0 %)
+ * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
+ * inlined the shared ModalHost code into each modal consumer and shifted some
+ * helper code into VisualizationRegistry):
+ *   root entry · ESM                7.65 kB   →   8.1 kB cap (5.9 %)
+ *   advanced entry · ESM            2.42 kB   →   2.6 kB cap (7.4 %)
+ *   stylesheet                     16.22 kB   →  17 kB   cap (4.8 %)
+ *   lazy ExportDialog chunk        67.58 kB   →  71 kB   cap (5.1 %)
+ *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
+ *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
+ *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
+ *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
- *   lazy ModalHost (shared)         5.25 kB   →   5.6 kB cap (6.7 %)
+ *
+ * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
+ * shared ModalHost helpers into each modal consumer. The per-modal caps above
+ * already cover the added bytes.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -55,7 +58,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '67 kB',
+    limit: '71 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -81,10 +84,5 @@ module.exports = [
     name: 'lazy CodeMirror editor chunk · ESM',
     path: 'dist/CodeMirrorExpressionEditor-*.js',
     limit: '5.5 kB',
-  },
-  {
-    name: 'lazy ModalHost shared chunk · ESM',
-    path: 'dist/ModalHost-*.js',
-    limit: '5.6 kB',
   },
 ];

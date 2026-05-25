@@ -1,6 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
@@ -37,10 +37,10 @@ export default tseslint.config(
       },
     },
     plugins: {
-      import: importPlugin,
+      'import-x': importPlugin,
     },
     settings: {
-      'import/resolver': {
+      'import-x/resolver': {
         typescript: { alwaysTryTypes: true },
         node: true,
       },
@@ -87,8 +87,8 @@ export default tseslint.config(
 
       // Cycle detection across this codebase's dense cross-imports — Phase 0 reports
       // findings as Phase 3 follow-ups (core orchestrator hot zone).
-      'import/no-cycle': ['error', { maxDepth: Infinity, ignoreExternal: true }],
-      'import/order': [
+      'import-x/no-cycle': ['error', { maxDepth: Infinity, ignoreExternal: true }],
+      'import-x/order': [
         'error',
         {
           groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],

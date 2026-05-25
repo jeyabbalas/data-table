@@ -3,26 +3,28 @@ name: Release
 # Triggered on push to main. Two responsibilities, split across two
 # steps:
 #
-#   1. The "Publish to npm (direct, with provenance)" step publishes any
-#      version that's in `package.json` but not yet on the registry. It
-#      uses the .npmrc that `actions/setup-node` already wired up against
-#      `NPM_TOKEN`, which `npm whoami` validates in the diagnostic step
-#      above it. This is the path that actually writes to npm.
+#   1. The "Publish to npm" step publishes any version that's in
+#      `package.json` but not yet on the registry. Authentication uses npm
+#      OIDC trusted publishing: the job mints a short-lived OIDC token
+#      (via `id-token: write`) that npm verifies against the trusted
+#      publisher configured for this package. There is no long-lived
+#      `NPM_TOKEN` — nothing to leak or rotate. npm also generates a
+#      provenance attestation automatically under trusted publishing.
+#      This is the path that actually writes to npm.
 #
 #   2. The "Version PR (changesets/action)" step opens / updates the
 #      "Version Packages" PR off any pending `.changeset/*.md` files.
-#      `publish:` is intentionally NOT passed — its publish path failed
-#      with E404-masks-403 against this token even when `npm whoami`
-#      succeeded, which is why step (1) exists. Leaving the publish input
-#      off means changesets/action only manages the version PR; no second
-#      publish attempt, no spurious red.
+#      `publish:` is intentionally NOT passed — publishing is handled by
+#      step (1), so changesets/action only manages the version PR; no
+#      second publish attempt, no spurious red.
 #
 # Manual prerequisites the maintainer enables before this workflow does
 # anything dangerous on `main`:
-#   - Add `NPM_TOKEN` repository secret with publish access to
-#     `@jeyabbalas/data-table` (or enable npm OIDC trusted publishing on
-#     the package settings page; in that case `NPM_TOKEN` is unused but
-#     `id-token: write` is required).
+#   - Configure a trusted publisher for `@jeyabbalas/data-table` on
+#     npmjs.com (package Settings → Trusted Publisher → GitHub Actions):
+#     org/user `jeyabbalas`, repo `data-table`, workflow file
+#     `release.yml`, no environment. This is what authorizes OIDC publish;
+#     `id-token: write` below is the matching half.
 #   - In the repo Settings → Actions → General, enable "Allow GitHub
 #     Actions to create and approve pull requests" so changesets/action
 #     can open the version PR.
@@ -54,9 +56,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          # Trusted publishing requires Node >= 22.14.0.
+          node-version: '22'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
+
+      # Node 22 ships npm 10.x; trusted publishing (OIDC) requires
+      # npm >= 11.5.1.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Install dependencies
         run: npm ci
@@ -67,19 +77,11 @@ jobs:
       - name: Run tests
         run: npm run test:coverage
 
-      - name: Verify npm authentication
-        run: |
-          echo "registry: $(npm config get registry)"
-          echo "always-auth: $(npm config get always-auth)"
-          echo "whoami:"
-          npm whoami --registry https://registry.npmjs.org
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # The actual publish step. Idempotent: if the current version is
-      # already on the registry, it no-ops, so re-runs and unrelated
-      # pushes to main don't republish or fail.
-      - name: Publish to npm (direct, with provenance)
+      # The actual publish step. Authenticates via OIDC trusted publishing
+      # (no NODE_AUTH_TOKEN). Idempotent: if the current version is already
+      # on the registry, it no-ops, so re-runs and unrelated pushes to main
+      # don't republish or fail.
+      - name: Publish to npm (OIDC trusted publishing, with provenance)
         run: |
           set -euo pipefail
           PACKAGE_VERSION=$(node -p 'require("./package.json").version')
@@ -89,8 +91,6 @@ jobs:
             echo "Publishing @jeyabbalas/data-table@$PACKAGE_VERSION"
             npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Version-PR creation only. No `publish:` input — see the workflow
       # header comment for why.

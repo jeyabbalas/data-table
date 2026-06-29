@@ -159,9 +159,7 @@ import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
 
 class BoxPlot extends BaseVisualization {
   protected async fetchData() {
-    /* query this.bridge */ return {
-      /* ... */
-    };
+    /* query this.bridge */ return {/* ... */};
   }
   protected render(_data: unknown) {
     /* draw on this.ctx */

@@ -80,9 +80,7 @@ For readability, declare an import map:
   import { createDataTable } from '@jeyabbalas/data-table';
   import '@jeyabbalas/data-table/styles';
 
-  const table = await createDataTable({
-    /* … */
-  });
+  const table = await createDataTable({/* … */});
 </script>
 ```
 

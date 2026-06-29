@@ -215,9 +215,7 @@ Or subscribe to `loadComplete`:
 
 ```ts
 const unsub = table.on('loadComplete', () => {
-  table.actions.addFilter({
-    /* ... */
-  });
+  table.actions.addFilter({/* ... */});
   unsub();
 });
 ```
@@ -432,9 +430,7 @@ Cause: the embedding app likely created the table with `persistence: false`. Tha
 Fix (intentional case): re-apply the tooltips at startup by iterating the catalogue:
 
 ```ts
-const catalogue: Record<string, ColumnHeaderTooltipContent | string> = {
-  /* … */
-};
+const catalogue: Record<string, ColumnHeaderTooltipContent | string> = {/* … */};
 for (const [col, content] of Object.entries(catalogue)) {
   table.actions.setColumnHeaderTooltip(col, content);
 }

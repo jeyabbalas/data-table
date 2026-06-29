@@ -336,11 +336,7 @@ export interface DataTable {
 }
 
 type VisualizationType =
-  | Histogram
-  | DateHistogram
-  | TimeHistogram
-  | IntervalHistogram
-  | ValueCounts;
+  Histogram | DateHistogram | TimeHistogram | IntervalHistogram | ValueCounts;
 
 type BrushState = Record<string, unknown>;
 

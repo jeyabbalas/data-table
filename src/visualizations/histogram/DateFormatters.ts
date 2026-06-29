@@ -16,14 +16,7 @@
  * Time interval granularities for date histogram binning
  */
 export type TimeInterval =
-  | 'second'
-  | 'minute'
-  | 'hour'
-  | 'day'
-  | 'week'
-  | 'month'
-  | 'quarter'
-  | 'year';
+  'second' | 'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 /**
  * Context for formatting labels - determines what parts to show

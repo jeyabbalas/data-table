@@ -129,9 +129,7 @@ unrelated tables.
 ```ts
 import { defaultStatsPanelRegistry } from '@jeyabbalas/data-table';
 
-defaultStatsPanelRegistry.register({
-  /* … */
-});
+defaultStatsPanelRegistry.register({/* … */});
 // Every table that omits `statsPanelRegistry` will use this registration.
 ```
 

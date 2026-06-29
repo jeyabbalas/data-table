@@ -124,9 +124,7 @@ export interface VectorValuePoolEntry {
  * undo/redo stack entries.
  */
 export type SerializedDerivedColumnDef =
-  | _ExpressionColumnDef
-  | _VectorColumnDef
-  | PooledVectorColumnRef;
+  _ExpressionColumnDef | _VectorColumnDef | PooledVectorColumnRef;
 
 /** Type guard: true when a serialized derived column uses a pool reference. */
 export function isPooledVectorRef(d: SerializedDerivedColumnDef): d is PooledVectorColumnRef {

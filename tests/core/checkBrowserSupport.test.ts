@@ -3,12 +3,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { checkBrowserSupport } from '@/core/checkBrowserSupport';
 
 type GlobalKey =
-  | 'Worker'
-  | 'WebAssembly'
-  | 'indexedDB'
-  | 'ResizeObserver'
-  | 'BigInt'
-  | 'structuredClone';
+  'Worker' | 'WebAssembly' | 'indexedDB' | 'ResizeObserver' | 'BigInt' | 'structuredClone';
 
 type Probe = { key: GlobalKey; label: string };
 

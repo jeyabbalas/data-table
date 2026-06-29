@@ -190,8 +190,7 @@ describe('worker dispatcher — cancel', () => {
     );
 
     const errorReply = replies.find((r) => r.type === 'error') as
-      | (CapturedReply & { payload: { code?: string } })
-      | undefined;
+      (CapturedReply & { payload: { code?: string } }) | undefined;
     expect(errorReply).toBeDefined();
     expect(errorReply!.payload).toMatchObject({ code: 'QUERY_CANCELLED' });
   });
@@ -211,8 +210,7 @@ describe('worker dispatcher — cancel', () => {
       respond,
     );
     const errorReply = replies.find((r) => r.type === 'error') as
-      | (CapturedReply & { payload: { code?: string } })
-      | undefined;
+      (CapturedReply & { payload: { code?: string } }) | undefined;
     expect(errorReply).toBeDefined();
     expect(errorReply!.payload).toMatchObject({ code: 'QUERY_RUNTIME' });
   });

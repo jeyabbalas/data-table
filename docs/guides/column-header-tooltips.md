@@ -125,9 +125,7 @@ const catalogue: Record<string, ColumnHeaderTooltipContent | string> = {
   total_amount: {
     title: 'Total amount',
     description: '…',
-    items: [
-      /* … */
-    ],
+    items: [/* … */],
   },
   fare_amount: 'Base fare in USD.',
   passenger_count: { title: 'Passenger count', description: '…' },

@@ -108,8 +108,7 @@ let table: DataTable | undefined;
     });
     if (!res.success) {
       const details = res.error.details as
-        | { dependentsAffected?: string[]; reasons?: Record<string, string> }
-        | undefined;
+        { dependentsAffected?: string[]; reasons?: Record<string, string> } | undefined;
       const affected = details?.dependentsAffected ?? [];
       const reasons = details?.reasons ?? {};
       const reasonsText = affected

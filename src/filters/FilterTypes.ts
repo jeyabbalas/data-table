@@ -113,13 +113,7 @@ export interface RawSQLFilter {
  * `filtersToWhereClause` all consume this union directly.
  */
 export type Filter =
-  | RangeFilter
-  | PointFilter
-  | SetFilter
-  | NotSetFilter
-  | NullFilter
-  | PatternFilter
-  | RawSQLFilter;
+  RangeFilter | PointFilter | SetFilter | NotSetFilter | NullFilter | PatternFilter | RawSQLFilter;
 
 /** String literal union of every {@link Filter} discriminator value. */
 export type FilterType = Filter['type'];

@@ -40,6 +40,13 @@ updates:
       - dependency-name: '@duckdb/duckdb-wasm'
         update-types:
           - version-update:semver-major
+      # TypeScript 7 is the native ("tsgo") port: it drops `tsserver` and
+      # `typescript-eslint` / `typedoc` peer-require `typescript <6.1.0`, so a
+      # major bump breaks lint/typecheck/docs CI. Hold back until the toolchain
+      # supports TS7; minor/patch bumps still flow through the typescript group.
+      - dependency-name: 'typescript'
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /

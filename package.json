@@ -132,7 +132,7 @@
     "globals": "^17.6.0",
     "jsdom": "^29.1.0",
     "prettier": "^3.8.3",
-    "size-limit": "^12.1.0",
+    "size-limit": "^13.0.1",
     "topojson-client": "^3.1.0",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",

@@ -65,6 +65,15 @@ updates:
       - dependency-name: '@size-limit/*'
         update-types:
           - version-update:semver-major
+      # Same Node 20 story as `size-limit` above: `jsdom` 30 requires Node
+      # `^22.22.2 || ^24.15.0 || >=26`, and its transitive
+      # `@asamuzakjp/css-color` 6 wants Node 22+, so `engine-strict` fails
+      # `npm ci` on the Node 20 runners. jsdom only backs the test DOM, so
+      # there is nothing to gain by forcing the runtime bump. Hold back until
+      # the project drops Node 20; minor/patch still flow via the vitest group.
+      - dependency-name: 'jsdom'
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /

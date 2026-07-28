@@ -130,7 +130,7 @@
     "eslint-plugin-import-x": "^4.16.2",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.6.0",
-    "jsdom": "^29.1.0",
+    "jsdom": "^30.0.0",
     "prettier": "^3.8.3",
     "size-limit": "^12.1.0",
     "topojson-client": "^3.1.0",

@@ -33,6 +33,12 @@ updates:
         patterns:
           - typedoc
           - 'typedoc-*'
+      # `@size-limit/*` peer-pins `size-limit` to an exact version, so split
+      # PRs deadlock on ERESOLVE. They must always be bumped together.
+      size-limit:
+        patterns:
+          - size-limit
+          - '@size-limit/*'
     ignore:
       # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev42.0`).
       # Major bumps need to be reviewed manually against the worker bridge
@@ -45,6 +51,18 @@ updates:
       # major bump breaks lint/typecheck/docs CI. Hold back until the toolchain
       # supports TS7; minor/patch bumps still flow through the typescript group.
       - dependency-name: 'typescript'
+        update-types:
+          - version-update:semver-major
+      # `size-limit` 13 requires Node `^22.18 || ^24 || >=26`. With
+      # `engine-strict=true` in `.npmrc`, installing it hard-fails `npm ci` on
+      # the Node 20 CI runners, and the library still declares `engines:
+      # >=20`. v13 adds no features we need (it only drops Node 20, sheds two
+      # deps, and adds provenance). Hold back until the project drops Node 20;
+      # minor/patch bumps still flow through the size-limit group.
+      - dependency-name: 'size-limit'
+        update-types:
+          - version-update:semver-major
+      - dependency-name: '@size-limit/*'
         update-types:
           - version-update:semver-major
 

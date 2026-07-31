@@ -25,7 +25,7 @@ import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatCount, formatPercent, truncateText, escapeHTML } from '../utils';
+import { formatCount, formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 
@@ -1210,13 +1210,14 @@ export class ValueCounts extends BaseVisualization {
 
     // Check if in bar area (vertically)
     if (y >= PADDING.top && y <= this.height - PADDING.bottom) {
-      // Check all segments
-      for (const pos of this.segmentPositions) {
-        if (x >= pos.x && x <= pos.x + pos.width) {
-          this.hoveredSegment = pos.index;
-          break;
-        }
-      }
+      // Segment borders map to the nearest segment to avoid interaction dead zones
+      const idx = findSlotAtX(
+        this.segmentPositions,
+        x,
+        this.barArea.x,
+        this.barArea.x + this.barArea.width,
+      );
+      if (idx !== null) this.hoveredSegment = this.segmentPositions[idx]!.index;
     }
 
     // Update cursor based on hover state
@@ -1298,12 +1299,14 @@ export class ValueCounts extends BaseVisualization {
     // Find clicked segment (null if click is outside all segments)
     let clickedIndex: number | null = null;
     if (inBarArea) {
-      for (const pos of this.segmentPositions) {
-        if (x >= pos.x && x <= pos.x + pos.width) {
-          clickedIndex = pos.index;
-          break;
-        }
-      }
+      // Segment borders map to the nearest segment, consistent with hover
+      const idx = findSlotAtX(
+        this.segmentPositions,
+        x,
+        this.barArea.x,
+        this.barArea.x + this.barArea.width,
+      );
+      if (idx !== null) clickedIndex = this.segmentPositions[idx]!.index;
     }
 
     // Check if clicked segment is currently selected

@@ -30,6 +30,26 @@ export function escapeHTML(str: string): string {
 }
 
 /**
+ * Map an x-coordinate to the index of the slot (bar/segment) that owns it,
+ * filling inter-slot gaps at their midpoints so hover/click never dead-zones.
+ * Slots must be ordered left-to-right. Returns null if x is outside [min, max].
+ */
+export function findSlotAtX(
+  slots: readonly { x: number; width: number }[],
+  x: number,
+  min: number,
+  max: number,
+): number | null {
+  if (slots.length === 0 || x < min || x > max) return null;
+  for (let i = 0; i < slots.length; i++) {
+    const next = slots[i + 1];
+    const boundary = next ? (slots[i]!.x + slots[i]!.width + next.x) / 2 : max;
+    if (x <= boundary) return i;
+  }
+  return slots.length - 1;
+}
+
+/**
  * Truncate text to fit within maxWidth, appending ellipsis (…) if needed.
  * Returns empty string if nothing fits.
  */

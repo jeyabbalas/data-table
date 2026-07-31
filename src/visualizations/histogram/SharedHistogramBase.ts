@@ -14,7 +14,7 @@ import type { ColumnSchema } from '../../core/types';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatCount, formatPercent, truncateText } from '../utils';
+import { formatCount, formatPercent, truncateText, findSlotAtX } from '../utils';
 
 // =========================================
 // Palette
@@ -789,6 +789,16 @@ export abstract class SharedHistogramBase<
   /**
    * Handle mouse movement - detect which bar is under cursor and update stats
    */
+  /**
+   * Right edge of the histogram bars' hit region: up to the null bar when nulls
+   * exist (so the null gap is owned by the last bar), else the chart edge.
+   */
+  private barsMaxX(): number {
+    return this.data?.nullCount
+      ? this.nullBarArea.x
+      : this.chartArea.x + this.chartArea.width;
+  }
+
   protected handleMouseMove(x: number, y: number): void {
     // Handle all-null state specially
     if (this.isAllNullState && this.data) {
@@ -860,13 +870,9 @@ export abstract class SharedHistogramBase<
       ) {
         this.hoveredNull = true;
       } else {
-        // Check histogram bars
-        for (const pos of this.barPositions) {
-          if (x >= pos.x && x <= pos.x + pos.width) {
-            this.hoveredBin = pos.binIndex;
-            break;
-          }
-        }
+        // Check histogram bars (gaps map to the nearest bar to avoid interaction dead zones)
+        const idx = findSlotAtX(this.barPositions, x, this.chartArea.x, this.barsMaxX());
+        if (idx !== null) this.hoveredBin = this.barPositions[idx]!.binIndex;
       }
     }
 
@@ -998,29 +1004,30 @@ export abstract class SharedHistogramBase<
     }
 
     // Check histogram bars - click creates a one-bin brush with range filter
-    for (const pos of this.barPositions) {
-      if (x >= pos.x && x <= pos.x + pos.width) {
-        const bin = this.data.bins[pos.binIndex];
-        if (bin && bin.count > 0) {
-          // Clear any null selection first
-          if (this.selectedNull) {
-            this.clearSelection();
-          }
-
-          // Create a committed one-bin brush
-          this.brushState.committed = true;
-          this.brushState.startBinIndex = pos.binIndex;
-          this.brushState.endBinIndex = pos.binIndex;
-          this.hoveredBin = null;
-          this.hoveredNull = false;
-          this.render();
-          this.canvas.style.cursor = 'grab';
-          this.updateBrushStats();
-          this.options.onBrushCommit?.(this.column.name);
-          this.emitBrushFilter();
+    // (gaps map to the nearest bar for consistency with hover)
+    const clickedIdx = findSlotAtX(this.barPositions, x, this.chartArea.x, this.barsMaxX());
+    if (clickedIdx !== null) {
+      const pos = this.barPositions[clickedIdx]!;
+      const bin = this.data.bins[pos.binIndex];
+      if (bin && bin.count > 0) {
+        // Clear any null selection first
+        if (this.selectedNull) {
+          this.clearSelection();
         }
-        return;
+
+        // Create a committed one-bin brush
+        this.brushState.committed = true;
+        this.brushState.startBinIndex = pos.binIndex;
+        this.brushState.endBinIndex = pos.binIndex;
+        this.hoveredBin = null;
+        this.hoveredNull = false;
+        this.render();
+        this.canvas.style.cursor = 'grab';
+        this.updateBrushStats();
+        this.options.onBrushCommit?.(this.column.name);
+        this.emitBrushFilter();
       }
+      return;
     }
 
     // Clicked empty area in chart -> clear any selection

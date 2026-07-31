@@ -160,6 +160,22 @@ Subclasses implement five methods:
 | `handleClick(event)`     | Called on click. Typically emits a filter via `this.emitFilter(filter)`                                              |
 | `handleMouseLeave()`     | Clear hover state                                                                                                    |
 
+### Hit-testing rule
+
+The built-in plots resolve an x-coordinate to a bar or segment by nearest
+slot, not by exact bounds: every x inside the plot's horizontal extent
+belongs to exactly one slot, and the gap between two neighbouring slots
+splits at its midpoint (x at or left of the boundary belongs to the left
+slot). The histogram's null bar is a slot too, so the gap before it splits
+rather than falling wholly to the last bar. x outside the extent — the
+paddings, the label band — belongs to nothing, which is what keeps
+click-to-clear reachable.
+
+Match it in a custom visualization and hover won't flicker as the cursor
+crosses the gaps between your marks. `findSlotAtX(slots, x, min, max)` in
+`src/visualizations/utils.ts` implements the rule for a left-to-right array
+of `{ x, width }` slots.
+
 ### Emitting a filter from a visualization
 
 Call the `onFilterChange` callback the registry wires up for you:
@@ -270,4 +286,4 @@ registry.unregister('date-histogram');
 - Multi-table: [Multi-table dashboards](./multi-table.md) for per-instance registry across tables
 - [Stats panels](./stats-panels.md) — sibling extension point for the `.dt-col-stats` slot below each visualization (replace the two-line stats display with your own DOM and DuckDB queries)
 - API reference: [`BaseVisualization`, `VisualizationRegistry`](../api-reference.md#visualizations)
-- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`
+- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/utils.ts`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`

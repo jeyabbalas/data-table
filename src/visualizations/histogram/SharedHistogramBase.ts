@@ -224,6 +224,7 @@ export abstract class SharedHistogramBase<
     // Check for all-null state (bins empty but nulls exist)
     if (this.data && this.data.bins.length === 0 && this.data.nullCount > 0) {
       this.isAllNullState = true;
+      this.clearLayout();
       this.drawAllNullState();
       return;
     }
@@ -232,6 +233,7 @@ export abstract class SharedHistogramBase<
 
     // If no data at all, show empty state
     if (!this.data || this.data.bins.length === 0) {
+      this.clearLayout();
       this.drawEmptyState();
       return;
     }
@@ -250,6 +252,18 @@ export abstract class SharedHistogramBase<
     if (this.brushState.active || this.brushState.committed) {
       this.drawBrushOverlay();
     }
+  }
+
+  /**
+   * Drop the hit-testable geometry left behind by the previous data.
+   * The early-return paths in render() never reach calculateLayout(), and
+   * nearest-slot hit-testing would otherwise resolve x to bars that are no
+   * longer drawn. calculateLayout() only ever writes nullBarArea, so it has
+   * to be zeroed here rather than left for the next full render.
+   */
+  private clearLayout(): void {
+    this.barPositions = [];
+    this.nullBarArea = { x: 0, y: 0, width: 0, height: 0 };
   }
 
   /**
@@ -787,18 +801,42 @@ export abstract class SharedHistogramBase<
   // =========================================
 
   /**
-   * Handle mouse movement - detect which bar is under cursor and update stats
+   * Resolve an x-coordinate to the slot that owns it.
+   *
+   * Every x inside the plot's horizontal extent belongs to exactly one slot,
+   * and the gap between two neighbouring slots splits at its midpoint (x at or
+   * left of the boundary belongs to the left slot). The null bar is a slot too,
+   * so `LAYOUT.nullBarGap` splits rather than falling wholly to the last bar.
+   * x outside the extent belongs to nothing, which is what keeps "click the
+   * padding to clear a selection" working.
    */
-  /**
-   * Right edge of the histogram bars' hit region: up to the null bar when nulls
-   * exist (so the null gap is owned by the last bar), else the chart edge.
-   */
-  private barsMaxX(): number {
-    return this.data?.nullCount
-      ? this.nullBarArea.x
-      : this.chartArea.x + this.chartArea.width;
+  private hitTestX(x: number): { kind: 'bar'; binIndex: number } | { kind: 'null' } | null {
+    let barsMaxX = this.chartArea.x + this.chartArea.width;
+
+    // Whether a null slot exists follows the same expression the layout uses,
+    // so the drawn geometry and the hit region never disagree: a null bar
+    // crossfiltered to zero is still drawn, and stays hoverable like a ghost
+    // bar rather than becoming a hole in the middle of the extent.
+    const hasNullSlot = ((this.backgroundData ?? this.data)?.nullCount ?? 0) > 0;
+
+    if (hasNullSlot) {
+      // Resolved arithmetically instead of by appending the null bar to a
+      // combined slot array, so the mousemove path builds nothing per event.
+      if (x > this.nullBarArea.x + this.nullBarArea.width) return null;
+      const lastBar = this.barPositions[this.barPositions.length - 1];
+      barsMaxX = lastBar
+        ? (lastBar.x + lastBar.width + this.nullBarArea.x) / 2
+        : this.nullBarArea.x;
+      if (x > barsMaxX) return { kind: 'null' };
+    }
+
+    const index = findSlotAtX(this.barPositions, x, this.chartArea.x, barsMaxX);
+    return index === null ? null : { kind: 'bar', binIndex: this.barPositions[index]!.binIndex };
   }
 
+  /**
+   * Handle mouse movement - detect which bar is under cursor and update stats
+   */
   protected handleMouseMove(x: number, y: number): void {
     // Handle all-null state specially
     if (this.isAllNullState && this.data) {
@@ -862,17 +900,12 @@ export abstract class SharedHistogramBase<
 
     // Check if in chart area (vertically)
     if (y >= PADDING.top && y <= this.height - PADDING.bottom) {
-      // Check null bar first (if exists)
-      if (
-        this.data?.nullCount &&
-        x >= this.nullBarArea.x &&
-        x <= this.nullBarArea.x + this.nullBarArea.width
-      ) {
+      // Gaps map to the nearest slot to avoid interaction dead zones
+      const hit = this.hitTestX(x);
+      if (hit?.kind === 'null') {
         this.hoveredNull = true;
-      } else {
-        // Check histogram bars (gaps map to the nearest bar to avoid interaction dead zones)
-        const idx = findSlotAtX(this.barPositions, x, this.chartArea.x, this.barsMaxX());
-        if (idx !== null) this.hoveredBin = this.barPositions[idx]!.binIndex;
+      } else if (hit) {
+        this.hoveredBin = hit.binIndex;
       }
     }
 
@@ -921,19 +954,23 @@ export abstract class SharedHistogramBase<
   }
 
   /**
-   * Check if a point is inside the committed brush area
+   * Check if a point is inside the committed brush area.
+   *
+   * Uses the same slot ownership as hover and click, so the half-gaps just
+   * outside the brush edges count as inside. Without that, a press one pixel
+   * past an edge cleared the brush and immediately re-created a one-bin one,
+   * emitting two filter changes for what reads as a slide.
    */
   private isInsideBrush(x: number, y: number): boolean {
     if (!this.brushState.committed) return false;
     if (y < PADDING.top || y > this.height - PADDING.bottom) return false;
 
+    const hit = this.hitTestX(x);
+    if (hit?.kind !== 'bar') return false;
+
     const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
-    const startPos = this.barPositions[startIdx];
-    const endPos = this.barPositions[endIdx];
-
-    if (!startPos || !endPos) return false;
-    return x >= startPos.x && x <= endPos.x + endPos.width;
+    return hit.binIndex >= startIdx && hit.binIndex <= endIdx;
   }
 
   /**
@@ -977,38 +1014,37 @@ export abstract class SharedHistogramBase<
     // Check if click is in the chart area
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
 
-    // Check null bar click
-    if (
-      this.data.nullCount > 0 &&
-      x >= this.nullBarArea.x &&
-      x <= this.nullBarArea.x + this.nullBarArea.width
-    ) {
-      if (this.selectedNull) {
-        // Already selected -> toggle off
-        this.clearSelection();
-      } else {
-        // Select null and create null filter
-        this.selectedBin = null;
-        this.selectedNull = true;
-        this.hoveredBin = null;
-        this.hoveredNull = false;
-        this.render();
-        this.updateSelectedStats();
-        this.options.onSelectionChange?.(this.column.name, true);
-        this.options.onFilterChange?.({
-          column: this.column.name,
-          type: 'null',
-        });
+    // Gaps map to the nearest slot for consistency with hover
+    const hit = this.hitTestX(x);
+
+    // Check null bar click. A null bar crossfiltered to zero is hoverable but
+    // inert here, exactly like a ghost histogram bar.
+    if (hit?.kind === 'null') {
+      if (this.data.nullCount > 0) {
+        if (this.selectedNull) {
+          // Already selected -> toggle off
+          this.clearSelection();
+        } else {
+          // Select null and create null filter
+          this.selectedBin = null;
+          this.selectedNull = true;
+          this.hoveredBin = null;
+          this.hoveredNull = false;
+          this.render();
+          this.updateSelectedStats();
+          this.options.onSelectionChange?.(this.column.name, true);
+          this.options.onFilterChange?.({
+            column: this.column.name,
+            type: 'null',
+          });
+        }
       }
       return;
     }
 
     // Check histogram bars - click creates a one-bin brush with range filter
-    // (gaps map to the nearest bar for consistency with hover)
-    const clickedIdx = findSlotAtX(this.barPositions, x, this.chartArea.x, this.barsMaxX());
-    if (clickedIdx !== null) {
-      const pos = this.barPositions[clickedIdx]!;
-      const bin = this.data.bins[pos.binIndex];
+    if (hit) {
+      const bin = this.data.bins[hit.binIndex];
       if (bin && bin.count > 0) {
         // Clear any null selection first
         if (this.selectedNull) {
@@ -1017,8 +1053,8 @@ export abstract class SharedHistogramBase<
 
         // Create a committed one-bin brush
         this.brushState.committed = true;
-        this.brushState.startBinIndex = pos.binIndex;
-        this.brushState.endBinIndex = pos.binIndex;
+        this.brushState.startBinIndex = hit.binIndex;
+        this.brushState.endBinIndex = hit.binIndex;
         this.hoveredBin = null;
         this.hoveredNull = false;
         this.render();
@@ -1030,7 +1066,7 @@ export abstract class SharedHistogramBase<
       return;
     }
 
-    // Clicked empty area in chart -> clear any selection
+    // Clicked empty area in chart (outside the plot's extent) -> clear any selection
     if (this.selectedNull) {
       this.clearSelection();
     }
@@ -1125,13 +1161,16 @@ export abstract class SharedHistogramBase<
 
     const now = Date.now();
 
+    // Gaps map to the nearest slot, so a press between bars starts a brush
+    // instead of doing nothing
+    const hit = this.hitTestX(x);
+
     // If null is selected, let handleClick handle toggle on null bar;
     // for other areas, clear null selection so brush can start
     if (this.selectedNull) {
       const onNullBar =
         this.data.nullCount > 0 &&
-        x >= this.nullBarArea.x &&
-        x <= this.nullBarArea.x + this.nullBarArea.width &&
+        hit?.kind === 'null' &&
         y >= PADDING.top &&
         y <= this.height - PADDING.bottom;
       if (onNullBar) {
@@ -1186,33 +1225,29 @@ export abstract class SharedHistogramBase<
       return;
     }
 
-    // Only start brush in chart area (not on null bar or outside)
+    // Only start brush in chart area (not on the null slot or outside)
     if (y < PADDING.top || y > this.height - PADDING.bottom) return;
-    if (this.data.nullCount > 0 && x >= this.nullBarArea.x) return;
+    if (hit?.kind !== 'bar') return;
 
-    // Find which bin we're starting on
-    for (const pos of this.barPositions) {
-      if (x >= pos.x && x <= pos.x + pos.width) {
-        this.brushState = {
-          active: false, // Becomes true on first mouse move
-          committed: false,
-          sliding: false,
-          slideStartX: 0,
-          slideVisualOffset: 0,
-          slideClickOffset: 0,
-          startX: x,
-          currentX: x, // Track current position for smooth animation
-          startBinIndex: -1, // Will be set when brush becomes active
-          endBinIndex: -1,
-          lastClickTime: now,
-          lastClickX: x,
-          lastClickY: y,
-        };
-        // Immediate cursor feedback for brush creation
-        this.canvas.style.cursor = 'crosshair';
-        return;
-      }
-    }
+    // `startX` doubles as handleMouseUp's "a brush was started" sentinel, so it
+    // must never be 0. A bar hit implies x >= chartArea.x (= PADDING.left).
+    this.brushState = {
+      active: false, // Becomes true on first mouse move
+      committed: false,
+      sliding: false,
+      slideStartX: 0,
+      slideVisualOffset: 0,
+      slideClickOffset: 0,
+      startX: x,
+      currentX: x, // Track current position for smooth animation
+      startBinIndex: -1, // Will be set when brush becomes active
+      endBinIndex: -1,
+      lastClickTime: now,
+      lastClickX: x,
+      lastClickY: y,
+    };
+    // Immediate cursor feedback for brush creation
+    this.canvas.style.cursor = 'crosshair';
   }
 
   /**
@@ -1387,8 +1422,12 @@ export abstract class SharedHistogramBase<
     // Calculate where brush left edge should be based on cursor position and click offset
     const brushLeftX = x - this.brushState.slideClickOffset;
 
-    const binWidth = this.barPositions[0]?.width ?? 0;
-    const binStep = binWidth + LAYOUT.barGap;
+    // Derive the bar pitch from the laid-out positions: histograms with few
+    // bins space bars by a fraction of their width rather than LAYOUT.barGap,
+    // so a step built from the constant would drift the brush off its bins.
+    const firstPos = this.barPositions[0];
+    const secondPos = this.barPositions[1];
+    const binStep = secondPos ? secondPos.x - firstPos!.x : (firstPos?.width ?? 0) + LAYOUT.barGap;
     const chartLeft = this.chartArea.x;
 
     // Calculate which bin the brush left edge should snap to

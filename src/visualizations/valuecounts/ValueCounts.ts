@@ -377,8 +377,11 @@ export class ValueCounts extends BaseVisualization {
     // Use background data for rendering decisions in crossfilter mode
     const referenceData = this.backgroundData ?? this.data;
 
-    // Handle empty state
+    // Handle empty state. Drop the previous data's segment geometry first:
+    // this path never reaches calculateLayout(), and nearest-slot hit-testing
+    // would otherwise resolve x to segments that are no longer drawn.
     if (referenceData.segments.length === 0 && referenceData.nullCount === 0) {
+      this.segmentPositions = [];
       this.drawEmptyState();
       return;
     }

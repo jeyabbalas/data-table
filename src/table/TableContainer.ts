@@ -50,7 +50,7 @@ import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnReorder } from './ColumnReorder';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
-import { KeyboardNavigator } from './KeyboardNavigator';
+import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
 
 /**
@@ -142,6 +142,7 @@ export type ResizeCallback = (dimensions: { width: number; height: number }) => 
  */
 export class TableContainer {
   private element: HTMLElement;
+  private gridElement: HTMLElement;
   private headerArea: HTMLElement;
   private headerScroll: HTMLElement;
   private scrollbarGutter: HTMLElement;
@@ -183,6 +184,13 @@ export class TableContainer {
 
   // Keyboard navigation / shortcuts
   private keyboardNavigator: KeyboardNavigator | null = null;
+
+  // True while `.dt-grid` carries the ARIA grid semantics. Flipped by
+  // `applyGridSemantics()` from render(); read by the aria-rowcount /
+  // aria-colcount / aria-activedescendant writers so they never annotate a
+  // roleless element (`aria-label` on a bare generic is aria-prohibited-attr,
+  // and the counts are meaningless without the role).
+  private gridSemanticsActive = false;
 
   // Scroll synchronization handlers
   private boundBodyScrollHandler: (() => void) | null = null;
@@ -238,6 +246,7 @@ export class TableContainer {
 
     // Create DOM structure
     this.element = this.createRootElement();
+    this.gridElement = this.createGridElement();
     this.headerArea = this.createHeaderArea();
     this.headerScroll = this.createHeaderScroll();
     this.scrollbarGutter = this.createScrollbarGutter();
@@ -246,15 +255,23 @@ export class TableContainer {
     this.bodyContainer = this.createBodyContainer();
 
     // Assemble structure:
-    // root > headerArea > (headerScroll > headerRow) + scrollbarGutter
-    //      > bodyScroll > bodyContainer
+    // root > [filterBar] > grid > headerArea > (headerScroll > headerRow) + scrollbarGutter
+    //                           > bodyScroll > bodyContainer
+    //      > liveRegion > [hiddenGutter]
+    //
+    // The filter bar, live region and hidden-columns gutter sit OUTSIDE
+    // `.dt-grid`: `role="grid"` may only own `row` / `rowgroup` children, and
+    // a toolbar or status sibling inside it fails `aria-required-children`.
+    // That constraint is the whole reason the grid is its own element rather
+    // than `.dt-root` — see createGridElement().
     this.headerScroll.appendChild(this.headerRow);
     this.headerArea.appendChild(this.headerScroll);
     this.headerArea.appendChild(this.scrollbarGutter);
     this.bodyScroll.appendChild(this.bodyContainer);
-    this.element.appendChild(this.headerArea);
+    this.gridElement.appendChild(this.headerArea);
+    this.gridElement.appendChild(this.bodyScroll);
 
-    // Create filter bar between header and body
+    // Create filter bar above the grid
     if (this.resolvedOptions.showFilterBar && this.actions) {
       this.filterBar = new FilterBar(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
@@ -278,7 +295,7 @@ export class TableContainer {
       this.element.appendChild(this.filterBar.getElement());
     }
 
-    this.element.appendChild(this.bodyScroll);
+    this.element.appendChild(this.gridElement);
 
     // Create aria-live region for screen reader announcements
     this.liveRegion = document.createElement('div');
@@ -348,14 +365,18 @@ export class TableContainer {
     // Set up scroll synchronization between header and body
     this.setupScrollSync();
 
-    // Install keyboard navigation + shortcuts on the grid root
+    // Install keyboard navigation + shortcuts. The listener stays on
+    // `.dt-root` so keydowns bubbling out of the grid, the filter bar and the
+    // hidden-columns gutter all reach it; `.dt-grid` is where focus lives.
     if (this.actions) {
       this.keyboardNavigator = new KeyboardNavigator({
         rootElement: this.element,
+        gridElement: this.gridElement,
         bodyScroll: this.bodyScroll,
         state: this.state,
         actions: this.actions,
         getTableBody: () => this.tableBody,
+        getColumnHeaders: () => this.columnHeaders,
         getBridge: () => this.bridge,
       });
     }
@@ -369,23 +390,35 @@ export class TableContainer {
   // =========================================
 
   /**
-   * Create the root container element
+   * Create the root container element.
+   *
+   * Deliberately roleless: it hosts the grid *and* its sibling chrome (the
+   * toolbar filter bar, the status live region, the toolbar hidden-columns
+   * gutter), which no table/grid role may own. A bare `generic` element also
+   * may not carry `aria-label` (`aria-prohibited-attr`), so the accessible
+   * name lives on `.dt-grid` instead. `getElement()` still returns this
+   * element, so the public surface is unchanged.
    */
   private createRootElement(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-root`;
-    // role="table" — valid ARIA for a data-table wrapper that also hosts
-    // sibling chrome (toolbar filter bar, status live region, toolbar hidden-
-    // columns gutter). Using role="grid" would require all owned children to
-    // be role="row"/"rowgroup"; restructuring the DOM to host chrome outside
-    // the grid is deferred. Interactive cell navigation (arrow keys, roving
-    // tabindex, Enter row-select) still works under role="table".
-    el.setAttribute('role', 'table');
-    el.setAttribute('aria-label', 'Data table');
-    el.setAttribute('aria-rowcount', '0');
-    el.setAttribute('aria-colcount', '0');
-    el.setAttribute('tabindex', '0');
     this.applyColorSchemeAttribute(el, this.resolvedOptions.colorScheme ?? 'auto');
+    return el;
+  }
+
+  /**
+   * Create the ARIA grid element — the keyboard cursor's tab stop.
+   *
+   * `role="grid"` (not `table`) because `aria-activedescendant` is not an
+   * allowed attribute on `role="table"`. The role and its `aria-*` companions
+   * are attached lazily by {@link applyGridSemantics} once a schema and table
+   * name exist: an empty shell showing "Load data to see the table" owns no
+   * rows, and `role="grid"` without a `row` / `rowgroup` child is an
+   * `aria-required-children` violation.
+   */
+  private createGridElement(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-grid`;
     return el;
   }
 
@@ -442,7 +475,16 @@ export class TableContainer {
   }
 
   /**
-   * Create the header scroll container (hidden scrollbar, synced with body)
+   * Create the header scroll container (hidden scrollbar, synced with body).
+   *
+   * {@link applyGridSemantics} gives it `role="rowgroup"` and `tabindex="0"`
+   * once there is data. The tab stop is required by WCAG 2.1.1 /
+   * `scrollable-region-focusable`: the element scrolls horizontally and every
+   * control inside it is `tabindex="-1"`, so without one the region has no
+   * keyboard route in. `tabindex="-1"` does *not* satisfy the rule — it asks
+   * whether the element is in the tab order, not whether it can take focus.
+   * The rowgroup role is equally load-bearing: a focusable roleless div
+   * directly under `role="grid"` fails `aria-required-children`.
    */
   private createHeaderScroll(): HTMLElement {
     const el = document.createElement('div');
@@ -465,17 +507,17 @@ export class TableContainer {
   private createHeaderRow(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-header`;
-    // role="rowgroup" wraps the real row (class "dt-header-row") created
-    // during render(). That inner element carries role="row" and the
-    // columnheader cells — the ARIA tree ends up grid > rowgroup > row >
-    // columnheader, which satisfies aria-required-children / -parent.
-    el.setAttribute('role', 'rowgroup');
+    // No role: `role="rowgroup"` lives on the scroll container one level up
+    // (see createHeaderScroll). A plain div is transparent to ARIA, so the
+    // tree still reads grid > rowgroup > row > columnheader.
     el.style.minHeight = `${this.resolvedOptions.headerHeight}px`;
     return el;
   }
 
   /**
-   * Create the body scroll container (handles both horizontal and vertical scrolling)
+   * Create the body scroll container (handles both horizontal and vertical
+   * scrolling). Gains `role="rowgroup"` and `tabindex="0"` once data exists —
+   * see {@link createHeaderScroll} for why both.
    */
   private createBodyScroll(): HTMLElement {
     const el = document.createElement('div');
@@ -484,12 +526,12 @@ export class TableContainer {
   }
 
   /**
-   * Create the body container for data rows
+   * Create the body container for data rows. Roleless for the same reason as
+   * the header row container — the rowgroup is `.dt-body-scroll`.
    */
   private createBodyContainer(): HTMLElement {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-body`;
-    el.setAttribute('role', 'rowgroup');
     return el;
   }
 
@@ -630,6 +672,139 @@ export class TableContainer {
   }
 
   // =========================================
+  // ARIA grid semantics + activedescendant
+  // =========================================
+
+  /**
+   * Attach or detach the ARIA grid semantics on `.dt-grid`.
+   *
+   * Grid semantics only make sense once a schema and table name exist: the
+   * empty shell renders a "Load data" placeholder, and `role="grid"` owning a
+   * non-row child is an `aria-required-children` violation. Detaching is
+   * therefore not cosmetic — it is what keeps an unloaded table clean.
+   *
+   * `tabindex="0"` rides along with the role so an inert shell contributes no
+   * tab stop.
+   */
+  private applyGridSemantics(active: boolean): void {
+    if (active === this.gridSemanticsActive) return;
+    this.gridSemanticsActive = active;
+    const grid = this.gridElement;
+    if (active) {
+      grid.setAttribute('role', 'grid');
+      grid.setAttribute('aria-label', this.messages.a11y.gridLabel);
+      grid.setAttribute('tabindex', '0');
+      for (const scroller of [this.headerScroll, this.bodyScroll]) {
+        scroller.setAttribute('role', 'rowgroup');
+        scroller.setAttribute('tabindex', '0');
+      }
+    } else {
+      grid.removeAttribute('role');
+      grid.removeAttribute('aria-label');
+      grid.removeAttribute('tabindex');
+      grid.removeAttribute('aria-rowcount');
+      grid.removeAttribute('aria-colcount');
+      grid.removeAttribute('aria-activedescendant');
+      for (const scroller of [this.headerScroll, this.bodyScroll]) {
+        scroller.removeAttribute('role');
+        scroller.removeAttribute('tabindex');
+      }
+    }
+  }
+
+  /**
+   * Refresh `aria-rowcount` / `aria-colcount` on `.dt-grid`.
+   *
+   * Row count is the *rendered* row count plus 1, because under `role="grid"`
+   * the column-header row is row 1 — body row `n` reports
+   * `aria-rowindex="n + 2"` to match. Under an active filter the body renders
+   * `filteredRows` rows, so counting `totalRows` here would have a screen
+   * reader announce "row 3 of 5,001" on a five-row result.
+   */
+  private updateGridCounts(): void {
+    if (!this.gridSemanticsActive) return;
+    const rows =
+      this.state.filters.get().length > 0
+        ? this.state.filteredRows.get()
+        : this.state.totalRows.get();
+    this.gridElement.setAttribute('aria-rowcount', String(rows + 1));
+    this.gridElement.setAttribute('aria-colcount', String(this.state.schema.get().length));
+  }
+
+  /**
+   * Point `aria-activedescendant` at the element the cursor currently sits on,
+   * or drop the attribute when there is no cursor.
+   *
+   * The id must resolve to a live element — a dangling IDREF is an
+   * `aria-valid-attr-value` failure — so a cursor on a body row that
+   * virtualization has not materialized (or has recycled away) clears the
+   * attribute rather than pointing into nothing. That is why TableBody calls
+   * back here after every row render, not just on cursor moves.
+   */
+  private syncActiveDescendant(): void {
+    if (this.destroyed) return;
+    if (!this.gridSemanticsActive) return;
+
+    const focused = this.state.focusedCell.get();
+    let targetId: string | null = null;
+
+    if (focused) {
+      if (focused.row === HEADER_ROW_INDEX) {
+        const header = this.columnHeaders.find((h) => h.getColumn().name === focused.column);
+        targetId = header?.getElement().id || null;
+      } else {
+        const colIndex = this.state.visibleColumns.get().indexOf(focused.column);
+        if (colIndex >= 0) {
+          targetId = this.buildCellId(focused.row, colIndex);
+        }
+      }
+    }
+
+    const resolved = targetId && this.resolveInGrid(targetId) ? targetId : null;
+
+    // Write only on change: this runs from TableBody's per-frame render
+    // callback, and a no-op attribute write still produces a mutation record
+    // for anything observing the grid.
+    const current = this.gridElement.getAttribute('aria-activedescendant');
+    if (resolved === current) return;
+    if (resolved) {
+      this.gridElement.setAttribute('aria-activedescendant', resolved);
+    } else {
+      this.gridElement.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  /**
+   * Look up an id and confirm it lands inside this grid.
+   *
+   * Resolves against the grid's own root node rather than `document` so the
+   * lookup keeps working when the table is mounted in a shadow root or in a
+   * detached subtree, and the `contains` check keeps a same-id element
+   * belonging to another table on the page from being adopted as this grid's
+   * active descendant.
+   */
+  private resolveInGrid(id: string): HTMLElement | null {
+    const root = this.gridElement.getRootNode();
+    const found = 'getElementById' in root ? (root as Document).getElementById(id) : null;
+    if (found && this.gridElement.contains(found)) return found;
+    // Either the tree has no `getElementById` (detached subtree), or the
+    // document-wide hit belongs to another table — two instances share an id
+    // space whenever a caller supplies the same `instanceId` twice. Fall back
+    // to a scoped query, which only costs a subtree scan in that rare case.
+    return this.gridElement.querySelector<HTMLElement>(`[id="${id}"]`);
+  }
+
+  /** Stable DOM id for a body cell — mirrors `TableBody`'s id scheme. */
+  private buildCellId(row: number, colIndex: number): string {
+    return `${this.resolvedOptions.classPrefix}-${this.resolvedOptions.instanceId}-cell-${row}-${colIndex}`;
+  }
+
+  /** Stable DOM id for a column-header cell. */
+  private buildHeaderCellId(colIndex: number): string {
+    return `${this.resolvedOptions.classPrefix}-${this.resolvedOptions.instanceId}-colheader-${colIndex}`;
+  }
+
+  // =========================================
   // State Subscriptions
   // =========================================
 
@@ -651,6 +826,19 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubSchema);
+
+    // `render()` decides whether the grid carries its ARIA semantics from
+    // schema + tableName, but only schema and visibleColumns trigger it. A
+    // caller that sets the table name last would otherwise leave the grid
+    // roleless and untabbable. Re-render only when the verdict actually
+    // flips, so the normal load path (tableName, then schema) still renders
+    // exactly once per signal.
+    const unsubTableName = this.state.tableName.subscribe(() => {
+      if (this.destroyed) return;
+      const hasData = this.state.schema.get().length > 0 && !!this.state.tableName.get();
+      if (hasData !== this.gridSemanticsActive) this.render();
+    });
+    this.unsubscribes.push(unsubTableName);
 
     // Subscribe to visible columns changes
     const unsubVisible = this.state.visibleColumns.subscribe(() => {
@@ -701,24 +889,38 @@ export class TableContainer {
     this.unsubscribes.push(unsubPinned);
 
     // Update aria-rowcount when total rows change
-    const unsubAriaRows = this.state.totalRows.subscribe((total) => {
+    const unsubAriaRows = this.state.totalRows.subscribe(() => {
       if (!this.destroyed) {
-        this.element.setAttribute('aria-rowcount', String(total));
+        this.updateGridCounts();
       }
     });
     this.unsubscribes.push(unsubAriaRows);
 
     // Update aria-colcount when schema changes
-    const unsubAriaCols = this.state.schema.subscribe((schema) => {
+    const unsubAriaCols = this.state.schema.subscribe(() => {
       if (!this.destroyed) {
-        this.element.setAttribute('aria-colcount', String(schema.length));
+        this.updateGridCounts();
       }
     });
     this.unsubscribes.push(unsubAriaCols);
 
+    // Keep aria-activedescendant pointed at the cursor. The companion
+    // callback from TableBody (onRowsRendered) covers the case where the
+    // cursor stays put but virtualization materializes or recycles its row.
+    const unsubActiveDescendant = this.state.focusedCell.subscribe(() => {
+      if (!this.destroyed) {
+        this.syncActiveDescendant();
+        this.updateHeaderCursorStyles();
+      }
+    });
+    this.unsubscribes.push(unsubActiveDescendant);
+
     // Update live region on filter/sort/filteredRows changes
     const unsubLiveFilters = this.state.filters.subscribe(() => {
-      if (!this.destroyed) this.scheduleLiveRegionUpdate();
+      if (!this.destroyed) {
+        this.scheduleLiveRegionUpdate();
+        this.updateGridCounts();
+      }
     });
     this.unsubscribes.push(unsubLiveFilters);
 
@@ -751,7 +953,10 @@ export class TableContainer {
     this.unsubscribes.push(unsubFilterScroll);
 
     const unsubLiveFilteredRows = this.state.filteredRows.subscribe(() => {
-      if (!this.destroyed) this.scheduleLiveRegionUpdate();
+      if (!this.destroyed) {
+        this.scheduleLiveRegionUpdate();
+        this.updateGridCounts();
+      }
     });
     this.unsubscribes.push(unsubLiveFilteredRows);
 
@@ -760,11 +965,14 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubLiveSort);
 
-    // Clamp focused cell when row count shrinks
+    // Clamp focused cell when row count shrinks. A header cursor
+    // (row === HEADER_ROW_INDEX) is exempt — the header row exists
+    // independently of how many data rows survive the filter.
     const unsubFocusClamp = this.state.filteredRows.subscribe(() => {
       if (this.destroyed) return;
       const focusedCell = this.state.focusedCell.get();
       if (!focusedCell) return;
+      if (focusedCell.row === HEADER_ROW_INDEX) return;
       const rowCount =
         this.state.filters.get().length > 0
           ? this.state.filteredRows.get()
@@ -944,9 +1152,9 @@ export class TableContainer {
     const tableName = this.state.tableName.get();
     const columnWidths = this.state.columnWidths.get();
 
-    // Update ARIA table dimensions
-    this.element.setAttribute('aria-rowcount', String(this.state.totalRows.get()));
-    this.element.setAttribute('aria-colcount', String(schema.length));
+    // Attach / detach the ARIA grid semantics, then refresh its dimensions.
+    this.applyGridSemantics(schema.length > 0 && !!tableName);
+    this.updateGridCounts();
 
     // Destroy filter panel (will be recreated lazily on next filter click)
     if (this.filterPanel) {
@@ -982,14 +1190,18 @@ export class TableContainer {
       const headerRowEl = document.createElement('div');
       headerRowEl.className = `${this.resolvedOptions.classPrefix}-header-row`;
       headerRowEl.setAttribute('role', 'row');
+      // Row 1 of the grid — body rows start at 2 (see updateGridCounts).
+      headerRowEl.setAttribute('aria-rowindex', '1');
 
       // Create column headers
       if (this.actions) {
+        let visibleIndex = 0;
         for (const colName of visibleColumns) {
           const colSchema = schema.find((s) => s.name === colName);
           if (colSchema) {
             const schemaIndex = schema.findIndex((s) => s.name === colName);
             const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
+              cellId: this.buildHeaderCellId(visibleIndex++),
               classPrefix: this.resolvedOptions.classPrefix,
               onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
               onDerivedIconClick: (column, buttonEl) =>
@@ -1018,6 +1230,9 @@ export class TableContainer {
           if (colSchema) {
             const colEl = document.createElement('div');
             colEl.className = `${this.resolvedOptions.classPrefix}-col-header`;
+            // `role="row"` requires cell-ish children; without this the
+            // no-actions shell would fail aria-required-children.
+            colEl.setAttribute('role', 'columnheader');
             colEl.style.padding = '0.5rem';
 
             // Apply dynamic width from state (default to 150px)
@@ -1055,11 +1270,13 @@ export class TableContainer {
         this.tableBody = new TableBody(this.bodyContainer, this.state, this.bridge, this.actions, {
           rowHeight: this.resolvedOptions.rowHeight,
           classPrefix: this.resolvedOptions.classPrefix,
+          instanceId: this.resolvedOptions.instanceId,
           scrollContainer: this.bodyScroll,
           // headerHeight no longer needed - body scroll only contains body
           annotations: this.resolvedOptions.annotations,
           annotationPopover: this.resolvedOptions.annotationPopover,
           messages: this.messages,
+          onRowsRendered: () => this.syncActiveDescendant(),
         });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
@@ -1083,11 +1300,21 @@ export class TableContainer {
           console.error('Error initializing table body:', error);
         });
       } else {
-        // Fallback: show row count if no bridge/actions
+        // Fallback: show row count if no bridge/actions. Wrapped in a
+        // row/gridcell pair because `.dt-body-scroll` is the body rowgroup
+        // once grid semantics are on, and a rowgroup may only own rows.
+        const placeholderRow = document.createElement('div');
+        // Its own class, not `.dt-row`: that would impose the 32px row
+        // height, the row border and the pointer cursor on a centred block
+        // of placeholder text. Only the role is needed here.
+        placeholderRow.className = `${this.resolvedOptions.classPrefix}-placeholder-row`;
+        placeholderRow.setAttribute('role', 'row');
         const bodyPlaceholder = document.createElement('div');
         bodyPlaceholder.className = `${this.resolvedOptions.classPrefix}-body-placeholder`;
+        bodyPlaceholder.setAttribute('role', 'gridcell');
         bodyPlaceholder.textContent = `${this.state.totalRows.get().toLocaleString()} rows`;
-        this.bodyContainer.appendChild(bodyPlaceholder);
+        placeholderRow.appendChild(bodyPlaceholder);
+        this.bodyContainer.appendChild(placeholderRow);
       }
     }
 
@@ -1145,6 +1372,13 @@ export class TableContainer {
     }
     this.previousVisibleColumns = newVisibleSet;
 
+    // render() rebuilt every ColumnHeader, so the cursor's target element is
+    // gone. Re-point it (dropping to the first visible column if its column
+    // disappeared) before anything reads aria-activedescendant.
+    this.reconcileCursorColumn(visibleColumns);
+    this.syncActiveDescendant();
+    this.updateHeaderCursorStyles();
+
     // Restore scroll positions and focus after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
       if (!this.destroyed) {
@@ -1155,11 +1389,41 @@ export class TableContainer {
         // Restore focus if it was lost due to DOM element removal during render.
         // This ensures keyboard shortcuts (Cmd+Z) continue working after
         // actions like pin/hide that destroy the focused button element.
+        // The grid — not the root — is the tab stop now.
         if (hadFocus && !this.element.contains(document.activeElement)) {
-          this.element.focus({ preventScroll: true });
+          this.gridElement.focus({ preventScroll: true });
         }
       }
     });
+  }
+
+  /**
+   * Keep the cursor on a column that still exists. Hiding or removing the
+   * cursor's column would otherwise leave `aria-activedescendant` pointing at
+   * a destroyed header and the header ring painted on nothing.
+   */
+  private reconcileCursorColumn(visibleColumns: string[]): void {
+    const focused = this.state.focusedCell.get();
+    if (!focused || visibleColumns.includes(focused.column)) return;
+    if (visibleColumns.length === 0) {
+      this.actions?.clearFocusedCell();
+      return;
+    }
+    this.actions?.setFocusedCell({ row: focused.row, column: visibleColumns[0]! });
+  }
+
+  /**
+   * Paint the cursor ring on the column header the cursor sits on, mirroring
+   * `.dt-cell--focused` in the body. Body-cell painting stays in TableBody,
+   * which owns the recycled row elements.
+   */
+  private updateHeaderCursorStyles(): void {
+    const focused = this.state.focusedCell.get();
+    const cursorColumn = focused && focused.row === HEADER_ROW_INDEX ? focused.column : null;
+    const focusClass = `${this.resolvedOptions.classPrefix}-col-header--focused`;
+    for (const header of this.columnHeaders) {
+      header.getElement().classList.toggle(focusClass, header.getColumn().name === cursorColumn);
+    }
   }
 
   /**
@@ -1439,6 +1703,23 @@ export class TableContainer {
    */
   getElement(): HTMLElement {
     return this.element;
+  }
+
+  /**
+   * Get the ARIA grid element — the keyboard cursor's tab stop.
+   *
+   * This is what `container.querySelector('[role="grid"]')` resolves to and
+   * what to call `.focus()` on to put the keyboard cursor into the table. It
+   * only carries `role="grid"` / `tabindex="0"` once a schema and table name
+   * exist; before that it is an inert shell.
+   *
+   * @example
+   * ```typescript
+   * table.getContainer().getGridElement().focus();
+   * ```
+   */
+  getGridElement(): HTMLElement {
+    return this.gridElement;
   }
 
   /**

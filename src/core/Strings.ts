@@ -335,6 +335,9 @@ export interface Strings {
   // Accessibility — ARIA labels, live-region text, keyboard nav
   // =========================================
   a11y: {
+    /** Accessible name of the grid itself (`aria-label` on `.dt-grid`). */
+    gridLabel: string;
+
     /** Live-region: "3 filters active, showing 1,234 of 5,678 rows". */
     filtersActive: (n: number, shown: number, total: number) => string;
     /** Live-region: "Showing all 5,678 rows". */
@@ -705,6 +708,8 @@ export const defaultStrings: Strings = {
   },
 
   a11y: {
+    gridLabel: 'Data table',
+
     filtersActive: (n, shown, total) =>
       `${n} ${n === 1 ? 'filter' : 'filters'} active, showing ${shown.toLocaleString()} of ${total.toLocaleString()} rows`,
     noFilters: (total) => `Showing all ${total.toLocaleString()} rows`,

@@ -6,7 +6,7 @@
 
 # Interface: TableBodyOptions
 
-Defined in: [table/TableBody.ts:24](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L24)
+Defined in: [table/TableBody.ts:25](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L25)
 
 Options for configuring the TableBody
 
@@ -16,7 +16,7 @@ Options for configuring the TableBody
 
 > `optional` **annotationPopover?**: [`AnnotationPopover`](../classes/AnnotationPopover.md)
 
-Defined in: [table/TableBody.ts:45](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L45)
+Defined in: [table/TableBody.ts:59](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L59)
 
 Shared popover singleton used to display cell-scope annotations on
 hover / focus of an annotated cell.
@@ -27,7 +27,7 @@ hover / focus of an annotated cell.
 
 > `optional` **annotations?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [table/TableBody.ts:40](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L40)
+Defined in: [table/TableBody.ts:54](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L54)
 
 Shared annotation store. When provided, the body applies
 `dt-row--annotated` / `dt-cell--annotated` classes at render time and
@@ -39,9 +39,21 @@ subscribes to `change` events to keep visible rows in sync.
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/TableBody.ts:28](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L28)
+Defined in: [table/TableBody.ts:29](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L29)
 
 CSS class prefix (default: 'dt')
+
+***
+
+### instanceId?
+
+> `optional` **instanceId?**: `string`
+
+Defined in: [table/TableBody.ts:35](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L35)
+
+Per-instance identifier mixed into cell DOM ids so two tables on the same
+page don't collide. Required for `aria-activedescendant` to resolve;
+without it cells are rendered without ids.
 
 ***
 
@@ -49,9 +61,26 @@ CSS class prefix (default: 'dt')
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/TableBody.ts:47](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L47)
+Defined in: [table/TableBody.ts:61](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L61)
 
 Resolved i18n strings (used for the placeholder-row label). Defaults to English.
+
+***
+
+### onRowsRendered?
+
+> `optional` **onRowsRendered?**: () => `void`
+
+Defined in: [table/TableBody.ts:42](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L42)
+
+Called after every pass that materializes or recycles row elements.
+`TableContainer` uses it to re-point `aria-activedescendant`, whose target
+must be a live element — virtualization can destroy the cursor's cell
+without the cursor itself changing.
+
+#### Returns
+
+`void`
 
 ***
 
@@ -59,7 +88,7 @@ Resolved i18n strings (used for the placeholder-row label). Defaults to English.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [table/TableBody.ts:26](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L26)
+Defined in: [table/TableBody.ts:27](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L27)
 
 Fixed height per row in pixels (default: 32)
 
@@ -69,7 +98,7 @@ Fixed height per row in pixels (default: 32)
 
 > `optional` **scrollContainer?**: `HTMLElement`
 
-Defined in: [table/TableBody.ts:34](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L34)
+Defined in: [table/TableBody.ts:48](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L48)
 
 External scroll container for unified scrolling.
 When provided, VirtualScroller will use this container for scroll events

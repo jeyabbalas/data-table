@@ -41,7 +41,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
-- WCAG-oriented accessibility (ARIA grid, roving tabindex, keyboard nav, live region).
+- WCAG-oriented accessibility (ARIA grid, `aria-activedescendant` cursor, keyboard nav, live region).
 - Multi-table on one page with shared `WorkerBridge`, `SessionStore`, `FilterPresetManager`.
 - CSP/offline deployment — self-host the WASM bundles via `bridgeOptions`.
 

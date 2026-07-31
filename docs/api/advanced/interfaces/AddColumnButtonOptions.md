@@ -6,7 +6,7 @@
 
 # Interface: AddColumnButtonOptions
 
-Defined in: [derived/AddColumnButton.ts:11](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/derived/AddColumnButton.ts#L11)
+Defined in: [derived/AddColumnButton.ts:11](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/derived/AddColumnButton.ts#L11)
 
 Construction options for [AddColumnButton](../classes/AddColumnButton.md).
 
@@ -16,7 +16,7 @@ Construction options for [AddColumnButton](../classes/AddColumnButton.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [derived/AddColumnButton.ts:12](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/derived/AddColumnButton.ts#L12)
+Defined in: [derived/AddColumnButton.ts:12](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/derived/AddColumnButton.ts#L12)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [derived/AddColumnButton.ts:12](https://github.com/jeyabbalas/data-t
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [derived/AddColumnButton.ts:15](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/derived/AddColumnButton.ts#L15)
+Defined in: [derived/AddColumnButton.ts:15](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/derived/AddColumnButton.ts#L15)
 
 Resolved i18n strings. Defaults to English.
 
@@ -34,7 +34,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onClick?**: () => `void`
 
-Defined in: [derived/AddColumnButton.ts:13](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/derived/AddColumnButton.ts#L13)
+Defined in: [derived/AddColumnButton.ts:13](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/derived/AddColumnButton.ts#L13)
 
 #### Returns
 

@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L337)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -114,6 +114,12 @@ Live-region: "3 filters active, showing 1,234 of 5,678 rows".
 ##### Returns
 
 `string`
+
+#### gridLabel
+
+> **gridLabel**: `string`
+
+Accessible name of the grid itself (`aria-label` on `.dt-grid`).
 
 #### hiddenColumnsLabel
 
@@ -329,7 +335,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -393,7 +399,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/a
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -787,7 +793,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:417](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L417)
+Defined in: [core/Strings.ts:420](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L420)
 
 #### stylesheetMissing
 
@@ -799,7 +805,7 @@ Defined in: [core/Strings.ts:417](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -949,7 +955,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1589,7 +1595,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1699,7 +1705,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:396](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L396)
+Defined in: [core/Strings.ts:399](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L399)
 
 #### allNull
 

@@ -128,8 +128,8 @@ describe('TableBody', () => {
     });
   });
 
-  describe('row/cell ARIA (Phase 6)', () => {
-    it('newly-created rows have role="row" and cells have role="cell" with tabindex="-1"', () => {
+  describe('row/cell ARIA', () => {
+    it('newly-created rows have role="row" and cells have role="gridcell" with tabindex="-1"', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
       // getOrCreateRow is internal; exercise it through the private accessor
       // so we can verify the attributes on the construction path used during
@@ -143,23 +143,26 @@ describe('TableBody', () => {
       expect(rowEl.getAttribute('role')).toBe('row');
       expect(rowEl.children.length).toBe(5);
       for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
-        expect(cell.getAttribute('role')).toBe('cell');
+        // `gridcell`, not `cell` — `cell` is only valid inside role="table",
+        // and the owning element is role="grid".
+        expect(cell.getAttribute('role')).toBe('gridcell');
         expect(cell.getAttribute('tabindex')).toBe('-1');
       }
 
       tableBody.destroy();
     });
 
-    it('pooled rows keep role=cell and tabindex=-1 on cells', () => {
+    it('pooled rows keep role=gridcell and tabindex=-1, and shed stale ids', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
       const internal = tableBody as unknown as {
         getOrCreateRow(n: number): HTMLElement;
         returnRowToPool(el: HTMLElement): void;
       };
 
-      // Mark a cell as "focused" to simulate a row in-use
+      // Simulate a row in use: the cursor ring plus the per-(row, column)
+      // id that `updateRowContent` writes for aria-activedescendant.
       const rowEl = internal.getOrCreateRow(3);
-      (rowEl.children[1] as HTMLElement).setAttribute('tabindex', '0');
+      (rowEl.children[1] as HTMLElement).id = 'dt-t1-cell-7-1';
       (rowEl.children[1] as HTMLElement).classList.add('dt-cell--focused');
 
       // Return to pool and pull back out
@@ -167,9 +170,12 @@ describe('TableBody', () => {
       const reused = internal.getOrCreateRow(3);
 
       for (const cell of Array.from(reused.children) as HTMLElement[]) {
-        expect(cell.getAttribute('role')).toBe('cell');
+        expect(cell.getAttribute('role')).toBe('gridcell');
         expect(cell.getAttribute('tabindex')).toBe('-1');
         expect(cell.classList.contains('dt-cell--focused')).toBe(false);
+        // A retained id would make getElementById resolve the cursor to a
+        // recycled element rendering a different row.
+        expect(cell.id).toBe('');
       }
 
       tableBody.destroy();

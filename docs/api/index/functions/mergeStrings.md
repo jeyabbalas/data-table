@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:799](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Strings.ts#L799)
+Defined in: [core/Strings.ts:804](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Strings.ts#L804)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -28,7 +28,7 @@ shape rather than the compile-time type.
 
 #### a11y?
 
-\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
+\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `gridLabel?`: `string`; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
 
 #### a11y.ascending?
 
@@ -83,6 +83,12 @@ Header filter button.
 \{ \}
 
 Live-region: "3 filters active, showing 1,234 of 5,678 rows".
+
+#### a11y.gridLabel?
+
+`string`
+
+Accessible name of the grid itself (`aria-label` on `.dt-grid`).
 
 #### a11y.hiddenColumnsLabel?
 

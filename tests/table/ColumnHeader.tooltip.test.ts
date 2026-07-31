@@ -65,24 +65,24 @@ describe('ColumnHeader — column-header tooltip popover', () => {
     header.destroy();
   });
 
-  it('after setColumnHeaderTooltip: nameEl gains tabindex="0"', () => {
+  it('after setColumnHeaderTooltip: nameEl gains tabindex="-1"', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('fare_amount', { description: 'D' });
-    expect(getNameEl(header).getAttribute('tabindex')).toBe('0');
+    expect(getNameEl(header).getAttribute('tabindex')).toBe('-1');
     header.destroy();
   });
 
   it('setting tooltip BEFORE constructing the header still applies tabindex on render', () => {
     actions.setColumnHeaderTooltip('fare_amount', 'pre-render');
     const header = makeHeader();
-    expect(getNameEl(header).getAttribute('tabindex')).toBe('0');
+    expect(getNameEl(header).getAttribute('tabindex')).toBe('-1');
     header.destroy();
   });
 
   it('clearing the tooltip removes the tabindex', () => {
     const header = makeHeader();
     actions.setColumnHeaderTooltip('fare_amount', { description: 'D' });
-    expect(getNameEl(header).getAttribute('tabindex')).toBe('0');
+    expect(getNameEl(header).getAttribute('tabindex')).toBe('-1');
 
     actions.setColumnHeaderTooltip('fare_amount', null);
     expect(getNameEl(header).getAttribute('tabindex')).toBeNull();
@@ -203,7 +203,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
 
     nameEl.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     expect(tooltipPopover.isOpen()).toBe(true);
-    expect(nameEl.getAttribute('tabindex')).toBe('0');
+    expect(nameEl.getAttribute('tabindex')).toBe('-1');
 
     actions.setColumnHeaderTooltip('fare_amount', null);
     expect(tooltipPopover.isOpen()).toBe(false);
@@ -250,7 +250,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
 
     expect(elAfter).toBe(elBefore);
     expect(nameElAfter).toBe(nameElBefore);
-    expect(nameElAfter.getAttribute('tabindex')).toBe('0');
+    expect(nameElAfter.getAttribute('tabindex')).toBe('-1');
     header.destroy();
   });
 
@@ -293,7 +293,7 @@ describe('ColumnHeader — column-header tooltip popover', () => {
       expect(el.dataset.dtAnnotationCount).toBe('1');
 
       // Tooltip wired on nameEl independently of the annotation.
-      expect(nameEl.getAttribute('tabindex')).toBe('0');
+      expect(nameEl.getAttribute('tabindex')).toBe('-1');
 
       // Hovering the name span opens the tooltip popover (anchored to nameEl).
       nameEl.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
@@ -338,11 +338,11 @@ describe('ColumnHeader — column-header tooltip popover', () => {
         severity: 'error',
         message: 'err',
       });
-      expect(getNameEl(header).getAttribute('tabindex')).toBe('0');
+      expect(getNameEl(header).getAttribute('tabindex')).toBe('-1');
 
       store.remove(ann.id);
       // Tooltip override survives independently of annotation lifecycle.
-      expect(getNameEl(header).getAttribute('tabindex')).toBe('0');
+      expect(getNameEl(header).getAttribute('tabindex')).toBe('-1');
       expect(actions.getColumnHeaderTooltip('fare_amount')).toEqual({
         description: 'My override',
       });

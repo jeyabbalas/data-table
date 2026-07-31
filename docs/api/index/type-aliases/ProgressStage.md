@@ -8,6 +8,6 @@
 
 > **ProgressStage** = `"reading"` \| `"parsing"` \| `"indexing"` \| `"analyzing"`
 
-Defined in: [core/Progress.ts:8](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/core/Progress.ts#L8)
+Defined in: [core/Progress.ts:8](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/Progress.ts#L8)
 
 Stages of data processing

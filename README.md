@@ -321,10 +321,12 @@ for the CSP recipe.
 ## Accessibility
 
 The grid targets WCAG 2.1 AA: `role="grid"` with `aria-rowcount` /
-`aria-colcount`, roving-tabindex arrow-key navigation, polite `aria-live`
-announcements on filter/sort/row-count changes, focus trap + escape-to-close
-on every modal, and `axe-core` as a CI gate. Known out-of-scope: in-cell
-editing, mobile touch gestures, RTL.
+`aria-colcount`, a single cursor published via `aria-activedescendant` and
+driven by the arrow keys (plus `F2` to reach a column's controls), a tab order
+that doesn't grow with column count, polite `aria-live` announcements on
+filter/sort/row-count changes, focus trap + escape-to-close on every modal,
+and `axe-core` as a CI gate. Known out-of-scope: in-cell editing, mobile touch
+gestures, keyboard column resize / reorder, RTL.
 
 ## Custom visualizations
 

@@ -8,7 +8,7 @@
 
 > **buildCompletionContext**(`columns`, `options?`): [`CompletionContext`](../../index/interfaces/CompletionContext.md)
 
-Defined in: [sql-editor/extensions.ts:96](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/sql-editor/extensions.ts#L96)
+Defined in: [sql-editor/extensions.ts:96](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/sql-editor/extensions.ts#L96)
 
 Build a `CompletionContext` from any column-like array.
 

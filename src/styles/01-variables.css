@@ -79,10 +79,14 @@
   --dt-border: #e5e7eb;
   --dt-border-light: #f3f4f6;
 
-  /* Text colors */
+  /* Text colors. `secondary` / `tertiary` are darker than the usual
+     gray-500 / gray-400 pairing because the surfaces they land on are
+     near-white (#f9fafb, #f3f4f6) and the type is 11.2-12px, where WCAG AA
+     demands 4.5:1 with no large-text exemption. gray-500 tops out at 4.39:1
+     on --dt-bg-tertiary. */
   --dt-text: #111827;
-  --dt-text-secondary: #6b7280;
-  --dt-text-tertiary: #9ca3af;
+  --dt-text-secondary: #374151;
+  --dt-text-tertiary: #4b5563;
 
   /* Sort arrow colors */
   --dt-arrow-default: #d1d5db;
@@ -228,7 +232,10 @@
     /* Text colors - inverted */
     --dt-text: #f9fafb;
     --dt-text-secondary: #d1d5db;
-    --dt-text-tertiary: #9ca3af;
+    /* Lifted off gray-400: #9ca3af only reaches 4.06:1 on --dt-bg-tertiary
+       (the hovered column header) and 3.44:1 on --dt-primary-lighter (a
+       selected, hovered row). */
+    --dt-text-tertiary: #b8bfc9;
 
     /* Sort arrow colors */
     --dt-arrow-default: #4b5563;
@@ -298,10 +305,14 @@
     --dt-border: #e5e7eb;
     --dt-border-light: #f3f4f6;
 
-    /* Text colors */
+    /* Text colors. `secondary` / `tertiary` are darker than the usual
+       gray-500 / gray-400 pairing because the surfaces they land on are
+       near-white (#f9fafb, #f3f4f6) and the type is 11.2-12px, where WCAG AA
+       demands 4.5:1 with no large-text exemption. gray-500 tops out at 4.39:1
+       on --dt-bg-tertiary. */
     --dt-text: #111827;
-    --dt-text-secondary: #6b7280;
-    --dt-text-tertiary: #9ca3af;
+    --dt-text-secondary: #374151;
+    --dt-text-tertiary: #4b5563;
 
     /* Sort arrow colors */
     --dt-arrow-default: #d1d5db;
@@ -369,7 +380,10 @@
   /* Text colors - inverted */
   --dt-text: #f9fafb;
   --dt-text-secondary: #d1d5db;
-  --dt-text-tertiary: #9ca3af;
+  /* Lifted off gray-400: #9ca3af only reaches 4.06:1 on --dt-bg-tertiary
+     (the hovered column header) and 3.44:1 on --dt-primary-lighter (a
+     selected, hovered row). */
+  --dt-text-tertiary: #b8bfc9;
 
   /* Sort arrow colors */
   --dt-arrow-default: #4b5563;

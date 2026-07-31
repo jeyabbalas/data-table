@@ -379,7 +379,7 @@ Fix: always `await table.actions.addDerivedColumn(...)` before capturing the nex
 
 ### 14. Keyboard navigation skips the header row
 
-Cause: `headerHeight` is too small to fit its controls; the header collapses and the roving-tabindex loop misses it.
+Cause: `headerHeight` is too small to fit its controls, so the header collapses and there is nothing to land on. The header row is part of the keyboard cursor's space — `ArrowUp` from body row 0 moves onto it — so a collapsed header reads as "the cursor skipped a row".
 
 Fix: `headerHeight: 120` (the default) is usually right. If you've overridden it, keep it at **≥ 96** when visualizations are enabled. Lower values collide with the visualization canvas.
 

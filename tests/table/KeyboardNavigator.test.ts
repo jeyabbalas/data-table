@@ -6,7 +6,8 @@
  * PageUp/PageDown without mounting the full TableContainer DOM tree.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { KeyboardNavigator } from '@/table/KeyboardNavigator';
+import { HEADER_ROW_INDEX, KeyboardNavigator } from '@/table/KeyboardNavigator';
+import { ColumnHeader } from '@/table/ColumnHeader';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
@@ -148,22 +149,52 @@ describe('KeyboardNavigator', () => {
     nav.destroy();
   });
 
-  // ---- Tab walk ----
+  // ---- Tab is never intercepted (WCAG 2.1.2, issue #84) ----
+  //
+  // jsdom does not implement sequential focus navigation, so we cannot press
+  // Tab and watch focus travel. The invariant that actually matters is
+  // structural: the grid must never call preventDefault() on Tab, and it must
+  // not grow the tab order with column count. Both are asserted directly; the
+  // end-to-end walk is verified in a real browser.
 
-  it('Tab advances left-to-right, row by row', () => {
-    const { state, actions, root, nav } = setup();
-    actions.setFocusedCell({ row: 0, column: 'c' });
-    keydown(root, { key: 'Tab' });
-    expect(state.focusedCell.get()).toEqual({ row: 1, column: 'a' });
-    nav.destroy();
-  });
+  describe('Tab', () => {
+    it('does not preventDefault Tab or Shift+Tab, from the root or any descendant', () => {
+      const { actions, root, nav } = setup();
+      actions.setFocusedCell({ row: 0, column: 'c' });
 
-  it('Shift+Tab reverses', () => {
-    const { state, actions, root, nav } = setup();
-    actions.setFocusedCell({ row: 1, column: 'a' });
-    keydown(root, { key: 'Tab', shiftKey: true });
-    expect(state.focusedCell.get()).toEqual({ row: 0, column: 'c' });
-    nav.destroy();
+      const headerCell = document.createElement('div');
+      headerCell.setAttribute('role', 'columnheader');
+      headerCell.setAttribute('tabindex', '-1');
+      const headerButton = document.createElement('button');
+      headerButton.setAttribute('tabindex', '-1');
+      headerCell.appendChild(headerButton);
+      root.appendChild(headerCell);
+
+      for (const target of [root, headerCell, headerButton]) {
+        for (const shiftKey of [false, true]) {
+          const event = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            shiftKey,
+            bubbles: true,
+            cancelable: true,
+          });
+          target.dispatchEvent(event);
+          expect(event.defaultPrevented).toBe(false);
+        }
+      }
+
+      nav.destroy();
+    });
+
+    it('leaves the cursor alone on Tab — it is the browser’s key, not the grid’s', () => {
+      const { state, actions, root, nav } = setup();
+      actions.setFocusedCell({ row: 0, column: 'c' });
+      keydown(root, { key: 'Tab' });
+      expect(state.focusedCell.get()).toEqual({ row: 0, column: 'c' });
+      keydown(root, { key: 'Tab', shiftKey: true });
+      expect(state.focusedCell.get()).toEqual({ row: 0, column: 'c' });
+      nav.destroy();
+    });
   });
 
   // ---- Escape ----
@@ -331,6 +362,344 @@ describe('KeyboardNavigator', () => {
       // Document-active-element is inside the dialog → grid yields.
       expect(undo).not.toHaveBeenCalled();
       nav.destroy();
+    });
+  });
+
+  // ---- Focus ownership ----
+
+  describe('focus ownership', () => {
+    /**
+     * Mirrors the real shape: a root that hosts chrome OUTSIDE the grid (the
+     * filter bar, the hidden-columns gutter) alongside the grid itself. The
+     * keydown listener is on the root, so both bubble to it.
+     */
+    function setupWithChrome() {
+      const state = createTableState();
+      state.schema.set(schema);
+      initializeColumnsFromSchema(state, schema);
+      state.totalRows.set(100);
+      const actions = new StateActions(state, mockBridge);
+
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const chromeButton = document.createElement('button');
+      root.appendChild(chromeButton);
+      const grid = document.createElement('div');
+      grid.setAttribute('tabindex', '0');
+      root.appendChild(grid);
+      const bodyScroll = document.createElement('div');
+      bodyScroll.setAttribute('tabindex', '0');
+      grid.appendChild(bodyScroll);
+      const cell = document.createElement('div');
+      cell.setAttribute('tabindex', '-1');
+      bodyScroll.appendChild(cell);
+
+      const nav = new KeyboardNavigator({
+        rootElement: root,
+        gridElement: grid,
+        bodyScroll,
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+      });
+      return { state, actions, root, grid, bodyScroll, cell, chromeButton, nav };
+    }
+
+    it('does not steal Enter or Space from chrome outside the grid', () => {
+      const { state, actions, chromeButton, nav } = setupWithChrome();
+      const toggleSort = vi.spyOn(actions, 'toggleSort');
+      // Header cursor active — this is what made the branch fire everywhere.
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      chromeButton.focus();
+
+      for (const key of [' ', 'Enter']) {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        chromeButton.dispatchEvent(event);
+        // Space on "Clear all filters" must clear filters, not sort a column.
+        expect(event.defaultPrevented).toBe(false);
+      }
+      expect(toggleSort).not.toHaveBeenCalled();
+      expect(state.selectedRows.get().size).toBe(0);
+
+      nav.destroy();
+    });
+
+    it('does not move the cursor from arrows pressed on chrome outside the grid', () => {
+      const { state, actions, chromeButton, nav } = setupWithChrome();
+      actions.setFocusedCell({ row: 5, column: 'b' });
+      chromeButton.focus();
+
+      keydown(chromeButton, { key: 'ArrowDown' });
+      expect(state.focusedCell.get()).toEqual({ row: 5, column: 'b' });
+
+      nav.destroy();
+    });
+
+    it('still handles undo/redo/copy from chrome outside the grid', () => {
+      const { actions, chromeButton, nav } = setupWithChrome();
+      const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);
+      chromeButton.focus();
+
+      keydown(chromeButton, { key: 'z', ctrlKey: true });
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      nav.destroy();
+    });
+
+    it('reclaims focus onto the grid on the first cursor key after a click', () => {
+      const { state, actions, grid, cell, nav } = setupWithChrome();
+      actions.setFocusedCell({ row: 5, column: 'b' });
+
+      // A click parks focus on the cell it hit. Focus is only reclaimed when
+      // the user starts driving the cursor, so pointer interactions (and the
+      // popovers they open on focusin/focusout) are left alone.
+      cell.focus();
+      expect(document.activeElement).toBe(cell);
+
+      keydown(cell, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(grid);
+      expect(state.focusedCell.get()).toEqual({ row: 6, column: 'b' });
+
+      nav.destroy();
+    });
+
+    it('reclaims focus from a scroll container too, rather than going inert', () => {
+      const { state, actions, grid, bodyScroll, nav } = setupWithChrome();
+      actions.setFocusedCell({ row: 5, column: 'b' });
+      bodyScroll.focus();
+
+      // The scroll containers are tab stops so `scrollable-region-focusable`
+      // passes; landing on one must not leave the keyboard dead.
+      keydown(bodyScroll, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(grid);
+      expect(state.focusedCell.get()).toEqual({ row: 6, column: 'b' });
+
+      nav.destroy();
+    });
+  });
+
+  // ---- Header row cursor, F2 controls mode ----
+
+  describe('header row + controls mode', () => {
+    function setupWithHeaders(rows = 100) {
+      const state = createTableState();
+      state.schema.set(schema);
+      initializeColumnsFromSchema(state, schema);
+      state.totalRows.set(rows);
+      const actions = new StateActions(state, mockBridge);
+
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const grid = document.createElement('div');
+      grid.setAttribute('tabindex', '0');
+      root.appendChild(grid);
+      const bodyScroll = document.createElement('div');
+
+      const headers = schema.map(
+        (col, i) => new ColumnHeader(col, state, actions, { cellId: `dt-t1-colheader-${i}` }),
+      );
+      for (const h of headers) grid.appendChild(h.getElement());
+
+      const nav = new KeyboardNavigator({
+        rootElement: root,
+        gridElement: grid,
+        bodyScroll,
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+        getColumnHeaders: () => headers,
+      });
+
+      const cleanup = (): void => {
+        nav.destroy();
+        for (const h of headers) h.destroy();
+      };
+
+      return { state, actions, root, grid, headers, nav, cleanup };
+    }
+
+    it('ArrowUp from body row 0 lands on the header row', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: 0, column: 'b' });
+      keydown(root, { key: 'ArrowUp' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+      cleanup();
+    });
+
+    it('ArrowDown from the header row enters the body at the same column', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'ArrowDown' });
+      expect(state.focusedCell.get()).toEqual({ row: 0, column: 'b' });
+      cleanup();
+    });
+
+    it('ArrowUp on the header row stays on the header row', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'ArrowUp' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+      cleanup();
+    });
+
+    it('Left/Right move between column headers; Home/End jump to the ends', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'a' });
+
+      keydown(root, { key: 'ArrowRight' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+
+      keydown(root, { key: 'End' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'c' });
+
+      keydown(root, { key: 'Home' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'a' });
+
+      cleanup();
+    });
+
+    it('with zero rows the cursor can only occupy the header row', () => {
+      const { state, root, cleanup } = setupWithHeaders(0);
+      keydown(root, { key: 'ArrowDown' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'a' });
+      cleanup();
+    });
+
+    it('Enter on a header cursor toggles sort; Shift+Enter adds to multi-sort', () => {
+      const { actions, root, cleanup } = setupWithHeaders();
+      const toggleSort = vi.spyOn(actions, 'toggleSort');
+      const addToSort = vi.spyOn(actions, 'addToSort');
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+
+      keydown(root, { key: 'Enter' });
+      expect(toggleSort).toHaveBeenCalledWith('b');
+
+      keydown(root, { key: ' ', shiftKey: true });
+      expect(addToSort).toHaveBeenCalledWith('b');
+
+      cleanup();
+    });
+
+    it('Enter on a header cursor does not toggle row selection', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'Enter' });
+      expect(state.selectedRows.get().size).toBe(0);
+      cleanup();
+    });
+
+    it('F2 moves real focus to the header cell’s first control', () => {
+      const { actions, root, headers, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+
+      keydown(root, { key: 'F2' });
+
+      const controls = headers[1]!.getControls();
+      expect(controls.length).toBeGreaterThan(1);
+      expect(document.activeElement).toBe(controls[0]);
+      cleanup();
+    });
+
+    it('F2 is a no-op in the body — body cells have no controls', () => {
+      const { actions, root, grid, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: 3, column: 'b' });
+      grid.focus();
+      keydown(root, { key: 'F2' });
+      expect(document.activeElement).toBe(grid);
+      cleanup();
+    });
+
+    it('Left/Right cycle the header’s controls in controls mode, wrapping', () => {
+      const { actions, root, headers, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      const controls = headers[1]!.getControls();
+      keydown(document.activeElement!, { key: 'ArrowRight' });
+      expect(document.activeElement).toBe(controls[1]);
+
+      // Wrap backwards past the start.
+      keydown(document.activeElement!, { key: 'ArrowLeft' });
+      keydown(document.activeElement!, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(controls[controls.length - 1]);
+
+      cleanup();
+    });
+
+    it('arrows in controls mode do not move the grid cursor', () => {
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      keydown(document.activeElement!, { key: 'ArrowRight' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+
+      cleanup();
+    });
+
+    it('Escape leaves controls mode and returns focus to the grid', () => {
+      const { state, actions, root, grid, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+      expect(document.activeElement).not.toBe(grid);
+
+      keydown(document.activeElement!, { key: 'Escape' });
+      expect(document.activeElement).toBe(grid);
+      // The cursor survives — Escape exits the mode, it does not clear focus.
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+
+      cleanup();
+    });
+
+    it('Tab is not intercepted in controls mode', () => {
+      const { actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+
+      cleanup();
+    });
+
+    it('Up/Down leave controls mode and move the cursor', () => {
+      const { state, actions, root, grid, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      // Without this the key falls through to the browser and scrolls the
+      // nearest scrollable ancestor out from under the user.
+      keydown(document.activeElement!, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(grid);
+      expect(state.focusedCell.get()).toEqual({ row: 0, column: 'b' });
+
+      cleanup();
+    });
+
+    it('undo still works in controls mode', () => {
+      const { actions, root, cleanup } = setupWithHeaders();
+      const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      keydown(document.activeElement!, { key: 'z', ctrlKey: true });
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      cleanup();
+    });
+
+    it('controls mode drops itself when focus leaves the header', () => {
+      const { state, actions, root, grid, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      keydown(root, { key: 'F2' });
+
+      // Simulate a Tab out of the grid.
+      grid.focus();
+      keydown(root, { key: 'ArrowRight' });
+      expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'c' });
+
+      cleanup();
     });
   });
 });

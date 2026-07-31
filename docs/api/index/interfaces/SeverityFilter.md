@@ -6,7 +6,7 @@
 
 # Interface: SeverityFilter
 
-Defined in: [annotations/types.ts:143](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L143)
+Defined in: [annotations/types.ts:143](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/annotations/types.ts#L143)
 
 Visual-only severity-filter flag set. Each flag controls whether tints for
 that severity appear; annotations themselves remain in the store regardless.
@@ -21,7 +21,7 @@ through.
 
 > **error**: `boolean`
 
-Defined in: [annotations/types.ts:144](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L144)
+Defined in: [annotations/types.ts:144](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/annotations/types.ts#L144)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [annotations/types.ts:144](https://github.com/jeyabbalas/data-table/
 
 > **info**: `boolean`
 
-Defined in: [annotations/types.ts:146](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L146)
+Defined in: [annotations/types.ts:146](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/annotations/types.ts#L146)
 
 ***
 
@@ -37,4 +37,4 @@ Defined in: [annotations/types.ts:146](https://github.com/jeyabbalas/data-table/
 
 > **warning**: `boolean`
 
-Defined in: [annotations/types.ts:145](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/annotations/types.ts#L145)
+Defined in: [annotations/types.ts:145](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/annotations/types.ts#L145)

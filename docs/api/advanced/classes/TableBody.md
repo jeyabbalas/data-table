@@ -6,7 +6,7 @@
 
 # Class: TableBody
 
-Defined in: [table/TableBody.ts:67](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L67)
+Defined in: [table/TableBody.ts:81](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L81)
 
 TableBody renders data rows using virtual scrolling.
 
@@ -26,7 +26,7 @@ body.destroy();
 
 > **new TableBody**(`container`, `state`, `bridge`, `actions?`, `options?`): `TableBody`
 
-Defined in: [table/TableBody.ts:110](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L110)
+Defined in: [table/TableBody.ts:126](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L126)
 
 #### Parameters
 
@@ -60,7 +60,7 @@ Defined in: [table/TableBody.ts:110](https://github.com/jeyabbalas/data-table/bl
 
 > **destroy**(): `void`
 
-Defined in: [table/TableBody.ts:1550](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1550)
+Defined in: [table/TableBody.ts:1588](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1588)
 
 Destroy the table body and clean up resources
 
@@ -74,7 +74,7 @@ Destroy the table body and clean up resources
 
 > **getVirtualScroller**(): [`VirtualScroller`](VirtualScroller.md)
 
-Defined in: [table/TableBody.ts:1514](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1514)
+Defined in: [table/TableBody.ts:1552](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1552)
 
 Get the virtual scroller instance
 
@@ -88,7 +88,7 @@ Get the virtual scroller instance
 
 > **getVisibleRange**(): [`VisibleRange`](../interfaces/VisibleRange.md)
 
-Defined in: [table/TableBody.ts:1521](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1521)
+Defined in: [table/TableBody.ts:1559](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1559)
 
 Get current visible range
 
@@ -102,7 +102,7 @@ Get current visible range
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [table/TableBody.ts:153](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L153)
+Defined in: [table/TableBody.ts:171](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L171)
 
 Initialize the table body
 
@@ -119,7 +119,7 @@ initial render.
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/TableBody.ts:1543](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1543)
+Defined in: [table/TableBody.ts:1581](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1581)
 
 Check if the table body has been destroyed
 
@@ -133,7 +133,7 @@ Check if the table body has been destroyed
 
 > **refresh**(): `void`
 
-Defined in: [table/TableBody.ts:1528](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1528)
+Defined in: [table/TableBody.ts:1566](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1566)
 
 Force a refresh of the table body
 
@@ -147,7 +147,7 @@ Force a refresh of the table body
 
 > **scrollToRow**(`index`, `align?`): `void`
 
-Defined in: [table/TableBody.ts:1536](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/table/TableBody.ts#L1536)
+Defined in: [table/TableBody.ts:1574](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/TableBody.ts#L1574)
 
 Scroll to a specific row
 

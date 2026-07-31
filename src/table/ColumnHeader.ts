@@ -27,6 +27,12 @@ import { ColumnResizer } from './ColumnResizer';
 export interface ColumnHeaderOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
+  /**
+   * DOM `id` for the header cell. `TableContainer` supplies an
+   * instance-scoped id so `aria-activedescendant` on `.dt-grid` can name this
+   * cell; omit it when mounting a header outside a grid.
+   */
+  cellId?: string | undefined;
   /** Called when the filter button is clicked, with column name and button element for positioning */
   onFilterClick?: ((column: string, buttonElement: HTMLElement) => void) | undefined;
   /** Called when the f(x) icon on a derived column is clicked */
@@ -131,6 +137,13 @@ export class ColumnHeader {
     }
     el.setAttribute('role', 'columnheader');
     el.setAttribute('aria-label', this.buildAriaLabel());
+    // Programmatically focusable but never a tab stop: the cursor lives on
+    // `.dt-grid`, which names this cell via `aria-activedescendant` — an
+    // attribute whose target has to be focusable.
+    el.setAttribute('tabindex', '-1');
+    if (this.options.cellId) {
+      el.id = this.options.cellId;
+    }
     if (this.options.colIndex !== undefined) {
       el.setAttribute('aria-colindex', String(this.options.colIndex));
     }
@@ -286,6 +299,15 @@ export class ColumnHeader {
     actionPanel.appendChild(dragHandle);
     el.appendChild(actionPanel);
 
+    // Take every per-column control out of the native tab order. A 266-column
+    // table renders ~1,600 of these; leaving them tabbable would make Tab-ing
+    // past the grid take over a thousand presses. They stay reachable through
+    // F2 controls mode (see KeyboardNavigator), which is what keeps this
+    // WCAG 2.1.1-conformant rather than merely quiet.
+    for (const btn of el.querySelectorAll('button')) {
+      btn.setAttribute('tabindex', '-1');
+    }
+
     // Apply annotation classes + popover wiring on initial render. The
     // store subscription in subscribeToState() re-applies on every
     // annotation change.
@@ -312,7 +334,10 @@ export class ColumnHeader {
     if (this.destroyed || !this.nameEl) return;
     const content = this.resolveTooltipContent();
     if (content) {
-      this.nameEl.setAttribute('tabindex', '0');
+      // `-1`, not `0`: the name span becomes a controls-mode stop (F2 →
+      // arrows), not a tab stop. One tab stop per column is exactly the
+      // column-count-proportional tab order this model exists to avoid.
+      this.nameEl.setAttribute('tabindex', '-1');
     } else {
       this.nameEl.removeAttribute('tabindex');
     }
@@ -484,11 +509,7 @@ export class ColumnHeader {
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.shiftKey || event.metaKey || event.ctrlKey) {
-      this.actions.addToSort(this.column.name);
-    } else {
-      this.actions.toggleSort(this.column.name);
-    }
+    this.activateSort(event.shiftKey || event.metaKey || event.ctrlKey);
   };
 
   /**
@@ -768,6 +789,74 @@ export class ColumnHeader {
 
     // Update aria-label to reflect current sort/filter state
     this.element.setAttribute('aria-label', this.buildAriaLabel());
+  }
+
+  /**
+   * Toggle this column's sort, or push it onto the multi-sort stack.
+   *
+   * The keyboard entry point for sorting. `KeyboardNavigator` calls it when
+   * the grid cursor sits on this header and the user presses Enter or Space;
+   * the header's own keydown listener calls it when the header cell itself is
+   * the event target. Mirrors click (plain) and Cmd/Ctrl+click (multi).
+   *
+   * @param addToMultiSort - Append to the sort stack instead of replacing it.
+   *
+   * @example
+   * ```typescript
+   * header.activateSort(false); // sort by this column alone
+   * header.activateSort(true);  // add as the next sort key
+   * ```
+   */
+  activateSort(addToMultiSort: boolean): void {
+    if (this.destroyed) return;
+    if (addToMultiSort) {
+      this.actions.addToSort(this.column.name);
+    } else {
+      this.actions.toggleSort(this.column.name);
+    }
+  }
+
+  /**
+   * The header's interactive controls, in visual order, filtered to the ones
+   * a user could actually operate right now.
+   *
+   * Drives F2 controls mode: `KeyboardNavigator` focuses `[0]` on entry and
+   * cycles the list with the arrow keys. Three kinds of element are left out:
+   * disabled ones (the hide button on the last visible column), ones the
+   * responsive container queries have hidden at narrow widths — focusing a
+   * `display: none` element silently does nothing, which would strand the
+   * cycle — and the drag handle, which is mouse-only. A focus stop whose
+   * Enter key does nothing is worse than no stop at all; keyboard reorder
+   * needs a designed gesture, tracked as a follow-up.
+   *
+   * @example
+   * ```typescript
+   * header.getControls()[0]?.focus();
+   * ```
+   */
+  getControls(): HTMLElement[] {
+    if (this.destroyed) return [];
+    const candidates: (HTMLElement | null)[] = [
+      this.derivedIconBtn,
+      this.nameEl.hasAttribute('tabindex') ? this.nameEl : null,
+      this.pinButton,
+      this.hideButton,
+      this.filterButton,
+      this.sortButton,
+    ];
+    return candidates.filter((el): el is HTMLElement => el !== null && this.isControlActive(el));
+  }
+
+  /**
+   * Whether a control can take focus and do something. Uses computed style
+   * rather than `offsetParent` because jsdom implements the former and always
+   * reports `null` for the latter.
+   */
+  private isControlActive(el: HTMLElement): boolean {
+    if (el.hasAttribute('disabled')) return false;
+    if (el.getAttribute('aria-disabled') === 'true') return false;
+    const style = getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden';
   }
 
   /**

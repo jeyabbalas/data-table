@@ -22,8 +22,30 @@
   container-name: dt-root;
 }
 
-.dt-root:focus {
-  outline: none;
+/* ===========================================
+   Grid (ARIA role="grid" — the keyboard cursor's tab stop)
+   =========================================== */
+
+/* Wraps only the header area and the body scroller — the filter bar, live
+   region and gutter stay outside so `role="grid"` owns nothing but rowgroups.
+   The flex chain keeps `.dt-body-scroll { flex: 1; min-height: 0 }` resolving
+   now that the grid sits between it and `.dt-root`. */
+.dt-grid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* `:focus-visible`, not `:focus` — clicking a cell bounces focus here (see
+   TableContainer.handleGridFocusIn), and a ring around the whole table on
+   every click reads as a glitch. Replaces `.dt-root:focus { outline: none }`,
+   which hid the cursor's tab stop entirely (WCAG 2.4.7, issue #84). */
+.dt-grid:focus-visible,
+.dt-header-scroll:focus-visible,
+.dt-body-scroll:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
 }
 
 /* ===========================================

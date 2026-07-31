@@ -8,7 +8,7 @@
 
 > **serializeFilter**(`filter`): [`SerializedFilter`](../type-aliases/SerializedFilter.md)
 
-Defined in: [persistence/SessionStore.ts:72](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/persistence/SessionStore.ts#L72)
+Defined in: [persistence/SessionStore.ts:72](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/persistence/SessionStore.ts#L72)
 
 Convert a live Filter (may contain Date objects) to a serialized form
 

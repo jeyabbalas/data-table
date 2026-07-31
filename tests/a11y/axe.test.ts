@@ -4,14 +4,19 @@
  * Automated a11y scan of the rendered grid + adjacent surfaces via axe-core.
  * Scoped to the relevant element (not the wider jsdom body) and with
  * color-contrast disabled — jsdom does not implement the layout / color
- * calculations axe needs for contrast checks, so contrast is verified
- * manually via Lighthouse instead (see docs/guides/accessibility.md).
+ * calculations axe needs for contrast checks. Contrast is guarded instead by
+ * `tests/styles/contrast.test.ts`, which computes ratios from the token
+ * definitions, plus a real-browser axe run (see docs/guides/accessibility.md).
  *
- * Phase 8 expansion: each scenario covers a different UI state — filters
- * applied, sort active, modals open, popovers shown, dark mode, RTL,
- * multi-table. Modal scenarios re-enable `aria-required-children` since
- * dialogs DO need their required descendants and the rule applies cleanly
- * outside the grid root's toolbar-sibling pattern.
+ * Every rule other than color-contrast runs on every scenario, including
+ * `aria-required-children`. It used to be disabled for grid scans because the
+ * table root carried `role="table"` while also owning the toolbar filter bar
+ * and the status live region. The grid is now its own `.dt-grid` element that
+ * owns nothing but rowgroups, so the rule applies cleanly — and disabling it
+ * is exactly what let the original violation sit unnoticed.
+ *
+ * Each scenario covers a different UI state — empty, filters applied, sort
+ * active, modals open, popovers shown, dark mode, RTL, multi-table.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axe from 'axe-core';
@@ -23,6 +28,7 @@ import { DerivedColumnModal } from '@/derived/DerivedColumnModal';
 import { ExportDialog } from '@/export/ExportDialog';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from '@/table/ColumnHeaderTooltipPopover';
+import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
 import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -47,20 +53,10 @@ const schema: ColumnSchema[] = [
   { name: 'score', type: 'float', nullable: false, originalType: 'DOUBLE' },
 ];
 
-interface ScanOptions {
-  /** Re-enable `aria-required-children` (modals don't need it disabled). */
-  strictRequiredChildren?: boolean;
-}
-
-async function scan(target: HTMLElement, opts: ScanOptions = {}): Promise<void> {
+async function scan(target: HTMLElement): Promise<void> {
   const rules: Record<string, { enabled: boolean }> = {
     'color-contrast': { enabled: false },
   };
-  if (!opts.strictRequiredChildren) {
-    // Default: relax for the table-root toolbar-sibling pattern. Modal
-    // scans set strictRequiredChildren=true so the rule runs there.
-    rules['aria-required-children'] = { enabled: false };
-  }
 
   const results = await axe.run(target, { rules, resultTypes: ['violations'] });
 
@@ -112,8 +108,27 @@ describe('a11y: axe-core grid scan', () => {
     vi.unstubAllGlobals();
   });
 
+  it('reports zero blocking violations before any data is loaded', async () => {
+    // The empty shell is not a grid — it renders a "Load data" placeholder
+    // and owns no rows, so it must not claim role="grid".
+    const state = createTableState();
+    const actions = new StateActions(state, mockBridge);
+    const tc = new TableContainer(container, state, actions, mockBridge);
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
   it('reports zero blocking violations on a rendered grid (light mode)', async () => {
     const { tc } = buildTable(container);
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations with the cursor on the header row', async () => {
+    const { actions, tc } = buildTable(container);
+    // aria-activedescendant is only valid if the IDREF resolves — this is the
+    // scan that would catch a cursor pointing at a destroyed element.
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'name' });
     await scan(tc.getElement());
     tc.destroy();
   });
@@ -166,7 +181,7 @@ describe('a11y: axe-core grid scan', () => {
   });
 
   // ------------------------------------------------------------------
-  // Modals — `aria-required-children` is re-enabled for these scans.
+  // Modals
   // ------------------------------------------------------------------
 
   it('reports zero blocking violations with the export dialog open', async () => {
@@ -174,7 +189,7 @@ describe('a11y: axe-core grid scan', () => {
     const dialog = new ExportDialog(state, mockBridge, { messages: defaultStrings });
     document.body.appendChild(dialog.getElement());
     dialog.open();
-    await scan(dialog.getElement(), { strictRequiredChildren: true });
+    await scan(dialog.getElement());
     dialog.close();
     dialog.destroy();
   });
@@ -184,7 +199,7 @@ describe('a11y: axe-core grid scan', () => {
     const modal = new SQLFilterModal(state, actions);
     document.body.appendChild(modal.getElement());
     modal.open();
-    await scan(modal.getElement(), { strictRequiredChildren: true });
+    await scan(modal.getElement());
     modal.destroy();
   });
 
@@ -193,7 +208,7 @@ describe('a11y: axe-core grid scan', () => {
     const modal = new DerivedColumnModal(state, actions);
     document.body.appendChild(modal.getElement());
     modal.open();
-    await scan(modal.getElement(), { strictRequiredChildren: true });
+    await scan(modal.getElement());
     modal.destroy();
   });
 
@@ -215,11 +230,10 @@ describe('a11y: axe-core grid scan', () => {
         message: 'value 200 exceeds maximum 150',
       },
     ]);
-    // Scope to the popover element — the table-root toolbar-sibling
-    // pattern (intentionally relaxed elsewhere) lives outside the popover.
+    // Scope to the popover element.
     const popoverEl = document.getElementById(popover.getId());
     expect(popoverEl).toBeTruthy();
-    await scan(popoverEl as HTMLElement, { strictRequiredChildren: true });
+    await scan(popoverEl as HTMLElement);
     popover.destroy();
   });
 
@@ -235,7 +249,7 @@ describe('a11y: axe-core grid scan', () => {
     });
     const popoverEl = popover.getElement();
     expect(popoverEl).toBeTruthy();
-    await scan(popoverEl as HTMLElement, { strictRequiredChildren: true });
+    await scan(popoverEl as HTMLElement);
     popover.destroy();
   });
 });

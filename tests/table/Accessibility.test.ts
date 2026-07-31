@@ -72,35 +72,81 @@ describe('Accessibility: ARIA attributes', () => {
   // =========================================
 
   describe('aria-rowcount and aria-colcount', () => {
-    it('should set aria-rowcount="0" and aria-colcount="0" initially', () => {
+    it('carries no counts before data is loaded', () => {
       const tc = new TableContainer(container, state);
-      const el = tc.getElement();
+      const grid = tc.getGridElement();
 
-      expect(el.getAttribute('aria-rowcount')).toBe('0');
-      expect(el.getAttribute('aria-colcount')).toBe('0');
+      // Grid semantics are attached lazily — an empty shell is not a grid,
+      // and `aria-rowcount` on a roleless element is meaningless.
+      expect(grid.hasAttribute('aria-rowcount')).toBe(false);
+      expect(grid.hasAttribute('aria-colcount')).toBe(false);
+      // And never on the root, which is a bare div.
+      expect(tc.getElement().hasAttribute('aria-rowcount')).toBe(false);
 
       tc.destroy();
     });
 
     it('should update aria-rowcount when totalRows changes', () => {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.tableName.set('test_table');
       const tc = new TableContainer(container, state);
-      const el = tc.getElement();
+      const grid = tc.getGridElement();
 
+      // totalRows + 1 — under role="grid" the column-header row is row 1.
       state.totalRows.set(5000);
-      expect(el.getAttribute('aria-rowcount')).toBe('5000');
+      expect(grid.getAttribute('aria-rowcount')).toBe('5001');
 
       state.totalRows.set(10000);
-      expect(el.getAttribute('aria-rowcount')).toBe('10000');
+      expect(grid.getAttribute('aria-rowcount')).toBe('10001');
 
       tc.destroy();
     });
 
     it('should update aria-colcount when schema changes', () => {
+      state.tableName.set('test_table');
       const tc = new TableContainer(container, state);
-      const el = tc.getElement();
 
       state.schema.set(testSchema);
-      expect(el.getAttribute('aria-colcount')).toBe('5');
+      expect(tc.getGridElement().getAttribute('aria-colcount')).toBe('5');
+
+      tc.destroy();
+    });
+
+    it('counts the filtered rows, not the total, while a filter is active', () => {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.tableName.set('test_table');
+      state.totalRows.set(5000);
+      const tc = new TableContainer(container, state);
+      const grid = tc.getGridElement();
+
+      // The body renders `filteredRows` rows and numbers them 2..N+1, so
+      // counting totalRows would announce "row 3 of 5,001" on a 20-row view.
+      state.filters.set([{ column: 'id', type: 'range', min: 100, max: Infinity }]);
+      state.filteredRows.set(20);
+      expect(grid.getAttribute('aria-rowcount')).toBe('21');
+
+      state.filters.set([]);
+      expect(grid.getAttribute('aria-rowcount')).toBe('5001');
+
+      tc.destroy();
+    });
+
+    it('attaches grid semantics when the table name arrives after the schema', () => {
+      const tc = new TableContainer(container, state);
+      const grid = tc.getGridElement();
+
+      // Only schema and visibleColumns trigger render(); a caller driving
+      // state directly can set the name last and would otherwise be left with
+      // a permanently roleless, untabbable grid.
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      expect(grid.hasAttribute('role')).toBe(false);
+
+      state.tableName.set('test_table');
+      expect(grid.getAttribute('role')).toBe('grid');
+      expect(grid.getAttribute('tabindex')).toBe('0');
 
       tc.destroy();
     });
@@ -112,10 +158,10 @@ describe('Accessibility: ARIA attributes', () => {
       state.tableName.set('test_table');
 
       const tc = new TableContainer(container, state, actions, mockBridge);
-      const el = tc.getElement();
+      const grid = tc.getGridElement();
 
-      expect(el.getAttribute('aria-rowcount')).toBe('2500');
-      expect(el.getAttribute('aria-colcount')).toBe('5');
+      expect(grid.getAttribute('aria-rowcount')).toBe('2501');
+      expect(grid.getAttribute('aria-colcount')).toBe('5');
 
       tc.destroy();
     });
@@ -337,12 +383,13 @@ describe('Accessibility: ARIA attributes', () => {
       const rowEl = document.createElement('div');
       rowEl.setAttribute('role', 'row');
 
-      // Simulate what updateRowContent does
+      // Simulate what updateRowContent does: +2, because under role="grid"
+      // the column-header row is row 1.
       const index = 41; // 0-based
       rowEl.setAttribute('data-row-index', String(index));
-      rowEl.setAttribute('aria-rowindex', String(index + 1)); // 1-based
+      rowEl.setAttribute('aria-rowindex', String(index + 2));
 
-      expect(rowEl.getAttribute('aria-rowindex')).toBe('42');
+      expect(rowEl.getAttribute('aria-rowindex')).toBe('43');
     });
 
     it('should set aria-rowindex on placeholder rows', () => {
@@ -351,14 +398,14 @@ describe('Accessibility: ARIA attributes', () => {
       // Simulate createPlaceholderRow
       const index = 99;
       rowEl.setAttribute('data-row-index', String(index));
-      rowEl.setAttribute('aria-rowindex', String(index + 1));
+      rowEl.setAttribute('aria-rowindex', String(index + 2));
 
-      expect(rowEl.getAttribute('aria-rowindex')).toBe('100');
+      expect(rowEl.getAttribute('aria-rowindex')).toBe('101');
     });
 
     it('should set aria-colindex on cells based on schema position', () => {
       const cellEl = document.createElement('div');
-      cellEl.setAttribute('role', 'cell');
+      cellEl.setAttribute('role', 'gridcell');
 
       // Schema: id(1), name(2), score(3), active(4), created(5)
       // If this cell is for 'score', aria-colindex should be 3
@@ -468,18 +515,103 @@ describe('Accessibility: ARIA attributes', () => {
   // Phase 6: grid role + gridcell + roving tabindex
   // =========================================
 
-  describe('grid role + roving tabindex', () => {
-    it('uses role="table" on the root element', () => {
-      const tc = new TableContainer(container, state);
-      expect(tc.getElement().getAttribute('role')).toBe('table');
+  describe('grid role + single tab stop', () => {
+    function loaded(): TableContainer {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.totalRows.set(100);
+      state.tableName.set('test_table');
+      return new TableContainer(container, state, actions, mockBridge);
+    }
+
+    it('puts role="grid" on .dt-grid, not on the root', () => {
+      const tc = loaded();
+      expect(tc.getElement().getAttribute('role')).toBeNull();
+      expect(tc.getGridElement().getAttribute('role')).toBe('grid');
+      tc.destroy();
+    });
+
+    it('exposes a fixed, column-count-independent set of tab stops', () => {
+      const tc = loaded();
+      const grid = tc.getGridElement();
+
+      // The grid, plus the two scroll regions WCAG 2.1.1 requires to be
+      // keyboard-reachable. Nothing else inside — in particular none of the
+      // ~6 buttons per column header, which is what made Tab unusable.
+      const tabbableInGrid = [
+        ...grid.querySelectorAll<HTMLElement>(
+          '[tabindex]:not([tabindex="-1"]), button:not([tabindex])',
+        ),
+      ];
+      expect(tabbableInGrid).toEqual([tc.getHeaderScroll(), tc.getScrollContainer()]);
+      expect(grid.getAttribute('tabindex')).toBe('0');
+
+      // Independent of column count: hiding half the columns changes nothing.
+      state.visibleColumns.set(['id', 'name']);
+      expect(
+        grid.querySelectorAll('[tabindex]:not([tabindex="-1"]), button:not([tabindex])').length,
+      ).toBe(2);
+
+      tc.destroy();
+    });
+
+    it('gives every header cell a stable id and takes its buttons out of the tab order', () => {
+      const tc = loaded();
+      const headers = tc.getColumnHeaders();
+      expect(headers.length).toBeGreaterThan(0);
+
+      const ids = new Set<string>();
+      for (const header of headers) {
+        const el = header.getElement();
+        expect(el.id).not.toBe('');
+        expect(ids.has(el.id)).toBe(false);
+        ids.add(el.id);
+        expect(el.getAttribute('tabindex')).toBe('-1');
+        for (const btn of el.querySelectorAll('button')) {
+          expect(btn.getAttribute('tabindex')).toBe('-1');
+        }
+      }
+
+      tc.destroy();
+    });
+
+    it('publishes the header cursor through aria-activedescendant', () => {
+      const tc = loaded();
+      const grid = tc.getGridElement();
+      expect(grid.hasAttribute('aria-activedescendant')).toBe(false);
+
+      actions.setFocusedCell({ row: -1, column: 'name' });
+
+      const header = tc.getColumnHeaders().find((h) => h.getColumn().name === 'name')!;
+      expect(grid.getAttribute('aria-activedescendant')).toBe(header.getElement().id);
+      expect(header.getElement().classList.contains('dt-col-header--focused')).toBe(true);
+
+      actions.clearFocusedCell();
+      expect(grid.hasAttribute('aria-activedescendant')).toBe(false);
+
+      tc.destroy();
+    });
+
+    it('drops aria-activedescendant when the cursor’s row is not materialized', () => {
+      const tc = loaded();
+      const grid = tc.getGridElement();
+      actions.setFocusedCell({ row: -1, column: 'name' });
+      expect(grid.hasAttribute('aria-activedescendant')).toBe(true);
+
+      // jsdom reports a zero-height viewport, so no body rows exist. Writing
+      // the id anyway would be a dangling IDREF — an aria-valid-attr-value
+      // failure — so the attribute has to come off entirely.
+      actions.setFocusedCell({ row: 42, column: 'name' });
+      expect(document.querySelectorAll('.dt-row').length).toBe(0);
+      expect(grid.hasAttribute('aria-activedescendant')).toBe(false);
+
       tc.destroy();
     });
 
     // Note: Full row materialization requires a non-zero viewport height,
-    // which jsdom does not provide. Assertions on rendered row/cell ARIA and
-    // roving tabindex are verified via TableBody.getOrCreateRow in
-    // tests/table/TableBody.test.ts, and end-to-end in the axe-core scan
-    // (tests/a11y/axe.test.ts).
+    // which jsdom does not provide. Assertions on rendered row/cell ARIA are
+    // verified via TableBody.getOrCreateRow in tests/table/TableBody.test.ts,
+    // and end-to-end in the axe-core scan (tests/a11y/axe.test.ts).
   });
 
   // =========================================

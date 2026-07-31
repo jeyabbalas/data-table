@@ -70,11 +70,11 @@ The reserved synthetic [`__rowid__`](../glossary.md#__rowid__-synthetic-row-id) 
 
 ### Transient UI
 
-| Field           | Type                                              | Meaning                                                                                  |
-| --------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `hoveredRow`    | `Signal<number \| null>`                          | Row index under the mouse; `null` when not hovering                                      |
-| `hoveredColumn` | `Signal<string \| null>`                          | Column name under the mouse                                                              |
-| `focusedCell`   | `Signal<{ row: number; column: string } \| null>` | The one cell carrying `tabindex="0"` (roving focus); `null` when the table isn't focused |
+| Field           | Type                                              | Meaning                                                                                                                                        |
+| --------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hoveredRow`    | `Signal<number \| null>`                          | Row index under the mouse; `null` when not hovering                                                                                            |
+| `hoveredColumn` | `Signal<string \| null>`                          | Column name under the mouse                                                                                                                    |
+| `focusedCell`   | `Signal<{ row: number; column: string } \| null>` | The keyboard cursor, published as `aria-activedescendant` on `.dt-grid`; `row: -1` means the column-header row; `null` when there is no cursor |
 
 Transient UI fields don't participate in undo / redo and aren't persisted.
 

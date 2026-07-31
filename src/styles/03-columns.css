@@ -53,6 +53,28 @@
   box-shadow: inset 0 3px 0 0 var(--dt-primary);
 }
 
+/* Keyboard cursor on the header row — mirrors `.dt-cell--focused` in the body
+   so the one cursor reads the same wherever it sits. */
+.dt-col-header--focused {
+  box-shadow: inset 0 0 0 2px var(--dt-primary);
+}
+
+/* Keep both indicators instead of letting the later rule win, the way
+   `.dt-cell--annotated.dt-cell--focused` composes. */
+.dt-col-header--filtered.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 3px 0 0 var(--dt-primary);
+}
+
+/* Controls mode (F2) parks real focus on a header button, inside the cell
+   that still shows the cursor ring — mark it unmistakably. */
+.dt-col-header button:focus-visible,
+.dt-col-name:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
 .dt-col-header.dt-col-resetting {
   transition: width 0.2s ease-out;
 }
@@ -87,7 +109,7 @@
 
 .dt-col-stats {
   font-size: var(--dt-font-size-xs);
-  color: var(--dt-text-tertiary);
+  color: var(--dt-text-secondary);
   margin-top: 0.25rem;
   height: 5.2em; /* 4 lines × 1.3 line-height — accommodates wrapped stats + hover */
   line-height: 1.3;
@@ -99,8 +121,11 @@
   font-weight: 600;
 }
 
+/* A colour, not `opacity`. Opacity composites against whatever is behind the
+   text, so contrast changes with every background it is painted on — at 0.8
+   this line failed 4.5:1 in all four theme x header-state combinations. */
 .dt-col-stats .dt-stats-line2 {
-  opacity: 0.8;
+  color: var(--dt-text-tertiary);
 }
 
 .dt-col-viz {
@@ -880,6 +905,46 @@
 }
 .dt-col-header--filtered.dt-col-header--annotation-info {
   box-shadow:
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
+}
+
+/* Keyboard cursor on an annotated header. The rules above set `box-shadow`
+   outright and win on source order against `.dt-col-header--focused`, which
+   would leave the cursor with no visible indicator on exactly the columns a
+   user most needs to inspect — a WCAG 2.4.7 failure. Re-compose every
+   combination, mirroring `.dt-cell--*-annotation-*.dt-cell--focused` in
+   05-data-grid.css. */
+.dt-col-header--annotation-error.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-col-header--annotation-warning.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-col-header--annotation-info.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
+}
+.dt-col-header--filtered.dt-col-header--annotation-error.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-error-bdr);
+}
+.dt-col-header--filtered.dt-col-header--annotation-warning.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
+    inset 0 3px 0 0 var(--dt-primary),
+    inset 0 -3px 0 0 var(--dt-annotation-warning-bdr);
+}
+.dt-col-header--filtered.dt-col-header--annotation-info.dt-col-header--focused {
+  box-shadow:
+    inset 0 0 0 2px var(--dt-primary),
     inset 0 3px 0 0 var(--dt-primary),
     inset 0 -3px 0 0 var(--dt-annotation-info-bdr);
 }

@@ -22,7 +22,7 @@
  * helper code into VisualizationRegistry):
  *   root entry · ESM                7.65 kB   →   8.1 kB cap (5.9 %)
  *   advanced entry · ESM            2.42 kB   →   2.6 kB cap (7.4 %)
- *   stylesheet                     16.22 kB   →  17 kB   cap (4.8 %)
+ *   stylesheet                     16.94 kB   →  17.8 kB cap (5.1 %)
  *   lazy ExportDialog chunk        67.58 kB   →  71 kB   cap (5.1 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
@@ -33,6 +33,11 @@
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
+ *
+ * The stylesheet baseline moved 16.22 → 16.94 kB with the ARIA-grid keyboard
+ * fix (issue #84): a `.dt-grid` layout block, a `:focus-visible` ring for it,
+ * and the header-row cursor ring. Its cap moved with it to keep the usual
+ * ~5 % headroom rather than leaving the next CSS change to trip the gate.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -53,7 +58,7 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '17 kB',
+    limit: '17.8 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',

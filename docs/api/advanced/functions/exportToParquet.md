@@ -8,7 +8,7 @@
 
 > **exportToParquet**(`tableName`, `options`, `context`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [export/ParquetExport.ts:93](https://github.com/jeyabbalas/data-table/blob/a7d429b4ecaa77d708c5fb2347c14e413094a698/src/export/ParquetExport.ts#L93)
+Defined in: [export/ParquetExport.ts:93](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/export/ParquetExport.ts#L93)
 
 Export table data as a Parquet file.
 

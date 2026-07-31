@@ -16,6 +16,7 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
+import { HEADER_ROW_INDEX } from './KeyboardNavigator';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
 
 /**
@@ -26,6 +27,19 @@ export interface TableBodyOptions {
   rowHeight?: number | undefined;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
+  /**
+   * Per-instance identifier mixed into cell DOM ids so two tables on the same
+   * page don't collide. Required for `aria-activedescendant` to resolve;
+   * without it cells are rendered without ids.
+   */
+  instanceId?: string | undefined;
+  /**
+   * Called after every pass that materializes or recycles row elements.
+   * `TableContainer` uses it to re-point `aria-activedescendant`, whose target
+   * must be a live element — virtualization can destroy the cursor's cell
+   * without the cursor itself changing.
+   */
+  onRowsRendered?: (() => void) | undefined;
   /**
    * External scroll container for unified scrolling.
    * When provided, VirtualScroller will use this container for scroll events
@@ -95,6 +109,8 @@ export class TableBody {
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
+  private readonly instanceId: string;
+  private readonly onRowsRendered: (() => void) | null;
   private readonly cellRenderer: CellRenderer;
   private readonly container: HTMLElement;
   private readonly annotations: AnnotationStore | null;
@@ -117,6 +133,8 @@ export class TableBody {
     this.container = container;
     this.rowHeight = options.rowHeight ?? 32;
     this.classPrefix = options.classPrefix ?? 'dt';
+    this.instanceId = options.instanceId ?? '';
+    this.onRowsRendered = options.onRowsRendered ?? null;
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
     this.messages = options.messages ?? defaultStrings;
@@ -243,7 +261,12 @@ export class TableBody {
     // Re-fetch and scroll to top when filters change
     const unsubFilters = this.state.filters.subscribe((filters) => {
       if (!this.destroyed) {
-        this.state.focusedCell.set(null);
+        // A body cursor points at a row index the new result set may not
+        // have; a header cursor is unaffected, and clearing it would yank
+        // the user out of the header the moment their own filter applied.
+        if (this.state.focusedCell.get()?.row !== HEADER_ROW_INDEX) {
+          this.state.focusedCell.set(null);
+        }
         if (filters.length === 0) {
           this.virtualScroller.setTotalRows(this.state.totalRows.get());
         }
@@ -732,26 +755,15 @@ export class TableBody {
           rowEl.classList.remove(hoverClass);
         }
 
-        // Apply focus style + roving tabindex
+        // Apply the cursor ring. Cells stay `tabindex="-1"` permanently —
+        // the cursor is published via `aria-activedescendant` on `.dt-grid`,
+        // not by moving DOM focus, because a recycled row would take real
+        // focus with it into the pool.
         const focusClass = `${this.classPrefix}-cell--focused`;
-        if (focusedCell && focusedCell.row === i) {
-          const focusColIdx = visibleColumns.indexOf(focusedCell.column);
-          for (let c = 0; c < rowEl.children.length; c++) {
-            const cell = rowEl.children[c] as HTMLElement;
-            if (c === focusColIdx) {
-              cell.classList.add(focusClass);
-              cell.setAttribute('tabindex', '0');
-            } else {
-              cell.classList.remove(focusClass);
-              cell.setAttribute('tabindex', '-1');
-            }
-          }
-        } else {
-          for (const child of rowEl.children) {
-            const cell = child as HTMLElement;
-            cell.classList.remove(focusClass);
-            cell.setAttribute('tabindex', '-1');
-          }
+        const focusColIdx =
+          focusedCell && focusedCell.row === i ? visibleColumns.indexOf(focusedCell.column) : -1;
+        for (let c = 0; c < rowEl.children.length; c++) {
+          (rowEl.children[c] as HTMLElement).classList.toggle(focusClass, c === focusColIdx);
         }
       }
     }
@@ -775,11 +787,13 @@ export class TableBody {
     // Also set header row width to match for scroll synchronization
     const scrollContainer = this.virtualScroller.getScrollContainer();
     const headerRow = scrollContainer
-      .closest('.dt-root')
-      ?.querySelector('.dt-header-row') as HTMLElement;
+      .closest(`.${this.classPrefix}-root`)
+      ?.querySelector(`.${this.classPrefix}-header-row`) as HTMLElement;
     if (headerRow) {
       headerRow.style.minWidth = `${totalWidth}px`;
     }
+
+    this.onRowsRendered?.();
   }
 
   /**
@@ -817,11 +831,7 @@ export class TableBody {
       if (currentCells < columnCount) {
         // Add missing cells
         for (let i = currentCells; i < columnCount; i++) {
-          const cellEl = document.createElement('div');
-          cellEl.className = `${this.classPrefix}-cell`;
-          cellEl.setAttribute('role', 'cell');
-          cellEl.setAttribute('tabindex', '-1');
-          rowEl.appendChild(cellEl);
+          rowEl.appendChild(this.createCell());
         }
       } else if (currentCells > columnCount) {
         // Remove extra cells
@@ -847,15 +857,36 @@ export class TableBody {
 
       // Create cells
       for (let i = 0; i < columnCount; i++) {
-        const cellEl = document.createElement('div');
-        cellEl.className = `${this.classPrefix}-cell`;
-        cellEl.setAttribute('role', 'cell');
-        cellEl.setAttribute('tabindex', '-1');
-        rowEl.appendChild(cellEl);
+        rowEl.appendChild(this.createCell());
       }
     }
 
     return rowEl;
+  }
+
+  /**
+   * Create one body cell.
+   *
+   * `role="gridcell"` (not `cell`): `cell` is only valid inside
+   * `role="table"`, and the grid element above these rows is `role="grid"`.
+   * `tabindex="-1"` is permanent — it makes the cell a legal
+   * `aria-activedescendant` target without adding a tab stop.
+   */
+  private createCell(): HTMLElement {
+    const cellEl = document.createElement('div');
+    cellEl.className = `${this.classPrefix}-cell`;
+    cellEl.setAttribute('role', 'gridcell');
+    cellEl.setAttribute('tabindex', '-1');
+    return cellEl;
+  }
+
+  /**
+   * Stable DOM id for a body cell, keyed by absolute row index and visible
+   * column index. Mirrors `TableContainer.buildCellId`, which computes the
+   * same string to resolve the cursor.
+   */
+  private buildCellId(row: number, colIndex: number): string {
+    return `${this.classPrefix}-${this.instanceId}-cell-${row}-${colIndex}`;
   }
 
   /**
@@ -887,12 +918,15 @@ export class TableBody {
     cleanEl.removeAttribute('aria-rowindex');
     cleanEl.removeAttribute('aria-selected');
 
-    // Clear cell-level focus class and reset roving tabindex
+    // Clear the cursor ring and the per-(row, column) cell ids. A pooled row
+    // that kept its ids would duplicate them the moment it is reused for a
+    // different row — `getElementById` would then resolve
+    // `aria-activedescendant` to the wrong cell.
     const focusClass = `${this.classPrefix}-cell--focused`;
     for (const child of cleanEl.children) {
       const cell = child as HTMLElement;
       cell.classList.remove(focusClass);
-      cell.setAttribute('tabindex', '-1');
+      cell.removeAttribute('id');
     }
 
     // Limit pool size to prevent memory bloat
@@ -912,7 +946,9 @@ export class TableBody {
     schemaMap: Map<string, ColumnSchema>,
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
-    rowEl.setAttribute('aria-rowindex', String(index + 1));
+    // +2, not +1: under `role="grid"` the column-header row is row 1, so body
+    // row 0 is aria-rowindex 2. `aria-rowcount` carries the matching +1.
+    rowEl.setAttribute('aria-rowindex', String(index + 2));
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
 
     // Resolve rowId from the __rowid__ column (injected into every row
@@ -962,6 +998,14 @@ export class TableBody {
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
       const cellEl = cells[i] as HTMLElement;
+
+      // Stable id so `aria-activedescendant` on `.dt-grid` can name this
+      // cell. Keyed by absolute row index + visible column index, and
+      // rewritten on every reuse, so a pooled element never carries a
+      // stale id.
+      if (this.instanceId) {
+        cellEl.id = this.buildCellId(index, i);
+      }
 
       // ARIA: 1-based column index in full schema
       const ariaColIdx = this.colIndexMap.get(colName);
@@ -1198,12 +1242,10 @@ export class TableBody {
     rowEl.setAttribute('role', 'row');
     rowEl.style.height = `${this.rowHeight}px`;
     rowEl.setAttribute('data-row-index', String(index));
-    rowEl.setAttribute('aria-rowindex', String(index + 1));
+    rowEl.setAttribute('aria-rowindex', String(index + 2));
 
-    const placeholderCell = document.createElement('div');
-    placeholderCell.className = `${this.classPrefix}-cell ${this.classPrefix}-cell--placeholder`;
-    placeholderCell.setAttribute('role', 'cell');
-    placeholderCell.setAttribute('tabindex', '-1');
+    const placeholderCell = this.createCell();
+    placeholderCell.classList.add(`${this.classPrefix}-cell--placeholder`);
     placeholderCell.textContent = this.messages.a11y.loadingRowLabel(index + 1);
     rowEl.appendChild(placeholderCell);
 
@@ -1446,9 +1488,7 @@ export class TableBody {
       if (prevRowEl) {
         const prevColIdx = visibleColumns.indexOf(this.previousFocusedCell.column);
         if (prevColIdx >= 0 && prevColIdx < prevRowEl.children.length) {
-          const prevCell = prevRowEl.children[prevColIdx] as HTMLElement;
-          prevCell.classList.remove(focusClass);
-          prevCell.setAttribute('tabindex', '-1');
+          (prevRowEl.children[prevColIdx] as HTMLElement).classList.remove(focusClass);
         }
       }
     }
@@ -1459,9 +1499,7 @@ export class TableBody {
       if (rowEl) {
         const colIdx = visibleColumns.indexOf(focusedCell.column);
         if (colIdx >= 0 && colIdx < rowEl.children.length) {
-          const cell = rowEl.children[colIdx] as HTMLElement;
-          cell.classList.add(focusClass);
-          cell.setAttribute('tabindex', '0');
+          (rowEl.children[colIdx] as HTMLElement).classList.add(focusClass);
         }
       }
     }
@@ -1497,8 +1535,8 @@ export class TableBody {
     // Update header row width
     const scrollContainer = this.virtualScroller.getScrollContainer();
     const headerRow = scrollContainer
-      .closest('.dt-root')
-      ?.querySelector('.dt-header-row') as HTMLElement;
+      .closest(`.${this.classPrefix}-root`)
+      ?.querySelector(`.${this.classPrefix}-header-row`) as HTMLElement;
     if (headerRow) {
       headerRow.style.minWidth = `${totalWidth}px`;
     }

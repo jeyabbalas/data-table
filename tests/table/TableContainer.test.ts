@@ -5,7 +5,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableContainer, type TableContainerOptions } from '@/table/TableContainer';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
+import { StateActions } from '@/core/Actions';
 import type { ColumnSchema } from '@/core/types';
+import type { WorkerBridge } from '@/data/WorkerBridge';
+
+const mockBridge = {
+  initialize: vi.fn(),
+  query: vi.fn(),
+  terminate: vi.fn(),
+  clearQueryCache: vi.fn(),
+} as unknown as WorkerBridge;
 
 // Mock ResizeObserver
 class MockResizeObserver implements ResizeObserver {
@@ -180,12 +189,50 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
-    it('should have correct ARIA roles', () => {
+    it('leaves the root roleless and puts grid semantics on .dt-grid', () => {
+      state.schema.set([{ name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' }]);
+      state.tableName.set('t');
       const tableContainer = new TableContainer(container, state);
 
-      expect(tableContainer.getElement().getAttribute('role')).toBe('table');
-      expect(tableContainer.getHeaderRow().getAttribute('role')).toBe('rowgroup');
-      expect(tableContainer.getBodyContainer().getAttribute('role')).toBe('rowgroup');
+      // `.dt-root` hosts the grid AND its toolbar/status siblings, which no
+      // table or grid role may own — so it carries no role at all.
+      expect(tableContainer.getElement().getAttribute('role')).toBeNull();
+      expect(tableContainer.getElement().hasAttribute('tabindex')).toBe(false);
+
+      const grid = tableContainer.getGridElement();
+      expect(grid.getAttribute('role')).toBe('grid');
+      expect(grid.getAttribute('tabindex')).toBe('0');
+      expect(grid.getAttribute('aria-label')).toBe('Data table');
+
+      // The rowgroups are the scroll containers: they need `tabindex="-1"`
+      // for scrollable-region-focusable, and a focusable roleless div is not
+      // a permitted child of role="grid".
+      expect(tableContainer.getScrollContainer().getAttribute('role')).toBe('rowgroup');
+      expect(tableContainer.getHeaderScroll().getAttribute('role')).toBe('rowgroup');
+      // `tabindex="0"`, not `-1`: `scrollable-region-focusable` asks whether
+      // the region is in the TAB order, not whether it can take focus.
+      expect(tableContainer.getScrollContainer().getAttribute('tabindex')).toBe('0');
+      expect(tableContainer.getHeaderScroll().getAttribute('tabindex')).toBe('0');
+
+      tableContainer.destroy();
+    });
+
+    it('drops grid semantics entirely while no data is loaded', () => {
+      const tableContainer = new TableContainer(container, state);
+      const grid = tableContainer.getGridElement();
+
+      // An empty shell owns no rows, so role="grid" would be an
+      // aria-required-children violation — and a tab stop with nothing to
+      // navigate is just noise.
+      expect(grid.hasAttribute('role')).toBe(false);
+      expect(grid.hasAttribute('tabindex')).toBe(false);
+      expect(grid.hasAttribute('aria-label')).toBe(false);
+      expect(grid.hasAttribute('aria-rowcount')).toBe(false);
+
+      // The scroll regions go quiet too — nothing overflows an empty shell,
+      // so their tab stops would be two rings around empty chrome.
+      expect(tableContainer.getHeaderScroll().hasAttribute('tabindex')).toBe(false);
+      expect(tableContainer.getScrollContainer().hasAttribute('tabindex')).toBe(false);
 
       tableContainer.destroy();
     });
@@ -194,10 +241,14 @@ describe('TableContainer', () => {
       const tableContainer = new TableContainer(container, state);
       const root = tableContainer.getElement();
 
-      // New structure:
-      // root > headerArea > (headerScroll > header) + scrollbarGutter
-      //      > bodyScroll > body
-      const headerArea = root.children[0];
+      // Structure:
+      // root > [filterBar] > grid > headerArea > (headerScroll > header) + scrollbarGutter
+      //                           > bodyScroll > body
+      const grid = root.children[0];
+      expect(grid.className).toContain('dt-grid');
+      expect(grid).toBe(tableContainer.getGridElement());
+
+      const headerArea = grid.children[0];
       expect(headerArea.className).toContain('header-area');
 
       const headerScroll = headerArea.children[0];
@@ -207,9 +258,20 @@ describe('TableContainer', () => {
       const scrollbarGutter = headerArea.children[1];
       expect(scrollbarGutter.className).toContain('scrollbar-gutter');
 
-      const bodyScroll = root.children[1];
+      const bodyScroll = grid.children[1];
       expect(bodyScroll.className).toContain('body-scroll');
       expect(bodyScroll.children[0]).toBe(tableContainer.getBodyContainer());
+
+      tableContainer.destroy();
+    });
+
+    it('mounts the filter bar above the grid', () => {
+      const actions = new StateActions(state, mockBridge);
+      const tableContainer = new TableContainer(container, state, actions, mockBridge);
+      const root = tableContainer.getElement();
+
+      expect(root.children[0]?.className).toContain('dt-filter-bar');
+      expect(root.children[1]).toBe(tableContainer.getGridElement());
 
       tableContainer.destroy();
     });

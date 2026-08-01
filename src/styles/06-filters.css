@@ -227,7 +227,7 @@
   accent-color: var(--dt-primary);
 }
 
-/* Apply button */
+/* Apply button. Ink inverts with the fill — see 02-shell.css. */
 .dt-filter-field-apply {
   display: block;
   width: 100%;
@@ -236,7 +236,7 @@
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
-  color: white;
+  color: var(--dt-bg);
   font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
@@ -400,7 +400,7 @@
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
-  color: white;
+  color: var(--dt-bg);
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
   font-family: var(--dt-font-family);
@@ -529,7 +529,7 @@
 
 .dt-filter-preset-action-btn--load:hover {
   background: var(--dt-primary);
-  color: var(--dt-on-error);
+  color: var(--dt-bg);
 }
 
 .dt-filter-preset-action-btn--delete {
@@ -537,10 +537,13 @@
   border-color: var(--dt-border);
 }
 
+/* The danger tint is --dt-error-bg, the error *surface* token, not an alpha
+   stop of the text colour: --dt-error on --dt-error-soft is one hue at two
+   opacities and never cleared 4:1. Foreground pairs as the error boxes do. */
 .dt-filter-preset-action-btn--delete:hover {
-  color: var(--dt-error);
+  color: var(--dt-error-text-strong);
   border-color: var(--dt-error);
-  background: var(--dt-error-soft);
+  background: var(--dt-error-bg);
 }
 
 .dt-filter-preset-delete-confirm {
@@ -608,8 +611,11 @@
   color: var(--dt-success);
 }
 
+/* --dt-annotation-warning-fg, not --dt-accent-hover: the accent family is
+   tuned for canvas bar fills and amber-600 reads 3.18:1 as text on --dt-bg.
+   The annotation `fg` stop is the one amber cut for text, and it flips. */
 .dt-filter-preset-import-status--warning {
-  color: var(--dt-accent-hover);
+  color: var(--dt-annotation-warning-fg);
 }
 
 /* Dark mode for preset panel. Lives inside .dt-root. */
@@ -617,16 +623,9 @@
   .dt-root:not([data-dt-color-scheme='light']) .dt-filter-preset-panel {
     box-shadow: 0 4px 16px var(--dt-shadow-md);
   }
-
-  .dt-root:not([data-dt-color-scheme='light']) .dt-filter-preset-action-btn--delete:hover {
-    background: var(--dt-error-soft);
-  }
 }
 .dt-root[data-dt-color-scheme='dark'] .dt-filter-preset-panel {
   box-shadow: 0 4px 16px var(--dt-shadow-md);
-}
-.dt-root[data-dt-color-scheme='dark'] .dt-filter-preset-action-btn--delete:hover {
-  background: var(--dt-error-soft);
 }
 
 /* ===========================================

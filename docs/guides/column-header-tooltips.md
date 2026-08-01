@@ -151,18 +151,26 @@ demonstrates the stateless pattern.
 
 ## Keyboard accessibility
 
-The column-name span receives `tabindex="0"` **only** when an override
-is set, so the keyboard tab order stays uncluttered for tables that
-don't use the feature. When an override is present:
+The column-name span receives `tabindex="-1"` **only** when an override is
+set via `actions.setColumnHeaderTooltip`, which makes it an extra stop in
+that header's `F2` controls-mode cycle rather than a page-level tab stop.
+Tab never lands on it — a 266-column table would otherwise put one more
+tab stop per annotated column in front of everything after the table. See
+the [accessibility guide](./accessibility.md#focus-model-single-cursor--aria-activedescendant)
+for the tab-order model this fits into.
 
-- Tab into the span — popover opens.
-- Press `Escape` — popover dismisses.
+When an override is present:
+
+- Put the grid cursor on that column header (`↑` from the first body row,
+  then `←` / `→`) and press `F2` — focus moves into the header's controls.
+  `←` / `→` cycle them; the popover opens when focus reaches the span.
+- Press `Escape` — the popover dismisses and focus returns to the grid.
 - Move focus elsewhere — popover dismisses on `focusout`.
 - Pointer hover / leave — popover opens / dismisses (with a 120 ms
   grace so users can move into the popover content).
 
-When the override is cleared, the `tabindex` is removed and the span
-returns to its non-focusable state.
+When the override is cleared, the `tabindex` is removed and the span drops
+out of the `F2` cycle.
 
 ## Coexistence with annotations
 

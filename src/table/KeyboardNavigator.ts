@@ -17,6 +17,15 @@
  * browser says — `.dt-grid` is one tab stop you step into and out of, and
  * the tab order no longer grows with the column count.
  *
+ * The invariant that keeps it that way: **a branch that does not act on a
+ * key must not move focus either.** Moving DOM focus is as good as
+ * preventing the default — reclaiming `.dt-grid` on a Tab keydown hands the
+ * browser a different starting point, and sequential navigation then walks
+ * straight back into the grid's first tabbable descendant. So
+ * {@link KeyboardNavigator.claimGridFocus} is called from the individual
+ * action paths rather than once up front. Unhandled keys are correct by
+ * construction, not by enumerating them.
+ *
  * Defers to any open ModalHost dialog/panel so modal focus traps are not
  * interfered with.
  */
@@ -91,14 +100,6 @@ export class KeyboardNavigator {
   private readonly keydownHandler: (e: KeyboardEvent) => void;
   private destroyed = false;
 
-  /**
-   * Column whose header buttons currently hold real DOM focus (controls
-   * mode), or `null`. Only the column is stored — the position within the
-   * button list is re-derived from `document.activeElement` on every
-   * keystroke, so a re-render that rebuilds the buttons cannot desync it.
-   */
-  private controlsColumn: string | null = null;
-
   constructor(opts: KeyboardNavigatorOptions) {
     this.rootElement = opts.rootElement;
     this.gridElement = opts.gridElement ?? opts.rootElement;
@@ -142,16 +143,12 @@ export class KeyboardNavigator {
     // The listener is bubble-phase on the table root, so keystrokes from the
     // filter bar and the hidden-columns gutter reach it too. Those controls
     // own their own keys — Space on "Clear all filters" must clear filters,
-    // not sort whichever column the cursor happens to sit on. Only the
-    // undo/redo/copy shortcuts below stay table-wide.
+    // not sort whichever column the cursor happens to sit on. Only Escape
+    // and the undo/redo/copy shortcuts stay table-wide.
     if (!this.cursorKeysApply(active)) {
       this.handleShortcut(e);
       return;
     }
-
-    // From here on the keystroke drives the cursor, so `.dt-grid` must hold
-    // real focus for `aria-activedescendant` to mean anything.
-    this.claimGridFocus();
 
     // Arrow navigation (no modifier)
     if (
@@ -214,7 +211,10 @@ export class KeyboardNavigator {
       const vs = body.getVirtualScroller();
       const pageRows = Math.max(1, Math.floor(vs.getViewportHeight() / vs.getRowHeight()));
       const delta = e.key === 'PageUp' ? -pageRows : pageRows;
-      this.moveFocus(delta, 0);
+      // A page jump is a body-scrolling gesture. PageUp near the top of the
+      // data should stop at row 0, not overshoot into the sticky header —
+      // the header row is a cursor position you step onto with ArrowUp.
+      this.moveFocus(delta, 0, { enterHeaderRow: false });
       return;
     }
 
@@ -227,19 +227,11 @@ export class KeyboardNavigator {
       return;
     }
 
-    if (e.key === 'Escape') {
-      if (this.state.focusedCell.get()) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.actions.clearFocusedCell();
-      }
-      return;
-    }
-
     // Enter / Space on a header cell toggles sort; Shift/Ctrl/Meta adds to
     // the multi-sort stack, mirroring Shift+click.
     if (onHeader && focused && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
       e.preventDefault();
+      this.claimGridFocus();
       const header = this.findHeader(focused.column);
       if (header) {
         header.activateSort(e.shiftKey || e.metaKey || e.ctrlKey);
@@ -252,6 +244,7 @@ export class KeyboardNavigator {
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       if (focused) {
         e.preventDefault();
+        this.claimGridFocus();
         this.actions.selectRow(focused.row, 'toggle');
       }
       return;
@@ -261,11 +254,28 @@ export class KeyboardNavigator {
   }
 
   /**
-   * Undo / redo / copy. Split out of the cursor keys because these stay
-   * table-wide: they should keep working from the filter bar and the
-   * hidden-columns gutter, where the cursor keys deliberately do not.
+   * Escape and undo / redo / copy. Split out of the cursor keys because
+   * these stay table-wide: they should keep working from the filter bar and
+   * the hidden-columns gutter, where the cursor keys deliberately do not.
+   *
+   * Escape belongs here rather than with the cursor keys. Dismissing the
+   * cursor is a "get me out of here" gesture — it was table-wide before the
+   * grid restructure, and gating it behind {@link cursorKeysApply} silently
+   * stopped it working from the filter bar and the hidden-columns gutter.
    */
   private handleShortcut(e: KeyboardEvent): void {
+    // Escape → drop the cursor. Only claims the event when there is a cursor
+    // to drop, so a stray Escape still reaches whatever else wants it.
+    if (e.key === 'Escape') {
+      if (this.state.focusedCell.get()) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.claimGridFocus();
+        this.actions.clearFocusedCell();
+      }
+      return;
+    }
+
     // Ctrl+Z / Cmd+Z → undo
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
@@ -339,6 +349,45 @@ export class KeyboardNavigator {
   // =========================================
 
   /**
+   * The header controls that currently hold real DOM focus, and where in
+   * that header's control list focus sits — or `null` when focus is not on
+   * one.
+   *
+   * Controls mode is *derived* here rather than stored in a field. A stored
+   * flag has to be cleared on every path that can move focus off the button
+   * — a click elsewhere, Tab, a re-render, a modal restoring focus — and
+   * each missed path desyncs the state machine in a user-visible way:
+   * `Space` sorting the cursor's column instead of pressing the focused
+   * button, `Enter` toggling row selection, `Ctrl+Z` silently dropping the
+   * mode. `document.activeElement` cannot desync, and deriving makes
+   * click-focus and F2 the same state for free — which is also what lets
+   * `ModalHost`'s focus-restore path behave.
+   */
+  private activeControls(): {
+    header: ColumnHeader;
+    controls: HTMLElement[];
+    index: number;
+  } | null {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement) || !this.gridElement.contains(el)) return null;
+    // The grid itself is never one of its headers' controls, and it is what
+    // holds focus for the whole of arrow-key navigation — bail before
+    // walking 266 headers on every cursor keystroke.
+    if (el === this.gridElement) return null;
+    for (const header of this.getColumnHeaders?.() ?? []) {
+      // `contains()` before `getControls()`. This runs on every keystroke,
+      // and `getControls()` resolves computed style per control — asking all
+      // 266 headers of issue #84's table would be ~1,600 style resolutions
+      // per key press.
+      if (!header.getElement().contains(el)) continue;
+      const controls = header.getControls();
+      const index = controls.indexOf(el);
+      return index >= 0 ? { header, controls, index } : null;
+    }
+    return null;
+  }
+
+  /**
    * Move real DOM focus onto the first button of a column header.
    *
    * Returns `false` (and stays out of controls mode) when the header has no
@@ -351,44 +400,42 @@ export class KeyboardNavigator {
     const controls = header?.getControls() ?? [];
     const first = controls[0];
     if (!first) return false;
-    this.controlsColumn = column;
-    first.focus();
+    first.focus({ preventScroll: true });
     return true;
   }
 
-  /** Return focus to the grid and leave controls mode. */
+  /**
+   * Return focus to the grid, which is all that leaving controls mode means
+   * now that the mode is derived from where focus sits.
+   */
   private exitControlsMode(): void {
-    this.controlsColumn = null;
     this.gridElement.focus({ preventScroll: true });
   }
 
   /**
-   * Handle a keystroke while controls mode is active.
+   * Handle a keystroke while a column-header control holds real DOM focus.
    *
-   * Controls mode owns the keyboard: Left/Right cycle the buttons, Escape
-   * exits, Up/Down exit and move the cursor. Enter, Space and Tab fall
-   * through to the browser so the focused button activates natively and Tab
-   * still walks out of the grid; the Ctrl/Cmd shortcuts fall through to the
-   * grid handler.
+   * That control owns the keyboard: Left/Right cycle the buttons, Escape
+   * exits, Up/Down exit and move the cursor, and the Ctrl/Cmd shortcuts are
+   * serviced here. Everything else — Enter, Space, Tab — is left entirely
+   * alone so the browser performs its default: activating the focused
+   * button, or walking focus out of the grid.
    *
    * @returns `true` when the caller should stop processing this event.
    */
   private handleControlsModeKey(e: KeyboardEvent): boolean {
-    if (this.controlsColumn === null) return false;
-
-    const header = this.findHeader(this.controlsColumn);
-    const controls = header?.getControls() ?? [];
-    const index = controls.findIndex((el) => el === document.activeElement);
-    if (index < 0) {
-      // Focus left the header (Tab out, a re-render, a click elsewhere).
-      // Drop the mode without stealing the keystroke.
-      this.controlsColumn = null;
-      return false;
-    }
+    const active = this.activeControls();
+    if (!active) return false;
+    const { controls, index } = active;
 
     // Undo / redo / copy keep working — they were table-wide before F2
-    // existed and a header button is no reason to drop them.
-    if (e.ctrlKey || e.metaKey) return false;
+    // existed and a header button is no reason to drop them. Serviced here
+    // instead of falling through to the grid handler, which would pull DOM
+    // focus off the button and drop the user out of controls mode.
+    if (e.ctrlKey || e.metaKey) {
+      this.handleShortcut(e);
+      return true;
+    }
 
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -409,7 +456,7 @@ export class KeyboardNavigator {
       e.preventDefault();
       const delta = e.key === 'ArrowLeft' ? -1 : 1;
       const next = (index + delta + controls.length) % controls.length;
-      controls[next]!.focus();
+      controls[next]!.focus({ preventScroll: true });
       return true;
     }
 
@@ -440,7 +487,19 @@ export class KeyboardNavigator {
     return this.getEffectiveRowCount() - 1;
   }
 
-  private moveFocus(deltaRow: number, deltaCol: number): void {
+  /**
+   * Move the cursor by a relative offset.
+   *
+   * @param opts.enterHeaderRow - Whether the move may land on the header row.
+   *   `false` for the page keys: a page jump is a body-scrolling gesture, so
+   *   PageUp near the top of the data stops at row 0 rather than overshooting
+   *   into the sticky header. The header stays an ArrowUp away.
+   */
+  private moveFocus(
+    deltaRow: number,
+    deltaCol: number,
+    opts: { enterHeaderRow?: boolean } = {},
+  ): void {
     const visibleColumns = this.state.visibleColumns.get();
     if (visibleColumns.length === 0) return;
 
@@ -460,7 +519,14 @@ export class KeyboardNavigator {
     // HEADER_ROW_INDEX is the top of the cursor space: ArrowUp from body row 0
     // lands on the header, ArrowDown from the header lands on body row 0, and
     // with zero rows the header is the only position that exists.
-    row = Math.max(HEADER_ROW_INDEX, Math.min(this.lastBodyRow(), row + deltaRow));
+    //
+    // When the header is off-limits the floor is body row 0 — unless the
+    // cursor already sits on the header, where holding it there is the only
+    // sane reading of PageUp, or unless there are no body rows at all.
+    const highest = this.lastBodyRow();
+    const lowest =
+      opts.enterHeaderRow === false ? Math.min(0, row, highest) : (HEADER_ROW_INDEX as number);
+    row = Math.max(lowest, Math.min(highest, row + deltaRow));
     colIdx = Math.max(0, Math.min(visibleColumns.length - 1, colIdx + deltaCol));
 
     // colIdx is bounded by the visibleColumns length above.
@@ -468,6 +534,13 @@ export class KeyboardNavigator {
   }
 
   private setFocusAbsolute(row: number, column: string): void {
+    // Every cursor move funnels through here, which makes it the one place
+    // that needs `.dt-grid` to hold real focus — `aria-activedescendant`
+    // only describes the cursor while the element declaring it is focused,
+    // and a click parks focus on whatever inert cell it hit. Claiming here
+    // rather than up front in the dispatcher is what keeps branches that do
+    // not move the cursor (Tab above all) from stealing focus.
+    this.claimGridFocus();
     this.actions.setFocusedCell({ row, column });
     this.scrollFocusedCellIntoView(row, column);
   }

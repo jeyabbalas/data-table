@@ -21,9 +21,9 @@
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
  *   root entry · ESM                7.65 kB   →   8.1 kB cap (5.9 %)
- *   advanced entry · ESM            2.42 kB   →   2.6 kB cap (7.4 %)
- *   stylesheet                     16.94 kB   →  17.8 kB cap (5.1 %)
- *   lazy ExportDialog chunk        67.58 kB   →  71 kB   cap (5.1 %)
+ *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
+ *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
+ *   lazy ExportDialog chunk        69.91 kB   →  74 kB   cap (5.8 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
  *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
@@ -34,10 +34,22 @@
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
  *
- * The stylesheet baseline moved 16.22 → 16.94 kB with the ARIA-grid keyboard
- * fix (issue #84): a `.dt-grid` layout block, a `:focus-visible` ring for it,
- * and the header-row cursor ring. Its cap moved with it to keep the usual
- * ~5 % headroom rather than leaving the next CSS change to trip the gate.
+ * Stylesheet history. The line above previously read 16.94 kB; that figure was
+ * never measured — the real size at that commit was 17.11 kB, so the gate had
+ * ~0.7 kB less headroom than it advertised. The accessibility follow-up to
+ * issue #84 then took it 17.11 → 18.66 kB: darker contrast tokens, the
+ * roving-tabindex toolbars, and clipping the two scrollable regions that had
+ * no focusable content.
+ *
+ * Worth knowing before the next CSS budget conversation: essentially all of
+ * that 1.55 kB is *comment prose*, not rules. `buildStylesPlugin` in
+ * `vite.config.ts` concatenates `src/styles/*.css` verbatim with no
+ * minification, so every explanatory comment ships to users. Stripped of
+ * comments the same stylesheet is 7.98 kB brotli — 57 % smaller, and the
+ * rule payload actually shrank by ~30 bytes across this change. Minifying in
+ * that concat step would make this budget a measure of CSS rather than of
+ * documentation; it is deliberately left alone here because it changes
+ * published output.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -58,12 +70,12 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '17.8 kB',
+    limit: '19.6 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '71 kB',
+    limit: '74 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

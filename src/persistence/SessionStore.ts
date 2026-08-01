@@ -228,7 +228,9 @@ export interface SessionStoreOptions {
 
 /**
  * IndexedDB-backed persistence store for `SessionSnapshot` records, keyed by
- * `tableName` (which defaults to the table's `instanceId`).
+ * `tableName` — the loader-assigned DuckDB table name unless a `tableName` was
+ * passed to `loadData()`. Not the table's `instanceId`, which is a DOM-id
+ * qualifier and carries a fresh random suffix on every construction.
  *
  * `createDataTable()` constructs and manages one internally when
  * `persistence: true` (default). Construct your own to share one store

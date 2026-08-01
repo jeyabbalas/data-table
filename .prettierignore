@@ -2,6 +2,8 @@ node_modules
 dist
 demo-dist
 coverage
+playwright-report
+test-results
 docs/api
 package-lock.json
 tests/fixtures/datasets

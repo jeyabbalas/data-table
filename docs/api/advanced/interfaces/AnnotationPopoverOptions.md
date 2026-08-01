@@ -6,7 +6,7 @@
 
 # Interface: AnnotationPopoverOptions
 
-Defined in: [table/AnnotationPopover.ts:50](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/AnnotationPopover.ts#L50)
+Defined in: [table/AnnotationPopover.ts:50](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/table/AnnotationPopover.ts#L50)
 
 Options accepted by [AnnotationPopover](../classes/AnnotationPopover.md).
 
@@ -16,7 +16,7 @@ Options accepted by [AnnotationPopover](../classes/AnnotationPopover.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/AnnotationPopover.ts:52](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/AnnotationPopover.ts#L52)
+Defined in: [table/AnnotationPopover.ts:52](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/table/AnnotationPopover.ts#L52)
 
 CSS class prefix (default: `'dt'`).
 
@@ -26,6 +26,6 @@ CSS class prefix (default: `'dt'`).
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [table/AnnotationPopover.ts:54](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/table/AnnotationPopover.ts#L54)
+Defined in: [table/AnnotationPopover.ts:54](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/table/AnnotationPopover.ts#L54)
 
 Where to mount the popover element. Defaults to `document.body`.

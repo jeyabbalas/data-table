@@ -23,9 +23,12 @@ Start new guides by copying [`_TEMPLATE.md`](./_TEMPLATE.md).
 
 ## Available migrations
 
-| From                                                          | To  | Released | Guide |
-| ------------------------------------------------------------- | --- | -------- | ----- |
-| _v0.1 is the first release — no predecessor to migrate from._ |     |          |       |
+| From   | To     | Released      | Guide                                                                                                           |
+| ------ | ------ | ------------- | --------------------------------------------------------------------------------------------------------------- |
+| `v0.5` | `v0.6` | see CHANGELOG | [`from-0.5-to-0.6.md`](./from-0.5-to-0.6.md) — ARIA grid moves to `.dt-grid`; `role="cell"` → `role="gridcell"` |
+
+Pre-`v0.5` breaking changes were tracked per review phase rather than per
+version; those guides are the `phase-*.md` files in this directory.
 
 ## See also
 

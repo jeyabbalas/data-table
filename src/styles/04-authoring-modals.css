@@ -240,12 +240,13 @@
   color: var(--dt-text);
 }
 
+/* Ink inverts with the fill — see `.dt-filter-chip-remove:hover` (02-shell). */
 .dt-derived-modal-create {
   padding: 0.375rem 1rem;
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
-  color: var(--dt-on-error);
+  color: var(--dt-bg);
   font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
   font-weight: 500;
@@ -266,13 +267,15 @@
   cursor: not-allowed;
 }
 
-/* General error area */
+/* General error area. --dt-error-text-strong in both schemes: it is the token
+   cut for error text on --dt-error-bg, red-600 (the fill red) manages only
+   4.41:1 on the light tint, and one token retires the dark-mode override. */
 .dt-derived-modal-error {
   padding: 0.375rem 0.5rem;
   background: var(--dt-error-bg);
   border: 1px solid var(--dt-error-border-soft);
   border-radius: var(--dt-radius-sm);
-  color: var(--dt-error-dark);
+  color: var(--dt-error-text-strong);
   font-size: var(--dt-font-size-sm);
   display: none;
 }
@@ -297,9 +300,6 @@
   .dt-root:not([data-dt-color-scheme='light']) .dt-add-column-btn:hover {
     background: var(--dt-primary-alpha-10);
   }
-  .dt-derived-modal-backdrop:not([data-dt-color-scheme='light']) .dt-derived-modal-error {
-    color: var(--dt-error-text-strong);
-  }
 }
 .dt-derived-modal-backdrop[data-dt-color-scheme='dark'] {
   background: var(--dt-backdrop);
@@ -313,10 +313,6 @@
 .dt-root[data-dt-color-scheme='dark'] .dt-add-column-btn:hover {
   background: var(--dt-primary-alpha-10);
 }
-.dt-derived-modal-backdrop[data-dt-color-scheme='dark'] .dt-derived-modal-error {
-  color: var(--dt-error-text-strong);
-}
-
 /* ===========================================
    SQL Filter Expression Modal
    =========================================== */
@@ -590,7 +586,7 @@
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
-  color: var(--dt-on-error);
+  color: var(--dt-bg);
   font-family: var(--dt-font-family);
   font-size: var(--dt-font-size-sm);
   font-weight: 500;

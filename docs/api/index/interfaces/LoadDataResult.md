@@ -6,7 +6,7 @@
 
 # Interface: LoadDataResult
 
-Defined in: [data/WorkerBridge.ts:41](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/data/WorkerBridge.ts#L41)
+Defined in: [data/WorkerBridge.ts:41](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/data/WorkerBridge.ts#L41)
 
 Outcome of a successful [WorkerBridge.loadData](../classes/WorkerBridge.md#loaddata): the DuckDB table
 name, the row count, the column-name list, and the resolved schema.
@@ -18,7 +18,7 @@ Internally maps to the public `loadComplete` event payload.
 
 > **columns**: `string`[]
 
-Defined in: [data/WorkerBridge.ts:44](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/data/WorkerBridge.ts#L44)
+Defined in: [data/WorkerBridge.ts:44](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/data/WorkerBridge.ts#L44)
 
 ***
 
@@ -26,7 +26,7 @@ Defined in: [data/WorkerBridge.ts:44](https://github.com/jeyabbalas/data-table/b
 
 > **rowCount**: `number`
 
-Defined in: [data/WorkerBridge.ts:43](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/data/WorkerBridge.ts#L43)
+Defined in: [data/WorkerBridge.ts:43](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/data/WorkerBridge.ts#L43)
 
 ***
 
@@ -34,7 +34,7 @@ Defined in: [data/WorkerBridge.ts:43](https://github.com/jeyabbalas/data-table/b
 
 > **schema**: [`ColumnSchema`](ColumnSchema.md)[]
 
-Defined in: [data/WorkerBridge.ts:45](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/data/WorkerBridge.ts#L45)
+Defined in: [data/WorkerBridge.ts:45](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/data/WorkerBridge.ts#L45)
 
 ***
 
@@ -42,4 +42,4 @@ Defined in: [data/WorkerBridge.ts:45](https://github.com/jeyabbalas/data-table/b
 
 > **tableName**: `string`
 
-Defined in: [data/WorkerBridge.ts:42](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/data/WorkerBridge.ts#L42)
+Defined in: [data/WorkerBridge.ts:42](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/data/WorkerBridge.ts#L42)

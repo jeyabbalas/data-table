@@ -132,7 +132,9 @@
   align-items: center;
   justify-content: center;
   background: var(--dt-primary);
-  color: white;
+  /* Ink inverts with the fill (see 02-shell.css); at 0.55rem this is the
+     smallest type in the library and has the least room to spare. */
+  color: var(--dt-bg);
   font-size: 0.55rem;
   font-weight: 600;
   min-width: 12px;

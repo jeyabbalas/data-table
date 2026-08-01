@@ -40,9 +40,13 @@ NYC taxi `nyc_taxi.parquet` fixture, loaded once at startup via `sourceFormat: '
    `passenger_count`, `payment_type`, `tpep_pickup_datetime`) — the
    popover appears within ~120 ms. The span (not the rest of the
    header) is the anchor.
-3. Tab into an annotated header — `tabindex="0"` is added when the
-   override is set, so keyboard users can reach the popover. Press
-   Escape to dismiss.
+3. Reach an annotated header from the keyboard — `↑` from the first body
+   row puts the grid cursor on the header row, `←` / `→` walk to the
+   column, `F2` moves focus into that header's controls, and `←` / `→`
+   cycle to the column-name span. The span receives `tabindex="-1"` only
+   while an override is set, which puts it in the `F2` cycle rather than
+   in the page's tab order. The popover opens on focus; Escape dismisses
+   it and hands focus back to the grid.
 4. Click **Rich tooltip on `total_amount`**, **Enum tooltip on
    `payment_type`**, **String shorthand on `fare_amount`** — each
    demonstrates one shape of tooltip in isolation.

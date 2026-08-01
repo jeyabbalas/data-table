@@ -132,8 +132,8 @@ values declared on `:root`; dark-mode variants apply automatically under
 
 | Variable                | Role                                                    | Light default | Dark default |
 | ----------------------- | ------------------------------------------------------- | ------------- | ------------ |
-| `--dt-primary`          | Accent colour for focused UI, buttons, sort indicators. | `#2563eb`     | `#3b82f6`    |
-| `--dt-primary-hover`    | Hover state for `--dt-primary`.                         | `#1d4ed8`     | `#60a5fa`    |
+| `--dt-primary`          | Accent colour for focused UI, buttons, sort indicators. | `#2563eb`     | `#60a5fa`    |
+| `--dt-primary-hover`    | Hover state for `--dt-primary`.                         | `#1d4ed8`     | `#93c5fd`    |
 | `--dt-primary-light`    | Light wash behind active rows / filters.                | `#eff6ff`     | `#1e3a5f`    |
 | `--dt-primary-lighter`  | Lighter wash for selected-row backgrounds.              | `#dbeafe`     | `#1e40af`    |
 | `--dt-primary-alpha-10` | 10% alpha of `--dt-primary` (derived via `color-mix`).  | —             | —            |
@@ -146,7 +146,7 @@ values declared on `:root`; dark-mode variants apply automatically under
 | `--dt-neutral`          | Neutral slate for ValueCounts "Other" category.         | `#94a3b8`     | `#64748b`    |
 | `--dt-neutral-hover`    | Hover state for `--dt-neutral`.                         | `#64748b`     | `#94a3b8`    |
 | `--dt-neutral-soft`     | Soft translucent version of `--dt-neutral` (derived).   | —             | —            |
-| `--dt-success`          | Success indicator colour (validated SQL, etc.).         | `#22c55e`     | `#4ade80`    |
+| `--dt-success`          | Success indicator colour (validated SQL, etc.).         | `#15803d`     | `#4ade80`    |
 
 The four `--dt-primary-alpha-*` and the three `*-soft` tokens are computed
 from their base tokens via `color-mix()`. Overriding the base cascades to
@@ -168,18 +168,18 @@ all derivatives automatically — you don't need to redeclare them.
 | Variable              | Role                                  | Light default | Dark default |
 | --------------------- | ------------------------------------- | ------------- | ------------ |
 | `--dt-text`           | Default text colour.                  | `#111827`     | `#f9fafb`    |
-| `--dt-text-secondary` | Secondary / caption text.             | `#6b7280`     | `#d1d5db`    |
-| `--dt-text-tertiary`  | Tertiary / placeholder text.          | `#9ca3af`     | `#9ca3af`    |
-| `--dt-arrow-default`  | Idle colour for sort / expand icons.  | `#d1d5db`     | `#4b5563`    |
-| `--dt-arrow-hover`    | Hover colour for sort / expand icons. | `#9ca3af`     | `#6b7280`    |
+| `--dt-text-secondary` | Secondary / caption text.             | `#374151`     | `#d1d5db`    |
+| `--dt-text-tertiary`  | Tertiary / placeholder text.          | `#4b5563`     | `#b8bfc9`    |
+| `--dt-arrow-default`  | Idle colour for sort / expand icons.  | `#6b7280`     | `#9ca3af`    |
+| `--dt-arrow-hover`    | Hover colour for sort / expand icons. | `#4b5563`     | `#d1d5db`    |
 
 ### Error / validation
 
 | Variable                 | Role                                        | Light default | Dark default |
 | ------------------------ | ------------------------------------------- | ------------- | ------------ |
-| `--dt-error`             | Base error colour.                          | `#ef4444`     | `#f87171`    |
-| `--dt-error-dark`        | Darker error accent (button hover, text).   | `#dc2626`     | `#ef4444`    |
-| `--dt-error-darker`      | Strongest error accent.                     | `#b91c1c`     | `#dc2626`    |
+| `--dt-error`             | Base error colour.                          | `#dc2626`     | `#f87171`    |
+| `--dt-error-dark`        | Darker error accent (button hover, text).   | `#dc2626`     | `#dc2626`    |
+| `--dt-error-darker`      | Strongest error accent.                     | `#b91c1c`     | `#b91c1c`    |
 | `--dt-error-soft`        | Soft translucent error wash (derived).      | —             | —            |
 | `--dt-error-bg`          | Error surface background (banners, panels). | `#fef2f2`     | `#451a1a`    |
 | `--dt-error-border-soft` | Soft border for error banners.              | `#fecaca`     | `#7f1d1d`    |
@@ -217,10 +217,10 @@ all derivatives automatically — you don't need to redeclare them.
 
 ### Syntax highlighting
 
-| Variable             | Light default | Dark default | Role                               |
-| -------------------- | ------------- | ------------ | ---------------------------------- |
-| `--dt-syntax-string` | `#16a34a`     | `#4ade80`    | String literals in the SQL editor. |
-| `--dt-syntax-type`   | `#9333ea`     | `#c084fc`    | Type keywords in the SQL editor.   |
+| Variable             | Role                               | Light default | Dark default |
+| -------------------- | ---------------------------------- | ------------- | ------------ |
+| `--dt-syntax-string` | String literals in the SQL editor. | `#15803d`     | `#4ade80`    |
+| `--dt-syntax-type`   | Type keywords in the SQL editor.   | `#9333ea`     | `#c084fc`    |
 
 ### Stacking ladder
 
@@ -276,9 +276,9 @@ no rebuild step.
 | `--dt-annotation-info-fg`          | Info-severity text on tinted surfaces.                                                                                                     | `#003e66`     | `#93c5fd`    |
 | `--dt-annotation-info-bg`          | Info-severity surface tint.                                                                                                                | `#d6ecfa`     | `#0f2a44`    |
 | `--dt-annotation-info-bdr`         | Info-severity accent.                                                                                                                      | `#2687c7`     | `#2687c7`    |
-| `--dt-annotation-error-bg-hover`   | Hover surface for error-tinted cells. Derived from `-bg` + `-bdr` via `color-mix`; overriding the base tokens flows through automatically. | derived       | derived      |
-| `--dt-annotation-warning-bg-hover` | Hover surface for warning-tinted cells. Derived from `-bg` + `-bdr`.                                                                       | derived       | derived      |
-| `--dt-annotation-info-bg-hover`    | Hover surface for info-tinted cells. Derived from `-bg` + `-bdr`.                                                                          | derived       | derived      |
+| `--dt-annotation-error-bg-hover`   | Hover surface for error-tinted cells. Derived from `-bg` + `-bdr` via `color-mix`; overriding the base tokens flows through automatically. | —             | —            |
+| `--dt-annotation-warning-bg-hover` | Hover surface for warning-tinted cells. Derived from `-bg` + `-bdr`.                                                                       | —             | —            |
+| `--dt-annotation-info-bg-hover`    | Hover surface for info-tinted cells. Derived from `-bg` + `-bdr`.                                                                          | —             | —            |
 
 ### Internal
 

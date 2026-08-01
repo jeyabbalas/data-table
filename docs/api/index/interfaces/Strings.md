@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L337)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -32,6 +32,157 @@ Word used inside `sortedBy` descriptions and header labels.
 #### cannotHideLastColumn
 
 > **cannotHideLastColumn**: `string`
+
+#### columnLayoutCancelled
+
+> **columnLayoutCancelled**: (`column`) => `string`
+
+Live-region: Escape restored the entry width and position.
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### columnLayoutCommitted
+
+> **columnLayoutCommitted**: (`column`) => `string`
+
+Live-region: Enter (or leaving the grid) committed the gesture.
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### columnLayoutModeEntered
+
+> **columnLayoutModeEntered**: (`column`) => `string`
+
+Column layout mode (`Shift+F2` on a column header) — the keyboard
+gesture for resize and reorder. The entry announcement is the only
+place the key map is spoken aloud, so it doubles as the mode's
+discoverability affordance; keep the key names in a translation.
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### columnMoveBlockedPinned
+
+> **columnMoveBlockedPinned**: (`column`) => `string`
+
+Live-region: a move was refused because the column is pinned.
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### columnMovedAnnouncement
+
+> **columnMovedAnnouncement**: (`column`, `position`, `total`) => `string`
+
+Live-region: the column's new 1-based position after a move.
+
+##### Parameters
+
+###### column
+
+`string`
+
+###### position
+
+`number`
+
+###### total
+
+`number`
+
+##### Returns
+
+`string`
+
+#### columnWidthAnnouncement
+
+> **columnWidthAnnouncement**: (`column`, `px`) => `string`
+
+Live-region: the column's new width after a resize step.
+
+##### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+##### Returns
+
+`string`
+
+#### columnWidthAtMaximum
+
+> **columnWidthAtMaximum**: (`column`, `px`) => `string`
+
+Live-region: resize step landed on the maximum width.
+
+##### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+##### Returns
+
+`string`
+
+#### columnWidthAtMinimum
+
+> **columnWidthAtMinimum**: (`column`, `px`) => `string`
+
+Live-region: resize step landed on the minimum width.
+
+##### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+##### Returns
+
+`string`
 
 #### descending
 
@@ -335,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -399,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/0
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -793,7 +944,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:420](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L420)
+Defined in: [core/Strings.ts:442](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L442)
 
 #### stylesheetMissing
 
@@ -805,7 +956,7 @@ Defined in: [core/Strings.ts:420](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -955,7 +1106,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1595,7 +1746,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1705,7 +1856,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:399](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L399)
+Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L421)
 
 #### allNull
 

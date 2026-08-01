@@ -6,7 +6,7 @@
 
 # Interface: DateHistogramBin
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:26](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/histogram/DateHistogramData.ts#L26)
+Defined in: [visualizations/histogram/DateHistogramData.ts:26](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/visualizations/histogram/DateHistogramData.ts#L26)
 
 A single date histogram bin with date range and count
 
@@ -16,7 +16,7 @@ A single date histogram bin with date range and count
 
 > **binEnd**: `Date`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:30](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/histogram/DateHistogramData.ts#L30)
+Defined in: [visualizations/histogram/DateHistogramData.ts:30](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/visualizations/histogram/DateHistogramData.ts#L30)
 
 End of the bin (exclusive) - computed from interval
 
@@ -26,7 +26,7 @@ End of the bin (exclusive) - computed from interval
 
 > **binStart**: `Date`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:28](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/histogram/DateHistogramData.ts#L28)
+Defined in: [visualizations/histogram/DateHistogramData.ts:28](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/visualizations/histogram/DateHistogramData.ts#L28)
 
 Start of the bin (truncated timestamp)
 
@@ -36,6 +36,6 @@ Start of the bin (truncated timestamp)
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:32](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/histogram/DateHistogramData.ts#L32)
+Defined in: [visualizations/histogram/DateHistogramData.ts:32](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/visualizations/histogram/DateHistogramData.ts#L32)
 
 Number of values in this bin

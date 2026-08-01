@@ -6,7 +6,7 @@
 
 # Interface: NumericColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L30)
+Defined in: [statistics/ColumnStatsTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L30)
 
 Stats for numeric columns (integer, float, decimal).
 Line 2: "min 0 · med 42 · max 1.2K"
@@ -21,7 +21,7 @@ Line 2: "min 0 · med 42 · max 1.2K"
 
 > **distinctCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L35)
+Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L35)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/da
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -43,7 +43,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"numeric"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L31)
+Defined in: [statistics/ColumnStatsTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L31)
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:31](https://github.com/jeyabbalas/da
 
 > **max**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L33)
+Defined in: [statistics/ColumnStatsTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L33)
 
 ***
 
@@ -59,7 +59,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:33](https://github.com/jeyabbalas/da
 
 > **median**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L34)
+Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L34)
 
 ***
 
@@ -67,7 +67,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/da
 
 > **min**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L32)
+Defined in: [statistics/ColumnStatsTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L32)
 
 ***
 
@@ -75,7 +75,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:32](https://github.com/jeyabbalas/da
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -89,7 +89,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -103,7 +103,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

@@ -139,6 +139,7 @@
 - [applySnapshot](functions/applySnapshot.md)
 - [buildCompletionContext](functions/buildCompletionContext.md)
 - [captureSnapshot](functions/captureSnapshot.md)
+- [clampUnpinnedIndex](functions/clampUnpinnedIndex.md)
 - [copyRowsToClipboard](functions/copyRowsToClipboard.md)
 - [copyToClipboard](functions/copyToClipboard.md)
 - [createSqlExtensions](functions/createSqlExtensions.md)

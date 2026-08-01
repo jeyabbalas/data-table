@@ -8,6 +8,6 @@
 
 > **AnnotationSeverity** = `"error"` \| `"warning"` \| `"info"`
 
-Defined in: [annotations/types.ts:26](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/annotations/types.ts#L26)
+Defined in: [annotations/types.ts:26](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/annotations/types.ts#L26)
 
 Severity of an annotation. Fixed three-level set; ordering error > warning > info.

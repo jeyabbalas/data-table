@@ -6,7 +6,7 @@
 
 # Class: StateActions
 
-Defined in: [core/Actions.ts:107](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L107)
+Defined in: [core/Actions.ts:107](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L107)
 
 StateActions class provides methods to manipulate TableState.
 
@@ -46,7 +46,7 @@ await table.actions.addDerivedColumn({
 
 > **new StateActions**(`state`, `bridge`, `undoManager?`): `StateActions`
 
-Defined in: [core/Actions.ts:127](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L127)
+Defined in: [core/Actions.ts:128](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L128)
 
 #### Parameters
 
@@ -72,7 +72,7 @@ Defined in: [core/Actions.ts:127](https://github.com/jeyabbalas/data-table/blob/
 
 > **addDerivedColumn**(`def`): `Promise`\<\{ `error?`: `string`; `success`: `boolean`; \}\>
 
-Defined in: [core/Actions.ts:1223](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1223)
+Defined in: [core/Actions.ts:1305](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1305)
 
 Add a derived column (expression or vector).
 Validates name uniqueness, creates VIEW, updates state.
@@ -93,7 +93,7 @@ Validates name uniqueness, creates VIEW, updates state.
 
 > **addFilter**(`filter`): `void`
 
-Defined in: [core/Actions.ts:532](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L532)
+Defined in: [core/Actions.ts:614](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L614)
 
 Add or update a filter
 
@@ -115,7 +115,7 @@ If a filter for the same column exists, it will be replaced.
 
 > **addRawSQLFilter**(`sql`, `label?`): `string`
 
-Defined in: [core/Actions.ts:616](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L616)
+Defined in: [core/Actions.ts:698](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L698)
 
 Add a raw SQL filter. Does NOT re-validate — caller is responsible
 for validation (see [validateSQLFilter](#validatesqlfilter)). Creates a RawSQLFilter
@@ -153,7 +153,7 @@ The filter's unique id
 
 > **addToSort**(`column`): `void`
 
-Defined in: [core/Actions.ts:763](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L763)
+Defined in: [core/Actions.ts:845](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L845)
 
 Add column to multi-sort (Shift+click behavior)
 
@@ -171,18 +171,86 @@ If column is already in sort, toggles its direction or removes it.
 
 ***
 
-### beginColumnWidthChange()
+### beginColumnLayoutChange()
 
-> **beginColumnWidthChange**(): `void`
+> **beginColumnLayoutChange**(): `void`
 
-Defined in: [core/Actions.ts:339](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L339)
+Defined in: [core/Actions.ts:368](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L368)
 
-Begin a column width drag sequence.
-Captures state once at drag start for undo.
+Open a column-layout gesture: the whole of it becomes one undo entry.
+
+A gesture is any run of width and order changes the user reads as a single
+action — a resize drag, or a keyboard `Shift+F2` session that resizes and
+moves a column before committing. Captures the pre-gesture state once and
+suppresses nested capture, so the ten `setColumnWidth` calls a drag emits
+(or the ten `setColumnOrder` calls a keyboard move emits) do not become ten
+undo steps. Close it with [StateActions.endColumnLayoutChange](#endcolumnlayoutchange) or
+[StateActions.cancelColumnLayoutChange](#cancelcolumnlayoutchange).
+
+Captures even when undo is disabled — the snapshot is what
+`cancelColumnLayoutChange()` restores from, which has to work regardless.
+Calling it twice without closing keeps the first (outermost) snapshot.
 
 #### Returns
 
 `void`
+
+#### Example
+
+```typescript
+actions.beginColumnLayoutChange();
+actions.setColumnWidth('price', 220);
+actions.setColumnOrder(['price', 'name', 'qty']);
+actions.endColumnLayoutChange(); // one Ctrl+Z undoes both
+```
+
+#### Throws
+
+`DestroyedError` if the table was destroyed.
+
+***
+
+### beginColumnWidthChange()
+
+> **beginColumnWidthChange**(): `void`
+
+Defined in: [core/Actions.ts:423](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L423)
+
+Begin a column width drag sequence.
+Captures state once at drag start for undo.
+
+A width drag is one flavour of column-layout gesture; this delegates so
+the mouse path picks up the "push only if something changed" guard too.
+
+#### Returns
+
+`void`
+
+#### Throws
+
+`DestroyedError` if the table was destroyed.
+
+***
+
+### cancelColumnLayoutChange()
+
+> **cancelColumnLayoutChange**(): `void`
+
+Defined in: [core/Actions.ts:405](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L405)
+
+Abandon an open column-layout gesture, restoring the state it opened on.
+
+The `Escape` half of the keyboard gesture: width **and** position go back
+to what they were at entry, and nothing is pushed onto the undo stack —
+a cancelled gesture never happened. No-op when no gesture is open.
+
+#### Returns
+
+`void`
+
+#### Throws
+
+`DestroyedError` if the table was destroyed.
 
 ***
 
@@ -190,7 +258,7 @@ Captures state once at drag start for undo.
 
 > **clearFilters**(): `void`
 
-Defined in: [core/Actions.ts:567](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L567)
+Defined in: [core/Actions.ts:649](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L649)
 
 Clear all filters
 
@@ -204,7 +272,7 @@ Clear all filters
 
 > **clearFocusedCell**(): `void`
 
-Defined in: [core/Actions.ts:1937](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1937)
+Defined in: [core/Actions.ts:2019](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L2019)
 
 Clear focused cell.
 
@@ -218,7 +286,7 @@ Clear focused cell.
 
 > **clearSelection**(): `void`
 
-Defined in: [core/Actions.ts:1883](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1883)
+Defined in: [core/Actions.ts:1965](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1965)
 
 Clear all row selection
 
@@ -232,7 +300,7 @@ Clear all row selection
 
 > **clearSort**(): `void`
 
-Defined in: [core/Actions.ts:790](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L790)
+Defined in: [core/Actions.ts:872](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L872)
 
 Clear all sorting
 
@@ -242,18 +310,47 @@ Clear all sorting
 
 ***
 
-### endColumnWidthChange()
+### endColumnLayoutChange()
 
-> **endColumnWidthChange**(): `void`
+> **endColumnLayoutChange**(): `void`
 
-Defined in: [core/Actions.ts:349](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L349)
+Defined in: [core/Actions.ts:386](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L386)
 
-End a column width drag sequence.
-Pushes the pre-drag snapshot to the undo stack.
+Commit an open column-layout gesture, pushing one undo entry.
+
+The entry is pushed **only if the state actually changed** — a mousedown
+and mouseup on the resize handle with no movement in between, or a
+`Shift+F2` the user immediately commits, leaves the undo stack alone
+rather than adding a step that undoes to an identical state. No-op when
+no gesture is open.
 
 #### Returns
 
 `void`
+
+#### Throws
+
+`DestroyedError` if the table was destroyed.
+
+***
+
+### endColumnWidthChange()
+
+> **endColumnWidthChange**(): `void`
+
+Defined in: [core/Actions.ts:434](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L434)
+
+End a column width drag sequence.
+Pushes the pre-drag snapshot to the undo stack, unless the drag was a
+no-op.
+
+#### Returns
+
+`void`
+
+#### Throws
+
+`DestroyedError` if the table was destroyed.
 
 ***
 
@@ -261,7 +358,7 @@ Pushes the pre-drag snapshot to the undo stack.
 
 > **getColumnHeaderTooltip**(`column`): [`ColumnHeaderTooltipContent`](../../index/interfaces/ColumnHeaderTooltipContent.md) \| `null`
 
-Defined in: [core/Actions.ts:1119](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1119)
+Defined in: [core/Actions.ts:1201](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1201)
 
 Get the app-controlled tooltip content for a column header, or `null`
 if unset. Always returns the normalized object form, even when the
@@ -283,7 +380,7 @@ setter was called with the string shorthand.
 
 > **getColumnValues**(`name`, `opts?`): `Promise`\<`unknown`[] \| `Int32Array`\<`ArrayBufferLike`\> \| `Float64Array`\<`ArrayBufferLike`\> \| `BigInt64Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [core/Actions.ts:1700](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1700)
+Defined in: [core/Actions.ts:1782](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1782)
 
 Return the values of a single column as an in-memory array, honoring the
 current effective table (base or derived-column VIEW), the requested
@@ -364,7 +461,7 @@ const adultAges = await table.actions.getColumnValues('age', { scope: 'filtered'
 
 > **getCompletionContext**(): [`CompletionContext`](../../index/interfaces/CompletionContext.md)
 
-Defined in: [core/Actions.ts:1806](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1806)
+Defined in: [core/Actions.ts:1888](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1888)
 
 Get completion context for expression editor autocompletion.
 
@@ -378,7 +475,7 @@ Get completion context for expression editor autocompletion.
 
 > **getFiltersSQL**(): `string`
 
-Defined in: [core/Actions.ts:718](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L718)
+Defined in: [core/Actions.ts:800](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L800)
 
 Get the complete WHERE clause SQL for all active filters.
 Convenience method for downstream apps that need the raw SQL string.
@@ -393,7 +490,7 @@ Convenience method for downstream apps that need the raw SQL string.
 
 > **getRawSQLFilters**(): [`RawSQLFilter`](../../index/interfaces/RawSQLFilter.md)[]
 
-Defined in: [core/Actions.ts:678](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L678)
+Defined in: [core/Actions.ts:760](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L760)
 
 Get all active raw SQL filters. Convenience getter.
 
@@ -407,7 +504,7 @@ Get all active raw SQL filters. Convenience getter.
 
 > **getUndoManager**(): [`UndoManager`](UndoManager.md) \| `undefined`
 
-Defined in: [core/Actions.ts:357](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L357)
+Defined in: [core/Actions.ts:439](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L439)
 
 Get the UndoManager instance, if one was provided
 
@@ -421,7 +518,7 @@ Get the UndoManager instance, if one was provided
 
 > **hideColumn**(`column`): `void`
 
-Defined in: [core/Actions.ts:803](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L803)
+Defined in: [core/Actions.ts:885](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L885)
 
 Hide a column, recording its neighbors for intelligent restore
 
@@ -441,7 +538,7 @@ Hide a column, recording its neighbors for intelligent restore
 
 > **loadData**(`source`, `options?`): `Promise`\<`void`\>
 
-Defined in: [core/Actions.ts:434](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L434)
+Defined in: [core/Actions.ts:516](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L516)
 
 Load data from a file or URL
 
@@ -472,7 +569,7 @@ Loading options (tableName, format)
 
 > **loadFilterPreset**(`filters`, `sortColumns?`): `void`
 
-Defined in: [core/Actions.ts:579](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L579)
+Defined in: [core/Actions.ts:661](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L661)
 
 Load a filter preset: replace all filters (and optionally sort) in one
 undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
@@ -498,7 +595,7 @@ entire pre-load state atomically.
 
 > **redo**(): `Promise`\<`boolean`\>
 
-Defined in: [core/Actions.ts:295](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L295)
+Defined in: [core/Actions.ts:303](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L303)
 
 Redo the last undone action. Returns true if state was restored.
 Async because derived column changes require DuckDB VIEW reconciliation.
@@ -518,7 +615,7 @@ Async because derived column changes require DuckDB VIEW reconciliation.
 
 > **removeDerivedColumn**(`name`): `Promise`\<`void`\>
 
-Defined in: [core/Actions.ts:1582](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1582)
+Defined in: [core/Actions.ts:1664](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1664)
 
 Remove a derived column.
 Cleans up filters, sorts, pins, then delegates to manager.
@@ -539,7 +636,7 @@ Cleans up filters, sorts, pins, then delegates to manager.
 
 > **removeFilter**(`column`, `type?`): `void`
 
-Defined in: [core/Actions.ts:554](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L554)
+Defined in: [core/Actions.ts:636](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L636)
 
 Remove filter(s) for a column
 
@@ -567,7 +664,7 @@ Optional filter type to remove (if not specified, removes all filters for column
 
 > **removeRawSQLFilter**(`id`): `void`
 
-Defined in: [core/Actions.ts:669](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L669)
+Defined in: [core/Actions.ts:751](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L751)
 
 Remove a raw SQL filter by id.
 Captures undo snapshot before mutation.
@@ -588,7 +685,7 @@ Captures undo snapshot before mutation.
 
 > **replaceDerivedColumn**(`name`, `newDef`): `Promise`\<\{ `info`: [`DerivedColumnInfo`](../interfaces/DerivedColumnInfo.md); `success`: `true`; \} \| \{ `error`: [`DerivedColumnError`](../../index/classes/DerivedColumnError.md); `success`: `false`; \}\>
 
-Defined in: [core/Actions.ts:1481](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1481)
+Defined in: [core/Actions.ts:1563](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1563)
 
 Replace a derived column at the same name with a new definition.
 
@@ -635,7 +732,7 @@ if (!result.success && result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
 
 > **resetColumnWidth**(`column`): `void`
 
-Defined in: [core/Actions.ts:1051](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1051)
+Defined in: [core/Actions.ts:1133](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1133)
 
 Reset column width to default
 
@@ -655,7 +752,7 @@ Reset column width to default
 
 > **resetToInitial**(): `Promise`\<`boolean`\>
 
-Defined in: [core/Actions.ts:369](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L369)
+Defined in: [core/Actions.ts:451](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L451)
 
 Reset to the original state captured at data-load time.
 Clears all filters, sorts, column customizations, derived columns,
@@ -676,7 +773,7 @@ and the undo/redo stacks. Returns true if state was restored.
 
 > **selectAll**(): `void`
 
-Defined in: [core/Actions.ts:1892](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1892)
+Defined in: [core/Actions.ts:1974](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1974)
 
 Select all rows
 
@@ -690,7 +787,7 @@ Select all rows
 
 > **selectRow**(`index`, `mode?`): `void`
 
-Defined in: [core/Actions.ts:1833](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1833)
+Defined in: [core/Actions.ts:1915](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1915)
 
 Select a row
 
@@ -721,7 +818,7 @@ Selection mode:
 
 > **setColumnHeaderTooltip**(`column`, `content`): `void`
 
-Defined in: [core/Actions.ts:1099](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1099)
+Defined in: [core/Actions.ts:1181](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1181)
 
 Set or clear an app-controlled tooltip rendered as a styled popover on
 the column-header name span.
@@ -783,7 +880,7 @@ table.actions.setColumnHeaderTooltip('age', null);
 
 > **setColumnOrder**(`columns`): `void`
 
-Defined in: [core/Actions.ts:958](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L958)
+Defined in: [core/Actions.ts:1040](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1040)
 
 Set the column order
 
@@ -806,7 +903,7 @@ Preserves hidden columns in columnOrder at their relative positions.
 
 > **setColumnWidth**(`column`, `width`): `void`
 
-Defined in: [core/Actions.ts:1041](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1041)
+Defined in: [core/Actions.ts:1123](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1123)
 
 Set column width
 
@@ -830,7 +927,7 @@ Set column width
 
 > **setFocusedCell**(`cell`): `void`
 
-Defined in: [core/Actions.ts:1929](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1929)
+Defined in: [core/Actions.ts:2011](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L2011)
 
 Set focused cell for keyboard navigation. Not undoable.
 
@@ -850,7 +947,7 @@ Set focused cell for keyboard navigation. Not undoable.
 
 > **setHoveredColumn**(`column`): `void`
 
-Defined in: [core/Actions.ts:1917](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1917)
+Defined in: [core/Actions.ts:1999](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1999)
 
 Set hovered column
 
@@ -870,7 +967,7 @@ Set hovered column
 
 > **setHoveredRow**(`index`): `void`
 
-Defined in: [core/Actions.ts:1909](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1909)
+Defined in: [core/Actions.ts:1991](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1991)
 
 Set hovered row
 
@@ -890,7 +987,7 @@ Set hovered row
 
 > **setOnDerivedChange**(`callback`): `void`
 
-Defined in: [core/Actions.ts:198](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L198)
+Defined in: [core/Actions.ts:206](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L206)
 
 Register a callback fired for each derived-column lifecycle event
 (add / remove / update / replace). Used by the DataTable facade to
@@ -912,7 +1009,7 @@ emit the `derivedChange` event with the right `kind` discriminator.
 
 > **setOnFilterRemove**(`callback`): `void`
 
-Defined in: [core/Actions.ts:188](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L188)
+Defined in: [core/Actions.ts:196](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L196)
 
 Set a callback invoked for each column whose filter is removed by undo/redo.
 Use this to clear visualization interaction state (brush, selection) that
@@ -934,7 +1031,7 @@ lives outside the signal-driven state.
 
 > **setSort**(`columns`): `void`
 
-Defined in: [core/Actions.ts:729](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L729)
+Defined in: [core/Actions.ts:811](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L811)
 
 Set sort columns directly
 
@@ -954,7 +1051,7 @@ Set sort columns directly
 
 > **showAllColumns**(): `void`
 
-Defined in: [core/Actions.ts:867](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L867)
+Defined in: [core/Actions.ts:949](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L949)
 
 Show all hidden columns, restoring them in columnOrder
 
@@ -968,7 +1065,7 @@ Show all hidden columns, restoring them in columnOrder
 
 > **showColumn**(`column`): `void`
 
-Defined in: [core/Actions.ts:831](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L831)
+Defined in: [core/Actions.ts:913](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L913)
 
 Show a hidden column using neighbor-aware restore logic
 
@@ -988,7 +1085,7 @@ Show a hidden column using neighbor-aware restore logic
 
 > **toggleColumnPin**(`column`): `void`
 
-Defined in: [core/Actions.ts:1002](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1002)
+Defined in: [core/Actions.ts:1084](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1084)
 
 Toggle column pin status
 
@@ -1012,7 +1109,7 @@ Also updates columnOrder and visibleColumns to reflect the new position.
 
 > **toggleSort**(`column`): `void`
 
-Defined in: [core/Actions.ts:740](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L740)
+Defined in: [core/Actions.ts:822](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L822)
 
 Toggle sort for a single column (cycles: none → asc → desc → none)
 
@@ -1034,7 +1131,7 @@ Replaces any existing sort with the new column.
 
 > **undo**(): `Promise`\<`boolean`\>
 
-Defined in: [core/Actions.ts:245](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L245)
+Defined in: [core/Actions.ts:253](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L253)
 
 Undo the last undoable action. Returns true if state was restored.
 Async because derived column changes require DuckDB VIEW reconciliation.
@@ -1054,7 +1151,7 @@ Async because derived column changes require DuckDB VIEW reconciliation.
 
 > **updateDerivedColumn**(`oldName`, `def`): `Promise`\<\{ `error?`: `string`; `success`: `boolean`; \}\>
 
-Defined in: [core/Actions.ts:1300](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1300)
+Defined in: [core/Actions.ts:1382](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1382)
 
 Update a derived column's expression, name, or values.
 Handles rename (updates all state references) and type change (removes stale filters).
@@ -1079,7 +1176,7 @@ Handles rename (updates all state references) and type change (removes stale fil
 
 > **updateRawSQLFilter**(`id`, `sql`, `label?`): `void`
 
-Defined in: [core/Actions.ts:642](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L642)
+Defined in: [core/Actions.ts:724](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L724)
 
 Update an existing raw SQL filter's SQL and/or label.
 Does NOT re-validate. Finds by id, replaces in state.filters.
@@ -1109,7 +1206,7 @@ Captures undo snapshot before mutation. No-op if filter not found.
 
 > **validateExpression**(`expression`): `Promise`\<\{ `error?`: `string`; `originalType?`: `string`; `type?`: [`DataType`](../../index/type-aliases/DataType.md); `valid`: `boolean`; \}\>
 
-Defined in: [core/Actions.ts:1790](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L1790)
+Defined in: [core/Actions.ts:1872](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L1872)
 
 Validate an expression without adding it. For UI preview.
 
@@ -1134,7 +1231,7 @@ Validate an expression without adding it. For UI preview.
 
 > **validateSQLFilter**(`sql`, `signal?`): `Promise`\<\{ `error?`: `string`; `matchCount?`: `number`; `valid`: `boolean`; \}\>
 
-Defined in: [core/Actions.ts:687](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Actions.ts#L687)
+Defined in: [core/Actions.ts:769](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Actions.ts#L769)
 
 Validate a SQL WHERE clause fragment. Runs the SQL against DuckDB
 and returns validity, match count, and any error message.

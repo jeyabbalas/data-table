@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:804](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/Strings.ts#L804)
+Defined in: [core/Strings.ts:839](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/Strings.ts#L839)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -28,7 +28,7 @@ shape rather than the compile-time type.
 
 #### a11y?
 
-\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `gridLabel?`: `string`; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
+\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `columnLayoutCancelled?`: \{ \}; `columnLayoutCommitted?`: \{ \}; `columnLayoutModeEntered?`: \{ \}; `columnMoveBlockedPinned?`: \{ \}; `columnMovedAnnouncement?`: \{ \}; `columnWidthAnnouncement?`: \{ \}; `columnWidthAtMaximum?`: \{ \}; `columnWidthAtMinimum?`: \{ \}; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `gridLabel?`: `string`; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
 
 #### a11y.ascending?
 
@@ -39,6 +39,57 @@ Word used inside `sortedBy` descriptions and header labels.
 #### a11y.cannotHideLastColumn?
 
 `string`
+
+#### a11y.columnLayoutCancelled?
+
+\{ \}
+
+Live-region: Escape restored the entry width and position.
+
+#### a11y.columnLayoutCommitted?
+
+\{ \}
+
+Live-region: Enter (or leaving the grid) committed the gesture.
+
+#### a11y.columnLayoutModeEntered?
+
+\{ \}
+
+Column layout mode (`Shift+F2` on a column header) — the keyboard
+gesture for resize and reorder. The entry announcement is the only
+place the key map is spoken aloud, so it doubles as the mode's
+discoverability affordance; keep the key names in a translation.
+
+#### a11y.columnMoveBlockedPinned?
+
+\{ \}
+
+Live-region: a move was refused because the column is pinned.
+
+#### a11y.columnMovedAnnouncement?
+
+\{ \}
+
+Live-region: the column's new 1-based position after a move.
+
+#### a11y.columnWidthAnnouncement?
+
+\{ \}
+
+Live-region: the column's new width after a resize step.
+
+#### a11y.columnWidthAtMaximum?
+
+\{ \}
+
+Live-region: resize step landed on the maximum width.
+
+#### a11y.columnWidthAtMinimum?
+
+\{ \}
+
+Live-region: resize step landed on the minimum width.
 
 #### a11y.descending?
 

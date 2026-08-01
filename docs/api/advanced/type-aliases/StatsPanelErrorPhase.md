@@ -8,7 +8,7 @@
 
 > **StatsPanelErrorPhase** = `"construct"` \| `"update"` \| `"hover"` \| `"fetch"` \| `"destroy"`
 
-Defined in: [visualizations/BaseStatsPanel.ts:73](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/BaseStatsPanel.ts#L73)
+Defined in: [visualizations/BaseStatsPanel.ts:73](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/visualizations/BaseStatsPanel.ts#L73)
 
 Stage where a stats-panel error originated. Surfaced on the `error`
 event payload via `context.phase`.

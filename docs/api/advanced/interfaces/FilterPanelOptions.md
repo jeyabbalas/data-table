@@ -6,7 +6,7 @@
 
 # Interface: FilterPanelOptions
 
-Defined in: [filters/FilterPanel.ts:43](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterPanel.ts#L43)
+Defined in: [filters/FilterPanel.ts:43](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterPanel.ts#L43)
 
 Options for FilterPanel
 
@@ -16,7 +16,7 @@ Options for FilterPanel
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterPanel.ts#L45)
+Defined in: [filters/FilterPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterPanel.ts#L45)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +26,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/FilterPanel.ts:52](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterPanel.ts#L52)
+Defined in: [filters/FilterPanel.ts:52](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterPanel.ts#L52)
 
 Element to mirror `data-dt-color-scheme` from (typically the owning
 table's `.dt-root`). Keeps the panel's theming in sync when the table's
@@ -39,6 +39,6 @@ facade).
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPanel.ts:54](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterPanel.ts#L54)
+Defined in: [filters/FilterPanel.ts:54](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterPanel.ts#L54)
 
 Resolved i18n strings. Defaults to English.

@@ -6,7 +6,7 @@
 
 # Interface: WorkerBridgeOptions
 
-Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L51)
+Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L51)
 
 Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
@@ -16,7 +16,7 @@ Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
 > `optional` **cache?**: `Partial`\<[`QueryCacheOptions`](QueryCacheOptions.md)\>
 
-Defined in: [data/WorkerBridge.ts:53](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L53)
+Defined in: [data/WorkerBridge.ts:53](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L53)
 
 Query cache configuration (LRU size, TTL).
 
@@ -26,7 +26,7 @@ Query cache configuration (LRU size, TTL).
 
 > `optional` **duckdbBundles?**: `DuckDBBundles`
 
-Defined in: [data/WorkerBridge.ts:94](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L94)
+Defined in: [data/WorkerBridge.ts:94](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L94)
 
 DuckDB WASM bundles override for offline / self-hosted deployments.
 Forwarded to the worker on init; when omitted the worker falls back
@@ -44,7 +44,7 @@ recommended self-hosting pattern.
 
 > `optional` **initializeTimeoutMs?**: `number`
 
-Defined in: [data/WorkerBridge.ts:59](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L59)
+Defined in: [data/WorkerBridge.ts:59](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L59)
 
 Maximum time (ms) to wait for the worker to signal ready and for
 DuckDB to initialize. Rejects `initialize()` with a descriptive
@@ -56,7 +56,7 @@ error if exceeded. Default: 30000.
 
 > `optional` **workerFactory?**: () => `Worker`
 
-Defined in: [data/WorkerBridge.ts:71](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L71)
+Defined in: [data/WorkerBridge.ts:71](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L71)
 
 Custom worker factory. Takes precedence over [workerUrl](#workerurl) and the
 built-in default. Useful for strict-CSP / bundler-specific deployments
@@ -78,7 +78,7 @@ from end-user input.
 
 > `optional` **workerUrl?**: `string` \| `URL`
 
-Defined in: [data/WorkerBridge.ts:82](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/data/WorkerBridge.ts#L82)
+Defined in: [data/WorkerBridge.ts:82](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/data/WorkerBridge.ts#L82)
 
 Custom URL/path for the worker script. Instantiated via
 `new Worker(workerUrl, { type: 'module' })`. Ignored if

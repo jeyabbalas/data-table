@@ -6,7 +6,7 @@
 
 # Interface: FilterChipOptions
 
-Defined in: [filters/FilterChip.ts:14](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterChip.ts#L14)
+Defined in: [filters/FilterChip.ts:14](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterChip.ts#L14)
 
 Options for FilterChip
 
@@ -16,7 +16,7 @@ Options for FilterChip
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterChip.ts:15](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterChip.ts#L15)
+Defined in: [filters/FilterChip.ts:15](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterChip.ts#L15)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [filters/FilterChip.ts:15](https://github.com/jeyabbalas/data-table/
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterChip.ts:19](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterChip.ts#L19)
+Defined in: [filters/FilterChip.ts:19](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterChip.ts#L19)
 
 Resolved i18n strings. Defaults to English.
 
@@ -34,7 +34,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onEdit?**: () => `void`
 
-Defined in: [filters/FilterChip.ts:17](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterChip.ts#L17)
+Defined in: [filters/FilterChip.ts:17](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterChip.ts#L17)
 
 Called when the chip body is clicked (for editing). Used by raw-sql filter chips.
 

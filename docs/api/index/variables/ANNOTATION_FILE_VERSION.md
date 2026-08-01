@@ -8,6 +8,6 @@
 
 > `const` **ANNOTATION\_FILE\_VERSION**: `1` = `1`
 
-Defined in: [annotations/types.ts:103](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/annotations/types.ts#L103)
+Defined in: [annotations/types.ts:103](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/annotations/types.ts#L103)
 
 Current on-disk version of the annotation file format. Bump if the shape changes.

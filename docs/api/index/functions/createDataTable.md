@@ -8,7 +8,7 @@
 
 > **createDataTable**(`opts`): `Promise`\<[`DataTable`](../interfaces/DataTable.md)\>
 
-Defined in: [DataTable.ts:379](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/DataTable.ts#L379)
+Defined in: [DataTable.ts:409](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/DataTable.ts#L409)
 
 Create a fully-wired data table mounted in `container`.
 
@@ -25,3 +25,9 @@ provided).
 ## Returns
 
 `Promise`\<[`DataTable`](../interfaces/DataTable.md)\>
+
+## Remarks
+
+Size the container before calling this. The table virtualizes
+against the container's height, and an unbounded one silently renders every
+row — see [CreateDataTableOptions.container](../interfaces/CreateDataTableOptions.md#container).

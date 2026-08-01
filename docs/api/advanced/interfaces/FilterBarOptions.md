@@ -6,7 +6,7 @@
 
 # Interface: FilterBarOptions
 
-Defined in: [filters/FilterBar.ts:18](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L18)
+Defined in: [filters/FilterBar.ts:18](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L18)
 
 Options for FilterBar
 
@@ -16,7 +16,7 @@ Options for FilterBar
 
 > `optional` **alwaysShow?**: `boolean`
 
-Defined in: [filters/FilterBar.ts:26](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L26)
+Defined in: [filters/FilterBar.ts:26](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L26)
 
 When true, the filter bar is always visible (shows expression filter button even with no filters). Default: false.
 
@@ -26,7 +26,7 @@ When true, the filter bar is always visible (shows expression filter button even
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterBar.ts:20](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L20)
+Defined in: [filters/FilterBar.ts:20](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L20)
 
 CSS class prefix (default: 'dt')
 
@@ -36,7 +36,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterBar.ts:32](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L32)
+Defined in: [filters/FilterBar.ts:32](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L32)
 
 Resolved i18n strings. Defaults to English.
 
@@ -46,7 +46,7 @@ Resolved i18n strings. Defaults to English.
 
 > `optional` **onAddSQLFilter?**: () => `void`
 
-Defined in: [filters/FilterBar.ts:28](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L28)
+Defined in: [filters/FilterBar.ts:28](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L28)
 
 Callback when the "Expression" filter button is clicked
 
@@ -60,7 +60,7 @@ Callback when the "Expression" filter button is clicked
 
 > `optional` **onFilterRemove?**: (`column`) => `void`
 
-Defined in: [filters/FilterBar.ts:22](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L22)
+Defined in: [filters/FilterBar.ts:22](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L22)
 
 Called when a filter chip is removed, for clearing visualization state
 
@@ -80,7 +80,7 @@ Called when a filter chip is removed, for clearing visualization state
 
 > `optional` **onPresetsClick?**: () => `void`
 
-Defined in: [filters/FilterBar.ts:30](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L30)
+Defined in: [filters/FilterBar.ts:30](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L30)
 
 Callback when the "Presets" button is clicked
 
@@ -94,7 +94,7 @@ Callback when the "Presets" button is clicked
 
 > `optional` **onRawSQLEdit?**: (`id`) => `void`
 
-Defined in: [filters/FilterBar.ts:24](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/filters/FilterBar.ts#L24)
+Defined in: [filters/FilterBar.ts:24](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/filters/FilterBar.ts#L24)
 
 Called when a raw-sql filter chip body is clicked (for editing). Receives the filter id.
 

@@ -6,7 +6,7 @@
 
 # Class: AddColumnButton
 
-Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/derived/AddColumnButton.ts#L23)
+Defined in: [derived/AddColumnButton.ts:23](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/derived/AddColumnButton.ts#L23)
 
 Vertical "+" affordance positioned at the table's right edge that opens the
 derived-column modal. Composed by the facade when derived-column UI is
@@ -18,7 +18,7 @@ enabled.
 
 > **new AddColumnButton**(`options?`): `AddColumnButton`
 
-Defined in: [derived/AddColumnButton.ts:29](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/derived/AddColumnButton.ts#L29)
+Defined in: [derived/AddColumnButton.ts:29](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/derived/AddColumnButton.ts#L29)
 
 #### Parameters
 
@@ -36,7 +36,7 @@ Defined in: [derived/AddColumnButton.ts:29](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [derived/AddColumnButton.ts:65](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/derived/AddColumnButton.ts#L65)
+Defined in: [derived/AddColumnButton.ts:65](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/derived/AddColumnButton.ts#L65)
 
 #### Returns
 
@@ -48,7 +48,7 @@ Defined in: [derived/AddColumnButton.ts:65](https://github.com/jeyabbalas/data-t
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [derived/AddColumnButton.ts:61](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/derived/AddColumnButton.ts#L61)
+Defined in: [derived/AddColumnButton.ts:61](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/derived/AddColumnButton.ts#L61)
 
 #### Returns
 

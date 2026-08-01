@@ -6,7 +6,7 @@
 
 # Class: DataTableError
 
-Defined in: [core/errors.ts:55](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/errors.ts#L55)
+Defined in: [core/errors.ts:55](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/core/errors.ts#L55)
 
 Base class for every error thrown by the library.
 
@@ -46,7 +46,7 @@ table.on('error', ({ error, source }) => {
 
 > **new DataTableError**(`message`, `options?`): `DataTableError`
 
-Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/errors.ts#L59)
+Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/core/errors.ts#L59)
 
 #### Parameters
 
@@ -72,7 +72,7 @@ Defined in: [core/errors.ts:59](https://github.com/jeyabbalas/data-table/blob/cd
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/core/errors.ts#L56)
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/cd
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/core/errors.ts#L57)
 
 ## Methods
 
@@ -88,7 +88,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/cd
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/cda2ebc222197533721ff593dcca15e2f024dfae/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/core/errors.ts#L66)
 
 #### Returns
 

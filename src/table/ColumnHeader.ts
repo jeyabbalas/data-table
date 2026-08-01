@@ -43,7 +43,12 @@ export interface ColumnHeaderOptions {
    * the facade via the public `derivedColumns` option.
    */
   showDerivedEditIcon?: boolean | undefined;
-  /** 1-based column index in the full schema (for aria-colindex) */
+  /**
+   * 1-based column index in the *presented* order (for `aria-colindex`).
+   * Position in `state.columnOrder`, not in the schema — ARIA requires the
+   * values to ascend in DOM order within a row, which the schema index stops
+   * doing the moment a column is reordered.
+   */
   colIndex?: number | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
@@ -53,6 +58,12 @@ export interface ColumnHeaderOptions {
   annotationPopover?: AnnotationPopover | undefined;
   /** Shared singleton used to display the app-controlled column-name tooltip popover. */
   columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover | undefined;
+  /**
+   * Write a transient message to a polite live region. Used to announce the
+   * final width after a resize drag, which is otherwise silent to a screen
+   * reader. `TableContainer.announce` is the wiring.
+   */
+  announce?: ((message: string) => void) | undefined;
 }
 
 /**
@@ -112,7 +123,14 @@ export class ColumnHeader {
       {
         classPrefix: this.classPrefix,
         onDragStart: () => this.actions.beginColumnWidthChange(),
-        onDragEnd: () => this.actions.endColumnWidthChange(),
+        onDragEnd: () => {
+          this.actions.endColumnWidthChange();
+          // Announced once at drag end, not on every mousemove — a live
+          // region fired at pointer rate is noise, not information.
+          this.options.announce?.(
+            this.messages.a11y.columnWidthAnnouncement(this.column.name, this.getWidth()),
+          );
+        },
         messages: this.messages,
       },
     );
@@ -141,6 +159,11 @@ export class ColumnHeader {
     // `.dt-grid`, which names this cell via `aria-activedescendant` — an
     // attribute whose target has to be focusable.
     el.setAttribute('tabindex', '-1');
+    // Resize and reorder have no focus stop of their own — they live behind a
+    // modal gesture on the header cursor. Advertising the entry key here is
+    // what makes it discoverable to a screen-reader user who never sees the
+    // drag handle or the resize separator.
+    el.setAttribute('aria-keyshortcuts', 'Shift+F2');
     if (this.options.cellId) {
       el.id = this.options.cellId;
     }
@@ -817,6 +840,98 @@ export class ColumnHeader {
   }
 
   /**
+   * Show or hide this header's column-layout-mode affordance.
+   *
+   * Column layout mode (`Shift+F2` from the header cursor) moves no DOM focus,
+   * so nothing in the default rendering would tell a sighted keyboard user
+   * which column the arrow keys are about to resize or move. This puts a
+   * dashed outline on the header and lights the resize handle.
+   *
+   * @example
+   * ```typescript
+   * header.setLayoutMode(true);
+   * ```
+   */
+  setLayoutMode(active: boolean): void {
+    if (this.destroyed) return;
+    this.element.classList.toggle(`${this.classPrefix}-col-header--layout`, active);
+    this.resizer.setActive(active);
+  }
+
+  /**
+   * The current width of this column, in pixels.
+   *
+   * Reads `columnWidths` rather than the element, so it reports the state the
+   * next resize step will build on even before layout has flushed. Falls back
+   * to the 150px default the renderer uses when the column has never been
+   * sized.
+   */
+  getWidth(): number {
+    return this.state.columnWidths.get().get(this.column.name) ?? 150;
+  }
+
+  /**
+   * The clamp bounds a width change is held to — the resizer's own
+   * `minWidth` / `maxWidth` (50 / 500 by default).
+   *
+   * Exposed so a caller can tell "the step was applied" from "the step was
+   * refused because we are already at the edge" without duplicating the
+   * bounds.
+   *
+   * @example
+   * ```typescript
+   * const { min, max } = header.getWidthBounds(); // { min: 50, max: 500 }
+   * ```
+   */
+  getWidthBounds(): { min: number; max: number } {
+    return { min: this.resizer.getMinWidth(), max: this.resizer.getMaxWidth() };
+  }
+
+  /**
+   * Set this column's width, clamped to {@link ColumnHeader.getWidthBounds}.
+   *
+   * The keyboard entry point for `Home` / `End` in column layout mode, and the
+   * counterpart to {@link ColumnHeader.activateSort} for sizing.
+   * `KeyboardNavigator` goes through here rather than calling
+   * `actions.setColumnWidth` directly so the clamp stays in exactly one place
+   * — the mouse drag applies the same bounds from the same resizer instance.
+   *
+   * @param px - Desired width in pixels, before clamping.
+   * @returns The width actually applied.
+   *
+   * @example
+   * ```typescript
+   * header.setWidth(9999); // → 500, the maximum
+   * ```
+   */
+  setWidth(px: number): number {
+    if (this.destroyed) return this.getWidth();
+    const { min, max } = this.getWidthBounds();
+    const clamped = Math.max(min, Math.min(max, Math.round(px)));
+    this.actions.setColumnWidth(this.column.name, clamped);
+    return clamped;
+  }
+
+  /**
+   * Grow or shrink this column by `deltaPx`, clamped to
+   * {@link ColumnHeader.getWidthBounds}.
+   *
+   * The keyboard entry point for the arrow keys in column layout mode.
+   *
+   * @param deltaPx - Signed pixel delta; negative shrinks.
+   * @returns The width actually applied.
+   *
+   * @example
+   * ```typescript
+   * header.resizeBy(-16); // one Left-arrow step
+   * ```
+   */
+  resizeBy(deltaPx: number): number {
+    if (this.destroyed) return this.getWidth();
+    return this.setWidth(this.getWidth() + deltaPx);
+  }
+
+  /**
    * The header's interactive controls, in visual order, filtered to the ones
    * a user could actually operate right now.
    *
@@ -825,12 +940,15 @@ export class ColumnHeader {
    * disabled ones (the hide button on the last visible column), ones the
    * responsive container queries have hidden at narrow widths — focusing a
    * `display: none` element silently does nothing, which would strand the
-   * cycle — and the drag handle, which is mouse-only. A focus stop whose
-   * Enter key does nothing is worse than no stop at all; keyboard reorder
-   * needs a designed gesture, tracked as
-   * [issue #87](https://github.com/jeyabbalas/data-table/issues/87). The
-   * column resize handle is excluded for the same reason — it is not part of
-   * this list at all.
+   * cycle — and the two layout affordances, the drag handle and the resize
+   * separator.
+   *
+   * Those two stay out by design rather than by omission. They are operated
+   * from the header cursor with `Shift+F2` (column layout mode), a modal
+   * gesture that costs no tab stop and no focus stop — see
+   * {@link ColumnHeader.resizeBy} and `KeyboardNavigator`. Adding them here
+   * instead would make the separator a focusable widget, which ARIA then
+   * requires to carry `aria-valuenow` / `min` / `max`.
    *
    * @example
    * ```typescript

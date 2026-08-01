@@ -326,6 +326,24 @@ export class ColumnResizer {
   }
 
   /**
+   * Show or hide the handle's active (highlighted) state without a drag.
+   *
+   * Used by column layout mode, the keyboard gesture for resize and reorder:
+   * the handle never takes focus, so this is the only thing that tells a
+   * sighted keyboard user which column the arrow keys are about to resize.
+   *
+   * @example
+   * ```typescript
+   * resizer.setActive(true);  // entering layout mode
+   * resizer.setActive(false); // committing or cancelling
+   * ```
+   */
+  setActive(active: boolean): void {
+    if (this.detached || !this.handle) return;
+    this.handle.classList.toggle(`${this.classPrefix}-col-resize-handle--active`, active);
+  }
+
+  /**
    * Get the min width constraint
    */
   getMinWidth(): number {

@@ -266,3 +266,56 @@ describe('TableBody — race protection (fetchSequence)', () => {
     await initPromise.catch(() => {});
   });
 });
+
+/**
+ * The other half of the same subscriber: which `visibleColumns` writes are
+ * allowed to reach `invalidateCacheAndRefresh` at all. Shares this file's
+ * harness because the assertion is a query count, which needs both a
+ * controllable bridge and a non-zero viewport.
+ */
+describe('TableBody — visibleColumns: reorder vs. set change', () => {
+  it('a same-set reorder renders from the warm cache while a real set change re-fetches', async () => {
+    const { body, state, queryQueue, calls } = setup();
+
+    const initPromise = body.initialize();
+    expect(queryQueue.length).toBe(1);
+
+    // Resolve the initial fetch with a row for *every* index in the visible
+    // range. A half-filled cache would leave `checkNeedsFetch` true no matter
+    // what the subscriber decided, and the control assertion at the bottom
+    // would then pass for the wrong reason.
+    const range = body.getVisibleRange();
+    expect(range.end).toBeGreaterThan(range.start);
+    queryQueue[0]!.resolve(
+      Array.from({ length: range.end - range.start }, (_, i) => ({
+        __rowid__: range.start + i,
+        id: range.start + i,
+        tag: 'A',
+      })),
+    );
+    await initPromise;
+
+    const cache = (body as unknown as { rowDataCache: Map<number, unknown> }).rowDataCache;
+    expect(cache.size).toBe(range.end - range.start);
+    const callsAfterInit = calls.length;
+
+    // What one step of a keyboard column move writes: the same names in a new
+    // order. Rows are keyed by column name, so every value the new order needs
+    // is already cached — invalidating here round-trips DuckDB once per
+    // keystroke for data the body is already holding.
+    state.visibleColumns.set(['tag', 'id']);
+
+    expect(calls.length).toBe(callsAfterInit);
+    expect(cache.size).toBe(range.end - range.start);
+
+    // Control: dropping a column is a genuine set change, and the projection
+    // it needs is not in the cache — so this one must still invalidate.
+    state.visibleColumns.set(['tag']);
+
+    expect(calls.length).toBe(callsAfterInit + 1);
+    expect(cache.size).toBe(0);
+
+    queryQueue[queryQueue.length - 1]!.resolve([]);
+    body.destroy();
+  });
+});

@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableContainer } from '@/table/TableContainer';
 import { TableBody } from '@/table/TableBody';
 import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
+import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
@@ -216,6 +217,56 @@ describe('Accessibility: ARIA attributes', () => {
       expect(headers[0].getAttribute('aria-colindex')).toBe('1'); // id is 1st in schema
       expect(headers[1].getAttribute('aria-colindex')).toBe('3'); // score is 3rd in schema
       expect(headers[2].getAttribute('aria-colindex')).toBe('5'); // created is 5th in schema
+
+      tc.destroy();
+    });
+
+    it('still ascends in DOM order after the columns are reordered', () => {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.totalRows.set(100);
+      state.tableName.set('test_table');
+      const tc = new TableContainer(container, state, actions, mockBridge);
+
+      // Pull the last column to the front and push the first one back — the
+      // move that made a schema-derived numbering report 5, 1, 2, 3, 4, which
+      // ARIA forbids as a MUST, not a SHOULD.
+      actions.setColumnOrder(['created', 'name', 'score', 'active', 'id']);
+
+      const headers = [...tc.getElement().querySelectorAll('.dt-col-header')];
+      const colIndices = headers.map((h) => Number(h.getAttribute('aria-colindex')));
+
+      for (let i = 1; i < colIndices.length; i++) {
+        expect(colIndices[i]!).toBeGreaterThan(colIndices[i - 1]!);
+      }
+
+      // And ascending is not enough on its own — each header has to report its
+      // own position in the presented order, which is what `columnOrder` is.
+      const order = state.columnOrder.get();
+      expect(colIndices).toEqual(
+        headers.map((h) => order.indexOf(h.getAttribute('data-column')!) + 1),
+      );
+
+      tc.destroy();
+    });
+
+    it('leaves a gap for a hidden column instead of renumbering around it', () => {
+      const fourColumns = testSchema.slice(0, 4);
+      state.schema.set(fourColumns);
+      initializeColumnsFromSchema(state, fourColumns);
+      state.totalRows.set(100);
+      state.tableName.set('test_table');
+      const tc = new TableContainer(container, state, actions, mockBridge);
+
+      actions.hideColumn('name');
+
+      const headers = [...tc.getElement().querySelectorAll('.dt-col-header')];
+      expect(headers.map((h) => h.getAttribute('data-column'))).toEqual(['id', 'score', 'active']);
+      // 1, 2, 3 would claim these are all the columns there are. The gap at 2
+      // is exactly how ARIA says "a column is present but not rendered", and
+      // it stays consistent with the aria-colcount of 4.
+      expect(headers.map((h) => h.getAttribute('aria-colindex'))).toEqual(['1', '3', '4']);
+      expect(tc.getGridElement().getAttribute('aria-colcount')).toBe('4');
 
       tc.destroy();
     });
@@ -671,6 +722,19 @@ describe('Accessibility: ARIA attributes', () => {
       return new TableContainer(container, state, actions, mockBridge);
     }
 
+    /**
+     * Everything inside the grid that Tab can land on. One query, shared by
+     * every census below, so a mode that quietly adds a stop cannot slip
+     * through by being measured with a slightly different selector.
+     */
+    function tabStops(grid: HTMLElement): HTMLElement[] {
+      return [
+        ...grid.querySelectorAll<HTMLElement>(
+          '[tabindex]:not([tabindex="-1"]), button:not([tabindex])',
+        ),
+      ];
+    }
+
     it('puts role="grid" on .dt-grid, not on the root', () => {
       const tc = loaded();
       expect(tc.getElement().getAttribute('role')).toBeNull();
@@ -685,19 +749,38 @@ describe('Accessibility: ARIA attributes', () => {
       // The grid, plus the two scroll regions WCAG 2.1.1 requires to be
       // keyboard-reachable. Nothing else inside — in particular none of the
       // ~6 buttons per column header, which is what made Tab unusable.
-      const tabbableInGrid = [
-        ...grid.querySelectorAll<HTMLElement>(
-          '[tabindex]:not([tabindex="-1"]), button:not([tabindex])',
-        ),
-      ];
-      expect(tabbableInGrid).toEqual([tc.getHeaderScroll(), tc.getScrollContainer()]);
+      expect(tabStops(grid)).toEqual([tc.getHeaderScroll(), tc.getScrollContainer()]);
       expect(grid.getAttribute('tabindex')).toBe('0');
 
       // Independent of column count: hiding half the columns changes nothing.
       state.visibleColumns.set(['id', 'name']);
-      expect(
-        grid.querySelectorAll('[tabindex]:not([tabindex="-1"]), button:not([tabindex])').length,
-      ).toBe(2);
+      expect(tabStops(grid).length).toBe(2);
+
+      tc.destroy();
+    });
+
+    it('exposes the same tab stops in column layout mode', () => {
+      const tc = loaded();
+      const grid = tc.getGridElement();
+      const before = tabStops(grid);
+
+      // Shift+F2 on the header cursor opens the resize/reorder gesture. It is
+      // a state machine with no DOM-focus correlate on purpose: giving resize
+      // and reorder real focus stops would put two more per column into the
+      // census, and a focusable resize separator would then owe ARIA an
+      // aria-valuenow/min/max it has no meaningful value for.
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'name' });
+      tc.getElement().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'F2', shiftKey: true, bubbles: true }),
+      );
+
+      // The mode really did open — otherwise this asserts nothing at all.
+      const inLayoutMode = tc
+        .getColumnHeaders()
+        .filter((h) => h.getElement().classList.contains('dt-col-header--layout'));
+      expect(inLayoutMode.map((h) => h.getColumn().name)).toEqual(['name']);
+
+      expect(tabStops(grid)).toEqual(before);
 
       tc.destroy();
     });

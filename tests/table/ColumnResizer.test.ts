@@ -299,7 +299,11 @@ describe('ColumnResizer', () => {
 
       expect(handle.getAttribute('role')).toBe('separator');
       expect(handle.getAttribute('aria-orientation')).toBe('vertical');
-      expect(handle.getAttribute('aria-label')).toBe('Resize column');
+      // The label names the keyboard gesture: the separator itself is not a
+      // focus stop, so this is one of the few places the key is discoverable.
+      expect(handle.getAttribute('aria-label')).toBe(
+        'Resize column (keyboard: Shift+F2 on the header)',
+      );
 
       resizer.detach();
     });

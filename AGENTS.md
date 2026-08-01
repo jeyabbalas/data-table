@@ -42,6 +42,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
 - WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts).
+- **Keyboard column resize and reorder** via `Shift+F2` from the header cursor — column layout mode: `←`/`→` resize by 16px (clamped 50–500), `Shift`+`←`/`→` move the column, `Home`/`End` hit the width bounds, `Backspace` resets, `Enter` commits, `Escape` restores both width and position. The whole gesture is one undo entry. Nothing becomes focusable, so the tab-stop census is unchanged; the resize handle (`role="separator"`) and the drag handle stay out of `ColumnHeader.getControls()` and the `F2` cycle on purpose (src/table/KeyboardNavigator.ts, src/table/ColumnHeader.ts).
 - Multi-table on one page with shared `WorkerBridge`, `SessionStore`, `FilterPresetManager`.
 - CSP/offline deployment — self-host the WASM bundles via `bridgeOptions`.
 
@@ -53,7 +54,6 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - **No built-in mobile touch gestures** beyond what the browser provides.
 - **Not designed for > 10M rows** in a single table. DuckDB will handle it, but UI latency degrades.
 - **No RTL-aware layouts beyond what the OS provides.**
-- **No keyboard column resize or reorder.** Both are mouse-only. The resize handle (`role="separator"`) and the header drag handle are deliberately left out of `ColumnHeader.getControls()`, and so out of the `F2` controls-mode cycle, rather than given a focus stop that does nothing on Enter — each needs a designed gesture (`←`/`→` to resize, a pick-up-and-move mode to reorder). Tracked as [issue #87](https://github.com/jeyabbalas/data-table/issues/87). Everything else in a column header — sort, pin, hide, filter, the derived-column `f(x)` icon and the tooltip name span — _is_ keyboard-reachable via `F2`.
 
 ### PARTIAL
 

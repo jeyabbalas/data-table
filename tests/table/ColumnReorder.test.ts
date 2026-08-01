@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ColumnReorder } from '../../src/table/ColumnReorder';
+import { ColumnReorder, clampUnpinnedIndex } from '../../src/table/ColumnReorder';
 
 describe('ColumnReorder', () => {
   let container: HTMLDivElement;
@@ -388,7 +388,7 @@ describe('ColumnReorder', () => {
 
       // Should have reordered: col1 moved after col2
       // New order: col2, col1, col3
-      expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3']);
+      expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3'], 'col1');
 
       reorder.destroy();
     });
@@ -432,6 +432,112 @@ describe('ColumnReorder', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 
       // Should not have called onReorder (same position)
+      expect(onReorder).not.toHaveBeenCalled();
+
+      reorder.destroy();
+    });
+
+    it('clamps a drop inside the pinned block to the first unpinned position', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, {
+        dragThreshold: 5,
+        getPinnedColumns: () => ['col1'],
+      });
+      reorder.refresh();
+
+      const header = headerRow.querySelector('[data-column="col3"]')!;
+      const dragHandle = getDragHandle(header);
+
+      // Start drag on col3 (at position 2) via drag handle
+      dragHandle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 375, // center of col3
+          clientY: 16,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      // Move past threshold to start drag
+      document.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 365,
+          clientY: 16,
+          bubbles: true,
+        }),
+      );
+
+      // Move to the far left, which is left of col1's midpoint and so drops
+      // at index 0 — inside the pinned block.
+      document.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 10,
+          clientY: 16,
+          bubbles: true,
+        }),
+      );
+
+      // Drop
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+      // Sticky `left` offsets are computed by walking the pinned columns in
+      // order, so a pinned column landing anywhere but the front desyncs every
+      // offset after it. col3 goes to index 1, the first unpinned slot.
+      expect(onReorder).toHaveBeenCalledWith(['col1', 'col3', 'col2'], 'col3');
+
+      reorder.destroy();
+    });
+
+    it('does not call onReorder when the clamped drop is the column’s own position', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, {
+        dragThreshold: 5,
+        getPinnedColumns: () => ['col1'],
+      });
+      reorder.refresh();
+
+      const header = headerRow.querySelector('[data-column="col2"]')!;
+      const dragHandle = getDragHandle(header);
+
+      // Start drag on col2 (at position 1) via drag handle
+      dragHandle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 225, // center of col2
+          clientY: 16,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      // Move past threshold to start drag
+      document.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 215,
+          clientY: 16,
+          bubbles: true,
+        }),
+      );
+
+      // Move to the far left (index 0)
+      document.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 10,
+          clientY: 16,
+          bubbles: true,
+        }),
+      );
+
+      // A live drag, so the silence below is the clamp deciding there is
+      // nothing to do rather than the drag never having started.
+      expect(reorder.isDraggingNow()).toBe(true);
+
+      // Drop
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+      // col2 is already the first unpinned column, so the clamp sends the drop
+      // straight back to where it started. The raw drop index (0) is not the
+      // dragged index (1), so only checking after the clamp keeps this from
+      // announcing and undo-logging a reorder that reorders nothing.
       expect(onReorder).not.toHaveBeenCalled();
 
       reorder.destroy();
@@ -623,5 +729,40 @@ describe('ColumnReorder', () => {
       // Should not throw
       expect(true).toBe(true);
     });
+  });
+});
+
+describe('clampUnpinnedIndex', () => {
+  // The presented order a drop is spliced into, with the moved column already
+  // removed — the shape endDrag() and the keyboard move both hand in.
+  const columns = ['id', 'name', 'qty'];
+
+  it('lifts an index inside the pinned block up to the first unpinned position', () => {
+    expect(clampUnpinnedIndex(0, columns, ['id'])).toBe(1);
+    expect(clampUnpinnedIndex(0, columns, ['id', 'name'])).toBe(2);
+    expect(clampUnpinnedIndex(1, columns, ['id', 'name'])).toBe(2);
+  });
+
+  it('clamps an index past the end down to the column count', () => {
+    expect(clampUnpinnedIndex(9, columns, ['id'])).toBe(3);
+  });
+
+  it('passes an index that is already valid through untouched', () => {
+    expect(clampUnpinnedIndex(1, columns, ['id'])).toBe(1);
+    expect(clampUnpinnedIndex(2, columns, ['id'])).toBe(2);
+    // columns.length is the append-at-the-end slot, not out of range.
+    expect(clampUnpinnedIndex(3, columns, ['id'])).toBe(3);
+  });
+
+  it('clamps nothing when no column is pinned', () => {
+    expect(clampUnpinnedIndex(0, columns, [])).toBe(0);
+    expect(clampUnpinnedIndex(2, columns, [])).toBe(2);
+  });
+
+  it('sends every drop to the end when every column is pinned', () => {
+    // The pinned prefix is the whole array, so the only position left that
+    // does not split the pinned block is after all of it.
+    expect(clampUnpinnedIndex(0, columns, columns)).toBe(3);
+    expect(clampUnpinnedIndex(2, columns, columns)).toBe(3);
   });
 });

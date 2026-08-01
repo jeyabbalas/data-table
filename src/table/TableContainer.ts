@@ -202,6 +202,7 @@ export class TableContainer {
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
+  private announceRegion: HTMLElement | null = null;
   private pendingLiveUpdate = false;
 
   // Resolved options with defaults applied. `instanceId` is narrowed past
@@ -311,6 +312,19 @@ export class TableContainer {
     this.liveRegion.className = `${this.resolvedOptions.classPrefix}-sr-only`;
     this.element.appendChild(this.liveRegion);
 
+    // A second region, for transient announcements. It has to be its own node:
+    // updateLiveRegion() takes no arguments and rebuilds the whole sentence
+    // from filter and sort state, so a message written into that node would be
+    // clobbered by the next rAF flush.
+    this.announceRegion = document.createElement('div');
+    this.announceRegion.setAttribute('role', 'status');
+    this.announceRegion.setAttribute('aria-live', 'polite');
+    this.announceRegion.setAttribute('aria-atomic', 'true');
+    // Second class so the two regions are distinguishable from a test or a
+    // consumer's own tooling; `-sr-only` is what actually hides it.
+    this.announceRegion.className = `${this.resolvedOptions.classPrefix}-sr-only ${this.resolvedOptions.classPrefix}-announce`;
+    this.element.appendChild(this.announceRegion);
+
     // Create hidden columns gutter after body
     if (this.actions) {
       this.hiddenColumnsGutter = new HiddenColumnsGutter(this.state, this.actions, {
@@ -363,8 +377,11 @@ export class TableContainer {
     if (this.actions) {
       this.columnReorder = new ColumnReorder(
         this.headerRow,
-        (newOrder) => this.actions?.setColumnOrder(newOrder),
-        { classPrefix: this.resolvedOptions.classPrefix },
+        (newOrder, movedColumn) => this.applyReorderFromDrag(newOrder, movedColumn),
+        {
+          classPrefix: this.resolvedOptions.classPrefix,
+          getPinnedColumns: () => this.state.pinnedColumns.get(),
+        },
       );
     }
 
@@ -384,6 +401,8 @@ export class TableContainer {
         getTableBody: () => this.tableBody,
         getColumnHeaders: () => this.columnHeaders,
         getBridge: () => this.bridge,
+        announce: (message) => this.announce(message),
+        messages: this.messages,
       });
     }
 
@@ -675,6 +694,56 @@ export class TableContainer {
     }
 
     this.liveRegion.textContent = parts.join(', ');
+  }
+
+  /**
+   * Commit a drag-to-reorder and announce where the column landed.
+   *
+   * A drop is silent to a screen reader otherwise — the column order is
+   * conveyed entirely by DOM position and `aria-colindex`, neither of which
+   * announces on change.
+   */
+  private applyReorderFromDrag(newOrder: string[], movedColumn: string): void {
+    if (!this.actions) return;
+    this.actions.setColumnOrder(newOrder);
+    const visible = this.state.visibleColumns.get();
+    const position = visible.indexOf(movedColumn);
+    if (position === -1) return;
+    this.announce(
+      this.messages.a11y.columnMovedAnnouncement(movedColumn, position + 1, visible.length),
+    );
+  }
+
+  /**
+   * Speak a transient message through the table's second polite live region.
+   *
+   * For state changes a screen-reader user would otherwise have no way to
+   * observe: a new column width, a column's new position, the entry and exit
+   * of column layout mode. Distinct from the standing filter / sort / row-count
+   * region, which is rebuilt wholesale from state on every flush and would
+   * overwrite anything written into it.
+   *
+   * Repeating the same text re-announces it — a second identical message
+   * (two resize steps that both land on the maximum, say) is blanked for a
+   * frame first, because assistive tech ignores a live region whose text has
+   * not changed.
+   *
+   * @example
+   * ```typescript
+   * container.announce('Price 220 pixels wide');
+   * ```
+   */
+  announce(message: string): void {
+    if (this.destroyed || !this.announceRegion) return;
+    const region = this.announceRegion;
+    if (region.textContent === message) {
+      region.textContent = '';
+      requestAnimationFrame(() => {
+        if (!this.destroyed) region.textContent = message;
+      });
+      return;
+    }
+    region.textContent = message;
   }
 
   // =========================================
@@ -1183,6 +1252,7 @@ export class TableContainer {
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
     const columnWidths = this.state.columnWidths.get();
+    const columnOrder = this.state.columnOrder.get();
 
     // Attach / detach the ARIA grid semantics, then refresh its dimensions.
     this.applyGridSemantics(schema.length > 0 && !!tableName);
@@ -1231,19 +1301,29 @@ export class TableContainer {
         for (const colName of visibleColumns) {
           const colSchema = schema.find((s) => s.name === colName);
           if (colSchema) {
-            const schemaIndex = schema.findIndex((s) => s.name === colName);
+            // aria-colindex is a position in the *presented* table, and ARIA
+            // requires the values to ascend in DOM order within a row — a MUST,
+            // not a SHOULD. `columnOrder` is the presentation order including
+            // hidden columns, and `visibleColumns` is a filter over it, so
+            // indexing into it ascends by construction while hidden columns
+            // still leave the gaps ARIA uses to signal "columns not present".
+            // Deriving from `schema` instead reported 3, 1, 2 after a reorder.
+            const orderIndex = columnOrder.indexOf(colName);
+            const colIndex =
+              orderIndex >= 0 ? orderIndex + 1 : schema.findIndex((s) => s.name === colName) + 1;
             const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
               cellId: this.buildHeaderCellId(visibleIndex++),
               classPrefix: this.resolvedOptions.classPrefix,
               onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
               onDerivedIconClick: (column, buttonEl) =>
                 void this.handleDerivedIconClick(column, buttonEl),
-              colIndex: schemaIndex >= 0 ? schemaIndex + 1 : undefined,
+              colIndex: colIndex > 0 ? colIndex : undefined,
               messages: this.messages,
               showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
               annotations: this.resolvedOptions.annotations,
               annotationPopover: this.resolvedOptions.annotationPopover,
               columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
+              announce: (message) => this.announce(message),
             });
             this.columnHeaders.push(columnHeader);
 

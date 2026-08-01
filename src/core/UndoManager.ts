@@ -168,6 +168,32 @@ export function derivedColumnsEqual(a: DerivedColumnDef[], b: DerivedColumnDef[]
   return true;
 }
 
+/**
+ * Structural equality for two snapshots.
+ *
+ * Every field comparator this needs already exists above as a module-private
+ * helper, so this is assembly rather than new logic. `StateActions` uses it to
+ * decide whether a bracketed gesture — a resize drag, a keyboard column-layout
+ * gesture — actually changed anything before it pushes an undo entry. Without
+ * it a mousedown/mouseup on the resize handle with no movement in between
+ * pushes a step that undoes to an identical state.
+ *
+ * Deliberately not re-exported from `advanced.ts`: it is an implementation
+ * detail of the undo bracket, not part of the snapshot API consumers build on.
+ */
+export function snapshotsEqual(a: StateSnapshot, b: StateSnapshot): boolean {
+  return (
+    filtersEqual(a.filters, b.filters) &&
+    sortColumnsEqual(a.sortColumns, b.sortColumns) &&
+    stringArraysEqual(a.visibleColumns, b.visibleColumns) &&
+    stringArraysEqual(a.columnOrder, b.columnOrder) &&
+    numberMapsEqual(a.columnWidths, b.columnWidths) &&
+    stringArraysEqual(a.pinnedColumns, b.pinnedColumns) &&
+    hiddenInfoMapsEqual(a.hiddenColumnInfo, b.hiddenColumnInfo) &&
+    derivedColumnsEqual(a.derivedColumns, b.derivedColumns)
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────
 
 /**

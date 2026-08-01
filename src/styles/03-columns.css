@@ -67,6 +67,17 @@
     inset 0 3px 0 0 var(--dt-primary);
 }
 
+/* Column layout mode (Shift+F2) — the arrow keys are about to resize or move
+   THIS column. Deliberately `outline` and not `box-shadow`: every box-shadow
+   on `.dt-col-header` has to be re-composed against the cursor ring at equal
+   specificity (see tests/styles/focusIndicator.test.ts), and the mode always
+   coexists with the ring, since it can only be entered from the cursor.
+   Dashed distinguishes it from the solid ring underneath. */
+.dt-col-header--layout {
+  outline: 2px dashed var(--dt-primary);
+  outline-offset: -2px;
+}
+
 /* Controls mode (F2) parks real focus on a header button, inside the cell
    that still shows the cursor ring — mark it unmistakably. */
 .dt-col-header button:focus-visible,

@@ -133,6 +133,34 @@ describe('a11y: axe-core grid scan', () => {
     tc.destroy();
   });
 
+  it('reports zero blocking violations in column layout mode (light mode)', async () => {
+    const { state, actions, tc } = buildTable(container);
+    // Shift+F2 opens the resize / reorder gesture without moving any DOM
+    // focus: it toggles a class on the header and writes to a live region.
+    // So aria-activedescendant still has to resolve while the mode is open,
+    // and the affordance must not have promoted the resize separator into a
+    // widget that then owes ARIA its value attributes.
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: state.visibleColumns.get()[0]! });
+    tc.getElement().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F2', shiftKey: true, bubbles: true }),
+    );
+    expect(tc.getElement().querySelector('.dt-col-header--layout')).toBeTruthy();
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations in column layout mode (dark mode)', async () => {
+    const { state, actions, tc } = buildTable(container);
+    tc.getElement().setAttribute('data-dt-color-scheme', 'dark');
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: state.visibleColumns.get()[0]! });
+    tc.getElement().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F2', shiftKey: true, bubbles: true }),
+    );
+    expect(tc.getElement().querySelector('.dt-col-header--layout')).toBeTruthy();
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
   it('reports zero blocking violations on a rendered grid (dark mode)', async () => {
     const { tc } = buildTable(container);
     tc.getElement().setAttribute('data-dt-color-scheme', 'dark');

@@ -8,7 +8,15 @@
  * Handles: arrow navigation across the header row and the body, Home/End (and
  * Ctrl variants), PageUp/PageDown, Escape to clear the cursor, Enter to toggle
  * sort (header) or row selection (body), F2 to enter the header cell's
- * buttons, and Ctrl+Z/Y/C.
+ * buttons, Shift+F2 to enter column layout mode (resize and reorder), and
+ * Ctrl+Z/Y/C.
+ *
+ * Column layout mode (issue #87) is the answer to the two per-column controls
+ * that have no focus stop: the resize separator and the drag handle. It is a
+ * modal gesture rather than two more stops — inside it the arrow keys resize,
+ * Shift+arrow moves the column, Home/End hit the width bounds, Backspace
+ * resets, Enter commits and Escape restores both width and position. Nothing
+ * becomes focusable, so the tab-stop census does not move.
  *
  * `Tab` is deliberately absent. Intercepting it is what made the grid a
  * WCAG 2.1.2 keyboard trap (issue #84): the listener is bubble-phase on the
@@ -33,9 +41,11 @@
 import type { StateActions } from '../core/Actions';
 import { isAnyModalOpen } from '../core/ModalHost';
 import type { TableState } from '../core/State';
+import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
 import type { ColumnHeader } from './ColumnHeader';
+import { clampUnpinnedIndex } from './ColumnReorder';
 import type { TableBody } from './TableBody';
 
 /**
@@ -48,6 +58,14 @@ import type { TableBody } from './TableBody';
  * negative index as "no such row" and skips it.
  */
 export const HEADER_ROW_INDEX = -1;
+
+/**
+ * Pixels one arrow-key press resizes by in column layout mode.
+ *
+ * Big enough that crossing the 50–500 range is ~28 presses rather than ~450,
+ * small enough to land on a width you meant. `Home` / `End` cover the ends.
+ */
+const LAYOUT_RESIZE_STEP = 16;
 
 /** Construction options for {@link KeyboardNavigator}. */
 export interface KeyboardNavigatorOptions {
@@ -77,13 +95,21 @@ export interface KeyboardNavigatorOptions {
   getColumnHeaders?: (() => ColumnHeader[]) | undefined;
   /** Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op. */
   getBridge?: () => WorkerBridge | undefined;
+  /**
+   * Write a transient message to a polite live region. Column layout mode is
+   * invisible without it — a width or a new position is not something the
+   * cursor announces on its own. `TableContainer.announce` is the wiring.
+   */
+  announce?: ((message: string) => void) | undefined;
+  /** Resolved i18n strings for the live-region announcements. Defaults to English. */
+  messages?: Strings | undefined;
 }
 
 /**
  * WCAG-oriented keyboard navigation controller for the table grid: arrow
  * keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
- * (header) or select (body), F2 to reach the per-column buttons, and
- * Ctrl/Cmd+C to copy the selection.
+ * (header) or select (body), F2 to reach the per-column buttons, Shift+F2 to
+ * resize and reorder the column, and Ctrl/Cmd+C to copy the selection.
  * Composed by {@link TableContainer}; reach for it directly only when
  * assembling a custom container shell.
  */
@@ -96,9 +122,25 @@ export class KeyboardNavigator {
   private readonly getTableBody: () => TableBody | null;
   private readonly getColumnHeaders: (() => ColumnHeader[]) | undefined;
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
+  private readonly announceMessage: ((message: string) => void) | undefined;
+  private readonly messages: Strings;
 
   private readonly keydownHandler: (e: KeyboardEvent) => void;
+  private readonly focusinHandler: (e: FocusEvent) => void;
+  private readonly focusoutHandler: (e: FocusEvent) => void;
   private destroyed = false;
+
+  /**
+   * The open column-layout gesture, keyed by column **name**.
+   *
+   * By name and not by index or by `ColumnHeader` reference: a move rewrites
+   * `visibleColumns`, which re-renders the header row and destroys every
+   * `ColumnHeader` instance, so anything else would be stale one keystroke
+   * into the gesture. The entry width and position are not stored here either
+   * — `StateActions` holds a pre-gesture snapshot and `Escape` restores from
+   * it, so there is exactly one restore path.
+   */
+  private layout: { column: string } | null = null;
 
   constructor(opts: KeyboardNavigatorOptions) {
     this.rootElement = opts.rootElement;
@@ -109,15 +151,40 @@ export class KeyboardNavigator {
     this.getTableBody = opts.getTableBody;
     this.getColumnHeaders = opts.getColumnHeaders;
     this.getBridge = opts.getBridge;
+    this.announceMessage = opts.announce;
+    this.messages = opts.messages ?? defaultStrings;
 
     this.keydownHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
     this.rootElement.addEventListener('keydown', this.keydownHandler);
+
+    // Layout mode is the one piece of keyboard state with no DOM-focus
+    // correlate, so it has to be stored — and a stored flag desyncs unless
+    // every path that ends the gesture is covered. Focus moving off `.dt-grid`
+    // is such a path: onto a header button (F2 controls mode, or a click), or
+    // out of the grid entirely with Tab. Both commit rather than cancel —
+    // walking away from a gesture reads as "I'm done", not "undo that".
+    this.focusinHandler = (e: FocusEvent) => {
+      if (e.target !== this.gridElement) this.exitLayoutMode('commit');
+    };
+    this.focusoutHandler = (e: FocusEvent) => {
+      const next = e.relatedTarget;
+      if (next instanceof Node && this.gridElement.contains(next)) return;
+      this.exitLayoutMode('commit');
+    };
+    this.gridElement.addEventListener('focusin', this.focusinHandler);
+    this.gridElement.addEventListener('focusout', this.focusoutHandler);
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    // Drop any open gesture without touching StateActions: destroy() runs
+    // during teardown, where the action layer may already be destroyed and
+    // every mutator throws.
+    this.layout = null;
     this.rootElement.removeEventListener('keydown', this.keydownHandler);
+    this.gridElement.removeEventListener('focusin', this.focusinHandler);
+    this.gridElement.removeEventListener('focusout', this.focusoutHandler);
   }
 
   // =========================================
@@ -134,6 +201,10 @@ export class KeyboardNavigator {
     const active = document.activeElement;
     if (active instanceof Element && active.closest('[role="dialog"]')) return;
 
+    // Re-derive whether the stored layout gesture is still valid before
+    // anything is allowed to consult it.
+    this.validateLayoutMode();
+
     // Controls mode owns the keyboard while focus sits on a header button.
     if (this.handleControlsModeKey(e)) return;
 
@@ -149,6 +220,10 @@ export class KeyboardNavigator {
       this.handleShortcut(e);
       return;
     }
+
+    // An open column-layout gesture owns the arrow keys, Home / End,
+    // Backspace, Enter and Escape. Everything else it leaves alone.
+    if (this.handleLayoutModeKey(e)) return;
 
     // Arrow navigation (no modifier)
     if (
@@ -220,8 +295,13 @@ export class KeyboardNavigator {
 
     // F2 on a header cell hands real DOM focus to its first button —
     // the APG "actionable cell" gesture. Body cells have no controls.
+    // Shift+F2 is the sibling gesture for the two controls that deliberately
+    // have no focus stop: column resize and column reorder.
     if (e.key === 'F2' && onHeader && focused) {
-      if (this.enterControlsMode(focused.column)) {
+      const entered = e.shiftKey
+        ? this.enterLayoutMode(focused.column)
+        : this.enterControlsMode(focused.column);
+      if (entered) {
         e.preventDefault();
       }
       return;
@@ -469,6 +549,264 @@ export class KeyboardNavigator {
   }
 
   // =========================================
+  // Column layout mode (Shift+F2)
+  // =========================================
+
+  /**
+   * Open a column-layout gesture on the cursor's column.
+   *
+   * Nothing becomes focusable: the mode is a state machine here and real DOM
+   * focus stays on `.dt-grid` throughout. That is what keeps the tab-stop
+   * census flat and sidesteps the ARIA rule that a focusable
+   * `role="separator"` must carry `aria-valuenow` / `min` / `max`.
+   *
+   * @returns `false` when there is no live header for the column, in which
+   *   case the keystroke is left entirely alone.
+   */
+  private enterLayoutMode(column: string): boolean {
+    const header = this.findHeader(column);
+    if (!header) return false;
+    // Shift+F2 on the column already in the mode toggles it off.
+    if (this.layout?.column === column) {
+      this.exitLayoutMode('commit');
+      return true;
+    }
+    this.exitLayoutMode('commit');
+    this.claimGridFocus();
+    this.actions.beginColumnLayoutChange();
+    this.layout = { column };
+    this.syncLayoutAffordance();
+    this.announce(this.messages.a11y.columnLayoutModeEntered(column));
+    return true;
+  }
+
+  /**
+   * Close an open gesture. `'commit'` keeps the result and pushes one undo
+   * entry (none at all if nothing changed); `'cancel'` restores the entry
+   * width and position and pushes nothing.
+   */
+  private exitLayoutMode(mode: 'commit' | 'cancel'): void {
+    const layout = this.layout;
+    if (!layout || this.destroyed) return;
+    this.layout = null;
+
+    const a = this.messages.a11y;
+    if (mode === 'cancel') {
+      this.actions.cancelColumnLayoutChange();
+      this.announce(a.columnLayoutCancelled(layout.column));
+    } else {
+      this.actions.endColumnLayoutChange();
+      this.announce(a.columnLayoutCommitted(layout.column));
+    }
+    // After the restore, not before: cancelling rewrites the column order,
+    // which rebuilds every header.
+    this.syncLayoutAffordance();
+  }
+
+  /**
+   * Drop a gesture the rest of the world has moved out from under.
+   *
+   * Runs before the stored mode is consulted on every keystroke. The gesture
+   * ends when the cursor is no longer parked on its column in the header row,
+   * when the column stops being visible (a hide, an undo, a data load), or
+   * when real focus has landed on a header control — which is F2 controls
+   * mode, and the two modes must not both think they own the arrow keys.
+   */
+  private validateLayoutMode(): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const focused = this.state.focusedCell.get();
+    const stale =
+      !focused ||
+      focused.row !== HEADER_ROW_INDEX ||
+      focused.column !== layout.column ||
+      !this.state.visibleColumns.get().includes(layout.column) ||
+      this.activeControls() !== null;
+    if (stale) this.exitLayoutMode('commit');
+  }
+
+  /**
+   * Handle a keystroke while a column-layout gesture is open.
+   *
+   * Mirrors {@link KeyboardNavigator.handleControlsModeKey}: returns `true`
+   * when the caller should stop processing, `preventDefault()`s only the keys
+   * it acts on, and leaves `Tab` and the Ctrl/Cmd shortcuts alone so they
+   * behave exactly as they do outside the mode.
+   */
+  private handleLayoutModeKey(e: KeyboardEvent): boolean {
+    const layout = this.layout;
+    if (!layout) return false;
+
+    // Undo / redo / copy stay table-wide, and Alt-modified keys belong to the
+    // OS. Neither is a layout key.
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        this.exitLayoutMode('cancel');
+        return true;
+
+      case 'Enter':
+        e.preventDefault();
+        this.exitLayoutMode('commit');
+        return true;
+
+      case 'F2':
+        // Shift+F2 toggles the mode off. Bare F2 commits and falls through to
+        // the dispatcher, which enters controls mode — the two gestures stay
+        // one keystroke apart.
+        this.exitLayoutMode('commit');
+        if (e.shiftKey) {
+          e.preventDefault();
+          return true;
+        }
+        return false;
+
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        e.preventDefault();
+        const direction = e.key === 'ArrowLeft' ? -1 : 1;
+        if (e.shiftKey) {
+          this.moveLayoutColumn(direction);
+        } else {
+          this.resizeLayoutColumn(direction * LAYOUT_RESIZE_STEP);
+        }
+        return true;
+      }
+
+      case 'Home':
+      case 'End': {
+        e.preventDefault();
+        const toEnd = e.key === 'End';
+        if (e.shiftKey) {
+          this.moveLayoutColumnToEdge(toEnd);
+        } else {
+          const header = this.findHeader(layout.column);
+          if (header) {
+            const bounds = header.getWidthBounds();
+            this.applyLayoutWidth(header, toEnd ? bounds.max : bounds.min);
+          }
+        }
+        return true;
+      }
+
+      case 'Backspace': {
+        // The keyboard twin of double-clicking the resize handle.
+        e.preventDefault();
+        this.claimGridFocus();
+        this.actions.resetColumnWidth(layout.column);
+        const header = this.findHeader(layout.column);
+        this.announce(
+          this.messages.a11y.columnWidthAnnouncement(layout.column, header?.getWidth() ?? 150),
+        );
+        return true;
+      }
+
+      default:
+        // Tab above all, but also ArrowUp / ArrowDown, which fall through to
+        // the cursor keys and end the gesture by moving off the column.
+        return false;
+    }
+  }
+
+  /** Apply a width through the header so the 50–500 clamp stays in one place. */
+  private applyLayoutWidth(header: ColumnHeader, px: number): void {
+    this.claimGridFocus();
+    const applied = header.setWidth(px);
+    const { min, max } = header.getWidthBounds();
+    const a = this.messages.a11y;
+    const column = header.getColumn().name;
+    this.announce(
+      applied <= min
+        ? a.columnWidthAtMinimum(column, applied)
+        : applied >= max
+          ? a.columnWidthAtMaximum(column, applied)
+          : a.columnWidthAnnouncement(column, applied),
+    );
+  }
+
+  private resizeLayoutColumn(deltaPx: number): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const header = this.findHeader(layout.column);
+    if (!header) return;
+    this.applyLayoutWidth(header, header.getWidth() + deltaPx);
+  }
+
+  /** Move the gesture's column one position left (-1) or right (+1). */
+  private moveLayoutColumn(direction: -1 | 1): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const visible = this.state.visibleColumns.get();
+    const from = visible.indexOf(layout.column);
+    if (from === -1) return;
+    this.moveLayoutColumnTo(from + direction);
+  }
+
+  /** `Shift+Home` / `Shift+End` — the first and last positions a move may reach. */
+  private moveLayoutColumnToEdge(toEnd: boolean): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const visible = this.state.visibleColumns.get();
+    if (visible.indexOf(layout.column) === -1) return;
+    this.moveLayoutColumnTo(toEnd ? visible.length : 0);
+  }
+
+  /**
+   * Splice the gesture's column to `desiredIndex`, clamped out of the pinned
+   * block, and announce where it landed.
+   *
+   * Pinned columns are refused outright rather than silently working: the
+   * mouse cannot drag them either (the drag handle is `pointer-events: none`
+   * while pinned), and a keyboard path that works where the mouse does not is
+   * a different feature, not an accessibility fix.
+   */
+  private moveLayoutColumnTo(desiredIndex: number): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const a = this.messages.a11y;
+    const pinned = this.state.pinnedColumns.get();
+    if (pinned.includes(layout.column)) {
+      this.announce(a.columnMoveBlockedPinned(layout.column));
+      return;
+    }
+
+    const visible = this.state.visibleColumns.get();
+    const from = visible.indexOf(layout.column);
+    if (from === -1) return;
+
+    const rest = visible.filter((c) => c !== layout.column);
+    const target = clampUnpinnedIndex(desiredIndex, rest, pinned);
+    if (target === from) return;
+
+    const next = [...rest];
+    next.splice(target, 0, layout.column);
+
+    this.claimGridFocus();
+    this.actions.setColumnOrder(next);
+    // setColumnOrder re-renders the header row, which destroys and rebuilds
+    // every ColumnHeader — the affordance has to be re-applied, and the
+    // column has moved out from under the cursor.
+    this.syncLayoutAffordance();
+    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
+    this.announce(a.columnMovedAnnouncement(layout.column, target + 1, next.length));
+  }
+
+  /** Put the layout outline on the gesture's header, and nowhere else. */
+  private syncLayoutAffordance(): void {
+    const column = this.layout?.column ?? null;
+    for (const header of this.getColumnHeaders?.() ?? []) {
+      header.setLayoutMode(header.getColumn().name === column);
+    }
+  }
+
+  private announce(message: string): void {
+    this.announceMessage?.(message);
+  }
+
+  // =========================================
   // Focus helpers
   // =========================================
 
@@ -542,6 +880,10 @@ export class KeyboardNavigator {
     // not move the cursor (Tab above all) from stealing focus.
     this.claimGridFocus();
     this.actions.setFocusedCell({ row, column });
+    // A cursor move is the other way out of column layout mode: the gesture
+    // belongs to the column it opened on, so walking off it commits now
+    // rather than on the next keystroke.
+    this.validateLayoutMode();
     this.scrollFocusedCellIntoView(row, column);
   }
 

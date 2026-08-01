@@ -18,12 +18,55 @@ export interface ColumnReorderOptions {
   classPrefix?: string | undefined;
   /** Movement threshold in pixels to start drag (default: 5) */
   dragThreshold?: number | undefined;
+  /**
+   * Late-bound accessor for the currently pinned columns. Used to keep a drop
+   * out of the pinned block (see {@link clampUnpinnedIndex}); when omitted,
+   * no clamping is applied.
+   */
+  getPinnedColumns?: (() => readonly string[]) | undefined;
 }
 
 /**
- * Callback invoked when columns are reordered
+ * Callback invoked when columns are reordered.
+ *
+ * @param newOrder - The full presented order after the drop.
+ * @param movedColumn - The column that was dragged. Derivable from `newOrder`
+ *   only ambiguously (a single move looks like a rotation of everything
+ *   between the two positions), so it is passed explicitly for announcements.
  */
-export type ReorderCallback = (newOrder: string[]) => void;
+export type ReorderCallback = (newOrder: string[], movedColumn: string) => void;
+
+/**
+ * Clamp an insertion index so an unpinned column cannot land inside the
+ * pinned block.
+ *
+ * Pinned columns are assumed to occupy the leading positions of the presented
+ * order — `TableContainer.updatePinnedColumnStyles` and
+ * `TableBody.updateRowContent` both compute sticky `left` offsets by walking
+ * `pinnedColumns` in order, so dropping an unpinned column at index 0 of a
+ * table with two pinned columns desyncs every offset after it.
+ *
+ * @param index - Desired insertion index into `columns`.
+ * @param columns - The presented order the column will be spliced into, with
+ *   the moved column already removed.
+ * @param pinnedColumns - Currently pinned column names.
+ * @returns `index` clamped to `[pinnedPrefixLength, columns.length]`.
+ *
+ * @example
+ * ```typescript
+ * clampUnpinnedIndex(0, ['id', 'name', 'qty'], ['id']); // → 1
+ * ```
+ */
+export function clampUnpinnedIndex(
+  index: number,
+  columns: readonly string[],
+  pinnedColumns: readonly string[],
+): number {
+  const pinned = new Set(pinnedColumns);
+  let prefix = 0;
+  while (prefix < columns.length && pinned.has(columns[prefix]!)) prefix++;
+  return Math.max(prefix, Math.min(columns.length, index));
+}
 
 /**
  * ColumnReorder manages drag-and-drop column reordering for a header row.
@@ -57,6 +100,7 @@ export class ColumnReorder {
 
   private readonly classPrefix: string;
   private readonly dragThreshold: number;
+  private readonly getPinnedColumns: (() => readonly string[]) | undefined;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseMove: (e: MouseEvent) => void;
@@ -76,6 +120,7 @@ export class ColumnReorder {
   ) {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.dragThreshold = options.dragThreshold ?? 5;
+    this.getPinnedColumns = options.getPinnedColumns;
 
     // Bind document-level handlers
     this.boundMouseMove = this.handleMouseMove.bind(this);
@@ -307,11 +352,18 @@ export class ColumnReorder {
         insertIndex--;
       }
 
-      // Insert at new position
-      newOrder.splice(insertIndex, 0, this.draggedColumn);
+      // The drop position comes from raw header midpoints, which happily
+      // point inside the pinned block. Landing there desyncs every sticky
+      // `left` offset, all of which assume the pinned columns lead.
+      insertIndex = clampUnpinnedIndex(insertIndex, newOrder, this.getPinnedColumns?.() ?? []);
 
-      // Notify callback
-      this.onReorder(newOrder);
+      if (insertIndex !== draggedIndex) {
+        // Insert at new position
+        newOrder.splice(insertIndex, 0, this.draggedColumn);
+
+        // Notify callback
+        this.onReorder(newOrder, this.draggedColumn);
+      }
     }
 
     this.resetDragState();

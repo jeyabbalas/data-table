@@ -38,7 +38,7 @@ import type {
   ColumnHeaderTooltipContent,
 } from './types';
 import { ROWID_COLUMN } from './types';
-import { captureSnapshot, applySnapshot, derivedColumnsEqual } from './UndoManager';
+import { captureSnapshot, applySnapshot, derivedColumnsEqual, snapshotsEqual } from './UndoManager';
 import type { StateSnapshot, UndoManager } from './UndoManager';
 
 /**
@@ -111,7 +111,8 @@ export class StateActions {
   private undoManager: UndoManager | undefined;
   private suppressUndoCapture = false;
   private undoRedoInProgress = false;
-  private widthDragSnapshot: StateSnapshot | null = null;
+  private layoutGestureSnapshot: StateSnapshot | null = null;
+  private layoutGestureActive = false;
   private onFilterRemoveCallback?: ((column: string) => void) | undefined;
   private onDerivedChangeCallback?:
     | ((payload: {
@@ -174,9 +175,16 @@ export class StateActions {
   // Undo/Redo
   // =========================================
 
-  /** Capture state snapshot before a mutation, if undo is enabled */
+  /**
+   * Capture state snapshot before a mutation, if undo is enabled.
+   *
+   * `layoutGestureActive` is checked separately from `suppressUndoCapture`
+   * rather than folded into it: `toggleColumnPin` clears `suppressUndoCapture`
+   * in a `finally`, which would clobber a column-layout gesture that happened
+   * to be open around it.
+   */
   private captureForUndo(): void {
-    if (!this.undoManager || this.suppressUndoCapture) return;
+    if (!this.undoManager || this.suppressUndoCapture || this.layoutGestureActive) return;
     this.undoManager.push(captureSnapshot(this.state));
   }
 
@@ -333,24 +341,98 @@ export class StateActions {
   }
 
   /**
+   * Open a column-layout gesture: the whole of it becomes one undo entry.
+   *
+   * A gesture is any run of width and order changes the user reads as a single
+   * action — a resize drag, or a keyboard `Shift+F2` session that resizes and
+   * moves a column before committing. Captures the pre-gesture state once and
+   * suppresses nested capture, so the ten `setColumnWidth` calls a drag emits
+   * (or the ten `setColumnOrder` calls a keyboard move emits) do not become ten
+   * undo steps. Close it with {@link StateActions.endColumnLayoutChange} or
+   * {@link StateActions.cancelColumnLayoutChange}.
+   *
+   * Captures even when undo is disabled — the snapshot is what
+   * `cancelColumnLayoutChange()` restores from, which has to work regardless.
+   * Calling it twice without closing keeps the first (outermost) snapshot.
+   *
+   * @example
+   * ```typescript
+   * actions.beginColumnLayoutChange();
+   * actions.setColumnWidth('price', 220);
+   * actions.setColumnOrder(['price', 'name', 'qty']);
+   * actions.endColumnLayoutChange(); // one Ctrl+Z undoes both
+   * ```
+   *
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  beginColumnLayoutChange(): void {
+    this.throwIfDestroyed('beginColumnLayoutChange');
+    if (this.layoutGestureActive) return;
+    this.layoutGestureSnapshot = captureSnapshot(this.state);
+    this.layoutGestureActive = true;
+  }
+
+  /**
+   * Commit an open column-layout gesture, pushing one undo entry.
+   *
+   * The entry is pushed **only if the state actually changed** — a mousedown
+   * and mouseup on the resize handle with no movement in between, or a
+   * `Shift+F2` the user immediately commits, leaves the undo stack alone
+   * rather than adding a step that undoes to an identical state. No-op when
+   * no gesture is open.
+   *
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  endColumnLayoutChange(): void {
+    this.throwIfDestroyed('endColumnLayoutChange');
+    const snapshot = this.layoutGestureSnapshot;
+    this.layoutGestureSnapshot = null;
+    this.layoutGestureActive = false;
+    if (!this.undoManager || !snapshot) return;
+    if (snapshotsEqual(snapshot, captureSnapshot(this.state))) return;
+    this.undoManager.push(snapshot);
+  }
+
+  /**
+   * Abandon an open column-layout gesture, restoring the state it opened on.
+   *
+   * The `Escape` half of the keyboard gesture: width **and** position go back
+   * to what they were at entry, and nothing is pushed onto the undo stack —
+   * a cancelled gesture never happened. No-op when no gesture is open.
+   *
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  cancelColumnLayoutChange(): void {
+    this.throwIfDestroyed('cancelColumnLayoutChange');
+    const snapshot = this.layoutGestureSnapshot;
+    this.layoutGestureSnapshot = null;
+    this.layoutGestureActive = false;
+    if (!snapshot) return;
+    applySnapshot(this.state, snapshot);
+  }
+
+  /**
    * Begin a column width drag sequence.
    * Captures state once at drag start for undo.
+   *
+   * A width drag is one flavour of column-layout gesture; this delegates so
+   * the mouse path picks up the "push only if something changed" guard too.
+   *
+   * @throws `DestroyedError` if the table was destroyed.
    */
   beginColumnWidthChange(): void {
-    this.throwIfDestroyed('beginColumnWidthChange');
-    if (!this.undoManager) return;
-    this.widthDragSnapshot = captureSnapshot(this.state);
+    this.beginColumnLayoutChange();
   }
 
   /**
    * End a column width drag sequence.
-   * Pushes the pre-drag snapshot to the undo stack.
+   * Pushes the pre-drag snapshot to the undo stack, unless the drag was a
+   * no-op.
+   *
+   * @throws `DestroyedError` if the table was destroyed.
    */
   endColumnWidthChange(): void {
-    this.throwIfDestroyed('endColumnWidthChange');
-    if (!this.undoManager || !this.widthDragSnapshot) return;
-    this.undoManager.push(this.widthDragSnapshot);
-    this.widthDragSnapshot = null;
+    this.endColumnLayoutChange();
   }
 
   /** Get the UndoManager instance, if one was provided */

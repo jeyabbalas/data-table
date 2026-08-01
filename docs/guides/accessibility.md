@@ -46,6 +46,14 @@ four others the table contributes — and then:
 | `↑` / `↓` (controls mode)                              | Leave controls mode and move the cursor one row              |
 | `Enter` / `Space` (controls mode)                      | Activate the focused button                                  |
 | `Escape` (controls mode)                               | Leave controls mode; focus returns to the grid               |
+| `Shift` + `F2` (header row)                            | Enter column layout mode — resize and reorder the column     |
+| `←` / `→` (layout mode)                                | Resize the column by 16px, clamped to 50–500                 |
+| `Shift` + `←` / `→` (layout mode)                      | Move the column one position                                 |
+| `Home` / `End` (layout mode)                           | Minimum / maximum width                                      |
+| `Shift` + `Home` / `End` (layout mode)                 | Move the column to the first / last position it may occupy   |
+| `Backspace` (layout mode)                              | Reset the width to the default                               |
+| `Enter` (layout mode)                                  | Commit and leave the mode                                    |
+| `Escape` (layout mode)                                 | Cancel — restore the entry width **and** position            |
 | `Escape`                                               | Clear the cursor                                             |
 | `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                         |
 | `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                         |
@@ -55,6 +63,38 @@ four others the table contributes — and then:
 When any modal is open (export dialog, SQL filter editor, derived-column
 editor, preset panel), the grid keyboard shortcuts are disabled — the
 modal owns input until dismissed.
+
+### Column layout mode (`Shift+F2`)
+
+Column resize and column reorder are the two per-column operations with no
+button of their own in the `F2` cycle, because neither has an affordance a
+focus stop could usefully sit on: the resize handle is a `role="separator"`
+and the drag handle only means something under a pointer. They live behind a
+modal gesture on the header cursor instead.
+
+Nothing becomes focusable. Real DOM focus stays on `.dt-grid` for the whole
+gesture, so the tab-stop census does not move and the separator never becomes
+a widget ARIA would then require `aria-valuenow` / `aria-valuemin` /
+`aria-valuemax` on. The column being edited carries a dashed outline
+(`.dt-col-header--layout`) and lights its resize handle; every step is spoken
+through the live region.
+
+The whole gesture is **one undo entry** — ten arrow presses and a move undo in
+a single `Ctrl+Z`, and a gesture that changed nothing pushes no entry at all.
+`Escape` restores the entry width and position and pushes nothing. Tab is never
+intercepted; walking out of the grid commits the gesture on the way.
+
+Pinned columns refuse to move, which is what the mouse does too — the drag
+handle is `pointer-events: none` while a column is pinned. An unpinned column
+also cannot be moved into the pinned block, in either direction: every sticky
+`left` offset assumes the pinned columns lead.
+
+Discoverability is the part that is easy to get wrong, so it is spelled out in
+four places: `aria-keyshortcuts="Shift+F2"` on every `.dt-col-header`, the key
+named in the drag handle's `title` and the resize handle's `aria-label`, and
+the live-region announcement on entry, which reads the whole key map aloud.
+All of those strings are translatable — see
+[ARIA and screen-reader strings](./i18n.md#aria-and-screen-reader-strings).
 
 ### Focus model (single cursor + `aria-activedescendant`)
 
@@ -146,10 +186,10 @@ tooltip popovers that open on `focusin`, are left alone.
 | Null filter toggle group                              | `role="radiogroup"`                                                                                    |
 | Filter bar (`.dt-filter-bar`)                         | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
 | Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (both axes)                                            |
-| Column resizer handle                                 | `role="separator"`                                                                                     |
-| Live-region announcer                                 | `role="status"` with `aria-live="polite"`, `aria-atomic="true"`                                        |
+| Column resizer handle                                 | `role="separator"`, `aria-orientation="vertical"`, never focusable                                     |
+| Live-region announcers (two)                          | `role="status"` with `aria-live="polite"`, `aria-atomic="true"`                                        |
 
-Two structural details are load-bearing rather than incidental:
+Three structural details are load-bearing rather than incidental:
 
 - **`.dt-root` carries no role and no `aria-label`.** It hosts the grid _and_
   its siblings — the toolbar filter bar, the status live region, the toolbar
@@ -165,6 +205,14 @@ Two structural details are load-bearing rather than incidental:
   _focusable_ roleless elements sitting directly under `role="grid"`, which is
   an `aria-required-children` violation. Giving them the rowgroup role they
   were wrapping anyway resolves both.
+- **There are two `role="status"` regions, not one.** The first is rebuilt
+  wholesale from filter, sort and row-count state on every flush; anything
+  written into it is clobbered by the next frame. The second
+  (`.dt-announce`) carries transient messages — a new column width, a
+  column's new position, the entry and exit of column layout mode — through
+  `TableContainer.announce()`. Repeating the same text there blanks the node
+  for a frame first, because assistive tech ignores a live region whose text
+  has not changed.
 
 Grid semantics are attached lazily: before a schema and table name exist, the
 shell renders a "Load data" placeholder, owns no rows, and carries no role,
@@ -342,7 +390,7 @@ messages: {
 - **Tab always moves on.** It is never intercepted, in any state, including controls mode and the two toolbars. Moving _within_ the grid is the arrow keys' job. Five Tab presses cross the whole table: the filter bar, the cursor, the two scroll regions, the hidden-columns gutter.
 - **The grid does not own keys pressed on the filter bar or the hidden-columns gutter.** They sit inside `.dt-root`, where the keydown listener lives, so the grid explicitly checks that focus is inside `.dt-grid` before acting — otherwise Space on "Clear all filters" would sort a column instead. Undo, redo and copy stay table-wide.
 - **The per-column buttons are not in the tab order.** Sort, pin, hide, filter and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
-- **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. Both gestures are mouse-only, and a focus stop whose Enter key does nothing is worse than no stop at all. See [What's not yet supported](#whats-not-yet-supported).
+- **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. A focus stop whose Enter key does nothing is worse than no stop at all, and a focusable `role="separator"` would need `aria-valuenow` / `aria-valuemin` / `aria-valuemax` to stay valid. They have their own gesture instead: [`Shift+F2`](#column-layout-mode-shiftf2), which costs no tab stop and no focus stop.
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
@@ -368,6 +416,7 @@ reader from each row. The test rig is the demo (`npm run dev`).
 | **Tab through** — Tab from the control before the table to the one after it     | six presses — five stops inside, one to step off — regardless of column count, hidden columns or active filters; Shift+Tab retraces | same                    | same                   |
 | **Header cursor** — ArrowUp from body row 0, then ArrowLeft / ArrowRight        | column header name, type, sort and filter state                                                                                     | same                    | same                   |
 | **Controls mode** — F2 on a header, ArrowRight a few times, Enter, Escape       | button label announced on each step; Escape returns to the grid cursor                                                              | same                    | same                   |
+| **Layout mode** — Shift+F2 on a header, then ←, Shift+→, Backspace, Escape      | key map read on entry; each step announces a width or a new position; Escape says the layout was cancelled                          | same                    | same                   |
 | **Filter add** — open Filter panel, apply a range filter, close                 | live region: "1 filter active, showing X of Y rows"                                                                                 | same                    | same                   |
 | **Sort change** — click a column header twice (toggle desc)                     | live region: "sorted by NAME descending"                                                                                            | same                    | same                   |
 | **Modal open** — open Export, then SQL filter, then Derived column              | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                          | same                    | same                   |
@@ -435,18 +484,13 @@ to post-1.0).
   `.dt-filter-chip` to `CanvasText`, and maps disabled buttons to `GrayText`.
   Everything else — modals, popovers, filled buttons, non-filter chips — is
   left to whatever the user agent substitutes.
-- **Touch + drag-and-drop** — column resize / reorder use mouse events
-  (`mousedown` / `mousemove` / `mouseup`). iOS Safari does not
-  synthesise reliable mousemove between touchstart and touchend, so
-  resize / reorder are pointer-only. Documented in the README and
+- **Touch drag for column resize / reorder** — the pointer path uses mouse
+  events (`mousedown` / `mousemove` / `mouseup`). iOS Safari does not
+  synthesise reliable mousemove between touchstart and touchend, so dragging
+  a column on a touch device does not work. The keyboard gesture
+  ([`Shift+F2`](#column-layout-mode-shiftf2)) covers both operations, so this
+  is a pointer gap rather than a WCAG 2.1.1 one. Documented in the README and
   AGENTS.md as out-of-scope.
-- **Keyboard column resize / reorder** — the resize handle
-  (`role="separator"`) and the header drag handle stay mouse-only and are
-  deliberately excluded from `ColumnHeader.getControls()`, and so from the
-  `F2` controls-mode cycle. Both need a designed keyboard gesture (`←` / `→`
-  to resize, a pick-up-and-move mode to reorder), not just a focus stop that
-  does nothing on Enter. Tracked as
-  [issue #87](https://github.com/jeyabbalas/data-table/issues/87).
 
 ## Related
 

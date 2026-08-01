@@ -75,6 +75,22 @@ export interface TableBodyOptions {
 export type RowData = Record<string, unknown>;
 
 /**
+ * Whether two column lists hold the same names, ignoring order.
+ *
+ * Used to tell a reorder (same set) from a show / hide / derived-column change
+ * (different set). Rows are keyed by column name, so the former needs a
+ * re-render and the latter needs a re-fetch.
+ */
+function sameColumnSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const seen = new Set(a);
+  for (const name of b) {
+    if (!seen.has(name)) return false;
+  }
+  return true;
+}
+
+/**
  * TableBody renders data rows using virtual scrolling.
  *
  * @example
@@ -112,8 +128,12 @@ export class TableBody {
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
-  // Cached column name -> 1-based schema index for aria-colindex
+  // Cached column name -> 1-based presented index for aria-colindex
   private colIndexMap = new Map<string, number>();
+
+  // Last observed visibleColumns, so a write can be classified as a reorder
+  // (same set, new order — re-render) or a real change (re-fetch).
+  private lastVisibleColumns: string[] = [];
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
@@ -183,6 +203,7 @@ export class TableBody {
 
     // Build initial column index map for aria-colindex
     this.rebuildColIndexMap();
+    this.lastVisibleColumns = [...this.state.visibleColumns.get()];
 
     // Set total rows (use filteredRows when filters are active)
     const filters = this.state.filters.get();
@@ -230,13 +251,30 @@ export class TableBody {
   // =========================================
 
   /**
-   * Rebuild the column name -> 1-based schema index map.
+   * Rebuild the column name -> 1-based `aria-colindex` map.
+   *
+   * Numbered from `columnOrder` — the presented order, including hidden
+   * columns — and not from `schema`. ARIA requires `aria-colindex` to ascend
+   * in DOM order within a row (a MUST), and rows render in `visibleColumns`
+   * order, which is a filter over `columnOrder`. Numbering from the schema
+   * made a reordered row report `3, 1, 2`. Keeping the hidden columns in the
+   * numbering is deliberate: the gaps are what tell assistive tech that
+   * columns are missing rather than renumbered.
+   *
+   * Falls back to the schema position for any column `columnOrder` does not
+   * know about, so a header still carries an index during the window between
+   * a schema write and the column-order write that follows it.
    */
   private rebuildColIndexMap(): void {
     this.colIndexMap.clear();
+    const columnOrder = this.state.columnOrder.get();
+    for (let i = 0; i < columnOrder.length; i++) {
+      this.colIndexMap.set(columnOrder[i]!, i + 1);
+    }
     const schema = this.state.schema.get();
     for (let i = 0; i < schema.length; i++) {
-      this.colIndexMap.set(schema[i]!.name, i + 1);
+      const name = schema[i]!.name;
+      if (!this.colIndexMap.has(name)) this.colIndexMap.set(name, i + 1);
     }
   }
 
@@ -252,9 +290,37 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubSchema);
 
-    // Re-fetch when visible columns change
-    const unsubVisibleCols = this.state.visibleColumns.subscribe(() => {
+    // …and when the presentation order changes, which is what aria-colindex
+    // is numbered from. A reorder leaves the schema untouched, so without
+    // this the indices stay frozen at the pre-reorder positions.
+    const unsubColumnOrder = this.state.columnOrder.subscribe(() => {
       if (!this.destroyed) {
+        this.rebuildColIndexMap();
+      }
+    });
+    this.unsubscribes.push(unsubColumnOrder);
+
+    // Re-fetch when the visible column *set* changes.
+    //
+    // A write that only permutes the set is a reorder, and rows are keyed by
+    // column name — every value is already in the cache, so a re-render is
+    // enough, and the in-flight `initialize()` fetch is not dropped by a
+    // `fetchSequence` bump it did not need.
+    //
+    // Measured honestly: through `TableContainer` this changes no query count.
+    // `render()` destroys and recreates the whole `TableBody` on any
+    // `visibleColumns` write, so one keyboard column move at 266 columns costs
+    // 534 DuckDB queries with or without this branch — all of them column-header
+    // stats and plot queries from rebuilding 266 headers, none of them row
+    // fetches. It earns its keep where a `TableBody` is driven directly, which
+    // is a supported `/advanced` entry point.
+    const unsubVisibleCols = this.state.visibleColumns.subscribe((columns) => {
+      if (this.destroyed) return;
+      const orderOnly = sameColumnSet(this.lastVisibleColumns, columns);
+      this.lastVisibleColumns = [...columns];
+      if (orderOnly) {
+        this.renderVisibleRows();
+      } else {
         this.invalidateCacheAndRefresh();
       }
     });

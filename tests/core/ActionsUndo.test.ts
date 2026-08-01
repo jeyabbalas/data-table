@@ -304,6 +304,110 @@ describe('StateActions — Undo/Redo Integration', () => {
       // No endColumnWidthChange called
       expect(undoManager.undoDepth).toBe(0);
     });
+
+    it('a drag that changed nothing pushes no undo entry', () => {
+      // mousedown + mouseup on the handle with no movement in between. It
+      // used to push a step that undid to an identical state, so the first
+      // Ctrl+Z after a mis-click appeared to do nothing.
+      actions.beginColumnWidthChange();
+      actions.endColumnWidthChange();
+      expect(undoManager.undoDepth).toBe(0);
+    });
+
+    it('a drag that ends on the width it started at pushes nothing either', () => {
+      actions.beginColumnWidthChange();
+      actions.setColumnWidth('id', 200);
+      actions.endColumnWidthChange();
+      expect(undoManager.undoDepth).toBe(1);
+
+      actions.beginColumnWidthChange();
+      actions.setColumnWidth('id', 300);
+      actions.setColumnWidth('id', 200); // dragged out and back
+      actions.endColumnWidthChange();
+      expect(undoManager.undoDepth).toBe(1);
+    });
+  });
+
+  // =========================================
+  // Column layout gesture (Shift+F2)
+  // =========================================
+
+  describe('Column layout gesture undo', () => {
+    it('a whole gesture — resize AND reorder — is one undo entry', () => {
+      actions.beginColumnLayoutChange();
+      actions.setColumnWidth('id', 200);
+      actions.setColumnWidth('id', 216);
+      actions.setColumnOrder(['name', 'id', 'age', 'email']);
+      actions.setColumnOrder(['name', 'age', 'id', 'email']);
+      actions.endColumnLayoutChange();
+
+      expect(undoManager.undoDepth).toBe(1);
+
+      actions.undo();
+      expect(state.columnWidths.get().has('id')).toBe(false);
+      expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
+    });
+
+    it('a gesture that changed nothing is zero undo entries', () => {
+      actions.beginColumnLayoutChange();
+      actions.endColumnLayoutChange();
+      expect(undoManager.undoDepth).toBe(0);
+    });
+
+    it('setColumnOrder inside a gesture does not capture on its own', () => {
+      // setColumnOrder captures on every call outside a gesture; ten keyboard
+      // move steps must not become ten undo steps.
+      actions.beginColumnLayoutChange();
+      actions.setColumnOrder(['name', 'id', 'age', 'email']);
+      expect(undoManager.undoDepth).toBe(0);
+      actions.endColumnLayoutChange();
+      expect(undoManager.undoDepth).toBe(1);
+    });
+
+    it('resetColumnWidth inside a gesture does not capture on its own', () => {
+      actions.setColumnWidth('id', 200);
+      actions.beginColumnLayoutChange();
+      actions.resetColumnWidth('id');
+      expect(undoManager.undoDepth).toBe(0);
+      actions.endColumnLayoutChange();
+      expect(undoManager.undoDepth).toBe(1);
+    });
+
+    it('cancel restores the entry width and order, and pushes nothing', () => {
+      actions.beginColumnLayoutChange();
+      actions.setColumnWidth('id', 300);
+      actions.setColumnOrder(['age', 'id', 'name', 'email']);
+
+      actions.cancelColumnLayoutChange();
+
+      expect(state.columnWidths.get().has('id')).toBe(false);
+      expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age', 'email']);
+      expect(state.columnOrder.get()).toEqual(['id', 'name', 'age', 'email']);
+      expect(undoManager.undoDepth).toBe(0);
+    });
+
+    it('a pin inside a gesture cannot clobber the open bracket', () => {
+      // toggleColumnPin clears suppressUndoCapture in a `finally`, which is
+      // why the gesture flag has to be a separate field.
+      actions.beginColumnLayoutChange();
+      actions.toggleColumnPin('name');
+      expect(undoManager.undoDepth).toBe(0);
+
+      actions.setColumnWidth('id', 260);
+      actions.endColumnLayoutChange();
+      expect(undoManager.undoDepth).toBe(1);
+
+      actions.undo();
+      expect(state.pinnedColumns.get()).toEqual([]);
+      expect(state.columnWidths.get().has('id')).toBe(false);
+    });
+
+    it('cancel with no open gesture is a no-op', () => {
+      actions.setColumnWidth('id', 210);
+      actions.cancelColumnLayoutChange();
+      expect(state.columnWidths.get().get('id')).toBe(210);
+      expect(undoManager.undoDepth).toBe(0);
+    });
   });
 
   // =========================================

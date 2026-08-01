@@ -79,4 +79,25 @@ for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     assertClean(await scan(page), `${WIDE_COLUMNS} columns, ${theme}`);
   });
+
+  test(`column layout mode is axe-clean in ${theme}`, async ({ page }) => {
+    // The mode adds `aria-keyshortcuts` to every header and a second
+    // `role="status"` region, and lights a `role="separator"` that stays
+    // unfocusable on purpose — a focusable one would need `aria-valuenow` /
+    // `min` / `max` and trip `aria-required-attr`. Scanned live because that
+    // last rule only fires against a real accessibility tree.
+    test.setTimeout(240_000);
+    await openDemo(page);
+    await loadCsv(page, WIDE_COLUMNS);
+    await setTheme(page, theme);
+
+    await page.locator('.dt-grid').focus();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Shift+F2');
+    await expect(page.locator('.dt-col-header--layout')).toHaveCount(1);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Shift+ArrowRight');
+
+    assertClean(await scan(page), `column layout mode, ${theme}`);
+  });
 }

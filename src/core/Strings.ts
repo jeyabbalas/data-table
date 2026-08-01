@@ -391,6 +391,28 @@ export interface Strings {
     resizeHandleLabel: string;
     /** Placeholder text shown for not-yet-fetched rows during fast scroll. */
     loadingRowLabel: (rowNumber: number) => string;
+
+    /**
+     * Column layout mode (`Shift+F2` on a column header) — the keyboard
+     * gesture for resize and reorder. The entry announcement is the only
+     * place the key map is spoken aloud, so it doubles as the mode's
+     * discoverability affordance; keep the key names in a translation.
+     */
+    columnLayoutModeEntered: (column: string) => string;
+    /** Live-region: the column's new width after a resize step. */
+    columnWidthAnnouncement: (column: string, px: number) => string;
+    /** Live-region: resize step landed on the minimum width. */
+    columnWidthAtMinimum: (column: string, px: number) => string;
+    /** Live-region: resize step landed on the maximum width. */
+    columnWidthAtMaximum: (column: string, px: number) => string;
+    /** Live-region: the column's new 1-based position after a move. */
+    columnMovedAnnouncement: (column: string, position: number, total: number) => string;
+    /** Live-region: a move was refused because the column is pinned. */
+    columnMoveBlockedPinned: (column: string) => string;
+    /** Live-region: Escape restored the entry width and position. */
+    columnLayoutCancelled: (column: string) => string;
+    /** Live-region: Enter (or leaving the grid) committed the gesture. */
+    columnLayoutCommitted: (column: string) => string;
   };
 
   // =========================================
@@ -723,7 +745,7 @@ export const defaultStrings: Strings = {
     multiFilteredSuffix: (count) => `${count} filters`,
 
     dragHandleLabel: (column) => `Drag to reorder ${column}`,
-    dragHandleTitle: 'Reorder column',
+    dragHandleTitle: 'Reorder column (keyboard: Shift+F2 on the header)',
 
     sortButtonLabel: (column) => `Sort by ${column}`,
     sortAscendingTitle: 'Sort ascending',
@@ -748,8 +770,21 @@ export const defaultStrings: Strings = {
     hiddenColumnsLabel: 'Hidden columns',
     showColumn: (column) => `Show ${column}`,
 
-    resizeHandleLabel: 'Resize column',
+    resizeHandleLabel: 'Resize column (keyboard: Shift+F2 on the header)',
     loadingRowLabel: (rowNumber) => `Loading row ${rowNumber}…`,
+
+    columnLayoutModeEntered: (column) =>
+      `${column}: column layout mode. Left and Right resize, Shift with Left and Right move the ` +
+      `column, Home and End set minimum and maximum width, Backspace resets the width, ` +
+      `Enter commits, Escape cancels.`,
+    columnWidthAnnouncement: (column, px) => `${column} ${px} pixels wide`,
+    columnWidthAtMinimum: (column, px) => `${column} ${px} pixels wide, minimum`,
+    columnWidthAtMaximum: (column, px) => `${column} ${px} pixels wide, maximum`,
+    columnMovedAnnouncement: (column, position, total) =>
+      `${column} moved to column ${position} of ${total}`,
+    columnMoveBlockedPinned: (column) => `${column} is pinned and cannot be moved`,
+    columnLayoutCancelled: (column) => `${column} layout cancelled, width and position restored`,
+    columnLayoutCommitted: (column) => `${column} layout committed`,
   },
 
   statistics: {

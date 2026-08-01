@@ -55,7 +55,7 @@ export type { ColumnHeaderTooltipPopoverOptions } from './table/ColumnHeaderTool
 export { CellRenderer } from './table/Cell';
 export type { CellOptions } from './table/Cell';
 
-export { ColumnReorder } from './table/ColumnReorder';
+export { ColumnReorder, clampUnpinnedIndex } from './table/ColumnReorder';
 export type { ColumnReorderOptions, ReorderCallback } from './table/ColumnReorder';
 
 export { HiddenColumnsGutter } from './table/HiddenColumnsGutter';

@@ -243,11 +243,11 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 
 | Symbol                              | Kind           | Purpose                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TableContainer`                    | class          | Main DOM container that composes every UI piece.                                                                                                                                                                                                                                                                                 |
+| `TableContainer`                    | class          | Main DOM container that composes every UI piece. `announce(message)` speaks a transient message through its second polite live region.                                                                                                                                                                                           |
 | `TableContainerOptions`             | interface      | Ctor options (rowHeight, headerHeight, classPrefix, instanceId, colorScheme, messages, …).                                                                                                                                                                                                                                       |
 | `ResizeCallback`                    | type           | `(rect: DOMRect) => void` for resize observers.                                                                                                                                                                                                                                                                                  |
-| `ColumnHeader`                      | class          | Renders a single column header cell (label, stats, viz canvas).                                                                                                                                                                                                                                                                  |
-| `ColumnHeaderOptions`               | interface      | Header ctor options.                                                                                                                                                                                                                                                                                                             |
+| `ColumnHeader`                      | class          | Renders a single column header cell (label, stats, viz canvas). See [Column layout mode](#column-layout-mode-shiftf2) for its keyboard width API.                                                                                                                                                                                |
+| `ColumnHeaderOptions`               | interface      | Header ctor options. `announce?: (message: string) => void` writes to the transient live region (used to announce the width at the end of a resize drag).                                                                                                                                                                        |
 | `VirtualScroller`                   | class          | Virtual row windowing for large datasets.                                                                                                                                                                                                                                                                                        |
 | `VirtualScrollerOptions`            | interface      | Scroller ctor options.                                                                                                                                                                                                                                                                                                           |
 | `VisibleRange`                      | type           | `{ startIndex, endIndex }`.                                                                                                                                                                                                                                                                                                      |
@@ -260,11 +260,11 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `CellOptions`                       | interface      | Cell ctor options.                                                                                                                                                                                                                                                                                                               |
 | `ColumnReorder`                     | class          | Drag-to-reorder controller for column headers.                                                                                                                                                                                                                                                                                   |
 | `ColumnReorderOptions`              | interface      | Reorder ctor options.                                                                                                                                                                                                                                                                                                            |
-| `ReorderCallback`                   | type           | `(newOrder: string[]) => void`.                                                                                                                                                                                                                                                                                                  |
+| `ReorderCallback`                   | type           | `(newOrder: string[], movedColumn: string) => void`.                                                                                                                                                                                                                                                                             |
 | `HiddenColumnsGutter`               | class          | Renders the gutter that surfaces hidden columns.                                                                                                                                                                                                                                                                                 |
 | `HiddenColumnsGutterOptions`        | interface      | Gutter ctor options.                                                                                                                                                                                                                                                                                                             |
-| `KeyboardNavigator`                 | class          | Arrow-key / `aria-activedescendant` navigation for the grid.                                                                                                                                                                                                                                                                     |
-| `KeyboardNavigatorOptions`          | interface      | Navigator ctor options.                                                                                                                                                                                                                                                                                                          |
+| `KeyboardNavigator`                 | class          | Arrow-key / `aria-activedescendant` navigation for the grid, plus `F2` controls mode and `Shift+F2` column layout mode.                                                                                                                                                                                                          |
+| `KeyboardNavigatorOptions`          | interface      | Navigator ctor options. `announce?: (message: string) => void` and `messages?: Strings` drive the layout-mode live-region text; omit `announce` and the gesture still works, silently.                                                                                                                                           |
 | `AnnotationStore`                   | class          | Programmatic annotation CRUD store. Exposed at Tier-1 via `table.annotations`; the class itself lives on `/advanced` for consumers that want to construct one independently.                                                                                                                                                     |
 | `AnnotationStoreOptions`            | interface      | Ctor options (`tableName`, `idGenerator`, `now`).                                                                                                                                                                                                                                                                                |
 | `AnnotationPopover`                 | class          | Single shared popover instance reused across hover / focus targets. Constructed by `createDataTable`; see [`docs/guides/annotations.md`](./guides/annotations.md).                                                                                                                                                               |
@@ -293,6 +293,30 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `SQLFilterModalOptions`    | interface | Modal ctor options.                                                                   |
 | `FilterPresetPanel`        | class     | Save/load/export preset panel.                                                        |
 | `FilterPresetPanelOptions` | interface | Panel ctor options.                                                                   |
+
+### Column layout mode (`Shift+F2`)
+
+Column resize and column reorder are keyboard-operable from the header cursor
+through one modal gesture. It adds no tab stop and makes no element focusable
+— real DOM focus stays on `.dt-grid` throughout. The key map, the live-region
+strings and the pinned-column rules are in the
+[accessibility guide](./guides/accessibility.md#column-layout-mode-shiftf2).
+
+These are the public surfaces it is built on; reach for them directly only
+when assembling a custom container shell.
+
+| Symbol                                       | Kind     | Purpose                                                                                                                            |
+| -------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ColumnHeader.getWidth()`                    | method   | Current width in pixels, read from `columnWidths` (150 when unset) rather than from layout.                                        |
+| `ColumnHeader.getWidthBounds()`              | method   | `{ min, max }` — the resizer's clamp, 50 / 500 by default.                                                                         |
+| `ColumnHeader.setWidth(px)`                  | method   | Apply a width, clamped to the bounds. Returns the width actually applied.                                                          |
+| `ColumnHeader.resizeBy(deltaPx)`             | method   | Grow or shrink by a signed delta, clamped. Returns the width actually applied.                                                     |
+| `ColumnHeader.setLayoutMode(active)`         | method   | Toggle the dashed outline and the lit resize handle that mark the column the arrow keys are about to act on.                       |
+| `TableContainer.announce(message)`           | method   | Write a transient message to the second polite live region. Repeating the same text re-announces it.                               |
+| `clampUnpinnedIndex(index, columns, pinned)` | function | Clamp an insertion index out of the pinned block. Exported from `ColumnReorder`; used by both the drag path and the keyboard move. |
+| `actions.beginColumnLayoutChange()`          | method   | Open the undo bracket — see [Undo / redo](#undo--redo).                                                                            |
+| `actions.endColumnLayoutChange()`            | method   | Commit it, pushing at most one entry.                                                                                              |
+| `actions.cancelColumnLayoutChange()`         | method   | Abandon it, restoring width and order.                                                                                             |
 
 ### Derived-column UI
 
@@ -528,15 +552,18 @@ Source: `src/core/Actions.ts`. Access via `table.actions`.
 
 ### Undo / redo
 
-| Method                   | Signature                                | Notes                                                            |
-| ------------------------ | ---------------------------------------- | ---------------------------------------------------------------- |
-| `undo`                   | `() => Promise<boolean>`                 | Resolves `true` if something was undone.                         |
-| `redo`                   | `() => Promise<boolean>`                 | Resolves `true` if something was redone.                         |
-| `beginColumnWidthChange` | `() => void`                             | Call before a width drag so undo captures pre-drag state.        |
-| `endColumnWidthChange`   | `() => void`                             | Pair with `beginColumnWidthChange`.                              |
-| `getUndoManager`         | `() => UndoManager \| undefined`         | Returns the active manager or `undefined` if `undoRedo: false`.  |
-| `resetToInitial`         | `() => Promise<boolean>`                 | Reset to snapshot captured at load time.                         |
-| `setOnFilterRemove`      | `(cb: (column: string) => void) => void` | Called when a filter chip is removed (e.g., to clear viz state). |
+| Method                     | Signature                                | Notes                                                                                                                                |
+| -------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `undo`                     | `() => Promise<boolean>`                 | Resolves `true` if something was undone.                                                                                             |
+| `redo`                     | `() => Promise<boolean>`                 | Resolves `true` if something was redone.                                                                                             |
+| `beginColumnWidthChange`   | `() => void`                             | Call before a width drag so undo captures pre-drag state. Thin alias for `beginColumnLayoutChange`.                                  |
+| `endColumnWidthChange`     | `() => void`                             | Pair with `beginColumnWidthChange`. Thin alias for `endColumnLayoutChange`.                                                          |
+| `beginColumnLayoutChange`  | `() => void`                             | Open a column-layout gesture: every width and order change until it closes becomes one undo entry, and nested capture is suppressed. |
+| `endColumnLayoutChange`    | `() => void`                             | Commit the gesture. Pushes an undo entry **only if the state actually changed** — a no-op drag adds no step.                         |
+| `cancelColumnLayoutChange` | `() => void`                             | Abandon the gesture: restore the width and order it opened on, push nothing. The `Escape` half of `Shift+F2`.                        |
+| `getUndoManager`           | `() => UndoManager \| undefined`         | Returns the active manager or `undefined` if `undoRedo: false`.                                                                      |
+| `resetToInitial`           | `() => Promise<boolean>`                 | Reset to snapshot captured at load time.                                                                                             |
+| `setOnFilterRemove`        | `(cb: (column: string) => void) => void` | Called when a filter chip is removed (e.g., to clear viz state).                                                                     |
 
 ### Data loading
 

@@ -11,6 +11,7 @@ import { ColumnHeader } from '@/table/ColumnHeader';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
+import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { TableBody } from '@/table/TableBody';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -611,6 +612,7 @@ describe('KeyboardNavigator', () => {
       );
       for (const h of headers) grid.appendChild(h.getElement());
 
+      const announce = vi.fn();
       const nav = new KeyboardNavigator({
         rootElement: root,
         gridElement: grid,
@@ -619,6 +621,7 @@ describe('KeyboardNavigator', () => {
         actions,
         getTableBody: () => makeStubBody(),
         getColumnHeaders: () => headers,
+        announce,
       });
 
       const cleanup = (): void => {
@@ -626,7 +629,7 @@ describe('KeyboardNavigator', () => {
         for (const h of headers) h.destroy();
       };
 
-      return { state, actions, root, grid, headers, nav, cleanup };
+      return { state, actions, root, grid, headers, nav, announce, cleanup };
     }
 
     it('ArrowUp from body row 0 lands on the header row', () => {
@@ -893,6 +896,301 @@ describe('KeyboardNavigator', () => {
 
       expect(state.focusedCell.get()).toBeNull();
       cleanup();
+    });
+
+    // ---- Column layout mode (Shift+F2) ----
+    //
+    // Issue #87. Resize and reorder are the two per-column operations with no
+    // focus stop, on purpose: a stop whose Enter does nothing is worse than no
+    // stop. They live behind a modal gesture on the header cursor instead,
+    // which costs no tab stop and makes nothing focusable.
+
+    const a11y = defaultStrings.a11y;
+
+    /** Enter layout mode with the cursor parked on `column`. */
+    function enterLayout(
+      harness: ReturnType<typeof setupWithHeaders>,
+      column = 'b',
+    ): ReturnType<typeof setupWithHeaders> {
+      harness.actions.setFocusedCell({ row: HEADER_ROW_INDEX, column });
+      keydown(harness.root, { key: 'F2', shiftKey: true });
+      harness.announce.mockClear();
+      return harness;
+    }
+
+    describe('column layout mode', () => {
+      it('Shift+F2 on a header enters the mode and announces the key map', () => {
+        const { actions, root, headers, announce, cleanup } = setupWithHeaders();
+        actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+
+        const event = new KeyboardEvent('keydown', {
+          key: 'F2',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        root.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(announce).toHaveBeenCalledWith(a11y.columnLayoutModeEntered('b'));
+        expect(headers[1]!.getElement().classList.contains('dt-col-header--layout')).toBe(true);
+        // …and only on the cursor's column.
+        expect(headers[0]!.getElement().classList.contains('dt-col-header--layout')).toBe(false);
+        cleanup();
+      });
+
+      it('Shift+F2 moves no DOM focus — the mode adds no focus stop', () => {
+        // The whole point of a modal gesture over two more focus stops: real
+        // focus never leaves `.dt-grid`, so the tab-stop census cannot move
+        // and the resize separator never becomes a widget ARIA would then
+        // require aria-valuenow/min/max on.
+        const harness = setupWithHeaders();
+        harness.grid.focus();
+        enterLayout(harness);
+        expect(document.activeElement).toBe(harness.grid);
+        harness.cleanup();
+      });
+
+      it('bare F2 still enters controls mode', () => {
+        const { actions, root, headers, cleanup } = setupWithHeaders();
+        actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+        keydown(root, { key: 'F2' });
+        expect(document.activeElement).toBe(headers[1]!.getControls()[0]);
+        cleanup();
+      });
+
+      it('Left / Right resize by one step and announce the new width', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders());
+
+        keydown(root, { key: 'ArrowRight' });
+        expect(state.columnWidths.get().get('b')).toBe(166);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 166));
+
+        keydown(root, { key: 'ArrowLeft' });
+        keydown(root, { key: 'ArrowLeft' });
+        expect(state.columnWidths.get().get('b')).toBe(134);
+
+        cleanup();
+      });
+
+      it('resize clamps at the minimum and says so', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders());
+        // 150 → 50 is under 7 steps; 10 proves it stops rather than wrapping.
+        for (let i = 0; i < 10; i++) keydown(root, { key: 'ArrowLeft' });
+        expect(state.columnWidths.get().get('b')).toBe(50);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAtMinimum('b', 50));
+        cleanup();
+      });
+
+      it('resize clamps at the maximum and says so', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders());
+        for (let i = 0; i < 30; i++) keydown(root, { key: 'ArrowRight' });
+        expect(state.columnWidths.get().get('b')).toBe(500);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAtMaximum('b', 500));
+        cleanup();
+      });
+
+      it('Home / End jump to the width bounds', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders());
+
+        keydown(root, { key: 'End' });
+        expect(state.columnWidths.get().get('b')).toBe(500);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAtMaximum('b', 500));
+
+        keydown(root, { key: 'Home' });
+        expect(state.columnWidths.get().get('b')).toBe(50);
+
+        cleanup();
+      });
+
+      it('Home / End do not move the cursor while the mode is open', () => {
+        const { state, root, cleanup } = enterLayout(setupWithHeaders());
+        keydown(root, { key: 'Home' });
+        expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+        cleanup();
+      });
+
+      it('Backspace resets the width to the default', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders());
+        keydown(root, { key: 'End' });
+        expect(state.columnWidths.get().has('b')).toBe(true);
+
+        keydown(root, { key: 'Backspace' });
+        // Reset means "no stored width", not "150 written down" — the same
+        // thing double-clicking the resize handle does.
+        expect(state.columnWidths.get().has('b')).toBe(false);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 150));
+        cleanup();
+      });
+
+      it('Shift+Right moves the column one position and announces where it landed', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders(), 'a');
+
+        keydown(root, { key: 'ArrowRight', shiftKey: true });
+
+        expect(state.visibleColumns.get()).toEqual(['b', 'a', 'c']);
+        expect(state.columnOrder.get()).toEqual(['b', 'a', 'c']);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnMovedAnnouncement('a', 2, 3));
+        // The cursor rides with the column, not with the position.
+        expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'a' });
+        cleanup();
+      });
+
+      it('Shift+Left at the first position is a no-op', () => {
+        const { state, root, cleanup } = enterLayout(setupWithHeaders(), 'a');
+        keydown(root, { key: 'ArrowLeft', shiftKey: true });
+        expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+        cleanup();
+      });
+
+      it('Shift+End / Shift+Home move to the last and first positions', () => {
+        const { state, root, cleanup } = enterLayout(setupWithHeaders(), 'a');
+
+        keydown(root, { key: 'End', shiftKey: true });
+        expect(state.visibleColumns.get()).toEqual(['b', 'c', 'a']);
+
+        keydown(root, { key: 'Home', shiftKey: true });
+        expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+
+        cleanup();
+      });
+
+      it('a pinned column refuses to move, the way the mouse path does', () => {
+        const harness = setupWithHeaders();
+        // Pinning moves the column to the head of the order as a side effect.
+        harness.actions.toggleColumnPin('b');
+        expect(harness.state.visibleColumns.get()).toEqual(['b', 'a', 'c']);
+
+        const { state, root, announce, cleanup } = enterLayout(harness, 'b');
+        keydown(root, { key: 'ArrowRight', shiftKey: true });
+
+        expect(state.visibleColumns.get()).toEqual(['b', 'a', 'c']);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnMoveBlockedPinned('b'));
+        cleanup();
+      });
+
+      it('an unpinned column cannot be moved into the pinned block', () => {
+        const harness = setupWithHeaders();
+        harness.actions.toggleColumnPin('a');
+        expect(harness.state.pinnedColumns.get()).toEqual(['a']);
+
+        const { state, root, cleanup } = enterLayout(harness, 'b');
+        keydown(root, { key: 'Home', shiftKey: true });
+
+        // Every sticky `left` offset assumes the pinned columns lead.
+        expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+        cleanup();
+      });
+
+      it('Escape restores the entry width AND the entry position', () => {
+        const { state, root, announce, cleanup } = enterLayout(setupWithHeaders(), 'a');
+
+        keydown(root, { key: 'ArrowRight' });
+        keydown(root, { key: 'ArrowRight', shiftKey: true });
+        expect(state.columnWidths.get().get('a')).toBe(166);
+        expect(state.visibleColumns.get()).toEqual(['b', 'a', 'c']);
+
+        keydown(root, { key: 'Escape' });
+
+        expect(state.columnWidths.get().has('a')).toBe(false);
+        expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+        expect(state.columnOrder.get()).toEqual(['a', 'b', 'c']);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnLayoutCancelled('a'));
+        cleanup();
+      });
+
+      it('Escape ends the mode without clearing the cursor', () => {
+        const { state, root, headers, cleanup } = enterLayout(setupWithHeaders());
+        keydown(root, { key: 'Escape' });
+
+        expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+        expect(headers[1]!.getElement().classList.contains('dt-col-header--layout')).toBe(false);
+
+        // …and the next Escape gets through to the cursor.
+        keydown(root, { key: 'Escape' });
+        expect(state.focusedCell.get()).toBeNull();
+        cleanup();
+      });
+
+      it('Enter commits and leaves the mode', () => {
+        const { state, root, headers, announce, cleanup } = enterLayout(setupWithHeaders());
+
+        keydown(root, { key: 'ArrowRight' });
+        keydown(root, { key: 'Enter' });
+
+        expect(state.columnWidths.get().get('b')).toBe(166);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnLayoutCommitted('b'));
+        expect(headers[1]!.getElement().classList.contains('dt-col-header--layout')).toBe(false);
+
+        // Out of the mode, Left is a cursor key again.
+        keydown(root, { key: 'ArrowLeft' });
+        expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'a' });
+        cleanup();
+      });
+
+      it('Shift+F2 again toggles the mode off', () => {
+        const { root, headers, announce, cleanup } = enterLayout(setupWithHeaders());
+        keydown(root, { key: 'F2', shiftKey: true });
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnLayoutCommitted('b'));
+        expect(headers[1]!.getElement().classList.contains('dt-col-header--layout')).toBe(false);
+        cleanup();
+      });
+
+      it('Tab is never intercepted', () => {
+        const { root, cleanup } = enterLayout(setupWithHeaders());
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+        cleanup();
+      });
+
+      it('an unhandled key changes nothing and moves no focus', () => {
+        const { state, root, grid, cleanup } = enterLayout(setupWithHeaders());
+        const before = state.columnWidths.get();
+
+        const event = new KeyboardEvent('keydown', { key: 'q', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(state.columnWidths.get()).toBe(before);
+        expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+        expect(document.activeElement).not.toBe(grid);
+        cleanup();
+      });
+
+      it('Ctrl+Z still reaches undo from inside the mode', () => {
+        const harness = enterLayout(setupWithHeaders());
+        const undo = vi.spyOn(harness.actions, 'undo').mockResolvedValue(true);
+        keydown(harness.root, { key: 'z', ctrlKey: true });
+        expect(undo).toHaveBeenCalledTimes(1);
+        harness.cleanup();
+      });
+
+      it('moving the cursor off the column commits the gesture', () => {
+        const { state, root, headers, announce, cleanup } = enterLayout(setupWithHeaders());
+
+        keydown(root, { key: 'ArrowDown' });
+
+        expect(state.focusedCell.get()).toEqual({ row: 0, column: 'b' });
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnLayoutCommitted('b'));
+        expect(headers[1]!.getElement().classList.contains('dt-col-header--layout')).toBe(false);
+
+        // The width keys are inert again.
+        keydown(root, { key: 'Home' });
+        expect(state.columnWidths.get().has('b')).toBe(false);
+        cleanup();
+      });
+
+      it('hiding the column out from under an open gesture drops the mode', () => {
+        const { state, actions, root, cleanup } = enterLayout(setupWithHeaders());
+        actions.hideColumn('b');
+
+        keydown(root, { key: 'ArrowRight' });
+
+        // The cursor's column is gone, so the arrow key is a plain cursor move.
+        expect(state.columnWidths.get().has('b')).toBe(false);
+        cleanup();
+      });
     });
   });
 });

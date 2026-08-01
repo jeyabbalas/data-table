@@ -518,14 +518,14 @@ All values source `src/DataTable.ts:123-278`.
 | `expressionFilter`   | `true`          | Raw-SQL filter button.                                                                           |
 | `visualizations`     | `true`          | Column header histograms / value counts.                                                         |
 | `exportDialog`       | `true`          | CSV/JSON/Parquet export dialog.                                                                  |
-| `rowHeight`          | `32`            | Pixels.                                                                                          |
-| `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on.                                            |
+| `rowHeight`          | `32`            | Pixels. Published as `--dt-row-height`; set it here, not in CSS.                                 |
+| `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on. Published as `--dt-header-height`.         |
 | `classPrefix`        | `'dt'`          | CSS class prefix.                                                                                |
 | `colorScheme`        | `'auto'`        | Follow `prefers-color-scheme`.                                                                   |
 | `portalTarget`       | `document.body` | Where modals mount.                                                                              |
 | `strictBrowserCheck` | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
 
-**Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. The scroller measures it (`src/table/VirtualScroller.ts:245`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+**Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. Note the reverse for those two: they are options, not CSS knobs. The library writes `--dt-row-height` / `--dt-header-height` onto `.dt-root` inline from the option values (`src/table/TableContainer.ts:createRootElement`), so overriding either token in a stylesheet is a no-op — the scroller's row arithmetic runs in JS and could not see it anyway. The scroller measures it (`src/table/VirtualScroller.ts:245`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 ---
 

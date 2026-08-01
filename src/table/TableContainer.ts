@@ -249,6 +249,15 @@ export class TableContainer {
     // `messages: undefined` / `colorScheme: undefined` explicitly. Restore.
     this.resolvedOptions.messages ??= defaultStrings;
     this.resolvedOptions.colorScheme ??= 'auto';
+    // Same hazard, and `createDataTable` walks straight into it: it forwards
+    // `rowHeight: opts.rowHeight` / `headerHeight: opts.headerHeight`
+    // verbatim, so omitting either from the public options spreads an
+    // explicit `undefined` over the default here. Both are interpolated into
+    // CSS lengths — `${headerHeight}px` on the header's min-height, and the
+    // `--dt-row-height` token — where `undefined` yields the invalid
+    // "undefinedpx" and the declaration is dropped on the floor.
+    this.resolvedOptions.rowHeight ??= 32;
+    this.resolvedOptions.headerHeight ??= 120;
     this.messages = this.resolvedOptions.messages;
 
     // Create DOM structure
@@ -428,7 +437,35 @@ export class TableContainer {
     const el = document.createElement('div');
     el.className = `${this.resolvedOptions.classPrefix}-root`;
     this.applyColorSchemeAttribute(el, this.resolvedOptions.colorScheme ?? 'auto');
+    this.applySizingCustomProperties(el);
     return el;
+  }
+
+  /**
+   * Publish `rowHeight` / `headerHeight` as the `--dt-row-height` and
+   * `--dt-header-height` custom properties on `.dt-root`.
+   *
+   * The stylesheet derives real geometry from `--dt-row-height`: `.dt-row`'s
+   * height, and the `line-height` that re-centres text in any cell using
+   * `align-self: stretch` (`.dt-cell--focused`, `.dt-cell--derived`, and every
+   * annotation-tinted cell — see `05-data-grid.css` and `03-columns.css`).
+   * Those cells opt out of the row's `align-items: center`, so their
+   * `line-height` is the only thing centring them and it has to equal the row
+   * height the scroller actually uses. Writing the option here is what keeps
+   * the two in step; without it a non-default `rowHeight` left the token at
+   * its 32px stylesheet default and those cells rendered off-centre.
+   *
+   * Set as an inline declaration, so the option wins over a stylesheet
+   * override of the same token. That precedence is deliberate: the row height
+   * is also the virtual scroller's scroll arithmetic
+   * ({@link VirtualScroller.setTotalRows}), which cannot see a CSS value —
+   * letting CSS move the row height alone would desync the scroller instead,
+   * including dynamically via a media query the scroller never observes.
+   * Host pages change these through the options, and the tokens follow.
+   */
+  private applySizingCustomProperties(el: HTMLElement): void {
+    el.style.setProperty('--dt-row-height', `${this.resolvedOptions.rowHeight}px`);
+    el.style.setProperty('--dt-header-height', `${this.resolvedOptions.headerHeight}px`);
   }
 
   /**

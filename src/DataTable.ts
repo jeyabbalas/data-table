@@ -243,9 +243,22 @@ export interface CreateDataTableOptions {
   instanceId?: string;
   /** Custom expression editor factory (replaces the CodeMirror-based default). */
   editorFactory?: ExpressionEditorFactory;
-  /** Row height in pixels. Default: 32. */
+  /**
+   * Row height in pixels. Default: 32.
+   *
+   * Published as the `--dt-row-height` custom property on the table root, so
+   * the stylesheet lays rows out at exactly the height the virtual scroller
+   * computes with. Set it here rather than overriding that token in CSS: the
+   * scroller's arithmetic runs in JS and cannot read a stylesheet, so a
+   * CSS-only change would move the rows and not the scroller.
+   */
   rowHeight?: number;
-  /** Header height in pixels. Default: 120. */
+  /**
+   * Header height in pixels. Default: 120. Applied as the header row's
+   * `min-height` and published as the `--dt-header-height` custom property.
+   * Keep it at 96 or above when visualizations are enabled, or the header
+   * plots have nowhere to draw.
+   */
   headerHeight?: number;
 
   /**

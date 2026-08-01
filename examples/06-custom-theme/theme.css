@@ -61,9 +61,11 @@
   --dt-border: #e7d8c3;
   --dt-border-light: #f5ead8;
 
-  /* Sizing — compact variant so the recolor reads denser. */
-  --dt-row-height: 28px;
-  --dt-header-height: 104px;
+  /* Sizing. `--dt-row-height` and `--dt-header-height` are deliberately
+     absent: the library writes both from the `rowHeight` / `headerHeight`
+     options (see main.ts), because the virtual scroller needs the numbers in
+     JS and cannot read a stylesheet. Declaring them here would be
+     overwritten. Everything else on this page is pure CSS. */
   --dt-radius: 3px;
 }
 

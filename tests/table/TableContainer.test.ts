@@ -135,6 +135,91 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    // `--dt-row-height` is not decorative: the stylesheet derives `.dt-row`'s
+    // height from it *and* the `line-height` that re-centres text in every
+    // cell using `align-self: stretch` (`.dt-cell--focused`,
+    // `.dt-cell--derived`, annotation-tinted cells). Those cells opt out of
+    // the row's `align-items: center`, so if the token keeps the stylesheet's
+    // 32px default while the scroller lays rows out at `rowHeight`, they
+    // render off-centre against their neighbours.
+    it('should publish rowHeight and headerHeight as custom properties on the root', () => {
+      const tableContainer = new TableContainer(container, state);
+      const root = tableContainer.getElement();
+
+      expect(root.style.getPropertyValue('--dt-row-height')).toBe('32px');
+      expect(root.style.getPropertyValue('--dt-header-height')).toBe('120px');
+
+      tableContainer.destroy();
+    });
+
+    it('should track a custom rowHeight in --dt-row-height', () => {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
+        rowHeight: 48,
+        headerHeight: 96,
+      });
+      const root = tableContainer.getElement();
+
+      expect(root.style.getPropertyValue('--dt-row-height')).toBe('48px');
+      expect(root.style.getPropertyValue('--dt-header-height')).toBe('96px');
+
+      tableContainer.destroy();
+    });
+
+    // The invariant the token exists to preserve: whatever the scroller uses
+    // for its row arithmetic is what CSS lays a row out at.
+    it('should keep --dt-row-height equal to the row height the scroller uses', () => {
+      for (const rowHeight of [16, 32, 48, 64]) {
+        const host = document.createElement('div');
+        const tableContainer = new TableContainer(host, createTableState(), undefined, undefined, {
+          rowHeight,
+        });
+
+        expect(tableContainer.getElement().style.getPropertyValue('--dt-row-height')).toBe(
+          `${tableContainer.getOptions().rowHeight}px`,
+        );
+
+        tableContainer.destroy();
+      }
+    });
+
+    // `createDataTable` forwards `rowHeight: opts.rowHeight` and
+    // `headerHeight: opts.headerHeight` verbatim, so leaving either off the
+    // public options spreads an explicit `undefined` over the default here.
+    // Both are interpolated into CSS lengths, where `undefined` produces the
+    // invalid "undefinedpx" and the browser drops the declaration — which is
+    // how the documented 120px header default reached no header at all.
+    it('should not let an explicit undefined clobber the sizing defaults', () => {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
+        rowHeight: undefined,
+        headerHeight: undefined,
+      });
+
+      const options = tableContainer.getOptions();
+      expect(options.rowHeight).toBe(32);
+      expect(options.headerHeight).toBe(120);
+
+      const root = tableContainer.getElement();
+      expect(root.style.getPropertyValue('--dt-row-height')).toBe('32px');
+      expect(root.style.getPropertyValue('--dt-header-height')).toBe('120px');
+      expect(tableContainer.getHeaderRow().style.minHeight).toBe('120px');
+
+      tableContainer.destroy();
+    });
+
+    // Written as an inline declaration so the option beats a stylesheet
+    // override of the same token. The row height is also the virtual
+    // scroller's scroll arithmetic, which cannot see a CSS value, so CSS
+    // moving it alone would desync the scroller instead.
+    it('should write the sizing tokens inline so the option wins the cascade', () => {
+      const tableContainer = new TableContainer(container, state, undefined, undefined, {
+        rowHeight: 40,
+      });
+
+      expect(tableContainer.getElement().getAttribute('style')).toContain('--dt-row-height: 40px');
+
+      tableContainer.destroy();
+    });
+
     it('should set up resize observer', () => {
       const tableContainer = new TableContainer(container, state);
       const mockInstance = MockResizeObserver.getLastInstance();

@@ -37,7 +37,14 @@ npm run dev
 | Syntax    | `--dt-syntax-string`, `--dt-syntax-type`                                               | SQL editor token colors; green + orange replace the default green + purple.                                                                                                          |
 | Surfaces  | `--dt-bg`, `--dt-bg-secondary`, `--dt-bg-tertiary`, `--dt-border`, `--dt-border-light` | Whole-page warmth; tinted cream in light, warm stone in dark.                                                                                                                        |
 | Dark text | `--dt-text`, `--dt-text-secondary`, `--dt-text-tertiary`, `--dt-arrow-*`               | Re-tuned for the warm-black background.                                                                                                                                              |
-| Sizing    | `--dt-row-height`, `--dt-header-height`, `--dt-radius`                                 | Compact demonstration.                                                                                                                                                               |
+| Sizing    | `--dt-radius`                                                                          | Squared-off corners. Row and header height are **not** here — see below.                                                                                                             |
+
+Row height and header height are the one part of the compact variant that is
+not CSS. `--dt-row-height` and `--dt-header-height` are written by the library
+from the `rowHeight` / `headerHeight` options, because the virtual scroller
+does its arithmetic in JS and cannot read a stylesheet — so this example sets
+them in [`main.ts`](./main.ts) and leaves them out of `theme.css`, where they
+would be overwritten. See [Theming → Sizing](../../docs/guides/theming.md#sizing).
 
 ## Portal gotcha — target both `:root` and `.dt-root`
 

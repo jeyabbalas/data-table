@@ -15,6 +15,14 @@ let table: DataTable | undefined;
     tableName: 'titanic',
     colorScheme: 'auto',
     persistence: false,
+    // The compact variant. Row and header height are options, not CSS
+    // tokens: the virtual scroller does its arithmetic in JS and cannot read
+    // a stylesheet, so the library writes `--dt-row-height` /
+    // `--dt-header-height` from these values. Setting the tokens in
+    // theme.css instead would be overwritten. Every other knob in this
+    // example is pure CSS.
+    rowHeight: 28,
+    headerHeight: 104,
   });
 
   const setScheme = (scheme: ColorScheme) => {

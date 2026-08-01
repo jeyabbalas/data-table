@@ -171,11 +171,14 @@ CSV/JSON/Parquet raw bytes during load.
 
 ### Row height
 
-Default is 32 px. Taller rows show more content per row but the scroller
-renders fewer at a time; shorter rows show more rows but cram content.
-Either way the rendered-row count stays proportional to the container's
-height, so this is a legibility choice rather than a performance lever —
-the container's height is the term that actually bounds the work.
+Default is 32 px, set through the `rowHeight` option — not by overriding
+`--dt-row-height`, which the library writes from that option (see
+[Theming → Sizing](./guides/theming.md#sizing)). Taller rows show more
+content per row but the scroller renders fewer at a time; shorter rows show
+more rows but cram content. Either way the rendered-row count stays
+proportional to the container's height, so this is a legibility choice
+rather than a performance lever — the container's height is the term that
+actually bounds the work.
 
 ### Query cache size
 

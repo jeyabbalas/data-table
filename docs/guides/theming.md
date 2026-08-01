@@ -5,6 +5,10 @@ reads from a CSS custom property. Override the ones you care about on
 `:root` (or a per-instance ancestor) and the table picks up the change
 without a rebuild.
 
+Two tokens are the exception: `--dt-row-height` and `--dt-header-height`
+are written by the library from the `rowHeight` / `headerHeight` options and
+cannot be overridden in CSS. See [Sizing](#sizing).
+
 This guide is the authoritative reference — both for the full `--dt-*`
 variable list and for the dark-mode / per-instance scoping model.
 
@@ -13,7 +17,7 @@ variable list and for the dark-mode / per-instance scoping model.
 - Override the library's theme globally or per instance
 - Drive dark mode via OS preference, per-instance attribute, or a runtime API
 - Understand the z-index stacking ladder and how to interleave host-app layers
-- Widen floating panels or change row height
+- Widen floating panels, and know which two sizing tokens are options rather than CSS
 
 ## Prerequisites
 
@@ -188,22 +192,41 @@ all derivatives automatically — you don't need to redeclare them.
 
 ### Sizing
 
-| Variable               | Default | Role                                                   |
-| ---------------------- | ------: | ------------------------------------------------------ |
-| `--dt-header-height`   | `120px` | Column header area height (room for visualizations).   |
-| `--dt-row-height`      |  `32px` | Virtual-scroller row height.                           |
-| `--dt-col-width`       | `200px` | Default column width.                                  |
-| `--dt-scrollbar-width` |  `17px` | Reserved gutter for the body's vertical scrollbar.     |
-| `--dt-panel-width`     | `320px` | Floating-panel (filter / preset / derived-edit) width. |
-| `--dt-radius`          |   `8px` | Default border radius.                                 |
-| `--dt-radius-sm`       |   `4px` | Small border radius (buttons, chips).                  |
+| Variable               | Default | Role                                                              |
+| ---------------------- | ------: | ----------------------------------------------------------------- |
+| `--dt-header-height`   | `120px` | Column header area height. **Set via the `headerHeight` option.** |
+| `--dt-row-height`      |  `32px` | Virtual-scroller row height. **Set via the `rowHeight` option.**  |
+| `--dt-col-width`       | `200px` | Default column width.                                             |
+| `--dt-scrollbar-width` |  `17px` | Reserved gutter for the body's vertical scrollbar.                |
+| `--dt-panel-width`     | `320px` | Floating-panel (filter / preset / derived-edit) width.            |
+| `--dt-radius`          |   `8px` | Default border radius.                                            |
+| `--dt-radius-sm`       |   `4px` | Small border radius (buttons, chips).                             |
 
-These tokens size the table's _contents_, and every one of them is
-optional. They are not how you size the table itself: the mount container's
-height comes from your own CSS, is mandatory, and is what drives
-virtualization — the scroller renders roughly
-`⌈containerHeight / --dt-row-height⌉ + 10` rows, so an unbounded container
-silently renders every row in the dataset. See
+**`--dt-row-height` and `--dt-header-height` are outputs, not inputs.** The
+library writes both onto `.dt-root` as inline declarations from the
+`rowHeight` and `headerHeight` options, so overriding them in your own CSS
+has no effect — the inline value wins. Change them through the options:
+
+```ts
+await createDataTable({ container, source, rowHeight: 28, headerHeight: 104 });
+```
+
+The precedence runs this way because the row height is also the virtual
+scroller's scroll arithmetic — which rows exist, where the viewport sits, how
+tall the scrollable content is — and that runs in JS, where a stylesheet value
+is not visible. If CSS could move the row height on its own the scroller would
+carry on measuring in the old unit, including dynamically through a media
+query it never observes. Publishing the option as a token instead keeps the
+one number in one place: `.dt-row`'s height and the `line-height` that centres
+text in stretched cells both follow whatever the scroller is using.
+
+The rest of the table is ordinary CSS and overrides normally.
+
+These tokens size the table's _contents_. They are not how you size the table
+itself: the mount container's height comes from your own CSS, is mandatory,
+and is what drives virtualization — the scroller renders roughly
+`⌈containerHeight / rowHeight⌉ + 10` rows, so an unbounded container silently
+renders every row in the dataset. See
 [Sizing the container](../../README.md#sizing-the-container).
 
 ### Typography
@@ -388,7 +411,7 @@ visualizations read those tokens rather than hard-coded colours.
 - **Z-indices have gaps of ≥ 10 intentionally.** Don't set them contiguously — leave room for host-app layers.
 - **`--dt-stylesheet-loaded` is an internal sentinel.** Overriding it silences the warning even when the real stylesheet isn't loaded. Don't.
 - **Per-instance panel width.** `--dt-panel-width` is read by JS (for edge clamping) via `getComputedStyle(...).offsetWidth`, so an override takes effect immediately.
-- **`--dt-row-height` is not the table's height.** The sizing tokens set internal proportions and all have defaults; the mount container's height is your own CSS, is mandatory, and is what caps how many rows get queried and rendered. An unbounded container renders every row and says nothing about it. See [Sizing the container](../../README.md#sizing-the-container).
+- **`--dt-row-height` is not the table's height, and is not yours to set.** It is written from the `rowHeight` option (as is `--dt-header-height` from `headerHeight`), so a stylesheet override of either is a no-op — see [Sizing](#sizing). Neither is the table's own height: the mount container's height is your own CSS, is mandatory, and is what caps how many rows get queried and rendered. An unbounded container renders every row and says nothing about it. See [Sizing the container](../../README.md#sizing-the-container).
 
 ## Related
 

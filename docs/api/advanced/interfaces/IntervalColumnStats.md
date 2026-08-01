@@ -6,7 +6,7 @@
 
 # Interface: IntervalColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:80](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L80)
+Defined in: [statistics/ColumnStatsTypes.ts:80](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L80)
 
 Stats for interval columns.
 Line 2: "min 2h · med 8h · max 48h"
@@ -21,7 +21,7 @@ Line 2: "min 2h · med 8h · max 48h"
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -35,7 +35,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"interval"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:81](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L81)
+Defined in: [statistics/ColumnStatsTypes.ts:81](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L81)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:81](https://github.com/jeyabbalas/da
 
 > **maxDisplay**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:85](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L85)
+Defined in: [statistics/ColumnStatsTypes.ts:85](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L85)
 
 Pre-formatted maximum interval from DuckDB
 
@@ -53,7 +53,7 @@ Pre-formatted maximum interval from DuckDB
 
 > **medianDisplay**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:87](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L87)
+Defined in: [statistics/ColumnStatsTypes.ts:87](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L87)
 
 Pre-formatted median interval from DuckDB
 
@@ -63,7 +63,7 @@ Pre-formatted median interval from DuckDB
 
 > **minDisplay**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:83](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L83)
+Defined in: [statistics/ColumnStatsTypes.ts:83](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L83)
 
 Pre-formatted minimum interval from DuckDB
 
@@ -73,7 +73,7 @@ Pre-formatted minimum interval from DuckDB
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -87,7 +87,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -101,7 +101,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/8e290efb68a3352eb95067f414af92985757dec0/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

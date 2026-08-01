@@ -58,6 +58,11 @@ The CSS side-effect import works with webpack's `style-loader` +
 `css-loader` pipeline. If you're using MiniCssExtractPlugin, the CSS
 extracts into a separate file.
 
+`#my-table` is your markup, not the library's, and it needs a bounded
+height: the table virtualizes against the container's measured height, and
+an unbounded one silently renders every row. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 ## Self-hosted WASM
 
 Like the [Vite guide](./vite.md#self-hosted-wasm-offline--strict-csp),

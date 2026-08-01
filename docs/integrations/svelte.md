@@ -29,6 +29,11 @@ Svelte 5 (with runes) work the same way — the library is framework-agnostic.
 <div bind:this={host} style="height: 600px"></div>
 ```
 
+The height on the host is a requirement, not styling. The table virtualizes
+against the container's measured height and renders only the rows that fit;
+an unbounded container silently renders every row in the dataset. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 ## Svelte 5 with runes
 
 ```svelte
@@ -99,6 +104,9 @@ Usage:
 
 <div use:dataTable={{ source }} style="height: 600px"></div>
 ```
+
+The action mounts into the node but doesn't size it — the host element
+still needs its own bounded height, here and at every call site.
 
 ## `{#key}` to force re-mount
 

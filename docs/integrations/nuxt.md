@@ -55,6 +55,11 @@ onBeforeUnmount(async () => {
 </template>
 ```
 
+The height on the host is a requirement, not styling. The table virtualizes
+against the container's measured height and renders only the rows that fit;
+an unbounded container silently renders every row in the dataset. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 Nuxt auto-imports components from `components/`, so `<DataTableView>` is
 available anywhere without an explicit import.
 

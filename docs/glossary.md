@@ -230,6 +230,19 @@ what lets the SQL filter modal, the derived-column editor, the export dialog,
 and the preset panel coexist without fighting over focus or layering.
 See: [Architecture](./concepts/architecture.md) · Source: `src/table/ModalHost.ts`
 
+### Mount Container
+
+The `HTMLElement` handed to `createDataTable({ container })`. The library
+appends its own `.dt-root` into it and takes full ownership of the contents,
+but never styles the element itself — selector strings are not accepted, and
+sizing is the host page's job. It must have a **bounded height**: `.dt-root`
+is `height: 100%`, so a content-sized container lets the scroll viewport grow
+to the full height of the dataset and [Virtual Scrolling](#virtual-scrolling)
+degrades to rendering every row, with no error and no warning. A container
+that is zero-tall at mount renders nothing and logs a one-shot console
+warning; an unbounded one is not detected at all.
+See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [API reference](./api-reference.md#createdatatableoptions) · Source: `src/table/TableContainer.ts`
+
 ### NullFilter
 
 [Filter](#filter) variant matching rows where a column is `NULL` (or
@@ -437,6 +450,21 @@ from JavaScript logic (a geocoding lookup, a cached ML score) that DuckDB SQL
 cannot express. The library registers the vector as a DuckDB table function
 internally; it behaves like any other column afterwards.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
+
+### Virtual Scrolling
+
+Rendering only the rows that fit the scroll viewport rather than the whole
+result set. `VirtualScroller` measures `clientHeight` on the internal
+`.dt-body-scroll` container and renders
+`⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — `bufferRows` is 5 above
+and below, and is reachable only by constructing a `VirtualScroller` from
+`/advanced`, not through `createDataTable`. Both the DOM row count and the
+`LIMIT` of the body query stay constant regardless of dataset size, which is
+what keeps multi-million-row tables interactive. Assumes a fixed `rowHeight`
+(default 32 px) and requires the [Mount Container](#mount-container) to have
+a bounded height; measured against a content-sized container the visible
+range becomes every row and the optimisation silently disappears.
+See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [Performance](./performance.md) · Source: `src/table/VirtualScroller.ts`
 
 ### Visualization
 

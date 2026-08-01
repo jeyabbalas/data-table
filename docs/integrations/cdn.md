@@ -41,6 +41,15 @@ blog post embeds, or pages where adding a build step isn't worth it.
 That's it. esm.sh bundles the library plus its peer deps (DuckDB-WASM,
 CodeMirror) and serves them as ESM.
 
+The `height: 100vh` on `#my-table` is load-bearing, not cosmetic. The table
+virtualizes against the container's measured height and renders only the
+rows that fit; with an unbounded container it renders every row in the
+dataset — one query that pulls the whole table into memory, plus a DOM row
+per row — and it neither errors nor warns. Any bounded height works
+(`600px`, `100vh`, a flex child with `min-height: 0`); none at all does
+not. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 ## CDN options
 
 Any CDN that serves npm packages as ES modules works:

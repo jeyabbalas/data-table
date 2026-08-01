@@ -47,6 +47,13 @@ omit them.
 
 ## Quick start
 
+Give the container a bounded height — the table virtualizes against it, and
+without one it renders every row. See [Sizing the container](#sizing-the-container).
+
+```html
+<div id="my-table" style="height: 600px"></div>
+```
+
 ```ts
 import { createDataTable } from '@jeyabbalas/data-table';
 import '@jeyabbalas/data-table/styles';
@@ -107,6 +114,87 @@ by default). It is browser-only and not safe to evaluate during SSR — see
 [Framework integration](#framework-integration) below for client-side
 mounting patterns.
 
+## Sizing the container
+
+**The mount container must have a bounded height. This is a requirement, not
+a style preference — it is what makes the table fast.**
+
+The table is virtualized: it renders only the rows that fit in view, about
+`⌈containerHeight / rowHeight⌉ + 10` of them. It learns how many that is by
+measuring the container. The container's height is therefore the knob that
+caps how much work every scroll, filter, and sort has to do — a 600 px
+container renders ~29 rows whether the dataset has 1 thousand rows or 10
+million.
+
+Give it a height in one of two ways:
+
+```html
+<!-- 1. An explicit height — simplest, and always correct -->
+<div id="my-table" style="height: 600px"></div>
+```
+
+```css
+/* 2. A flex or grid child that fills the space left over */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+}
+#my-table {
+  flex: 1;
+  min-height: 0; /* required — see below */
+}
+```
+
+`min-height: 0` is not optional in the flex case. Flex items default to
+`min-height: auto`, which refuses to shrink below the content's intrinsic
+height — and this table's content is every row in the dataset. Omit it and
+you get the unbounded-growth failure below, in a container that looks like
+it was sized correctly. The same applies to grid children.
+
+`height: 100%` on the container alone does nothing unless **every** ancestor
+up to the viewport also has a resolved height. That is the usual reason a
+container that "has a height" still behaves as if it doesn't.
+
+### What goes wrong without one
+
+Nothing errors. The table renders, and on a small dataset it looks fine —
+which is exactly why this is easy to ship and painful later.
+
+With no bounded height, the library's root element (`height: 100%`) resolves
+against an auto-height parent and becomes content-sized. The scroll area then
+grows to the full height of the data — `rowCount × rowHeight` — so the
+"visible region" the scroller measures is the _entire dataset_. Virtualization
+is silently defeated: the table issues one query that pulls every row into
+memory and builds DOM for all of them.
+
+At 1M rows and the default 32 px row height, that is a 32,000,000 px tall
+element, a single `LIMIT 1000000` query, and a million rows' worth of DOM
+nodes. The tab stalls, memory climbs, and scrolling is unusable. With a
+bounded container the same dataset renders ~29 rows and stays interactive.
+
+The degenerate case is the opposite one: a container that is **zero**-tall at
+mount renders no rows at all, and the library logs a console warning saying
+so. A container that is merely _unbounded_ gets no warning, because it has a
+perfectly good non-zero height — it is just the wrong one.
+
+### Resizing after mount
+
+Give the container its height before mounting, and prefer a height that the
+browser resolves through CSS (`flex: 1`, `100%`, `vh`) over one you assign
+imperatively after the fact. The scroller recomputes its visible range on
+scroll and on state changes, so a container that changes height while idle
+can keep a stale range until the next interaction. Sizing it up front avoids
+the question.
+
+Every [runnable example](./examples/README.md) uses the flex pattern, and
+[`docs/integrations/cdn.md`](./docs/integrations/cdn.md) has a complete
+copy-pasteable HTML starter.
+
 ## Documentation
 
 Full documentation lives under [`docs/`](./docs/README.md). A quick index:
@@ -114,12 +202,13 @@ Full documentation lives under [`docs/`](./docs/README.md). A quick index:
 **Start here**
 
 - Quick start (above) · [Runnable examples](./examples/README.md)
+- [Sizing the container](#sizing-the-container) — the bounded height the table virtualizes against; read this before reporting a performance problem
 - [AGENTS.md](./AGENTS.md) — agent-facing guide: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
 
 **Reference**
 
 - [API reference](./docs/api-reference.md) — every option, event, action, error, filter shape, derived-column type
-- [Troubleshooting](./docs/troubleshooting.md) — 34 error codes and 19 common-issue FAQs with fix snippets
+- [Troubleshooting](./docs/troubleshooting.md) — 46 error codes and 26 common-issue FAQs with fix snippets
 
 **Guides**
 

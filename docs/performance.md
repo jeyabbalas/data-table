@@ -5,6 +5,15 @@ table on a typical laptop. This doc covers the architectural limits,
 what to watch for when scaling up, and the methodology for measuring
 your own workload.
 
+**Prerequisite: the mount container needs a bounded height.** Every number
+in this doc assumes one. The table renders only the rows that fit in the
+container, so the container's height is what caps the per-frame work; give
+it no height and the scroller's "visible region" becomes the whole dataset,
+which fetches and renders every row. That single mistake dominates every
+other tuning lever here, and it is by far the most common cause of a
+"slow" table. See [The virtual scroller](#the-virtual-scroller) below and
+[Sizing the container](../README.md#sizing-the-container) in the README.
+
 **Status of numeric benchmarks.** A reference-machine benchmark harness
 is not yet in place for v0.1.x. This doc is methodology-first: it
 explains the observable performance thresholds drawn from the
@@ -18,13 +27,60 @@ release.
 
 The table body renders only the visible row range. Given a fixed row
 height (default 32 px) and the container's height, the scroller renders
-roughly `⌈height / rowHeight⌉ + buffer` rows at any moment — on a 1000 px
-tall container, that's about 35 rows visible, regardless of whether the
-underlying data has 1K rows or 10M.
+roughly `⌈height / rowHeight⌉ + buffer` rows at any moment (the buffer is
+5 rows above and below) — on a 1000 px tall container, that's about 35
+rows, regardless of whether the underlying data has 1K rows or 10M.
 
 **Implication:** initial paint and scroll latency don't scale with row
 count. The cost moves elsewhere — to DuckDB query times and to memory
 holding the loaded data.
+
+**This holds only while the container's height is bounded.** The height is
+read as `clientHeight` off the internal scroll element
+(`src/table/VirtualScroller.ts:245`), and that element inherits its size
+from the element you mount into. There is no `height` option and no
+fallback height in the library: sizing is entirely the host page's job.
+
+When the mount container has no resolved height, the chain collapses in a
+way that is easy to miss because nothing errors. The library's root carries
+`height: 100%` (`src/styles/02-shell.css:11-19`), which against an
+auto-height parent resolves to `auto`, making the root content-sized. The
+scroll element (`flex: 1; min-height: 0`) then grows to its own content —
+and that content has an explicit `rowCount × rowHeight` height written onto
+it so the scrollbar is proportioned correctly
+(`VirtualScroller.ts:300-308`). So `clientHeight` comes back as the height
+of the _entire dataset_, the computed visible range covers every row, and
+the body issues a single `LIMIT <totalRows>` query
+(`src/table/TableBody.ts:732`) and builds a DOM row for each one
+(`TableBody.ts:812`).
+
+At 1M rows that is a 32,000,000 px element, one query materializing 1M rows
+into the row cache, and 1M rows of DOM — instead of ~35 rows and a
+35-row query. Virtualization is not degraded, it is gone, and the numbers
+in the [thresholds table](#observable-thresholds) no longer apply.
+
+Two things make this hard to catch. It scales invisibly: on a 500-row
+development fixture, rendering everything is fine, so the bug ships and
+only shows up on production-sized data. And it is silent — the library
+warns on a container that is _zero_-tall at mount (see
+[troubleshooting](./troubleshooting.md)), but an unbounded container has a
+perfectly ordinary non-zero height, just the wrong one, so no warning
+fires.
+
+The fix is CSS, not configuration: an explicit height (`height: 600px`,
+`70vh`) or a flex/grid child with `flex: 1; min-height: 0`. The
+`min-height: 0` matters — a flex item defaults to `min-height: auto` and
+will not shrink below its content, which reproduces the unbounded case
+inside a container that looks correctly sized. Full detail and copy-
+pasteable CSS in [Sizing the container](../README.md#sizing-the-container).
+
+One consequence worth knowing: nothing in the library subscribes to the
+container's `ResizeObserver` to recompute the range, so the visible range
+is refreshed on scroll and on state changes rather than on resize alone. A
+container that changes height while the table sits idle can hold a stale
+range until the next interaction. Sizing the container before mount, and
+letting CSS resolve the height rather than assigning it imperatively
+afterwards, sidesteps this.
 
 ### DuckDB in WASM
 
@@ -117,7 +173,9 @@ CSV/JSON/Parquet raw bytes during load.
 
 Default is 32 px. Taller rows show more content per row but the scroller
 renders fewer at a time; shorter rows show more rows but cram content.
-Changing `--dt-row-height` has no performance effect — just visual.
+Either way the rendered-row count stays proportional to the container's
+height, so this is a legibility choice rather than a performance lever —
+the container's height is the term that actually bounds the work.
 
 ### Query cache size
 
@@ -223,6 +281,28 @@ either your code is leaking references to destroyed tables, or derived
 vector columns are accumulating.
 
 ## Common performance pitfalls
+
+### An unbounded container height
+
+The one that dwarfs everything else on this list. Symptoms: the tab hangs
+for seconds after load, memory climbs into the gigabytes, scrolling is
+unusable, and a DevTools profile shows enormous time in DOM work rather
+than in `WorkerBridge.query`. Cause: the mount container has no bounded
+height, so the scroller measures the whole dataset as its viewport and
+renders every row (see [The virtual scroller](#the-virtual-scroller)).
+
+Check it in the console:
+
+```ts
+const el = document.getElementById('my-table')!;
+const rendered = el.querySelectorAll('.dt-row').length; // default classPrefix
+console.log(el.clientHeight, 'px container,', rendered, 'rows in the DOM');
+// Healthy: a few hundred px, tens of rows.
+// Broken:  a container as tall as rowCount × rowHeight, and thousands of rows.
+```
+
+Fix it in CSS — `height: 600px` on the container, or `flex: 1;
+min-height: 0` if it should fill a flex parent.
 
 ### Peak memory during a large dataset swap
 

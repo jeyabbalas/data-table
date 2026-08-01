@@ -2,6 +2,8 @@
 
 Diagnostic recipes for common problems. For the full list of public errors/warnings with file references, see [API reference → Error catalog](./api-reference.md#error-catalog).
 
+Before anything else: the mount container must have a bounded height. An unbounded one defeats virtualization without erroring (FAQ §25) and a zero-height one renders nothing (FAQ §26). See [Sizing the container](../README.md#sizing-the-container).
+
 ## Contents
 
 - [Error code reference](#error-code-reference)
@@ -91,6 +93,7 @@ table.on('warning', ({ code, message, details }) => {
 | `PERSISTENCE_UNAVAILABLE`      | `src/DataTable.ts`                | IndexedDB was requested but unavailable (private browsing, disabled storage).                                                                                           | Inform the user that filters won't persist across reloads.                                                                        |
 | `PERSISTENCE_VERSION_REJECTED` | `src/persistence/SessionStore.ts` | Stored snapshot's `version` is outside `[1, SNAPSHOT_VERSION]`; the table booted fresh. Typical cause: a downgrade from a newer library version that wrote the IDB row. | Inform the user that the prior session was reset, or trigger your own reapply path. The library handles boot-fresh automatically. |
 | (console warning)              | `src/persistence/SessionStore.ts` | An unknown filter type was encountered while restoring a snapshot.                                                                                                      | Safe to ignore for old snapshots; indicates a filter schema evolved.                                                              |
+| (console warning)              | `src/table/TableContainer.ts`     | The mount container measured `getBoundingClientRect().height === 0` at initialization, so no rows render until it has a computed height. Fires once, at construction.   | Give the container a bounded height. See [Sizing the container](../README.md#sizing-the-container) and FAQ §26.                   |
 
 ---
 
@@ -147,6 +150,8 @@ export default function TablePage() {
 ```
 
 For Pages Router, use `dynamic(() => import('./TableClient'), { ssr: false })`.
+
+Note the `height: 600` on the mount `div` — it is load-bearing, not cosmetic. If the table mounts client-side but still shows nothing, the cause is the container's height, not SSR; see §26.
 
 ---
 
@@ -558,6 +563,64 @@ const refresh = () => {
 table.on('loadComplete', refresh);
 table.on('derivedChange', refresh);
 ```
+
+### 25. The table is slow, the tab freezes, or scrolling stutters on a large dataset
+
+Symptom: the tab stalls for seconds (or indefinitely) after the data loads, memory climbs, and scrolling is unusable. The same page is fine on a small dataset. Nothing is logged — there is no error and no warning for this case.
+
+Cause: the mount container has no bounded height, so virtualization is defeated. `.dt-root` is `height: 100%`, which against an auto-height parent resolves to the content's own height; the internal scroll container `.dt-body-scroll` (`flex: 1`) then grows with it. The scroller sizes the visible range from that element's `clientHeight` (`src/table/VirtualScroller.ts:245`), so the "viewport" it measures is the entire dataset: the visible range becomes every row, one `LIMIT <totalRows>` query runs (`src/table/TableBody.ts:732`), and a DOM row is built per row (`TableBody.ts:812`). At 1M rows with the default `rowHeight: 32` that is a 32,000,000 px tall element, a `LIMIT 1000000` query, and 1M DOM rows.
+
+The container that looks sized but isn't is the common case: a flex or grid child without `min-height: 0` (flex items default to `min-height: auto` and refuse to shrink below their intrinsic content height), or `height: 100%` on a container whose ancestors don't resolve a height up to the viewport.
+
+Check: compare what the scroller measures against the dataset's full height. Paste this into DevTools with the table mounted.
+
+```js
+const root = document.querySelector('.dt-root');
+const mount = root.closest('.dt-table-wrapper')?.parentElement ?? root.parentElement;
+const scroll = root.querySelector('.dt-body-scroll');
+const body = root.querySelector('.dt-body');
+console.log({
+  mountHeight: mount.clientHeight, // the element you passed as `container`
+  measuredViewport: scroll.clientHeight, // what VirtualScroller measures
+  fullDataHeight: parseFloat(body.style.height), // rowCount × rowHeight
+  renderedRows: body.querySelectorAll('.dt-row').length,
+});
+```
+
+Healthy: `measuredViewport` is the on-screen height and stays there as the dataset grows; `renderedRows` is `Math.ceil(measuredViewport / rowHeight) + 10` (the scroller renders 5 buffer rows on each side, and `bufferRows` is not exposed through `createDataTable`). Broken: `measuredViewport` is roughly equal to `fullDataHeight` and `renderedRows` is roughly the row count.
+
+Fix: give the container a height. Either an explicit one:
+
+```html
+<div id="my-table" style="height: 600px"></div>
+```
+
+or make it a flex/grid child that fills the leftover space, with `min-height: 0`:
+
+```css
+#my-table {
+  flex: 1;
+  min-height: 0; /* required — without it the item won't shrink below content height */
+}
+```
+
+There is no `height`, `maxHeight`, `autoHeight`, or `fitToContainer` option to do this from JavaScript — the height comes from your CSS. See [Sizing the container](../README.md#sizing-the-container) for the full rules, including why every ancestor up to the viewport needs a resolved height.
+
+### 26. No rows render at all — the table area is blank
+
+Symptom: nothing is visible where the table should be. The mount element and `.dt-root` are in the DOM, but the table occupies no space and no rows exist. The console usually has:
+
+```
+[@jeyabbalas/data-table] Mount container has height 0 at initialization. No rows will render
+until the container has a computed height. Typical fix: make it a flex/grid child with
+`flex: 1; min-height: 0` (see examples/01-minimal) or set an explicit height.
+```
+
+Cause: the container's height is zero. `calculateVisibleRange()` returns an empty range whenever the scroll container's `clientHeight` is `0` (`src/table/VirtualScroller.ts:248-250`), so nothing is rendered. The message above is a plain `console.warn` emitted once at construction, when `container.getBoundingClientRect().height === 0` (`src/table/TableContainer.ts:357-368`) — it is not a `warning` event and has no error code, so `table.on('warning', …)` will not see it. A container that collapses to zero height _after_ mount produces the same blank body with no message at all.
+
+This is the same root cause as §25 — an unresolved height chain — at the other extreme. Note that §2 also describes a blank table, but that one is SSR-specific and looks different: with SSR the library never mounts at all, so there is no `.dt-root` in the DOM. If `document.querySelector('.dt-root')` returns an element, it is a height problem, not an SSR problem.
+
+Fix: as in §25 — an explicit height on the mount element, or `flex: 1; min-height: 0` on a flex/grid child, with a resolved height on every ancestor up to the viewport. See [Sizing the container](../README.md#sizing-the-container) and the flex chain in [`examples/01-minimal`](../examples/01-minimal/).
 
 ---
 

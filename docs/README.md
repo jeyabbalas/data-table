@@ -7,6 +7,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 ## Start here
 
 - [Quick start](../README.md#quick-start) — mount a table in ~10 lines
+- [Sizing the container](../README.md#sizing-the-container) — the mount container must have a bounded height; it is what makes virtualization work, and nothing errors when it is missing
 - [Runnable examples](../examples/README.md) — fourteen focused single-feature examples, browsable from the demo via `npm run dev`
 - [AGENTS.md](../AGENTS.md) — coding-agent orientation: capability matrix, clarifying-question checklist, canonical snippets, pitfalls
 
@@ -15,7 +16,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 - [API reference](./api-reference.md) — curated narrative: every option, event, action, error code, filter shape, derived-column type
 - [Generated API reference](./api/README.md) — exhaustive signatures auto-generated from source JSDoc (regenerate via `npm run docs:api`)
 - [Glossary](./glossary.md) — alphabetical index of domain terms with cross-links to the relevant guide or concept doc
-- [Troubleshooting](./troubleshooting.md) — 34 error codes and 19 common-issue FAQs with fix snippets
+- [Troubleshooting](./troubleshooting.md) — 46 error codes and 26 common-issue FAQs with fix snippets
 - [Performance](./performance.md) — architectural limits, self-benchmarking methodology
 
 ## Guides (task-oriented)
@@ -70,6 +71,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 
 - **"What does option `X` do?"** → [API reference](./api-reference.md).
 - **"What's the error code `Y`?"** → [Troubleshooting](./troubleshooting.md).
+- **"The table renders every row / the tab freezes on a big file."** → [Sizing the container](../README.md#sizing-the-container), then [Architecture § Virtual scroller](./concepts/architecture.md#virtual-scroller).
 - **"How do I do `Z`?"** → start in [Guides](#guides-task-oriented). Each guide links back to the API reference for type signatures.
 - **"I'm an AI agent writing code against this library."** → [AGENTS.md](../AGENTS.md) first, then this index.
 

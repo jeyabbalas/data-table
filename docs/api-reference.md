@@ -426,13 +426,17 @@ Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, bui
 
 ## `CreateDataTableOptions`
 
-Source: `src/DataTable.ts:124-223`.
+Source: `src/DataTable.ts:123-278`.
 
 ### Mounting
 
-| Field       | Type          | Required? | Default | Description                                                                         |
-| ----------- | ------------- | --------- | ------- | ----------------------------------------------------------------------------------- |
-| `container` | `HTMLElement` | yes       | —       | Element that will host the table. The library takes full ownership of its contents. |
+| Field       | Type          | Required? | Default | Description                                                                                                                          |
+| ----------- | ------------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `container` | `HTMLElement` | yes       | —       | Element that will host the table. The library takes full ownership of its contents. Must have a bounded height — see the note below. |
+
+A bounded container height is a performance requirement, not a style preference. The library appends a `height: 100%` root into `container` (`src/styles/02-shell.css:11-19`) and the virtual scroller sizes its render window from the `clientHeight` of the internal `.dt-body-scroll` viewport (`src/table/VirtualScroller.ts:245-262`) — `⌈clientHeight / rowHeight⌉ + 10` rows. When `container` is content-sized, that chain resolves to the height of the whole dataset: the visible range becomes every row, the body issues a single `LIMIT <totalRows>` query (`src/table/TableBody.ts:732`), and a DOM row is built per result (`src/table/TableBody.ts:812`). Virtualization is defeated with no error and no warning. The degenerate opposite — a container that is zero-tall at mount — renders nothing and does log a one-shot `console.warn` (`src/table/TableContainer.ts:357-368`).
+
+There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is the host page's job, and the library never writes styles onto it. Selector strings are not accepted — pass the `HTMLElement`. See [Sizing the container](../README.md#sizing-the-container) for the two layouts that work and the failure modes, and [Architecture § Virtual scroller](./concepts/architecture.md#virtual-scroller) for the mechanism in full.
 
 ### Data
 
@@ -465,13 +469,13 @@ Source: `src/DataTable.ts:124-223`.
 
 ### UI
 
-| Field          | Type          | Required? | Default         | Description                                            |
-| -------------- | ------------- | --------- | --------------- | ------------------------------------------------------ |
-| `portalTarget` | `HTMLElement` | no        | `document.body` | Where fixed-position modals mount.                     |
-| `rowHeight`    | `number`      | no        | `32`            | Row height in pixels.                                  |
-| `headerHeight` | `number`      | no        | `120`           | Header height in pixels (accommodates visualizations). |
-| `colorScheme`  | `ColorScheme` | no        | `'auto'`        | Initial light/dark theme.                              |
-| `classPrefix`  | `string`      | no        | `'dt'`          | CSS class prefix for full isolation.                   |
+| Field          | Type          | Required? | Default         | Description                                                                                                                                                                                        |
+| -------------- | ------------- | --------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `portalTarget` | `HTMLElement` | no        | `document.body` | Where fixed-position modals mount.                                                                                                                                                                 |
+| `rowHeight`    | `number`      | no        | `32`            | Row height in pixels. With the scroll viewport's height it fixes how many rows render — see [Mounting](#mounting).                                                                                 |
+| `headerHeight` | `number`      | no        | `120`           | Header height in pixels (accommodates visualizations). Applied as a `min-height` on the header row, so it comes out of the container's height before the body scroll viewport takes the remainder. |
+| `colorScheme`  | `ColorScheme` | no        | `'auto'`        | Initial light/dark theme.                                                                                                                                                                          |
+| `classPrefix`  | `string`      | no        | `'dt'`          | CSS class prefix for full isolation.                                                                                                                                                               |
 
 ### Customization
 
@@ -486,7 +490,7 @@ Source: `src/DataTable.ts:124-223`.
 
 ## `DataTable` interface
 
-Returned by `createDataTable()`. Source: `src/DataTable.ts:228-312`.
+Returned by `createDataTable()`. Source: `src/DataTable.ts:283-372`.
 
 ### Properties
 

@@ -10,7 +10,14 @@
  * The modular classes (`WorkerBridge`, `TableContainer`, etc.) remain
  * exported for power users who want to orchestrate things manually.
  *
+ * The mount container must have a bounded height before the table is created —
+ * see {@link CreateDataTableOptions.container}.
+ *
  * @example
+ * ```html
+ * <div id="my-table" style="height: 600px"></div>
+ * ```
+ *
  * ```ts
  * import { createDataTable } from '@jeyabbalas/data-table';
  * import '@jeyabbalas/data-table/styles';
@@ -114,7 +121,26 @@ function validateColorScheme(value: unknown, origin: string): ColorScheme {
  * to `true`; pass `false` (or a configuration object) to customize.
  */
 export interface CreateDataTableOptions {
-  /** Element that will host the table. The library takes full ownership of its contents. */
+  /**
+   * Element that will host the table. The library takes full ownership of its
+   * contents.
+   *
+   * Must have a bounded height before mounting: the table virtualizes against
+   * this element, measuring it to render only `⌈height / rowHeight⌉ + 10` rows.
+   * Give it an explicit height, or `flex: 1; min-height: 0` as a flex/grid
+   * child — `min-height: 0` is mandatory, as flex and grid items otherwise
+   * refuse to shrink below their content, which here is every row.
+   *
+   * Without one nothing errors: the root (`height: 100%`) becomes
+   * content-sized, so the measured viewport is the whole dataset and the table
+   * queries and builds DOM for every row. A zero-height container renders no
+   * rows and logs a console warning. See "Sizing the container" in the README.
+   *
+   * @example
+   * ```html
+   * <div id="my-table" style="height: 600px"></div>
+   * ```
+   */
   container: HTMLElement;
 
   /** Optional initial data source. If omitted, call `table.loadData(source)` later. */
@@ -375,6 +401,10 @@ async function normalizeSource(
  * Awaits worker initialization before returning so the caller can immediately
  * `loadData()` or rely on `state.schema` being populated (if `source` was
  * provided).
+ *
+ * @remarks Size the container before calling this. The table virtualizes
+ * against the container's height, and an unbounded one silently renders every
+ * row — see {@link CreateDataTableOptions.container}.
  */
 export async function createDataTable(opts: CreateDataTableOptions): Promise<DataTable> {
   // -------- Options validation --------

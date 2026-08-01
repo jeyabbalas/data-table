@@ -37,6 +37,11 @@ export function Table({ source }: { source: File | string }) {
 }
 ```
 
+The host element's height is a requirement, not styling. The table
+virtualizes against the container's measured height and renders only the
+rows that fit; an unbounded container silently renders every row in the
+dataset. See [Sizing the container](../../README.md#sizing-the-container).
+
 ## Why the `cancelled` flag
 
 `createDataTable` is async. If the effect re-runs (or Strict Mode

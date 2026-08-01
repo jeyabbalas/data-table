@@ -26,7 +26,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 ### SUPPORTS
 
-- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:129).
+- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:147).
 - Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–63).
 - Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
 - Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`) (src/core/types.ts, src/core/Actions.ts).
@@ -69,14 +69,15 @@ Ask these **before writing integration code**, in order. The first answer often 
 
 1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed?
 2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency.
-3. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
-4. **SSR / CSP.** Next.js / Nuxt / Remix? A strict CSP forbidding `cdn.jsdelivr.net`? These drive code layout and `bridgeOptions`.
-5. **Multi-table.** Two or more tables on the same page? Share a `WorkerBridge` (perf) and optionally a `FilterPresetManager`. Keep distinct `tableName`s.
-6. **Custom SQL exposure.** Will end users author raw SQL (`expressionFilter`, `RawSQLFilter`)? If yes, understand that these bypass validation for content — treat them as trusted input.
-7. **Theme / brand.** CSS-variable overrides? Light-only, dark-only, or auto? See [`docs/api-reference.md#i18n-strings`](./docs/api-reference.md) + CSS variable list in `README.md`.
-8. **i18n.** Which locale(s)? `messages` is captured at `createDataTable()` time — runtime swap requires rebuild.
-9. **Accessibility target.** Keyboard-only + screen reader support is default-on. Is there a stricter compliance bar (axe CI, WCAG 2.2)?
-10. **Offline / self-hosted WASM.** Air-gapped, Electron, or strict CSP? Use `bridgeOptions.duckdbBundles` + `workerUrl`.
+3. **Mount point and height.** Which `HTMLElement` does the table mount into (`container` takes an element, not a selector), and where does that element's height come from — an explicit `height`, a `flex: 1; min-height: 0` child, a grid track? It must be bounded. If the answer is "it grows with its content", fix that before writing any other integration code; see [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+4. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
+5. **SSR / CSP.** Next.js / Nuxt / Remix? A strict CSP forbidding `cdn.jsdelivr.net`? These drive code layout and `bridgeOptions`.
+6. **Multi-table.** Two or more tables on the same page? Share a `WorkerBridge` (perf) and optionally a `FilterPresetManager`. Keep distinct `tableName`s.
+7. **Custom SQL exposure.** Will end users author raw SQL (`expressionFilter`, `RawSQLFilter`)? If yes, understand that these bypass validation for content — treat them as trusted input.
+8. **Theme / brand.** CSS-variable overrides? Light-only, dark-only, or auto? See [`docs/api-reference.md#i18n-strings`](./docs/api-reference.md) + CSS variable list in `README.md`.
+9. **i18n.** Which locale(s)? `messages` is captured at `createDataTable()` time — runtime swap requires rebuild.
+10. **Accessibility target.** Keyboard-only + screen reader support is default-on. Is there a stricter compliance bar (axe CI, WCAG 2.2)?
+11. **Offline / self-hosted WASM.** Air-gapped, Electron, or strict CSP? Use `bridgeOptions.duckdbBundles` + `workerUrl`.
 
 ---
 
@@ -89,7 +90,15 @@ import { createDataTable, type DataTable } from '@jeyabbalas/data-table';
 import '@jeyabbalas/data-table/styles';
 ```
 
+They also assume the mount container already has a **bounded height**, as set up in snippet (a). That is a hard requirement, not styling: the virtual scroller measures the container to decide how many rows to render, so an auto-height container makes it render the entire dataset — silently, with no error and no `warning` event. Only snippet (a) repeats the HTML/CSS; every later snippet takes it as given. See [pitfall 1](#5-common-pitfalls) and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+
 ### (a) Minimum working example
+
+```html
+<!-- The container MUST have a bounded height. The library never sets one, and
+     measures this element to decide how many rows to put in the DOM. -->
+<div id="table" style="height: 600px"></div>
+```
 
 ```ts
 const container = document.getElementById('table')!;
@@ -101,6 +110,27 @@ table.on('ready', () => console.log('ready'));
 // Later:
 await table.destroy();
 ```
+
+Use a flex/grid child instead of a fixed pixel height when the table should fill the space left over:
+
+```css
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+}
+#table {
+  flex: 1;
+  min-height: 0; /* mandatory — flex items default to min-height: auto and
+                    will not shrink below their intrinsic content height */
+}
+```
+
+`container` takes an `HTMLElement`, not a selector string. There is no height option — sizing is entirely the host page's job. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`), so it inherits whatever the container resolves to; the scroller then reads `clientHeight` off `.dt-body-scroll` (`src/table/VirtualScroller.ts:245`) and renders `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — ~29 at 600px, whether the dataset has 1 thousand rows or 10 million. `bufferRows` defaults to 5 and is not exposed through `createDataTable` (`src/table/VirtualScroller.ts:257-262`, `:103`). `height: 100%` on the container works only if every ancestor up to the viewport also has a resolved height.
 
 ### (b) Programmatic filter application (every type)
 
@@ -478,7 +508,7 @@ table.on('derivedChange', refresh);
 
 ## 4. Default config cheat-sheet
 
-All values source `src/DataTable.ts:124-223`.
+All values source `src/DataTable.ts:123-278`.
 
 | Option               | Default         | Notes                                                                                            |
 | -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
@@ -495,15 +525,34 @@ All values source `src/DataTable.ts:124-223`.
 | `portalTarget`       | `document.body` | Where modals mount.                                                                              |
 | `strictBrowserCheck` | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
 
+**Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. The scroller measures it (`src/table/VirtualScroller.ts:245`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+
 ---
 
 ## 5. Common pitfalls
 
-1. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
+1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:448-452`) grows to the full dataset height that `setTotalRows()` writes onto `.dt-body` (`src/table/VirtualScroller.ts:300-308`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:245`) is then the whole dataset, so the visible range is every row: one `LIMIT <totalRows>` query (`src/table/TableBody.ts:732`) and one DOM row per row (`src/table/TableBody.ts:812`). At 1M rows × 32px that is a 32,000,000px element, `LIMIT 1000000`, and 1M DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
 
-2. **Calling `loadData` before `await createDataTable()` resolves.** Symptom: filters/sort don't apply as expected. The facade already handles `options.source` for the first load. Use `loadData()` only for subsequent swaps.
+   ```html
+   <div id="table" style="height: 600px"></div>
+   ```
 
-3. **Forgetting `isDestroyed()` in async callbacks.** After `destroy()`, every public method throws `DestroyedError`. Always guard:
+   ```css
+   /* or as a flex/grid child — `min-height: 0` is mandatory, flex items default
+      to `min-height: auto` and will not shrink below intrinsic content height */
+   #table {
+     flex: 1;
+     min-height: 0;
+   }
+   ```
+
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:248-250`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:357-368`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+
+2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
+
+3. **Calling `loadData` before `await createDataTable()` resolves.** Symptom: filters/sort don't apply as expected. The facade already handles `options.source` for the first load. Use `loadData()` only for subsequent swaps.
+
+4. **Forgetting `isDestroyed()` in async callbacks.** After `destroy()`, every public method throws `DestroyedError`. Always guard:
 
    ```ts
    setTimeout(() => {
@@ -512,21 +561,21 @@ All values source `src/DataTable.ts:124-223`.
    }, 500);
    ```
 
-4. **Sharing a `SessionStore` with colliding `tableName`s.** Snapshots are keyed by table name. Two tables with the same (auto-generated) name clobber each other. Always pass distinct `tableName`s when sharing a store.
+5. **Sharing a `SessionStore` with colliding `tableName`s.** Snapshots are keyed by table name. Two tables with the same (auto-generated) name clobber each other. Always pass distinct `tableName`s when sharing a store.
 
-5. **React Strict Mode double-invocation.** In dev, effects run twice. Without the cancel-flag pattern you'll mount two tables into the same container. See [snippet (g)](#g-destroy-on-unmount).
+6. **React Strict Mode double-invocation.** In dev, effects run twice. Without the cancel-flag pattern you'll mount two tables into the same container. See [snippet (g)](#g-destroy-on-unmount).
 
-6. **Mutating `messages` after construction.** `messages` is consumed once. Destroy + recreate the table to change locale.
+7. **Mutating `messages` after construction.** `messages` is consumed once. Destroy + recreate the table to change locale.
 
-7. **Registering a custom viz on `defaultVisualizationRegistry`.** Leaks across every table on the page. Create a per-instance `new VisualizationRegistry()` and pass it via `visualizationRegistry`.
+8. **Registering a custom viz on `defaultVisualizationRegistry`.** Leaks across every table on the page. Create a per-instance `new VisualizationRegistry()` and pass it via `visualizationRegistry`.
 
-8. **Assuming derived-column errors throw.** They don't. `addDerivedColumn` resolves `{ success: false, error }` for expression/vector failures. Check `result.success`.
+9. **Assuming derived-column errors throw.** They don't. `addDerivedColumn` resolves `{ success: false, error }` for expression/vector failures. Check `result.success`.
 
-9. **Treating raw-SQL filters as validated input.** `RawSQLFilter.sql` is spliced into a `WHERE` clause. If your end users author the SQL, you own the injection surface — validate and sanitize at your layer.
+10. **Treating raw-SQL filters as validated input.** `RawSQLFilter.sql` is spliced into a `WHERE` clause. If your end users author the SQL, you own the injection surface — validate and sanitize at your layer.
 
-10. **Expecting synchronous completion after `loadData()`.** `loadData()` returns a promise. Await it (or subscribe to `loadComplete`) before reading `state.schema.get()` / `state.totalRows.get()`.
+11. **Expecting synchronous completion after `loadData()`.** `loadData()` returns a promise. Await it (or subscribe to `loadComplete`) before reading `state.schema.get()` / `state.totalRows.get()`.
 
-11. **Blocking network for the WASM bundle.** DuckDB fetches from a CDN by default. On a strict CSP, supply `bridgeOptions.duckdbBundles` with self-hosted paths.
+12. **Blocking network for the WASM bundle.** DuckDB fetches from a CDN by default. On a strict CSP, supply `bridgeOptions.duckdbBundles` with self-hosted paths.
 
 ---
 
@@ -641,6 +690,6 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 **Source-of-truth (prefer these over the docs when they disagree)**
 
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
-- **Options definition** — `src/DataTable.ts:124-223`
+- **Options definition** — `src/DataTable.ts:123-278`
 - **Event payloads** — `src/core/TableEvents.ts`
 - **Action methods** — `src/core/Actions.ts`

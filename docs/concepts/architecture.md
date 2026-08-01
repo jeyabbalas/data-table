@@ -10,6 +10,8 @@ small number of coordinated components.
 - How the major components relate
 - Where queries execute (hint: not on the main thread)
 - How filter changes propagate to visualizations and the row count
+- Why the mount container's height is a performance property, not a
+  cosmetic one
 - How modals escape CSS containment via portals
 
 Not a task-oriented guide. If you just want to use the library, skip to
@@ -170,6 +172,86 @@ The table body renders only visible rows. Given:
 
 The `VirtualScroller` computes `[firstVisibleRow, lastVisibleRow]` and
 queries DuckDB for that slice. Rows are re-rendered as the user scrolls.
+
+### The height chain
+
+How _many_ rows that slice contains comes from a single measurement:
+`clientHeight` on the internal scroll container `.dt-body-scroll`
+([`src/table/VirtualScroller.ts:245`](../../src/table/VirtualScroller.ts)).
+The rendered count is `⌈clientHeight / rowHeight⌉ + 2 × bufferRows`, with
+`bufferRows` defaulting to 5
+([`src/table/VirtualScroller.ts:257-262`, `:103`](../../src/table/VirtualScroller.ts))
+— roughly 29 rows in a 600 px viewport at the default `rowHeight`.
+`bufferRows` is not reachable through `createDataTable`; only a direct
+`VirtualScroller` construction from `/advanced` can change it.
+
+That `clientHeight` is whatever CSS hands the scroller, and the stylesheet
+deliberately delegates the decision upward
+([`src/styles/02-shell.css`](../../src/styles/02-shell.css)):
+
+```
+.dt-root         { height: 100% }                           /* :11-19   */
+.dt-grid         { flex: 1; min-height: 0 }                 /* :33-38   */
+.dt-body-scroll  { flex: 1; overflow: auto; min-height: 0 } /* :448-452 */
+```
+
+No link in that chain introduces a height of its own. `.dt-root` takes the
+mount container's, `.dt-grid` takes what is left inside the root, and
+`.dt-body-scroll` takes what is left inside the grid. The mount container
+is the only place a concrete number can enter — and the library never
+styles it, because it belongs to the host page. `container` is an
+`HTMLElement` the host provides; the library only appends its own root
+into it.
+
+### Why an unbounded container defeats virtualization
+
+`setTotalRows()` writes an explicit `height: rowCount × rowHeight` px onto
+the body content element `.dt-body`
+([`src/table/VirtualScroller.ts:300-308`](../../src/table/VirtualScroller.ts))
+so the scrollbar reflects the whole dataset. That tall element is the
+content `.dt-body-scroll` is asked to hold, and `overflow: auto` clips it
+only while the scroller itself is constrained from above.
+
+If the mount container is content-sized, it is not. `.dt-root`'s
+`height: 100%` resolves against an auto-height parent and becomes
+content-sized in turn, so sizing runs the other way: `.dt-body`'s
+`rowCount × rowHeight` propagates outward, `.dt-body-scroll` grows to fit
+it rather than clipping it, and `clientHeight` ends up equal to the height
+of the entire dataset. The computed visible range is then every row — one
+`LIMIT <totalRows>` query
+([`src/table/TableBody.ts:732`](../../src/table/TableBody.ts)) and one DOM
+row per row ([`src/table/TableBody.ts:812`](../../src/table/TableBody.ts)).
+At 1M rows and `rowHeight: 32` that is a single query pulling the full
+table into memory behind a 32,000,000 px element.
+
+Nothing errors and nothing warns. The scroller measured correctly; it was
+handed the wrong viewport. The only height the library complains about is
+zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
+is 0
+([`src/table/VirtualScroller.ts:248-250`](../../src/table/VirtualScroller.ts)),
+and `TableContainer` logs a one-shot `console.warn` at construction
+([`src/table/TableContainer.ts:357-368`](../../src/table/TableContainer.ts)).
+An unbounded container has a perfectly good non-zero height, so it trips
+neither check.
+
+The consequence for the host page is that the mount container must have a
+bounded height, and that is a performance requirement rather than a
+styling preference — it is the only input that caps how much work each
+scroll, filter, and sort does. There is no `height` / `maxHeight` /
+`autoHeight` option to substitute for it; `rowHeight` (default 32) and
+`headerHeight` (default 120) are the only size knobs, and `headerHeight`
+only subtracts from the viewport. See
+[Sizing the container](../../README.md#sizing-the-container) for the two
+layouts that produce a bounded height and the failure modes when neither
+is used.
+
+Re-measurement is interaction-driven. The visible range is recomputed on
+scroll and on state-change re-renders; nothing subscribes to the
+container's `ResizeObserver` to recompute it on resize alone, so a
+container whose height changes while the table is idle keeps a stale range
+until the next interaction. Size the container before mounting.
+
+### Fixed row heights
 
 Fixed row heights are an assumption — content taller than `rowHeight`
 will clip or overflow. That's the cost of virtualization; you opt out of

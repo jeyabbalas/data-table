@@ -43,6 +43,14 @@ export function DataTableView({ source }: { source: string }) {
 }
 ```
 
+The host element's height is a requirement, not styling. The table
+virtualizes against the container's measured height and renders only the
+rows that fit; an unbounded container silently renders every row. If you
+prefer `height: 100%` or `flex: 1` over a fixed height, every ancestor up
+to `<html>` needs a resolved height too — including the `<body>` your root
+layout renders. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 Use it from a server component or another client component:
 
 ```tsx

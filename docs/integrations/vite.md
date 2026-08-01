@@ -22,6 +22,11 @@ That's usually enough. Vite handles the Web Worker and WASM imports
 transparently. The library's `new Worker(new URL('../worker/worker.ts',
 import.meta.url), { type: 'module' })` pattern is Vite-native.
 
+`#my-table` is your markup, not the library's, and it needs a bounded
+height: the table virtualizes against the container's measured height, and
+an unbounded one silently renders every row. See
+[Sizing the container](../../README.md#sizing-the-container).
+
 ## Dependency optimization
 
 For faster dev startup, tell Vite which dependencies to pre-bundle:

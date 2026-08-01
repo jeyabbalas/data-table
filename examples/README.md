@@ -16,6 +16,41 @@ No pre-build needed — Vite serves the library from source via aliases (see `vi
 
 The same examples are also browsable on the deployed demo under [`/data-table/examples/`](https://jeyabbalas.github.io/data-table/examples/).
 
+## Sizing the mount container
+
+Every example gives its mount container a bounded height through an unbroken chain from the viewport down. That CSS is load-bearing, not decorative. The table is virtualized and measures the container to decide how many rows to render (about `⌈containerHeight / rowHeight⌉ + 10`); with no bounded height the container becomes content-sized, the visible range becomes the entire dataset, and you get one `LIMIT <totalRows>` query and a DOM row for every row. Nothing errors — virtualization is silently defeated. A zero-height container renders nothing and logs a one-shot console warning at mount.
+
+All fourteen start the chain with `html, body { margin: 0; padding: 0; height: 100% }` plus `body { display: flex; flex-direction: column }`. Two patterns follow from there.
+
+Direct flex child of `body` (01, 02, 03, 06, 07, 08, 13):
+
+```css
+#table {
+  flex: 1;
+  min-height: 0;
+}
+```
+
+Grid cell beside a side panel (04, 05, 10, 11, 12, 14):
+
+```css
+.split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px; /* panel width varies per example */
+  min-height: 0;
+}
+#table {
+  min-height: 0;
+}
+```
+
+`09-multi-table` nests the two: a `main` grid holding two `.wrap` flex columns, each with a `flex: 1; min-height: 0` table.
+
+`min-height: 0` is mandatory on every flex or grid child in the chain. Flex items default to `min-height: auto` and refuse to shrink below their intrinsic content height — here, every row in the dataset. Omit it and you get the unbounded case above from CSS that looks correctly sized.
+
+Copy [`01-minimal`](./01-minimal/) as the smallest correct reference; see [Sizing the container](../README.md#sizing-the-container) for the full rationale.
+
 ## The examples
 
 | #   | Directory                                                   | Demonstrates                                                                                                                                                                                                                                                                                                                                                                                                                                                           | API surface                                                                                                         |

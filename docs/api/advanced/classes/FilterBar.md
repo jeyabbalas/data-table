@@ -6,10 +6,15 @@
 
 # Class: FilterBar
 
-Defined in: [filters/FilterBar.ts:55](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/filters/FilterBar.ts#L55)
+Defined in: [filters/FilterBar.ts:61](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterBar.ts#L61)
 
 FilterBar renders a horizontal bar of filter chips showing all active filters.
 It auto-shows when filters are present and collapses when empty.
+
+The bar is a `role="toolbar"` with the APG roving-tabindex treatment, so it
+is a single tab stop however many chips it holds: `←` / `→` move between the
+chips' remove buttons, "Clear all", "Expression" and "Presets", `Home` /
+`End` jump to the ends, and the movement wraps.
 
 ## Example
 
@@ -39,7 +44,7 @@ bar.destroy();
 
 > **new FilterBar**(`state`, `actions`, `options?`): `FilterBar`
 
-Defined in: [filters/FilterBar.ts:68](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/filters/FilterBar.ts#L68)
+Defined in: [filters/FilterBar.ts:75](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterBar.ts#L75)
 
 #### Parameters
 
@@ -65,7 +70,7 @@ Defined in: [filters/FilterBar.ts:68](https://github.com/jeyabbalas/data-table/b
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterBar.ts:240](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/filters/FilterBar.ts#L240)
+Defined in: [filters/FilterBar.ts:268](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterBar.ts#L268)
 
 Destroy and clean up
 
@@ -79,7 +84,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterBar.ts:233](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/filters/FilterBar.ts#L233)
+Defined in: [filters/FilterBar.ts:261](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/filters/FilterBar.ts#L261)
 
 Get the bar's DOM element
 

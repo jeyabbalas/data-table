@@ -8,7 +8,7 @@
 
 > **VisualizationConstructor** = (`container`, `column`, `options`) => [`BaseVisualization`](../../advanced/classes/BaseVisualization.md)
 
-Defined in: [visualizations/VisualizationRegistry.ts:47](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/visualizations/VisualizationRegistry.ts#L47)
+Defined in: [visualizations/VisualizationRegistry.ts:47](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/visualizations/VisualizationRegistry.ts#L47)
 
 Constructor signature for visualization classes.
 

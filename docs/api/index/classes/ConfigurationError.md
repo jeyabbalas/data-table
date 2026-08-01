@@ -6,7 +6,7 @@
 
 # Class: ConfigurationError
 
-Defined in: [core/errors.ts:256](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/errors.ts#L256)
+Defined in: [core/errors.ts:256](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/errors.ts#L256)
 
 Invalid configuration / options / internal invariant violation.
 
@@ -31,7 +31,7 @@ catch (err) {
 
 > **new ConfigurationError**(`message`, `options?`): `ConfigurationError`
 
-Defined in: [core/errors.ts:257](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/errors.ts#L257)
+Defined in: [core/errors.ts:257](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/errors.ts#L257)
 
 #### Parameters
 
@@ -57,7 +57,7 @@ Defined in: [core/errors.ts:257](https://github.com/jeyabbalas/data-table/blob/1
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -69,7 +69,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/16
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -81,7 +81,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/16
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/16620f899e7b6dda96e2db6a94ff225dc91572f6/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/02aaeeae0857255cd57341c45137ab5dad347776/src/core/errors.ts#L66)
 
 #### Returns
 

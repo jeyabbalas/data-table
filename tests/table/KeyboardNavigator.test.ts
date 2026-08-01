@@ -149,13 +149,43 @@ describe('KeyboardNavigator', () => {
     nav.destroy();
   });
 
+  it('PageUp near the top of the data stops at row 0, not the header row', () => {
+    // A page jump is a body-scrolling gesture. Overshooting into the sticky
+    // header is a surprise; the header is one ArrowUp away.
+    const { state, actions, root, nav } = setup(100);
+    actions.setFocusedCell({ row: 3, column: 'b' });
+    keydown(root, { key: 'PageUp' });
+    expect(state.focusedCell.get()).toEqual({ row: 0, column: 'b' });
+    nav.destroy();
+  });
+
+  it('PageUp on the header row leaves the cursor there', () => {
+    // The floor cannot be a flat "body row 0" — from the header that would
+    // move the cursor *down* into the data.
+    const { state, actions, root, nav } = setup(100);
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+    keydown(root, { key: 'PageUp' });
+    expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+    nav.destroy();
+  });
+
+  it('PageUp with no rows at all stays on the header row', () => {
+    const { state, actions, root, nav } = setup(0);
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+    keydown(root, { key: 'PageUp' });
+    expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+    nav.destroy();
+  });
+
   // ---- Tab is never intercepted (WCAG 2.1.2, issue #84) ----
   //
   // jsdom does not implement sequential focus navigation, so we cannot press
-  // Tab and watch focus travel. The invariant that actually matters is
-  // structural: the grid must never call preventDefault() on Tab, and it must
-  // not grow the tab order with column count. Both are asserted directly; the
-  // end-to-end walk is verified in a real browser.
+  // Tab and watch focus travel; the end-to-end walk is verified in a real
+  // browser under tests/browser/. What jsdom *can* see is the two ways the
+  // grid could break that walk: calling preventDefault() on Tab, and moving
+  // DOM focus during a Tab keydown. The second is what reopened #84 — a
+  // focus() call is as good as preventDefault(), because the browser then
+  // starts sequential navigation from the element the grid just focused.
 
   describe('Tab', () => {
     it('does not preventDefault Tab or Shift+Tab, from the root or any descendant', () => {
@@ -193,6 +223,87 @@ describe('KeyboardNavigator', () => {
       expect(state.focusedCell.get()).toEqual({ row: 0, column: 'c' });
       keydown(root, { key: 'Tab', shiftKey: true });
       expect(state.focusedCell.get()).toEqual({ row: 0, column: 'c' });
+      nav.destroy();
+    });
+
+    it('does not move DOM focus out of a scroll container inside the grid', () => {
+      // The exact regression: the dispatcher reclaimed the grid for every key
+      // that passed the cursor-key gate, Tab included. Focus went
+      // .dt-header-scroll → .dt-grid before the browser ran sequential
+      // navigation, which then walked back into .dt-grid's first tabbable
+      // descendant — .dt-header-scroll — and looped forever.
+      const state = createTableState();
+      state.schema.set(schema);
+      initializeColumnsFromSchema(state, schema);
+      state.totalRows.set(100);
+      const actions = new StateActions(state, mockBridge);
+
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const grid = document.createElement('div');
+      grid.setAttribute('tabindex', '0');
+      root.appendChild(grid);
+      const headerScroll = document.createElement('div');
+      headerScroll.setAttribute('tabindex', '0');
+      grid.appendChild(headerScroll);
+
+      const nav = new KeyboardNavigator({
+        rootElement: root,
+        gridElement: grid,
+        bodyScroll: headerScroll,
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+      });
+
+      actions.setFocusedCell({ row: 0, column: 'a' });
+      headerScroll.focus();
+      expect(document.activeElement).toBe(headerScroll);
+
+      for (const shiftKey of [false, true]) {
+        keydown(headerScroll, { key: 'Tab', shiftKey });
+        expect(document.activeElement).toBe(headerScroll);
+      }
+
+      nav.destroy();
+    });
+
+    it('does not move DOM focus for any key the grid does not act on', () => {
+      // Stated as a general rule rather than a Tab special case: a branch
+      // that does not act must not touch focus, so every unhandled key is
+      // correct by construction instead of by enumeration.
+      const state = createTableState();
+      state.schema.set(schema);
+      initializeColumnsFromSchema(state, schema);
+      state.totalRows.set(100);
+      const actions = new StateActions(state, mockBridge);
+
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const grid = document.createElement('div');
+      grid.setAttribute('tabindex', '0');
+      root.appendChild(grid);
+      const scroller = document.createElement('div');
+      scroller.setAttribute('tabindex', '0');
+      grid.appendChild(scroller);
+
+      const nav = new KeyboardNavigator({
+        rootElement: root,
+        gridElement: grid,
+        bodyScroll: scroller,
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+      });
+
+      actions.setFocusedCell({ row: 0, column: 'a' });
+
+      for (const key of ['Tab', 'a', 'F5', 'Insert', 'Shift', 'Alt', 'ContextMenu']) {
+        scroller.focus();
+        keydown(scroller, { key });
+        expect(document.activeElement, `"${key}" moved DOM focus`).toBe(scroller);
+      }
+
       nav.destroy();
     });
   });
@@ -699,6 +810,88 @@ describe('KeyboardNavigator', () => {
       keydown(root, { key: 'ArrowRight' });
       expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'c' });
 
+      cleanup();
+    });
+
+    // ---- Click-focus and F2 are the same state ----
+    //
+    // Controls mode is derived from document.activeElement rather than stored,
+    // so a control that got focus from a click behaves exactly like one
+    // reached with F2. Storing the mode is what let these three diverge.
+
+    it('Space on a click-focused control does not sort the cursor’s column', () => {
+      const { actions, headers, cleanup } = setupWithHeaders();
+      const toggleSort = vi.spyOn(actions, 'toggleSort');
+
+      // Cursor sits on 'b'…
+      actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+      // …while a click has left real focus on a control of 'a'.
+      const control = headers[0]!.getControls()[0]!;
+      control.focus();
+
+      keydown(control, { key: ' ' });
+
+      expect(toggleSort).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(control);
+      cleanup();
+    });
+
+    it('Enter on a click-focused control does not toggle row selection', () => {
+      const { state, actions, headers, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: 4, column: 'b' });
+      const control = headers[0]!.getControls()[0]!;
+      control.focus();
+
+      keydown(control, { key: 'Enter' });
+
+      expect(state.selectedRows.get().size).toBe(0);
+      expect(document.activeElement).toBe(control);
+      cleanup();
+    });
+
+    it('Ctrl+Z from a control runs undo and leaves focus on the button', () => {
+      // Falling through to the grid handler is what used to drop the user out
+      // of controls mode on every undo — contradicting the intent of keeping
+      // the shortcut table-wide in the first place.
+      const { actions, headers, cleanup } = setupWithHeaders();
+      const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);
+      const control = headers[0]!.getControls()[0]!;
+      control.focus();
+
+      keydown(control, { key: 'z', ctrlKey: true });
+
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(control);
+      cleanup();
+    });
+
+    it('Escape from a click-focused control returns focus to the grid', () => {
+      const { headers, grid, cleanup } = setupWithHeaders();
+      const control = headers[0]!.getControls()[0]!;
+      control.focus();
+
+      keydown(control, { key: 'Escape' });
+
+      expect(document.activeElement).toBe(grid);
+      cleanup();
+    });
+
+    it('Escape still clears the cursor from chrome outside the grid', () => {
+      // Escape is a "get me out of here" gesture and was table-wide before
+      // the grid restructure. Gating it behind the cursor-key check silently
+      // stopped it working from the filter bar and the hidden-columns gutter.
+      const { state, actions, root, cleanup } = setupWithHeaders();
+      actions.setFocusedCell({ row: 2, column: 'b' });
+
+      const filterBar = document.createElement('div');
+      const button = document.createElement('button');
+      filterBar.appendChild(button);
+      root.appendChild(filterBar);
+      button.focus();
+
+      keydown(button, { key: 'Escape' });
+
+      expect(state.focusedCell.get()).toBeNull();
       cleanup();
     });
   });

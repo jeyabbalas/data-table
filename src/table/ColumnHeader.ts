@@ -827,7 +827,10 @@ export class ColumnHeader {
    * `display: none` element silently does nothing, which would strand the
    * cycle — and the drag handle, which is mouse-only. A focus stop whose
    * Enter key does nothing is worse than no stop at all; keyboard reorder
-   * needs a designed gesture, tracked as a follow-up.
+   * needs a designed gesture, tracked as
+   * [issue #87](https://github.com/jeyabbalas/data-table/issues/87). The
+   * column resize handle is excluded for the same reason — it is not part of
+   * this list at all.
    *
    * @example
    * ```typescript

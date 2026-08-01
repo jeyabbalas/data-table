@@ -27,6 +27,12 @@ npm-debug.log*
 # Test coverage
 coverage/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Cache
 .cache/
 .parcel-cache/

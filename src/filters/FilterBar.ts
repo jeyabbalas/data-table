@@ -6,6 +6,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { RovingTabindex } from '../core/RovingTabindex';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import { FilterChip, type FilterChipOptions } from './FilterChip';
@@ -35,6 +36,11 @@ export interface FilterBarOptions {
  * FilterBar renders a horizontal bar of filter chips showing all active filters.
  * It auto-shows when filters are present and collapses when empty.
  *
+ * The bar is a `role="toolbar"` with the APG roving-tabindex treatment, so it
+ * is a single tab stop however many chips it holds: `←` / `→` move between the
+ * chips' remove buttons, "Clear all", "Expression" and "Presets", `Home` /
+ * `End` jump to the ends, and the movement wraps.
+ *
  * @example
  * import { FilterBar } from '@jeyabbalas/data-table/advanced';
  *
@@ -60,6 +66,7 @@ export class FilterBar {
   private expressionBtn!: HTMLButtonElement;
   private presetsBtn!: HTMLButtonElement;
   private chips: FilterChip[] = [];
+  private readonly roving: RovingTabindex;
   private unsubscribe: (() => void) | null = null;
   private destroyed = false;
   private readonly prefix: string;
@@ -75,6 +82,10 @@ export class FilterBar {
     this.element = this.createElement();
     this.chipsContainer = this.element.querySelector(`.${this.prefix}-filter-chips`)!;
     this.clearAllButton = this.element.querySelector(`.${this.prefix}-filter-clear-all`)!;
+
+    // The bar is a single row (`.dt-filter-bar` is a non-wrapping flex), so
+    // only the horizontal arrows move the stop.
+    this.roving = new RovingTabindex(this.element, { orientation: 'horizontal' });
 
     // Subscribe to filter changes
     this.unsubscribe = this.state.filters.subscribe((filters) => {
@@ -153,6 +164,19 @@ export class FilterBar {
   }
 
   private update(filters: Filter[]): void {
+    // Whether focus sat on a control that the render below is about to
+    // destroy can only be answered from here — by the time the roving
+    // controller is told about the rebuild, the focused chip is detached and
+    // `document.activeElement` has already fallen back to `<body>`.
+    const hadFocus =
+      document.activeElement instanceof Node && this.element.contains(document.activeElement);
+
+    this.render(filters);
+
+    this.roving.refresh({ restoreFocus: hadFocus });
+  }
+
+  private render(filters: Filter[]): void {
     // Recreates all chips from scratch. This is O(n) DOM operations but acceptable
     // because n is bounded by the number of table columns (typically < 50) and
     // filter changes are infrequent (user-initiated).
@@ -173,6 +197,10 @@ export class FilterBar {
         return;
       }
       this.element.classList.add(`${this.prefix}-filter-bar--hidden`);
+      // A collapsed bar is `max-height: 0; overflow: hidden`, which clips its
+      // children without making them unfocusable — leaving "Clear all" at
+      // `display: ''` would keep an invisible tab stop alive.
+      this.clearAllButton.style.display = 'none';
       return;
     }
 
@@ -240,6 +268,8 @@ export class FilterBar {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    this.roving.destroy();
 
     // Unsubscribe from state
     if (this.unsubscribe) {

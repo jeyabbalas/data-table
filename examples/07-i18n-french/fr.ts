@@ -282,6 +282,8 @@ export const frenchMessages: DeepPartial<Strings> = {
   },
 
   a11y: {
+    gridLabel: 'Tableau de données',
+
     filtersActive: (n, shown, total) =>
       `${n} ${n === 1 ? 'filtre actif' : 'filtres actifs'}, ${shown.toLocaleString()} sur ${total.toLocaleString()} lignes affichées`,
     noFilters: (total) => `Affichage de toutes les ${total.toLocaleString()} lignes`,

@@ -51,8 +51,17 @@ Use the **Feature request** issue template. Before proposing:
    - `npm run build`
    - `npm run size` (bundle-size budgets — fails on > 5 % regression)
    - `npm run docs:api:check` (typedoc dry-run; catches broken JSDoc references)
+   - `npm run test:browser` (Playwright accessibility suite; first run needs
+     `npx playwright install chromium`)
 
    `npm run lint:fix` and `npm run format` can fix most mechanical issues.
+
+   `npm run test:browser` boots the demo and drives a real Chromium. It
+   guards the things jsdom structurally cannot see — sequential focus
+   navigation (`Tab` order and keyboard traps), colour contrast against real
+   paint, and scrollable-region detection. A jsdom test can never replace one
+   of these: a live keyboard trap was measured to pass the entire vitest
+   suite.
 
    The opt-in performance gate `npm run test:perf` (sets
    `RUN_DUCKDB_PERF=1` and `RUN_LIFECYCLE_STRESS=1`) is for nightly /

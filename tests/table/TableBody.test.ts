@@ -180,6 +180,37 @@ describe('TableBody', () => {
 
       tableBody.destroy();
     });
+
+    it('marks loading placeholder rows aria-busy and clears it on promotion', () => {
+      const tableBody = new TableBody(container, state, mockBridge as any, actions);
+      const internal = tableBody as unknown as {
+        createPlaceholderRow(index: number): HTMLElement;
+        updateRowContent(
+          rowEl: HTMLElement,
+          index: number,
+          data: Record<string, unknown>,
+          columns: string[],
+          schemaMap: Map<string, unknown>,
+        ): void;
+      };
+
+      // A placeholder carries one cell while the grid advertises N columns.
+      // `aria-busy` is what makes that legal — padding it out to N cells is
+      // not an option, because cell count is the only thing distinguishing a
+      // placeholder from a data row in `renderVisibleRows`.
+      const placeholder = internal.createPlaceholderRow(7);
+      expect(placeholder.getAttribute('role')).toBe('row');
+      expect(placeholder.getAttribute('aria-busy')).toBe('true');
+      expect(placeholder.children.length).toBe(1);
+
+      // A single-column grid promotes a placeholder in place (cell counts
+      // match), so the marker has to come off there or the row stays busy
+      // forever.
+      internal.updateRowContent(placeholder, 7, { id: 1 }, ['id'], new Map());
+      expect(placeholder.hasAttribute('aria-busy')).toBe(false);
+
+      tableBody.destroy();
+    });
   });
 
   describe('SQL query building', () => {

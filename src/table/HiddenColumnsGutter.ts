@@ -6,6 +6,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { RovingTabindex } from '../core/RovingTabindex';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 
@@ -22,11 +23,19 @@ export interface HiddenColumnsGutterOptions {
 /**
  * HiddenColumnsGutter renders a horizontal bar of chips for hidden columns.
  * It auto-shows when columns are hidden and collapses when all are visible.
+ *
+ * The gutter is a `role="toolbar"` with the APG roving-tabindex treatment, so
+ * it is a single tab stop no matter how many columns are hidden — hiding 250
+ * of a 266-column table used to put 251 tab stops in front of the rest of the
+ * page, most of them clipped out of sight by the gutter's `max-height`. All
+ * four arrow keys move the stop (the chips wrap onto several rows), `Home` /
+ * `End` jump to the ends, and the movement wraps.
  */
 export class HiddenColumnsGutter {
   private element: HTMLElement;
   private chipsContainer: HTMLElement;
   private showAllButton: HTMLButtonElement;
+  private readonly roving: RovingTabindex;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
   private readonly prefix: string;
@@ -42,6 +51,10 @@ export class HiddenColumnsGutter {
     this.element = this.createElement();
     this.chipsContainer = this.element.querySelector(`.${this.prefix}-hidden-chips`)!;
     this.showAllButton = this.element.querySelector(`.${this.prefix}-hidden-show-all`)!;
+
+    // `.dt-hidden-gutter` wraps onto as many rows as it takes, so up/down is
+    // as natural a "next chip" gesture as left/right.
+    this.roving = new RovingTabindex(this.element, { orientation: 'both' });
 
     // Subscribe to visible columns and column order to derive hidden columns
     const unsubVisible = this.state.visibleColumns.subscribe(() => {
@@ -90,6 +103,19 @@ export class HiddenColumnsGutter {
   }
 
   private update(): void {
+    // Read the focus state before the chips are torn down: a restore button
+    // that removes its own chip leaves `document.activeElement` on `<body>`,
+    // and only this side of the rebuild can tell that apart from focus having
+    // been elsewhere all along.
+    const hadFocus =
+      document.activeElement instanceof Node && this.element.contains(document.activeElement);
+
+    this.render();
+
+    this.roving.refresh({ restoreFocus: hadFocus });
+  }
+
+  private render(): void {
     const order = this.state.columnOrder.get();
     const visible = this.state.visibleColumns.get();
     const visibleSet = new Set(visible);
@@ -100,6 +126,10 @@ export class HiddenColumnsGutter {
 
     if (hiddenColumns.length === 0) {
       this.element.classList.add(`${this.prefix}-hidden-gutter--hidden`);
+      // The collapsed gutter is `max-height: 0; overflow: hidden`, which clips
+      // its children without making them unfocusable. Hiding "Show all" as
+      // well is what keeps a collapsed gutter out of the tab order entirely.
+      this.showAllButton.style.display = 'none';
       return;
     }
 
@@ -157,6 +187,8 @@ export class HiddenColumnsGutter {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    this.roving.destroy();
 
     for (const unsub of this.unsubscribes) {
       unsub();

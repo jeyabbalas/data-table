@@ -88,9 +88,11 @@
   --dt-text-secondary: #374151;
   --dt-text-tertiary: #4b5563;
 
-  /* Sort arrow colors */
-  --dt-arrow-default: #d1d5db;
-  --dt-arrow-hover: #9ca3af;
+  /* Sort arrow / action-icon colors. The only indicator that a column is
+     sortable or pinnable, so non-text content under WCAG 1.4.11 needing 3:1
+     against both header states: gray-300 managed 1.34:1 on a hovered one. */
+  --dt-arrow-default: #6b7280;
+  --dt-arrow-hover: #4b5563;
 
   /* Sizing */
   --dt-header-height: 120px;
@@ -98,9 +100,11 @@
   --dt-col-width: 200px; /* Default column width */
   --dt-scrollbar-width: 17px;
 
-  /* Semantic colors */
-  --dt-success: #22c55e;
-  --dt-error: #ef4444;
+  /* Semantic colors, split by role: `success` / `error` are painted as text
+     on near-white surfaces (green-500 read 2.02:1, red-500 3.76:1 on --dt-bg),
+     while `error-dark` / `error-darker` are fills under white --dt-on-error. */
+  --dt-success: #15803d;
+  --dt-error: #dc2626;
   --dt-error-dark: #dc2626;
 
   /* Alpha stops of --dt-primary. Overriding --dt-primary cascades via color-mix. */
@@ -132,8 +136,9 @@
   --dt-shadow-sm: rgba(0, 0, 0, 0.06);
   --dt-shadow-md: rgba(0, 0, 0, 0.12);
 
-  /* Syntax-highlighting tokens (SQL editor) */
-  --dt-syntax-string: #16a34a;
+  /* Syntax-highlighting tokens (SQL editor) — body text on --dt-bg at 13px,
+     so green-600's 3.30:1 needed the same darkening as --dt-success. */
+  --dt-syntax-string: #15803d;
   --dt-syntax-type: #9333ea;
 
   /* Misc */
@@ -216,9 +221,14 @@
   :root {
     color-scheme: dark;
 
-    /* Primary colors - slightly lighter for dark mode */
-    --dt-primary: #3b82f6;
-    --dt-primary-hover: #60a5fa;
+    /* Primary colors — a step lighter than the light ramp, not just a shade.
+       --dt-primary is the cursor ring, the filtered-column underline, the
+       sorted arrow and the active action icon, which need 3:1 against a
+       hovered header and a selected+hovered row; blue-500 read 2.80:1 and
+       2.37:1 there. Filled buttons take `color: var(--dt-bg)` instead of
+       white: no blue light enough to indicate can also carry white text. */
+    --dt-primary: #60a5fa;
+    --dt-primary-hover: #93c5fd;
     --dt-primary-light: #1e3a5f;
     --dt-primary-lighter: #1e40af;
 
@@ -237,14 +247,16 @@
        selected, hovered row). */
     --dt-text-tertiary: #b8bfc9;
 
-    /* Sort arrow colors */
-    --dt-arrow-default: #4b5563;
-    --dt-arrow-hover: #6b7280;
+    /* Sort arrow / action-icon colors — the light block's 3:1 floor
+       mirrored; gray-600 sat at 1.36:1 against a hovered header. */
+    --dt-arrow-default: #9ca3af;
+    --dt-arrow-hover: #d1d5db;
 
-    /* Semantic colors */
+    /* Semantic colors. `success` / `error` stay light — they are text here.
+       The two fill reds keep their light values: white on red-500 is 3.76:1. */
     --dt-success: #4ade80;
     --dt-error: #f87171;
-    --dt-error-dark: #ef4444;
+    --dt-error-dark: #dc2626;
 
     /* Accent family — lighter amber for dark */
     --dt-accent: #fbbf24;
@@ -255,7 +267,7 @@
     --dt-neutral-hover: #94a3b8;
 
     /* Error chrome surfaces */
-    --dt-error-darker: #dc2626;
+    --dt-error-darker: #b91c1c;
     --dt-error-bg: #451a1a;
     --dt-error-border-soft: #7f1d1d;
     --dt-error-text-strong: #fca5a5;
@@ -314,13 +326,13 @@
     --dt-text-secondary: #374151;
     --dt-text-tertiary: #4b5563;
 
-    /* Sort arrow colors */
-    --dt-arrow-default: #d1d5db;
-    --dt-arrow-hover: #9ca3af;
+    /* Sort arrow / action-icon colors */
+    --dt-arrow-default: #6b7280;
+    --dt-arrow-hover: #4b5563;
 
     /* Semantic colors */
-    --dt-success: #22c55e;
-    --dt-error: #ef4444;
+    --dt-success: #15803d;
+    --dt-error: #dc2626;
     --dt-error-dark: #dc2626;
 
     /* Accent family */
@@ -343,7 +355,7 @@
     --dt-shadow-md: rgba(0, 0, 0, 0.12);
 
     /* Syntax-highlighting tokens */
-    --dt-syntax-string: #16a34a;
+    --dt-syntax-string: #15803d;
     --dt-syntax-type: #9333ea;
 
     /* Annotation palette — light defaults (restored when an instance opts
@@ -364,9 +376,10 @@
 [data-dt-color-scheme='dark'] {
   color-scheme: dark;
 
-  /* Primary colors - slightly lighter for dark mode */
-  --dt-primary: #3b82f6;
-  --dt-primary-hover: #60a5fa;
+  /* Primary colors — see the @media block above for why dark lifts a full
+     step past the light ramp instead of shading it. */
+  --dt-primary: #60a5fa;
+  --dt-primary-hover: #93c5fd;
   --dt-primary-light: #1e3a5f;
   --dt-primary-lighter: #1e40af;
 
@@ -385,14 +398,14 @@
      selected, hovered row). */
   --dt-text-tertiary: #b8bfc9;
 
-  /* Sort arrow colors */
-  --dt-arrow-default: #4b5563;
-  --dt-arrow-hover: #6b7280;
+  /* Sort arrow / action-icon colors */
+  --dt-arrow-default: #9ca3af;
+  --dt-arrow-hover: #d1d5db;
 
   /* Semantic colors */
   --dt-success: #4ade80;
   --dt-error: #f87171;
-  --dt-error-dark: #ef4444;
+  --dt-error-dark: #dc2626;
 
   /* Accent family — lighter amber for dark */
   --dt-accent: #fbbf24;
@@ -403,7 +416,7 @@
   --dt-neutral-hover: #94a3b8;
 
   /* Error chrome surfaces */
-  --dt-error-darker: #dc2626;
+  --dt-error-darker: #b91c1c;
   --dt-error-bg: #451a1a;
   --dt-error-border-soft: #7f1d1d;
   --dt-error-text-strong: #fca5a5;

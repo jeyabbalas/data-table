@@ -6,7 +6,7 @@
  */
 
 import type { DerivedColumnDef } from '../derived/types';
-import { createSignal, computed, type Signal, type Computed } from './Signal';
+import { createSignal, computed, batch, type Signal, type Computed } from './Signal';
 import type { ColumnSchema, Filter, SortColumn, ColumnHeaderTooltipContent } from './types';
 
 /** Metadata for a hidden column — tracks neighbors at hide time for intelligent restore */
@@ -192,13 +192,23 @@ export function initializeColumnsFromSchema(state: TableState, schema: ColumnSch
   // excluded from the default visible set so the grid does not show them
   // unless the app explicitly opts in via showColumn().
   const visibleNames = schema.filter((col) => !col.system).map((col) => col.name);
-  state.schema.set(schema);
-  state.visibleColumns.set(visibleNames);
-  state.columnOrder.set(columnNames);
-  state.columnWidths.set(new Map());
-  state.pinnedColumns.set([]);
-  state.hiddenColumnInfo.set(new Map());
-  state.columnHeaderTooltips.set(new Map());
+  // Batched because `TableContainer` re-renders on `schema` alone: un-batched,
+  // the schema write lands while `visibleColumns` is still the previous (on
+  // first load, empty) array, and that render paints a grid advertising N
+  // columns whose header row owns no `columnheader` — an
+  // `aria-required-children` violation on every single load. `batch()`
+  // coalesces per *signal*, not per subscriber, so this still produces two
+  // renders (schema, then visibleColumns); what it buys is that the first one
+  // already sees the final visible set.
+  batch(() => {
+    state.schema.set(schema);
+    state.visibleColumns.set(visibleNames);
+    state.columnOrder.set(columnNames);
+    state.columnWidths.set(new Map());
+    state.pinnedColumns.set([]);
+    state.hiddenColumnInfo.set(new Map());
+    state.columnHeaderTooltips.set(new Map());
+  });
 }
 
 /**

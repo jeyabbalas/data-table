@@ -43,7 +43,6 @@ import {
   WorkerInitError,
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
-import { nextInstanceId } from './core/instanceId';
 import type { TableState } from './core/State';
 import { createTableState, resetTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
@@ -204,9 +203,16 @@ export interface CreateDataTableOptions {
   /** CSS class prefix. Default: `'dt'`. */
   classPrefix?: string;
   /**
-   * Unique identifier mixed into element IDs so multiple tables on the
-   * same page don't collide on `aria-labelledby` targets. Auto-generated
-   * if omitted. Primarily useful for deterministic test IDs.
+   * Identifier mixed into element IDs so multiple tables on the same page
+   * don't collide on `aria-labelledby` / `aria-activedescendant` targets.
+   * Auto-generated if omitted.
+   *
+   * A short random suffix is appended even to a value you supply, because
+   * nothing stops an app from handing the same one to two tables and a
+   * duplicate there is silent — the grids would mint identical cell ids and
+   * publish ambiguous IDREFs. Read {@link DataTable.instanceId} for the value
+   * actually used in the DOM; this option only seeds it, so it cannot be used
+   * to predict element IDs.
    */
   instanceId?: string;
   /** Custom expression editor factory (replaces the CodeMirror-based default). */
@@ -266,9 +272,13 @@ export interface DataTable {
   readonly annotations: AnnotationStore;
 
   /**
-   * Unique per-instance identifier, e.g. `'t1-a3f9'`. Mixed into modal
-   * element IDs to keep two tables on the same page from colliding on
-   * `aria-labelledby` targets.
+   * Unique per-instance identifier, e.g. `'t1-a3f9'`. Mixed into cell and
+   * modal element IDs to keep two tables on the same page from colliding on
+   * `aria-labelledby` and `aria-activedescendant` targets.
+   *
+   * This is the value actually used in the DOM, which is not the
+   * {@link CreateDataTableOptions.instanceId} you passed in: a random suffix
+   * is always appended. Read it here rather than assuming it.
    */
   readonly instanceId: string;
 
@@ -469,9 +479,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     presetManager = presetConfig.manager ?? new FilterPresetManager();
   }
 
-  // -------- Instance id (multi-instance DOM ID isolation) --------
-  const instanceId = opts.instanceId ?? nextInstanceId();
-
   // -------- Annotations --------
   // Constructed here (before TableContainer) so TableBody and every
   // ColumnHeader can be wired with the store + popover at construction
@@ -491,7 +498,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     rowHeight: opts.rowHeight,
     headerHeight: opts.headerHeight,
     classPrefix: opts.classPrefix ?? 'dt',
-    instanceId,
+    instanceId: opts.instanceId,
     showExpressionFilter: opts.expressionFilter !== false,
     showAddColumnButton: opts.derivedColumns !== false,
     showDerivedColumnEditIcon: opts.derivedColumns !== false,
@@ -504,6 +511,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     annotationPopover,
     columnHeaderTooltipPopover,
   });
+
+  // -------- Instance id (multi-instance DOM ID isolation) --------
+  // Read back rather than minted here, so exactly one value exists. The
+  // container qualifies whatever it is given with a random suffix — two
+  // tables handed the same `instanceId` must not mint the same cell ids —
+  // and everything downstream (the export dialog's `aria-labelledby`, the
+  // public `instanceId` property) has to agree with the ids actually in the
+  // DOM. Minting a second value here is how they came to disagree.
+  const instanceId = tableContainer.getInstanceId();
 
   // -------- Stylesheet presence check --------
   if (!stylesheetWarningEmitted && !isStylesheetLoaded()) {

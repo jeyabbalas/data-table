@@ -41,6 +41,14 @@ export interface TableBodyOptions {
    */
   onRowsRendered?: (() => void) | undefined;
   /**
+   * The owning `.dt-grid` element. Used as the rescue landing spot for real
+   * DOM focus when a row that holds it is about to be detached: virtualization
+   * recycles rows out from under the user, and focus on a detached node falls
+   * back to `<body>`, which silently ends keyboard navigation. Omit it and that
+   * rescue is simply skipped.
+   */
+  gridElement?: HTMLElement | undefined;
+  /**
    * External scroll container for unified scrolling.
    * When provided, VirtualScroller will use this container for scroll events
    * instead of creating its own scroll container.
@@ -111,6 +119,7 @@ export class TableBody {
   private readonly classPrefix: string;
   private readonly instanceId: string;
   private readonly onRowsRendered: (() => void) | null;
+  private readonly gridElement: HTMLElement | null;
   private readonly cellRenderer: CellRenderer;
   private readonly container: HTMLElement;
   private readonly annotations: AnnotationStore | null;
@@ -135,6 +144,7 @@ export class TableBody {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.instanceId = options.instanceId ?? '';
     this.onRowsRendered = options.onRowsRendered ?? null;
+    this.gridElement = options.gridElement ?? null;
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
     this.messages = options.messages ?? defaultStrings;
@@ -422,6 +432,7 @@ export class TableBody {
 
     // Clear row element map and return all rows to pool
     for (const [, element] of this.rowElementMap) {
+      this.moveFocusToGridBeforeRemoval(element);
       element.remove();
       this.returnRowToPool(element);
     }
@@ -658,6 +669,39 @@ export class TableBody {
   }
 
   // =========================================
+  // Focus lifetime
+  // =========================================
+
+  /**
+   * Move real DOM focus to the grid when `node` is about to leave the document
+   * while holding it.
+   *
+   * Body cells are permanently `tabindex="-1"`, so clicking one leaves real
+   * focus parked on an element the pool may recycle at any moment. When that
+   * happens the browser drops focus to `<body>`, and because the keydown
+   * listener lives on `.dt-root`, every subsequent arrow key is delivered
+   * somewhere it can never be heard — the whole keyboard layer goes dead until
+   * the user tabs back in.
+   *
+   * Deliberately narrow: focus moves only when `node` genuinely owns it, i.e.
+   * only when the removal was going to relocate focus anyway. Broadening this
+   * to "focus is somewhere in the table" would move focus out from under a
+   * user who never asked for it, which is as hostile as trapping Tab.
+   */
+  private moveFocusToGridBeforeRemoval(node: Node): void {
+    const grid = this.gridElement;
+    if (!grid) return;
+    // Resolve the active element against the node's own root so this keeps
+    // working under a shadow root, where `document.activeElement` reports the
+    // host rather than the focused descendant. Mirrors
+    // `TableContainer.resolveInGrid`.
+    const root = node.getRootNode();
+    const active = 'activeElement' in root ? (root as Document | ShadowRoot).activeElement : null;
+    if (!active || !node.contains(active)) return;
+    grid.focus({ preventScroll: true });
+  }
+
+  // =========================================
   // Rendering
   // =========================================
 
@@ -691,6 +735,7 @@ export class TableBody {
     // 1. Remove rows no longer visible (return to pool)
     for (const [index, element] of this.rowElementMap) {
       if (index < newStart || index >= newEnd) {
+        this.moveFocusToGridBeforeRemoval(element);
         element.remove();
         this.rowElementMap.delete(index);
         this.returnRowToPool(element);
@@ -724,6 +769,9 @@ export class TableBody {
         // updateRowContent on first call); replace from the pool when it
         // doesn't match.
         if (rowEl.children.length !== visibleColumns.length) {
+          // Bypasses `returnRowToPool` entirely, so the focus rescue has to be
+          // spelled out here as well.
+          this.moveFocusToGridBeforeRemoval(rowEl);
           rowEl.remove();
           rowEl = this.getOrCreateRow(visibleColumns.length);
           this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
@@ -741,13 +789,9 @@ export class TableBody {
         const selectedClass = `${this.classPrefix}-row--selected`;
         const hoverClass = `${this.classPrefix}-row--hover`;
 
-        if (selectedRows.has(i)) {
-          rowEl.classList.add(selectedClass);
-          rowEl.setAttribute('aria-selected', 'true');
-        } else {
-          rowEl.classList.remove(selectedClass);
-          rowEl.removeAttribute('aria-selected');
-        }
+        const selected = selectedRows.has(i);
+        rowEl.classList.toggle(selectedClass, selected);
+        this.setRowSelected(rowEl, selected);
 
         if (hoveredRow === i) {
           rowEl.classList.add(hoverClass);
@@ -834,9 +878,12 @@ export class TableBody {
           rowEl.appendChild(this.createCell());
         }
       } else if (currentCells > columnCount) {
-        // Remove extra cells
+        // Remove extra cells. The row itself survives, so `returnRowToPool`
+        // never sees these cells — the focus rescue belongs here.
         while (rowEl.children.length > columnCount) {
-          rowEl.removeChild(rowEl.lastChild!);
+          const surplus = rowEl.lastChild!;
+          this.moveFocusToGridBeforeRemoval(surplus);
+          rowEl.removeChild(surplus);
         }
       }
 
@@ -846,13 +893,14 @@ export class TableBody {
         `${this.classPrefix}-row--hover`,
         `${this.classPrefix}-row--loading`,
       );
-      rowEl.removeAttribute('aria-selected');
+      this.setRowSelected(rowEl, false);
       rowEl.removeAttribute('aria-rowindex');
     } else {
       // Create new row
       rowEl = document.createElement('div');
       rowEl.className = `${this.classPrefix}-row`;
       rowEl.setAttribute('role', 'row');
+      rowEl.setAttribute('aria-selected', 'false');
       rowEl.style.height = `${this.rowHeight}px`;
 
       // Create cells
@@ -916,7 +964,7 @@ export class TableBody {
       `${this.classPrefix}-row--loading`,
     );
     cleanEl.removeAttribute('aria-rowindex');
-    cleanEl.removeAttribute('aria-selected');
+    cleanEl.setAttribute('aria-selected', 'false');
 
     // Clear the cursor ring and the per-(row, column) cell ids. A pooled row
     // that kept its ids would duplicate them the moment it is reused for a
@@ -950,6 +998,10 @@ export class TableBody {
     // row 0 is aria-rowindex 2. `aria-rowcount` carries the matching +1.
     rowEl.setAttribute('aria-rowindex', String(index + 2));
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
+    // A single-column grid promotes a placeholder in place (cell counts match,
+    // so `renderVisibleRows` reuses the element); clear the loading marker here
+    // or that row would stay `aria-busy` forever.
+    rowEl.removeAttribute('aria-busy');
 
     // Resolve rowId from the __rowid__ column (injected into every row
     // SELECT in buildRowQuery). DuckDB returns BIGINT as bigint or number
@@ -1240,6 +1292,13 @@ export class TableBody {
     const rowEl = document.createElement('div');
     rowEl.className = `${this.classPrefix}-row ${this.classPrefix}-row--loading`;
     rowEl.setAttribute('role', 'row');
+    // One cell against a grid advertising N columns is an incomplete row;
+    // `aria-busy` is what tells AT to expect that and hold off announcing it
+    // until the data lands. Padding the row out to N cells instead is not an
+    // option: `renderVisibleRows` distinguishes a placeholder from a data row
+    // purely by cell count, and matching counts would resurrect the
+    // partial-render bug (see the `else if (rowData)` branch there).
+    rowEl.setAttribute('aria-busy', 'true');
     rowEl.style.height = `${this.rowHeight}px`;
     rowEl.setAttribute('data-row-index', String(index));
     rowEl.setAttribute('aria-rowindex', String(index + 2));
@@ -1428,6 +1487,26 @@ export class TableBody {
   // =========================================
 
   /**
+   * Write `aria-selected` on a row.
+   *
+   * Unselected rows carry `"false"` rather than nothing: inside a `role="grid"`
+   * an *absent* `aria-selected` reads as "this row is not selectable at all",
+   * which is wrong for rows that answer to click / ctrl-click / shift-click
+   * (`selectRow` supports `replace` / `toggle` / `range`).
+   *
+   * Skips a write that would not change anything — this runs for every row on
+   * every scroll frame, and even a no-op `setAttribute` still produces a
+   * mutation record for anything observing the grid. Mirrors
+   * `TableContainer.syncActiveDescendant`.
+   */
+  private setRowSelected(rowEl: HTMLElement, selected: boolean): void {
+    const value = selected ? 'true' : 'false';
+    if (rowEl.getAttribute('aria-selected') !== value) {
+      rowEl.setAttribute('aria-selected', value);
+    }
+  }
+
+  /**
    * Update selection styles on visible rows using O(1) element lookup
    */
   private updateSelectionStyles(): void {
@@ -1436,13 +1515,9 @@ export class TableBody {
 
     // Use rowElementMap for O(1) lookups instead of querySelectorAll
     for (const [index, rowEl] of this.rowElementMap) {
-      if (selectedRows.has(index)) {
-        rowEl.classList.add(selectedClass);
-        rowEl.setAttribute('aria-selected', 'true');
-      } else {
-        rowEl.classList.remove(selectedClass);
-        rowEl.removeAttribute('aria-selected');
-      }
+      const selected = selectedRows.has(index);
+      rowEl.classList.toggle(selectedClass, selected);
+      this.setRowSelected(rowEl, selected);
     }
   }
 
@@ -1621,7 +1696,12 @@ export class TableBody {
     this.rowElementMap.clear();
     this.rowPool = [];
 
-    // Destroy virtual scroller
+    // Destroy virtual scroller. It detaches the whole row subtree in one go,
+    // so a cell holding real focus (from a click) has to be rescued first —
+    // `TableContainer.render()` destroys and rebuilds the body on every
+    // schema / visibleColumns change, and dropping focus to `<body>` there
+    // would silently kill the keyboard layer.
+    this.moveFocusToGridBeforeRemoval(this.virtualScroller.getViewportContainer());
     this.virtualScroller.destroy();
   }
 }

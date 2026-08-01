@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FilterBar } from '@/filters/FilterBar';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { FilterBar, type FilterBarOptions } from '@/filters/FilterBar';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
@@ -259,6 +259,244 @@ describe('FilterBar', () => {
     expect(scrollToMock).not.toHaveBeenCalled();
 
     bar.destroy();
+  });
+
+  /**
+   * The bar is a `role="toolbar"` with a roving tabindex: one tab stop for the
+   * whole bar however many chips it holds. jsdom cannot observe sequential
+   * focus navigation, so the stop count is asserted through `tabindex`
+   * attributes rather than by tabbing.
+   */
+  describe('roving tabindex (APG toolbar)', () => {
+    /** Every button in the bar, in DOM order. */
+    function buttons(bar: FilterBar): HTMLButtonElement[] {
+      return Array.from(bar.getElement().querySelectorAll('button'));
+    }
+
+    /** The buttons that are actually reachable — hidden ones do not count. */
+    function visibleButtons(bar: FilterBar): HTMLButtonElement[] {
+      return buttons(bar).filter((b) => b.style.display !== 'none');
+    }
+
+    function press(target: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      target.dispatchEvent(event);
+      return event;
+    }
+
+    /** Mount into the document — jsdom only focuses attached elements. */
+    function mount(options?: FilterBarOptions): FilterBar {
+      const bar = new FilterBar(state, actions, {
+        onAddSQLFilter: () => {},
+        onPresetsClick: () => {},
+        ...options,
+      });
+      document.body.appendChild(bar.getElement());
+      return bar;
+    }
+
+    afterEach(() => {
+      document.body.innerHTML = '';
+    });
+
+    it('exposes exactly one tabindex="0" at rest', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+
+      const all = buttons(bar);
+      // 2 chip removes + clear all + expression + presets
+      expect(all).toHaveLength(5);
+      expect(all.filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1);
+      // The stop was established on the empty bar's only control — the
+      // expression button — and adding chips does not move it, because a stop
+      // that survives the rebuild stays put.
+      const expression = bar.getElement().querySelector('.dt-filter-expression-btn');
+      expect(expression!.getAttribute('tabindex')).toBe('0');
+
+      bar.destroy();
+    });
+
+    it('keeps exactly one reachable stop as filters come and go', () => {
+      const bar = mount();
+      // The jsdom stand-in for "how many tab stops does the bar contribute":
+      // a `tabindex="0"` on a `display: none` control is not a tab stop.
+      const stops = () =>
+        buttons(bar).filter(
+          (b) => b.getAttribute('tabindex') === '0' && b.style.display !== 'none',
+        );
+
+      expect(stops()).toHaveLength(1);
+
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      expect(stops()).toHaveLength(1);
+
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+      actions.addFilter({ type: 'null', column: 'notes' });
+      expect(buttons(bar)).toHaveLength(6);
+      expect(stops()).toHaveLength(1);
+
+      actions.clearFilters();
+      expect(stops()).toHaveLength(1);
+
+      bar.destroy();
+    });
+
+    it('moves the stop off a control the render hides', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+
+      const clearAll = bar.getElement().querySelector('.dt-filter-clear-all') as HTMLButtonElement;
+      clearAll.focus();
+      expect(clearAll.getAttribute('tabindex')).toBe('0');
+
+      // Down to one filter, "Clear all" goes back to `display: none`. A stop
+      // stranded on it would take the whole bar out of the tab order.
+      actions.removeFilter('age');
+
+      expect(clearAll.style.display).toBe('none');
+      expect(clearAll.getAttribute('tabindex')).toBe('-1');
+      expect(
+        buttons(bar).filter(
+          (b) => b.getAttribute('tabindex') === '0' && b.style.display !== 'none',
+        ),
+      ).toHaveLength(1);
+
+      bar.destroy();
+    });
+
+    it('moves the stop and DOM focus with the horizontal arrows', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+      const [first, second] = visibleButtons(bar);
+
+      first!.focus();
+      press(first!, 'ArrowRight');
+
+      expect(document.activeElement).toBe(second);
+      expect(second!.getAttribute('tabindex')).toBe('0');
+      expect(first!.getAttribute('tabindex')).toBe('-1');
+
+      press(second!, 'ArrowLeft');
+      expect(document.activeElement).toBe(first);
+
+      bar.destroy();
+    });
+
+    it('jumps to the ends with Home / End and wraps past them', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      const controls = visibleButtons(bar);
+      const first = controls[0]!;
+      const last = controls[controls.length - 1]!;
+
+      first.focus();
+      press(first, 'End');
+      expect(document.activeElement).toBe(last);
+
+      // Wraps rather than clamping.
+      press(last, 'ArrowRight');
+      expect(document.activeElement).toBe(first);
+
+      press(first, 'ArrowLeft');
+      expect(document.activeElement).toBe(last);
+
+      press(last, 'Home');
+      expect(document.activeElement).toBe(first);
+
+      bar.destroy();
+    });
+
+    it('skips the controls the bar has hidden', () => {
+      // One filter keeps "Clear all" at display:none, and without the two
+      // callbacks the expression and presets buttons are hidden too.
+      const bar = mount({ onAddSQLFilter: undefined, onPresetsClick: undefined });
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+
+      const all = buttons(bar);
+      const reachable = all.filter((b) => b.getAttribute('tabindex') === '0');
+      expect(reachable).toHaveLength(1);
+      expect(reachable[0]).toBe(all[0]);
+      expect(all[0]!.className).toContain('dt-filter-chip-remove');
+
+      // Hidden controls are still swept to -1 so they cannot resurface as a
+      // second tab stop when they become visible again.
+      expect(
+        all
+          .slice(1)
+          .every((b) => b.style.display === 'none' && b.getAttribute('tabindex') === '-1'),
+      ).toBe(true);
+
+      bar.destroy();
+    });
+
+    it('re-establishes the stop after a re-render removes the active control', () => {
+      const bar = mount({ onAddSQLFilter: undefined, onPresetsClick: undefined });
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+
+      const removeSecond = buttons(bar)[1]!;
+      removeSecond.focus();
+      expect(removeSecond.getAttribute('tabindex')).toBe('0');
+
+      // The chip removes itself, so the element holding the stop is gone.
+      removeSecond.click();
+
+      const all = buttons(bar);
+      expect(all.filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1);
+      expect(all[0]!.getAttribute('tabindex')).toBe('0');
+      // Focus followed the stop instead of falling out of the bar entirely.
+      expect(document.activeElement).toBe(all[0]);
+
+      bar.destroy();
+    });
+
+    it('never preventDefaults Tab, and lets it bubble out of the bar', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      const first = visibleButtons(bar)[0]!;
+      const onAncestorKey = vi.fn();
+      document.body.addEventListener('keydown', onAncestorKey);
+
+      first.focus();
+      const tab = press(first, 'Tab');
+      const shiftTab = press(first, 'Tab', { shiftKey: true });
+
+      expect(tab.defaultPrevented).toBe(false);
+      expect(shiftTab.defaultPrevented).toBe(false);
+      expect(onAncestorKey).toHaveBeenCalledTimes(2);
+
+      document.body.removeEventListener('keydown', onAncestorKey);
+      bar.destroy();
+    });
+
+    it('keeps its arrow keys away from the grid cursor listener', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      const first = visibleButtons(bar)[0]!;
+      // Stands in for KeyboardNavigator's bubble-phase listener on `.dt-root`.
+      const onRootKey = vi.fn();
+      document.body.addEventListener('keydown', onRootKey);
+
+      first.focus();
+      const arrow = press(first, 'ArrowRight');
+      expect(arrow.defaultPrevented).toBe(true);
+      expect(onRootKey).not.toHaveBeenCalled();
+
+      // Ctrl chords stay table-wide: undo/redo/copy still reach the root.
+      press(document.activeElement!, 'z', { ctrlKey: true });
+      expect(onRootKey).toHaveBeenCalledTimes(1);
+
+      document.body.removeEventListener('keydown', onRootKey);
+      bar.destroy();
+    });
   });
 
   describe('raw-SQL chip edit gating (expressionFilter flag)', () => {

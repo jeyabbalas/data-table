@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableContainer } from '@/table/TableContainer';
+import { TableBody } from '@/table/TableBody';
 import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
@@ -316,61 +317,207 @@ describe('Accessibility: ARIA attributes', () => {
   // =========================================
 
   describe('aria-selected on rows', () => {
-    it('should not set aria-selected on unselected rows in renderVisibleRows', () => {
-      // We test via the public updateSelectionStyles path by creating a row element
-      // and simulating what renderVisibleRows does
-      const rowEl = document.createElement('div');
-      rowEl.setAttribute('role', 'row');
+    // Inside a `role="grid"` an *absent* `aria-selected` means "not
+    // selectable", not "not selected" — so unselected rows must say `"false"`
+    // out loud. Driven through the real TableBody rather than a hand-built
+    // div: the value is written from four separate places and a simulation
+    // proves none of them.
+    async function bodyWithRows(): Promise<{
+      body: TableBody;
+      rows: Map<number, HTMLElement>;
+      internal: { getOrCreateRow(n: number): HTMLElement; returnRowToPool(el: HTMLElement): void };
+    }> {
+      initializeColumnsFromSchema(state, testSchema);
+      state.tableName.set('test_table');
+      const body = new TableBody(container, state, mockBridge, actions);
+      // `initialize()` is what subscribes `updateSelectionStyles` to
+      // `selectedRows`. totalRows is 0 here, so no fetch is attempted.
+      await body.initialize();
+      const internal = body as unknown as {
+        getOrCreateRow(n: number): HTMLElement;
+        returnRowToPool(el: HTMLElement): void;
+        rowElementMap: Map<number, HTMLElement>;
+      };
+      return { body, rows: internal.rowElementMap, internal };
+    }
 
-      // Simulate no selection
-      rowEl.removeAttribute('aria-selected');
-      expect(rowEl.hasAttribute('aria-selected')).toBe(false);
+    it('marks a freshly created row aria-selected="false"', async () => {
+      const { body, internal } = await bodyWithRows();
+
+      expect(internal.getOrCreateRow(3).getAttribute('aria-selected')).toBe('false');
+
+      body.destroy();
     });
 
-    it('should set aria-selected="true" on selected rows', () => {
-      const rowEl = document.createElement('div');
-      rowEl.setAttribute('role', 'row');
+    it('hands back pooled rows as aria-selected="false", never bare', async () => {
+      const { body, internal } = await bodyWithRows();
 
-      // Simulate selection
+      const rowEl = internal.getOrCreateRow(3);
       rowEl.setAttribute('aria-selected', 'true');
+      internal.returnRowToPool(rowEl);
+
+      expect(internal.getOrCreateRow(3).getAttribute('aria-selected')).toBe('false');
+
+      body.destroy();
+    });
+
+    it('flips aria-selected with the selection and back to "false", not off', async () => {
+      const { body, rows, internal } = await bodyWithRows();
+      const rowEl = internal.getOrCreateRow(testSchema.length);
+      rows.set(0, rowEl);
+
+      actions.selectRow(0, 'replace');
       expect(rowEl.getAttribute('aria-selected')).toBe('true');
+
+      actions.clearSelection();
+      expect(rowEl.getAttribute('aria-selected')).toBe('false');
+
+      body.destroy();
+    });
+
+    it('skips the DOM write when aria-selected is already correct', async () => {
+      // `updateSelectionStyles` runs for every visible row on every selection
+      // change and `renderVisibleRows` on every scroll frame; a no-op
+      // setAttribute still costs a mutation record for anything observing the
+      // grid.
+      const { body, rows, internal } = await bodyWithRows();
+      const rowEl = internal.getOrCreateRow(testSchema.length);
+      rows.set(0, rowEl);
+      const setAttribute = vi.spyOn(rowEl, 'setAttribute');
+
+      actions.selectRow(1, 'replace');
+      actions.selectRow(2, 'replace');
+
+      // Row 0 stayed unselected across both, and was already "false".
+      expect(setAttribute.mock.calls.filter(([name]) => name === 'aria-selected')).toEqual([]);
+
+      body.destroy();
     });
   });
 
   // =========================================
-  // Row pool cleanup
+  // aria-multiselectable
   // =========================================
 
-  describe('row pool ARIA cleanup', () => {
-    it('should remove aria-rowindex and aria-selected when clearing stale state', () => {
-      const rowEl = document.createElement('div');
-      rowEl.setAttribute('role', 'row');
-      rowEl.setAttribute('aria-rowindex', '42');
-      rowEl.setAttribute('aria-selected', 'true');
-      rowEl.classList.add('dt-row--selected');
+  describe('aria-multiselectable', () => {
+    it('advertises multi-select on the grid, and only while it is a grid', () => {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.tableName.set('test_table');
+      const tc = new TableContainer(container, state, actions, mockBridge);
+      const grid = tc.getGridElement();
 
-      // Simulate pool cleanup (same logic as getOrCreateRow reuse branch)
-      rowEl.classList.remove('dt-row--selected', 'dt-row--hover', 'dt-row--loading');
-      rowEl.removeAttribute('aria-selected');
-      rowEl.removeAttribute('aria-rowindex');
+      // `selectRow` supports `toggle` and `range`, so the selection genuinely
+      // is multiple — without this the `aria-selected="false"` rows announce
+      // a single-select grid.
+      expect(grid.getAttribute('aria-multiselectable')).toBe('true');
 
-      expect(rowEl.hasAttribute('aria-selected')).toBe(false);
-      expect(rowEl.hasAttribute('aria-rowindex')).toBe(false);
+      // Comes off with the rest of the grid semantics on an unloaded shell.
+      state.schema.set([]);
+      expect(grid.hasAttribute('aria-multiselectable')).toBe(false);
+
+      tc.destroy();
+    });
+  });
+
+  // =========================================
+  // Empty role="row"
+  // =========================================
+
+  describe('header row with zero visible columns', () => {
+    it('emits no role="row" at all rather than a childless one', () => {
+      state.schema.set(testSchema);
+      initializeColumnsFromSchema(state, testSchema);
+      state.tableName.set('test_table');
+      const tc = new TableContainer(container, state, actions, mockBridge);
+
+      expect(tc.getHeaderRow().querySelectorAll('[role="row"]').length).toBe(1);
+
+      // Reachable for real: `setColumnOrder([])` and `stripDerivedColumnRefs`
+      // both empty the visible set without the guard `hideColumn` has. A
+      // surviving `role="row"` here owns no columnheader — a critical
+      // aria-required-children violation.
+      state.visibleColumns.set([]);
+      expect(tc.getHeaderRow().querySelectorAll('[role="row"]').length).toBe(0);
+
+      // And comes back when the columns do.
+      state.visibleColumns.set(['id', 'name']);
+      expect(tc.getHeaderRow().querySelectorAll('[role="row"]').length).toBe(1);
+
+      tc.destroy();
     });
 
-    it('should remove stale ARIA from cloned rows in returnRowToPool', () => {
-      const rowEl = document.createElement('div');
-      rowEl.setAttribute('role', 'row');
-      rowEl.setAttribute('aria-rowindex', '10');
-      rowEl.setAttribute('aria-selected', 'true');
+    it('has a fully populated header row on the very first render of a load', () => {
+      state.tableName.set('test_table');
+      const tc = new TableContainer(container, state, actions, mockBridge);
 
-      // Simulate returnRowToPool clone + cleanup
-      const cleanEl = rowEl.cloneNode(true) as HTMLElement;
-      cleanEl.removeAttribute('aria-rowindex');
-      cleanEl.removeAttribute('aria-selected');
+      // Subscribed after TableContainer, so signal notification order puts
+      // this immediately after its schema-triggered render() — the earliest
+      // moment that render's DOM is observable.
+      let headersAtFirstRender = -1;
+      let emptyRowsAtFirstRender = -1;
+      const unsub = state.schema.subscribe(() => {
+        const headerRow = tc.getHeaderRow();
+        headersAtFirstRender = headerRow.querySelectorAll('.dt-col-header').length;
+        emptyRowsAtFirstRender = [...headerRow.querySelectorAll('[role="row"]')].filter(
+          (row) => row.childElementCount === 0,
+        ).length;
+      });
 
-      expect(cleanEl.hasAttribute('aria-rowindex')).toBe(false);
-      expect(cleanEl.hasAttribute('aria-selected')).toBe(false);
+      initializeColumnsFromSchema(state, testSchema);
+      unsub();
+
+      // Un-batched, the `schema` write rendered while `visibleColumns` was
+      // still the previous (on first load, empty) array — a grid advertising
+      // five columns whose header row owned none of them. Batching does not
+      // dedupe the two renders (batch() coalesces per signal, and render() is
+      // subscribed to `schema` and `visibleColumns` separately); it makes the
+      // first one correct.
+      expect(headersAtFirstRender).toBe(testSchema.length);
+      expect(emptyRowsAtFirstRender).toBe(0);
+
+      tc.destroy();
+    });
+  });
+
+  // =========================================
+  // Ambiguous IDREF across instances
+  // =========================================
+
+  describe('instanceId collisions', () => {
+    it('keeps cell ids disjoint when two tables are given the same instanceId', () => {
+      // `instanceId` is a public option; nothing stops an app handing the same
+      // value to two tables. Identical cell ids would make each grid's
+      // `aria-activedescendant` an ambiguous IDREF, and a screen reader
+      // resolving it document-wide lands in whichever table is first in the
+      // document.
+      const containerA = document.createElement('div');
+      const containerB = document.createElement('div');
+      const stateB = createTableState();
+      const actionsB = new StateActions(stateB, mockBridge);
+
+      for (const s of [state, stateB]) {
+        s.schema.set(testSchema);
+        initializeColumnsFromSchema(s, testSchema);
+        s.tableName.set('test_table');
+      }
+
+      const a = new TableContainer(containerA, state, actions, mockBridge, {
+        instanceId: 'shared',
+      });
+      const b = new TableContainer(containerB, stateB, actionsB, mockBridge, {
+        instanceId: 'shared',
+      });
+
+      const idsA = a.getColumnHeaders().map((h) => h.getElement().id);
+      const idsB = b.getColumnHeaders().map((h) => h.getElement().id);
+      expect(idsA.length).toBe(testSchema.length);
+      expect(idsA.some((id) => idsB.includes(id))).toBe(false);
+      // The caller's value stays legible in the id — only a suffix is added.
+      expect(idsA[0]).toContain('shared');
+
+      a.destroy();
+      b.destroy();
     });
   });
 

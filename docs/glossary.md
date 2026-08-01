@@ -210,13 +210,16 @@ See: [Filter presets](./guides/filter-presets.md) · [Multi-table dashboards](./
 
 ### Instance ID
 
-A short unique string stamped on every `DataTable` instance. Prefixes the
-DuckDB catalogue names, the [IndexedDB](./guides/session-persistence.md) keys,
-and the CSS custom-property scope (`[data-dt-instance="<id>"]`) so multiple
-tables on the same page do not collide. Auto-generated; override via
-`createDataTable({ instanceId })` when persistence keys need to be stable
-across reloads.
-See: [Multi-table dashboards](./guides/multi-table.md) · [API reference](./api-reference.md)
+A short unique string mixed into the DOM element IDs a table publishes: grid
+cell and column-header ids (what `aria-activedescendant` points at) and modal
+titles (what `aria-labelledby` points at). Two tables on the same page would
+otherwise mint identical ids, leaving both references ambiguous — a screen
+reader resolves an IDREF document-wide and lands in whichever table comes first.
+Auto-generated. You may pass one to `createDataTable({ instanceId })` to make
+those ids recognisable, but a random suffix is always appended, so the value in
+the DOM is never exactly what you passed; `DataTable.instanceId` reports the
+resolved one. Not a persistence key — session snapshots are keyed by table name.
+See: [Multi-table dashboards](./guides/multi-table.md) · [API reference](./api-reference.md) · Source: `src/core/instanceId.ts`
 
 ### ModalHost
 

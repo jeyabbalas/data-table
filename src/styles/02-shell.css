@@ -194,9 +194,13 @@
   flex-shrink: 0;
 }
 
+/* Ink on a --dt-primary fill is the page background, not literal white: the
+   dark primary is light enough to serve as a focus indicator, which leaves
+   white at 3.68:1 on it. --dt-bg inverts with the scheme and is #ffffff in
+   light, so light mode is unchanged. Every primary fill follows this. */
 .dt-filter-chip-remove:hover {
   background: var(--dt-primary);
-  color: white;
+  color: var(--dt-bg);
 }
 
 .dt-filter-chip-remove:focus {
@@ -328,6 +332,16 @@
     border-top-color 0.2s ease;
 }
 
+/* Past `max-height` the chips still have to be reachable: the roving tabindex
+   scrolls the keyboard cursor into view, but `overflow: hidden` leaves a
+   pointer user no way in. Scoped off the collapsed state so no scrollbar
+   flashes through the transition. axe's `scrollable-region-focusable` is
+   satisfied by the chips themselves — `tabindex` here would put back the tab
+   stop this work removes. */
+.dt-hidden-gutter:not(.dt-hidden-gutter--hidden) {
+  overflow: hidden auto;
+}
+
 .dt-hidden-gutter--hidden {
   max-height: 0;
   padding-top: 0;
@@ -382,9 +396,12 @@
   flex-shrink: 0;
 }
 
+/* Matches `.dt-filter-chip-remove:hover`, the twin control one gutter up. The
+   old fill was --dt-text-secondary — a text token, so #d1d5db in dark, which
+   left the white glyph at 1.47:1. Text tokens are never backgrounds. */
 .dt-hidden-chip-restore:hover {
-  background: var(--dt-text-secondary);
-  color: white;
+  background: var(--dt-primary);
+  color: var(--dt-bg);
 }
 
 .dt-hidden-chip-restore:focus {

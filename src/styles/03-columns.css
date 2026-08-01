@@ -107,13 +107,20 @@
   margin-top: 0.125rem;
 }
 
+/* Clipped, never scrolled. `overflow-y: auto` made this a scrollable region
+   with no focusable content (axe `scrollable-region-focusable`), and the
+   obvious remedy — `tabindex="0"` — is the bug the header rewrite removed:
+   one tab stop per column. The height is a whole number of line boxes
+   (4 × 1.3), so the clip lands on a line boundary. `display` stays untouched:
+   the slot is a public extension point (`BaseStatsPanel` renders into it) and
+   a `-webkit-box` clamp would relayout a custom panel's children. */
 .dt-col-stats {
   font-size: var(--dt-font-size-xs);
   color: var(--dt-text-secondary);
   margin-top: 0.25rem;
   height: 5.2em; /* 4 lines × 1.3 line-height — accommodates wrapped stats + hover */
   line-height: 1.3;
-  overflow-y: auto;
+  overflow: hidden;
   word-break: break-word;
 }
 
@@ -556,6 +563,7 @@
   text-overflow: ellipsis;
 }
 
+/* Ink inverts with the fill — see `.dt-filter-chip-remove:hover` (02-shell). */
 .dt-derived-edit-update {
   padding: 0.3rem 0.75rem;
   font-family: var(--dt-font-family);
@@ -564,7 +572,7 @@
   border: 1px solid var(--dt-primary);
   border-radius: var(--dt-radius-sm);
   background: var(--dt-primary);
-  color: var(--dt-on-error);
+  color: var(--dt-bg);
   cursor: pointer;
   transition:
     background var(--dt-transition),
@@ -714,13 +722,21 @@
   display: none;
 }
 
+/* Same `scrollable-region-focusable` shape as `.dt-col-stats`. This one is
+   library-owned DOM (one text node), so it can take the line clamp the stats
+   slot cannot: 5 lines is what 80px of 11px/1.4 holds, and the ellipsis
+   signals the truncation the scrollbar used to. */
 .dt-expr-editor-context {
   color: var(--dt-text-secondary);
   font-size: 11px;
   margin-top: 0.5rem;
   line-height: 1.4;
   max-height: 80px;
-  overflow-y: auto;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
   padding-right: 0.25rem;
 }
 

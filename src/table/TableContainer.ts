@@ -31,7 +31,7 @@
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { StateActions } from '../core/Actions';
-import { nextInstanceId } from '../core/instanceId';
+import { resolveInstanceId } from '../core/instanceId';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -64,9 +64,10 @@ export interface TableContainerOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
   /**
-   * Unique per-instance identifier mixed into modal element IDs so two
-   * tables on the same page don't collide on `aria-labelledby` targets.
-   * Auto-generated if omitted.
+   * Unique per-instance identifier mixed into modal and grid-cell element IDs
+   * so two tables on the same page don't collide on `aria-labelledby` /
+   * `aria-activedescendant` targets. Auto-generated if omitted, and a random
+   * suffix is appended even when supplied — see `resolveInstanceId`.
    */
   instanceId?: string | undefined;
   /** Show filter bar between header and body (default: true) */
@@ -203,8 +204,11 @@ export class TableContainer {
   private liveRegion: HTMLElement | null = null;
   private pendingLiveUpdate = false;
 
-  // Resolved options with defaults applied
-  private readonly resolvedOptions: Required<TableContainerOptions>;
+  // Resolved options with defaults applied. `instanceId` is narrowed past
+  // `Required<>`, which keeps the explicit `| undefined` written on the option:
+  // the constructor always overwrites it with `resolveInstanceId`, so every
+  // reader — id builders, `getInstanceId` — gets a `string`.
+  private readonly resolvedOptions: Required<TableContainerOptions> & { instanceId: string };
   private readonly messages: Strings;
 
   constructor(
@@ -219,7 +223,6 @@ export class TableContainer {
       rowHeight: 32,
       headerHeight: 120,
       classPrefix: 'dt',
-      instanceId: '',
       showFilterBar: true,
       onFilterRemove: undefined as unknown as (column: string) => void,
       editorFactory: undefined as unknown as ExpressionEditorFactory,
@@ -234,10 +237,13 @@ export class TableContainer {
       annotationPopover: undefined as unknown as AnnotationPopover,
       columnHeaderTooltipPopover: undefined as unknown as ColumnHeaderTooltipPopover,
       ...options,
+      // Always qualified, never taken verbatim: a caller-supplied `instanceId`
+      // reused across two tables would mint identical cell ids and leave both
+      // grids publishing an ambiguous `aria-activedescendant`. After the spread
+      // deliberately — this is the only value the field can ever hold, which is
+      // what lets everything downstream read it back as a plain `string`.
+      instanceId: resolveInstanceId(options.instanceId),
     };
-    if (!this.resolvedOptions.instanceId) {
-      this.resolvedOptions.instanceId = nextInstanceId();
-    }
     // Spread above writes `undefined` over the defaults if the caller passed
     // `messages: undefined` / `colorScheme: undefined` explicitly. Restore.
     this.resolvedOptions.messages ??= defaultStrings;
@@ -694,6 +700,10 @@ export class TableContainer {
       grid.setAttribute('role', 'grid');
       grid.setAttribute('aria-label', this.messages.a11y.gridLabel);
       grid.setAttribute('tabindex', '0');
+      // Rows answer to ctrl-click (`toggle`) and shift-click (`range`), so the
+      // selection is genuinely multiple. Without this, `aria-selected="false"`
+      // on the rows announces a single-select grid.
+      grid.setAttribute('aria-multiselectable', 'true');
       for (const scroller of [this.headerScroll, this.bodyScroll]) {
         scroller.setAttribute('role', 'rowgroup');
         scroller.setAttribute('tabindex', '0');
@@ -702,6 +712,7 @@ export class TableContainer {
       grid.removeAttribute('role');
       grid.removeAttribute('aria-label');
       grid.removeAttribute('tabindex');
+      grid.removeAttribute('aria-multiselectable');
       grid.removeAttribute('aria-rowcount');
       grid.removeAttribute('aria-colcount');
       grid.removeAttribute('aria-activedescendant');
@@ -792,6 +803,20 @@ export class TableContainer {
     // space whenever a caller supplies the same `instanceId` twice. Fall back
     // to a scoped query, which only costs a subtree scan in that rare case.
     return this.gridElement.querySelector<HTMLElement>(`[id="${id}"]`);
+  }
+
+  /**
+   * The focused element as this table's own root node sees it.
+   *
+   * Resolves against `getRootNode()` rather than `document` for the same reason
+   * {@link resolveInGrid} does: under a shadow root `document.activeElement`
+   * reports the *host*, which would make every focus check inside the table
+   * read as "focus is elsewhere". Returns `null` when the tree has no notion of
+   * a focused element (a detached subtree).
+   */
+  private activeElementInRoot(): Element | null {
+    const root = this.element.getRootNode();
+    return 'activeElement' in root ? (root as Document | ShadowRoot).activeElement : null;
   }
 
   /** Stable DOM id for a body cell — mirrors `TableBody`'s id scheme. */
@@ -1143,9 +1168,16 @@ export class TableContainer {
     const savedBodyScrollTop = this.bodyScroll.scrollTop;
     const savedHeaderScrollLeft = this.headerScroll.scrollLeft;
 
-    // Track whether focus is within the table before render destroys DOM elements.
-    // Actions like pin/hide remove the focused button, causing focus to fall to document.body.
-    const hadFocus = this.element.contains(document.activeElement);
+    // Remember the *specific* element focus sits on before render destroys DOM
+    // elements. Actions like pin/hide remove the focused button, dropping focus
+    // to document.body — the rAF below puts it back on the grid. Tracking the
+    // element rather than a boolean is what distinguishes that from "the user
+    // tabbed away while we were rendering", which must not be reeled back in.
+    const focusedBefore = this.activeElementInRoot();
+    const focusedInTable =
+      focusedBefore instanceof HTMLElement && this.element.contains(focusedBefore)
+        ? focusedBefore
+        : null;
 
     const schema = this.state.schema.get();
     const visibleColumns = this.state.visibleColumns.get();
@@ -1253,7 +1285,15 @@ export class TableContainer {
         }
       }
 
-      this.headerRow.appendChild(headerRowEl);
+      // Only mount the row once it actually owns column headers. A childless
+      // `role="row"` is a critical `aria-required-children` violation, and an
+      // empty visible set is reachable both permanently (`setColumnOrder([])`,
+      // `stripDerivedColumnRefs` — neither guards the way `hideColumn` does)
+      // and transiently, whenever `schema` and `visibleColumns` land as
+      // separate signal writes and the schema write renders first.
+      if (headerRowEl.childElementCount > 0) {
+        this.headerRow.appendChild(headerRowEl);
+      }
 
       // Refresh column reorder handlers for new headers
       this.columnReorder?.refresh();
@@ -1277,6 +1317,10 @@ export class TableContainer {
           annotationPopover: this.resolvedOptions.annotationPopover,
           messages: this.messages,
           onRowsRendered: () => this.syncActiveDescendant(),
+          // Where the body parks real DOM focus when it is about to detach the
+          // row holding it. Passed explicitly rather than rediscovered with
+          // `closest('.dt-grid')` so the dependency is visible at the wiring.
+          gridElement: this.gridElement,
         });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
@@ -1386,11 +1430,22 @@ export class TableContainer {
         this.bodyScroll.scrollTop = savedBodyScrollTop;
         this.headerScroll.scrollLeft = savedHeaderScrollLeft;
 
-        // Restore focus if it was lost due to DOM element removal during render.
-        // This ensures keyboard shortcuts (Cmd+Z) continue working after
-        // actions like pin/hide that destroy the focused button element.
-        // The grid — not the root — is the tab stop now.
-        if (hadFocus && !this.element.contains(document.activeElement)) {
+        // Restore focus only when this render is what destroyed it: the element
+        // focus was on is gone from the table AND focus fell to nothing (body,
+        // or null under a shadow root). Anything else — most importantly a Tab
+        // that landed outside the table between the render and this frame —
+        // is the user's own move and must be left alone; yanking focus back is
+        // no better than trapping it. Guarded on `gridSemanticsActive` because
+        // `.dt-grid` only carries `tabindex` while it does, so `.focus()` on an
+        // unloaded shell is a silent no-op that would leave focus on <body>.
+        const activeNow = this.activeElementInRoot();
+        const focusFellAway = activeNow === null || activeNow === this.element.ownerDocument.body;
+        if (
+          focusedInTable &&
+          this.gridSemanticsActive &&
+          !this.element.contains(focusedInTable) &&
+          focusFellAway
+        ) {
           this.gridElement.focus({ preventScroll: true });
         }
       }
@@ -1767,6 +1822,24 @@ export class TableContainer {
    */
   getOptions(): Required<TableContainerOptions> {
     return { ...this.resolvedOptions };
+  }
+
+  /**
+   * The instance identifier actually mixed into this table's element IDs.
+   *
+   * Not the `instanceId` a caller passed in: `resolveInstanceId` always
+   * appends a random suffix, so two tables handed the same value still mint
+   * disjoint cell ids. Anything that builds an ID referencing this table —
+   * the export dialog's `aria-labelledby`, a consumer's own test selector —
+   * has to read the resolved value from here rather than assume the input.
+   *
+   * @example
+   * ```typescript
+   * const cellId = `dt-${container.getInstanceId()}-cell-0-1`;
+   * ```
+   */
+  getInstanceId(): string {
+    return this.resolvedOptions.instanceId;
   }
 
   /**

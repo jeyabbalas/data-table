@@ -42,6 +42,7 @@
     "preview": "vite preview --config vite.demo.config.ts",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:browser": "playwright test",
     "test:perf": "RUN_DUCKDB_PERF=1 RUN_LIFECYCLE_STRESS=1 vitest run --config vitest.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache --cache-strategy content",
@@ -108,6 +109,7 @@
     }
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@changesets/cli": "^2.31.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.3",
@@ -119,6 +121,7 @@
     "@eslint/js": "^10.0.1",
     "@lezer/highlight": "^1.2.3",
     "@observablehq/plot": "^0.6.17",
+    "@playwright/test": "^1.62.1",
     "@size-limit/file": "^12.1.0",
     "@types/node": "^26.0.0",
     "@types/topojson-client": "^3.1.5",
@@ -131,6 +134,7 @@
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.6.0",
     "jsdom": "^29.1.0",
+    "playwright": "^1.62.1",
     "prettier": "^3.8.3",
     "size-limit": "^12.1.0",
     "topojson-client": "^3.1.0",

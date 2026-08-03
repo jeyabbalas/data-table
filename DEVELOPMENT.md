@@ -209,24 +209,32 @@ For the reactive/worker/crossfilter architecture, see [`docs/concepts/architectu
 ## Release process
 
 The repo uses [changesets](https://github.com/changesets/changesets) for
-versioning and publishing. A push to `main` triggers
+versioning. A push to `main` triggers
 [`.github/workflows/release.yml`](./.github/workflows/release.yml), which
-either opens a "Version Packages" PR (when one or more `.changeset/*.md`
-files exist) or runs `changeset publish` once that PR merges. npm provenance
-(`NPM_CONFIG_PROVENANCE=true`) is enabled in the workflow.
+does two independent things on every push:
+
+1. **Publishes** whatever version is in `package.json` but not yet on the
+   registry, with a guarded `npm publish --access public --provenance`.
+   The guard makes the step idempotent: if the version is already on npm it
+   logs and skips, so ordinary pushes to `main` neither republish nor fail.
+   Authentication is npm OIDC trusted publishing — there is no `NPM_TOKEN`.
+   Provenance comes from the `--provenance` flag plus
+   `publishConfig.provenance` in `package.json`.
+2. **Opens or updates the "Version Packages" PR** from any pending
+   `.changeset/*.md` files, via `changesets/action`. That action is
+   deliberately invoked _without_ a `publish:` input — publishing is step
+   (1)'s job — so there is no second publish attempt and no spurious red.
+
+The workflow does **not** create git tags. See "Tagging the release" below.
 
 ### One-time setup before the workflow can publish
 
-The workflow is committed in a safe, secret-gated state:
-
-1. Add an `NPM_TOKEN` repository secret with publish access to
-   `@jeyabbalas/data-table`, **or** enable npm OIDC trusted publishing
-   (recommended — see "Trusted publishing (npm OIDC)" below).
+1. Configure a trusted publisher for `@jeyabbalas/data-table` on npmjs.com —
+   see "Trusted publishing (npm OIDC)" below. Until it exists, the publish
+   step fails to authenticate.
 2. Settings → Actions → General → check **"Allow GitHub Actions to create
    and approve pull requests"** so the changesets action can open the
    "Version Packages" PR.
-
-Until both are configured, the publish step is a no-op.
 
 ### Trusted publishing (npm OIDC)
 
@@ -250,11 +258,12 @@ compromised.
 write` (required for OIDC token minting). Confirm by inspecting
    `.github/workflows/release.yml` — line ~43.
 
-3. **Remove the legacy secret.** Once OIDC is verified working on the
-   first publish, delete the `NPM_TOKEN` repository secret and remove the
-   `NPM_TOKEN` env line from `release.yml`. `npm publish` (npm CLI ≥ 9.5)
-   discovers the OIDC token automatically; provenance attestation is
-   issued in the same step.
+3. **No secret to add.** `release.yml` carries no `NPM_TOKEN` env; the job
+   mints a short-lived OIDC token instead, which npm verifies against the
+   trusted publisher above. `npm publish` discovers that token
+   automatically, and the provenance attestation is issued in the same
+   step. The workflow upgrades npm before publishing, because trusted
+   publishing needs npm ≥ 11.5.1 and Node 22 ships npm 10.x.
 
 **Verifying without publishing.** Run `npm publish --dry-run --provenance`
 locally — outside CI it prints a banner explaining the OIDC requirement.
@@ -262,8 +271,7 @@ The workflow's first real publish is the only smoke test for the trust
 binding; rehearse the manual fallback (below) once before that publish so
 you have a clean rollback path.
 
-Until OIDC is configured AND the first publish succeeds, leave the
-`NPM_TOKEN` secret in place as a fallback.
+The 0.6.0 release is the first publish to exercise the trust binding.
 
 ### Day-to-day flow
 
@@ -278,8 +286,34 @@ Until OIDC is configured AND the first publish succeeds, leave the
    that bumps `package.json` and prepends a fresh `CHANGELOG.md` section
    built from the changesets.
 4. Review the version PR. Merge when ready.
-5. The workflow runs `changeset publish` against npm with provenance, and
-   tags the commit.
+
+   Note that a PR opened by `changesets/action` runs **no CI** — GitHub
+   does not trigger workflows for events raised with the default
+   `GITHUB_TOKEN`. To get the release commit tested before it publishes,
+   push a commit to the `changeset-release/main` branch yourself, or close
+   and reopen the PR; either fires a `pull_request` event from your
+   account.
+
+5. Merging the version PR pushes `main`, and the workflow publishes the new
+   version to npm with provenance.
+6. Tag the release by hand — see below.
+
+### Tagging the release
+
+The workflow does not tag, so `git tag` and the GitHub release are a
+manual step after the publish lands:
+
+```bash
+gh release create vX.Y.Z \
+  --target <sha-of-the-version-commit-on-main> \
+  --title "vX.Y.Z — <short summary>" \
+  --notes-file notes.md \
+  --latest
+```
+
+`gh release create` creates the tag as well. Match the existing title
+convention (`vX.Y.Z — <short summary>`) and link the corresponding
+`CHANGELOG.md` section from the notes.
 
 ### Manual fallback
 
@@ -290,9 +324,14 @@ npm run typecheck && npm run lint && npm run format:check
 npm run test:coverage
 npm run build
 npx changeset version            # bumps package.json, writes CHANGELOG
-npx changeset publish            # publishes; --provenance comes from .npmrc / env
+npx changeset publish            # publishes and creates the version tag
 git push && git push --tags
 ```
+
+Provenance comes from `publishConfig.provenance` in `package.json`. Outside
+GitHub Actions there is no OIDC token to mint, so this path needs a
+classic npm credential (`npm login`, or an `NPM_TOKEN` in your environment)
+and will not produce a provenance attestation.
 
 `prepublishOnly` runs `npm run build && npm run test:coverage` as a final
 guard against publishing a broken artifact.

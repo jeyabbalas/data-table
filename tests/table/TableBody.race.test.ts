@@ -165,7 +165,10 @@ describe('TableBody — race protection (epoch guard + superseded-fetch abort)',
 
     const initPromise = body.initialize();
     expect(queries.length).toBe(1);
-    expect(queries[0]!.sql).not.toContain('WHERE');
+    // The unfiltered fetch carries no FILTER predicate. (It does carry the
+    // fast path's own `WHERE "__rowid__" >= …` range — that's the window,
+    // not a filter.)
+    expect(queries[0]!.sql).not.toContain('"tag" =');
 
     const filter: Filter = { type: 'point', column: 'tag', value: 'A' };
     state.filters.set([filter]);
@@ -174,8 +177,7 @@ describe('TableBody — race protection (epoch guard + superseded-fetch abort)',
     // rejects it on abort, and the replacement is already issued.
     expect(queries[0]!.signal?.aborted).toBe(true);
     expect(queries.length).toBe(2);
-    expect(queries[1]!.sql).toContain('WHERE');
-    expect(queries[1]!.sql).toContain("'A'");
+    expect(queries[1]!.sql).toContain(`WHERE "tag" = 'A'`);
 
     queries[1]!.deferred.resolve(rowsFor(queries[1]!.sql, COLUMNS));
     await Promise.resolve();

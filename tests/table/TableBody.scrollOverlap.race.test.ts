@@ -33,7 +33,7 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 
-import { makeRowFetchBridge, parseRowWindow } from '../helpers/rowFetchBridge';
+import { makeRowFetchBridge, parseRowWindow, parseRowidRange } from '../helpers/rowFetchBridge';
 
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}
@@ -203,9 +203,15 @@ describe('TableBody — cross-block cache invariant under sort + ties', () => {
     await drainMicrotasks();
 
     expect(queries.length).toBe(1);
-    expect(queries[0]!.sql).toContain('ORDER BY "__rowid__" ASC');
+    const sql1 = queries[0]!.sql;
+    expect(sql1).toContain('ORDER BY "__rowid__" ASC');
+    // No filters + no user sort → the __rowid__ range fast path: a range
+    // predicate on the dense rowid, no OFFSET anywhere in the SQL.
+    expect(sql1).not.toMatch(/OFFSET/i);
 
-    const { offset: off1, limit: lim1 } = parseRowWindow(queries[0]!.sql);
+    const rowidRange1 = parseRowidRange(sql1);
+    const off1 = rowidRange1.start;
+    const lim1 = rowidRange1.end - rowidRange1.start;
     expect(off1 % BLOCK).toBe(0);
     queries[0]!.deferred.resolve(Array.from({ length: lim1 }, (_, i) => rowAt(off1 + i)));
     await drainMicrotasks();
@@ -219,8 +225,11 @@ describe('TableBody — cross-block cache invariant under sort + ties', () => {
     expect(queries.length).toBe(2);
     const sql2 = queries[1]!.sql;
     expect(sql2).toContain('ORDER BY "__rowid__" ASC');
+    expect(sql2).not.toMatch(/OFFSET/i);
 
-    const { offset: off2, limit: lim2 } = parseRowWindow(sql2);
+    const rowidRange2 = parseRowidRange(sql2);
+    const off2 = rowidRange2.start;
+    const lim2 = rowidRange2.end - rowidRange2.start;
     expect(off2).toBeGreaterThan(off1);
     expect(off2 % BLOCK).toBe(0);
     queries[1]!.deferred.resolve(Array.from({ length: lim2 }, (_, i) => rowAt(off2 + i)));

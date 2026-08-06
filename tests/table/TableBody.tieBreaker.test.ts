@@ -152,19 +152,28 @@ describe('TableBody — __rowid__ tiebreaker on ORDER BY (buildRowQuery)', () =>
     await initPromise.catch(() => {});
   });
 
-  it('emits ORDER BY "__rowid__" ASC when no user sort', async () => {
+  it('emits the __rowid__ range fast path (ordered, no OFFSET) when no user sort', async () => {
     const { body, queryQueue, calls } = setup();
 
     const initPromise = body.initialize();
     await Promise.resolve();
 
     const sql = calls[0]!;
-    // Always order by __rowid__ — closes the filter+scroll manifestation
-    // where a parallel-scan permutation could otherwise return rows in a
-    // different order across overlapping fetches.
+    // No filters + no user sort takes the fast path: a range predicate on
+    // the dense __rowid__ instead of OFFSET pagination. Ordering by
+    // __rowid__ is still explicit — scan order is not guaranteed — which
+    // also closes the filter+scroll manifestation where a parallel-scan
+    // permutation could return rows in a different order across fetches.
+    expect(sql).toContain('WHERE "__rowid__" >= 0 AND "__rowid__" < 100');
     expect(sql).toContain('ORDER BY "__rowid__" ASC');
+    expect(sql).not.toMatch(/OFFSET/i);
 
-    queryQueue[0]!.resolve([]);
+    // Resolve with exactly the requested window — a short result would
+    // (correctly) trip the fast path's density valve into an OFFSET
+    // re-issue, which is fastPathSql.test.ts's subject, not this one's.
+    queryQueue[0]!.resolve(
+      Array.from({ length: 100 }, (_, i) => ({ __rowid__: i, id: i, tag: `tag-${i}` })),
+    );
     body.destroy();
     await initPromise.catch(() => {});
   });

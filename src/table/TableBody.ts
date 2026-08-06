@@ -205,6 +205,11 @@ export class TableBody {
   // The single speculative block fetch beyond the viewport, or null.
   private prefetch: { blockStart: number; controller: AbortController } | null = null;
   private lastScrollDirection: 1 | -1 = 1;
+  // Runtime safety valve for the __rowid__ range fast path: flipped (once,
+  // with a console.warn) if a fast-path result ever violates the dense-rowid
+  // premise; every subsequent fetch then uses OFFSET pagination. The flag's
+  // false→true transition is also the warn-once gate. See fetchBlock.
+  private rowidFastPathDisabled = false;
 
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
@@ -767,9 +772,21 @@ export class TableBody {
   }
 
   /**
+   * Whether the unsorted/unfiltered `__rowid__` range fast path applies.
+   * The single decision point shared by `buildRowQuery` (SQL shape) and
+   * `fetchBlock` (cache keying + density valve) so the two can never
+   * disagree about which shape a query used.
+   */
+  private useRowidFastPath(sortColumns: SortColumn[], filters: Filter[]): boolean {
+    return filters.length === 0 && sortColumns.length === 0 && !this.rowidFastPathDisabled;
+  }
+
+  /**
    * Fetch one aligned block and write it into `rowDataCache`.
    *
-   * Cache writes are keyed `blockStart + i` — valid because `buildRowQuery`
+   * Cache keying: the fast path keys by each row's own `__rowid__` (which
+   * the density valve has just proven equals the positional index); the
+   * OFFSET path keys by `blockStart + i` — valid because `buildRowQuery`
    * always emits a fully deterministic ORDER BY (see the tiebreaker note
    * there), so the block window is stable across queries.
    */
@@ -788,11 +805,14 @@ export class TableBody {
       const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
       if (limit <= 0) return;
 
+      const sortColumns = this.state.sortColumns.get();
+      const filters = this.state.filters.get();
+      const usedFastPath = this.useRowidFastPath(sortColumns, filters);
       const sql = this.buildRowQuery(
         tableName,
         visibleColumns,
-        this.state.sortColumns.get(),
-        this.state.filters.get(),
+        sortColumns,
+        filters,
         blockStart,
         limit,
         this.state.schema.get(),
@@ -815,9 +835,46 @@ export class TableBody {
         return;
       }
 
-      rows.forEach((row, i) => {
-        this.rowDataCache.set(blockStart + i, row);
-      });
+      if (usedFastPath) {
+        // Density valve: the fast path is only correct while __rowid__ is
+        // dense 0..N-1. A short window or an out-of-range rowid means the
+        // premise broke somewhere — disable the fast path permanently for
+        // this instance (the false→true flip below is also the warn-once
+        // gate) and re-issue THIS block via OFFSET on the same controller.
+        // Bounded recursion: with the flag set, the retry cannot re-enter
+        // this branch. Nothing is cached from the violating result.
+        let dense = rows.length === limit;
+        if (dense) {
+          for (const row of rows) {
+            const rowid = Number(row[ROWID_COLUMN]);
+            if (!Number.isInteger(rowid) || rowid < blockStart || rowid >= blockStart + limit) {
+              dense = false;
+              break;
+            }
+          }
+        }
+        if (!dense) {
+          this.rowidFastPathDisabled = true;
+          console.warn(
+            'TableBody: __rowid__ range fast path returned an inconsistent window ' +
+              `(block ${blockStart}, expected ${limit} rows, got ${rows.length}); ` +
+              'falling back to OFFSET pagination.',
+          );
+          // `await` is load-bearing: a bare `return promise` would run this
+          // call's `finally` (deregister + reconcile) while the retry is
+          // still in flight, and the reconciler would double-issue the
+          // block. With `await`, the retry's own finally deregisters first
+          // and this one's identity guard turns into a no-op.
+          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch);
+        }
+        for (const row of rows) {
+          this.rowDataCache.set(Number(row[ROWID_COLUMN]), row);
+        }
+      } else {
+        rows.forEach((row, i) => {
+          this.rowDataCache.set(blockStart + i, row);
+        });
+      }
 
       this.evictDistantBlocks(blockStart);
 
@@ -944,6 +1001,34 @@ export class TableBody {
     const columnList = parts.join(', ');
 
     let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
+
+    // FAST PATH — no filters, no user sort: fetch the window by a range
+    // predicate on the dense synthetic __rowid__ instead of LIMIT/OFFSET.
+    //
+    // Premise (verified at the call sites cited): every loader materializes
+    // __rowid__ densely as `row_number() OVER () - 1` (0..N-1 — parquet.ts,
+    // csv.ts, json.ts), and the derived-column VIEW preserves exactly the
+    // base rows (`base t LEFT JOIN helper h ON t.__rowid__ = h.__rowid__`,
+    // DerivedColumnManager). With no WHERE and no user sort, positional
+    // index ≡ __rowid__, so the range predicate returns exactly the OFFSET
+    // window — but as a zonemap-prunable scan (~ms at any scroll depth)
+    // instead of a top-(offset+limit) sort that grows with depth. The code
+    // that could break the premise is the table-rebuild path in
+    // worker/loaders/common.ts; fetchBlock's density valve turns any
+    // violation into slow-but-correct OFFSET pagination, never wrong rows.
+    //
+    // Sorted/filtered fetches keep LIMIT/OFFSET below — there is no closed
+    // form for "position k" under an arbitrary ORDER BY/WHERE. They still
+    // gain block dedupe, cancellation, priority, and the larger row cache.
+    // Keyset pagination for sorted mode is deliberate future work.
+    if (this.useRowidFastPath(sortColumns, filters)) {
+      sql += ` WHERE ${quoteIdentifier(ROWID_COLUMN)} >= ${offset}`;
+      sql += ` AND ${quoteIdentifier(ROWID_COLUMN)} < ${offset + limit}`;
+      // Scan order is not guaranteed, even for a single index range.
+      sql += ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)} ASC`;
+      sql += ` LIMIT ${limit}`; // defensive cap only
+      return sql;
+    }
 
     // Add WHERE clause if filters are active
     if (filters.length > 0) {

@@ -52,7 +52,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - **No row-click event.** Use `selectionChange` instead (src/core/TableEvents.ts:104–105). Row selection is driven by checkbox/keyboard, not row clicks.
 - **No in-cell editing.** Derived columns cover computed fields; raw cell edits are not in scope.
 - **No built-in mobile touch gestures** beyond what the browser provides.
-- **Not designed for > 10M rows** in a single table. DuckDB will handle it, but UI latency degrades.
+- **No latency guarantees on very large tables.** Scrolling stays correct at 50M+ rows, but filter/sort queries are DuckDB-bound and slow down as rows grow, and deep scrolls of a sorted or filtered table pay `OFFSET` cost that grows with depth.
 - **No RTL-aware layouts beyond what the OS provides.**
 
 ### PARTIAL
@@ -130,7 +130,7 @@ body {
 }
 ```
 
-`container` takes an `HTMLElement`, not a selector string. There is no height option — sizing is entirely the host page's job. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`), so it inherits whatever the container resolves to; the scroller then reads `clientHeight` off `.dt-body-scroll` (`src/table/VirtualScroller.ts:245`) and renders `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — ~29 at 600px, whether the dataset has 1 thousand rows or 10 million. `bufferRows` defaults to 5 and is not exposed through `createDataTable` (`src/table/VirtualScroller.ts:257-262`, `:103`). `height: 100%` on the container works only if every ancestor up to the viewport also has a resolved height.
+`container` takes an `HTMLElement`, not a selector string. There is no height option — sizing is entirely the host page's job. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`), so it inherits whatever the container resolves to; the scroller then reads `clientHeight` off `.dt-body-scroll` (`src/table/VirtualScroller.ts:353`) and renders `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — ~29 at 600px, whether the dataset has 1 thousand rows or 10 million. `bufferRows` defaults to 5 and is not exposed through `createDataTable` (`src/table/VirtualScroller.ts:148`, `:18`). `height: 100%` on the container works only if every ancestor up to the viewport also has a resolved height.
 
 ### (b) Programmatic filter application (every type)
 
@@ -508,7 +508,7 @@ table.on('derivedChange', refresh);
 
 ## 4. Default config cheat-sheet
 
-All values source `src/DataTable.ts:123-278`.
+All values source `src/DataTable.ts:123-325`.
 
 | Option               | Default         | Notes                                                                                            |
 | -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
@@ -520,18 +520,21 @@ All values source `src/DataTable.ts:123-278`.
 | `exportDialog`       | `true`          | CSV/JSON/Parquet export dialog.                                                                  |
 | `rowHeight`          | `32`            | Pixels. Published as `--dt-row-height`; set it here, not in CSS.                                 |
 | `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on. Published as `--dt-header-height`.         |
+| `fetchBlockSize`     | `128`           | Rows fetched per scroll block. Clamped to 16–1024.                                               |
+| `rowCacheRows`       | `2048`          | In-memory row cache size. Rounded up to whole blocks, 4-block floor.                             |
+| `prefetch`           | `true`          | Direction-aware: one block beyond the viewport while the fetch pipeline is idle.                 |
 | `classPrefix`        | `'dt'`          | CSS class prefix.                                                                                |
 | `colorScheme`        | `'auto'`        | Follow `prefers-color-scheme`.                                                                   |
 | `portalTarget`       | `document.body` | Where modals mount.                                                                              |
 | `strictBrowserCheck` | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
 
-**Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. Note the reverse for those two: they are options, not CSS knobs. The library writes `--dt-row-height` / `--dt-header-height` onto `.dt-root` inline from the option values (`src/table/TableContainer.ts:createRootElement`), so overriding either token in a stylesheet is a no-op — the scroller's row arithmetic runs in JS and could not see it anyway. The scroller measures it (`src/table/VirtualScroller.ts:245`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+**Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. Note the reverse for those two: they are options, not CSS knobs. The library writes `--dt-row-height` / `--dt-header-height` onto `.dt-root` inline from the option values (`src/table/TableContainer.ts:createRootElement`), so overriding either token in a stylesheet is a no-op — the scroller's row arithmetic runs in JS and could not see it anyway. The scroller measures it (`src/table/VirtualScroller.ts:353`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 ---
 
 ## 5. Common pitfalls
 
-1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:448-452`) grows to the full dataset height that `setTotalRows()` writes onto `.dt-body` (`src/table/VirtualScroller.ts:300-308`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:245`) is then the whole dataset, so the visible range is every row: one `LIMIT <totalRows>` query (`src/table/TableBody.ts:732`) and one DOM row per row (`src/table/TableBody.ts:812`). At 1M rows × 32px that is a 32,000,000px element, `LIMIT 1000000`, and 1M DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
+1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:448-452`) grows to the spacer height that `setTotalRows()` writes onto `.dt-body` — `min(totalRows × rowHeight, 15,000,000)` px, capped by the module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000` (`src/table/VirtualScroller.ts:73`, applied in `setTotalRows`, `:426-464`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:353`) is then that whole capped element, so the visible range is everything under the cap: rows are fetched in blocks (`src/table/TableBody.ts`) and a DOM row — data or placeholder — is built per row, up to ~468,750 rows at the default 32px `rowHeight` (the entire dataset when it is smaller). At 1M rows × 32px that is a 15,000,000px element and ~468,750 DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
 
    ```html
    <div id="table" style="height: 600px"></div>
@@ -546,7 +549,7 @@ All values source `src/DataTable.ts:123-278`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:248-250`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:357-368`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:391-398`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 
@@ -690,6 +693,6 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 **Source-of-truth (prefer these over the docs when they disagree)**
 
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
-- **Options definition** — `src/DataTable.ts:123-278`
+- **Options definition** — `src/DataTable.ts:123-325`
 - **Event payloads** — `src/core/TableEvents.ts`
 - **Action methods** — `src/core/Actions.ts`

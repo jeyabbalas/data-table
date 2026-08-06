@@ -237,10 +237,11 @@ appends its own `.dt-root` into it and takes full ownership of the contents,
 but never styles the element itself — selector strings are not accepted, and
 sizing is the host page's job. It must have a **bounded height**: `.dt-root`
 is `height: 100%`, so a content-sized container lets the scroll viewport grow
-to the full height of the dataset and [Virtual Scrolling](#virtual-scrolling)
-degrades to rendering every row, with no error and no warning. A container
-that is zero-tall at mount renders nothing and logs a one-shot console
-warning; an unbounded one is not detected at all.
+to the dataset's full scroll height — capped at 15,000,000 px — and
+[Virtual Scrolling](#virtual-scrolling) degrades to rendering every row under
+the cap (~468,750 rows at the default 32 px), with no error and no warning.
+A container that is zero-tall at mount renders nothing and logs a one-shot
+console warning; an unbounded one is not detected at all.
 See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [API reference](./api-reference.md#createdatatableoptions) · Source: `src/table/TableContainer.ts`
 
 ### NullFilter
@@ -321,6 +322,24 @@ number`. Both [annotations](#annotation) and the read-only
 alignment. `getColumnValues('__rowid__')` returns a `BigInt64Array`;
 convert with `Number(rowIds[i])` before passing back as a `rowId: number`.
 See: [`actions.getColumnValues`](./api-reference.md#column-values-read-only-export) · [Annotations](./guides/annotations.md) · Source: `src/core/types.ts`, `src/worker/loaders/`
+
+### Scroll-Space Compression
+
+How [Virtual Scrolling](#virtual-scrolling) keeps the scrollbar honest past
+browser height limits. The scroll spacer is written as
+`min(totalRows × rowHeight, 15,000,000 px)` — browsers silently clamp
+element heights (Blink/WebKit at ≈33,554,431 px, Gecko at ≈17,895,697 px),
+so an uncapped spacer would break first. Below the cap (~468,750 rows at the
+default 32 px) physical and virtual scroll positions coincide and behavior
+is identical to an uncapped spacer. Above it, a dual-mode mapping translates
+between the two spaces: wheel-scale deltas move the virtual position
+linearly for native feel, thumb-scale jumps map proportionally across the
+full range, and exact reconciliation at the top and bottom edges keeps the
+first and last rows reachable — the scrollbar stays correct to 50M+ rows.
+The cap (`maxVirtualHeight`, primarily a test hook) is reachable only by
+constructing a `VirtualScroller` from `/advanced`, not through
+`createDataTable`.
+See: [Architecture](./concepts/architecture.md#virtual-scroller) · Source: `src/table/VirtualScroller.ts`
 
 ### SessionSnapshot
 
@@ -458,13 +477,22 @@ result set. `VirtualScroller` measures `clientHeight` on the internal
 `.dt-body-scroll` container and renders
 `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — `bufferRows` is 5 above
 and below, and is reachable only by constructing a `VirtualScroller` from
-`/advanced`, not through `createDataTable`. Both the DOM row count and the
-`LIMIT` of the body query stay constant regardless of dataset size, which is
-what keeps multi-million-row tables interactive. Assumes a fixed `rowHeight`
+`/advanced`, not through `createDataTable`. The DOM row count stays constant
+regardless of dataset size, and rows arrive in aligned blocks of
+`fetchBlockSize` rows (default 128) fetched with a `LIMIT` of the block size
+— via a [`__rowid__`](#__rowid__-synthetic-row-id) range predicate instead
+of `OFFSET` when the view is unsorted and unfiltered — which is what keeps
+multi-million-row tables interactive. Rows whose block has not arrived yet
+render as placeholders; fetched blocks land in a row cache capped at
+`rowCacheRows` rows (default 2048). Block size, cache size, and
+direction-aware prefetch are tunable via the `createDataTable` options
+`fetchBlockSize`, `rowCacheRows`, and `prefetch`. Assumes a fixed `rowHeight`
 (default 32 px) and requires the [Mount Container](#mount-container) to have
 a bounded height; measured against a content-sized container the visible
-range becomes every row and the optimisation silently disappears.
-See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [Performance](./performance.md) · Source: `src/table/VirtualScroller.ts`
+range becomes every row under the
+[Scroll-Space Compression](#scroll-space-compression) cap and the
+optimisation silently disappears.
+See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [Performance](./performance.md) · Source: `src/table/VirtualScroller.ts`, `src/table/TableBody.ts`
 
 ### Visualization
 

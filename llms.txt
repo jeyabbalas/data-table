@@ -8,7 +8,7 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 
 - [AGENTS.md](./AGENTS.md): Coding-agent guide — capability matrix, clarifying-question checklist, canonical snippets, common pitfalls. Read this before writing code against the library.
 - [README.md](./README.md): Feature list, install, quick start, framework integration.
-- [README.md#sizing-the-container](./README.md#sizing-the-container): The mount container must have a bounded height — the virtual scroller measures it to size the visible range. Without one, virtualization is silently defeated and every row is queried and rendered.
+- [README.md#sizing-the-container](./README.md#sizing-the-container): The mount container must have a bounded height — the virtual scroller measures it to size the visible range. Without one, virtualization is silently defeated and the table renders up to the 15M px height cap (~469K rows at 32 px) instead of just the rows in view.
 
 ## Reference
 

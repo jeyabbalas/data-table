@@ -568,7 +568,7 @@ table.on('derivedChange', refresh);
 
 Symptom: the tab stalls for seconds (or indefinitely) after the data loads, memory climbs, and scrolling is unusable. The same page is fine on a small dataset. Nothing is logged — there is no error and no warning for this case.
 
-Cause: the mount container has no bounded height, so virtualization is defeated. `.dt-root` is `height: 100%`, which against an auto-height parent resolves to the content's own height; the internal scroll container `.dt-body-scroll` (`flex: 1`) then grows with it. The scroller sizes the visible range from that element's `clientHeight` (`src/table/VirtualScroller.ts:245`), so the "viewport" it measures is the entire dataset: the visible range becomes every row, one `LIMIT <totalRows>` query runs (`src/table/TableBody.ts:732`), and a DOM row is built per row (`TableBody.ts:812`). At 1M rows with the default `rowHeight: 32` that is a 32,000,000 px tall element, a `LIMIT 1000000` query, and 1M DOM rows.
+Cause: the mount container has no bounded height, so virtualization is defeated. `.dt-root` is `height: 100%`, which against an auto-height parent resolves to the content's own height; the internal scroll container `.dt-body-scroll` (`flex: 1`) then grows with it — up to the spacer height the scroller writes, `min(rowCount × rowHeight, 15,000,000)` px (`DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000`, `src/table/VirtualScroller.ts:73`). The scroller sizes the visible range from that element's `clientHeight` (`src/table/VirtualScroller.ts:353`), so the "viewport" it measures is that whole capped spacer: the visible range becomes everything under the cap, rows are fetched block by block to fill it, and a DOM row (data or placeholder) is built for each — ~468,750 rows at the default `rowHeight: 32`, or the entire dataset if it is smaller. At 1M rows that is a 15,000,000 px tall element and ~468,750 DOM rows.
 
 The container that looks sized but isn't is the common case: a flex or grid child without `min-height: 0` (flex items default to `min-height: auto` and refuse to shrink below their intrinsic content height), or `height: 100%` on a container whose ancestors don't resolve a height up to the viewport.
 
@@ -582,12 +582,12 @@ const body = root.querySelector('.dt-body');
 console.log({
   mountHeight: mount.clientHeight, // the element you passed as `container`
   measuredViewport: scroll.clientHeight, // what VirtualScroller measures
-  fullDataHeight: parseFloat(body.style.height), // rowCount × rowHeight
+  fullDataHeight: parseFloat(body.style.height), // min(rowCount × rowHeight, 15,000,000)
   renderedRows: body.querySelectorAll('.dt-row').length,
 });
 ```
 
-Healthy: `measuredViewport` is the on-screen height and stays there as the dataset grows; `renderedRows` is `Math.ceil(measuredViewport / rowHeight) + 10` (the scroller renders 5 buffer rows on each side, and `bufferRows` is not exposed through `createDataTable`). Broken: `measuredViewport` is roughly equal to `fullDataHeight` and `renderedRows` is roughly the row count.
+Healthy: `measuredViewport` is the on-screen height and stays there as the dataset grows; `renderedRows` is `Math.ceil(measuredViewport / rowHeight) + 10` (the scroller renders 5 buffer rows on each side, and `bufferRows` is not exposed through `createDataTable`). Broken: `measuredViewport` is roughly equal to `fullDataHeight` and `renderedRows` saturates at ~468,750 with the default `rowHeight: 32` — or is roughly the row count if the dataset is smaller than that.
 
 Fix: give the container a height. Either an explicit one:
 
@@ -616,7 +616,7 @@ until the container has a computed height. Typical fix: make it a flex/grid chil
 `flex: 1; min-height: 0` (see examples/01-minimal) or set an explicit height.
 ```
 
-Cause: the container's height is zero. `calculateVisibleRange()` returns an empty range whenever the scroll container's `clientHeight` is `0` (`src/table/VirtualScroller.ts:248-250`), so nothing is rendered. The message above is a plain `console.warn` emitted once at construction, when `container.getBoundingClientRect().height === 0` (`src/table/TableContainer.ts:357-368`) — it is not a `warning` event and has no error code, so `table.on('warning', …)` will not see it. A container that collapses to zero height _after_ mount produces the same blank body with no message at all.
+Cause: the container's height is zero. `calculateVisibleRange()` returns an empty range whenever the scroll container's `clientHeight` is `0` (`src/table/VirtualScroller.ts:356-358`), so nothing is rendered. The message above is a plain `console.warn` emitted once at construction, when `container.getBoundingClientRect().height === 0` (`src/table/TableContainer.ts:391-398`) — it is not a `warning` event and has no error code, so `table.on('warning', …)` will not see it. A container that collapses to zero height _after_ mount produces the same blank body with no message at all.
 
 This is the same root cause as §25 — an unresolved height chain — at the other extreme. Note that §2 also describes a blank table, but that one is SSR-specific and looks different: with SSR the library never mounts at all, so there is no `.dt-root` in the DOM. If `document.querySelector('.dt-root')` returns an element, it is a height problem, not an SSR problem.
 

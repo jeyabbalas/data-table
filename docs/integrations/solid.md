@@ -38,8 +38,8 @@ export const Table: Component<Props> = (props) => {
 
 The host element's height is a requirement, not styling. The table
 virtualizes against the container's measured height and renders only the
-rows that fit; an unbounded container silently renders every row in the
-dataset. See [Sizing the container](../../README.md#sizing-the-container).
+rows that fit; an unbounded container silently defeats virtualization. See
+[Sizing the container](../../README.md#sizing-the-container).
 
 `createEffect` tracks `props.source` automatically — it re-runs when the
 parent passes a new source. For most use cases, call `loadData()` on the

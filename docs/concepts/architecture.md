@@ -12,6 +12,7 @@ small number of coordinated components.
 - How filter changes propagate to visualizations and the row count
 - Why the mount container's height is a performance property, not a
   cosmetic one
+- How scrolling stays exact past browser element-height limits
 - How modals escape CSS containment via portals
 
 Not a task-oriented guide. If you just want to use the library, skip to
@@ -128,10 +129,30 @@ is a thin Promise-based RPC wrapper:
 - **Types.** `init`, `query`, `load`, `export`, `cancel`, `progress`.
 - **Query cache.** SELECTs are cached by SQL text (LRU with configurable
   size/TTL). Non-SELECTs bypass. Cache is invalidated automatically on
-  mutation via `attachCacheInvalidation`.
+  mutation via `attachCacheInvalidation`. Individual queries can opt out
+  or jump the queue through a `QueryOptions` third parameter on
+  `query(sql, signal?, options?)`
+  ([`src/data/WorkerBridge.ts:51-63`](../../src/data/WorkerBridge.ts)):
+  `cache: false` bypasses the SQL-text cache — viewport row fetches use
+  it, since their rows already live in `TableBody`'s row cache (see
+  [Row fetching](#row-fetching)) — and `priority: 'high' | 'normal'`
+  picks the worker queue.
+- **Serial priority queue.** The worker runs one query at a time,
+  drained from an explicit two-priority FIFO — `'high'` for viewport row
+  fetches, `'normal'` for everything else
+  ([`src/worker/dispatcher.ts:46-72`](../../src/worker/dispatcher.ts)).
+  Serialization costs nothing real — SQL already executes serially
+  inside DuckDB-WASM's single-threaded worker — and buys truthful
+  cancel targeting, free cancellation of still-queued work, and
+  priority.
 - **Abort support.** Every async method takes an optional
-  `AbortSignal`; aborts send a `cancel` message to the worker and
-  unregister the request.
+  `AbortSignal`; aborts reject the pending Promise locally and send a
+  `cancel` message to the worker. `cancel` bypasses the queue: a queued
+  target is dequeued without DuckDB ever seeing it, and a running query
+  is genuinely interrupted through the connection's pending-query path
+  (`conn.send()` + `cancelSent()`). Running `load`/`export` work is not
+  interruptible; for those, cancellation remains delivery suppression —
+  late replies to aborted ids are dropped.
 - **Lifecycle.** `initialize()` boots the worker and DuckDB; `terminate()`
   kills the worker and rejects all pending promises. See
   [CSP and offline guide](../guides/csp-and-offline.md) for construction
@@ -171,16 +192,21 @@ The table body renders only visible rows. Given:
 - the container's scroll position
 
 The `VirtualScroller` computes `[firstVisibleRow, lastVisibleRow]` and
-queries DuckDB for that slice. Rows are re-rendered as the user scrolls.
+`TableBody` paints that range immediately — cached rows with content,
+uncached rows as placeholders — while fetching whatever is missing from
+DuckDB in block-aligned queries (see [Row fetching](#row-fetching)).
+Rows are re-rendered as the user scrolls. Datasets too tall for a
+browser to represent as a single element scroll through a compressed
+spacer (see [Scroll-space compression](#scroll-space-compression)).
 
 ### The height chain
 
 How _many_ rows that slice contains comes from a single measurement:
 `clientHeight` on the internal scroll container `.dt-body-scroll`
-([`src/table/VirtualScroller.ts:245`](../../src/table/VirtualScroller.ts)).
+([`src/table/VirtualScroller.ts:353`](../../src/table/VirtualScroller.ts)).
 The rendered count is `⌈clientHeight / rowHeight⌉ + 2 × bufferRows`, with
 `bufferRows` defaulting to 5
-([`src/table/VirtualScroller.ts:257-262`, `:103`](../../src/table/VirtualScroller.ts))
+([`src/table/VirtualScroller.ts:366-374`, `:148`](../../src/table/VirtualScroller.ts))
 — roughly 29 rows in a 600 px viewport at the default `rowHeight`.
 `bufferRows` is not reachable through `createDataTable`; only a direct
 `VirtualScroller` construction from `/advanced` can change it.
@@ -203,41 +229,191 @@ styles it, because it belongs to the host page. `container` is an
 `HTMLElement` the host provides; the library only appends its own root
 into it.
 
+### Scroll-space compression
+
+A spacer of `totalRows × rowHeight` px stops working at some point,
+because browsers silently saturate element heights — Blink/WebKit at
+≈33,554,431 px, Gecko at ≈17,895,697 px. Past the clamp, writing a
+taller height changes nothing: at the default 32 px row height the
+scrollbar would stop reaching rows past ~1,048,576 in Chrome and
+~559,240 in Firefox. `setTotalRows()` therefore writes
+`min(totalRows × rowHeight, 15,000,000)` px. The cap — the
+module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000`
+([`src/table/VirtualScroller.ts:73`](../../src/table/VirtualScroller.ts))
+— leaves margin under the tightest engine's clamp and stays below the
+range where float32 arithmetic quantizes positions by a pixel or more.
+
+Below the cap — up to 468,750 rows at the default 32 px — nothing
+changes: the physical scroll position _is_ the virtual position, the
+mapping is the identity, and `scrollHeight` is never read. Above it, the
+scroller keeps one virtual anchor, `virtualScrollTop`, and updates it
+once per scroll event with a dual-mode mapping
+([`src/table/VirtualScroller.ts:311-342`](../../src/table/VirtualScroller.ts)):
+
+```
+delta     = scrollTop − lastScrollTop
+maxScroll = scrollHeight − viewportHeight     // measured, not requested
+maxVTop   = totalRows × rowHeight − viewportHeight
+
+if scrollTop ≤ 0:                   vTop = 0        // top reconciliation
+else if scrollTop ≥ maxScroll − 1:  vTop = maxVTop  // bottom reconciliation
+else if |delta| ≤ viewportHeight:   vTop = clamp(vTop + delta, 0, maxVTop)   // linear
+else:                               vTop = (scrollTop / maxScroll) × maxVTop // proportional
+```
+
+Wheel ticks, trackpad momentum frames, and arrow/PageDown presses all
+move less than one viewport height per event, so they take the _linear_
+branch: rows move exactly as far as the user scrolled — native feel at
+any dataset size. Scrollbar thumb drags, `Home`/`End`, and programmatic
+jumps move farther and take the _proportional_ branch, which maps the
+physical position across the full virtual range, dividing before
+multiplying because `scrollTop × maxVTop` can exceed 2^53 at 50M+ rows.
+The edge branches reconcile the two spaces exactly. The top one is
+mandatory: without it, accumulated linear drift could strand the user
+above row 0 with `scrollTop` already at 0, and no further scroll event
+would ever fire to close the gap. The bottom one lands the last row
+exactly flush with the viewport's bottom edge (the `− 1` tolerates
+fractional `scrollTop` on hidpi screens). `maxScroll` derives from the
+_measured_ `scrollHeight` at event time — falling back to the requested
+height where measurement reports 0, as in jsdom — so when an engine
+clamps the spacer below the cap (Chrome does at high zoom), the mapping
+self-corrects to the extent that actually exists.
+
+Both modes then derive the range from the virtual position —
+`rawStart = ⌊vTop / rowHeight⌋`,
+`rawEnd = ⌈(vTop + viewportHeight) / rowHeight⌉`, buffered and clamped —
+and position the viewport container at
+`offsetY = scrollTop − vTop + start × rowHeight`. That is what
+`VisibleRange.offsetY` now means
+([`src/table/VirtualScroller.ts:46-51`](../../src/table/VirtualScroller.ts)):
+the physical Y offset at which the viewport container is positioned
+inside the (possibly height-capped) content element, equal to
+`start × rowHeight` whenever the dataset fits under the cap. The offset
+is applied as an inline `style.top` rather than
+`transform: translateY(…)`
+([`src/table/VirtualScroller.ts:392-404`](../../src/table/VirtualScroller.ts)):
+`top` resolves through layout, which is fixed-point and exact at these
+magnitudes, while compositor transforms are float32, which quantizes by
+more than a pixel above ~8.4M px.
+
+Two operations touch the anchor directly. `scrollToRow()` computes its
+target in virtual space and writes the anchor rather than inverting the
+lossy proportional map, so any index lands exactly even above the cap
+([`src/table/VirtualScroller.ts:508-564`](../../src/table/VirtualScroller.ts)).
+`setTotalRows()` writes the newly capped height, then re-anchors
+preserving the current position — never proportionally re-deriving it,
+which would teleport a linearly-scrolled user
+([`src/table/VirtualScroller.ts:426-464`](../../src/table/VirtualScroller.ts)).
+`getVirtualScrollTop()` exposes the anchor: the virtual-space
+counterpart of `getScrollTop()`, identical below the cap. The cap itself
+is configurable only as `maxVirtualHeight` on `VirtualScrollerOptions` —
+like `bufferRows`, not reachable through `createDataTable`. It exists so
+tests can exercise compression at human scale; raising it past Gecko's
+clamp breaks Firefox.
+
+One cosmetic trade-off is accepted: during sustained linear scrolling in
+compressed mode the scrollbar thumb can drift from true proportion — the
+rows on screen are exactly right, the thumb position only approximately.
+Top and bottom reconciliation are exact, so the drift never turns into
+unreachable rows.
+
+### Row fetching
+
+Scrolling never waits on data. Every range change paints immediately:
+rows present in `TableBody`'s in-memory row cache render with content,
+missing rows render as placeholders, and a placeholder is replaced whole
+when its block arrives (a row whose cache entry was evicted or
+invalidated demotes back to a placeholder — stale paint never persists).
+Fetching is reconciliation that happens after the paint, never a
+precondition for it; the full state machine is documented at
+[`src/table/TableBody.ts:155-190`](../../src/table/TableBody.ts).
+
+Fetches are quantized to aligned blocks of `fetchBlockSize` rows
+(default 128, clamped to [16, 1024]) so overlapping scroll positions
+dedupe onto the same query and an in-flight block is never re-issued.
+The reconciler
+([`src/table/TableBody.ts:699-772`](../../src/table/TableBody.ts)) keeps
+at most 2 block fetches in flight — the worker executes serially, so
+that is one running query and one queued — each with its own
+`AbortController`. Blocks that no longer intersect the viewport padded
+by one block on each side are aborted mid-flight, and an epoch counter
+bumped on every filter/sort/data change makes late results from a
+previous state drop instead of landing in the cache. Aborted fetches
+settle silently as cancellations. When nothing visible is missing or in
+flight, one speculative block beyond the viewport in the current scroll
+direction is prefetched (`prefetch`, default true) at `'normal'` worker
+priority, so visible-block fetches (`'high'`) always jump ahead of it.
+
+Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
+rounded up to whole blocks with a floor of 4 blocks). Over the cap,
+whole blocks are evicted farthest-from-the-viewport-first, exempting
+blocks that intersect the live viewport and the block just written
+([`src/table/TableBody.ts:928-961`](../../src/table/TableBody.ts)).
+Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
+see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
+invalidated in lockstep with the epoch, and a second SQL-keyed copy with
+its own TTL/LRU would be a second staleness domain.
+
+The SQL itself has two shapes. With no filters and no user sort, a block
+is fetched by a range predicate on the dense synthetic row id —
+`WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
+([`src/table/TableBody.ts:1024-1030`](../../src/table/TableBody.ts)) —
+which DuckDB prunes via zonemaps, so a block fetch costs about the same
+at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
+loader materializes `__rowid__` densely, and a runtime density valve
+verifies each fast-path result: any violation permanently switches the
+instance to OFFSET pagination with a single `console.warn` — slow but
+correct, never wrong rows. Sorted or filtered fetches keep
+`ORDER BY … LIMIT n OFFSET k`, always appending `"__rowid__" ASC` as a
+tiebreaker
+([`src/table/TableBody.ts:1054-1062`](../../src/table/TableBody.ts)) —
+DuckDB's `ORDER BY` is non-deterministic for ties, and two block queries
+that permute ties differently would duplicate some rows across block
+boundaries and drop others.
+
+Unlike `bufferRows` and `maxVirtualHeight`, the pipeline knobs are
+public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by
+`createDataTable`.
+
 ### Why an unbounded container defeats virtualization
 
-`setTotalRows()` writes an explicit `height: rowCount × rowHeight` px onto
-the body content element `.dt-body`
-([`src/table/VirtualScroller.ts:300-308`](../../src/table/VirtualScroller.ts))
-so the scrollbar reflects the whole dataset. That tall element is the
-content `.dt-body-scroll` is asked to hold, and `overflow: auto` clips it
-only while the scroller itself is constrained from above.
+`setTotalRows()` writes an explicit
+`height: min(rowCount × rowHeight, 15,000,000)` px onto the body content
+element `.dt-body`
+([`src/table/VirtualScroller.ts:432-444`](../../src/table/VirtualScroller.ts))
+so the scrollbar reflects the whole dataset (see
+[Scroll-space compression](#scroll-space-compression) for the cap). That
+tall element is the content `.dt-body-scroll` is asked to hold, and
+`overflow: auto` clips it only while the scroller itself is constrained
+from above.
 
 If the mount container is content-sized, it is not. `.dt-root`'s
 `height: 100%` resolves against an auto-height parent and becomes
-content-sized in turn, so sizing runs the other way: `.dt-body`'s
-`rowCount × rowHeight` propagates outward, `.dt-body-scroll` grows to fit
-it rather than clipping it, and `clientHeight` ends up equal to the height
-of the entire dataset. The computed visible range is then every row — one
-`LIMIT <totalRows>` query
-([`src/table/TableBody.ts:732`](../../src/table/TableBody.ts)) and one DOM
-row per row ([`src/table/TableBody.ts:812`](../../src/table/TableBody.ts)).
-At 1M rows and `rowHeight: 32` that is a single query pulling the full
-table into memory behind a 32,000,000 px element.
+content-sized in turn, so sizing runs the other way: `.dt-body`'s capped
+height propagates outward, `.dt-body-scroll` grows to fit it rather than
+clipping it, and `clientHeight` ends up equal to the height of the
+entire (possibly capped) content. The computed visible range then spans
+everything the spacer can hold. At 1M rows and `rowHeight: 32` that
+saturates at the cap — ~468,750 rows fetched block by block
+([Row fetching](#row-fetching)) and one DOM row rendered per row
+([`src/table/TableBody.ts:1112`](../../src/table/TableBody.ts)) behind a
+15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was
 handed the wrong viewport. The only height the library complains about is
 zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
-([`src/table/VirtualScroller.ts:248-250`](../../src/table/VirtualScroller.ts)),
+([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:357-368`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:391-397`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 
 The consequence for the host page is that the mount container must have a
 bounded height, and that is a performance requirement rather than a
-styling preference — it is the only input that caps how much work each
-scroll, filter, and sort does. There is no `height` / `maxHeight` /
+styling preference — it is the only input that keeps the work each
+scroll, filter, and sort does proportional to what the user can see (the
+height cap merely saturates the damage; it does not make it usable). There is no `height` / `maxHeight` /
 `autoHeight` option to substitute for it; `rowHeight` (default 32) and
 `headerHeight` (default 120) are the only size knobs, and `headerHeight`
 only subtracts from the viewport. See

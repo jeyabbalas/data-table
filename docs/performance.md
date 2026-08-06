@@ -1,15 +1,19 @@
 # Performance
 
-`@jeyabbalas/data-table` is designed to scale to ~1M rows in a single
-table on a typical laptop. This doc covers the architectural limits,
+`@jeyabbalas/data-table` keeps rendering virtualized at any practical
+row count: the row DOM, the scrollbar, and the scroll mapping stay
+correct at 50M+ rows. The practical ceilings live elsewhere — in DuckDB
+query latency (filter and sort cost grows with data volume) and in
+browser memory holding the loaded data. This doc covers those limits,
 what to watch for when scaling up, and the methodology for measuring
 your own workload.
 
 **Prerequisite: the mount container needs a bounded height.** Every number
 in this doc assumes one. The table renders only the rows that fit in the
 container, so the container's height is what caps the per-frame work; give
-it no height and the scroller's "visible region" becomes the whole dataset,
-which fetches and renders every row. That single mistake dominates every
+it no height and the scroller's "visible region" becomes the whole dataset
+(up to the height cap), which fetches and renders every row it can reach.
+That single mistake dominates every
 other tuning lever here, and it is by far the most common cause of a
 "slow" table. See [The virtual scroller](#the-virtual-scroller) below and
 [Sizing the container](../README.md#sizing-the-container) in the README.
@@ -35,29 +39,55 @@ rows, regardless of whether the underlying data has 1K rows or 10M.
 count. The cost moves elsewhere — to DuckDB query times and to memory
 holding the loaded data.
 
+The scrollbar is proportioned by a spacer element whose height is
+`min(totalRows × rowHeight, 15,000,000 px)` (`setTotalRows`,
+`src/table/VirtualScroller.ts:434-443`). The cap exists because browsers
+silently clamp element heights — Blink/WebKit saturate at ≈33,554,431 px,
+Gecko at ≈17,895,697 px — so an uncapped spacer stops growing partway
+through a large dataset and strands the scrollbar: before the cap, a
+1.5M-row table at the default 32 px asked for more height than Chrome
+honors, and scrolling bottomed out near row ~1,048,576. Datasets at or
+below 468,750 rows at 32 px fit under the cap and scroll exactly as
+before, with `scrollTop` as the virtual position. Above it, the scroller
+maps physical scroll positions into virtual row space: deltas up to one
+viewport height (wheel, trackpad, keyboard) move linearly so native
+scrolling feels unchanged, larger jumps (scrollbar thumb drags) map
+proportionally across the full range, and the two spaces reconcile
+exactly at the edges — `scrollTop` 0 is row 0, max scroll puts the last
+row fully in view. The mapping reads the measured `scrollHeight` at
+event time, so an engine that clamps below 15M px anyway (Chrome at high
+zoom) self-corrects. Rows are positioned with inline `top` rather than
+`transform: translateY`, which is float32 and quantizes to whole pixels
+above ~8.4M px.
+
 **This holds only while the container's height is bounded.** The height is
 read as `clientHeight` off the internal scroll element
-(`src/table/VirtualScroller.ts:245`), and that element inherits its size
-from the element you mount into. There is no `height` option and no
-fallback height in the library: sizing is entirely the host page's job.
+(`calculateVisibleRange`, `src/table/VirtualScroller.ts:353`), and that
+element inherits its size from the element you mount into. There is no
+`height` option and no fallback height in the library: sizing is entirely
+the host page's job.
 
 When the mount container has no resolved height, the chain collapses in a
 way that is easy to miss because nothing errors. The library's root carries
 `height: 100%` (`src/styles/02-shell.css:11-19`), which against an
 auto-height parent resolves to `auto`, making the root content-sized. The
 scroll element (`flex: 1; min-height: 0`) then grows to its own content —
-and that content has an explicit `rowCount × rowHeight` height written onto
-it so the scrollbar is proportioned correctly
-(`VirtualScroller.ts:300-308`). So `clientHeight` comes back as the height
-of the _entire dataset_, the computed visible range covers every row, and
-the body issues a single `LIMIT <totalRows>` query
-(`src/table/TableBody.ts:732`) and builds a DOM row for each one
-(`TableBody.ts:812`).
+and that content has the explicit `min(rowCount × rowHeight,
+15,000,000 px)` spacer height written onto it so the scrollbar is
+proportioned correctly (`setTotalRows`, `VirtualScroller.ts:434-443`). So
+`clientHeight` comes back as the height of the entire spacer, the computed
+visible range covers every row under the cap, and the body treats that
+range like any other: it builds a DOM row — or a placeholder row — for
+each index (`renderVisibleRows`, `src/table/TableBody.ts:1112`) and
+fetches the lot in 128-row blocks, at most 2 in flight (`ensureFetched`,
+`TableBody.ts:699`).
 
-At 1M rows that is a 32,000,000 px element, one query materializing 1M rows
-into the row cache, and 1M rows of DOM — instead of ~35 rows and a
-35-row query. Virtualization is not degraded, it is gone, and the numbers
-in the [thresholds table](#observable-thresholds) no longer apply.
+The height cap saturates the damage rather than removing it: at the
+default 32 px the degenerate "viewport" tops out at ~468,750 rendered rows
+instead of the whole dataset, with the block pipeline grinding through
+them 128 rows at a time — hundreds of thousands of DOM rows instead of
+~35. Virtualization is not degraded, it is gone, and the numbers in the
+[thresholds table](#observable-thresholds) no longer apply.
 
 Two things make this hard to catch. It scales invisibly: on a 500-row
 development fixture, rendering everything is fine, so the bug ships and
@@ -102,6 +132,17 @@ mutation (filter / sort / derived column) that changes the result set.
 **Implication:** filter-change → visualization-refresh loops stay fast
 because repeated "unchanged" viz queries hit the cache. Tuning the cache
 size can help if you have many visualizations and a lot of histogramming.
+
+Viewport row fetches deliberately bypass this cache (`cache: false` on
+`WorkerBridge.query` — see `QueryOptions`,
+`src/data/WorkerBridge.ts:51`). The block-based row cache in `TableBody`
+is the authoritative store for scroll data, invalidated in lockstep with
+the fetch epoch; a second SQL-keyed copy would only add a second
+staleness domain. Keeping scroll SQL out of the LRU also means a fast
+scroll no longer evicts the header-stats and histogram entries the cache
+exists to serve. The same options object carries
+`priority: 'high' | 'normal'`: viewport fetches go out at `'high'` and
+jump queued stats/histogram work in the worker's serial dispatch queue.
 
 ### Derived columns
 
@@ -153,15 +194,23 @@ adding annotations to toggle visibility.
 
 ## Observable thresholds
 
-Approximate ranges from architectural reasoning — not measured:
+Approximate ranges from architectural reasoning — not measured. Scrolling
+is not the axis being graded here: virtualization and the scrollbar stay
+correct throughout (the scroller is exact at 50M+ rows), and unsorted,
+unfiltered scrolling fetches blocks by `__rowid__` range — a
+zonemap-pruned scan that takes milliseconds at any scroll depth. What
+grows with scale is query latency: filter and sort cost, and deep scrolls
+_while sorted or filtered_, which still page with `LIMIT … OFFSET` and
+get slower the further down you are. That, plus the memory holding the
+loaded data, is what the tiers grade:
 
-| Dataset scale     | Expected experience                                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| < 100 K rows      | Fully interactive, all features snappy. Filter changes < 50 ms                                                                           |
-| 100 K – 1 M rows  | Interactive with faint cost on filter changes (100–300 ms). Virtualized scroll remains smooth. This is the design target                 |
-| 1 M – 10 M rows   | Filter/sort latency becomes noticeable (300 ms – 2 s). Initial load takes seconds. Still workable for analytics, not for live dashboards |
-| 10 M – 100 M rows | Outside the design target. Consider server-side aggregation; use this library for the summary layer                                      |
-| > 100 M rows      | Don't                                                                                                                                    |
+| Dataset scale     | Expected experience                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| < 100 K rows      | Fully interactive, all features snappy. Filter changes < 50 ms                                                                                       |
+| 100 K – 1 M rows  | Interactive with faint cost on filter changes (100–300 ms). Virtualized scroll remains smooth                                                        |
+| 1 M – 10 M rows   | Filter/sort latency becomes noticeable (300 ms – 2 s). Initial load takes seconds. Still workable for analytics, not for live dashboards             |
+| 10 M – 100 M rows | Scrolling stays correct; filter/sort latency and load-time memory dominate. Consider server-side aggregation; use this library for the summary layer |
+| > 100 M rows      | Don't — the loaded data outgrows browser memory long before the scroller cares                                                                       |
 
 Memory usage grows roughly linearly with row count × column count. A
 useful rule of thumb: expect ~50–100 bytes per cell in DuckDB, plus the
@@ -185,6 +234,31 @@ actually bounds the work.
 Pass `bridgeOptions.cache: { size: 200 }` to increase the cache. Default
 100 is fine for most apps; raise if you have many visualizations driving
 lots of repeated queries.
+
+### Scroll fetch pipeline: `fetchBlockSize`, `rowCacheRows`, `prefetch`
+
+Three `createDataTable` options shape how the body fetches rows while you
+scroll. `fetchBlockSize` (default 128, clamped to 16–1024) is the
+quantum: row fetches are block-aligned windows of this many rows, so
+overlapping scroll positions dedupe onto the same query and a block
+already in flight is never re-requested. Bigger blocks mean fewer, larger
+queries per scroll distance; the default already spans a few viewports of
+rows, so raise it mainly for very tall viewports, and lower it only when
+rows are extremely wide and transfer size matters.
+
+`rowCacheRows` (default 2048, rounded up to whole blocks with a floor of
+4 blocks) caps the in-memory row cache. Eviction is whole-block, furthest
+from the live viewport first, so raising it makes longer back-scrolls
+repaint instantly with zero queries at the cost of memory. It never
+affects correctness — only how often previously seen blocks are
+re-fetched.
+
+`prefetch` (default `true`) speculatively fetches one block beyond the
+viewport in the current scroll direction while the pipeline is otherwise
+idle. It runs at normal worker priority, so visible-row fetches always
+jump ahead of it, and a direction change abandons it. Disable it to keep
+query volume to the strict minimum — e.g. when the table shares its
+DuckDB worker with heavier analytical queries.
 
 ### Combine multi-filter changes into one step
 
@@ -264,8 +338,17 @@ This approximates the filter → re-query → re-render round-trip.
 The Performance tab in Chrome / Firefox DevTools shows where time is
 spent — worker messages, DOM updates, canvas rendering. Typical hot paths:
 
-- **WorkerBridge.query** — DuckDB query time + message round-trip
-- **VirtualScroller renderRange** — row re-rendering on scroll
+- **WorkerBridge.query** — DuckDB query time + message round-trip. Every
+  query rides the worker's serial two-priority queue: viewport row fetches
+  go out at `'high'` and jump queued `'normal'` work, and an aborted fetch
+  is dequeued for free — or genuinely cancelled mid-query via DuckDB's
+  pending-query path
+- **TableBody.renderVisibleRows** — row painting on every scroll frame:
+  cached rows paint as data, missing rows paint as placeholders that are
+  replaced whole when their block fetch lands
+- **TableBody.ensureFetched / fetchBlock** — the block fetch pipeline:
+  block-aligned queries, aborts of blocks scrolled out of the window, the
+  one-block prefetch
 - **BaseVisualization.render** — canvas drawing for the viz row
 
 ### Monitor memory
@@ -291,8 +374,9 @@ The one that dwarfs everything else on this list. Symptoms: the tab hangs
 for seconds after load, memory climbs into the gigabytes, scrolling is
 unusable, and a DevTools profile shows enormous time in DOM work rather
 than in `WorkerBridge.query`. Cause: the mount container has no bounded
-height, so the scroller measures the whole dataset as its viewport and
-renders every row (see [The virtual scroller](#the-virtual-scroller)).
+height, so the scroller measures the full (height-capped) spacer as its
+viewport and renders every row under the cap (see
+[The virtual scroller](#the-virtual-scroller)).
 
 Check it in the console:
 
@@ -301,7 +385,9 @@ const el = document.getElementById('my-table')!;
 const rendered = el.querySelectorAll('.dt-row').length; // default classPrefix
 console.log(el.clientHeight, 'px container,', rendered, 'rows in the DOM');
 // Healthy: a few hundred px, tens of rows.
-// Broken:  a container as tall as rowCount × rowHeight, and thousands of rows.
+// Broken:  a container as tall as min(rowCount × rowHeight, 15,000,000) px,
+//          and rendered rows by the hundred thousand (saturating around
+//          468,750 at the default 32 px).
 ```
 
 Fix it in CSS — `height: 600px` on the container, or `flex: 1;
@@ -456,7 +542,9 @@ Planned for a follow-up release:
 
 - A reference-machine configuration so numbers are comparable across releases
 - A Playwright nightly job for real-browser frame timing and WASM cold-start
-- 10 M-row scaling profiles (today the docs assume 100 K – 1 M)
+- 10 M-row scaling profiles for filter/sort latency (the scroller is
+  already exact at that scale; the query-latency tiers above are the part
+  still reasoned rather than measured)
 
 Until that's in place, this doc stays methodology-first. If you
 measure something interesting about your workload, share it in an issue

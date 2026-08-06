@@ -26,32 +26,85 @@ import type {
   QueryPayload,
   LoadPayload,
   ExportPayload,
+  CancelPayload,
 } from './types';
 
 export type Respond = (id: string, type: WorkerResponseType, payload: unknown) => void;
 
-/**
- * Currently-running operation, tracked so a `cancel` message can route to
- * `connection.cancelSent()` for the right query/load/export. The worker
- * dispatches messages serially, so at most one in-flight at a time per
- * worker.
- */
-let inFlight: { id: string; type: 'query' | 'load' | 'export' } | null = null;
+/** Message types that run through the queue — everything except `cancel`. */
+export type RunnableType = 'init' | 'query' | 'load' | 'export';
 
-/**
- * @internal Test-only — drop the in-flight reference. Production code
- * never calls this; the `finally` blocks in each case clear it
- * automatically.
- */
-export function __resetInFlightForTests(): void {
-  inFlight = null;
+interface QueueEntry {
+  message: WorkerMessage;
+  /** Narrowed once at enqueue so `runTask` needs no cast. */
+  type: RunnableType;
+  respond: Respond;
+  /** Resolves the promise `handleMessage` returned for THIS message. */
+  done: () => void;
 }
 
 /**
- * @internal Test-only — read the in-flight reference shape for assertions.
+ * Messages are serialized through an explicit two-priority FIFO: `high`
+ * for viewport row fetches, `normal` for everything else. `pump()` runs
+ * exactly one task at a time (`running`); `cancel` messages bypass the
+ * queue entirely — a queued target is removed without touching DuckDB,
+ * the running target is interrupted via the connection's pending-query
+ * cancel.
+ *
+ * Why serialization does not hurt: SQL execution already serializes
+ * inside duckdb-wasm's single-threaded WASM worker, so concurrent
+ * dispatch here only ever overlapped Arrow→JS materialization with the
+ * next query's start. We trade that sliver for truthful cancel
+ * targeting, free dequeue-cancellation of queued work, and priority.
+ *
+ * Why a cancel can never hit the wrong query: the running-id check and
+ * the `cancelSent()` call happen in one synchronous frame, and a later
+ * query's start message can only be posted to duckdb-wasm's inner
+ * worker after the current task settles. Same-source postMessage is
+ * FIFO, so the inner worker processes the cancel before any later query
+ * starts. If the target already finished, the cancel lands on an empty
+ * pending slot and returns `false` — it never throws at an innocent
+ * query.
+ *
+ * Priority starvation is accepted by design: only viewport row fetches
+ * should be posted with `priority: 'high'`, and those are bounded by
+ * scroll activity.
  */
-export function __getInFlightForTests(): { id: string; type: 'query' | 'load' | 'export' } | null {
-  return inFlight;
+let highQueue: QueueEntry[] = [];
+let normalQueue: QueueEntry[] = [];
+let running: { id: string; type: RunnableType } | null = null;
+
+/**
+ * Bumped by `__resetDispatcherForTests` so `finally` handlers of tasks
+ * started before a reset cannot clear the fresh state or pump stale
+ * queues.
+ */
+let epoch = 0;
+
+/**
+ * @internal Test-only — clear the queues and the running slot.
+ * Production code never calls this; `pump()`'s `finally` owns the
+ * lifecycle.
+ */
+export function __resetDispatcherForTests(): void {
+  epoch += 1;
+  highQueue = [];
+  normalQueue = [];
+  running = null;
+}
+
+/**
+ * @internal Test-only — read the running-task reference for assertions.
+ */
+export function __getRunningForTests(): { id: string; type: RunnableType } | null {
+  return running;
+}
+
+/**
+ * @internal Test-only — read the queue depths for assertions.
+ */
+export function __getQueueDepthsForTests(): { high: number; normal: number } {
+  return { high: highQueue.length, normal: normalQueue.length };
 }
 
 /**
@@ -102,13 +155,66 @@ export function toErrorPayload(
 
 /**
  * Dispatch one inbound message. Calls `respond(id, type, payload)` for
- * every reply (results, errors, progress).
+ * every reply (results, errors, progress). The returned promise resolves
+ * when this message's processing completes — for queued work, after its
+ * task has run (or it was dequeued by a cancel); for `cancel`, when the
+ * cancel is answered.
  */
-export async function handleMessage(message: WorkerMessage, respond: Respond): Promise<void> {
+export function handleMessage(message: WorkerMessage, respond: Respond): Promise<void> {
   const { id, type, payload } = message;
 
+  if (type === 'cancel') {
+    return handleCancel(message, respond);
+  }
+
+  if (type !== 'init' && type !== 'query' && type !== 'load' && type !== 'export') {
+    respond(id, 'error', {
+      message: `Unknown message type: ${String(type)}`,
+      code: 'INVARIANT',
+    });
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
+    const high = type === 'query' && (payload as QueryPayload | undefined)?.priority === 'high';
+    (high ? highQueue : normalQueue).push({ message, type, respond, done: resolve });
+    pump();
+  });
+}
+
+/**
+ * Start the next task if none is running. The dequeue happens
+ * synchronously — before any await — so `running` is truthful the moment
+ * `handleMessage` returns, and a settling task chains straight into the
+ * next one inside its `finally`.
+ */
+function pump(): void {
+  if (running) return;
+  const entry = highQueue.shift() ?? normalQueue.shift();
+  if (!entry) return;
+
+  running = { id: entry.message.id, type: entry.type };
+  const startedEpoch = epoch;
+  void runTask(entry).finally(() => {
+    if (epoch === startedEpoch && running?.id === entry.message.id) {
+      running = null;
+      pump();
+    }
+    entry.done();
+  });
+}
+
+/**
+ * Execute one queued task. Response shapes, progress emissions, and
+ * error mapping are the per-type contract; `pump()` owns the lifecycle
+ * (the `running` slot and chaining into the next task).
+ */
+async function runTask(entry: QueueEntry): Promise<void> {
+  const { message, respond } = entry;
+  const { id, payload } = message;
+
   try {
-    switch (type) {
+    switch (entry.type) {
       case 'init': {
         const { bundles } = (payload as InitPayload) ?? {};
         await initializeDuckDB(bundles);
@@ -117,6 +223,8 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
       }
 
       case 'query': {
+        // Evaluated at execution time: a query queued behind a running
+        // `init` correctly waits for it instead of racing it.
         if (!isInitialized()) {
           respond(id, 'error', {
             message: 'DuckDB not initialized',
@@ -125,7 +233,6 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
           break;
         }
         const { sql } = payload as QueryPayload;
-        inFlight = { id, type: 'query' };
         try {
           const rows = await executeQuery(sql);
           respond(id, 'result', { rows });
@@ -138,8 +245,6 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
           } else {
             throw error;
           }
-        } finally {
-          if (inFlight?.id === id) inFlight = null;
         }
         break;
       }
@@ -161,7 +266,6 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
           cancelable: true,
         });
 
-        inFlight = { id, type: 'load' };
         try {
           let result;
 
@@ -226,8 +330,6 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
           } else {
             respond(id, 'error', toErrorPayload(error, 'Failed to load data', 'LOAD_PARSE_FAILED'));
           }
-        } finally {
-          if (inFlight?.id === id) inFlight = null;
         }
         break;
       }
@@ -244,7 +346,6 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
         const { sql: exportSql, format: exportFormat } = payload as ExportPayload;
         const exportFileName = `__export_${id}.${exportFormat}`;
 
-        inFlight = { id, type: 'export' };
         try {
           const exportConn = getConnection();
           const exportDb = getDatabase();
@@ -271,34 +372,68 @@ export async function handleMessage(message: WorkerMessage, respond: Respond): P
           } else {
             respond(id, 'error', toErrorPayload(error, 'Export failed', 'EXPORT_FAILED'));
           }
-        } finally {
-          if (inFlight?.id === id) inFlight = null;
         }
         break;
       }
-
-      case 'cancel': {
-        const { targetId } = (payload as { targetId?: string } | undefined) ?? {};
-        if (inFlight && typeof targetId === 'string' && inFlight.id === targetId) {
-          try {
-            const cancelled = await getConnection().cancelSent();
-            respond(id, 'result', { cancelled });
-          } catch (error) {
-            respond(id, 'error', toErrorPayload(error, 'Cancel failed', 'QUERY_RUNTIME'));
-          }
-        } else {
-          respond(id, 'result', { cancelled: false, reason: 'no-matching-inflight' });
-        }
-        break;
-      }
-
-      default:
-        respond(id, 'error', {
-          message: `Unknown message type: ${type}`,
-          code: 'INVARIANT',
-        });
     }
   } catch (error) {
     respond(id, 'error', toErrorPayload(error, 'Unknown error', 'QUERY_RUNTIME'));
   }
+}
+
+/**
+ * Handle a `cancel` message out-of-band — it never enters the queue, so
+ * it can act while another task is running.
+ *
+ * - A **queued** target is dequeued for free: it gets a
+ *   `QUERY_CANCELLED` error reply without DuckDB ever seeing it.
+ * - The **running** target is forwarded to `cancelSent()`. For `query`
+ *   tasks this genuinely interrupts execution once queries run through
+ *   the pending-query path. For `load`/`export` tasks the underlying
+ *   `conn.query()` calls are not interruptible — cancellation remains
+ *   delivery-suppression by the bridge (late replies to aborted ids are
+ *   dropped), exactly as before the queue existed.
+ * - A running `init` is not cancellable: mid-init there is no
+ *   connection yet, so `getConnection()` would throw out of the cancel
+ *   path.
+ */
+async function handleCancel(message: WorkerMessage, respond: Respond): Promise<void> {
+  const { id } = message;
+  const targetId = (message.payload as CancelPayload | undefined)?.targetId;
+
+  if (typeof targetId !== 'string') {
+    respond(id, 'result', { cancelled: false, reason: 'no-matching-inflight' });
+    return;
+  }
+
+  const queued =
+    highQueue.find((entry) => entry.message.id === targetId) ??
+    normalQueue.find((entry) => entry.message.id === targetId);
+  if (queued) {
+    const queue = highQueue.includes(queued) ? highQueue : normalQueue;
+    queue.splice(queue.indexOf(queued), 1);
+    queued.respond(targetId, 'error', {
+      message: 'Cancelled before execution',
+      code: 'QUERY_CANCELLED',
+    });
+    queued.done();
+    respond(id, 'result', { cancelled: true, reason: 'dequeued' });
+    return;
+  }
+
+  if (running?.id === targetId) {
+    if (running.type === 'init') {
+      respond(id, 'result', { cancelled: false, reason: 'not-cancellable' });
+      return;
+    }
+    try {
+      const cancelled = await getConnection().cancelSent();
+      respond(id, 'result', { cancelled });
+    } catch (error) {
+      respond(id, 'error', toErrorPayload(error, 'Cancel failed', 'QUERY_RUNTIME'));
+    }
+    return;
+  }
+
+  respond(id, 'result', { cancelled: false, reason: 'no-matching-inflight' });
 }

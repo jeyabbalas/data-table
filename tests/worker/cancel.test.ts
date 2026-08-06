@@ -1,8 +1,8 @@
 /**
  * Phase 4: worker-side cancel.
  *
- * The dispatcher routes `case 'cancel'` to `connection.cancelSent()` and
- * tracks an in-flight reference so a cancel only fires when its `targetId`
+ * The dispatcher routes `cancel` messages to `connection.cancelSent()`
+ * and tracks the running task so a cancel only fires when its `targetId`
  * matches. Errors from a DuckDB interrupt are mapped to the
  * `QUERY_CANCELLED` code.
  */
@@ -11,8 +11,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleMessage,
   isCancelRejection,
-  __resetInFlightForTests,
-  __getInFlightForTests,
+  __resetDispatcherForTests,
+  __getRunningForTests,
   type Respond,
 } from '@/worker/dispatcher';
 import type { WorkerMessage, WorkerResponse } from '@/worker/types';
@@ -62,12 +62,12 @@ function captureRespond(): { respond: Respond; replies: CapturedReply[] } {
 
 describe('worker dispatcher — cancel', () => {
   beforeEach(() => {
-    __resetInFlightForTests();
+    __resetDispatcherForTests();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    __resetInFlightForTests();
+    __resetDispatcherForTests();
   });
 
   it('cancel with no in-flight returns { cancelled: false, reason }', async () => {
@@ -104,7 +104,7 @@ describe('worker dispatcher — cancel', () => {
     );
     // Let the query start (microtask).
     await Promise.resolve();
-    expect(__getInFlightForTests()).toEqual({ id: 'q-a', type: 'query' });
+    expect(__getRunningForTests()).toEqual({ id: 'q-a', type: 'query' });
 
     const { respond, replies } = captureRespond();
     await handleMessage(
@@ -133,7 +133,7 @@ describe('worker dispatcher — cancel', () => {
       respond1,
     );
     await Promise.resolve();
-    expect(__getInFlightForTests()?.id).toBe('q-b');
+    expect(__getRunningForTests()?.id).toBe('q-b');
 
     const { respond, replies } = captureRespond();
     await handleMessage(
@@ -225,7 +225,7 @@ describe('worker dispatcher — cancel', () => {
       { id: 'q-f1', type: 'query', payload: { sql: 'SELECT 1' } } as WorkerMessage,
       respond,
     );
-    expect(__getInFlightForTests()).toBeNull();
+    expect(__getRunningForTests()).toBeNull();
 
     duckdbMock.executeQuery.mockRejectedValueOnce(new Error('boom'));
     const { respond: respond2 } = captureRespond();
@@ -233,7 +233,7 @@ describe('worker dispatcher — cancel', () => {
       { id: 'q-f2', type: 'query', payload: { sql: 'SELECT 1' } } as WorkerMessage,
       respond2,
     );
-    expect(__getInFlightForTests()).toBeNull();
+    expect(__getRunningForTests()).toBeNull();
   });
 
   it('isCancelRejection matches INTERRUPT, interrupted, and cancelled phrases', () => {

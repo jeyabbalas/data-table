@@ -48,7 +48,7 @@ omit them.
 ## Quick start
 
 Give the container a bounded height — the table virtualizes against it, and
-without one it renders every row. See [Sizing the container](#sizing-the-container).
+without one virtualization is silently defeated. See [Sizing the container](#sizing-the-container).
 
 ```html
 <div id="my-table" style="height: 600px"></div>
@@ -167,14 +167,15 @@ which is exactly why this is easy to ship and painful later.
 
 With no bounded height, the library's root element (`height: 100%`) resolves
 against an auto-height parent and becomes content-sized. The scroll area then
-grows to the full height of the data — `rowCount × rowHeight` — so the
-"visible region" the scroller measures is the _entire dataset_. Virtualization
-is silently defeated: the table issues one query that pulls every row into
-memory and builds DOM for all of them.
+grows to its full capped height — `min(rowCount × rowHeight, 15,000,000 px)`
+— so the "visible region" the scroller measures is that _entire range_.
+Virtualization is silently defeated: the table builds DOM for every row in
+the range and issues block fetches to fill all of them.
 
-At 1M rows and the default 32 px row height, that is a 32,000,000 px tall
-element, a single `LIMIT 1000000` query, and a million rows' worth of DOM
-nodes. The tab stalls, memory climbs, and scrolling is unusable. With a
+At the default 32 px row height, the cap corresponds to ~468,750 rows, so
+that is where the damage saturates instead of scaling with the dataset — no
+comfort: hundreds of thousands of DOM rows and a churn of block fetches to
+fill them. The tab stalls, memory climbs, and scrolling is unusable. With a
 bounded container the same dataset renders ~29 rows and stays interactive.
 
 The degenerate case is the opposite one: a container that is **zero**-tall at

@@ -157,7 +157,16 @@ export function convertBigInts(obj: unknown): unknown {
 }
 
 /**
- * Execute a SQL query and return results as an array of objects
+ * Execute a SQL query via `conn.query()` and return results as an array
+ * of objects.
+ *
+ * `conn.query()` runs as one blocking call inside duckdb-wasm's inner
+ * worker and CANNOT be interrupted by `cancelSent()`, so the dispatcher
+ * executes queries through {@link executeQueryCancellable} instead. This
+ * function has no production callers left; it is kept exported as the
+ * documented fallback — if `conn.send()` ever shows result-parity or
+ * stability problems for some query shape, revert the dispatcher's query
+ * case to this function (queue-level dequeue-cancellation still works).
  */
 export async function executeQuery<T = Record<string, unknown>>(sql: string): Promise<T[]> {
   if (!conn) {
@@ -168,6 +177,55 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
 
   const result = await conn.query(sql);
   return result.toArray().map((row) => convertBigInts(row.toJSON()) as T);
+}
+
+/**
+ * Execute a SQL query via DuckDB's pending-query path so an inbound
+ * `cancel` message can genuinely interrupt it.
+ *
+ * `conn.send(sql)` runs `startPendingQuery` + repeated `pollPendingQuery`
+ * round-trips against the inner worker; `cancelSent()` makes the next
+ * poll reject with `Error('query was canceled')` (recognized by the
+ * dispatcher's `isCancelRejection`). `allowStreamResult` is left at its
+ * default `false` deliberately: the whole execution then sits inside the
+ * cancellable pending phase, whereas streaming mode would end the
+ * cancellable window at the first result batch.
+ *
+ * Result rows are materialized exactly like {@link executeQuery}'s
+ * (`row.toJSON()` → `convertBigInts`), so the two are interchangeable.
+ */
+export async function executeQueryCancellable<T = Record<string, unknown>>(
+  sql: string,
+): Promise<T[]> {
+  if (!conn) {
+    throw Object.assign(new Error('DuckDB not initialized. Call initializeDuckDB() first.'), {
+      code: 'BRIDGE_NOT_READY',
+    });
+  }
+
+  const reader = await conn.send(sql);
+  // `send()` resolves undefined (it does not throw) when the inner worker
+  // is detached; surface that as a runtime error instead of iterating it.
+  if (!reader) {
+    throw new Error('DuckDB worker is detached; cannot execute query.');
+  }
+
+  const rows: T[] = [];
+  for await (const batch of reader) {
+    for (const row of batch.toArray()) {
+      rows.push(convertBigInts(row.toJSON()) as T);
+    }
+  }
+  return rows;
+}
+
+/**
+ * @internal Test-only — swap the module-level connection singleton so
+ * `executeQueryCancellable` can be exercised in node without a real
+ * browser Worker behind `initializeDuckDB`.
+ */
+export function __setConnForTests(next: duckdb.AsyncDuckDBConnection | null): void {
+  conn = next;
 }
 
 /**

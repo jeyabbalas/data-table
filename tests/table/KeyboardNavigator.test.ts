@@ -35,6 +35,7 @@ function makeStubBody(pageRows = 10): TableBody {
     getViewportHeight: () => pageRows * 32,
     getRowHeight: () => 32,
     getScrollTop: () => 0,
+    getVirtualScrollTop: () => 0,
     scrollToRow: vi.fn(),
   };
   return {
@@ -175,6 +176,58 @@ describe('KeyboardNavigator', () => {
     actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
     keydown(root, { key: 'PageUp' });
     expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'b' });
+    nav.destroy();
+  });
+
+  // ---- Scroll-into-view (compressed mode) ----
+
+  it('scrollFocusedCellIntoView compares against virtual scroll space, not physical', () => {
+    // Above the height cap the physical scrollTop is compressed: comparing
+    // row * rowHeight (virtual space) against it would wrongly re-scroll rows
+    // that are already on screen. The navigator must read getVirtualScrollTop().
+    const state = createTableState();
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.totalRows.set(40_000);
+    const actions = new StateActions(state, mockBridge);
+
+    const root = document.createElement('div');
+    root.setAttribute('tabindex', '0');
+    document.body.appendChild(root);
+
+    // One stable stub instance so the scrollToRow spy sees every call
+    // (getTableBody: () => makeStubBody() would mint a fresh spy per call).
+    const scrollToRow = vi.fn();
+    const vs = {
+      getViewportHeight: () => 320,
+      getRowHeight: () => 32,
+      getScrollTop: () => 5, // compressed physical position — must be ignored
+      getVirtualScrollTop: () => 1_000_000, // rows 31,250–31,259 visible
+      scrollToRow,
+    };
+    const body = { getVirtualScroller: () => vs } as unknown as TableBody;
+
+    const nav = new KeyboardNavigator({
+      rootElement: root,
+      bodyScroll: document.createElement('div'),
+      state,
+      actions,
+      getTableBody: () => body,
+    });
+
+    // Row 31,255 sits inside the virtual viewport → no scroll needed. (Under
+    // the old physical read, rowTop 1,000,160 > 5 + 320 would force a scroll.)
+    actions.setFocusedCell({ row: 31_254, column: 'a' });
+    keydown(root, { key: 'ArrowDown' });
+    expect(state.focusedCell.get()).toEqual({ row: 31_255, column: 'a' });
+    expect(scrollToRow).not.toHaveBeenCalled();
+
+    // Row 100 is far above the virtual viewport → scrolls with 'start'
+    actions.setFocusedCell({ row: 101, column: 'a' });
+    keydown(root, { key: 'ArrowUp' });
+    expect(state.focusedCell.get()).toEqual({ row: 100, column: 'a' });
+    expect(scrollToRow).toHaveBeenCalledWith(100, 'start');
+
     nav.destroy();
   });
 

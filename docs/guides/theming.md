@@ -226,7 +226,8 @@ These tokens size the table's _contents_. They are not how you size the table
 itself: the mount container's height comes from your own CSS, is mandatory,
 and is what drives virtualization — the scroller renders roughly
 `⌈containerHeight / rowHeight⌉ + 10` rows, so an unbounded container silently
-renders every row in the dataset. See
+renders every row up to the scroller's 15,000,000 px height cap (~468,750
+rows at the default `rowHeight`). See
 [Sizing the container](../../README.md#sizing-the-container).
 
 ### Typography
@@ -411,7 +412,7 @@ visualizations read those tokens rather than hard-coded colours.
 - **Z-indices have gaps of ≥ 10 intentionally.** Don't set them contiguously — leave room for host-app layers.
 - **`--dt-stylesheet-loaded` is an internal sentinel.** Overriding it silences the warning even when the real stylesheet isn't loaded. Don't.
 - **Per-instance panel width.** `--dt-panel-width` is read by JS (for edge clamping) via `getComputedStyle(...).offsetWidth`, so an override takes effect immediately.
-- **`--dt-row-height` is not the table's height, and is not yours to set.** It is written from the `rowHeight` option (as is `--dt-header-height` from `headerHeight`), so a stylesheet override of either is a no-op — see [Sizing](#sizing). Neither is the table's own height: the mount container's height is your own CSS, is mandatory, and is what caps how many rows get queried and rendered. An unbounded container renders every row and says nothing about it. See [Sizing the container](../../README.md#sizing-the-container).
+- **`--dt-row-height` is not the table's height, and is not yours to set.** It is written from the `rowHeight` option (as is `--dt-header-height` from `headerHeight`), so a stylesheet override of either is a no-op — see [Sizing](#sizing). Neither is the table's own height: the mount container's height is your own CSS, is mandatory, and is what caps how many rows get queried and rendered. An unbounded container defeats virtualization and says nothing about it. See [Sizing the container](../../README.md#sizing-the-container).
 
 ## Related
 

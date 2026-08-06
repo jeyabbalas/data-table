@@ -6,7 +6,7 @@
 
 # Class: EventEmitter\<Events\>
 
-Defined in: [core/EventEmitter.ts:45](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L45)
+Defined in: [core/EventEmitter.ts:45](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L45)
 
 Type-safe pub/sub emitter parameterised by an event-shape map. Listeners
 are isolated via try/catch so one throwing subscriber does not break later
@@ -27,7 +27,7 @@ custom UIs composed on `/advanced`.
 
 > **new EventEmitter**\<`Events`\>(`onListenerError?`): `EventEmitter`\<`Events`\>
 
-Defined in: [core/EventEmitter.ts:49](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L49)
+Defined in: [core/EventEmitter.ts:49](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L49)
 
 #### Parameters
 
@@ -45,7 +45,7 @@ Defined in: [core/EventEmitter.ts:49](https://github.com/jeyabbalas/data-table/b
 
 > **emit**\<`K`\>(`event`, `data`): `void`
 
-Defined in: [core/EventEmitter.ts:84](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L84)
+Defined in: [core/EventEmitter.ts:84](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L84)
 
 Emit an event with data. Each listener is invoked inside a try/catch so
 a throwing listener cannot break subsequent listeners. Errors are routed
@@ -79,7 +79,7 @@ them without aborting `emit`.
 
 > **listenerCount**\<`K`\>(`event`): `number`
 
-Defined in: [core/EventEmitter.ts:138](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L138)
+Defined in: [core/EventEmitter.ts:138](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L138)
 
 Get the number of listeners for an event
 
@@ -105,7 +105,7 @@ Get the number of listeners for an event
 
 > **off**\<`K`\>(`event`, `callback`): `void`
 
-Defined in: [core/EventEmitter.ts:70](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L70)
+Defined in: [core/EventEmitter.ts:70](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L70)
 
 Unsubscribe from an event
 
@@ -135,7 +135,7 @@ Unsubscribe from an event
 
 > **on**\<`K`\>(`event`, `callback`): () => `void`
 
-Defined in: [core/EventEmitter.ts:57](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L57)
+Defined in: [core/EventEmitter.ts:57](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L57)
 
 Subscribe to an event
 
@@ -167,7 +167,7 @@ Unsubscribe function
 
 > **once**\<`K`\>(`event`, `callback`): () => `void`
 
-Defined in: [core/EventEmitter.ts:116](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L116)
+Defined in: [core/EventEmitter.ts:116](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L116)
 
 Subscribe to an event for a single occurrence
 
@@ -199,7 +199,7 @@ Unsubscribe function
 
 > **removeAllListeners**\<`K`\>(`event?`): `void`
 
-Defined in: [core/EventEmitter.ts:127](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/core/EventEmitter.ts#L127)
+Defined in: [core/EventEmitter.ts:127](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/EventEmitter.ts#L127)
 
 Remove all listeners for an event, or all listeners if no event specified
 

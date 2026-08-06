@@ -1,8 +1,8 @@
 /**
  * Phase 4: worker-side cancel.
  *
- * The dispatcher routes `case 'cancel'` to `connection.cancelSent()` and
- * tracks an in-flight reference so a cancel only fires when its `targetId`
+ * The dispatcher routes `cancel` messages to `connection.cancelSent()`
+ * and tracks the running task so a cancel only fires when its `targetId`
  * matches. Errors from a DuckDB interrupt are mapped to the
  * `QUERY_CANCELLED` code.
  */
@@ -11,8 +11,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleMessage,
   isCancelRejection,
-  __resetInFlightForTests,
-  __getInFlightForTests,
+  __resetDispatcherForTests,
+  __getRunningForTests,
   type Respond,
 } from '@/worker/dispatcher';
 import type { WorkerMessage, WorkerResponse } from '@/worker/types';
@@ -24,6 +24,7 @@ vi.mock('@/worker/duckdb', () => {
   return {
     initializeDuckDB: vi.fn(() => Promise.resolve()),
     executeQuery: vi.fn(() => Promise.resolve([])),
+    executeQueryCancellable: vi.fn(() => Promise.resolve([])),
     getConnection: vi.fn(() => conn),
     getDatabase: vi.fn(() => ({})),
     isInitialized: vi.fn(() => initialized),
@@ -62,12 +63,12 @@ function captureRespond(): { respond: Respond; replies: CapturedReply[] } {
 
 describe('worker dispatcher — cancel', () => {
   beforeEach(() => {
-    __resetInFlightForTests();
+    __resetDispatcherForTests();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    __resetInFlightForTests();
+    __resetDispatcherForTests();
   });
 
   it('cancel with no in-flight returns { cancelled: false, reason }', async () => {
@@ -91,11 +92,11 @@ describe('worker dispatcher — cancel', () => {
 
     // Set up an in-flight query manually by starting one and never resolving.
     // For this test, we simulate it by assigning via the dispatcher's path:
-    // start a query that uses a never-resolving executeQuery, then send cancel.
-    const { executeQuery } = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+    // start a query that uses a never-resolving executeQueryCancellable, then send cancel.
+    const { executeQueryCancellable } = (await import('@/worker/duckdb')) as unknown as {
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
-    executeQuery.mockImplementationOnce(() => new Promise(() => undefined));
+    executeQueryCancellable.mockImplementationOnce(() => new Promise(() => undefined));
 
     const { respond: respond1 } = captureRespond();
     void handleMessage(
@@ -104,7 +105,7 @@ describe('worker dispatcher — cancel', () => {
     );
     // Let the query start (microtask).
     await Promise.resolve();
-    expect(__getInFlightForTests()).toEqual({ id: 'q-a', type: 'query' });
+    expect(__getRunningForTests()).toEqual({ id: 'q-a', type: 'query' });
 
     const { respond, replies } = captureRespond();
     await handleMessage(
@@ -122,10 +123,10 @@ describe('worker dispatcher — cancel', () => {
   it('cancel with matching targetId calls cancelSent() and replies with the result', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
       __conn: { cancelSent: ReturnType<typeof vi.fn> };
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     duckdbMock.__conn.cancelSent.mockResolvedValueOnce(true);
-    duckdbMock.executeQuery.mockImplementationOnce(() => new Promise(() => undefined));
+    duckdbMock.executeQueryCancellable.mockImplementationOnce(() => new Promise(() => undefined));
 
     const { respond: respond1 } = captureRespond();
     void handleMessage(
@@ -133,7 +134,7 @@ describe('worker dispatcher — cancel', () => {
       respond1,
     );
     await Promise.resolve();
-    expect(__getInFlightForTests()?.id).toBe('q-b');
+    expect(__getRunningForTests()?.id).toBe('q-b');
 
     const { respond, replies } = captureRespond();
     await handleMessage(
@@ -152,10 +153,10 @@ describe('worker dispatcher — cancel', () => {
   it('cancel returns false when cancelSent reports nothing was running', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
       __conn: { cancelSent: ReturnType<typeof vi.fn> };
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     duckdbMock.__conn.cancelSent.mockResolvedValueOnce(false);
-    duckdbMock.executeQuery.mockImplementationOnce(() => new Promise(() => undefined));
+    duckdbMock.executeQueryCancellable.mockImplementationOnce(() => new Promise(() => undefined));
 
     const { respond: r1 } = captureRespond();
     void handleMessage(
@@ -177,9 +178,9 @@ describe('worker dispatcher — cancel', () => {
 
   it('a query rejection with INTERRUPT-shaped message is rewrapped as QUERY_CANCELLED', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
-    duckdbMock.executeQuery.mockImplementationOnce(() =>
+    duckdbMock.executeQueryCancellable.mockImplementationOnce(() =>
       Promise.reject(new Error('Query was cancelled (INTERRUPT)')),
     );
 
@@ -197,12 +198,12 @@ describe('worker dispatcher — cancel', () => {
 
   it('non-cancel query rejections still surface their original code', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     const original = Object.assign(new Error('syntax error at line 1'), {
       code: 'QUERY_RUNTIME',
     });
-    duckdbMock.executeQuery.mockImplementationOnce(() => Promise.reject(original));
+    duckdbMock.executeQueryCancellable.mockImplementationOnce(() => Promise.reject(original));
 
     const { respond, replies } = captureRespond();
     await handleMessage(
@@ -217,23 +218,23 @@ describe('worker dispatcher — cancel', () => {
 
   it('finally clears in-flight after each query, success or failure', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
-    duckdbMock.executeQuery.mockResolvedValueOnce([{ x: 1 }]);
+    duckdbMock.executeQueryCancellable.mockResolvedValueOnce([{ x: 1 }]);
     const { respond } = captureRespond();
     await handleMessage(
       { id: 'q-f1', type: 'query', payload: { sql: 'SELECT 1' } } as WorkerMessage,
       respond,
     );
-    expect(__getInFlightForTests()).toBeNull();
+    expect(__getRunningForTests()).toBeNull();
 
-    duckdbMock.executeQuery.mockRejectedValueOnce(new Error('boom'));
+    duckdbMock.executeQueryCancellable.mockRejectedValueOnce(new Error('boom'));
     const { respond: respond2 } = captureRespond();
     await handleMessage(
       { id: 'q-f2', type: 'query', payload: { sql: 'SELECT 1' } } as WorkerMessage,
       respond2,
     );
-    expect(__getInFlightForTests()).toBeNull();
+    expect(__getRunningForTests()).toBeNull();
   });
 
   it('isCancelRejection matches INTERRUPT, interrupted, and cancelled phrases', () => {
@@ -241,8 +242,36 @@ describe('worker dispatcher — cancel', () => {
     expect(isCancelRejection(new Error('Query was interrupted by user'))).toBe(true);
     expect(isCancelRejection(new Error('Query was cancelled'))).toBe(true);
     expect(isCancelRejection(new Error('Query was canceled'))).toBe(true); // single-l variant
+    // The two real strings the pending-query path produces (duckdb-wasm
+    // 1.33.1-dev57.0): the cancel rejection itself, and the post-cancel
+    // race where the next poll finds the pending query already gone.
+    expect(isCancelRejection(new Error('query was canceled'))).toBe(true);
+    expect(isCancelRejection(new Error('No active pending query'))).toBe(true);
     expect(isCancelRejection(new Error('Syntax error in query'))).toBe(false);
     expect(isCancelRejection('not an error')).toBe(false);
     expect(isCancelRejection(null)).toBe(false);
+  });
+
+  it("the real pending-query rejection 'query was canceled' maps to QUERY_CANCELLED", async () => {
+    const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
+    };
+    duckdbMock.executeQueryCancellable.mockImplementationOnce(() =>
+      Promise.reject(new Error('query was canceled')),
+    );
+
+    const { respond, replies } = captureRespond();
+    await handleMessage(
+      { id: 'q-g', type: 'query', payload: { sql: 'SELECT 1' } } as WorkerMessage,
+      respond,
+    );
+
+    const errorReply = replies.find((r) => r.type === 'error') as
+      (CapturedReply & { payload: { code?: string; message?: string } }) | undefined;
+    expect(errorReply).toBeDefined();
+    expect(errorReply!.payload).toMatchObject({
+      message: 'query was canceled',
+      code: 'QUERY_CANCELLED',
+    });
   });
 });

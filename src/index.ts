@@ -87,7 +87,12 @@ export type { FilterPreset, FilterPresetCollection } from './filters/FilterPrese
 // Exposed for consumers pre-constructing a bridge or passing custom
 // load options (progress callbacks, abort signals, format overrides).
 export { WorkerBridge } from './data/WorkerBridge';
-export type { LoadOptions, LoadDataResult, WorkerBridgeOptions } from './data/WorkerBridge';
+export type {
+  LoadOptions,
+  LoadDataResult,
+  WorkerBridgeOptions,
+  QueryOptions,
+} from './data/WorkerBridge';
 export type { QueryCacheOptions } from './data/QueryCache';
 export type { DataFormat, LoadResult } from './data/DataLoader';
 

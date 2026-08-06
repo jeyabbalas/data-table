@@ -46,6 +46,24 @@ export interface LoadDataResult {
 }
 
 /**
+ * Options for {@link WorkerBridge.query}.
+ */
+export interface QueryOptions {
+  /**
+   * Set `false` to bypass the SQL result cache — both the read (a cached
+   * result is ignored) and the write (the fresh result is not stored).
+   * Default: SELECT queries are cached.
+   */
+  cache?: boolean;
+  /**
+   * Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
+   * stats/histogram queries) in the worker's serial dispatch queue —
+   * intended for viewport row fetches. Default `'normal'`.
+   */
+  priority?: 'high' | 'normal';
+}
+
+/**
  * Construction options for {@link WorkerBridge}.
  */
 export interface WorkerBridgeOptions {
@@ -273,25 +291,53 @@ export class WorkerBridge {
   }
 
   /**
-   * Execute a SQL query
+   * Execute a SQL query.
+   *
+   * SELECT results are served from and stored into the bridge's LRU+TTL
+   * cache unless `options.cache === false`. `options.priority: 'high'`
+   * makes the worker run this query ahead of queued normal-priority work
+   * (viewport row fetches use this so they are not stuck behind
+   * stats/histogram fan-outs).
+   *
+   * @param sql SQL text to execute.
+   * @param signal Optional abort signal; aborting rejects with
+   *   `QUERY_ABORTED` and posts a targeted cancel to the worker.
+   * @param options Cache and priority behavior — see {@link QueryOptions}.
+   *
+   * @example
+   * // Viewport row fetch: skip the cache, jump the queue, abortable.
+   * const rows = await bridge.query(sql, controller.signal, {
+   *   cache: false,
+   *   priority: 'high',
+   * });
    */
-  async query<T = Record<string, unknown>>(sql: string, signal?: AbortSignal): Promise<T[]> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    signal?: AbortSignal,
+    options?: QueryOptions,
+  ): Promise<T[]> {
     this.ensureInitialized();
 
-    // Only cache SELECT queries
-    if (this.isCacheable(sql)) {
+    // Only cache SELECT queries, and only when not explicitly bypassed.
+    const cacheable = options?.cache !== false && this.isCacheable(sql);
+    if (cacheable) {
       const cached = this.queryCache.get<T>(sql);
       if (cached !== undefined) {
         return cached;
       }
     }
 
-    const payload: QueryPayload = { sql };
+    // Conditional spread keeps the wire payload minimal (and satisfies
+    // exactOptionalPropertyTypes — no explicit `priority: undefined`).
+    const payload: QueryPayload = {
+      sql,
+      ...(options?.priority !== undefined ? { priority: options.priority } : {}),
+    };
     const result = await this.sendMessage('query', payload, undefined, signal);
     const rows = (result as { rows: T[] }).rows;
 
     // Store in cache if cacheable and not aborted
-    if (this.isCacheable(sql) && !signal?.aborted) {
+    if (cacheable && !signal?.aborted) {
       this.queryCache.set(sql, rows);
     }
 

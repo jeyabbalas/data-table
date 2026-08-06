@@ -67,6 +67,35 @@ export interface TableBodyOptions {
   annotationPopover?: AnnotationPopover | undefined;
   /** Resolved i18n strings (used for the placeholder-row label). Defaults to English. */
   messages?: Strings | undefined;
+  /**
+   * Rows fetched per block. Default: 128. Clamped to [16, 1024].
+   *
+   * Row fetches are quantized to block-aligned windows so overlapping scroll
+   * positions dedupe onto the same query and an in-flight block is never
+   * re-requested. 128 is roughly 3–4× a realistic viewport (~30–48 rows), so
+   * the viewport spans 1–2 blocks; fetch cost on the OFFSET path is dominated
+   * by the offset rather than the limit, and power-of-two alignment keeps
+   * dedupe keys stable.
+   */
+  fetchBlockSize?: number | undefined;
+  /**
+   * Maximum rows kept in the in-memory row cache. Default: 2048. Rounded up
+   * to whole blocks, with a floor of 4 blocks.
+   *
+   * 2048 rows is 16 default-size blocks (≈2–4 MB at typical row widths) —
+   * enough for instant scroll-back across ±900 rows with zero queries, which
+   * is the reuse role the SQL-keyed QueryCache used to (poorly) play for
+   * scroll traffic.
+   */
+  rowCacheRows?: number | undefined;
+  /**
+   * Speculatively fetch one block beyond the viewport in the current scroll
+   * direction while the pipeline is otherwise idle. Default: true.
+   *
+   * Prefetches run at 'normal' worker priority, so visible-block fetches
+   * (priority 'high') always jump ahead of them in the worker queue.
+   */
+  prefetch?: boolean | undefined;
 }
 
 /**
@@ -91,6 +120,18 @@ function sameColumnSet(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
+ * Whether a rejected row fetch was aborted/cancelled rather than failed.
+ *
+ * Matches the bridge's local abort rejection (`QUERY_ABORTED`) and the
+ * worker's cancellation response (`QUERY_CANCELLED`) by `code` rather than
+ * by class so bridge test doubles behave like the real `QueryError`.
+ */
+function isFetchCancellation(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === 'QUERY_ABORTED' || code === 'QUERY_CANCELLED';
+}
+
+/**
  * TableBody renders data rows using virtual scrolling.
  *
  * @example
@@ -108,23 +149,71 @@ export class TableBody {
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
-  private fetchInProgress = false;
-  private pendingFetch: { start: number; end: number } | null = null;
   private isAnimatingScroll = false;
   private scrollAnimationId: number | null = null;
-  // Monotonic counter used to drop stale row-fetch results: bumped at the
-  // start of every `fetchRows` AND from `invalidateCacheAndRefresh` /
-  // `destroy()`. After awaiting `bridge.query`, a fetch that finds its seq
-  // no longer matches discards its rows instead of polluting `rowDataCache`
-  // with data for a state (filters/sort/visibleColumns/tableName) that has
-  // since changed. Mirrors `CrossfilterCoordinator.filterSequence` and
+
+  // ---- Fetch state machine ----------------------------------------------
+  //
+  //   IDLE         inFlightBlocks empty; every index of currentRange cached
+  //                (or the range is empty)
+  //   FETCHING     ≥1 visible-block fetch in flight
+  //   PREFETCHING  prefetch !== null and no visible-block fetches
+  //   DESTROYED    terminal
+  //
+  // Transitions:
+  //   scroll (any state): assign range → render → reconcile (abort
+  //     out-of-window blocks, top up, maybe prefetch). Never skips a render,
+  //     never waits on an old fetch.
+  //   block completes (epoch matches, not aborted): write cache → evict →
+  //     render if it intersects the viewport → deregister → reconcile.
+  //   block completes stale (epoch mismatch): dropped entirely.
+  //   block aborted: rejection swallowed; deregistered in `finally`; the
+  //     reconciler may legitimately re-issue the same block later as a
+  //     fresh query.
+  //   invalidation mid-fetch: epoch++ → abort all → clear caches → re-read
+  //     the live range → placeholders → reconcile. (The filter-change
+  //     scroll animation is unchanged: cache-only renders during the 300 ms
+  //     animation, invalidation fires at its end.)
+  //   destroy mid-fetch: guards drop late resolutions; aborts are silent.
+  //   worker mirror: abort → the bridge rejects locally + posts `cancel` →
+  //     the dispatcher dequeues (zero DuckDB work) or interrupts the
+  //     running pending query; the eventual QUERY_CANCELLED response finds
+  //     no pending request at the bridge and is dropped — no double-settle.
+  //
+  // Why there is no single-flight gate (the old `fetchInProgress` /
+  // `pendingFetch` pair): it existed to bound DB load and serialize cache
+  // writes. Load is bounded properly by the worker's serial queue plus the
+  // MAX_INFLIGHT_BLOCK_FETCHES cap; write consistency by block-granular
+  // dedupe (an in-flight block is never re-issued) plus the epoch guard.
+  // What the gate additionally did — skip rendering, prevent cancellation,
+  // and replay stale ranges — was exactly the rapid-scroll flicker bug.
+  // ------------------------------------------------------------------------
+
+  // Monotonic state identity used to drop stale block-fetch results: bumped
+  // by `invalidateCacheAndRefresh()` and `destroy()`. After awaiting
+  // `bridge.query`, a fetch that finds its captured epoch no longer matches
+  // discards its rows instead of polluting `rowDataCache` with data for a
+  // state (filters/sort/visibleColumns/tableName) that has since changed.
+  // Mirrors `CrossfilterCoordinator.filterSequence` and
   // `BaseVisualization.fetchSequence`.
-  private fetchSequence = 0;
+  private epoch = 0;
+  // In-flight visible-block fetches keyed by block start index. Capped at
+  // MAX_INFLIGHT_BLOCK_FETCHES; an in-flight block is never re-issued, and
+  // aborting deletes the entry immediately so the reconciler can top up in
+  // the same pass.
+  private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
+  // The single speculative block fetch beyond the viewport, or null.
+  private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  private lastScrollDirection: 1 | -1 = 1;
+  // Runtime safety valve for the __rowid__ range fast path: flipped (once,
+  // with a console.warn) if a fast-path result ever violates the dense-rowid
+  // premise; every subsequent fetch then uses OFFSET pagination. The flag's
+  // false→true transition is also the warn-once gate. See fetchBlock.
+  private rowidFastPathDisabled = false;
 
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
   private rowElementMap = new Map<number, HTMLElement>();
-  private readonly MAX_ROW_CACHE = 500;
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
@@ -138,6 +227,16 @@ export class TableBody {
   private readonly rowHeight: number;
   private readonly classPrefix: string;
   private readonly instanceId: string;
+  // Resolved fetch-pipeline options — see TableBodyOptions for semantics
+  // and sizing rationale. `fetchBlockSize` is clamped to [16, 1024];
+  // `rowCacheRows` is rounded up to whole blocks with a 4-block floor.
+  private readonly fetchBlockSize: number;
+  private readonly rowCacheRows: number;
+  private readonly prefetchEnabled: boolean;
+  // Two in-flight block fetches: the worker executes serially anyway, so 2
+  // overlaps result materialization with execution while keeping abort
+  // turnaround at ≤1 running + 1 queued query.
+  private static readonly MAX_INFLIGHT_BLOCK_FETCHES = 2;
   private readonly onRowsRendered: (() => void) | null;
   private readonly gridElement: HTMLElement | null;
   private readonly cellRenderer: CellRenderer;
@@ -168,6 +267,12 @@ export class TableBody {
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
     this.messages = options.messages ?? defaultStrings;
+    this.fetchBlockSize = Math.min(1024, Math.max(16, Math.floor(options.fetchBlockSize ?? 128)));
+    this.rowCacheRows = Math.max(
+      4 * this.fetchBlockSize,
+      Math.ceil((options.rowCacheRows ?? 2048) / this.fetchBlockSize) * this.fetchBlockSize,
+    );
+    this.prefetchEnabled = options.prefetch ?? true;
     this.cellRenderer = new CellRenderer({ classPrefix: this.classPrefix });
 
     // Create virtual scroller
@@ -212,37 +317,31 @@ export class TableBody {
     this.virtualScroller.setTotalRows(effectiveTotal);
 
     // Subscribe to state changes BEFORE the initial fetch so any state mutation
-    // mid-fetch is tracked (and seq-guarded by `fetchSequence`).
+    // mid-fetch is tracked (and epoch-guarded, see `epoch`).
     this.subscribeToState();
 
-    // Perform initial render if we have data. We do this BEFORE subscribing to
-    // onScroll: the scroller's `onScroll(callback)` auto-fires the callback
-    // synchronously when `totalRows > 0` (see VirtualScroller.onScroll), and
-    // the callback's `void this.handleScroll(...)` is fire-and-forget — so if
-    // we subscribed first, the auto-fire would start the real fetch while
-    // this awaited handleScroll became a no-op (sees `fetchInProgress=true`,
-    // queues `pendingFetch`, returns), and `initialize()` would resolve
-    // before the first SELECT lands. Awaiting the manual call first means
-    // the cache is populated by the time onScroll subscribes; the auto-fire
-    // then becomes a `renderVisibleRows()` no-op against the warm cache.
+    // Perform the initial paint + fetch if we have data. We do this BEFORE
+    // subscribing to onScroll: the scroller's `onScroll(callback)` auto-fires
+    // the callback synchronously when `totalRows > 0` (see
+    // VirtualScroller.onScroll). Rendering and awaiting `ensureFetched()`
+    // first means the visible blocks are cached (fetched and painted) by the
+    // time the subscription's auto-fire runs — the auto-fire is then one
+    // cheap cache-backed render plus a no-op reconcile. This is also what
+    // keeps `initialize()`'s contract of resolving only after the first data
+    // paint (`fetchBlock` renders before its promise settles), which
+    // `TableContainer.whenBodyReady()` and the DataTable first-paint await
+    // both rely on.
     if (effectiveTotal > 0) {
-      const range = this.virtualScroller.getVisibleRange();
-      await this.handleScroll(range);
+      this.currentRange = this.virtualScroller.getVisibleRange();
+      this.renderVisibleRows();
+      await this.ensureFetched();
     }
 
     // Subscribe to scroll events. Safe to do after the initial fetch — the
-    // auto-fire is a cache-warm no-op; subsequent user-driven scrolls go
-    // through handleScroll normally.
-    const unsubScroll = this.virtualScroller.onScroll((range) => {
-      if (this.isAnimatingScroll) {
-        // During scroll animation: update range and re-render with cached data
-        // but don't trigger data fetches for intermediate positions
-        this.currentRange = range;
-        this.renderVisibleRows();
-        return;
-      }
-      void this.handleScroll(range);
-    });
+    // auto-fire is a warm no-op; subsequent user-driven scrolls go through
+    // handleScroll normally (which itself renders cache-only during the
+    // filter-change scroll animation).
+    const unsubScroll = this.virtualScroller.onScroll((range) => this.handleScroll(range));
     this.unsubscribes.push(unsubScroll);
   }
 
@@ -486,12 +585,16 @@ export class TableBody {
    * Invalidate cache and refresh visible rows
    */
   private invalidateCacheAndRefresh(): void {
-    // Bump so any in-flight `fetchRows` result is dropped instead of
-    // being written into the just-cleared cache. Without this, an
-    // unfiltered fetch started during `initialize()` could cache its
-    // rows after a filter mutation and the next `checkNeedsFetch` would
-    // see a "full" cache and skip the re-fetch.
-    this.fetchSequence++;
+    // Bump so any in-flight block result is dropped instead of being
+    // written into the just-cleared cache. Without this, an unfiltered
+    // fetch started during `initialize()` could cache its rows after a
+    // filter mutation and the next reconcile would see a "full" cache and
+    // skip the re-fetch.
+    this.epoch++;
+
+    // Stop wasting worker time on superseded queries. The epoch guard
+    // above stays belt-and-braces for anything already past its await.
+    this.abortAllBlockFetches();
 
     // Clear data cache
     this.rowDataCache.clear();
@@ -504,9 +607,25 @@ export class TableBody {
     }
     this.rowElementMap.clear();
 
-    // Re-fetch and render
-    const range = this.virtualScroller.getVisibleRange();
-    void this.handleScroll(range);
+    // Re-read the live range — the scroller does not re-notify on
+    // offset-only changes, so a stored range could be stale here — then
+    // paint immediately (placeholders, not a stale or blank viewport,
+    // while the re-fetch runs) and reconcile.
+    this.currentRange = this.virtualScroller.getVisibleRange();
+    this.renderVisibleRows();
+    void this.ensureFetched();
+  }
+
+  /** Abort every in-flight block fetch and the prefetch, clearing both. */
+  private abortAllBlockFetches(): void {
+    for (const [, entry] of this.inFlightBlocks) {
+      entry.controller.abort();
+    }
+    this.inFlightBlocks.clear();
+    if (this.prefetch) {
+      this.prefetch.controller.abort();
+      this.prefetch = null;
+    }
   }
 
   // =========================================
@@ -514,68 +633,29 @@ export class TableBody {
   // =========================================
 
   /**
-   * Handle scroll event from VirtualScroller
+   * Handle a range change from the VirtualScroller.
+   *
+   * Synchronous by design: every range change paints immediately — missing
+   * rows as placeholders — so the viewport position and the row content
+   * rendered at it can never disagree. Fetching is reconciliation that
+   * happens after the paint, never a precondition for it.
+   *
+   * `currentRange` is only ever assigned a scroller-originated range (this
+   * callback or a `virtualScroller.getVisibleRange()` re-read); no
+   * synthesized ranges exist anywhere in TableBody.
    */
-  private async handleScroll(range: VisibleRange): Promise<void> {
+  private handleScroll(range: VisibleRange): void {
     if (this.destroyed) return;
 
+    this.lastScrollDirection = range.start >= this.currentRange.start ? 1 : -1;
     this.currentRange = range;
+    this.renderVisibleRows();
 
-    // Check if we need to fetch data
-    const needsFetch = this.checkNeedsFetch(range.start, range.end);
-
-    if (needsFetch) {
-      if (this.fetchInProgress) {
-        // Queue this fetch for later
-        this.pendingFetch = { start: range.start, end: range.end };
-      } else {
-        await this.fetchAndRender(range.start, range.end);
-      }
-    } else {
-      // Data already cached, just render
-      this.renderVisibleRows();
-    }
-  }
-
-  /**
-   * Check if we need to fetch data for the given range
-   */
-  private checkNeedsFetch(start: number, end: number): boolean {
-    for (let i = start; i < end; i++) {
-      if (!this.rowDataCache.has(i)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Fetch data and render visible rows
-   */
-  private async fetchAndRender(start: number, end: number): Promise<void> {
-    this.fetchInProgress = true;
-
-    try {
-      const cached = await this.fetchRows(start, end);
-      // Skip the immediate render when the fetch was superseded — the
-      // cache is empty and the trailing `pendingFetch` (queued by whatever
-      // bumped fetchSequence, e.g. `invalidateCacheAndRefresh`) will run
-      // a fresh fetch + render in the `finally` below. Rendering here
-      // would paint placeholders for a viewport that's about to be filled.
-      if (cached) this.renderVisibleRows();
-    } finally {
-      this.fetchInProgress = false;
-
-      // Process pending fetch if any
-      if (this.pendingFetch) {
-        const pending = this.pendingFetch;
-        this.pendingFetch = null;
-        await this.handleScroll({
-          start: pending.start,
-          end: pending.end,
-          offsetY: pending.start * this.rowHeight,
-        });
-      }
+    // During the filter-change scroll animation, render from cache only —
+    // no fetches for intermediate positions. Invalidation fires at the
+    // animation's end and reconciles from row 0.
+    if (!this.isAnimatingScroll) {
+      void this.ensureFetched();
     }
   }
 
@@ -583,79 +663,300 @@ export class TableBody {
   // Data Fetching
   // =========================================
 
+  /** First index of the fetch block containing row `index`. */
+  private blockStartOf(index: number): number {
+    return Math.floor(index / this.fetchBlockSize) * this.fetchBlockSize;
+  }
+
   /**
-   * Fetch rows from DuckDB for the given range.
-   *
-   * Returns `true` when fresh rows landed in `rowDataCache`, `false` when
-   * the call was a no-op (no table / no visible columns) OR was superseded
-   * mid-flight by a `fetchSequence` bump (see `invalidateCacheAndRefresh`).
-   * Callers gate their post-fetch render on this so a stale fetch does not
-   * paint placeholders into a viewport that's about to be filled by the
-   * pending re-fetch.
+   * Starts of the blocks intersecting `range` in which at least one row
+   * index is missing from `rowDataCache`, ordered viewport-top-first.
    */
-  private async fetchRows(start: number, end: number): Promise<boolean> {
-    const seq = ++this.fetchSequence;
+  private missingBlocks(range: VisibleRange): number[] {
+    const blocks: number[] = [];
+    for (let i = Math.max(0, range.start); i < range.end; i++) {
+      if (!this.rowDataCache.has(i)) {
+        const blockStart = this.blockStartOf(i);
+        blocks.push(blockStart);
+        // One miss marks the whole block — skip to the next one.
+        i = blockStart + this.fetchBlockSize - 1;
+      }
+    }
+    return blocks;
+  }
 
-    const tableName = this.state.tableName.get();
-    if (!tableName) return false;
+  /**
+   * The reconciler: compare `currentRange` against the cache and the
+   * in-flight set, abort superseded work, and start whatever is missing —
+   * visible blocks first, then at most one speculative prefetch when the
+   * pipeline is fully idle.
+   *
+   * Returns a promise over the fetches STARTED IN THIS CALL (allSettled;
+   * rejections are already handled inside `fetchBlock`). `initialize()`
+   * awaits it to keep its resolves-after-first-paint contract; scroll
+   * callers void-cast it.
+   */
+  private async ensureFetched(): Promise<void> {
+    if (this.destroyed) return;
+    if (!this.state.tableName.get()) return;
+    if (this.state.visibleColumns.get().length === 0) return;
 
-    const visibleColumns = this.state.visibleColumns.get();
-    const sortColumns = this.state.sortColumns.get();
-    const filters = this.state.filters.get();
-    const schema = this.state.schema.get();
+    const needed = this.missingBlocks(this.currentRange);
 
-    if (visibleColumns.length === 0) return false;
+    // Abort in-flight blocks that no longer intersect the current range
+    // padded by one block on each side. Deleting the entry here (not in the
+    // fetch's own `finally`) frees the slot for the same-pass top-up below.
+    const padStart = this.currentRange.start - this.fetchBlockSize;
+    const padEnd = this.currentRange.end + this.fetchBlockSize;
+    for (const [blockStart, entry] of this.inFlightBlocks) {
+      const blockEnd = blockStart + this.fetchBlockSize;
+      if (blockEnd <= padStart || blockStart >= padEnd) {
+        entry.controller.abort();
+        this.inFlightBlocks.delete(blockStart);
+      }
+    }
 
-    // Build SQL query
-    const sql = this.buildRowQuery(
-      tableName,
-      visibleColumns,
-      sortColumns,
-      filters,
-      start,
-      end - start,
-      schema,
-    );
+    // Abort the prefetch when its block became a visible need (the top-up
+    // below re-issues it at high priority) or when it now points the wrong
+    // way. Nulled synchronously so the prefetch check further down sees a
+    // deterministic state in this same pass.
+    if (this.prefetch) {
+      const prefetchNowNeeded = needed.includes(this.prefetch.blockStart);
+      const wrongDirection =
+        this.lastScrollDirection === 1
+          ? this.prefetch.blockStart < this.blockStartOf(Math.max(0, this.currentRange.start))
+          : this.prefetch.blockStart > this.blockStartOf(Math.max(0, this.currentRange.end - 1));
+      if (prefetchNowNeeded || wrongDirection) {
+        this.prefetch.controller.abort();
+        this.prefetch = null;
+      }
+    }
 
-    try {
-      const rows = await this.bridge.query<RowData>(sql);
+    // Top up visible-block fetches. An in-flight block is never re-issued.
+    const started: Promise<void>[] = [];
+    for (const blockStart of needed) {
+      if (this.inFlightBlocks.size >= TableBody.MAX_INFLIGHT_BLOCK_FETCHES) break;
+      if (this.inFlightBlocks.has(blockStart)) continue;
+      const controller = new AbortController();
+      this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch });
+      started.push(this.fetchBlock(blockStart, this.epoch, controller, false));
+    }
 
-      // Drop stale results: a newer fetch (or `invalidateCacheAndRefresh`)
-      // bumped fetchSequence while we were awaiting the worker, so caching
-      // these rows would pollute the cache with stale-state data and the
-      // next `checkNeedsFetch` would short-circuit without re-fetching.
-      if (seq !== this.fetchSequence || this.destroyed) return false;
+    // Prefetch: one block beyond the viewport in the last scroll direction,
+    // only when nothing visible is missing or in flight.
+    if (
+      this.prefetchEnabled &&
+      needed.length === 0 &&
+      this.inFlightBlocks.size === 0 &&
+      this.prefetch === null &&
+      this.currentRange.end > this.currentRange.start
+    ) {
+      const candidate =
+        this.lastScrollDirection === 1
+          ? this.blockStartOf(this.currentRange.end - 1) + this.fetchBlockSize
+          : this.blockStartOf(this.currentRange.start) - this.fetchBlockSize;
+      if (
+        candidate >= 0 &&
+        candidate < this.virtualScroller.getTotalRows() &&
+        !this.rowDataCache.has(candidate)
+      ) {
+        const controller = new AbortController();
+        this.prefetch = { blockStart: candidate, controller };
+        started.push(this.fetchBlock(candidate, this.epoch, controller, true));
+      }
+    }
 
-      // Cache the fetched rows
-      rows.forEach((row, index) => {
-        this.rowDataCache.set(start + index, row);
-      });
-
-      // Evict distant rows to bound memory usage
-      this.evictDistantRows(start, end);
-      return true;
-    } catch (error) {
-      console.error('Error fetching rows:', error);
-      return false;
+    if (started.length > 0) {
+      await Promise.allSettled(started);
     }
   }
 
   /**
-   * Evict cached rows furthest from the visible range to bound memory.
+   * Whether the unsorted/unfiltered `__rowid__` range fast path applies.
+   * The single decision point shared by `buildRowQuery` (SQL shape) and
+   * `fetchBlock` (cache keying + density valve) so the two can never
+   * disagree about which shape a query used.
    */
-  private evictDistantRows(visibleStart: number, visibleEnd: number): void {
-    if (this.rowDataCache.size <= this.MAX_ROW_CACHE) return;
+  private useRowidFastPath(sortColumns: SortColumn[], filters: Filter[]): boolean {
+    return filters.length === 0 && sortColumns.length === 0 && !this.rowidFastPathDisabled;
+  }
 
-    const indices = [...this.rowDataCache.keys()];
-    indices.sort((a, b) => {
-      const distA = Math.min(Math.abs(a - visibleStart), Math.abs(a - visibleEnd));
-      const distB = Math.min(Math.abs(b - visibleStart), Math.abs(b - visibleEnd));
-      return distB - distA; // Most distant first
-    });
+  /**
+   * Fetch one aligned block and write it into `rowDataCache`.
+   *
+   * Cache keying: the fast path keys by each row's own `__rowid__` (which
+   * the density valve has just proven equals the positional index); the
+   * OFFSET path keys by `blockStart + i` — valid because `buildRowQuery`
+   * always emits a fully deterministic ORDER BY (see the tiebreaker note
+   * there), so the block window is stable across queries.
+   */
+  private async fetchBlock(
+    blockStart: number,
+    epochAtStart: number,
+    controller: AbortController,
+    isPrefetch: boolean,
+  ): Promise<void> {
+    try {
+      const tableName = this.state.tableName.get();
+      if (!tableName) return;
+      const visibleColumns = this.state.visibleColumns.get();
+      if (visibleColumns.length === 0) return;
 
-    const toRemove = indices.slice(0, this.rowDataCache.size - this.MAX_ROW_CACHE);
-    for (const idx of toRemove) {
-      this.rowDataCache.delete(idx);
+      const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
+      if (limit <= 0) return;
+
+      const sortColumns = this.state.sortColumns.get();
+      const filters = this.state.filters.get();
+      const usedFastPath = this.useRowidFastPath(sortColumns, filters);
+      const sql = this.buildRowQuery(
+        tableName,
+        visibleColumns,
+        sortColumns,
+        filters,
+        blockStart,
+        limit,
+        this.state.schema.get(),
+      );
+
+      // Scroll SQL bypasses the SQL-keyed QueryCache: `rowDataCache` is the
+      // authoritative row store, invalidated in lockstep with `epoch` — a
+      // second SQL-keyed copy with its own TTL/LRU would be a second
+      // staleness domain, and every distinct scroll window would thrash the
+      // 100-entry LRU that also holds header-stats/histogram results.
+      const rows = await this.bridge.query<RowData>(sql, controller.signal, {
+        cache: false,
+        priority: isPrefetch ? 'normal' : 'high',
+      });
+
+      // Drop stale results — the epoch mirrors the old sequence guard. The
+      // aborted check covers test doubles that resolve after an abort; the
+      // real bridge rejects instead.
+      if (this.destroyed || epochAtStart !== this.epoch || controller.signal.aborted) {
+        return;
+      }
+
+      if (usedFastPath) {
+        // Density valve: the fast path is only correct while __rowid__ is
+        // dense 0..N-1. A short window or an out-of-range rowid means the
+        // premise broke somewhere — disable the fast path permanently for
+        // this instance (the false→true flip below is also the warn-once
+        // gate) and re-issue THIS block via OFFSET on the same controller.
+        // Bounded recursion: with the flag set, the retry cannot re-enter
+        // this branch. Nothing is cached from the violating result.
+        let dense = rows.length === limit;
+        if (dense) {
+          for (const row of rows) {
+            const rowid = Number(row[ROWID_COLUMN]);
+            if (!Number.isInteger(rowid) || rowid < blockStart || rowid >= blockStart + limit) {
+              dense = false;
+              break;
+            }
+          }
+        }
+        if (!dense) {
+          this.rowidFastPathDisabled = true;
+          console.warn(
+            'TableBody: __rowid__ range fast path returned an inconsistent window ' +
+              `(block ${blockStart}, expected ${limit} rows, got ${rows.length}); ` +
+              'falling back to OFFSET pagination.',
+          );
+          // `await` is load-bearing: a bare `return promise` would run this
+          // call's `finally` (deregister + reconcile) while the retry is
+          // still in flight, and the reconciler would double-issue the
+          // block. With `await`, the retry's own finally deregisters first
+          // and this one's identity guard turns into a no-op.
+          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch);
+        }
+        for (const row of rows) {
+          this.rowDataCache.set(Number(row[ROWID_COLUMN]), row);
+        }
+      } else {
+        rows.forEach((row, i) => {
+          this.rowDataCache.set(blockStart + i, row);
+        });
+      }
+
+      this.evictDistantBlocks(blockStart);
+
+      // Promote placeholders in place when the block is (still) visible.
+      if (blockStart < this.currentRange.end && blockStart + limit > this.currentRange.start) {
+        this.renderVisibleRows();
+      }
+    } catch (error) {
+      // Aborted / cancelled fetches are the expected outcome of scrolling
+      // past a window or invalidating state — silent. Anything else keeps
+      // today's behavior.
+      if (!isFetchCancellation(error)) {
+        console.error('Error fetching rows:', error);
+      }
+    } finally {
+      // Deregister, guarded on controller identity: a block re-issued after
+      // an abort must not delete its successor's entry.
+      if (isPrefetch) {
+        if (this.prefetch?.controller === controller) {
+          this.prefetch = null;
+        }
+      } else if (this.inFlightBlocks.get(blockStart)?.controller === controller) {
+        this.inFlightBlocks.delete(blockStart);
+      }
+      // Reconcile against the LIVE viewport — the replacement for the old
+      // stored-pendingFetch replay, which could resurrect a stale range.
+      if (!this.destroyed) {
+        void this.ensureFetched();
+      }
+    }
+  }
+
+  /**
+   * Evict whole cached blocks furthest from the live viewport until the
+   * cache is back under `rowCacheRows`.
+   *
+   * Distance is measured from `this.currentRange` — never from a fetch's
+   * own bounds, which is how the old per-row eviction managed to evict
+   * currently-visible rows during races. Whole-block granularity keeps
+   * surviving blocks fully populated, so `missingBlocks` never sees a
+   * half-evicted block that would re-trigger fetch churn.
+   *
+   * Two kinds of block are exempt (a deliberate deviation from the phase
+   * spec, which used the distance metric alone): blocks intersecting
+   * `currentRange`, and the just-written block. Without the latter, a
+   * prefetched block landing into an at-cap cache is itself the most
+   * distant block — evicting it re-triggers the same prefetch from the
+   * `finally` reconcile, forever. The cost is a transient overage of at
+   * most the visible blocks plus one, well inside the 4-block sizing floor.
+   */
+  private evictDistantBlocks(justWrittenBlockStart: number): void {
+    if (this.rowDataCache.size <= this.rowCacheRows) return;
+
+    // Group cached indices by block.
+    const blockRowCounts = new Map<number, number>();
+    for (const index of this.rowDataCache.keys()) {
+      const blockStart = this.blockStartOf(index);
+      blockRowCounts.set(blockStart, (blockRowCounts.get(blockStart) ?? 0) + 1);
+    }
+
+    const candidates: number[] = [];
+    for (const blockStart of blockRowCounts.keys()) {
+      const blockEnd = blockStart + this.fetchBlockSize;
+      const visible = blockEnd > this.currentRange.start && blockStart < this.currentRange.end;
+      if (visible || blockStart === justWrittenBlockStart) continue;
+      candidates.push(blockStart);
+    }
+    const distanceOf = (blockStart: number): number =>
+      Math.min(
+        Math.abs(blockStart - this.currentRange.start),
+        Math.abs(blockStart + this.fetchBlockSize - this.currentRange.end),
+      );
+    candidates.sort((a, b) => distanceOf(b) - distanceOf(a));
+
+    let total = this.rowDataCache.size;
+    for (const blockStart of candidates) {
+      if (total <= this.rowCacheRows) break;
+      const blockEnd = blockStart + this.fetchBlockSize;
+      for (let i = blockStart; i < blockEnd; i++) {
+        this.rowDataCache.delete(i);
+      }
+      total -= blockRowCounts.get(blockStart) ?? 0;
     }
   }
 
@@ -701,6 +1002,34 @@ export class TableBody {
 
     let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
 
+    // FAST PATH — no filters, no user sort: fetch the window by a range
+    // predicate on the dense synthetic __rowid__ instead of LIMIT/OFFSET.
+    //
+    // Premise (verified at the call sites cited): every loader materializes
+    // __rowid__ densely as `row_number() OVER () - 1` (0..N-1 — parquet.ts,
+    // csv.ts, json.ts), and the derived-column VIEW preserves exactly the
+    // base rows (`base t LEFT JOIN helper h ON t.__rowid__ = h.__rowid__`,
+    // DerivedColumnManager). With no WHERE and no user sort, positional
+    // index ≡ __rowid__, so the range predicate returns exactly the OFFSET
+    // window — but as a zonemap-prunable scan (~ms at any scroll depth)
+    // instead of a top-(offset+limit) sort that grows with depth. The code
+    // that could break the premise is the table-rebuild path in
+    // worker/loaders/common.ts; fetchBlock's density valve turns any
+    // violation into slow-but-correct OFFSET pagination, never wrong rows.
+    //
+    // Sorted/filtered fetches keep LIMIT/OFFSET below — there is no closed
+    // form for "position k" under an arbitrary ORDER BY/WHERE. They still
+    // gain block dedupe, cancellation, priority, and the larger row cache.
+    // Keyset pagination for sorted mode is deliberate future work.
+    if (this.useRowidFastPath(sortColumns, filters)) {
+      sql += ` WHERE ${quoteIdentifier(ROWID_COLUMN)} >= ${offset}`;
+      sql += ` AND ${quoteIdentifier(ROWID_COLUMN)} < ${offset + limit}`;
+      // Scan order is not guaranteed, even for a single index range.
+      sql += ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)} ASC`;
+      sql += ` LIMIT ${limit}`; // defensive cap only
+      return sql;
+    }
+
     // Add WHERE clause if filters are active
     if (filters.length > 0) {
       const whereClause = filtersToWhereClause(filters);
@@ -711,12 +1040,13 @@ export class TableBody {
 
     // Always emit ORDER BY with __rowid__ as the final tiebreaker. DuckDB's
     // ORDER BY is non-deterministic for ties, so without a tiebreaker two
-    // paginated queries with overlapping LIMIT/OFFSET ranges (which the
-    // scroll path issues whenever the visible window shifts by even one
-    // row, see `checkNeedsFetch` + `fetchRows`) can return *different*
-    // rows for the same logical positions. The cache write at
-    // `rowDataCache.set(start + index, row)` then overwrites with shuffled
-    // data and the user sees row contents change while scrolling. The
+    // paginated queries over different LIMIT/OFFSET windows (which the
+    // scroll path issues per aligned block as the viewport moves, see
+    // `ensureFetched` + `fetchBlock`) can permute ties differently and
+    // return *different* rows for the same logical positions — duplicating
+    // some rows across blocks and dropping others. The cache write at
+    // `rowDataCache.set(blockStart + i, row)` then holds shuffled data and
+    // the user sees row contents change while scrolling. The
     // empty-sort branch also emits `ORDER BY __rowid__` so filter+scroll
     // (no user sort) is deterministic against any DuckDB parallel-scan
     // permutation. Skipped if the user already sorts on __rowid__ (they
@@ -827,14 +1157,17 @@ export class TableBody {
         this.insertRowInOrder(viewport, rowEl, i);
       } else if (rowData) {
         // The map can hold either a data row (visibleColumns.length cells,
-        // listeners attached) or a placeholder (1 cell, no listeners).
-        // updateRowContent's loop is bounded by min(columns, cells), so
-        // calling it on a placeholder leaves columns 1..N-1 unrendered AND
-        // the row inert — the partial-render bug. Cell-count mismatch is
-        // the durable signal (the dt-row--loading class is stripped by
-        // updateRowContent on first call); replace from the pool when it
-        // doesn't match.
-        if (rowEl.children.length !== visibleColumns.length) {
+        // listeners attached) or a placeholder (1 cell, no listeners,
+        // `data-placeholder` marker). updateRowContent's loop is bounded by
+        // min(columns, cells), so calling it on a placeholder would leave
+        // columns 1..N-1 unrendered AND the row inert — the partial-render
+        // bug. The marker is the durable signal — unlike the historical
+        // cell-count comparison it stays unambiguous for single-column
+        // tables, which are now replaced from the pool like everything else
+        // instead of being promoted in place. The count check remains as a
+        // second trigger so a data row with a stale cell shape is also
+        // rebuilt rather than partially updated.
+        if (this.isPlaceholderRow(rowEl) || rowEl.children.length !== visibleColumns.length) {
           // Bypasses `returnRowToPool` entirely, so the focus rescue has to be
           // spelled out here as well.
           this.moveFocusToGridBeforeRemoval(rowEl);
@@ -848,6 +1181,18 @@ export class TableBody {
           // Row exists, update content if needed (e.g., after sort)
           this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
         }
+      } else if (!this.isPlaceholderRow(rowEl)) {
+        // Data row whose cache entry is gone (evicted or invalidated while
+        // the element stayed mapped): without this branch the stale painted
+        // content would persist at this position indefinitely — render
+        // would simply skip it. Recycle the element and show a placeholder
+        // until the block fetch brings the row back.
+        this.moveFocusToGridBeforeRemoval(rowEl);
+        rowEl.remove();
+        this.returnRowToPool(rowEl);
+        rowEl = this.createPlaceholderRow(i);
+        this.rowElementMap.set(i, rowEl);
+        this.insertRowInOrder(viewport, rowEl, i);
       }
 
       // Apply selection/hover styles
@@ -1004,18 +1349,27 @@ export class TableBody {
   }
 
   /**
+   * Durable placeholder discriminator: the `data-placeholder` attribute is
+   * set by `createPlaceholderRow` and removed by `updateRowContent`. Unlike
+   * the historical cell-count comparison, it stays unambiguous for
+   * single-column tables (1 placeholder cell vs 1 data cell).
+   */
+  private isPlaceholderRow(rowEl: HTMLElement): boolean {
+    return rowEl.hasAttribute('data-placeholder');
+  }
+
+  /**
    * Return a row element to the pool for reuse
    */
   private returnRowToPool(rowEl: HTMLElement): void {
-    // Skip placeholder-shaped rows (1 cell carrying dt-cell--placeholder).
-    // Pooling them lets `getOrCreateRow` later append blank cells alongside
-    // the placeholder cell — the appended cells are fine, but the original
-    // placeholder cell keeps its dt-cell--placeholder class and would render
-    // its column's data in tertiary text colour. GC overhead is trivial:
-    // placeholders are cheap to recreate when the data hasn't arrived yet.
-    const placeholderClass = `${this.classPrefix}-cell--placeholder`;
-    const firstChild = rowEl.firstElementChild as HTMLElement | null;
-    if (firstChild?.classList.contains(placeholderClass)) {
+    // Skip placeholder rows (marked `data-placeholder`, one cell carrying
+    // dt-cell--placeholder). Pooling them lets `getOrCreateRow` later append
+    // blank cells alongside the placeholder cell — the appended cells are
+    // fine, but the original placeholder cell keeps its dt-cell--placeholder
+    // class and would render its column's data in tertiary text colour. GC
+    // overhead is trivial: placeholders are cheap to recreate when the data
+    // hasn't arrived yet.
+    if (this.isPlaceholderRow(rowEl)) {
       return;
     }
 
@@ -1064,10 +1418,12 @@ export class TableBody {
     // row 0 is aria-rowindex 2. `aria-rowcount` carries the matching +1.
     rowEl.setAttribute('aria-rowindex', String(index + 2));
     rowEl.classList.remove(`${this.classPrefix}-row--loading`);
-    // A single-column grid promotes a placeholder in place (cell counts match,
-    // so `renderVisibleRows` reuses the element); clear the loading marker here
-    // or that row would stay `aria-busy` forever.
+    // Placeholders are replaced from the pool rather than updated in place
+    // (see the `isPlaceholderRow` guard in `renderVisibleRows`), but strip
+    // the loading/busy/placeholder markers defensively anyway: whatever the
+    // element's history, from here on it IS a data row.
     rowEl.removeAttribute('aria-busy');
+    rowEl.removeAttribute('data-placeholder');
 
     // Resolve rowId from the __rowid__ column (injected into every row
     // SELECT in buildRowQuery). DuckDB returns BIGINT as bigint or number
@@ -1360,11 +1716,13 @@ export class TableBody {
     rowEl.setAttribute('role', 'row');
     // One cell against a grid advertising N columns is an incomplete row;
     // `aria-busy` is what tells AT to expect that and hold off announcing it
-    // until the data lands. Padding the row out to N cells instead is not an
-    // option: `renderVisibleRows` distinguishes a placeholder from a data row
-    // purely by cell count, and matching counts would resurrect the
-    // partial-render bug (see the `else if (rowData)` branch there).
+    // until the data lands. `data-placeholder` is the render pipeline's own
+    // durable discriminator (`isPlaceholderRow`): renderVisibleRows replaces
+    // marked rows from the pool instead of updating them in place, and
+    // returnRowToPool refuses to pool them. `updateRowContent` strips both
+    // attributes the moment real data lands in the element.
     rowEl.setAttribute('aria-busy', 'true');
+    rowEl.setAttribute('data-placeholder', '1');
     rowEl.style.height = `${this.rowHeight}px`;
     rowEl.setAttribute('data-row-index', String(index));
     rowEl.setAttribute('aria-rowindex', String(index + 2));
@@ -1724,16 +2082,43 @@ export class TableBody {
   }
 
   /**
+   * Test-only DOM invariant check: every viewport child's `data-row-index`
+   * is strictly ascending and the set exactly covers
+   * `[currentRange.start, currentRange.end)`. The viewport contains only
+   * row elements (the width spacer is a sibling, see VirtualScroller), so
+   * children can be checked directly. No production-path cost.
+   *
+   * @internal
+   */
+  __verifyDomOrderForTests(): boolean {
+    const children = Array.from(this.virtualScroller.getViewportContainer().children);
+    const expectedCount = Math.max(0, this.currentRange.end - this.currentRange.start);
+    if (children.length !== expectedCount) return false;
+    for (let i = 0; i < children.length; i++) {
+      const indexAttr = children[i]!.getAttribute('data-row-index');
+      if (indexAttr === null || Number(indexAttr) !== this.currentRange.start + i) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Destroy the table body and clean up resources
    */
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    // Belt-and-braces: `fetchRows` already bails on `this.destroyed`, but
-    // bumping fetchSequence keeps this consistent with the seq-guarded
-    // pattern used by `CrossfilterCoordinator` / `BaseVisualization` and
-    // covers any future post-await write paths added inside `fetchRows`.
-    this.fetchSequence++;
+
+    // Abort in-flight block fetches first so the worker stops paying for
+    // superseded queries; their rejections are swallowed inside
+    // `fetchBlock`'s catch (QUERY_ABORTED is silent by design).
+    this.abortAllBlockFetches();
+    // Belt-and-braces: `fetchBlock` already bails on `this.destroyed`, but
+    // bumping the epoch keeps this consistent with the guard pattern used
+    // by `CrossfilterCoordinator` / `BaseVisualization` and covers any
+    // future post-await write paths added inside `fetchBlock`.
+    this.epoch++;
 
     // Cancel any ongoing scroll animation
     if (this.scrollAnimationId !== null) {

@@ -31,7 +31,7 @@ Svelte 5 (with runes) work the same way — the library is framework-agnostic.
 
 The height on the host is a requirement, not styling. The table virtualizes
 against the container's measured height and renders only the rows that fit;
-an unbounded container silently renders every row in the dataset. See
+an unbounded container silently defeats virtualization. See
 [Sizing the container](../../README.md#sizing-the-container).
 
 ## Svelte 5 with runes

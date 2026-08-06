@@ -34,6 +34,8 @@ export interface InitPayload {
 
 export interface QueryPayload {
   sql: string;
+  /** Worker queue priority. 'high' = viewport row fetches jump stats/histogram work. */
+  priority?: 'high' | 'normal';
 }
 
 export interface LoadPayload {

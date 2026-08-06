@@ -260,6 +260,40 @@ export interface CreateDataTableOptions {
    * plots have nowhere to draw.
    */
   headerHeight?: number;
+  /**
+   * Rows fetched per scroll block. Default: 128. Clamped to [16, 1024].
+   *
+   * Row fetches are quantized to block-aligned windows, so overlapping
+   * scroll positions dedupe onto the same query and a block already in
+   * flight is never re-requested. The default is roughly 3–4× a realistic
+   * viewport (~30–48 rows): the viewport spans 1–2 blocks, fetch cost is
+   * dominated by scroll depth rather than block length, and power-of-two
+   * alignment keeps the dedupe keys stable. Raise it for very tall
+   * viewports; lower it only if your rows are extremely wide and you want
+   * smaller transfers.
+   */
+  fetchBlockSize?: number;
+  /**
+   * Maximum rows held in the in-memory row cache. Default: 2048 (rounded
+   * up to whole blocks, floor 4 blocks).
+   *
+   * At the default block size that is 16 blocks — a few MB at typical row
+   * widths — enough that scrolling back across ±900 rows repaints
+   * instantly with zero queries. Raise it to make longer back-scrolls
+   * query-free at the cost of memory; it never affects correctness, only
+   * how often previously seen blocks are re-fetched.
+   */
+  rowCacheRows?: number;
+  /**
+   * Speculatively fetch one block beyond the viewport in the current
+   * scroll direction while the fetch pipeline is idle. Default: `true`.
+   *
+   * The prefetch runs at normal worker priority, so visible-row fetches
+   * always jump ahead of it; a direction change abandons it. Disable it
+   * to keep query volume to the strict minimum (e.g. when the table
+   * shares its DuckDB worker with heavier analytical queries).
+   */
+  prefetch?: boolean;
 
   /**
    * Initial light/dark theme selector. Defaults to `'auto'` (follows
@@ -540,6 +574,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const tableContainer = new TableContainer(opts.container, state, actions, bridge, {
     rowHeight: opts.rowHeight,
     headerHeight: opts.headerHeight,
+    fetchBlockSize: opts.fetchBlockSize,
+    rowCacheRows: opts.rowCacheRows,
+    prefetch: opts.prefetch,
     classPrefix: opts.classPrefix ?? 'dt',
     instanceId: opts.instanceId,
     showExpressionFilter: opts.expressionFilter !== false,

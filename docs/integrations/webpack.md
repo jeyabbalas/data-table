@@ -60,7 +60,7 @@ extracts into a separate file.
 
 `#my-table` is your markup, not the library's, and it needs a bounded
 height: the table virtualizes against the container's measured height, and
-an unbounded one silently renders every row. See
+an unbounded one silently defeats virtualization. See
 [Sizing the container](../../README.md#sizing-the-container).
 
 ## Self-hosted WASM

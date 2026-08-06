@@ -153,7 +153,11 @@ describe('createDataTable awaits first body paint', () => {
     expect(state).toBe('pending');
     expect(bridge.query).toHaveBeenCalled();
 
-    queryDfd.resolve([{ a: 'sentinel-1' }, { a: 'sentinel-2' }, { a: 'sentinel-3' }]);
+    queryDfd.resolve([
+      { __rowid__: 0, a: 'sentinel-1' },
+      { __rowid__: 1, a: 'sentinel-2' },
+      { __rowid__: 2, a: 'sentinel-3' },
+    ]);
     await tablePromise;
     expect(state).toBe('resolved');
 
@@ -170,9 +174,9 @@ describe('createDataTable awaits first body paint', () => {
     // Single query outcome; the contract guarantees the await won't resolve
     // until this lands.
     (bridge.query as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { a: 'sentinel-A' },
-      { a: 'sentinel-B' },
-      { a: 'sentinel-C' },
+      { __rowid__: 0, a: 'sentinel-A' },
+      { __rowid__: 1, a: 'sentinel-B' },
+      { __rowid__: 2, a: 'sentinel-C' },
     ]);
 
     const container = document.createElement('div');

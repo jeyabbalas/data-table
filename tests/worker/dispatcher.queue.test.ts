@@ -23,6 +23,7 @@ vi.mock('@/worker/duckdb', () => {
   return {
     initializeDuckDB: vi.fn(() => Promise.resolve()),
     executeQuery: vi.fn(() => Promise.resolve([])),
+    executeQueryCancellable: vi.fn(() => Promise.resolve([])),
     getConnection: vi.fn(() => conn),
     getDatabase: vi.fn(() => ({})),
     isInitialized: vi.fn(() => true),
@@ -84,7 +85,7 @@ describe('worker dispatcher — serial queue', () => {
 
   it('serial execution: one task at a time, next pumped synchronously on settle', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     // SQL-keyed deferreds: each query awaits the promise for its own SQL, no
     // matter in which order the queue executes them (a chain of
@@ -93,7 +94,7 @@ describe('worker dispatcher — serial queue', () => {
       'SELECT 1': deferred<unknown[]>(),
       'SELECT 2': deferred<unknown[]>(),
     };
-    duckdbMock.executeQuery.mockImplementation((sql: string) => deferreds[sql].promise);
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
 
     const { respond: respond1, replies: replies1 } = captureRespond();
     const { respond: respond2, replies: replies2 } = captureRespond();
@@ -108,7 +109,7 @@ describe('worker dispatcher — serial queue', () => {
     );
 
     // q1 was dequeued and started synchronously; q2 waits in the normal queue.
-    expect(duckdbMock.executeQuery).toHaveBeenCalledTimes(1);
+    expect(duckdbMock.executeQueryCancellable).toHaveBeenCalledTimes(1);
     expect(__getRunningForTests()).toEqual({ id: 'q1', type: 'query' });
     expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1 });
 
@@ -117,7 +118,7 @@ describe('worker dispatcher — serial queue', () => {
 
     // The settle-pump already started q2 before p1's awaiter resumed, so
     // running is q2 here — never null between back-to-back tasks.
-    expect(duckdbMock.executeQuery).toHaveBeenCalledTimes(2);
+    expect(duckdbMock.executeQueryCancellable).toHaveBeenCalledTimes(2);
     expect(__getRunningForTests()).toEqual({ id: 'q2', type: 'query' });
 
     deferreds['SELECT 2'].resolve([]);
@@ -132,14 +133,14 @@ describe('worker dispatcher — serial queue', () => {
 
   it('priority ordering: a high-priority query jumps ahead of queued normal work', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     const deferreds: Record<string, Deferred<unknown[]>> = {
       'SELECT 1': deferred<unknown[]>(),
       'SELECT 2': deferred<unknown[]>(),
       'SELECT 3': deferred<unknown[]>(),
     };
-    duckdbMock.executeQuery.mockImplementation((sql: string) => deferreds[sql].promise);
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
 
     // One shared collector for all three queries so the completion ORDER is
     // observable in a single replies array.

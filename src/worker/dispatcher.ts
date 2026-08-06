@@ -10,7 +10,7 @@
 
 import {
   initializeDuckDB,
-  executeQuery,
+  executeQueryCancellable,
   getConnection,
   getDatabase,
   isInitialized,
@@ -113,13 +113,18 @@ export function __getQueueDepthsForTests(): { high: number; normal: number } {
  * DuckDB does not ship a typed `CancelledError`; the rejection arrives as
  * a generic `Error` with an interrupt-shaped message. Best-effort match on
  * the canonical phrases — kept here behind a single helper so the
- * fragility is documented in one place.
+ * fragility is documented in one place. The pending-query path rejects
+ * with exactly 'query was canceled'; a poll that races the cancel can
+ * also reject with 'No active pending query'.
  */
 export function isCancelRejection(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message || '';
   return (
-    /\bINTERRUPT\b/i.test(message) || /interrupted/i.test(message) || /cancell?ed/i.test(message)
+    /\bINTERRUPT\b/i.test(message) ||
+    /interrupted/i.test(message) ||
+    /cancell?ed/i.test(message) ||
+    /no active pending query/i.test(message)
   );
 }
 
@@ -234,7 +239,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
         }
         const { sql } = payload as QueryPayload;
         try {
-          const rows = await executeQuery(sql);
+          const rows = await executeQueryCancellable(sql);
           respond(id, 'result', { rows });
         } catch (error) {
           if (isCancelRejection(error)) {

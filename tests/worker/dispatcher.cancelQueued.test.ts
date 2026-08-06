@@ -23,6 +23,7 @@ vi.mock('@/worker/duckdb', () => {
   return {
     initializeDuckDB: vi.fn(() => Promise.resolve()),
     executeQuery: vi.fn(() => Promise.resolve([])),
+    executeQueryCancellable: vi.fn(() => Promise.resolve([])),
     getConnection: vi.fn(() => conn),
     getDatabase: vi.fn(() => ({})),
     isInitialized: vi.fn(() => true),
@@ -84,13 +85,13 @@ describe('worker dispatcher — cancel routing', () => {
 
   it('cancel of a queued id dequeues it without execution', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
     };
     const deferreds: Record<string, Deferred<unknown[]>> = {
       'SELECT 1': deferred<unknown[]>(),
       'SELECT 2': deferred<unknown[]>(),
     };
-    duckdbMock.executeQuery.mockImplementation((sql: string) => deferreds[sql].promise);
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
 
     const { respond: respond1 } = captureRespond();
     const { respond: respond2, replies: replies2 } = captureRespond();
@@ -112,9 +113,9 @@ describe('worker dispatcher — cancel routing', () => {
       cancelRespond,
     );
 
-    // q2's query fn was never invoked: only q1's SQL ever reached executeQuery.
-    expect(duckdbMock.executeQuery).toHaveBeenCalledTimes(1);
-    expect(duckdbMock.executeQuery).toHaveBeenCalledWith('SELECT 1');
+    // q2's query fn was never invoked: only q1's SQL ever reached executeQueryCancellable.
+    expect(duckdbMock.executeQueryCancellable).toHaveBeenCalledTimes(1);
+    expect(duckdbMock.executeQueryCancellable).toHaveBeenCalledWith('SELECT 1');
 
     // The dequeued target gets a QUERY_CANCELLED error on its own respond…
     expect(replies2).toHaveLength(1);
@@ -144,11 +145,11 @@ describe('worker dispatcher — cancel routing', () => {
 
   it('cancel of the running id calls cancelSent exactly once', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
       __conn: { cancelSent: ReturnType<typeof vi.fn> };
     };
     const d1 = deferred<unknown[]>();
-    duckdbMock.executeQuery.mockImplementation(() => d1.promise);
+    duckdbMock.executeQueryCancellable.mockImplementation(() => d1.promise);
     duckdbMock.__conn.cancelSent.mockResolvedValueOnce(true);
 
     const { respond: respond1 } = captureRespond();
@@ -179,10 +180,10 @@ describe('worker dispatcher — cancel routing', () => {
 
   it('cancel of an unknown or completed id reports no-matching-inflight', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
       __conn: { cancelSent: ReturnType<typeof vi.fn> };
     };
-    duckdbMock.executeQuery.mockImplementation(() => Promise.resolve([]));
+    duckdbMock.executeQueryCancellable.mockImplementation(() => Promise.resolve([]));
 
     const { respond: respond1, replies: replies1 } = captureRespond();
     await handleMessage(
@@ -209,14 +210,14 @@ describe('worker dispatcher — cancel routing', () => {
 
   it('wrong-cancel regression: cancel of a queued id must not touch the running query', async () => {
     const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
-      executeQuery: ReturnType<typeof vi.fn>;
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
       __conn: { cancelSent: ReturnType<typeof vi.fn> };
     };
     const deferreds: Record<string, Deferred<unknown[]>> = {
       'SELECT 1': deferred<unknown[]>(),
       'SELECT 2': deferred<unknown[]>(),
     };
-    duckdbMock.executeQuery.mockImplementation((sql: string) => deferreds[sql].promise);
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
 
     const { respond: respond1, replies: replies1 } = captureRespond();
     const { respond: respond2 } = captureRespond();

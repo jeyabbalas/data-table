@@ -6,7 +6,7 @@
 
 # Interface: StatsPanelRegistration
 
-Defined in: [visualizations/StatsPanelRegistry.ts:66](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/visualizations/StatsPanelRegistry.ts#L66)
+Defined in: [visualizations/StatsPanelRegistry.ts:66](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/StatsPanelRegistry.ts#L66)
 
 Registration entry for a stats panel.
 
@@ -16,7 +16,7 @@ Registration entry for a stats panel.
 
 > **constructor**: [`StatsPanelConstructor`](../type-aliases/StatsPanelConstructor.md)
 
-Defined in: [visualizations/StatsPanelRegistry.ts:72](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/visualizations/StatsPanelRegistry.ts#L72)
+Defined in: [visualizations/StatsPanelRegistry.ts:72](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/StatsPanelRegistry.ts#L72)
 
 The panel class to instantiate when [isApplicable](#isapplicable) returns true.
 
@@ -26,7 +26,7 @@ The panel class to instantiate when [isApplicable](#isapplicable) returns true.
 
 > **isApplicable**: (`type`) => `boolean`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:70](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/visualizations/StatsPanelRegistry.ts#L70)
+Defined in: [visualizations/StatsPanelRegistry.ts:70](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/StatsPanelRegistry.ts#L70)
 
 Predicate: should this panel handle a column of the given type?
 
@@ -46,7 +46,7 @@ Predicate: should this panel handle a column of the given type?
 
 > **name**: `string`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:68](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/visualizations/StatsPanelRegistry.ts#L68)
+Defined in: [visualizations/StatsPanelRegistry.ts:68](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/StatsPanelRegistry.ts#L68)
 
 Stable identifier; same-name re-register replaces the existing entry.
 
@@ -56,7 +56,7 @@ Stable identifier; same-name re-register replaces the existing entry.
 
 > **priority**: `number`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:79](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/visualizations/StatsPanelRegistry.ts#L79)
+Defined in: [visualizations/StatsPanelRegistry.ts:79](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/StatsPanelRegistry.ts#L79)
 
 Higher priority wins when multiple registrations match. There are no
 library built-ins (the default HTML formatter is the implicit

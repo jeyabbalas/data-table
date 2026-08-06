@@ -6,7 +6,7 @@
 
 # Class: WorkerTerminatedError
 
-Defined in: [core/errors.ts:116](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/errors.ts#L116)
+Defined in: [core/errors.ts:116](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L116)
 
 Worker terminated mid-flight (intentional or unexpected).
 
@@ -30,7 +30,7 @@ catch (err) {
 
 > **new WorkerTerminatedError**(`message`, `options?`): `WorkerTerminatedError`
 
-Defined in: [core/errors.ts:117](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/errors.ts#L117)
+Defined in: [core/errors.ts:117](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L117)
 
 #### Parameters
 
@@ -56,7 +56,7 @@ Defined in: [core/errors.ts:117](https://github.com/jeyabbalas/data-table/blob/6
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -68,7 +68,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/6a
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -80,7 +80,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/6a
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L66)
 
 #### Returns
 

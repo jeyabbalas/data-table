@@ -6,7 +6,7 @@
 
 # Interface: LoadOptions
 
-Defined in: [data/WorkerBridge.ts:31](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L31)
+Defined in: [data/WorkerBridge.ts:31](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/data/WorkerBridge.ts#L31)
 
 Low-level options accepted by [WorkerBridge.loadData](../classes/WorkerBridge.md#loaddata). Most consumers
 use the higher-level `table.loadData(source, opts?)` facade instead, which
@@ -18,7 +18,7 @@ builds these from a `File` / URL / Blob input.
 
 > **format**: `"csv"` \| `"json"` \| `"parquet"`
 
-Defined in: [data/WorkerBridge.ts:32](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L32)
+Defined in: [data/WorkerBridge.ts:32](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/data/WorkerBridge.ts#L32)
 
 ***
 
@@ -26,4 +26,4 @@ Defined in: [data/WorkerBridge.ts:32](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **tableName?**: `string`
 
-Defined in: [data/WorkerBridge.ts:33](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L33)
+Defined in: [data/WorkerBridge.ts:33](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/data/WorkerBridge.ts#L33)

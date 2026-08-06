@@ -611,7 +611,11 @@ export class VirtualScroller {
   }
 
   /**
-   * Get the current scroll top position
+   * Get the current physical scroll top position
+   *
+   * This is the raw `scrollTop` of the scroll element. Above the height
+   * cap it diverges from row space — use {@link getVirtualScrollTop} for
+   * the virtual-space position; the two are identical below the cap.
    */
   getScrollTop(): number {
     return this.scrollSource.scrollTop;

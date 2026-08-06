@@ -6,7 +6,7 @@
 
 # Class: FilterPresetManager
 
-Defined in: [filters/FilterPresets.ts:61](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L61)
+Defined in: [filters/FilterPresets.ts:61](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L61)
 
 In-memory store for named filter presets with JSON import / export. Pass
 one to [createDataTable](../functions/createDataTable.md) via `presets: { manager }` to share preset
@@ -18,7 +18,7 @@ state across multiple tables on a page.
 
 > **new FilterPresetManager**(): `FilterPresetManager`
 
-Defined in: [filters/FilterPresets.ts:64](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L64)
+Defined in: [filters/FilterPresets.ts:64](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L64)
 
 #### Returns
 
@@ -30,7 +30,7 @@ Defined in: [filters/FilterPresets.ts:64](https://github.com/jeyabbalas/data-tab
 
 > `readonly` **presets**: `Signal`\<[`FilterPreset`](../interfaces/FilterPreset.md)[]\>
 
-Defined in: [filters/FilterPresets.ts:62](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L62)
+Defined in: [filters/FilterPresets.ts:62](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L62)
 
 ## Methods
 
@@ -38,7 +38,7 @@ Defined in: [filters/FilterPresets.ts:62](https://github.com/jeyabbalas/data-tab
 
 > **delete**(`id`): `void`
 
-Defined in: [filters/FilterPresets.ts:126](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L126)
+Defined in: [filters/FilterPresets.ts:126](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L126)
 
 Delete a preset by id.
 
@@ -58,7 +58,7 @@ Delete a preset by id.
 
 > **exportToJSON**(): `string`
 
-Defined in: [filters/FilterPresets.ts:174](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L174)
+Defined in: [filters/FilterPresets.ts:174](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L174)
 
 Export all presets as a JSON string.
 
@@ -72,7 +72,7 @@ Export all presets as a JSON string.
 
 > **getPresets**(): [`FilterPreset`](../interfaces/FilterPreset.md)[]
 
-Defined in: [filters/FilterPresets.ts:328](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L328)
+Defined in: [filters/FilterPresets.ts:328](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L328)
 
 Get all presets (convenience for non-reactive access).
 
@@ -86,7 +86,7 @@ Get all presets (convenience for non-reactive access).
 
 > **importFromJSON**(`json`): `object`
 
-Defined in: [filters/FilterPresets.ts:186](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L186)
+Defined in: [filters/FilterPresets.ts:186](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L186)
 
 Import presets from a JSON string. Assigns new IDs to avoid collisions.
 Returns the count of successfully imported presets and any validation errors.
@@ -115,7 +115,7 @@ Returns the count of successfully imported presets and any validation errors.
 
 > **load**(`id`, `actions`): `void`
 
-Defined in: [filters/FilterPresets.ts:115](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L115)
+Defined in: [filters/FilterPresets.ts:115](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L115)
 
 Load a preset by id: clears existing filters and applies the preset's
 filters (and optionally sort state) in a single undo step.
@@ -140,7 +140,7 @@ filters (and optionally sort state) in a single undo step.
 
 > **loadPresets**(`presets`): `void`
 
-Defined in: [filters/FilterPresets.ts:321](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L321)
+Defined in: [filters/FilterPresets.ts:321](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L321)
 
 Replace all presets (used for session restore).
 
@@ -160,7 +160,7 @@ Replace all presets (used for session restore).
 
 > **rename**(`id`, `newName`): `void`
 
-Defined in: [filters/FilterPresets.ts:138](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L138)
+Defined in: [filters/FilterPresets.ts:138](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L138)
 
 Rename a preset.
 
@@ -189,7 +189,7 @@ no-op.
 
 > **save**(`name`, `filters`, `sortColumns?`, `description?`): [`FilterPreset`](../interfaces/FilterPreset.md)
 
-Defined in: [filters/FilterPresets.ts:76](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L76)
+Defined in: [filters/FilterPresets.ts:76](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L76)
 
 Save current filters as a named preset.
 
@@ -226,7 +226,7 @@ different name.
 
 > **update**(`id`, `filters`): `void`
 
-Defined in: [filters/FilterPresets.ts:161](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/filters/FilterPresets.ts#L161)
+Defined in: [filters/FilterPresets.ts:161](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/filters/FilterPresets.ts#L161)
 
 Update a preset's filters with the current set.
 

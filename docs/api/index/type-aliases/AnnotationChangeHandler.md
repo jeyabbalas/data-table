@@ -8,7 +8,7 @@
 
 > **AnnotationChangeHandler** = (`payload`) => `void`
 
-Defined in: [annotations/types.ts:133](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/types.ts#L133)
+Defined in: [annotations/types.ts:133](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L133)
 
 Handler function shape for `AnnotationStore.on('change', …)`.
 

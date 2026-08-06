@@ -8,6 +8,6 @@
 
 > **DataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"`
 
-Defined in: [core/types.ts:6](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/core/types.ts#L6)
+Defined in: [core/types.ts:6](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/types.ts#L6)
 
 Core type definitions for the Interactive Data Table Library

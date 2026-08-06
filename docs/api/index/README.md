@@ -55,6 +55,7 @@
 - [PointFilter](interfaces/PointFilter.md)
 - [ProgressInfo](interfaces/ProgressInfo.md)
 - [QueryCacheOptions](interfaces/QueryCacheOptions.md)
+- [QueryOptions](interfaces/QueryOptions.md)
 - [RangeFilter](interfaces/RangeFilter.md)
 - [RawSQLFilter](interfaces/RawSQLFilter.md)
 - [RowAnnotation](interfaces/RowAnnotation.md)

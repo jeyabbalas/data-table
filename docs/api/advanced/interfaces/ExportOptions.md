@@ -6,7 +6,7 @@
 
 # Interface: ExportOptions
 
-Defined in: [export/CSVExport.ts:37](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L37)
+Defined in: [export/CSVExport.ts:37](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L37)
 
 Options controlling CSV export behavior
 
@@ -16,7 +16,7 @@ Options controlling CSV export behavior
 
 > **columns**: `"all"` \| `string`[]
 
-Defined in: [export/CSVExport.ts:41](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L41)
+Defined in: [export/CSVExport.ts:41](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L41)
 
 Which columns to include
 
@@ -26,7 +26,7 @@ Which columns to include
 
 > **delimiter**: `string`
 
-Defined in: [export/CSVExport.ts:45](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L45)
+Defined in: [export/CSVExport.ts:45](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L45)
 
 Field delimiter character
 
@@ -36,7 +36,7 @@ Field delimiter character
 
 > **includeHeaders**: `boolean`
 
-Defined in: [export/CSVExport.ts:43](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L43)
+Defined in: [export/CSVExport.ts:43](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L43)
 
 Whether to include a header row
 
@@ -46,7 +46,7 @@ Whether to include a header row
 
 > **nullValue**: `string`
 
-Defined in: [export/CSVExport.ts:47](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L47)
+Defined in: [export/CSVExport.ts:47](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L47)
 
 String to use for NULL values
 
@@ -56,6 +56,6 @@ String to use for NULL values
 
 > **scope**: `"all"` \| `"filtered"` \| `"selected"`
 
-Defined in: [export/CSVExport.ts:39](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/export/CSVExport.ts#L39)
+Defined in: [export/CSVExport.ts:39](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/export/CSVExport.ts#L39)
 
 Which rows to export

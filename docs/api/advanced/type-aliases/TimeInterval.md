@@ -8,6 +8,6 @@
 
 > **TimeInterval** = `"second"` \| `"minute"` \| `"hour"` \| `"day"` \| `"week"` \| `"month"` \| `"quarter"` \| `"year"`
 
-Defined in: [visualizations/histogram/DateFormatters.ts:18](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/DateFormatters.ts#L18)
+Defined in: [visualizations/histogram/DateFormatters.ts:18](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/DateFormatters.ts#L18)
 
 Time interval granularities for date histogram binning

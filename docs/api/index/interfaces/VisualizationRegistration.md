@@ -6,7 +6,7 @@
 
 # Interface: VisualizationRegistration
 
-Defined in: [visualizations/VisualizationRegistry.ts:56](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/VisualizationRegistry.ts#L56)
+Defined in: [visualizations/VisualizationRegistry.ts:56](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/VisualizationRegistry.ts#L56)
 
 Registration entry for a visualization type.
 
@@ -16,7 +16,7 @@ Registration entry for a visualization type.
 
 > **constructor**: [`VisualizationConstructor`](../type-aliases/VisualizationConstructor.md)
 
-Defined in: [visualizations/VisualizationRegistry.ts:59](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/VisualizationRegistry.ts#L59)
+Defined in: [visualizations/VisualizationRegistry.ts:59](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/VisualizationRegistry.ts#L59)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [visualizations/VisualizationRegistry.ts:59](https://github.com/jeya
 
 > **isApplicable**: (`type`) => `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:58](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/VisualizationRegistry.ts#L58)
+Defined in: [visualizations/VisualizationRegistry.ts:58](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/VisualizationRegistry.ts#L58)
 
 #### Parameters
 
@@ -42,7 +42,7 @@ Defined in: [visualizations/VisualizationRegistry.ts:58](https://github.com/jeya
 
 > **name**: `string`
 
-Defined in: [visualizations/VisualizationRegistry.ts:57](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/VisualizationRegistry.ts#L57)
+Defined in: [visualizations/VisualizationRegistry.ts:57](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/VisualizationRegistry.ts#L57)
 
 ***
 
@@ -50,6 +50,6 @@ Defined in: [visualizations/VisualizationRegistry.ts:57](https://github.com/jeya
 
 > **priority**: `number`
 
-Defined in: [visualizations/VisualizationRegistry.ts:61](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/VisualizationRegistry.ts#L61)
+Defined in: [visualizations/VisualizationRegistry.ts:61](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/VisualizationRegistry.ts#L61)
 
 Higher priority wins when multiple registrations match; built-ins use 0.

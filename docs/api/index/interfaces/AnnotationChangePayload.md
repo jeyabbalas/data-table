@@ -6,7 +6,7 @@
 
 # Interface: AnnotationChangePayload
 
-Defined in: [annotations/types.ts:121](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/annotations/types.ts#L121)
+Defined in: [annotations/types.ts:121](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/types.ts#L121)
 
 Event payload emitted by `AnnotationStore.on('change', …)`.
 
@@ -16,7 +16,7 @@ Event payload emitted by `AnnotationStore.on('change', …)`.
 
 > **ids**: `string`[]
 
-Defined in: [annotations/types.ts:129](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/annotations/types.ts#L129)
+Defined in: [annotations/types.ts:129](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/types.ts#L129)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [annotations/types.ts:129](https://github.com/jeyabbalas/data-table/
 
 > **kind**: `"added"` \| `"removed"` \| `"updated"` \| `"cleared"` \| `"filterChanged"`
 
-Defined in: [annotations/types.ts:128](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/annotations/types.ts#L128)
+Defined in: [annotations/types.ts:128](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/types.ts#L128)
 
 `'filterChanged'` is a visual-only signal — it fires when
 `setSeverityFilter` actually toggled at least one flag. The store's

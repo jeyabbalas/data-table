@@ -6,7 +6,7 @@
 
 # Class: TimeHistogram
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:41](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L41)
+Defined in: [visualizations/histogram/TimeHistogram.ts:41](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L41)
 
 Time-of-day histogram for `time` columns. Bins clock values across a
 24-hour cycle; tick labels render as `HH:mm` strings. Same brush /
@@ -22,7 +22,7 @@ crossfilter contract as [Histogram](Histogram.md).
 
 > **new TimeHistogram**(`container`, `column`, `options`): `TimeHistogram`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:47](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L47)
+Defined in: [visualizations/histogram/TimeHistogram.ts:47](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L47)
 
 #### Parameters
 
@@ -52,7 +52,7 @@ Defined in: [visualizations/histogram/TimeHistogram.ts:47](https://github.com/je
 
 > `protected` **allNullHovered**: `boolean` = `false`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L151)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L151)
 
 #### Inherited from
 
@@ -64,7 +64,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github
 
 > `protected` **backgroundData**: [`TimeHistogramData`](../interfaces/TimeHistogramData.md) \| `null` = `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:136](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L136)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:136](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L136)
 
 #### Inherited from
 
@@ -76,7 +76,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:136](https://github
 
 > `protected` **barPositions**: `object`[] = `[]`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:180](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L180)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:180](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L180)
 
 #### binIndex
 
@@ -100,7 +100,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:180](https://github
 
 > `protected` **brushState**: `object`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:157](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L157)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:157](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L157)
 
 #### active
 
@@ -164,7 +164,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:157](https://github
 
 > `protected` **canvas**: `HTMLCanvasElement`
 
-Defined in: [visualizations/BaseVisualization.ts:145](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L145)
+Defined in: [visualizations/BaseVisualization.ts:145](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L145)
 
 #### Inherited from
 
@@ -176,7 +176,7 @@ Defined in: [visualizations/BaseVisualization.ts:145](https://github.com/jeyabba
 
 > `protected` **chartArea**: `object`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:178](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L178)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:178](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L178)
 
 #### height
 
@@ -204,7 +204,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:178](https://github
 
 > `protected` **clickConsumedByMouseDown**: `boolean` = `false`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:154](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L154)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:154](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L154)
 
 #### Inherited from
 
@@ -216,7 +216,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:154](https://github
 
 > `protected` **colors**: `HistogramColors`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:175](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L175)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:175](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L175)
 
 #### Inherited from
 
@@ -228,7 +228,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:175](https://github
 
 > `protected` **column**: [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:176](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L176)
+Defined in: [visualizations/BaseVisualization.ts:176](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L176)
 
 #### Inherited from
 
@@ -240,7 +240,7 @@ Defined in: [visualizations/BaseVisualization.ts:176](https://github.com/jeyabba
 
 > `protected` **container**: `HTMLElement`
 
-Defined in: [visualizations/BaseVisualization.ts:175](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L175)
+Defined in: [visualizations/BaseVisualization.ts:175](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L175)
 
 #### Inherited from
 
@@ -252,7 +252,7 @@ Defined in: [visualizations/BaseVisualization.ts:175](https://github.com/jeyabba
 
 > `protected` **ctx**: `CanvasRenderingContext2D`
 
-Defined in: [visualizations/BaseVisualization.ts:146](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L146)
+Defined in: [visualizations/BaseVisualization.ts:146](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L146)
 
 #### Inherited from
 
@@ -264,7 +264,7 @@ Defined in: [visualizations/BaseVisualization.ts:146](https://github.com/jeyabba
 
 > `protected` **data**: [`TimeHistogramData`](../interfaces/TimeHistogramData.md) \| `null` = `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:135](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L135)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:135](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L135)
 
 #### Inherited from
 
@@ -276,7 +276,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:135](https://github
 
 > `protected` **dataPromise**: `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:164](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L164)
+Defined in: [visualizations/BaseVisualization.ts:164](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L164)
 
 #### Inherited from
 
@@ -288,7 +288,7 @@ Defined in: [visualizations/BaseVisualization.ts:164](https://github.com/jeyabba
 
 > `protected` **destroyed**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L150)
+Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L150)
 
 #### Inherited from
 
@@ -300,7 +300,7 @@ Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabba
 
 > `protected` **dpr**: `number`
 
-Defined in: [visualizations/BaseVisualization.ts:149](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L149)
+Defined in: [visualizations/BaseVisualization.ts:149](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L149)
 
 #### Inherited from
 
@@ -312,7 +312,7 @@ Defined in: [visualizations/BaseVisualization.ts:149](https://github.com/jeyabba
 
 > `protected` **fetchSequence**: `number` = `0`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:139](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L139)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:139](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L139)
 
 #### Inherited from
 
@@ -324,7 +324,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:139](https://github
 
 > `protected` **height**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:148](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L148)
+Defined in: [visualizations/BaseVisualization.ts:148](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L148)
 
 #### Inherited from
 
@@ -336,7 +336,7 @@ Defined in: [visualizations/BaseVisualization.ts:148](https://github.com/jeyabba
 
 > `protected` **hoveredBin**: `number` \| `null` = `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:142](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L142)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:142](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L142)
 
 #### Inherited from
 
@@ -348,7 +348,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:142](https://github
 
 > `protected` **hoveredNull**: `boolean` = `false`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:143](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L143)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:143](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L143)
 
 #### Inherited from
 
@@ -360,7 +360,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:143](https://github
 
 > `protected` **isAllNullState**: `boolean` = `false`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L150)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L150)
 
 #### Inherited from
 
@@ -372,7 +372,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github
 
 > `protected` **isFilterUpdate**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:151](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L151)
+Defined in: [visualizations/BaseVisualization.ts:151](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L151)
 
 #### Inherited from
 
@@ -384,7 +384,7 @@ Defined in: [visualizations/BaseVisualization.ts:151](https://github.com/jeyabba
 
 > `protected` **nullBarArea**: `object`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:179](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L179)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:179](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L179)
 
 #### height
 
@@ -412,7 +412,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:179](https://github
 
 > `protected` **options**: [`VisualizationOptions`](../interfaces/VisualizationOptions.md)
 
-Defined in: [visualizations/BaseVisualization.ts:177](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L177)
+Defined in: [visualizations/BaseVisualization.ts:177](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L177)
 
 #### Inherited from
 
@@ -424,7 +424,7 @@ Defined in: [visualizations/BaseVisualization.ts:177](https://github.com/jeyabba
 
 > `protected` **selectedBin**: `number` \| `null` = `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:146](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L146)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:146](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L146)
 
 #### Inherited from
 
@@ -436,7 +436,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:146](https://github
 
 > `protected` **selectedNull**: `boolean` = `false`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:147](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L147)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:147](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L147)
 
 #### Inherited from
 
@@ -448,7 +448,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:147](https://github
 
 > `protected` **width**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:147](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L147)
+Defined in: [visualizations/BaseVisualization.ts:147](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L147)
 
 #### Inherited from
 
@@ -460,7 +460,7 @@ Defined in: [visualizations/BaseVisualization.ts:147](https://github.com/jeyabba
 
 > `protected` **clear**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:416](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L416)
+Defined in: [visualizations/BaseVisualization.ts:416](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L416)
 
 Clear the entire canvas
 
@@ -478,7 +478,7 @@ Clear the entire canvas
 
 > **clearBrush**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1730](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1730)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1730](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1730)
 
 Clear the brush (public method for external LIFO handling)
 
@@ -496,7 +496,7 @@ Clear the brush (public method for external LIFO handling)
 
 > `protected` **clearBrushStateOnly**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1396](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1396)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1396](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1396)
 
 Clear brush visual state without triggering filter removal.
 Used by syncVisualStateFromFilter() when transitioning from a brush
@@ -517,7 +517,7 @@ Unlike resetBrush(), this does NOT call onFilterChange(null) or onBrushClear.
 
 > **clearSelection**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1103](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1103)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1103](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1103)
 
 Clear single bar selection (public for LIFO handling)
 
@@ -535,7 +535,7 @@ Clear single bar selection (public for LIFO handling)
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:497](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L497)
+Defined in: [visualizations/BaseVisualization.ts:497](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L497)
 
 Destroy the visualization and clean up all resources.
 Must be called when the visualization is no longer needed.
@@ -554,7 +554,7 @@ Must be called when the visualization is no longer needed.
 
 > **dispatchWindowKeyDown**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:404](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L404)
+Defined in: [visualizations/BaseVisualization.ts:404](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L404)
 
 Called by WindowListenerManager to dispatch window keydown events.
 
@@ -578,7 +578,7 @@ Called by WindowListenerManager to dispatch window keydown events.
 
 > **dispatchWindowMouseUp**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:393](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L393)
+Defined in: [visualizations/BaseVisualization.ts:393](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L393)
 
 Called by WindowListenerManager to dispatch window mouseup events.
 Translates coordinates relative to this instance's canvas.
@@ -603,7 +603,7 @@ Translates coordinates relative to this instance's canvas.
 
 > `protected` **drawAxisLabels**(): `void`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:255](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L255)
+Defined in: [visualizations/histogram/TimeHistogram.ts:255](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L255)
 
 Draw axis labels with human-readable time format
 
@@ -621,7 +621,7 @@ Draw axis labels with human-readable time format
 
 > `protected` **drawMinMaxLabels**(`minLabel`, `maxLabel`, `maxX`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:678](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L678)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:678](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L678)
 
 Draw min/max axis labels with overlap detection and truncation.
 If both labels fit, renders as-is; otherwise adaptively allocates
@@ -655,7 +655,7 @@ space and truncates the longer label with ellipsis.
 
 > `protected` **drawNullSymbol**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:659](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L659)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:659](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L659)
 
 Draw the empty set symbol (∅) below the null bar
 
@@ -673,7 +673,7 @@ Draw the empty set symbol (∅) below the null bar
 
 > `protected` **drawRoundedBar**(`ctx`, `x`, `y`, `width`, `height`, `radius`, `color`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:507](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L507)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:507](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L507)
 
 Draw a single bar with rounded top corners
 
@@ -721,7 +721,7 @@ Draw a single bar with rounded top corners
 
 > `protected` **emitBrushFilter**(): `void`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:337](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L337)
+Defined in: [visualizations/histogram/TimeHistogram.ts:337](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L337)
 
 Emit a range filter based on current brush bin indices
 
@@ -739,7 +739,7 @@ Emit a range filter based on current brush bin indices
 
 > **fetchData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:161](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L161)
+Defined in: [visualizations/histogram/TimeHistogram.ts:161](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L161)
 
 Fetch time histogram data from DuckDB.
 
@@ -761,7 +761,7 @@ B) Any filter active: ghost = initialData, foreground = allFilters
 
 > `protected` **formatBinRange**(`binIndex`): `string`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:300](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L300)
+Defined in: [visualizations/histogram/TimeHistogram.ts:300](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L300)
 
 Format a single bin's range for hover/selection stats
 
@@ -785,7 +785,7 @@ Format a single bin's range for hover/selection stats
 
 > `protected` **formatBrushRange**(`startIdx`, `endIdx`): `string`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:313](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L313)
+Defined in: [visualizations/histogram/TimeHistogram.ts:313](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L313)
 
 Format a brush range spanning startIdx to endIdx
 
@@ -813,7 +813,7 @@ Format a brush range spanning startIdx to endIdx
 
 > `protected` **formatNumber**(`value`): `string`
 
-Defined in: [visualizations/BaseVisualization.ts:423](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L423)
+Defined in: [visualizations/BaseVisualization.ts:423](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L423)
 
 Format a number with locale-specific formatting
 
@@ -837,7 +837,7 @@ Format a number with locale-specific formatting
 
 > **getBrushState**(): \{ `endBinIndex`: `number`; `startBinIndex`: `number`; \} \| `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1586](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1586)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1586](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1586)
 
 Get the current brush state for persistence
 Returns null if no brush is committed
@@ -856,7 +856,7 @@ Returns null if no brush is committed
 
 > **getColumn**(): [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:430](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L430)
+Defined in: [visualizations/BaseVisualization.ts:430](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L430)
 
 Get the column this visualization represents
 
@@ -874,7 +874,7 @@ Get the column this visualization represents
 
 > **getMinMaxDisplay**(): \{ `max`: `string`; `min`: `string`; \} \| `null`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:364](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L364)
+Defined in: [visualizations/histogram/TimeHistogram.ts:364](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L364)
 
 Get data min/max for display purposes
 
@@ -888,7 +888,7 @@ Get data min/max for display purposes
 
 > **getSelectionState**(): `object`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1619](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1619)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1619](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1619)
 
 Get the current selection state for persistence
 
@@ -914,7 +914,7 @@ Get the current selection state for persistence
 
 > `protected` **handleClick**(`x`, `y`, `_event?`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:983](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L983)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:983](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L983)
 
 Handle click - create filter via one-bin brush or null selection
 
@@ -950,7 +950,7 @@ Null bar click creates a null filter (separate from brush).
 
 > `protected` **handleKeyDown**(`_key`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1305](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1305)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1305](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1305)
 
 Handle keyboard events
 Note: Escape is handled by InteractionManager for LIFO behavior across columns
@@ -975,7 +975,7 @@ Note: Escape is handled by InteractionManager for LIFO behavior across columns
 
 > `protected` **handleMouseDown**(`x`, `y`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1159](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1159)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1159](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1159)
 
 Handle mouse down - start potential brush selection or start sliding
 
@@ -1003,7 +1003,7 @@ Handle mouse down - start potential brush selection or start sliding
 
 > `protected` **handleMouseLeave**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1119](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1119)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1119](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1119)
 
 Handle mouse leave - clear hover states
 
@@ -1021,7 +1021,7 @@ Handle mouse leave - clear hover states
 
 > `protected` **handleMouseMove**(`x`, `y`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:840](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L840)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:840](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L840)
 
 Handle mouse movement - detect which bar is under cursor and update stats
 
@@ -1049,7 +1049,7 @@ Handle mouse movement - detect which bar is under cursor and update stats
 
 > `protected` **handleMouseUp**(`_x`, `_y`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1256](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1256)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1256](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1256)
 
 Handle mouse up - stop sliding or commit brush
 
@@ -1077,7 +1077,7 @@ Handle mouse up - stop sliding or commit brush
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [visualizations/BaseVisualization.ts:437](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L437)
+Defined in: [visualizations/BaseVisualization.ts:437](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L437)
 
 Check if the visualization has been destroyed
 
@@ -1095,7 +1095,7 @@ Check if the visualization has been destroyed
 
 > **render**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:215](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L215)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:215](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L215)
 
 Main render method - draws the complete histogram
 
@@ -1113,7 +1113,7 @@ Main render method - draws the complete histogram
 
 > `protected` **resetBrush**(): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1361](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1361)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1361](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1361)
 
 Reset brush state
 
@@ -1131,7 +1131,7 @@ Reset brush state
 
 > `protected` **setBrushFromBinRange**(`startIdx`, `endIdx`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1717](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1717)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1717](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1717)
 
 Helper: set brush state to span bins [startIdx, endIdx].
 
@@ -1159,7 +1159,7 @@ Helper: set brush state to span bins [startIdx, endIdx].
 
 > **setBrushState**(`state`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1598](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1598)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1598](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1598)
 
 Restore brush state from saved state
 Call after data is loaded (fetchData completed)
@@ -1184,7 +1184,7 @@ Call after data is loaded (fetchData completed)
 
 > **setSelectionState**(`state`): `void`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:1633](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/SharedHistogramBase.ts#L1633)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:1633](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/SharedHistogramBase.ts#L1633)
 
 Restore selection state from saved state
 Call after data is loaded (fetchData completed)
@@ -1215,7 +1215,7 @@ Call after data is loaded (fetchData completed)
 
 > `protected` **syncVisualStateFromFilter**(): `void`
 
-Defined in: [visualizations/histogram/TimeHistogram.ts:378](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/histogram/TimeHistogram.ts#L378)
+Defined in: [visualizations/histogram/TimeHistogram.ts:378](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/histogram/TimeHistogram.ts#L378)
 
 Base implementation handles null/default cases.
 Subclasses override for range/point with type-specific bin boundaries.
@@ -1234,7 +1234,7 @@ Subclasses override for range/point with type-specific bin boundaries.
 
 > **updateFilters**(`filters`): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:459](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L459)
+Defined in: [visualizations/BaseVisualization.ts:459](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L459)
 
 Update filters on a live visualization and re-fetch data.
 Used by CrossfilterCoordinator to push new filter arrays
@@ -1260,7 +1260,7 @@ without recreating the visualization.
 
 > `protected` **updateSize**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:311](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L311)
+Defined in: [visualizations/BaseVisualization.ts:311](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L311)
 
 Update canvas dimensions to match container.
 Accounts for device pixel ratio for crisp rendering.
@@ -1279,7 +1279,7 @@ Accounts for device pixel ratio for crisp rendering.
 
 > **waitForData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:450](https://github.com/jeyabbalas/data-table/blob/e107b8ba1fceb43ab96cbfcbd2c0a926830d3cb4/src/visualizations/BaseVisualization.ts#L450)
+Defined in: [visualizations/BaseVisualization.ts:450](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/visualizations/BaseVisualization.ts#L450)
 
 Resolves once the visualization's initial `fetchData()` settles. The
 facade awaits this during `loadData` so a consumer chaining `addFilter`

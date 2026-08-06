@@ -54,17 +54,28 @@ function buildFakeRows(n: number): Record<string, unknown>[] {
 
 /**
  * Create a mock bridge whose `.query()` resolves to rows parsed from the
- * provided dataset, respecting the LIMIT/OFFSET parsed out of the SQL.
- * Also records every SQL query for assertions.
+ * provided dataset, respecting the row window parsed out of the SQL —
+ * either the `WHERE "__rowid__" >= a AND "__rowid__" < b` fast-path shape
+ * or LIMIT/OFFSET. Also records every SQL query for assertions.
  */
 function createMockBridge(rows: Record<string, unknown>[]) {
   const queries: string[] = [];
   const query = vi.fn(async (sql: string) => {
     queries.push(sql);
+    // The fast-path shape carries a defensive LIMIT too, so check it first.
+    const rangeMatch = /"__rowid__"\s*>=\s*(\d+)\s+AND\s+"__rowid__"\s*<\s*(\d+)/i.exec(sql);
     const limitMatch = /LIMIT\s+(\d+)/i.exec(sql);
     const offsetMatch = /OFFSET\s+(\d+)/i.exec(sql);
-    const limit = limitMatch ? parseInt(limitMatch[1], 10) : rows.length;
-    const offset = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
+    const offset = rangeMatch
+      ? parseInt(rangeMatch[1], 10)
+      : offsetMatch
+        ? parseInt(offsetMatch[1], 10)
+        : 0;
+    const limit = rangeMatch
+      ? parseInt(rangeMatch[2], 10) - offset
+      : limitMatch
+        ? parseInt(limitMatch[1], 10)
+        : rows.length;
     return rows.slice(offset, offset + limit);
   });
   const bridge = {
@@ -121,7 +132,10 @@ describe('TableBody — annotation overlay', () => {
   });
 
   it('buildRowQuery prepends __rowid__ to every fetch', async () => {
-    const rows = buildFakeRows(10);
+    // Full-block dataset: the block fetch requests min(fetchBlockSize,
+    // totalRows) = 100 rows, and a short result would trip the rowid
+    // fast path's density safety valve into a second (OFFSET) query.
+    const rows = buildFakeRows(100);
     const { bridge, queries } = createMockBridge(rows);
     const body = new TableBody(
       container,
@@ -134,8 +148,18 @@ describe('TableBody — annotation overlay', () => {
       },
     );
 
-    // Force a fetch by directly triggering internal rendering.
-    await (body as unknown as { fetchRows(s: number, e: number): Promise<void> }).fetchRows(0, 5);
+    // Force a fetch by seeding the live range and running the reconciler
+    // (jsdom reports clientHeight 0, so scroll events can't produce one).
+    // The scroller needs a row count too: fetchBlock clamps its limit to
+    // `virtualScroller.getTotalRows()`, which starts at 0 without
+    // initialize().
+    body.getVirtualScroller().setTotalRows(100);
+    const internal = body as unknown as {
+      currentRange: { start: number; end: number; offsetY: number };
+      ensureFetched(): Promise<void>;
+    };
+    internal.currentRange = { start: 0, end: 5, offsetY: 0 };
+    await internal.ensureFetched();
     expect(queries.length).toBe(1);
     expect(queries[0]).toMatch(/SELECT\s+"__rowid__"/);
 

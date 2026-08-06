@@ -7,14 +7,19 @@
  * fire-and-forget by `TableContainer.render()` → `tableBody.initialize()`)
  * could land *after* a synchronous `addFilter` cleared `rowDataCache`,
  * polluting the just-cleared cache with stale unfiltered rows. The next
- * `checkNeedsFetch` then short-circuited (cache "full") and the user saw
- * unfiltered rows in the rendered table even though `state.filters`
- * carried the new filter.
+ * reconcile then saw a "full" cache and the user got unfiltered rows in
+ * the rendered table even though `state.filters` carried the new filter.
  *
- * Fixed by tagging each `fetchRows` invocation with a monotonic
- * `fetchSequence` and dropping its result when seq has been bumped — the
- * same idiom `CrossfilterCoordinator.filterSequence` and
- * `BaseVisualization.fetchSequence` use elsewhere in the library.
+ * Two layers defend against this in the block pipeline:
+ *  1. `invalidateCacheAndRefresh` aborts every in-flight block fetch, so
+ *     with the real bridge the superseded query rejects (QUERY_ABORTED)
+ *     and its rows never exist; the replacement query is issued
+ *     immediately instead of waiting behind the old one.
+ *  2. The `epoch` guard (the successor of `fetchSequence`, same idiom as
+ *     `CrossfilterCoordinator.filterSequence` /
+ *     `BaseVisualization.fetchSequence`) drops the rows of any fetch that
+ *     somehow resolves after the state changed — exercised here with a
+ *     bridge double that deliberately resolves after its abort.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableBody } from '@/table/TableBody';
@@ -23,23 +28,12 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
 
-// Minimal deferred — same shape as the helper in
-// `tests/DataTable.destroy.race.test.ts:33-46`. Lets a test interleave
-// signal mutations between a `bridge.query()` call and its resolution.
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (v: T) => void;
-  reject: (e: unknown) => void;
-}
-function deferred<T>(): Deferred<T> {
-  let resolve!: (v: T) => void;
-  let reject!: (e: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
+import {
+  makeRowFetchBridge,
+  parseRowWindow,
+  rowsFor,
+  type RowFetchBridgeOptions,
+} from '../helpers/rowFetchBridge';
 
 // MockResizeObserver — required by VirtualScroller construction in JSDOM.
 class MockResizeObserver implements ResizeObserver {
@@ -52,6 +46,7 @@ const SCHEMA: ColumnSchema[] = [
   { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
   { name: 'tag', type: 'string', nullable: true, originalType: 'VARCHAR' },
 ];
+const COLUMNS = ['id', 'tag'];
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -64,10 +59,10 @@ afterEach(() => {
 
 /**
  * Create a TableBody whose virtual scroller reports a non-zero clientHeight
- * — JSDOM defaults to 0, which would short-circuit `initialize()` past the
- * first `handleScroll(range)` call (effectiveTotal stays 0, never reached).
+ * — JSDOM defaults to 0, which would leave `getVisibleRange()` at 0..0 and
+ * `initialize()` with nothing to fetch.
  */
-function setup() {
+function setup(bridgeOptions: RowFetchBridgeOptions = {}) {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -77,21 +72,7 @@ function setup() {
   state.totalRows.set(100);
   state.filteredRows.set(100);
 
-  const queryQueue: Deferred<unknown[]>[] = [];
-  const calls: string[] = [];
-  const bridge = {
-    query: vi.fn((sql: string) => {
-      calls.push(sql);
-      const d = deferred<unknown[]>();
-      queryQueue.push(d);
-      return d.promise;
-    }),
-    isInitialized: vi.fn().mockReturnValue(true),
-    initialize: vi.fn().mockResolvedValue(undefined),
-    loadData: vi.fn().mockResolvedValue(undefined),
-    terminate: vi.fn(),
-    clearQueryCache: vi.fn(),
-  };
+  const { bridge, queries } = makeRowFetchBridge(bridgeOptions);
   const actions = new StateActions(state, bridge as unknown as Parameters<typeof StateActions>[1]);
 
   const body = new TableBody(
@@ -101,12 +82,6 @@ function setup() {
     actions,
   );
 
-  // Force a non-empty visible range so initialize() actually triggers a
-  // fetch. Without this JSDOM reports clientHeight=0 and `effectiveTotal`
-  // is gated by `if (effectiveTotal > 0)` at TableBody.ts:174 — but the
-  // condition fires; the issue is that `getVisibleRange()` returns 0..0
-  // and `checkNeedsFetch` is false-from-empty. Stub clientHeight on the
-  // scroller's container so we get a real range.
   const scrollContainer = body.getVirtualScroller().getScrollContainer();
   Object.defineProperty(scrollContainer, 'clientHeight', {
     value: 320, // 10 rows at rowHeight=32
@@ -114,56 +89,63 @@ function setup() {
   });
   body.getVirtualScroller().setTotalRows(100);
 
-  return { body, state, bridge, queryQueue, calls, container };
+  return { body, state, bridge, queries, container };
 }
 
-describe('TableBody — race protection (fetchSequence)', () => {
+describe('TableBody — race protection (epoch guard + superseded-fetch abort)', () => {
   it('an addFilter dispatched while the initial fetch is in-flight does NOT pollute the cache with unfiltered rows', async () => {
-    const { body, state, queryQueue } = setup();
+    // `rejectOnAbort: false` emulates a double that RESOLVES after its
+    // signal aborted — the epoch/aborted post-await guards are the only
+    // thing standing between those rows and the cache.
+    const { body, state, queries } = setup({ rejectOnAbort: false });
 
     // Kick off initialize() but do NOT await it: the initial unfiltered
-    // SELECT is now sitting at `await bridge.query(sql)` inside fetchRows.
+    // SELECT is now sitting at `await bridge.query(...)` inside fetchBlock.
     const initPromise = body.initialize();
 
-    // The fire-and-forget initial fetch ran sync up to the first await;
-    // exactly one query is queued.
-    expect(queryQueue.length).toBe(1);
+    // The initial fetch ran sync up to the first await; with the default
+    // 128-row block and totalRows=100, the whole table is one block.
+    expect(queries.length).toBe(1);
 
     // User calls addFilter immediately after `await createDataTable(...)`.
-    // synchronous fan-out: TableBody's filter subscriber clears the cache,
-    // bumps fetchSequence, and queues a pending fetch (because
-    // fetchInProgress is still true from the initial fetch).
+    // Synchronous fan-out: TableBody's filter subscriber invalidates —
+    // epoch bump, superseded fetch aborted, cache cleared, placeholders
+    // painted, and the filtered replacement query issued IMMEDIATELY (the
+    // old pipeline made it wait for the in-flight fetch to resolve first).
     const filter: Filter = { type: 'point', column: 'tag', value: 'A' };
     state.filters.set([filter]);
 
-    // Resolve the in-flight unfiltered query AFTER the filter mutation —
-    // this is the exact bug timeline. Sentinel `tag` values let us prove
-    // the rows never reach the cache.
-    queryQueue[0]!.resolve([
+    expect(queries[0]!.signal?.aborted).toBe(true);
+    expect(queries.length).toBe(2);
+    expect(queries[1]!.sql).toContain('WHERE');
+
+    // Resolve the superseded unfiltered query AFTER the filter mutation —
+    // the exact bug timeline. Sentinel `tag` values prove the rows never
+    // reach the cache.
+    queries[0]!.deferred.resolve([
       { __rowid__: 0, id: 0, tag: 'UNFILTERED' },
       { __rowid__: 1, id: 1, tag: 'UNFILTERED' },
     ]);
 
-    // Drain microtasks so fetchRows resumes after its await.
+    // Drain microtasks so fetchBlock resumes after its await.
     await Promise.resolve();
     await Promise.resolve();
 
-    // The seq guard inside fetchRows must drop the stale rows BEFORE they
-    // land in rowDataCache. The cache should be empty (cleared by
-    // invalidateCacheAndRefresh and never re-populated by the stale fetch).
     const cache = (body as unknown as { rowDataCache: Map<number, unknown> }).rowDataCache;
     for (const [, row] of cache) {
       expect((row as { tag?: string }).tag).not.toBe('UNFILTERED');
     }
 
-    // Now the pending fetch should have been kicked off in
-    // `fetchAndRender`'s `finally`. A second query is queued — and its SQL
-    // carries the new WHERE clause.
-    expect(queryQueue.length).toBe(2);
-    expect((queryQueue[1] as unknown as never) !== undefined).toBe(true);
-
-    // Resolve the pending (filtered) fetch. Now the cache should fill.
-    queryQueue[1]!.resolve([{ __rowid__: 0, id: 0, tag: 'A' }]);
+    // Resolve the filtered fetch with its full requested window. Now the
+    // cache fills — with filtered rows only.
+    const window1 = parseRowWindow(queries[1]!.sql);
+    queries[1]!.deferred.resolve(
+      Array.from({ length: window1.limit }, (_, k) => ({
+        __rowid__: window1.offset + k,
+        id: window1.offset + k,
+        tag: 'A',
+      })),
+    );
 
     await Promise.resolve();
     await Promise.resolve();
@@ -174,33 +156,28 @@ describe('TableBody — race protection (fetchSequence)', () => {
       expect((row as { tag?: string }).tag).toBe('A');
     }
 
-    // initialize() resolves once its outer await chain settles (which
-    // includes the pendingFetch via finally). Don't leave a dangling promise.
     body.destroy();
-    // After destroy(), any further worker responses are silently ignored.
-    // Resolve initPromise's path — initialize already returned in finally.
     await initPromise.catch(() => {});
   });
 
-  it('the SQL of the pending fetch contains the new filter predicate', async () => {
-    const { body, state, queryQueue, calls } = setup();
+  it('the superseding fetch is issued immediately and carries the new filter predicate', async () => {
+    const { body, state, queries } = setup();
 
     const initPromise = body.initialize();
-    expect(queryQueue.length).toBe(1);
-    expect(calls[0]).not.toContain('WHERE');
+    expect(queries.length).toBe(1);
+    expect(queries[0]!.sql).not.toContain('WHERE');
 
     const filter: Filter = { type: 'point', column: 'tag', value: 'A' };
     state.filters.set([filter]);
 
-    queryQueue[0]!.resolve([{ __rowid__: 0, id: 0, tag: 'UNFILTERED' }]);
-    await Promise.resolve();
-    await Promise.resolve();
+    // No resolution needed for the superseded call: the bridge mirror
+    // rejects it on abort, and the replacement is already issued.
+    expect(queries[0]!.signal?.aborted).toBe(true);
+    expect(queries.length).toBe(2);
+    expect(queries[1]!.sql).toContain('WHERE');
+    expect(queries[1]!.sql).toContain("'A'");
 
-    expect(queryQueue.length).toBe(2);
-    expect(calls[1]).toContain('WHERE');
-    expect(calls[1]).toContain("'A'");
-
-    queryQueue[1]!.resolve([{ __rowid__: 0, id: 0, tag: 'A' }]);
+    queries[1]!.deferred.resolve(rowsFor(queries[1]!.sql, COLUMNS));
     await Promise.resolve();
 
     body.destroy();
@@ -208,16 +185,20 @@ describe('TableBody — race protection (fetchSequence)', () => {
   });
 
   it('a sort change mid-fetch drops the stale unsorted rows', async () => {
-    const { body, state, queryQueue } = setup();
+    // Resolve-after-abort double again: the epoch guard does the dropping.
+    const { body, state, queries } = setup({ rejectOnAbort: false });
 
     const initPromise = body.initialize();
-    expect(queryQueue.length).toBe(1);
+    expect(queries.length).toBe(1);
 
     // Trigger sort change while the first fetch is in flight. TableBody's
     // sortColumns subscriber also funnels into invalidateCacheAndRefresh.
     state.sortColumns.set([{ column: 'id', direction: 'desc' }]);
 
-    queryQueue[0]!.resolve([
+    expect(queries[0]!.signal?.aborted).toBe(true);
+    expect(queries.length).toBe(2);
+
+    queries[0]!.deferred.resolve([
       { __rowid__: 0, id: 0, tag: 'UNSORTED' },
       { __rowid__: 1, id: 1, tag: 'UNSORTED' },
     ]);
@@ -229,14 +210,9 @@ describe('TableBody — race protection (fetchSequence)', () => {
       expect((row as { tag?: string }).tag).not.toBe('UNSORTED');
     }
 
-    expect(queryQueue.length).toBe(2);
-
-    // Resolve the pending sorted fetch so initialize() can settle. (Since
-    // the contract fix, initialize() awaits first paint — including the
-    // pendingFetch processed in `fetchAndRender`'s finally — instead of
-    // returning early. Leaving queryQueue[1] unresolved would hang
-    // initPromise indefinitely.)
-    queryQueue[1]!.resolve([{ __rowid__: 0, id: 0, tag: 'A' }]);
+    // Resolve the sorted fetch so nothing dangles.
+    expect(queries[1]!.sql).toContain('ORDER BY "id" DESC');
+    queries[1]!.deferred.resolve(rowsFor(queries[1]!.sql, COLUMNS));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -244,22 +220,28 @@ describe('TableBody — race protection (fetchSequence)', () => {
     await initPromise.catch(() => {});
   });
 
-  it('destroy() during an in-flight fetch silently drops the result', async () => {
-    const { body, queryQueue } = setup();
+  it('destroy() during an in-flight fetch aborts it and silently drops the result', async () => {
+    const { body, queries } = setup();
 
     const initPromise = body.initialize();
-    expect(queryQueue.length).toBe(1);
-
-    body.destroy();
+    expect(queries.length).toBe(1);
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    queryQueue[0]!.resolve([{ __rowid__: 0, id: 0, tag: 'POST_DESTROY' }]);
+    body.destroy();
+
+    // destroy() aborts every captured signal; the bridge mirror rejects the
+    // deferred with QUERY_ABORTED, which fetchBlock swallows silently.
+    for (const q of queries) {
+      expect(q.signal?.aborted).toBe(true);
+    }
+
+    // A late resolve on the already-rejected deferred is a no-op.
+    queries[0]!.deferred.resolve([{ __rowid__: 0, id: 0, tag: 'POST_DESTROY' }]);
     await Promise.resolve();
     await Promise.resolve();
 
     expect(errorSpy).not.toHaveBeenCalled();
 
-    // rowDataCache is cleared in destroy(), so it's already empty regardless.
     const cache = (body as unknown as { rowDataCache: Map<number, unknown> }).rowDataCache;
     expect(cache.size).toBe(0);
 
@@ -275,29 +257,29 @@ describe('TableBody — race protection (fetchSequence)', () => {
  */
 describe('TableBody — visibleColumns: reorder vs. set change', () => {
   it('a same-set reorder renders from the warm cache while a real set change re-fetches', async () => {
-    const { body, state, queryQueue, calls } = setup();
+    const { body, state, queries } = setup();
 
     const initPromise = body.initialize();
-    expect(queryQueue.length).toBe(1);
+    expect(queries.length).toBe(1);
 
-    // Resolve the initial fetch with a row for *every* index in the visible
-    // range. A half-filled cache would leave `checkNeedsFetch` true no matter
-    // what the subscriber decided, and the control assertion at the bottom
-    // would then pass for the wrong reason.
-    const range = body.getVisibleRange();
-    expect(range.end).toBeGreaterThan(range.start);
-    queryQueue[0]!.resolve(
-      Array.from({ length: range.end - range.start }, (_, i) => ({
-        __rowid__: range.start + i,
-        id: range.start + i,
-        tag: 'A',
-      })),
-    );
+    // Resolve the initial fetch with its full requested window (the whole
+    // 100-row table fits one 128-row block). A short resolve would leave
+    // the block half-cached, and the control assertion at the bottom would
+    // then pass for the wrong reason.
+    const window0 = parseRowWindow(queries[0]!.sql);
+    queries[0]!.deferred.resolve(rowsFor(queries[0]!.sql, COLUMNS));
     await initPromise;
 
+    const range = body.getVisibleRange();
+    expect(range.end).toBeGreaterThan(range.start);
     const cache = (body as unknown as { rowDataCache: Map<number, unknown> }).rowDataCache;
-    expect(cache.size).toBe(range.end - range.start);
-    const callsAfterInit = calls.length;
+    // Block-quantized fetch: the cache holds the whole block, not just the
+    // visible slice — and every visible index is covered.
+    expect(cache.size).toBe(window0.limit);
+    for (let i = range.start; i < range.end; i++) {
+      expect(cache.has(i), `cache covers visible row ${i}`).toBe(true);
+    }
+    const callsAfterInit = queries.length;
 
     // What one step of a keyboard column move writes: the same names in a new
     // order. Rows are keyed by column name, so every value the new order needs
@@ -305,17 +287,19 @@ describe('TableBody — visibleColumns: reorder vs. set change', () => {
     // keystroke for data the body is already holding.
     state.visibleColumns.set(['tag', 'id']);
 
-    expect(calls.length).toBe(callsAfterInit);
-    expect(cache.size).toBe(range.end - range.start);
+    expect(queries.length).toBe(callsAfterInit);
+    expect(cache.size).toBe(window0.limit);
 
     // Control: dropping a column is a genuine set change, and the projection
     // it needs is not in the cache — so this one must still invalidate.
     state.visibleColumns.set(['tag']);
 
-    expect(calls.length).toBe(callsAfterInit + 1);
+    expect(queries.length).toBe(callsAfterInit + 1);
     expect(cache.size).toBe(0);
 
-    queryQueue[queryQueue.length - 1]!.resolve([]);
+    queries[queries.length - 1]!.deferred.resolve(
+      rowsFor(queries[queries.length - 1]!.sql, ['tag']),
+    );
     body.destroy();
   });
 });

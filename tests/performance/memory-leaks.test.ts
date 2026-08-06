@@ -27,6 +27,9 @@ import { StateActions } from '@/core/Actions';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { Filter } from '@/core/types';
 
+import { rowsFor } from '../helpers/rowFetchBridge';
+import { HARNESS_COLUMNS, setupTableBody } from '../helpers/tableBodyHarness';
+
 // Polyfill ResizeObserver for jsdom — class form so `new ResizeObserver(...)`
 // at production call sites (TableContainer.setupResizeObserver) actually
 // constructs. The earlier `vi.fn().mockImplementation(...)` form failed with
@@ -163,6 +166,40 @@ describe('Memory Leak Detection', () => {
       }
 
       expect(pool.length).toBe(MAX_POOL_SIZE);
+    });
+  });
+
+  describe('Row cache bounds (TableBody)', () => {
+    it('a long scroll walk keeps rowDataCache at or under rowCacheRows (+ one block of write slack)', async () => {
+      const BLOCK = 16;
+      const CACHE_ROWS = 64;
+      const { body, queries, scrollToRow, drain } = setupTableBody({
+        totalRows: 10_000,
+        body: { fetchBlockSize: BLOCK, rowCacheRows: CACHE_ROWS },
+      });
+
+      const initPromise = body.initialize();
+      queries[0]!.deferred.resolve(rowsFor(queries[0]!.sql, HARNESS_COLUMNS));
+      await initPromise;
+
+      // Walk 600 rows down, resolving every fetch (visible and prefetch)
+      // as it appears — the cache is written far more rows than its cap.
+      for (let row = 20; row <= 600; row += 20) {
+        scrollToRow(row);
+        for (const q of queries) {
+          if (q.signal?.aborted !== true) {
+            q.deferred.resolve(rowsFor(q.sql, HARNESS_COLUMNS));
+          }
+        }
+        for (let i = 0; i < 4; i++) await drain();
+      }
+
+      const cache = (body as unknown as { rowDataCache: Map<number, unknown> }).rowDataCache;
+      // Bound: the cap, plus at most one block of just-written slack
+      // (eviction runs after each block write and exempts that block).
+      expect(cache.size).toBeLessThanOrEqual(CACHE_ROWS + BLOCK);
+
+      body.destroy();
     });
   });
 

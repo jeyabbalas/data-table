@@ -902,7 +902,7 @@ export class KeyboardNavigator {
       const vs = body.getVirtualScroller();
       const viewportHeight = vs.getViewportHeight();
       const rowHeight = vs.getRowHeight();
-      const scrollTop = vs.getScrollTop();
+      const scrollTop = vs.getVirtualScrollTop();
       const rowTop = row * rowHeight;
       const rowBottom = rowTop + rowHeight;
 

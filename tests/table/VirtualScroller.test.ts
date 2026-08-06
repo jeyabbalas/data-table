@@ -600,7 +600,7 @@ describe('VirtualScroller', () => {
   });
 
   describe('viewport positioning', () => {
-    it('should position viewport with translateY', () => {
+    it('should position viewport with style.top', () => {
       const scroller = createScroller();
 
       Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
@@ -616,7 +616,7 @@ describe('VirtualScroller', () => {
 
       const viewport = scroller.getViewportContainer();
       // Range starts at row 5 (10 - buffer 5), offsetY = 5 * 32 = 160
-      expect(viewport.style.transform).toBe('translateY(160px)');
+      expect(viewport.style.top).toBe('160px');
 
       scroller.destroy();
     });
@@ -740,7 +740,7 @@ describe('VirtualScroller', () => {
       scroller.destroy();
     });
 
-    it('handles 1M rows without instantiating per-row DOM', () => {
+    it('caps the spacer at MAX_VIRTUAL_HEIGHT', () => {
       const scroller = createScroller();
       Object.defineProperty(scroller.getScrollContainer(), 'clientHeight', {
         value: 480,
@@ -753,10 +753,11 @@ describe('VirtualScroller', () => {
       // (plus a small overscan buffer) — must be ≪ totalRows.
       expect(range.end - range.start).toBeLessThan(200);
 
-      // Total content height = 1M × rowHeight; it's a single inline-styled
-      // div, not a million child nodes.
+      // 1M × 32 px = 32M px exceeds the 15M px height cap, so the spacer is
+      // written capped; it's a single inline-styled div, not a million child
+      // nodes.
       const contentContainer = scroller.getScrollContainer().firstElementChild as HTMLElement;
-      expect(contentContainer.style.height).toBe(`${1_000_000 * 32}px`);
+      expect(contentContainer.style.height).toBe('15000000px');
       expect(contentContainer.children.length).toBeLessThan(10);
 
       scroller.destroy();

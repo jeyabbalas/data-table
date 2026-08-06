@@ -566,15 +566,13 @@ export class TableBody {
     } finally {
       this.fetchInProgress = false;
 
-      // Process pending fetch if any
+      // Process pending fetch if any. `pendingFetch` is purely the
+      // "work is pending" trigger — replay the scroller's freshest window
+      // rather than the queued range, which may be stale by now.
+      // Phase 3 replaces this.
       if (this.pendingFetch) {
-        const pending = this.pendingFetch;
         this.pendingFetch = null;
-        await this.handleScroll({
-          start: pending.start,
-          end: pending.end,
-          offsetY: pending.start * this.rowHeight,
-        });
+        await this.handleScroll(this.virtualScroller.getVisibleRange());
       }
     }
   }

@@ -19,6 +19,13 @@
  *     (forces every iteration to recompute the range).
  *   - Assert per-call median ≤ 1ms and p99 ≤ 16.6ms (60fps).
  *
+ * At 1M rows × 32px the virtual height (32M px) exceeds the 15M px spacer
+ * cap, so both benches run the compressed scroll mapping (jsdom reports
+ * scrollHeight 0 → the mapping falls back to the requested physical
+ * height). The first bench's constant 13px deltas exercise the LINEAR
+ * branch; the second interleaves large absolute jumps (every ~10th event)
+ * to exercise the PROPORTIONAL branch alongside linear motion.
+ *
  * Local M1 medians: ~0.05ms median per call, ~0.2ms p99. Budgets are
  * generous to absorb GC pauses and CI variance.
  */
@@ -126,6 +133,91 @@ describe('VirtualScroller — Phase 9 scroll-handler frame budget', () => {
     if (median > MEDIAN_BUDGET_MS || p99 > P99_BUDGET_MS) {
       console.warn(
         `[scroll-handler.bench] median=${median.toFixed(3)}ms p99=${p99.toFixed(3)}ms max=${max.toFixed(3)}ms`,
+      );
+    }
+
+    expect(median).toBeLessThan(MEDIAN_BUDGET_MS);
+    expect(p99).toBeLessThan(P99_BUDGET_MS);
+
+    scroller.destroy();
+  });
+
+  it('1000 interleaved scroll events (thumb-drag jumps every ~10th): median <1ms/call, p99 <16.6ms/call', () => {
+    // Stub rAF so handleScroll's throttle fires synchronously per event.
+    originalRAF = globalThis.requestAnimationFrame;
+    originalCAF = globalThis.cancelAnimationFrame;
+    let rafId = 0;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      cb(performance.now());
+      return ++rafId;
+    }) as typeof globalThis.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = (() => {}) as typeof globalThis.cancelAnimationFrame;
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const scroller = new VirtualScroller(container, {
+      rowHeight: ROW_HEIGHT,
+      bufferRows: 5,
+    });
+
+    // The scroll source is the inner scroll-container created by VirtualScroller.
+    // jsdom returns 0 for clientHeight by default — stub it before measuring.
+    const scrollSource = container.firstChild as HTMLElement;
+    expect(scrollSource).toBeTruthy();
+    Object.defineProperty(scrollSource, 'clientHeight', {
+      value: VIEWPORT_HEIGHT,
+      configurable: true,
+    });
+
+    let callbackCount = 0;
+    scroller.onScroll(() => {
+      callbackCount++;
+    });
+
+    scroller.setTotalRows(TOTAL_ROWS);
+
+    // Interleaved pattern: every ~10th event is an absolute jump ≥1e6 px
+    // (alternating between a ~12M and a ~1M band, both strictly inside
+    // (0, maxScroll − 1) where maxScroll = 15M cap − viewport) → the
+    // PROPORTIONAL branch; all other events advance by 13 px (not a
+    // divisor of ROW_HEIGHT) → the LINEAR branch with row-boundary
+    // crossings, mirroring the first bench.
+    const tops: number[] = [];
+    let prev = 0;
+    for (let i = 0; i < SCROLL_ITERATIONS; i++) {
+      if (i % 10 === 9) {
+        prev = (Math.floor(i / 10) % 2 === 0 ? 12_000_000 : 1_000_000) + i * 13;
+      } else {
+        prev += 13;
+      }
+      tops.push(prev);
+    }
+
+    // Time each dispatch individually so we can compute median + p99.
+    const samples: number[] = [];
+    for (const top of tops) {
+      Object.defineProperty(scrollSource, 'scrollTop', {
+        value: top,
+        configurable: true,
+      });
+      const start = performance.now();
+      scrollSource.dispatchEvent(new Event('scroll'));
+      samples.push(performance.now() - start);
+    }
+
+    expect(callbackCount).toBeGreaterThan(0);
+    expect(samples).toHaveLength(SCROLL_ITERATIONS);
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(samples.length / 2)]!;
+    const p99 = samples[Math.floor(samples.length * 0.99)]!;
+    const max = samples[samples.length - 1]!;
+
+    // Useful diagnostics in the test output if budgets bust.
+    if (median > MEDIAN_BUDGET_MS || p99 > P99_BUDGET_MS) {
+      console.warn(
+        `[scroll-handler.bench] interleaved median=${median.toFixed(3)}ms p99=${p99.toFixed(3)}ms max=${max.toFixed(3)}ms`,
       );
     }
 

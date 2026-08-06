@@ -150,14 +150,15 @@
 
 .dt-virtual-content {
   position: relative;
-  /* Height set dynamically via JavaScript = totalRows * rowHeight */
+  /* Height set dynamically via JavaScript = min(totalRows * rowHeight, height cap) */
 }
 
 .dt-virtual-viewport {
   position: absolute;
   top: 0;
   left: 0;
-  /* Positioned via transform: translateY() for GPU acceleration */
+  /* Positioned via inline style.top; layout-unit precision is exact under
+     the height cap, unlike float32 compositor transforms */
 }
 
 .dt-width-spacer {

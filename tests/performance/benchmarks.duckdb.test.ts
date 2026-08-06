@@ -20,6 +20,7 @@
  *   - perf_1m pattern filter SELECT: ~800ms (COUNT(*) WHERE category LIKE 'cat_1%')
  *   - 100 cached SELECTs:            ~25ms
  *   - 100 uncached COUNT(*):         ~700ms
+ *   - perf_scroll_16 rowid walk:     ~150ms (200 × 128-row block fetches)
  *
  * Budgets are 4-5x of the local median to absorb CI / shared-runner
  * variance. The WASM-init budget (4000ms) measures Node `worker_threads`
@@ -164,6 +165,62 @@ describeIfPerf('DuckDB performance budgets (opt-in via RUN_DUCKDB_PERF=1)', () =
       const elapsed = performance.now() - start;
       expect(elapsed).toBeLessThan(4000);
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Large-dataset virtual-scroll fix — rowid-range block-fetch latency at
+  // 1.6M rows. TableBody's scroll pipeline fetches 128-row blocks with the
+  // exact query shape below whenever no filter and no user sort are active
+  // (zonemap-pruned rowid range instead of OFFSET pagination), so this walk
+  // documents the worker-side latency envelope that keeps deep scrolling
+  // ~ms at any depth. Seeded via `range()` like perf_1m; `"__rowid__"`
+  // mirrors the column the loaders inject.
+  // ---------------------------------------------------------------------------
+  describe('1.6M-row rowid-range block-fetch scroll walk', () => {
+    beforeAll(async () => {
+      await harness.conn.query(`
+        CREATE TABLE perf_scroll_16 AS
+        SELECT
+          CAST(i AS BIGINT) AS "__rowid__",
+          CAST(i AS INTEGER) AS id,
+          ('g' || (i % 97)) AS grp,
+          (i % 1000) / 10.0 AS val
+        FROM range(1600000) t(i)
+      `);
+    }, 30_000);
+
+    it('200 block-shaped fetches (128 rows each) complete under 5000ms total', async () => {
+      // mulberry32(0xC0FFEE): a deterministic walk over block-aligned starts —
+      // reruns measure the same query set, so the budget tracks DuckDB, not RNG.
+      let seed = 0xc0ffee;
+      const rand = (): number => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+
+      const start = performance.now();
+      for (let k = 0; k < 200; k++) {
+        // Block-aligned start, block ∈ [0, 12_499] — 1.6M / 128 = 12,500
+        // exactly, so every block is full.
+        const s = Math.floor(rand() * 12_500) * 128;
+        // The EXACT fast-path shape TableBody.buildRowQuery emits when
+        // unsorted and unfiltered.
+        const result = await harness.conn.query(
+          `SELECT "__rowid__", "id", "grp", "val" FROM "perf_scroll_16"` +
+            ` WHERE "__rowid__" >= ${s} AND "__rowid__" < ${s + 128}` +
+            ` ORDER BY "__rowid__" ASC LIMIT 128`,
+        );
+        // toArray() forces materialization — without it nothing is measured.
+        expect(result.toArray()).toHaveLength(128);
+      }
+      const elapsed = performance.now() - start;
+      // ~25ms/block ceiling (4-5x the local median, matching the file's
+      // budget discipline).
+      expect(elapsed).toBeLessThan(5000);
+    }, 30_000);
   });
 });
 

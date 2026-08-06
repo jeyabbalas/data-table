@@ -419,6 +419,11 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
         colorScheme: currentScheme,
       });
       wireTableEvents(table);
+      // Re-apply the scheme the radios show right now: a toggle clicked
+      // while createDataTable was pending hit `table?.setColorScheme` when
+      // `table` was still undefined and silently no-oped. Idempotent when
+      // nothing changed mid-flight.
+      table.setColorScheme(currentScheme);
     } else {
       await table.loadData(librarySource, {
         tableName,

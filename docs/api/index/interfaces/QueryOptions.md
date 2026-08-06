@@ -6,7 +6,7 @@
 
 # Interface: QueryOptions
 
-Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/data/WorkerBridge.ts#L51)
+Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L51)
 
 Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
@@ -16,7 +16,7 @@ Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
 > `optional` **cache?**: `boolean`
 
-Defined in: [data/WorkerBridge.ts:57](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/data/WorkerBridge.ts#L57)
+Defined in: [data/WorkerBridge.ts:57](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L57)
 
 Set `false` to bypass the SQL result cache — both the read (a cached
 result is ignored) and the write (the fresh result is not stored).
@@ -28,7 +28,7 @@ Default: SELECT queries are cached.
 
 > `optional` **priority?**: `"high"` \| `"normal"`
 
-Defined in: [data/WorkerBridge.ts:63](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/data/WorkerBridge.ts#L63)
+Defined in: [data/WorkerBridge.ts:63](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/data/WorkerBridge.ts#L63)
 
 Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
 stats/histogram queries) in the worker's serial dispatch queue —

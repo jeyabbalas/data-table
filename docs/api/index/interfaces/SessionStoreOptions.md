@@ -6,7 +6,7 @@
 
 # Interface: SessionStoreOptions
 
-Defined in: [persistence/SessionStore.ts:211](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/persistence/SessionStore.ts#L211)
+Defined in: [persistence/SessionStore.ts:211](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/persistence/SessionStore.ts#L211)
 
 Optional per-instance configuration for [SessionStore](../classes/SessionStore.md). When omitted,
 `SessionStore` is a pure read/write wrapper around IndexedDB; supplying
@@ -24,7 +24,7 @@ to route the warning through the same path.
 
 > `optional` **onLoadIssue?**: (`issue`) => `void`
 
-Defined in: [persistence/SessionStore.ts:222](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/persistence/SessionStore.ts#L222)
+Defined in: [persistence/SessionStore.ts:222](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/persistence/SessionStore.ts#L222)
 
 Called when `load()` rejects a stored snapshot for a reason the
 consumer may want to surface as a warning (currently: a snapshot

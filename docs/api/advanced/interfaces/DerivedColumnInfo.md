@@ -6,7 +6,7 @@
 
 # Interface: DerivedColumnInfo
 
-Defined in: [derived/types.ts:45](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/derived/types.ts#L45)
+Defined in: [derived/types.ts:45](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/derived/types.ts#L45)
 
 Runtime metadata after adding a column — extends the def with detected DuckDB info
 
@@ -16,7 +16,7 @@ Runtime metadata after adding a column — extends the def with detected DuckDB 
 
 > **def**: [`DerivedColumnDef`](../../index/type-aliases/DerivedColumnDef.md)
 
-Defined in: [derived/types.ts:46](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/derived/types.ts#L46)
+Defined in: [derived/types.ts:46](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/derived/types.ts#L46)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [derived/types.ts:46](https://github.com/jeyabbalas/data-table/blob/
 
 > **detectedOriginalType**: `string`
 
-Defined in: [derived/types.ts:48](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/derived/types.ts#L48)
+Defined in: [derived/types.ts:48](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/derived/types.ts#L48)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [derived/types.ts:48](https://github.com/jeyabbalas/data-table/blob/
 
 > **detectedType**: [`DataType`](../../index/type-aliases/DataType.md)
 
-Defined in: [derived/types.ts:47](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/derived/types.ts#L47)
+Defined in: [derived/types.ts:47](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/derived/types.ts#L47)

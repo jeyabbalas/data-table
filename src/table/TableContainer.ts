@@ -121,6 +121,22 @@ export interface TableContainerOptions {
    * by `createDataTable`; destroyed alongside the container.
    */
   columnHeaderTooltipPopover?: ColumnHeaderTooltipPopover | undefined;
+  /**
+   * Rows fetched per scroll block, forwarded to `TableBody`. Default: 128.
+   * Clamped to [16, 1024]. See {@link TableBodyOptions.fetchBlockSize}.
+   */
+  fetchBlockSize?: number | undefined;
+  /**
+   * Maximum rows kept in the body's row cache, forwarded to `TableBody`.
+   * Default: 2048, rounded up to whole blocks (floor 4 blocks). See
+   * {@link TableBodyOptions.rowCacheRows}.
+   */
+  rowCacheRows?: number | undefined;
+  /**
+   * Speculative one-block-ahead prefetch while scrolling, forwarded to
+   * `TableBody`. Default: true. See {@link TableBodyOptions.prefetch}.
+   */
+  prefetch?: boolean | undefined;
 }
 
 /**
@@ -237,6 +253,11 @@ export class TableContainer {
       annotations: undefined as unknown as AnnotationStore,
       annotationPopover: undefined as unknown as AnnotationPopover,
       columnHeaderTooltipPopover: undefined as unknown as ColumnHeaderTooltipPopover,
+      // Fetch-pipeline knobs: TableBody owns the real defaults/clamping;
+      // undefined here means "let the body decide".
+      fetchBlockSize: undefined as unknown as number,
+      rowCacheRows: undefined as unknown as number,
+      prefetch: undefined as unknown as boolean,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -1433,6 +1454,9 @@ export class TableContainer {
           annotations: this.resolvedOptions.annotations,
           annotationPopover: this.resolvedOptions.annotationPopover,
           messages: this.messages,
+          fetchBlockSize: this.resolvedOptions.fetchBlockSize,
+          rowCacheRows: this.resolvedOptions.rowCacheRows,
+          prefetch: this.resolvedOptions.prefetch,
           onRowsRendered: () => this.syncActiveDescendant(),
           // Where the body parks real DOM focus when it is about to detach the
           // row holding it. Passed explicitly rather than rediscovered with

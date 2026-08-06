@@ -6,7 +6,7 @@
 
 # Class: AnnotationStore
 
-Defined in: [annotations/AnnotationStore.ts:158](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L158)
+Defined in: [annotations/AnnotationStore.ts:158](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L158)
 
 In-memory store + index for row / column / cell annotations. Exposed on the
 facade as `table.annotations`. Provides CRUD, intersection lookup
@@ -21,7 +21,7 @@ live outside `TableState` (no undo/redo) and persist independently into
 
 > **new AnnotationStore**(`options?`): `AnnotationStore`
 
-Defined in: [annotations/AnnotationStore.ts:183](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L183)
+Defined in: [annotations/AnnotationStore.ts:183](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L183)
 
 #### Parameters
 
@@ -39,7 +39,7 @@ Defined in: [annotations/AnnotationStore.ts:183](https://github.com/jeyabbalas/d
 
 > **add**(`ann`): [`Annotation`](../../index/type-aliases/Annotation.md)
 
-Defined in: [annotations/AnnotationStore.ts:194](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L194)
+Defined in: [annotations/AnnotationStore.ts:194](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L194)
 
 Add a single annotation. Generates `id` and `createdAt` if missing.
 
@@ -59,7 +59,7 @@ Add a single annotation. Generates `id` and `createdAt` if missing.
 
 > **addMany**(`anns`): [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
-Defined in: [annotations/AnnotationStore.ts:206](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L206)
+Defined in: [annotations/AnnotationStore.ts:206](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L206)
 
 Add many annotations atomically. Any duplicate-id or shape failure
 aborts the whole batch (rolling back any intermediate inserts) and
@@ -82,7 +82,7 @@ throws the first `AnnotationError`. On success, emits a single
 
 > **clear**(`scope?`): `number`
 
-Defined in: [annotations/AnnotationStore.ts:339](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L339)
+Defined in: [annotations/AnnotationStore.ts:339](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L339)
 
 Clear by scope (default `'all'`). Emits a single `change` event with
 `kind: 'cleared'` and the full list of removed ids. Returns the
@@ -104,7 +104,7 @@ number of annotations removed.
 
 > **count**(): `number`
 
-Defined in: [annotations/AnnotationStore.ts:359](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L359)
+Defined in: [annotations/AnnotationStore.ts:359](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L359)
 
 Number of annotations currently in the store.
 
@@ -118,7 +118,7 @@ Number of annotations currently in the store.
 
 > **destroy**(): `void`
 
-Defined in: [annotations/AnnotationStore.ts:617](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L617)
+Defined in: [annotations/AnnotationStore.ts:617](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L617)
 
 Clear all listeners. Called from `DataTable.destroy`.
 
@@ -132,7 +132,7 @@ Clear all listeners. Called from `DataTable.destroy`.
 
 > **get**(`id`): [`Annotation`](../../index/type-aliases/Annotation.md) \| `null`
 
-Defined in: [annotations/AnnotationStore.ts:224](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L224)
+Defined in: [annotations/AnnotationStore.ts:224](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L224)
 
 Lookup by id. Returns `null` when not present.
 
@@ -152,7 +152,7 @@ Lookup by id. Returns `null` when not present.
 
 > **getAll**(): [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
-Defined in: [annotations/AnnotationStore.ts:229](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L229)
+Defined in: [annotations/AnnotationStore.ts:229](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L229)
 
 All annotations in insertion order.
 
@@ -166,7 +166,7 @@ All annotations in insertion order.
 
 > **getByCell**(`rowId`, `column`): [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
-Defined in: [annotations/AnnotationStore.ts:385](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L385)
+Defined in: [annotations/AnnotationStore.ts:385](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L385)
 
 Union of row-scope + column-scope + cell-scope annotations at
 `(rowId, column)`. Sorted by severity (error > warning > info),
@@ -193,7 +193,7 @@ insertion order.
 
 > **getByColumn**(`column`): [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
-Defined in: [annotations/AnnotationStore.ts:373](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L373)
+Defined in: [annotations/AnnotationStore.ts:373](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L373)
 
 #### Parameters
 
@@ -211,7 +211,7 @@ Defined in: [annotations/AnnotationStore.ts:373](https://github.com/jeyabbalas/d
 
 > **getByRow**(`rowId`): [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
-Defined in: [annotations/AnnotationStore.ts:367](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L367)
+Defined in: [annotations/AnnotationStore.ts:367](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L367)
 
 #### Parameters
 
@@ -229,7 +229,7 @@ Defined in: [annotations/AnnotationStore.ts:367](https://github.com/jeyabbalas/d
 
 > **getSeverityFilter**(): [`SeverityFilter`](../../index/interfaces/SeverityFilter.md)
 
-Defined in: [annotations/AnnotationStore.ts:439](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L439)
+Defined in: [annotations/AnnotationStore.ts:439](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L439)
 
 Snapshot of the current severity-filter flags. Returns a fresh copy.
 
@@ -243,7 +243,7 @@ Snapshot of the current severity-filter flags. Returns a fresh copy.
 
 > **loadJSON**(`file`, `modeOrOptions?`): `object`
 
-Defined in: [annotations/AnnotationStore.ts:490](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L490)
+Defined in: [annotations/AnnotationStore.ts:490](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L490)
 
 Load annotations from an [AnnotationFile](../../index/interfaces/AnnotationFile.md).
 
@@ -291,7 +291,7 @@ case visible even when callers do not opt into the throw.
 
 > **on**(`event`, `handler`): () => `void`
 
-Defined in: [annotations/AnnotationStore.ts:600](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L600)
+Defined in: [annotations/AnnotationStore.ts:600](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L600)
 
 Subscribe to store mutations. Returns an unsubscribe function.
 Handlers that throw are caught and logged; other handlers still fire.
@@ -316,7 +316,7 @@ Handlers that throw are caught and logged; other handlers still fire.
 
 > **remove**(`id`): `boolean`
 
-Defined in: [annotations/AnnotationStore.ts:314](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L314)
+Defined in: [annotations/AnnotationStore.ts:314](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L314)
 
 Remove by id. Returns `true` if something was removed.
 
@@ -336,7 +336,7 @@ Remove by id. Returns `true` if something was removed.
 
 > **removeMany**(`ids`): `number`
 
-Defined in: [annotations/AnnotationStore.ts:325](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L325)
+Defined in: [annotations/AnnotationStore.ts:325](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L325)
 
 Remove many ids in a batch. Unknown ids are silently skipped.
 Returns the count of ids actually removed. Emits a single `change`
@@ -358,7 +358,7 @@ event when at least one was removed.
 
 > **setSeverityFilter**(`patch`): `void`
 
-Defined in: [annotations/AnnotationStore.ts:426](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L426)
+Defined in: [annotations/AnnotationStore.ts:426](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L426)
 
 Toggle one or more severities on or off for visual rendering.
 
@@ -391,7 +391,7 @@ so toggles survive a page reload.
 
 > **toJSON**(): [`AnnotationFile`](../../index/interfaces/AnnotationFile.md)
 
-Defined in: [annotations/AnnotationStore.ts:452](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L452)
+Defined in: [annotations/AnnotationStore.ts:452](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L452)
 
 Serialize the store to a JSON-safe [AnnotationFile](../../index/interfaces/AnnotationFile.md). Unknown
 top-level keys and unknown per-annotation keys captured by an earlier
@@ -407,7 +407,7 @@ top-level keys and unknown per-annotation keys captured by an earlier
 
 > **update**(`id`, `patch`): [`Annotation`](../../index/type-aliases/Annotation.md)
 
-Defined in: [annotations/AnnotationStore.ts:238](https://github.com/jeyabbalas/data-table/blob/545d3dece9300b5f4a8e75f6e7f930aac0e500d6/src/annotations/AnnotationStore.ts#L238)
+Defined in: [annotations/AnnotationStore.ts:238](https://github.com/jeyabbalas/data-table/blob/6ab877c1ea07585d4f49019b8ce012ecb2e0d015/src/annotations/AnnotationStore.ts#L238)
 
 Apply a partial update. Rejects any patch that would change `id`,
 `scope`, `rowId`, or `column` — those are immutable after creation.

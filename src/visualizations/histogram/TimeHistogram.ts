@@ -206,6 +206,10 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         this.syncVisualStateFromFilter();
       }
 
+      // Keep the committed-selection stats text in step with the synced
+      // visual state (also clears it when this column's filter was removed).
+      this.emitCommittedStats();
+
       this.render();
     } catch (error) {
       if (seq !== this.fetchSequence || this.destroyed) return;

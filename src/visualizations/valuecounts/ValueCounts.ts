@@ -25,7 +25,7 @@ import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatCount, formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
+import { formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 
@@ -324,6 +324,12 @@ export class ValueCounts extends BaseVisualization {
     this.pendingFilterSync = this.isFilterUpdate || this.options.filters.length > 0;
 
     this.render();
+
+    // Keep the committed-selection stats text in step with the synced
+    // visual state (also clears it when this column's filter was removed).
+    // Runs after render() because the filter→selection sync happens inside
+    // render (pendingFilterSync).
+    this.emitCommittedStats();
   }
 
   /**
@@ -1072,7 +1078,7 @@ export class ValueCounts extends BaseVisualization {
     if (segment.isNull) {
       labelText = '\u2205'; // Empty set symbol for null
     } else if (segment.isAllUnique) {
-      labelText = `All unique (${formatCount(segment.count)})`;
+      labelText = this.statsMessages.allUniqueCategory(segment.count);
     } else if (segment.isOther) {
       labelText = 'Other';
     } else {
@@ -1243,6 +1249,64 @@ export class ValueCounts extends BaseVisualization {
   }
 
   /**
+   * Segment identity label for stats detail lines. Reads the background
+   * (unfiltered) segment first so the label — including the Other/All-unique
+   * value counts — is stable when other columns' filters change.
+   */
+  private formatSegmentLabel(idx: number): string {
+    const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+    if (!seg) return '';
+    if (seg.isNull) return this.statsMessages.nullBinLabel;
+    if (seg.isAllUnique) return this.statsMessages.allUniqueCategory(seg.count);
+    if (seg.isOther) return this.statsMessages.otherCategory(seg.otherCount ?? 0);
+    const raw = seg.value.length > 30 ? seg.value.substring(0, 27) + '...' : seg.value;
+    return escapeHTML(raw);
+  }
+
+  /** Sum unfiltered (background-first) counts over segment indices. */
+  private sumBgCounts(indices: Iterable<number>): number {
+    let count = 0;
+    for (const idx of indices) {
+      const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+      if (seg) count += seg.count;
+    }
+    return count;
+  }
+
+  /**
+   * Count line for a committed selection: how many rows this column's filter
+   * alone matches, out of the full dataset. Measured on the unfiltered
+   * background so the text is stable when other columns' filters change.
+   */
+  private formatSelectionCountLine(indices: Iterable<number>): string {
+    const total = (this.backgroundData ?? this.data)?.total ?? 0;
+    const count = this.sumBgCounts(indices);
+    return this.statsMessages.selectionRowCount(
+      count,
+      formatPercent(total > 0 ? count / total : 0),
+    );
+  }
+
+  /**
+   * Count line for a transient hover: the segment's unfiltered size out of
+   * the full dataset, plus — when filters are active — how many of its rows
+   * pass all current filters.
+   */
+  private formatHoverCountLine(idx: number): string {
+    const total = (this.backgroundData ?? this.data)?.total ?? 0;
+    const bgCount = this.sumBgCounts([idx]);
+    let line = this.statsMessages.selectionRowCount(
+      bgCount,
+      formatPercent(total > 0 ? bgCount / total : 0),
+    );
+    if (this.backgroundData) {
+      const fgCount = this.renderSegments[idx]?.count ?? 0;
+      line += `${this.statsMessages.separator}${this.statsMessages.matchCount(fgCount)}`;
+    }
+    return line;
+  }
+
+  /**
    * Update stats line based on hover state
    */
   private updateHoverStats(): void {
@@ -1252,32 +1316,9 @@ export class ValueCounts extends BaseVisualization {
       const segment =
         this.renderSegments[this.hoveredSegment] ?? this.backgroundSegments[this.hoveredSegment];
       if (segment) {
-        let categoryLabel: string;
-        if (segment.isNull) {
-          categoryLabel = 'null';
-        } else if (segment.isAllUnique) {
-          categoryLabel = `All unique (${formatCount(segment.count)})`;
-        } else if (segment.isOther) {
-          categoryLabel = `Other (${segment.otherCount} values)`;
-        } else {
-          const raw =
-            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
-          categoryLabel = escapeHTML(raw);
-        }
-
-        // Show crossfilter context when background data exists
-        const bgSegment = this.backgroundSegments[this.hoveredSegment];
-        let countLine: string;
-        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
-          const ratio = formatPercent(segment.count / bgSegment.count);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
-        } else {
-          const percent = formatPercent(segment.count / this.data.total);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
-        }
-
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
+          `<span class="stats-label">${this.statsMessages.categoryLabel}</span> ${this.formatSegmentLabel(this.hoveredSegment)}<br>` +
+            this.formatHoverCountLine(this.hoveredSegment),
         );
       }
     } else {
@@ -1512,74 +1553,57 @@ export class ValueCounts extends BaseVisualization {
     // Single selection
     if (this.selectedSegments.size === 1) {
       const idx = [...this.selectedSegments][0]!;
-      const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
+      const segment = this.backgroundSegments[idx] ?? this.renderSegments[idx];
       if (segment) {
-        let categoryLabel: string;
-        if (segment.isNull) {
-          categoryLabel = 'null';
-        } else if (segment.isAllUnique) {
-          categoryLabel = `All unique (${formatCount(segment.count)})`;
-        } else if (segment.isOther) {
-          categoryLabel = `Other (${segment.otherCount} values)`;
-        } else {
-          const raw =
-            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
-          categoryLabel = escapeHTML(raw);
-        }
-
-        const bgSegment = this.backgroundSegments[idx];
-        let countLine: string;
-        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
-          const ratio = formatPercent(segment.count / bgSegment.count);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
-        } else {
-          const percent = formatPercent(segment.count / this.data.total);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
-        }
-
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
+          `<span class="stats-label">${this.statsMessages.categoryLabel}</span> ${this.formatSegmentLabel(idx)}<br>` +
+            this.formatSelectionCountLine(this.selectedSegments),
         );
       }
       return;
     }
 
-    // Multi-select stats
-    const selectedSegmentsList = [...this.selectedSegments]
-      .map((idx) => this.renderSegments[idx])
-      .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique);
-
-    const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
-
-    // Format value list (truncate if too long)
-    const values = selectedSegmentsList.map((s) => escapeHTML(s.value));
+    // Multi-select: list every selected segment (null and Other included —
+    // they are part of what the emitted filter selects, and the count line
+    // sums them all).
+    const values: string[] = [];
+    for (const idx of this.selectedSegments) {
+      const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+      if (!seg || seg.isAllUnique) continue;
+      values.push(this.formatSegmentLabel(idx));
+    }
     let valueListStr = values.join(', ');
     if (valueListStr.length > 50) {
-      valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;
-    }
-
-    // Calculate background total for multi-select crossfilter context
-    let countLine: string;
-    if (this.backgroundData) {
-      const bgTotal = [...this.selectedSegments]
-        .map((idx) => this.backgroundSegments[idx])
-        .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique)
-        .reduce((sum, s) => sum + s.count, 0);
-      if (bgTotal > 0) {
-        const ratio = formatPercent(totalCount / bgTotal);
-        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} / ${formatCount(bgTotal)} (${ratio})`;
-      } else {
-        const percent = formatPercent(totalCount / this.data.total);
-        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
-      }
-    } else {
-      const percent = formatPercent(totalCount / this.data.total);
-      countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
+      valueListStr =
+        values.slice(0, 3).join(', ') + this.statsMessages.valueListSuffix(values.length);
     }
 
     this.options.onStatsChange?.(
-      `<span class="stats-label">Selected:</span><br>` + `${valueListStr}<br>` + countLine,
+      `<span class="stats-label">${this.statsMessages.selectedLabel}</span> ${valueListStr}<br>` +
+        this.formatSelectionCountLine(this.selectedSegments),
     );
+  }
+
+  /**
+   * Emit the committed-selection detail text — or clear it — after each
+   * fetch+render+sync cycle, so this column's filter displays identically
+   * regardless of how it was created and clears on every removal path.
+   * Pattern filters keep their segment highlight but suppress the detail:
+   * category folding can hide matching values, so a sum over the visible
+   * segments would undercount the filter's true matches.
+   */
+  private emitCommittedStats(): void {
+    if (this.destroyed) return;
+    const ownFilter = this.options.filters.find((f) => f.column === this.column.name);
+    if (ownFilter?.type === 'pattern') {
+      this.options.onStatsChange?.(null);
+      return;
+    }
+    if (this.selectedSegments.size > 0) {
+      this.updateSelectedStats();
+    } else {
+      this.options.onStatsChange?.(null);
+    }
   }
 
   /**

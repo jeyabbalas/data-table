@@ -3,6 +3,8 @@ import {
   formatStatValue,
   formatCount,
   formatDefaultStats,
+  formatStatsLine1,
+  formatStatsLine2,
 } from '../../src/statistics/StatsFormatters';
 import type {
   NumericColumnStats,
@@ -206,6 +208,108 @@ describe('formatDefaultStats - Line 1', () => {
     );
     expect(result).toContain('0 rows');
     expect(result).not.toContain('dt-stats-line2');
+  });
+
+  it('shows the fraction whenever a filter is active, even when filtered count equals total', () => {
+    const result = formatDefaultStats(makeNumericStats({ filteredTotalRows: 1234 }), 'integer');
+    expect(result).toContain('1,234 / 1,234 rows');
+  });
+
+  it('never shows a fraction when no filter is active', () => {
+    const result = formatDefaultStats(makeNumericStats({ filteredTotalRows: null }), 'integer');
+    expect(result).not.toContain(' / ');
+  });
+});
+
+// =========================================
+// formatStatsLine1 / formatStatsLine2 (granular formatters)
+// =========================================
+
+describe('formatStatsLine1', () => {
+  const makeNumericStats = (overrides: Partial<NumericColumnStats> = {}): NumericColumnStats => ({
+    kind: 'numeric',
+    totalRows: 1234,
+    nonNullCount: 1234,
+    nullCount: 0,
+    filteredTotalRows: null,
+    min: 0,
+    max: 100,
+    median: 50,
+    distinctCount: 100,
+    ...overrides,
+  });
+
+  it('returns plain text without HTML wrapping', () => {
+    const result = formatStatsLine1(makeNumericStats());
+    expect(result).toBe('1,234 rows');
+    expect(result).not.toContain('<');
+  });
+
+  it('shows fraction with F equal to N when a filter is active', () => {
+    expect(formatStatsLine1(makeNumericStats({ filteredTotalRows: 1234 }))).toBe(
+      '1,234 / 1,234 rows',
+    );
+  });
+
+  it('shows fraction with null annotation counted within the filtered set', () => {
+    const result = formatStatsLine1(
+      makeNumericStats({ filteredTotalRows: 892, nullCount: 3, nonNullCount: 889 }),
+    );
+    expect(result).toBe('892 / 1,234 rows · 3 null');
+  });
+
+  it('shows "all null" when nulls equal the filtered count', () => {
+    const result = formatStatsLine1(
+      makeNumericStats({ filteredTotalRows: 10, nullCount: 10, nonNullCount: 0 }),
+    );
+    expect(result).toContain('all null');
+  });
+});
+
+describe('formatStatsLine2', () => {
+  const makeNumericStats = (overrides: Partial<NumericColumnStats> = {}): NumericColumnStats => ({
+    kind: 'numeric',
+    totalRows: 1234,
+    nonNullCount: 1234,
+    nullCount: 0,
+    filteredTotalRows: null,
+    min: 0,
+    max: 100,
+    median: 50,
+    distinctCount: 100,
+    ...overrides,
+  });
+
+  it('returns the type-specific summary as raw text', () => {
+    const result = formatStatsLine2(makeNumericStats(), 'integer');
+    expect(result).toContain('min');
+    expect(result).toContain('max');
+    expect(result).not.toContain('dt-stats-line2');
+  });
+
+  it('returns empty string for 0 rows', () => {
+    const result = formatStatsLine2(
+      makeNumericStats({ totalRows: 0, nonNullCount: 0, min: null, max: null, median: null }),
+      'integer',
+    );
+    expect(result).toBe('');
+  });
+
+  it('returns empty string when all values in the filtered set are null', () => {
+    const result = formatStatsLine2(
+      makeNumericStats({ filteredTotalRows: 10, nullCount: 10, nonNullCount: 0 }),
+      'integer',
+    );
+    expect(result).toBe('');
+  });
+
+  it('composes with formatStatsLine1 to reproduce formatDefaultStats output', () => {
+    const stats = makeNumericStats({ filteredTotalRows: 892, nullCount: 3, nonNullCount: 889 });
+    const line1 = formatStatsLine1(stats);
+    const line2 = formatStatsLine2(stats, 'integer');
+    expect(formatDefaultStats(stats, 'integer')).toBe(
+      `<span class="dt-stats-line1">${line1}</span><br><span class="dt-stats-line2">${line2}</span>`,
+    );
   });
 });
 

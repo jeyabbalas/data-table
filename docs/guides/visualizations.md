@@ -80,12 +80,24 @@ whether the filter was created by brushing the chart, the funnel panel,
 `Bin: 50 – 60` + `800 rows (8.0%)` — the hovered bin's share of the
 dataset — plus `· 300 match` for the rows of that bin passing all active
 filters. Mousing off restores the committed selection (or the default
-summary).
+summary). A hover survives filter activity elsewhere in the table: when
+another column's filter triggers a refetch, the hovered bin's readout is
+recomputed against the new data rather than replaced.
 
-Two filter kinds have no chart representation and therefore no committed
-detail: **pattern** filters (contains/starts/ends/regex) and **raw-SQL**
-filters. Their columns keep the default summary; line 1 and the funnel
-indicator still reflect them.
+Some filters have no countable chart representation and therefore show no
+committed detail — their columns keep the default summary, while line 1
+and the funnel indicator still reflect them:
+
+- **pattern** filters (contains/starts/ends/regex) and **raw-SQL**
+  filters, which have no chart representation at all;
+- on a categorical column, any filter naming a value that has been folded
+  into the **Other** segment. A stacked bar keeps only the top categories
+  as their own segment and rolls the rest into Other, whose total it knows
+  but whose membership it does not — so `IN`/`=` on a folded value would
+  undercount, and `NOT IN` would overcount by exactly that value's rows.
+  Rather than state a wrong number, the detail is omitted. Filters built
+  by the chart's own gestures are always countable, including the
+  `NOT IN` that clicking Other emits.
 
 A continuous histogram can only draw bin-aligned brushes, so a range
 filter created through the panel or API snaps its drawn brush (and the

@@ -149,6 +149,20 @@ function lastStats(): string | null {
   return statsChanges[statsChanges.length - 1] ?? null;
 }
 
+/**
+ * Assert the detail region was explicitly cleared.
+ *
+ * `expect(lastStats()).toBeNull()` cannot express this on its own: the `?? null`
+ * collapses "emitted null" and "emitted nothing at all" into the same value, so
+ * such an assertion passes even when the emission under test never fires —
+ * deleting the `emitCommittedStats()` call from `fetchData` would keep it green.
+ * Pinning the emission count is what makes the clear path actually covered.
+ */
+function expectCleared(): void {
+  expect(statsChanges.length).toBeGreaterThan(0);
+  expect(statsChanges[statsChanges.length - 1]).toBeNull();
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   statsChanges = [];
@@ -209,7 +223,7 @@ describe('Histogram — committed-selection emission (continuous)', () => {
     await settled(viz);
     expect(lastStats()).toContain('Bin:');
     await viz.updateFilters([]);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 
@@ -238,7 +252,7 @@ describe('Histogram — committed-selection emission (continuous)', () => {
   it('pattern and raw-sql filters produce no committed detail', async () => {
     const patternViz = makeViz([{ type: 'pattern', column: 'v', pattern: 'x', mode: 'contains' }]);
     await settled(patternViz);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     patternViz.destroy();
 
     statsChanges = [];
@@ -246,7 +260,7 @@ describe('Histogram — committed-selection emission (continuous)', () => {
       { type: 'raw-sql', column: '__raw_sql_1__', sql: 'v > 1', id: '1' } as Filter,
     ]);
     await settled(rawViz);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     rawViz.destroy();
   });
 
@@ -289,7 +303,7 @@ describe('Histogram — committed-selection emission (continuous)', () => {
   it('a brush committed before any refetch shows the same count after the refetch', async () => {
     const viz = makeViz([]);
     await settled(viz);
-    expect(lastStats()).toBeNull();
+    expectCleared();
 
     // Simulate the state handleMouseUp leaves after a one-bin brush commit,
     // before the filter round-trips (backgroundData is still null).
@@ -329,6 +343,100 @@ describe('Histogram — committed-selection emission (discrete)', () => {
     const viz = makeViz([{ type: 'set', column: 'v', values: [1, 2] }]);
     await settled(viz);
     expect(lastStats()).toContain('14 rows (70.0%)');
+    viz.destroy();
+  });
+});
+
+describe('Histogram — a refetch must not blank a live hover', () => {
+  /**
+   * Any other column's filter change fans out to every registered viz, so a
+   * refetch routinely lands while the pointer rests on a bar. Clearing the
+   * detail there is unrecoverable in practice: handleMouseMove re-emits only
+   * when the hovered bin *changes*, so moving inside the same bar brings
+   * nothing back until the cursor crosses a bin boundary.
+   */
+  function hoverBin(viz: Histogram, index: number): void {
+    (viz as unknown as { hoveredBin: number | null }).hoveredBin = index;
+  }
+
+  it('re-emits the hover detail — refreshed against the new data — instead of clearing it', async () => {
+    const viz = makeViz([]);
+    await settled(viz);
+
+    hoverBin(viz, 0);
+    statsChanges = [];
+
+    // A second column's filter arrives; this viz refetches and re-emits.
+    canned.fgBins = [4, 2, 0];
+    await viz.updateFilters([{ type: 'range', column: 'other', min: 0, max: 1 }]);
+
+    const after = lastStats();
+    expect(after).not.toBeNull();
+    expect(after).toContain('Bin:');
+    // Selection size is measured on the unfiltered background: bin 0 holds 9
+    // of 20 rows regardless of the other column's filter.
+    expect(after).toContain('9 rows (45.0%)');
+    // …and the hover carries the match suffix now that a filter is active.
+    expect(after).toContain('4 match');
+    viz.destroy();
+  });
+
+  it('falls back to the committed detail when nothing is hovered', async () => {
+    const viz = makeViz([{ type: 'range', column: 'v', min: 0, max: 10 }]);
+    await settled(viz);
+    const committed = lastStats();
+    expect(committed).toContain('9 rows (45.0%)');
+
+    statsChanges = [];
+    await viz.updateFilters([
+      { type: 'range', column: 'v', min: 0, max: 10 },
+      { type: 'range', column: 'other', min: 0, max: 1 },
+    ]);
+    expect(lastStats()).toBe(committed);
+    viz.destroy();
+  });
+});
+
+describe('Histogram — an all-null column carries no committed selection', () => {
+  beforeEach(() => {
+    canned.initial = () => ({
+      ...makeInitial(false),
+      bins: [],
+      nullCount: 20,
+      total: 20,
+    });
+    canned.fgBins = [];
+    canned.fgCount = 0;
+    canned.fgNullCount = 20;
+  });
+
+  /**
+   * Pins why the all-null hover-exit branches clear rather than restore:
+   * `syncVisualStateFromFilter` bails on `data.bins.length === 0` and forces
+   * `selectedNull = false`, so a `null` filter on an entirely-null column
+   * never produces a committed detail in the first place. If that guard ever
+   * changes, the hover-exit branches must be revisited with it — they now
+   * route through `emitRestingStats()`, so they will follow automatically.
+   */
+  it('a null filter on an all-null column leaves selectedNull unset and emits no detail', async () => {
+    const viz = makeViz([{ type: 'null', column: 'v' }]);
+    await settled(viz);
+
+    const internals = viz as unknown as {
+      selectedNull: boolean;
+      allNullHovered: boolean;
+      isAllNullState: boolean;
+      handleMouseLeave: () => void;
+    };
+    expect(internals.selectedNull).toBe(false);
+    expectCleared();
+
+    // Mousing off the bar is consistent with that: still nothing to restore.
+    internals.isAllNullState = true;
+    internals.allNullHovered = true;
+    statsChanges = [];
+    internals.handleMouseLeave();
+    expectCleared();
     viz.destroy();
   });
 });

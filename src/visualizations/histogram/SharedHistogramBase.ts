@@ -873,14 +873,13 @@ export abstract class SharedHistogramBase<
 
       if (this.allNullHovered !== prevHovered) {
         this.render();
-        if (this.allNullHovered) {
-          this.options.onStatsChange?.(
-            `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
-              this.formatHoverCountLine('null'),
-          );
-        } else {
-          this.options.onStatsChange?.(null);
-        }
+        // Hover-exit goes through the same resting path as every other
+        // branch. Today that is equivalent to clearing — an all-null column
+        // has `bins.length === 0`, so `syncVisualStateFromFilter` forces
+        // `selectedNull = false` and there is never a committed detail here —
+        // but routing it through `emitRestingStats()` keeps this branch
+        // correct if that guard is ever relaxed.
+        if (!this.emitHoverStats()) this.emitRestingStats();
       }
       return;
     }
@@ -897,10 +896,6 @@ export abstract class SharedHistogramBase<
       // Skip hover logic while actively brushing
       if (this.brushState.active) return;
     }
-
-    // Track whether we have a committed brush or selection (for stat restoration)
-    const hasBrushOrSelection =
-      this.brushState.committed || this.selectedBin !== null || this.selectedNull;
 
     // If brush is committed, set cursor based on position but still allow hover
     if (this.brushState.committed) {
@@ -943,32 +938,9 @@ export abstract class SharedHistogramBase<
       // Re-render for bar highlighting
       this.render();
 
-      // Update stats line with formatted HTML
-      if (this.hoveredBin !== null && this.data) {
-        const bin = this.data.bins[this.hoveredBin];
-        if (bin) {
-          const rangeStr = this.formatBinRange(this.hoveredBin);
-          this.options.onStatsChange?.(
-            `<span class="stats-label">${this.statsMessages.binLabel}</span> ${rangeStr}<br>` +
-              this.formatHoverCountLine({ start: this.hoveredBin, end: this.hoveredBin }),
-          );
-        }
-      } else if (this.hoveredNull && this.data) {
-        this.options.onStatsChange?.(
-          `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
-            this.formatHoverCountLine('null'),
-        );
-      } else if (hasBrushOrSelection) {
-        // Restore brush/selection stats when hover ends
-        if (this.brushState.committed) {
-          this.updateBrushStats();
-        } else {
-          this.updateSelectedStats();
-        }
-      } else {
-        // Restore default stats
-        this.options.onStatsChange?.(null);
-      }
+      // Hover detail, else restore the committed detail (or clear it).
+      // `emitRestingStats` branches on exactly `hasBrushOrSelection`.
+      if (!this.emitHoverStats()) this.emitRestingStats();
     }
   }
 
@@ -1140,7 +1112,8 @@ export abstract class SharedHistogramBase<
     if (this.isAllNullState) {
       if (this.allNullHovered) {
         this.allNullHovered = false;
-        this.options.onStatsChange?.(null);
+        // Same resting path as every other hover-exit; see handleMouseMove.
+        this.emitRestingStats();
         this.render();
       }
       return;
@@ -1151,15 +1124,7 @@ export abstract class SharedHistogramBase<
     this.hoveredBin = null;
     this.hoveredNull = false;
 
-    if (this.brushState.committed) {
-      // Restore brush stats
-      this.updateBrushStats();
-    } else if (this.selectedBin !== null || this.selectedNull) {
-      // Restore selection stats
-      this.updateSelectedStats();
-    } else {
-      this.options.onStatsChange?.(null);
-    }
+    this.emitRestingStats();
 
     if (hadHover) {
       this.render();
@@ -1513,14 +1478,47 @@ export abstract class SharedHistogramBase<
   }
 
   /**
-   * Emit the committed-selection detail text — or clear it — so the stats
-   * slot always reflects this column's own filter, regardless of how the
-   * filter was created (brush, panel, API, preset, session restore, undo)
-   * or which other column's filter just changed. Subclasses call this from
-   * `fetchData` after `syncVisualStateFromFilter` has run.
+   * Emit the detail for the bar currently under the pointer. Returns false
+   * when nothing is hovered, so callers can fall through to the resting
+   * (committed) detail.
    */
-  protected emitCommittedStats(): void {
-    if (this.destroyed) return;
+  private emitHoverStats(): boolean {
+    if (!this.data) return false;
+
+    if (this.isAllNullState) {
+      if (!this.allNullHovered) return false;
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
+          this.formatHoverCountLine('null'),
+      );
+      return true;
+    }
+
+    if (this.hoveredBin !== null) {
+      if (!this.data.bins[this.hoveredBin]) return false;
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.formatBinRange(this.hoveredBin)}<br>` +
+          this.formatHoverCountLine({ start: this.hoveredBin, end: this.hoveredBin }),
+      );
+      return true;
+    }
+
+    if (this.hoveredNull) {
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
+          this.formatHoverCountLine('null'),
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Emit this column's committed-selection detail, or clear the detail
+   * region when it has no selection. The resting state of the slot.
+   */
+  private emitRestingStats(): void {
     if (this.brushState.committed) {
       this.updateBrushStats();
     } else if (this.selectedBin !== null || this.selectedNull) {
@@ -1528,6 +1526,27 @@ export abstract class SharedHistogramBase<
     } else {
       this.options.onStatsChange?.(null);
     }
+  }
+
+  /**
+   * Emit the committed-selection detail text — or clear it — so the stats
+   * slot always reflects this column's own filter, regardless of how the
+   * filter was created (brush, panel, API, preset, session restore, undo)
+   * or which other column's filter just changed. Subclasses call this from
+   * `fetchData` after `syncVisualStateFromFilter` has run.
+   *
+   * A refetch can land while the pointer is resting on a bar — any other
+   * column's filter change fans out to every registered viz — so a live
+   * hover takes precedence. Overwriting it would blank a readout still
+   * under the cursor, and `handleMouseMove` re-emits only when the hovered
+   * bin *changes*, so moving within the same bar would not bring it back.
+   * Re-emitting the hover here also refreshes it against the data that just
+   * arrived, which the previous behaviour did not do.
+   */
+  protected emitCommittedStats(): void {
+    if (this.destroyed) return;
+    if (this.emitHoverStats()) return;
+    this.emitRestingStats();
   }
 
   /**

@@ -213,6 +213,18 @@ function lastStats(): string | null {
   return statsChanges[statsChanges.length - 1] ?? null;
 }
 
+/**
+ * Assert the detail region was explicitly cleared.
+ *
+ * `expect(lastStats()).toBeNull()` cannot express this on its own: the `?? null`
+ * collapses "emitted null" and "emitted nothing at all" into the same value, so
+ * such an assertion passes even when the emission under test never fires.
+ */
+function expectCleared(): void {
+  expect(statsChanges.length).toBeGreaterThan(0);
+  expect(statsChanges[statsChanges.length - 1]).toBeNull();
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   statsChanges = [];
@@ -314,7 +326,7 @@ describe.each(CASES)('$name — committed-selection emission hook', ({ make }) =
     await settled(viz as never);
     expect(lastStats()).toContain('Bin:');
     await viz.updateFilters([]);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 });

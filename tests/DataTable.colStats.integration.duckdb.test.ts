@@ -191,10 +191,23 @@ async function mountTable(preFilters: Filter[] = []): Promise<Harness2> {
   };
 }
 
-async function waitForSlot(h: Harness2, column: string, expected: string): Promise<void> {
+/**
+ * Wait for a column's stats slot to match.
+ *
+ * Pass a RegExp — anchored with `^` — for any unfiltered expectation. Line 1
+ * is a prefix of its own filtered form (`'20 rows'` is a substring of
+ * `'9 / 20 rows'`, and `'20 rows · 3 null'` of `'9 / 20 rows · 3 null'`), so
+ * a bare `toContain` would resolve against the filtered text it is supposed
+ * to be waiting for the absence of — and the synchronous placeholder line 1
+ * satisfies it before any DuckDB fetch lands, letting the next `addFilter`
+ * race the initial fetch.
+ */
+async function waitForSlot(h: Harness2, column: string, expected: string | RegExp): Promise<void> {
   await vi.waitFor(
     () => {
-      expect(h.slot(column)).toContain(expected);
+      const text = h.slot(column);
+      if (expected instanceof RegExp) expect(text).toMatch(expected);
+      else expect(text).toContain(expected);
     },
     { timeout: 5000 },
   );
@@ -207,15 +220,15 @@ afterEach(() => {
 describe('column stats — uniform denominator end-to-end (real DuckDB)', () => {
   it('baseline: every column shows the total with per-column null annotations', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'id', '20 rows');
-    await waitForSlot(h, 'v', '20 rows · 3 null');
-    await waitForSlot(h, 'c', '20 rows · 4 null');
+    await waitForSlot(h, 'id', /^20 rows/);
+    await waitForSlot(h, 'v', /^20 rows · 3 null/);
+    await waitForSlot(h, 'c', /^20 rows · 4 null/);
     await h.table.destroy();
   }, 20_000);
 
   it('point filter on c: identical line 1 everywhere, committed detail on c only', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', 'Category: US');
     await waitForSlot(h, 'c', '8 rows (40.0%)');
@@ -228,7 +241,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('chained filter: numerators shrink everywhere, committed details stay byte-stable', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', '8 rows (40.0%)');
     const cDetailBefore = h.slotHtml('c');
@@ -256,7 +269,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('range filter on id: F/N line 1 on every column; detail shows the bin-snapped brush', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'id', '20 rows');
+    await waitForSlot(h, 'id', /^20 rows/);
     // maxInclusive: true → id in [6, 15] → 10 rows.
     h.table.actions.addFilter({ type: 'range', column: 'id', min: 6, max: 15, maxInclusive: true });
     await waitForSlot(h, 'id', '10 / 20 rows');
@@ -272,7 +285,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('null filter on v: null-bin detail; all-null annotation on c', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'v', '20 rows');
+    await waitForSlot(h, 'v', /^20 rows/);
     h.table.actions.addFilter({ type: 'null', column: 'v' });
     await waitForSlot(h, 'v', 'Bin: null');
     await waitForSlot(h, 'v', '3 rows (15.0%)');
@@ -284,7 +297,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('set filter on c: multi-select detail sums the background', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'set', column: 'c', values: ['US', 'CA'] });
     await waitForSlot(h, 'c', 'Selected: US, CA');
     await waitForSlot(h, 'c', '13 rows (65.0%)');
@@ -294,7 +307,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('pattern filter: line 1 reflects it, no committed detail', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'pattern', column: 'c', pattern: 'U', mode: 'contains' });
     await waitForSlot(h, 'c', '8 / 20 rows');
     await waitForSlot(h, 'v', '8 / 20 rows');
@@ -305,7 +318,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('raw-SQL filter: fractions everywhere, no committed details; F==N still shows the fraction', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'id', '20 rows');
+    await waitForSlot(h, 'id', /^20 rows/);
     const filterId = h.table.actions.addRawSQLFilter('id <= 10');
     await waitForSlot(h, 'id', '10 / 20 rows');
     await waitForSlot(h, 'v', '10 / 20 rows');
@@ -321,7 +334,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('creation-path identity: preset load reproduces the API-created display exactly', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     h.table.actions.addFilter({ type: 'point', column: 'v', value: 1 });
     await waitForSlot(h, 'v', '9 rows (45.0%)');
@@ -330,7 +343,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
     const vHtml = h.slotHtml('v');
 
     h.table.actions.clearFilters();
-    await waitForSlot(h, 'c', '20 rows · 4 null');
+    await waitForSlot(h, 'c', /^20 rows · 4 null/);
     expect(h.slot('v')).not.toContain('Bin:');
 
     h.table.actions.loadFilterPreset([
@@ -359,7 +372,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('undo removes the newest filter and its detail; redo re-derives it', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', '8 rows (40.0%)');
     h.table.actions.addFilter({ type: 'point', column: 'v', value: 1 });
@@ -381,7 +394,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('removal paths: removeFilter clears one detail, clearFilters clears everything', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     h.table.actions.addFilter({ type: 'point', column: 'v', value: 1 });
     await waitForSlot(h, 'v', '9 rows (45.0%)');
@@ -395,7 +408,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
     expect(h.slot('v')).toContain('9 rows (45.0%)');
 
     h.table.actions.clearFilters();
-    await waitForSlot(h, 'id', '20 rows');
+    await waitForSlot(h, 'id', /^20 rows/);
     await vi.waitFor(() => {
       expect(h.slot('v')).not.toContain('Bin:');
     });
@@ -404,7 +417,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('derived expression column: gets its own filtered line 1; existing details survive the rebuild', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', '8 rows (40.0%)');
 
@@ -424,7 +437,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('renaming a filtered derived column carries the committed detail to the new name', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     const res = await h.table.actions.addDerivedColumn({
       kind: 'expression',
       name: 'v2',
@@ -447,13 +460,13 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
     await waitForSlot(h, 'id', '9 / 20 rows');
 
     await h.table.actions.removeDerivedColumn('v2x');
-    await waitForSlot(h, 'id', '20 rows');
+    await waitForSlot(h, 'id', /^20 rows/);
     await h.table.destroy();
   }, 20_000);
 
   it('derived vector column joins the same stats contract', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', '8 rows (40.0%)');
 
@@ -471,7 +484,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('hiding a filtered column keeps its filter active; showing restores the identical detail', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     h.table.actions.addFilter({ type: 'point', column: 'v', value: 1 });
     await waitForSlot(h, 'c', '4 / 20 rows');
@@ -496,7 +509,7 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
 
   it('sorting and reordering never change the stats text', async () => {
     const h = await mountTable();
-    await waitForSlot(h, 'c', '20 rows');
+    await waitForSlot(h, 'c', /^20 rows/);
     h.table.actions.addFilter({ type: 'point', column: 'c', value: 'US' });
     await waitForSlot(h, 'c', '8 rows (40.0%)');
     await waitForSlot(h, 'v', '8 / 20 rows');

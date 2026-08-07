@@ -20,7 +20,7 @@
  */
 
 import { DataTableError, QueryError } from '../../core/errors';
-import type { ColumnSchema } from '../../core/types';
+import type { ColumnSchema, Filter } from '../../core/types';
 import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
@@ -386,14 +386,27 @@ export class ValueCounts extends BaseVisualization {
     // Handle empty state. Drop the previous data's segment geometry first:
     // this path never reaches calculateLayout(), and nearest-slot hit-testing
     // would otherwise resolve x to segments that are no longer drawn.
+    //
+    // Both this path and the all-unique one below return before the
+    // pendingFilterSync block, so they consume the flag themselves: neither
+    // draws selectable segments, so the only correct synced state is "no
+    // selection". Leaving the flag set would fire syncVisualStateFromFilter()
+    // at an arbitrary later render (resize, hover, theme flip), and leaving a
+    // stale selection would let emitCommittedStats() publish a detail line
+    // for a filter that is gone — or for the display-only all-unique segment,
+    // which emits no filter at all and so has no chip to clear it.
     if (referenceData.segments.length === 0 && referenceData.nullCount === 0) {
       this.segmentPositions = [];
+      this.pendingFilterSync = false;
+      this.selectedSegments.clear();
       this.drawEmptyState();
       return;
     }
 
     // Handle all unique values special case
     if (referenceData.isAllUnique && referenceData.segments.length > 0) {
+      this.pendingFilterSync = false;
+      this.selectedSegments.clear();
       this.drawAllUniqueState();
       return;
     }
@@ -1241,7 +1254,7 @@ export class ValueCounts extends BaseVisualization {
       if (this.hoveredSegment !== null) {
         this.updateHoverStats();
       } else if (hasSelection) {
-        this.updateSelectedStats();
+        this.emitSelectionDetail();
       } else {
         this.options.onStatsChange?.(null);
       }
@@ -1584,26 +1597,83 @@ export class ValueCounts extends BaseVisualization {
     );
   }
 
+  /** This column's active filter, if any. */
+  private ownFilter(): Filter | undefined {
+    return this.options.filters.find((f) => f.column === this.column.name);
+  }
+
   /**
-   * Emit the committed-selection detail text — or clear it — after each
-   * fetch+render+sync cycle, so this column's filter displays identically
-   * regardless of how it was created and clears on every removal path.
-   * Pattern filters keep their segment highlight but suppress the detail:
-   * category folding can hide matching values, so a sum over the visible
-   * segments would undercount the filter's true matches.
+   * Whether a committed detail line can be counted for `filter` from the
+   * segments this chart draws.
+   *
+   * Folding keeps only the top MAX_CATEGORIES values as their own segment
+   * and rolls the rest into "Other", whose total is known but whose
+   * membership is not. A filter naming a value that has no segment of its
+   * own is therefore uncountable here, in either direction:
+   *
+   * - `set` / `point` on a folded value **undercounts** — the matching rows
+   *   sit inside Other, which value-matching sync skips, so the sum omits
+   *   them (and a multi-value set can render as a single-value selection).
+   * - `not-set` excluding a folded value **overcounts** — sync attributes
+   *   Other to the selection whole, including the very rows `NOT IN` drops.
+   *
+   * Patterns are never countable: they match by predicate, so folded values
+   * can match without being named anywhere.
+   *
+   * The chart's own gestures always stay countable — clicking Other emits
+   * `not-set` over exactly the visible top categories — so this suppresses
+   * only the externally-constructed filters that cannot be rendered
+   * truthfully.
    */
-  private emitCommittedStats(): void {
-    if (this.destroyed) return;
-    const ownFilter = this.options.filters.find((f) => f.column === this.column.name);
-    if (ownFilter?.type === 'pattern') {
-      this.options.onStatsChange?.(null);
-      return;
+  private canCountCommittedDetail(filter: Filter | undefined): boolean {
+    if (!filter) return true;
+    if (filter.type === 'pattern') return false;
+
+    let named: string[];
+    if (filter.type === 'point') {
+      named = filter.value === null ? [] : [String(filter.value)];
+    } else if (filter.type === 'set' || filter.type === 'not-set') {
+      named = filter.values.map(String);
+    } else {
+      return true;
     }
-    if (this.selectedSegments.size > 0) {
+    if (named.length === 0) return true;
+
+    const segs = this.backgroundSegments.length > 0 ? this.backgroundSegments : this.renderSegments;
+    const visible = new Set(
+      segs.filter((s) => !s.isNull && !s.isOther && !s.isAllUnique).map((s) => s.value),
+    );
+    return named.every((v) => visible.has(v));
+  }
+
+  /**
+   * Emit the committed-selection detail — or clear it when this column's
+   * filter cannot be counted from the drawn segments.
+   *
+   * Every path that *restores* the committed text after a hover, or
+   * publishes it after a filter sync, routes through here instead of
+   * calling `updateSelectedStats()` directly, so suppression is a property
+   * of the filter rather than of whichever gesture fired last. (The
+   * `handleClick` path keeps its direct call: a selection built by clicking
+   * segments is countable by construction, and its filter has not
+   * round-tripped yet.)
+   */
+  private emitSelectionDetail(): void {
+    if (this.selectedSegments.size > 0 && this.canCountCommittedDetail(this.ownFilter())) {
       this.updateSelectedStats();
     } else {
       this.options.onStatsChange?.(null);
     }
+  }
+
+  /**
+   * Emit the committed-selection detail text — or clear it — after each
+   * fetch+render+sync cycle, so this column's filter displays identically
+   * regardless of how it was created and clears on every removal path.
+   */
+  private emitCommittedStats(): void {
+    if (this.destroyed) return;
+    this.emitSelectionDetail();
   }
 
   /**
@@ -1616,11 +1686,7 @@ export class ValueCounts extends BaseVisualization {
     this.hoveredSegment = null;
 
     // Restore appropriate stats
-    if (this.selectedSegments.size > 0) {
-      this.updateSelectedStats();
-    } else {
-      this.options.onStatsChange?.(null);
-    }
+    this.emitSelectionDetail();
 
     if (hadHover) {
       this.render();
@@ -1700,9 +1766,7 @@ export class ValueCounts extends BaseVisualization {
     }
 
     this.render();
-    if (this.selectedSegments.size > 0) {
-      this.updateSelectedStats();
-    }
+    this.emitSelectionDetail();
   }
 
   /**

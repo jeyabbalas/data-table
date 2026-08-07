@@ -10,7 +10,7 @@ Column-header stats now measure every count against the full dataset total, fixi
 - A column whose own filter has a chart representation shows a committed detail below line 1: its selection label (`Bin: 30 – 40`, `Category: US`, `Selected: a, b`) plus `X rows (p%)`, where `X` is what that filter **alone** matches in the unfiltered data and `p% = X/N`. The old `Count: fg / bg (ratio)` form — whose denominator was the selection's own post-filter count — is gone.
 - The committed detail is stable when other columns' filters change (previously it went stale), and identical regardless of how the filter was created: chart gesture, funnel panel, `actions.addFilter`, preset load, session restore, or undo/redo (previously panel/API-created filters displayed differently until first hover).
 - Hover swaps only the detail region: `800 rows (8.0%)` — the bin's share of the dataset — plus `· 300 match` for its rows passing all filters when filters are active.
-- Pattern and raw-SQL filters produce no committed detail (no chart representation); line 1 and the funnel indicator still reflect them.
+- Filters with no countable chart representation produce no committed detail; line 1 and the funnel indicator still reflect them. This covers pattern and raw-SQL filters, and — on categorical columns — any filter naming a value folded into the `Other` segment: the chart knows Other's total but not its membership, so `IN`/`=` on a folded value would undercount and `NOT IN` would overcount by that value's rows. Filters produced by the chart's own gestures are always countable, including the `NOT IN` emitted by clicking Other.
 - Non-visualization columns' stats are now filter-aware on first paint and localized (previously hardcoded English).
 
 **API surface**

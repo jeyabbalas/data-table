@@ -133,6 +133,18 @@ function lastStats(): string | null {
   return statsChanges[statsChanges.length - 1] ?? null;
 }
 
+/**
+ * Assert the detail region was explicitly cleared.
+ *
+ * `expect(lastStats()).toBeNull()` cannot express this on its own: the `?? null`
+ * collapses "emitted null" and "emitted nothing at all" into the same value, so
+ * such an assertion passes even when the emission under test never fires.
+ */
+function expectCleared(): void {
+  expect(statsChanges.length).toBeGreaterThan(0);
+  expect(statsChanges[statsChanges.length - 1]).toBeNull();
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   statsChanges = [];
@@ -249,7 +261,7 @@ describe('ValueCounts — committed-selection emission', () => {
     await settled(viz);
     const selected = (viz as unknown as { selectedSegments: Set<number> }).selectedSegments;
     expect(selected.size).toBeGreaterThan(0);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 
@@ -258,7 +270,7 @@ describe('ValueCounts — committed-selection emission', () => {
     await settled(viz);
     expect(lastStats()).toContain('Category:');
     await viz.updateFilters([]);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 
@@ -269,7 +281,7 @@ describe('ValueCounts — committed-selection emission', () => {
       { type: 'raw-sql', column: '__raw_sql_1__', sql: 'x > 1', id: '1' } as Filter,
     ]);
     await settled(viz);
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 
@@ -293,7 +305,7 @@ describe('ValueCounts — committed-selection emission', () => {
 
     // No committed selection on this column — mouse-out restores default.
     anyViz.handleMouseLeave();
-    expect(lastStats()).toBeNull();
+    expectCleared();
     viz.destroy();
   });
 
@@ -347,6 +359,136 @@ describe('ValueCounts — Other segment detail', () => {
     const detail = lastStats();
     expect(detail).toContain('Other (5 values)');
     expect(detail).toContain('3 rows (15.0%)');
+    viz.destroy();
+  });
+
+  /**
+   * Folding keeps the top MAX_CATEGORIES values as their own segment and rolls
+   * the rest into Other, whose total is known but whose membership is not. A
+   * filter naming a folded value therefore cannot be counted from the drawn
+   * segments in either direction, so the detail is suppressed rather than
+   * stated wrongly. `'rare'` below is one of Other's 5 folded values.
+   */
+  function mockFolded(fgCounts: [number, number, number], fgNull = 0): void {
+    vi.mocked(fetchValueCountsData).mockImplementation(() =>
+      Promise.resolve(unfilteredWithOther()),
+    );
+    vi.mocked(fetchAlignedValueCountsData).mockImplementation(() => {
+      const base = unfilteredWithOther();
+      const segments = base.segments.map((s, i) => ({ ...s, count: fgCounts[i] ?? 0 }));
+      return Promise.resolve({
+        ...base,
+        segments,
+        nullCount: fgNull,
+        total: segments.reduce((sum, s) => sum + s.count, 0) + fgNull,
+      } as ValueCountsData);
+    });
+  }
+
+  it('not-set excluding a folded value suppresses rather than attributing all of Other', async () => {
+    // NOT IN ('rare') matches 14 of 20 rows. Sync selects Other whole plus US
+    // and CA (neither is named), which sums to 16 — an overcount of exactly
+    // the folded value's rows, because Other holds rows the filter excludes.
+    mockFolded([8, 5, 1], 0);
+    const viz = makeViz([{ type: 'not-set', column: 'country', values: ['rare'] }]);
+    await settled(viz);
+    expectCleared();
+    viz.destroy();
+  });
+
+  it('set naming a folded value suppresses rather than rendering as a single category', async () => {
+    // IN ('US','rare') matches 10 rows; value-matching sync skips Other, so the
+    // detail would have read "Category: US · 8 rows (40.0%)" — a two-value set
+    // displayed as a one-value selection, with the wrong count.
+    mockFolded([8, 0, 2], 0);
+    const viz = makeViz([{ type: 'set', column: 'country', values: ['US', 'rare'] }]);
+    await settled(viz);
+    expectCleared();
+    viz.destroy();
+  });
+
+  it('point on a folded value emits no detail', async () => {
+    mockFolded([0, 0, 2], 0);
+    const viz = makeViz([{ type: 'point', column: 'country', value: 'rare' }]);
+    await settled(viz);
+    expectCleared();
+    viz.destroy();
+  });
+
+  it('suppression is a property of the filter, not of the last gesture', async () => {
+    // The guard used to live only in emitCommittedStats, so any path that
+    // restored the committed text directly — mouse-leave, hover-exit —
+    // republished the very text the guard exists to prevent.
+    mockFolded([8, 5, 0], 0);
+    const viz = makeViz([{ type: 'pattern', column: 'country', pattern: 'C', mode: 'contains' }]);
+    await settled(viz);
+    expectCleared();
+
+    const selected = (viz as unknown as { selectedSegments: Set<number> }).selectedSegments;
+    expect(selected.size).toBeGreaterThan(0);
+
+    (viz as unknown as { handleMouseLeave: () => void }).handleMouseLeave();
+    expectCleared();
+    viz.destroy();
+  });
+});
+
+describe('ValueCounts — render() early returns consume the filter-sync flag', () => {
+  /**
+   * `emitCommittedStats()` runs after `render()` on the premise that the
+   * filter→selection sync happened inside it. The all-unique and empty-state
+   * paths return before that block, so they consume the flag themselves —
+   * otherwise a stale selection publishes a detail for a filter that is gone,
+   * and the leaked flag fires the sync at an arbitrary later render.
+   */
+  function mockAllUnique(): void {
+    const data = {
+      segments: [{ value: 'a', count: 1, isOther: false }],
+      nullCount: 0,
+      distinctCount: 20,
+      total: 20,
+      isAllUnique: true,
+    } as ValueCountsData;
+    vi.mocked(fetchValueCountsData).mockImplementation(() => Promise.resolve(data));
+    vi.mocked(fetchAlignedValueCountsData).mockImplementation(() => Promise.resolve(data));
+  }
+
+  it('an all-unique column leaves no pending sync and no phantom selection', async () => {
+    mockAllUnique();
+    const viz = makeViz([{ type: 'null', column: 'country' }]);
+    await settled(viz);
+
+    const internals = viz as unknown as {
+      pendingFilterSync: boolean;
+      selectedSegments: Set<number>;
+    };
+    expect(internals.pendingFilterSync).toBe(false);
+    expect(internals.selectedSegments.size).toBe(0);
+    expectCleared();
+    viz.destroy();
+  });
+
+  it('an empty column leaves no pending sync and no phantom selection', async () => {
+    const empty = {
+      segments: [],
+      nullCount: 0,
+      distinctCount: 0,
+      total: 0,
+      isAllUnique: false,
+    } as unknown as ValueCountsData;
+    vi.mocked(fetchValueCountsData).mockImplementation(() => Promise.resolve(empty));
+    vi.mocked(fetchAlignedValueCountsData).mockImplementation(() => Promise.resolve(empty));
+
+    const viz = makeViz([{ type: 'point', column: 'country', value: 'US' }]);
+    await settled(viz);
+
+    const internals = viz as unknown as {
+      pendingFilterSync: boolean;
+      selectedSegments: Set<number>;
+    };
+    expect(internals.pendingFilterSync).toBe(false);
+    expect(internals.selectedSegments.size).toBe(0);
+    expectCleared();
     viz.destroy();
   });
 });

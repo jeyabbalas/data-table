@@ -863,6 +863,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         tableName,
         bridge,
         filters: state.filters.get(),
+        messages,
         onFilterChange: (filter: Filter | null) => {
           coordinator.handleFilterChange(column.name, filter);
         },

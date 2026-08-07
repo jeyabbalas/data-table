@@ -434,6 +434,24 @@ export interface Strings {
     uniquePercent: (count: number, pct: number) => string;
     /** " · " separator used between stats segments. */
     separator: string;
+    /** Bold label prefix for a histogram bin/brush selection detail line. */
+    binLabel: string;
+    /** Bold label prefix for a single selected category detail line. */
+    categoryLabel: string;
+    /** Bold label prefix for a multi-category selection detail line. */
+    selectedLabel: string;
+    /** Display value for the null bin/segment in a selection detail line. */
+    nullBinLabel: string;
+    /** Display value for the folded "Other" segment (count = folded distinct values). */
+    otherCategory: (count: number) => string;
+    /** Display value for the all-unique segment (count = distinct values). */
+    allUniqueCategory: (count: number) => string;
+    /** Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted. */
+    selectionRowCount: (count: number, pct: string) => string;
+    /** Rows of a hovered bin/segment passing all active filters, e.g. "300 match". */
+    matchCount: (count: number) => string;
+    /** Truncation suffix for a long multi-select value list (total = selected values). */
+    valueListSuffix: (total: number) => string;
   };
 
   // =========================================
@@ -803,6 +821,16 @@ export const defaultStrings: Strings = {
     uniqueCount: (count) => `${count.toLocaleString()} unique`,
     uniquePercent: (count, pct) => `${count.toLocaleString()} unique (${pct}%)`,
     separator: ' \u00B7 ',
+    binLabel: 'Bin:',
+    categoryLabel: 'Category:',
+    selectedLabel: 'Selected:',
+    nullBinLabel: 'null',
+    otherCategory: (count) => `Other (${count.toLocaleString()} values)`,
+    allUniqueCategory: (count) => `All unique (${count.toLocaleString()})`,
+    selectionRowCount: (count, pct) =>
+      `${count.toLocaleString()} ${count === 1 ? 'row' : 'rows'} (${pct})`,
+    matchCount: (count) => `${count.toLocaleString()} match`,
+    valueListSuffix: (total) => `, ... (${total.toLocaleString()} values)`,
   },
 
   errors: {

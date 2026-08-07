@@ -34,6 +34,7 @@
  */
 
 import { DataTableError, ExportError, QueryError } from '../core/errors';
+import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
@@ -105,6 +106,8 @@ export interface VisualizationOptions {
   onStatsChange?: (stats: string | null) => void;
   /** Callback providing computed column stats for default display (not hover) */
   onDefaultStatsChange?: (stats: ColumnStatsData) => void;
+  /** Resolved i18n strings for viz-emitted stats text. Defaults to English. */
+  messages?: Strings;
   /** Maximum number of histogram bins (default: 15) */
   maxBins?: number;
   /** Callback when brush is committed (column name passed) */
@@ -162,6 +165,11 @@ export abstract class BaseVisualization {
   // facade can gate `loadComplete` on first-paint readiness. Subclasses
   // with no eager fetch leave it `Promise.resolve()` — "ready immediately".
   protected dataPromise: Promise<void> = Promise.resolve();
+
+  /** Resolved i18n statistics strings; English defaults when no `messages` supplied. */
+  protected get statsMessages(): Strings['statistics'] {
+    return (this.options.messages ?? defaultStrings).statistics;
+  }
 
   // Bound event handlers for proper cleanup
   private boundMouseMove: (e: MouseEvent) => void;

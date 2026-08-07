@@ -6,7 +6,7 @@
 
 # Interface: ColumnAnnotation
 
-Defined in: [annotations/types.ts:78](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L78)
+Defined in: [annotations/types.ts:78](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L78)
 
 Column-scope annotation — attached to a column by name.
 
@@ -20,7 +20,7 @@ Column-scope annotation — attached to a column by name.
 
 > `optional` **code?**: `string`
 
-Defined in: [annotations/types.ts:57](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L57)
+Defined in: [annotations/types.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L57)
 
 App-defined error / rule code (e.g. `JSON_SCHEMA_MAXIMUM`). Rendered via
 `.textContent` — HTML strings are NOT interpreted.
@@ -35,7 +35,7 @@ App-defined error / rule code (e.g. `JSON_SCHEMA_MAXIMUM`). Rendered via
 
 > **column**: `string`
 
-Defined in: [annotations/types.ts:80](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L80)
+Defined in: [annotations/types.ts:80](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L80)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [annotations/types.ts:80](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **createdAt?**: `string`
 
-Defined in: [annotations/types.ts:66](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L66)
+Defined in: [annotations/types.ts:66](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L66)
 
 ISO 8601; set to `now()` by `add` when missing.
 
@@ -57,7 +57,7 @@ ISO 8601; set to `now()` by `add` when missing.
 
 > **id**: `string`
 
-Defined in: [annotations/types.ts:45](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L45)
+Defined in: [annotations/types.ts:45](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L45)
 
 Stable identifier. Auto-generated if omitted at `add` time.
 
@@ -71,7 +71,7 @@ Stable identifier. Auto-generated if omitted at `add` time.
 
 > **message**: `string`
 
-Defined in: [annotations/types.ts:52](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L52)
+Defined in: [annotations/types.ts:52](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L52)
 
 Human-readable message. The library renders this via `.textContent` —
 HTML strings are NOT interpreted. Pass any string safely.
@@ -86,7 +86,7 @@ HTML strings are NOT interpreted. Pass any string safely.
 
 > `optional` **metadata?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [annotations/types.ts:64](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L64)
+Defined in: [annotations/types.ts:64](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L64)
 
 App-defined structured metadata; round-tripped verbatim.
 
@@ -100,7 +100,7 @@ App-defined structured metadata; round-tripped verbatim.
 
 > **scope**: `"column"`
 
-Defined in: [annotations/types.ts:79](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L79)
+Defined in: [annotations/types.ts:79](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L79)
 
 ***
 
@@ -108,7 +108,7 @@ Defined in: [annotations/types.ts:79](https://github.com/jeyabbalas/data-table/b
 
 > **severity**: [`AnnotationSeverity`](../type-aliases/AnnotationSeverity.md)
 
-Defined in: [annotations/types.ts:47](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L47)
+Defined in: [annotations/types.ts:47](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L47)
 
 Severity level — drives CSS precedence and popover ordering in Phase 4.
 
@@ -122,7 +122,7 @@ Severity level — drives CSS precedence and popover ordering in Phase 4.
 
 > `optional` **source?**: `string`
 
-Defined in: [annotations/types.ts:62](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L62)
+Defined in: [annotations/types.ts:62](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L62)
 
 App-defined origin tag (e.g. `harmonization-validator`). Rendered via
 `.textContent` — HTML strings are NOT interpreted.
@@ -137,7 +137,7 @@ App-defined origin tag (e.g. `harmonization-validator`). Rendered via
 
 > `optional` **updatedAt?**: `string`
 
-Defined in: [annotations/types.ts:68](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/types.ts#L68)
+Defined in: [annotations/types.ts:68](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/types.ts#L68)
 
 ISO 8601; set on every successful `update`.
 

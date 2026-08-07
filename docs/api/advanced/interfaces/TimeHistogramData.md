@@ -6,7 +6,7 @@
 
 # Interface: TimeHistogramData
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L42)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L42)
 
 Complete time histogram data including bins and metadata
 
@@ -16,7 +16,7 @@ Complete time histogram data including bins and metadata
 
 > **bins**: [`TimeHistogramBin`](TimeHistogramBin.md)[]
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L44)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L44)
 
 Array of bins sorted by binStartSeconds
 
@@ -26,7 +26,7 @@ Array of bins sorted by binStartSeconds
 
 > **interval**: [`TimeInterval`](../type-aliases/TimeInterval.md)
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L54)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L54)
 
 Detected/used interval for binning
 
@@ -36,7 +36,7 @@ Detected/used interval for binning
 
 > **isNumericBinning**: `boolean`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:58](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L58)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:58](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L58)
 
 True when using numeric binning fallback (bins not aligned to time intervals)
 
@@ -46,7 +46,7 @@ True when using numeric binning fallback (bins not aligned to time intervals)
 
 > **isSingleValue**: `boolean`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L56)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L56)
 
 True when all non-null values are identical
 
@@ -56,7 +56,7 @@ True when all non-null values are identical
 
 > **maxSeconds**: `number` \| `null`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L50)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L50)
 
 Maximum non-null time in seconds from midnight
 
@@ -66,7 +66,7 @@ Maximum non-null time in seconds from midnight
 
 > **minSeconds**: `number` \| `null`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L48)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L48)
 
 Minimum non-null time in seconds from midnight
 
@@ -76,7 +76,7 @@ Minimum non-null time in seconds from midnight
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L46)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L46)
 
 Count of null values in the column
 
@@ -86,6 +86,6 @@ Count of null values in the column
 
 > **total**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/histogram/TimeHistogramData.ts#L52)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/histogram/TimeHistogramData.ts#L52)
 
 Total count of all values (including nulls)

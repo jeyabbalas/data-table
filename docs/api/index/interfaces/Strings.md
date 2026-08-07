@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L337)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -486,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -550,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/4
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -944,7 +944,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:442](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L442)
+Defined in: [core/Strings.ts:460](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L460)
 
 #### stylesheetMissing
 
@@ -956,7 +956,7 @@ Defined in: [core/Strings.ts:442](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -1106,7 +1106,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1746,7 +1746,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1856,7 +1856,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L421)
+Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L421)
 
 #### allNull
 
@@ -1865,6 +1865,22 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 #### allUnique
 
 > **allUnique**: `string`
+
+#### allUniqueCategory
+
+> **allUniqueCategory**: (`count`) => `string`
+
+Display value for the all-unique segment (count = distinct values).
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
 
 #### allValues
 
@@ -1880,6 +1896,18 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 
 `string`
 
+#### binLabel
+
+> **binLabel**: `string`
+
+Bold label prefix for a histogram bin/brush selection detail line.
+
+#### categoryLabel
+
+> **categoryLabel**: `string`
+
+Bold label prefix for a single selected category detail line.
+
 #### filteredRowCount
 
 > **filteredRowCount**: (`filtered`, `total`) => `string`
@@ -1891,6 +1919,22 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 `number`
 
 ###### total
+
+`number`
+
+##### Returns
+
+`string`
+
+#### matchCount
+
+> **matchCount**: (`count`) => `string`
+
+Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
+
+##### Parameters
+
+###### count
 
 `number`
 
@@ -1940,9 +1984,31 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 
 `string`
 
+#### nullBinLabel
+
+> **nullBinLabel**: `string`
+
+Display value for the null bin/segment in a selection detail line.
+
 #### nullCount
 
 > **nullCount**: (`count`) => `string`
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### otherCategory
+
+> **otherCategory**: (`count`) => `string`
+
+Display value for the folded "Other" segment (count = folded distinct values).
 
 ##### Parameters
 
@@ -1996,6 +2062,32 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 
 `string`
 
+#### selectedLabel
+
+> **selectedLabel**: `string`
+
+Bold label prefix for a multi-category selection detail line.
+
+#### selectionRowCount
+
+> **selectionRowCount**: (`count`, `pct`) => `string`
+
+Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
+
+##### Parameters
+
+###### count
+
+`number`
+
+###### pct
+
+`string`
+
+##### Returns
+
+`string`
+
 #### separator
 
 > **separator**: `string`
@@ -2027,6 +2119,22 @@ Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/
 `number`
 
 ###### pct
+
+`number`
+
+##### Returns
+
+`string`
+
+#### valueListSuffix
+
+> **valueListSuffix**: (`total`) => `string`
+
+Truncation suffix for a long multi-select value list (total = selected values).
+
+##### Parameters
+
+###### total
 
 `number`
 

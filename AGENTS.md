@@ -441,7 +441,7 @@ statsPanelRegistry.register({
 const table = await createDataTable({ container, source: '/data.csv', statsPanelRegistry });
 ```
 
-The registry is empty by default — leaving a column type unregistered falls back to the library's built-in `formatDefaultStats` HTML, so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:128-216` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
+The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:128-216` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
 
 ### (n) Standalone SQL editor — host-app embedded, schema-aware
 

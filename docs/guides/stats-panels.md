@@ -249,11 +249,14 @@ The full canonical implementation lives in
 
 ## Hover integration
 
-When a user hovers a histogram bin or a value-counts segment, the
-visualization emits a hover snippet via `onStatsChange`. The library
-forwards that snippet to your panel as `setHoverStats(html: string | null)`.
-The default panel briefly swaps line 2 to display the bin / segment info,
-then snaps back when the hover ends.
+When a user hovers a histogram bin or a value-counts segment — or commits
+a selection (brush, bar click, segment click) — the visualization emits a
+detail snippet via `onStatsChange`. The library forwards that snippet to
+your panel as `setHoverStats(html: string | null)`. The default rendering
+swaps only the region below line 1 (the row-count line stays visible):
+transient hover snippets snap back on mouse-out, while a committed
+selection's snippet persists until the filter is removed (`null` arrives
+to clear it).
 
 ```ts
 private hoverText: string | null = null;
@@ -275,8 +278,8 @@ private paint(): void {
 ### Safety note
 
 `setHoverStats` receives an **HTML string**, not plain text — the same
-pre-formatted markup the library's built-in panel renders in place of
-line 2 (e.g. `<span class="stats-label">Bin:</span><br>10–20: 42 rows`).
+pre-formatted markup the library's built-in rendering places below line 1
+(e.g. `<span class="stats-label">Bin:</span> 10 – 20<br>42 rows (8.4%)`).
 The bundled `Histogram` and `ValueCounts` visualizations call
 `escapeHTML` on every user-derived value before producing this string
 ([`src/statistics/StatsFormatters.ts`](../../src/statistics/StatsFormatters.ts)).

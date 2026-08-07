@@ -175,6 +175,12 @@ const unsub = table.on('filterChange', ({ filters, filteredRowCount }) => {
 });
 ```
 
+While filters are active, every column header's stats line shows the same
+`filtered / total rows` fraction, and columns whose own filter has a chart
+representation additionally show what that filter alone matches — see
+[Reading the column stats](./visualizations.md#reading-the-column-stats)
+for the exact semantics.
+
 ## Serialization
 
 Filters persist to IndexedDB (session restore) and to JSON (filter-preset

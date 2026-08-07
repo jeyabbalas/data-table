@@ -83,20 +83,27 @@ export function escapeHtml(str: string): string {
 // =========================================
 
 /**
- * Format Line 1: count + data quality.
+ * Format Line 1: count + data quality. Returns plain text (no HTML wrapping).
+ *
+ * The fraction form appears whenever any filter is active (`filteredTotalRows`
+ * is non-null), even when the filtered count equals the total — so every
+ * column signals "a filter is active" consistently.
  *
  * Examples:
  * - "1,234 rows"
  * - "1,234 rows · 5 null"
  * - "892 / 1,234 rows · 3 null"
+ * - "1,234 / 1,234 rows"
  * - "1,234 rows · all null"
  */
-function formatLine1(stats: ColumnStatsData, messages: Strings): string {
+export function formatStatsLine1(
+  stats: ColumnStatsData,
+  messages: Strings = defaultStrings,
+): string {
   const { totalRows, nullCount, filteredTotalRows } = stats;
   const s = messages.statistics;
 
-  // Determine which counts to show
-  const isFiltered = filteredTotalRows !== null && filteredTotalRows !== totalRows;
+  const isFiltered = filteredTotalRows !== null;
 
   let line: string;
   if (isFiltered) {
@@ -275,6 +282,40 @@ function formatIntervalLine2(
 // =========================================
 
 /**
+ * Format Line 2: the type-specific distribution summary. Returns text that may
+ * contain pre-escaped values (dates, interval displays), or '' when there is
+ * nothing to show (empty data, all-null column, or no computable summary).
+ *
+ * @param stats - The computed column stats data
+ * @param dataType - The column's DataType (needed to disambiguate categorical subtypes)
+ * @param messages - Resolved i18n strings. Defaults to English.
+ */
+export function formatStatsLine2(
+  stats: ColumnStatsData,
+  dataType: DataType,
+  messages: Strings = defaultStrings,
+): string {
+  // No line 2 for empty data or all-null columns
+  const currentTotal = stats.filteredTotalRows !== null ? stats.filteredTotalRows : stats.totalRows;
+  if (currentTotal === 0 || stats.nullCount === currentTotal) {
+    return '';
+  }
+
+  switch (stats.kind) {
+    case 'numeric':
+      return formatNumericLine2(stats, messages);
+    case 'categorical':
+      return formatCategoricalLine2(stats, dataType, messages);
+    case 'temporal':
+      return formatTemporalLine2(stats, messages);
+    case 'time':
+      return formatTimeLine2(stats, messages);
+    case 'interval':
+      return formatIntervalLine2(stats, messages);
+  }
+}
+
+/**
  * Format the complete two-line default stats HTML for a column header.
  *
  * @param stats - The computed column stats data
@@ -287,32 +328,8 @@ export function formatDefaultStats(
   dataType: DataType,
   messages: Strings = defaultStrings,
 ): string {
-  const line1 = formatLine1(stats, messages);
-
-  // No line 2 for empty data or all-null columns
-  const currentTotal = stats.filteredTotalRows !== null ? stats.filteredTotalRows : stats.totalRows;
-  if (currentTotal === 0 || stats.nullCount === currentTotal) {
-    return `<span class="dt-stats-line1">${line1}</span>`;
-  }
-
-  let line2 = '';
-  switch (stats.kind) {
-    case 'numeric':
-      line2 = formatNumericLine2(stats, messages);
-      break;
-    case 'categorical':
-      line2 = formatCategoricalLine2(stats, dataType, messages);
-      break;
-    case 'temporal':
-      line2 = formatTemporalLine2(stats, messages);
-      break;
-    case 'time':
-      line2 = formatTimeLine2(stats, messages);
-      break;
-    case 'interval':
-      line2 = formatIntervalLine2(stats, messages);
-      break;
-  }
+  const line1 = formatStatsLine1(stats, messages);
+  const line2 = formatStatsLine2(stats, dataType, messages);
 
   if (line2) {
     return `<span class="dt-stats-line1">${line1}</span><br><span class="dt-stats-line2">${line2}</span>`;

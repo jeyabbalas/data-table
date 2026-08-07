@@ -20,12 +20,12 @@
  */
 
 import { DataTableError, QueryError } from '../../core/errors';
-import type { ColumnSchema } from '../../core/types';
+import type { ColumnSchema, Filter } from '../../core/types';
 import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatCount, formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
+import { formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 
@@ -324,6 +324,12 @@ export class ValueCounts extends BaseVisualization {
     this.pendingFilterSync = this.isFilterUpdate || this.options.filters.length > 0;
 
     this.render();
+
+    // Keep the committed-selection stats text in step with the synced
+    // visual state (also clears it when this column's filter was removed).
+    // Runs after render() because the filter→selection sync happens inside
+    // render (pendingFilterSync).
+    this.emitCommittedStats();
   }
 
   /**
@@ -380,14 +386,27 @@ export class ValueCounts extends BaseVisualization {
     // Handle empty state. Drop the previous data's segment geometry first:
     // this path never reaches calculateLayout(), and nearest-slot hit-testing
     // would otherwise resolve x to segments that are no longer drawn.
+    //
+    // Both this path and the all-unique one below return before the
+    // pendingFilterSync block, so they consume the flag themselves: neither
+    // draws selectable segments, so the only correct synced state is "no
+    // selection". Leaving the flag set would fire syncVisualStateFromFilter()
+    // at an arbitrary later render (resize, hover, theme flip), and leaving a
+    // stale selection would let emitCommittedStats() publish a detail line
+    // for a filter that is gone — or for the display-only all-unique segment,
+    // which emits no filter at all and so has no chip to clear it.
     if (referenceData.segments.length === 0 && referenceData.nullCount === 0) {
       this.segmentPositions = [];
+      this.pendingFilterSync = false;
+      this.selectedSegments.clear();
       this.drawEmptyState();
       return;
     }
 
     // Handle all unique values special case
     if (referenceData.isAllUnique && referenceData.segments.length > 0) {
+      this.pendingFilterSync = false;
+      this.selectedSegments.clear();
       this.drawAllUniqueState();
       return;
     }
@@ -1072,7 +1091,7 @@ export class ValueCounts extends BaseVisualization {
     if (segment.isNull) {
       labelText = '\u2205'; // Empty set symbol for null
     } else if (segment.isAllUnique) {
-      labelText = `All unique (${formatCount(segment.count)})`;
+      labelText = this.statsMessages.allUniqueCategory(segment.count);
     } else if (segment.isOther) {
       labelText = 'Other';
     } else {
@@ -1235,11 +1254,69 @@ export class ValueCounts extends BaseVisualization {
       if (this.hoveredSegment !== null) {
         this.updateHoverStats();
       } else if (hasSelection) {
-        this.updateSelectedStats();
+        this.emitSelectionDetail();
       } else {
         this.options.onStatsChange?.(null);
       }
     }
+  }
+
+  /**
+   * Segment identity label for stats detail lines. Reads the background
+   * (unfiltered) segment first so the label — including the Other/All-unique
+   * value counts — is stable when other columns' filters change.
+   */
+  private formatSegmentLabel(idx: number): string {
+    const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+    if (!seg) return '';
+    if (seg.isNull) return this.statsMessages.nullBinLabel;
+    if (seg.isAllUnique) return this.statsMessages.allUniqueCategory(seg.count);
+    if (seg.isOther) return this.statsMessages.otherCategory(seg.otherCount ?? 0);
+    const raw = seg.value.length > 30 ? seg.value.substring(0, 27) + '...' : seg.value;
+    return escapeHTML(raw);
+  }
+
+  /** Sum unfiltered (background-first) counts over segment indices. */
+  private sumBgCounts(indices: Iterable<number>): number {
+    let count = 0;
+    for (const idx of indices) {
+      const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+      if (seg) count += seg.count;
+    }
+    return count;
+  }
+
+  /**
+   * Count line for a committed selection: how many rows this column's filter
+   * alone matches, out of the full dataset. Measured on the unfiltered
+   * background so the text is stable when other columns' filters change.
+   */
+  private formatSelectionCountLine(indices: Iterable<number>): string {
+    const total = (this.backgroundData ?? this.data)?.total ?? 0;
+    const count = this.sumBgCounts(indices);
+    return this.statsMessages.selectionRowCount(
+      count,
+      formatPercent(total > 0 ? count / total : 0),
+    );
+  }
+
+  /**
+   * Count line for a transient hover: the segment's unfiltered size out of
+   * the full dataset, plus — when filters are active — how many of its rows
+   * pass all current filters.
+   */
+  private formatHoverCountLine(idx: number): string {
+    const total = (this.backgroundData ?? this.data)?.total ?? 0;
+    const bgCount = this.sumBgCounts([idx]);
+    let line = this.statsMessages.selectionRowCount(
+      bgCount,
+      formatPercent(total > 0 ? bgCount / total : 0),
+    );
+    if (this.backgroundData) {
+      const fgCount = this.renderSegments[idx]?.count ?? 0;
+      line += `${this.statsMessages.separator}${this.statsMessages.matchCount(fgCount)}`;
+    }
+    return line;
   }
 
   /**
@@ -1252,32 +1329,9 @@ export class ValueCounts extends BaseVisualization {
       const segment =
         this.renderSegments[this.hoveredSegment] ?? this.backgroundSegments[this.hoveredSegment];
       if (segment) {
-        let categoryLabel: string;
-        if (segment.isNull) {
-          categoryLabel = 'null';
-        } else if (segment.isAllUnique) {
-          categoryLabel = `All unique (${formatCount(segment.count)})`;
-        } else if (segment.isOther) {
-          categoryLabel = `Other (${segment.otherCount} values)`;
-        } else {
-          const raw =
-            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
-          categoryLabel = escapeHTML(raw);
-        }
-
-        // Show crossfilter context when background data exists
-        const bgSegment = this.backgroundSegments[this.hoveredSegment];
-        let countLine: string;
-        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
-          const ratio = formatPercent(segment.count / bgSegment.count);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
-        } else {
-          const percent = formatPercent(segment.count / this.data.total);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
-        }
-
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
+          `<span class="stats-label">${this.statsMessages.categoryLabel}</span> ${this.formatSegmentLabel(this.hoveredSegment)}<br>` +
+            this.formatHoverCountLine(this.hoveredSegment),
         );
       }
     } else {
@@ -1512,74 +1566,114 @@ export class ValueCounts extends BaseVisualization {
     // Single selection
     if (this.selectedSegments.size === 1) {
       const idx = [...this.selectedSegments][0]!;
-      const segment = this.renderSegments[idx] ?? this.backgroundSegments[idx];
+      const segment = this.backgroundSegments[idx] ?? this.renderSegments[idx];
       if (segment) {
-        let categoryLabel: string;
-        if (segment.isNull) {
-          categoryLabel = 'null';
-        } else if (segment.isAllUnique) {
-          categoryLabel = `All unique (${formatCount(segment.count)})`;
-        } else if (segment.isOther) {
-          categoryLabel = `Other (${segment.otherCount} values)`;
-        } else {
-          const raw =
-            segment.value.length > 30 ? segment.value.substring(0, 27) + '...' : segment.value;
-          categoryLabel = escapeHTML(raw);
-        }
-
-        const bgSegment = this.backgroundSegments[idx];
-        let countLine: string;
-        if (this.backgroundData && bgSegment && bgSegment.count > 0) {
-          const ratio = formatPercent(segment.count / bgSegment.count);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} / ${formatCount(bgSegment.count)} (${ratio})`;
-        } else {
-          const percent = formatPercent(segment.count / this.data.total);
-          countLine = `<span class="stats-label">Count:</span> ${formatCount(segment.count)} (${percent})`;
-        }
-
         this.options.onStatsChange?.(
-          `<span class="stats-label">Category:</span><br>` + `${categoryLabel}<br>` + countLine,
+          `<span class="stats-label">${this.statsMessages.categoryLabel}</span> ${this.formatSegmentLabel(idx)}<br>` +
+            this.formatSelectionCountLine(this.selectedSegments),
         );
       }
       return;
     }
 
-    // Multi-select stats
-    const selectedSegmentsList = [...this.selectedSegments]
-      .map((idx) => this.renderSegments[idx])
-      .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique);
-
-    const totalCount = selectedSegmentsList.reduce((sum, s) => sum + s.count, 0);
-
-    // Format value list (truncate if too long)
-    const values = selectedSegmentsList.map((s) => escapeHTML(s.value));
+    // Multi-select: list every selected segment (null and Other included —
+    // they are part of what the emitted filter selects, and the count line
+    // sums them all).
+    const values: string[] = [];
+    for (const idx of this.selectedSegments) {
+      const seg = this.backgroundSegments[idx] ?? this.renderSegments[idx];
+      if (!seg || seg.isAllUnique) continue;
+      values.push(this.formatSegmentLabel(idx));
+    }
     let valueListStr = values.join(', ');
     if (valueListStr.length > 50) {
-      valueListStr = values.slice(0, 3).join(', ') + `, ... (${values.length} values)`;
-    }
-
-    // Calculate background total for multi-select crossfilter context
-    let countLine: string;
-    if (this.backgroundData) {
-      const bgTotal = [...this.selectedSegments]
-        .map((idx) => this.backgroundSegments[idx])
-        .filter((s): s is RenderSegment => !!s && !s.isNull && !s.isOther && !s.isAllUnique)
-        .reduce((sum, s) => sum + s.count, 0);
-      if (bgTotal > 0) {
-        const ratio = formatPercent(totalCount / bgTotal);
-        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} / ${formatCount(bgTotal)} (${ratio})`;
-      } else {
-        const percent = formatPercent(totalCount / this.data.total);
-        countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
-      }
-    } else {
-      const percent = formatPercent(totalCount / this.data.total);
-      countLine = `<span class="stats-label">Count:</span> ${formatCount(totalCount)} (${percent})`;
+      valueListStr =
+        values.slice(0, 3).join(', ') + this.statsMessages.valueListSuffix(values.length);
     }
 
     this.options.onStatsChange?.(
-      `<span class="stats-label">Selected:</span><br>` + `${valueListStr}<br>` + countLine,
+      `<span class="stats-label">${this.statsMessages.selectedLabel}</span> ${valueListStr}<br>` +
+        this.formatSelectionCountLine(this.selectedSegments),
     );
+  }
+
+  /** This column's active filter, if any. */
+  private ownFilter(): Filter | undefined {
+    return this.options.filters.find((f) => f.column === this.column.name);
+  }
+
+  /**
+   * Whether a committed detail line can be counted for `filter` from the
+   * segments this chart draws.
+   *
+   * Folding keeps only the top MAX_CATEGORIES values as their own segment
+   * and rolls the rest into "Other", whose total is known but whose
+   * membership is not. A filter naming a value that has no segment of its
+   * own is therefore uncountable here, in either direction:
+   *
+   * - `set` / `point` on a folded value **undercounts** — the matching rows
+   *   sit inside Other, which value-matching sync skips, so the sum omits
+   *   them (and a multi-value set can render as a single-value selection).
+   * - `not-set` excluding a folded value **overcounts** — sync attributes
+   *   Other to the selection whole, including the very rows `NOT IN` drops.
+   *
+   * Patterns are never countable: they match by predicate, so folded values
+   * can match without being named anywhere.
+   *
+   * The chart's own gestures always stay countable — clicking Other emits
+   * `not-set` over exactly the visible top categories — so this suppresses
+   * only the externally-constructed filters that cannot be rendered
+   * truthfully.
+   */
+  private canCountCommittedDetail(filter: Filter | undefined): boolean {
+    if (!filter) return true;
+    if (filter.type === 'pattern') return false;
+
+    let named: string[];
+    if (filter.type === 'point') {
+      named = filter.value === null ? [] : [String(filter.value)];
+    } else if (filter.type === 'set' || filter.type === 'not-set') {
+      named = filter.values.map(String);
+    } else {
+      return true;
+    }
+    if (named.length === 0) return true;
+
+    const segs = this.backgroundSegments.length > 0 ? this.backgroundSegments : this.renderSegments;
+    const visible = new Set(
+      segs.filter((s) => !s.isNull && !s.isOther && !s.isAllUnique).map((s) => s.value),
+    );
+    return named.every((v) => visible.has(v));
+  }
+
+  /**
+   * Emit the committed-selection detail — or clear it when this column's
+   * filter cannot be counted from the drawn segments.
+   *
+   * Every path that *restores* the committed text after a hover, or
+   * publishes it after a filter sync, routes through here instead of
+   * calling `updateSelectedStats()` directly, so suppression is a property
+   * of the filter rather than of whichever gesture fired last. (The
+   * `handleClick` path keeps its direct call: a selection built by clicking
+   * segments is countable by construction, and its filter has not
+   * round-tripped yet.)
+   */
+  private emitSelectionDetail(): void {
+    if (this.selectedSegments.size > 0 && this.canCountCommittedDetail(this.ownFilter())) {
+      this.updateSelectedStats();
+    } else {
+      this.options.onStatsChange?.(null);
+    }
+  }
+
+  /**
+   * Emit the committed-selection detail text — or clear it — after each
+   * fetch+render+sync cycle, so this column's filter displays identically
+   * regardless of how it was created and clears on every removal path.
+   */
+  private emitCommittedStats(): void {
+    if (this.destroyed) return;
+    this.emitSelectionDetail();
   }
 
   /**
@@ -1592,11 +1686,7 @@ export class ValueCounts extends BaseVisualization {
     this.hoveredSegment = null;
 
     // Restore appropriate stats
-    if (this.selectedSegments.size > 0) {
-      this.updateSelectedStats();
-    } else {
-      this.options.onStatsChange?.(null);
-    }
+    this.emitSelectionDetail();
 
     if (hadHover) {
       this.render();
@@ -1676,9 +1766,7 @@ export class ValueCounts extends BaseVisualization {
     }
 
     this.render();
-    if (this.selectedSegments.size > 0) {
-      this.updateSelectedStats();
-    }
+    this.emitSelectionDetail();
   }
 
   /**

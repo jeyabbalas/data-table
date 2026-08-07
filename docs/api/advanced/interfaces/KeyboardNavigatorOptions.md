@@ -6,7 +6,7 @@
 
 # Interface: KeyboardNavigatorOptions
 
-Defined in: [table/KeyboardNavigator.ts:71](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L71)
+Defined in: [table/KeyboardNavigator.ts:71](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L71)
 
 Construction options for [KeyboardNavigator](../classes/KeyboardNavigator.md).
 
@@ -16,7 +16,7 @@ Construction options for [KeyboardNavigator](../classes/KeyboardNavigator.md).
 
 > **actions**: [`StateActions`](../classes/StateActions.md)
 
-Defined in: [table/KeyboardNavigator.ts:87](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L87)
+Defined in: [table/KeyboardNavigator.ts:87](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L87)
 
 State mutation surface.
 
@@ -26,7 +26,7 @@ State mutation surface.
 
 > `optional` **announce?**: (`message`) => `void`
 
-Defined in: [table/KeyboardNavigator.ts:103](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L103)
+Defined in: [table/KeyboardNavigator.ts:103](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L103)
 
 Write a transient message to a polite live region. Column layout mode is
 invisible without it — a width or a new position is not something the
@@ -48,7 +48,7 @@ cursor announces on its own. `TableContainer.announce` is the wiring.
 
 > **bodyScroll**: `HTMLElement`
 
-Defined in: [table/KeyboardNavigator.ts:83](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L83)
+Defined in: [table/KeyboardNavigator.ts:83](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L83)
 
 Body horizontal-scroll container (for horizontal cell scroll).
 
@@ -58,7 +58,7 @@ Body horizontal-scroll container (for horizontal cell scroll).
 
 > `optional` **getBridge?**: () => [`WorkerBridge`](../../index/classes/WorkerBridge.md) \| `undefined`
 
-Defined in: [table/KeyboardNavigator.ts:97](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L97)
+Defined in: [table/KeyboardNavigator.ts:97](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L97)
 
 Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op.
 
@@ -72,7 +72,7 @@ Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op.
 
 > `optional` **getColumnHeaders?**: () => [`ColumnHeader`](../classes/ColumnHeader.md)[]
 
-Defined in: [table/KeyboardNavigator.ts:95](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L95)
+Defined in: [table/KeyboardNavigator.ts:95](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L95)
 
 Late-bound accessor for the live ColumnHeader instances — `render()`
 destroys and rebuilds them, so they cannot be captured at construction.
@@ -88,7 +88,7 @@ Without it, header-row navigation and F2 controls mode are inert.
 
 > **getTableBody**: () => [`TableBody`](../classes/TableBody.md) \| `null`
 
-Defined in: [table/KeyboardNavigator.ts:89](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L89)
+Defined in: [table/KeyboardNavigator.ts:89](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L89)
 
 Late-bound accessor for the TableBody (may be recreated on data loads).
 
@@ -102,7 +102,7 @@ Late-bound accessor for the TableBody (may be recreated on data loads).
 
 > `optional` **gridElement?**: `HTMLElement`
 
-Defined in: [table/KeyboardNavigator.ts:81](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L81)
+Defined in: [table/KeyboardNavigator.ts:81](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L81)
 
 The `role="grid"` element that owns focus. Escape from controls mode
 returns focus here. Defaults to `rootElement` when omitted.
@@ -113,7 +113,7 @@ returns focus here. Defaults to `rootElement` when omitted.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/KeyboardNavigator.ts:105](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L105)
+Defined in: [table/KeyboardNavigator.ts:105](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L105)
 
 Resolved i18n strings for the live-region announcements. Defaults to English.
 
@@ -123,7 +123,7 @@ Resolved i18n strings for the live-region announcements. Defaults to English.
 
 > **rootElement**: `HTMLElement`
 
-Defined in: [table/KeyboardNavigator.ts:76](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L76)
+Defined in: [table/KeyboardNavigator.ts:76](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L76)
 
 Element the keydown listener is attached to. Bubble-phase, so it sees
 keystrokes from every descendant of the table root.
@@ -134,6 +134,6 @@ keystrokes from every descendant of the table root.
 
 > **state**: [`TableState`](TableState.md)
 
-Defined in: [table/KeyboardNavigator.ts:85](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/table/KeyboardNavigator.ts#L85)
+Defined in: [table/KeyboardNavigator.ts:85](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/KeyboardNavigator.ts#L85)
 
 Reactive state for the grid.

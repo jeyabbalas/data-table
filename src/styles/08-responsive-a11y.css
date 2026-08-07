@@ -35,9 +35,13 @@
     max-width: 180px;
   }
 
-  /* Column stats: 2 lines instead of 4 */
+  /* Column stats: 3 lines instead of 4. Three is the floor, not a
+     preference — a column carrying a committed selection rests at line 1
+     (row count) + the selection label + its count line, and hover uses the
+     same three. Clamping to 2 here would permanently clip the count line
+     on any container this query matches. */
   .dt-col-stats {
-    height: 2.6em;
+    height: 3.9em;
   }
 
   /* Action panel: hide pin and drag (keep filter, sort, hide) */

@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:839](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/Strings.ts#L839)
+Defined in: [core/Strings.ts:867](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L867)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -1139,7 +1139,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allValues?`: \{ \}; `filteredRowCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullCount?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1149,13 +1149,37 @@ Inline regex/UUID validation messages.
 
 `string`
 
+#### statistics.allUniqueCategory?
+
+\{ \}
+
+Display value for the all-unique segment (count = distinct values).
+
 #### statistics.allValues?
 
 \{ \}
 
+#### statistics.binLabel?
+
+`string`
+
+Bold label prefix for a histogram bin/brush selection detail line.
+
+#### statistics.categoryLabel?
+
+`string`
+
+Bold label prefix for a single selected category detail line.
+
 #### statistics.filteredRowCount?
 
 \{ \}
+
+#### statistics.matchCount?
+
+\{ \}
+
+Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 
 #### statistics.max?
 
@@ -1169,9 +1193,21 @@ Inline regex/UUID validation messages.
 
 \{ \}
 
+#### statistics.nullBinLabel?
+
+`string`
+
+Display value for the null bin/segment in a selection detail line.
+
 #### statistics.nullCount?
 
 \{ \}
+
+#### statistics.otherCategory?
+
+\{ \}
+
+Display value for the folded "Other" segment (count = folded distinct values).
 
 #### statistics.percentTrue?
 
@@ -1184,6 +1220,18 @@ Inline regex/UUID validation messages.
 #### statistics.rowWord?
 
 \{ \}
+
+#### statistics.selectedLabel?
+
+`string`
+
+Bold label prefix for a multi-category selection detail line.
+
+#### statistics.selectionRowCount?
+
+\{ \}
+
+Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 
 #### statistics.separator?
 
@@ -1198,6 +1246,12 @@ Inline regex/UUID validation messages.
 #### statistics.uniquePercent?
 
 \{ \}
+
+#### statistics.valueListSuffix?
+
+\{ \}
+
+Truncation suffix for a long multi-select value list (total = selected values).
 
 ## Returns
 

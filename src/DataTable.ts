@@ -65,7 +65,7 @@ import { FilterPresetManager } from './filters/FilterPresets';
 import { AutoSave } from './persistence/AutoSave';
 import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
-import { escapeHtml, formatDefaultStats } from './statistics/StatsFormatters';
+import { escapeHtml, formatStatsLine1, formatStatsLine2 } from './statistics/StatsFormatters';
 import { AnnotationPopover } from './table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
 import { TableContainer } from './table/TableContainer';
@@ -687,6 +687,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     interactionManager?.clearColumn(column);
   };
 
+  // Table-wide line 1 for stats slots with no per-column stats: columns
+  // without a visualization, and viz columns before their first fetch lands.
+  // escapeHtml: messages.* are consumer-overridable functions whose return
+  // value lands in innerHTML.
+  const tableWideLine1Html = (): string => {
+    const prefix = opts.classPrefix ?? 'dt';
+    const tr = state.totalRows.get();
+    const text =
+      state.filters.get().length > 0
+        ? messages.statistics.filteredRowCount(state.filteredRows.get(), tr)
+        : messages.statistics.rowCount(tr);
+    return `<span class="${prefix}-stats-line1">${escapeHtml(text)}</span>`;
+  };
+
   if (opts.visualizations !== false) {
     actions.setOnFilterRemove(clearVisualizationState);
   }
@@ -833,36 +847,47 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // and the panel's own `updateFilters` (via the coordinator) handles
         // filter-aware refreshes. Otherwise, write the simple row-count fallback.
         if (!panel) {
-          const total = state.totalRows.get();
-          // escapeHtml the i18n function output: consumers may override
-          // `messages.statistics.rowCount` with anything, and we splice into innerHTML.
-          statsEl.innerHTML = `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.rowCount(total))}</span>`;
+          statsEl.innerHTML = tableWideLine1Html();
         }
         continue;
       }
 
       const vizContainer = header.getVizContainer();
-      let currentDefault: string | null = null;
-      let showingHover = false;
+      // The stats slot is composed of two regions: line 1 (the row-count
+      // line, always present) and the detail region below it. Line 1 comes
+      // from the viz's default stats; the detail region shows the viz's
+      // interaction text (committed selection or transient hover) when one
+      // is active, else the default type-specific line 2. Interaction text
+      // never displaces line 1, and default-stats refreshes are never
+      // dropped while interaction text is showing.
+      let lastStats: ColumnStatsData | null = null;
+      let detailHtml: string | null = null;
 
-      const fallbackStats = (): string => {
-        const fr = state.filteredRows.get();
-        const tr = state.totalRows.get();
-        const af = state.filters.get();
+      const renderStatsSlot = (): void => {
+        const prefix = opts.classPrefix ?? 'dt';
         // escapeHtml: messages.* are consumer-overridable functions whose
         // return value lands in innerHTML.
-        return af.length > 0
-          ? `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.filteredRowCount(fr, tr))}</span>`
-          : `<span class="${opts.classPrefix ?? 'dt'}-stats-line1">${escapeHtml(messages.statistics.rowCount(tr))}</span>`;
+        const line1 = lastStats
+          ? `<span class="${prefix}-stats-line1">${escapeHtml(formatStatsLine1(lastStats, messages))}</span>`
+          : tableWideLine1Html();
+        if (detailHtml) {
+          statsEl.innerHTML = `${line1}<br>${detailHtml}`;
+          return;
+        }
+        const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
+        statsEl.innerHTML = line2
+          ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
+          : line1;
       };
       // Only write the placeholder fallback when there's no panel taking the slot.
-      if (!panel) statsEl.innerHTML = fallbackStats();
+      if (!panel) renderStatsSlot();
 
       let viz: VisualizationType | undefined;
       const vizOptions = {
         tableName,
         bridge,
         filters: state.filters.get(),
+        messages,
         onFilterChange: (filter: Filter | null) => {
           coordinator.handleFilterChange(column.name, filter);
         },
@@ -875,9 +900,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             }
             return;
           }
-          const html = formatDefaultStats(stats, column.type, messages);
-          currentDefault = html;
-          if (!showingHover) statsEl.innerHTML = html;
+          lastStats = stats;
+          renderStatsSlot();
         },
         onStatsChange: (stats: string | null) => {
           if (panel) {
@@ -888,13 +912,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             }
             return;
           }
-          if (stats) {
-            showingHover = true;
-            statsEl.innerHTML = stats;
-          } else {
-            showingHover = false;
-            statsEl.innerHTML = currentDefault ?? fallbackStats();
-          }
+          detailHtml = stats;
+          renderStatsSlot();
         },
         onBrushCommit: (colName: string) => {
           if (!viz) return;
@@ -1165,10 +1184,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (destroyed) return;
     if (!state.tableName.get()) return;
     const headers = tableContainer.getColumnHeaders();
-    const totalRows = state.totalRows.get();
-    const filteredRows = state.filteredRows.get();
-    const activeFilters = state.filters.get();
-    const prefix = opts.classPrefix ?? 'dt';
     for (const header of headers) {
       const column = header.getColumn();
       if (vizRegistry.isApplicable(column)) continue;
@@ -1181,11 +1196,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         if (!panel.isDestroyed()) continue;
         activeStatsPanels.delete(column.name);
       }
-      const statsEl = header.getStatsElement();
-      statsEl.innerHTML =
-        activeFilters.length > 0
-          ? `<span class="${prefix}-stats-line1">${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()} rows</span>`
-          : `<span class="${prefix}-stats-line1">${totalRows.toLocaleString()} rows</span>`;
+      header.getStatsElement().innerHTML = tableWideLine1Html();
     }
   };
   unsubscribes.push(state.filters.subscribe(refreshNonVizStats));

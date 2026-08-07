@@ -41,6 +41,21 @@ describe('Strings', () => {
       expect(d.notInSet('x', false)).toBe('not in {x}');
       expect(d.valueListMore(3)).toBe('+3 more');
     });
+
+    it('ships defaults for the viz-emitted stats detail strings', () => {
+      const s = defaultStrings.statistics;
+      expect(s.binLabel).toBe('Bin:');
+      expect(s.categoryLabel).toBe('Category:');
+      expect(s.selectedLabel).toBe('Selected:');
+      expect(s.nullBinLabel).toBe('null');
+      expect(s.otherCategory(12)).toBe('Other (12 values)');
+      expect(s.allUniqueCategory(1234)).toBe('All unique (1,234)');
+      expect(s.selectionRowCount(4000, '40.0%')).toBe('4,000 rows (40.0%)');
+      expect(s.selectionRowCount(1, '0.1%')).toBe('1 row (0.1%)');
+      expect(s.matchCount(300)).toBe('300 match');
+      expect(s.matchCount(0)).toBe('0 match');
+      expect(s.valueListSuffix(8)).toBe(', ... (8 values)');
+    });
   });
 
   describe('mergeStrings', () => {

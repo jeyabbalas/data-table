@@ -14,7 +14,7 @@ import type { ColumnSchema } from '../../core/types';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatCount, formatPercent, truncateText, findSlotAtX } from '../utils';
+import { formatPercent, truncateText, findSlotAtX } from '../utils';
 
 // =========================================
 // Palette
@@ -771,29 +771,51 @@ export abstract class SharedHistogramBase<
   // =========================================
 
   /**
-   * Format count stats with crossfilter context.
-   * When backgroundData exists, shows "Count: fg / bg (ratio%)" instead of just "Count: fg (percent%)".
+   * Sum the reference (unfiltered) counts over a bin range or the null bar.
+   * Foreground bins are boundary-aligned to the background, so an index
+   * addresses the same value range in both.
    */
-  private formatCountLine(fgCount: number, binIndices?: { start: number; end: number }): string {
-    if (this.backgroundData && this.data) {
-      // Calculate background count for the same bin(s)
-      let bgCount: number;
-      if (binIndices) {
-        bgCount = 0;
-        for (let i = binIndices.start; i <= binIndices.end; i++) {
-          bgCount += this.backgroundData.bins[i]?.count ?? 0;
-        }
-      } else {
-        // null bar
-        bgCount = this.backgroundData.nullCount;
-      }
-      if (bgCount > 0) {
-        const ratio = formatPercent(fgCount / bgCount);
-        return `<span class="stats-label">Count:</span> ${formatCount(fgCount)} / ${formatCount(bgCount)} (${ratio})`;
-      }
+  private sumRefCounts(ref: TData, sel: { start: number; end: number } | 'null'): number {
+    if (sel === 'null') return ref.nullCount;
+    let count = 0;
+    for (let i = sel.start; i <= sel.end; i++) {
+      count += ref.bins[i]?.count ?? 0;
     }
-    const percent = formatPercent(fgCount / this.data!.total);
-    return `<span class="stats-label">Count:</span> ${formatCount(fgCount)} (${percent})`;
+    return count;
+  }
+
+  /**
+   * Count line for a committed selection: how many rows this column's filter
+   * alone matches, out of the full dataset. Measured on the unfiltered
+   * background (or the current data before any filter exists), so the text
+   * is stable when other columns' filters change.
+   */
+  protected formatSelectionCountLine(sel: { start: number; end: number } | 'null'): string {
+    const ref = this.backgroundData ?? this.data;
+    if (!ref || ref.total === 0) {
+      return this.statsMessages.selectionRowCount(0, formatPercent(0));
+    }
+    const count = this.sumRefCounts(ref, sel);
+    return this.statsMessages.selectionRowCount(count, formatPercent(count / ref.total));
+  }
+
+  /**
+   * Count line for a transient hover: the hovered bin's unfiltered size out
+   * of the full dataset, plus — when filters are active — how many of its
+   * rows pass all current filters.
+   */
+  protected formatHoverCountLine(sel: { start: number; end: number } | 'null'): string {
+    const ref = this.backgroundData ?? this.data;
+    if (!ref || ref.total === 0) {
+      return this.statsMessages.selectionRowCount(0, formatPercent(0));
+    }
+    const bgCount = this.sumRefCounts(ref, sel);
+    let line = this.statsMessages.selectionRowCount(bgCount, formatPercent(bgCount / ref.total));
+    if (this.backgroundData && this.data) {
+      const fgCount = this.sumRefCounts(this.data, sel);
+      line += `${this.statsMessages.separator}${this.statsMessages.matchCount(fgCount)}`;
+    }
+    return line;
   }
 
   // =========================================
@@ -851,15 +873,13 @@ export abstract class SharedHistogramBase<
 
       if (this.allNullHovered !== prevHovered) {
         this.render();
-        if (this.allNullHovered) {
-          this.options.onStatsChange?.(
-            `<span class="stats-label">Bin:</span><br>` +
-              `null<br>` +
-              this.formatCountLine(this.data.nullCount),
-          );
-        } else {
-          this.options.onStatsChange?.(null);
-        }
+        // Hover-exit goes through the same resting path as every other
+        // branch. Today that is equivalent to clearing — an all-null column
+        // has `bins.length === 0`, so `syncVisualStateFromFilter` forces
+        // `selectedNull = false` and there is never a committed detail here —
+        // but routing it through `emitRestingStats()` keeps this branch
+        // correct if that guard is ever relaxed.
+        if (!this.emitHoverStats()) this.emitRestingStats();
       }
       return;
     }
@@ -876,10 +896,6 @@ export abstract class SharedHistogramBase<
       // Skip hover logic while actively brushing
       if (this.brushState.active) return;
     }
-
-    // Track whether we have a committed brush or selection (for stat restoration)
-    const hasBrushOrSelection =
-      this.brushState.committed || this.selectedBin !== null || this.selectedNull;
 
     // If brush is committed, set cursor based on position but still allow hover
     if (this.brushState.committed) {
@@ -922,34 +938,9 @@ export abstract class SharedHistogramBase<
       // Re-render for bar highlighting
       this.render();
 
-      // Update stats line with formatted HTML
-      if (this.hoveredBin !== null && this.data) {
-        const bin = this.data.bins[this.hoveredBin];
-        if (bin) {
-          const rangeStr = this.formatBinRange(this.hoveredBin);
-          this.options.onStatsChange?.(
-            `<span class="stats-label">Bin:</span><br>` +
-              `${rangeStr}<br>` +
-              this.formatCountLine(bin.count, { start: this.hoveredBin, end: this.hoveredBin }),
-          );
-        }
-      } else if (this.hoveredNull && this.data) {
-        this.options.onStatsChange?.(
-          `<span class="stats-label">Bin:</span><br>` +
-            `null<br>` +
-            this.formatCountLine(this.data.nullCount),
-        );
-      } else if (hasBrushOrSelection) {
-        // Restore brush/selection stats when hover ends
-        if (this.brushState.committed) {
-          this.updateBrushStats();
-        } else {
-          this.updateSelectedStats();
-        }
-      } else {
-        // Restore default stats
-        this.options.onStatsChange?.(null);
-      }
+      // Hover detail, else restore the committed detail (or clear it).
+      // `emitRestingStats` branches on exactly `hasBrushOrSelection`.
+      if (!this.emitHoverStats()) this.emitRestingStats();
     }
   }
 
@@ -1083,16 +1074,14 @@ export abstract class SharedHistogramBase<
       if (bin) {
         const rangeStr = this.formatBinRange(this.selectedBin);
         this.options.onStatsChange?.(
-          `<span class="stats-label">Bin:</span><br>` +
-            `${rangeStr}<br>` +
-            this.formatCountLine(bin.count, { start: this.selectedBin, end: this.selectedBin }),
+          `<span class="stats-label">${this.statsMessages.binLabel}</span> ${rangeStr}<br>` +
+            this.formatSelectionCountLine({ start: this.selectedBin, end: this.selectedBin }),
         );
       }
     } else if (this.selectedNull) {
       this.options.onStatsChange?.(
-        `<span class="stats-label">Bin:</span><br>` +
-          `null<br>` +
-          this.formatCountLine(this.data.nullCount),
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
+          this.formatSelectionCountLine('null'),
       );
     }
   }
@@ -1123,7 +1112,8 @@ export abstract class SharedHistogramBase<
     if (this.isAllNullState) {
       if (this.allNullHovered) {
         this.allNullHovered = false;
-        this.options.onStatsChange?.(null);
+        // Same resting path as every other hover-exit; see handleMouseMove.
+        this.emitRestingStats();
         this.render();
       }
       return;
@@ -1134,15 +1124,7 @@ export abstract class SharedHistogramBase<
     this.hoveredBin = null;
     this.hoveredNull = false;
 
-    if (this.brushState.committed) {
-      // Restore brush stats
-      this.updateBrushStats();
-    } else if (this.selectedBin !== null || this.selectedNull) {
-      // Restore selection stats
-      this.updateSelectedStats();
-    } else {
-      this.options.onStatsChange?.(null);
-    }
+    this.emitRestingStats();
 
     if (hadHover) {
       this.render();
@@ -1487,19 +1469,84 @@ export abstract class SharedHistogramBase<
     const endBin = this.data.bins[endIdx];
 
     if (startBin && endBin) {
-      // Sum counts in range
-      let rangeCount = 0;
-      for (let i = startIdx; i <= endIdx; i++) {
-        rangeCount += this.data.bins[i]!.count;
-      }
       const rangeStr = this.formatBrushRange(startIdx, endIdx);
-
       this.options.onStatsChange?.(
-        `<span class="stats-label">Bin:</span><br>` +
-          `${rangeStr}<br>` +
-          this.formatCountLine(rangeCount, { start: startIdx, end: endIdx }),
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${rangeStr}<br>` +
+          this.formatSelectionCountLine({ start: startIdx, end: endIdx }),
       );
     }
+  }
+
+  /**
+   * Emit the detail for the bar currently under the pointer. Returns false
+   * when nothing is hovered, so callers can fall through to the resting
+   * (committed) detail.
+   */
+  private emitHoverStats(): boolean {
+    if (!this.data) return false;
+
+    if (this.isAllNullState) {
+      if (!this.allNullHovered) return false;
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
+          this.formatHoverCountLine('null'),
+      );
+      return true;
+    }
+
+    if (this.hoveredBin !== null) {
+      if (!this.data.bins[this.hoveredBin]) return false;
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.formatBinRange(this.hoveredBin)}<br>` +
+          this.formatHoverCountLine({ start: this.hoveredBin, end: this.hoveredBin }),
+      );
+      return true;
+    }
+
+    if (this.hoveredNull) {
+      this.options.onStatsChange?.(
+        `<span class="stats-label">${this.statsMessages.binLabel}</span> ${this.statsMessages.nullBinLabel}<br>` +
+          this.formatHoverCountLine('null'),
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Emit this column's committed-selection detail, or clear the detail
+   * region when it has no selection. The resting state of the slot.
+   */
+  private emitRestingStats(): void {
+    if (this.brushState.committed) {
+      this.updateBrushStats();
+    } else if (this.selectedBin !== null || this.selectedNull) {
+      this.updateSelectedStats();
+    } else {
+      this.options.onStatsChange?.(null);
+    }
+  }
+
+  /**
+   * Emit the committed-selection detail text — or clear it — so the stats
+   * slot always reflects this column's own filter, regardless of how the
+   * filter was created (brush, panel, API, preset, session restore, undo)
+   * or which other column's filter just changed. Subclasses call this from
+   * `fetchData` after `syncVisualStateFromFilter` has run.
+   *
+   * A refetch can land while the pointer is resting on a bar — any other
+   * column's filter change fans out to every registered viz — so a live
+   * hover takes precedence. Overwriting it would blank a readout still
+   * under the cursor, and `handleMouseMove` re-emits only when the hovered
+   * bin *changes*, so moving within the same bar would not bring it back.
+   * Re-emitting the hover here also refreshes it against the data that just
+   * arrived, which the previous behaviour did not do.
+   */
+  protected emitCommittedStats(): void {
+    if (this.destroyed) return;
+    if (this.emitHoverStats()) return;
+    this.emitRestingStats();
   }
 
   /**

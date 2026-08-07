@@ -44,6 +44,69 @@ await createDataTable({ container, source, visualizations: false });
 With visualizations off, column headers still show column stats but no
 chart.
 
+## Reading the column stats
+
+Below each chart sits the column-stats text (`.dt-col-stats`). One rule
+governs every number in it: **counts and percentages are always measured
+against the full dataset total** — the denominator never changes meaning
+from column to column or filter to filter.
+
+**Line 1 — the row-count line, identical on every column.** With no
+filters it reads `1,234 rows · 5 null`. While _any_ filter is active it
+becomes `892 / 1,234 rows · 3 null`: rows passing **all** active filters,
+out of the dataset total (nulls are counted within the filtered rows).
+Every column shows the same fraction, and it stays visible during hover
+and selection.
+
+**Detail region — lines 2+.** Normally the type-specific summary
+(`min · med · max`, `12 unique`, a date range …), computed on the
+filtered rows. When the column's **own** filter has a chart
+representation, the detail instead shows the committed selection:
+
+```
+1,500 / 10,000 rows        ← after all filters (same on every column)
+Bin: 30 – 40               ← this column's selection
+4,000 rows (40.0%)         ← what this filter alone matches, out of 10,000
+```
+
+The selection line counts matches in the **unfiltered** data, so it does
+not move when other columns' filters change — with several filters
+chained, each participant column tells you its own filter's selectivity
+while line 1 tells you the combined result. The display is identical
+whether the filter was created by brushing the chart, the funnel panel,
+`actions.addFilter`, a preset, session restore, or undo/redo.
+
+**Hover** temporarily swaps the detail region (line 1 stays put):
+`Bin: 50 – 60` + `800 rows (8.0%)` — the hovered bin's share of the
+dataset — plus `· 300 match` for the rows of that bin passing all active
+filters. Mousing off restores the committed selection (or the default
+summary). A hover survives filter activity elsewhere in the table: when
+another column's filter triggers a refetch, the hovered bin's readout is
+recomputed against the new data rather than replaced.
+
+Some filters have no countable chart representation and therefore show no
+committed detail — their columns keep the default summary, while line 1
+and the funnel indicator still reflect them:
+
+- **pattern** filters (contains/starts/ends/regex) and **raw-SQL**
+  filters, which have no chart representation at all;
+- on a categorical column, any filter naming a value that has been folded
+  into the **Other** segment. A stacked bar keeps only the top categories
+  as their own segment and rolls the rest into Other, whose total it knows
+  but whose membership it does not — so `IN`/`=` on a folded value would
+  undercount, and `NOT IN` would overcount by exactly that value's rows.
+  Rather than state a wrong number, the detail is omitted. Filters built
+  by the chart's own gestures are always countable, including the
+  `NOT IN` that clicking Other emits.
+
+A continuous histogram can only draw bin-aligned brushes, so a range
+filter created through the panel or API snaps its drawn brush (and the
+selection label) to bin boundaries; line 1 always reflects the exact
+filter.
+
+All of these strings are localizable via `messages.statistics.*` — see
+the [i18n guide](./i18n.md).
+
 ## Per-instance registry
 
 By default, `createDataTable()` uses a shared `defaultVisualizationRegistry`.

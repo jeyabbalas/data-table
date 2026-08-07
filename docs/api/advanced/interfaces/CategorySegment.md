@@ -6,7 +6,7 @@
 
 # Interface: CategorySegment
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:28](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/valuecounts/ValueCountsData.ts#L28)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:28](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/valuecounts/ValueCountsData.ts#L28)
 
 A single category segment in the stacked bar
 
@@ -16,7 +16,7 @@ A single category segment in the stacked bar
 
 > **count**: `number`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:32](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/valuecounts/ValueCountsData.ts#L32)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:32](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/valuecounts/ValueCountsData.ts#L32)
 
 Count of rows with this value
 
@@ -26,7 +26,7 @@ Count of rows with this value
 
 > **isOther**: `boolean`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:34](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/valuecounts/ValueCountsData.ts#L34)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:34](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/valuecounts/ValueCountsData.ts#L34)
 
 Is this the "Other" aggregation segment?
 
@@ -36,7 +36,7 @@ Is this the "Other" aggregation segment?
 
 > `optional` **otherCount?**: `number`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:36](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/valuecounts/ValueCountsData.ts#L36)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:36](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/valuecounts/ValueCountsData.ts#L36)
 
 For "Other" segment: how many distinct values it represents
 
@@ -46,6 +46,6 @@ For "Other" segment: how many distinct values it represents
 
 > **value**: `string`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:30](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/visualizations/valuecounts/ValueCountsData.ts#L30)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:30](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/valuecounts/ValueCountsData.ts#L30)
 
 The category value (string representation)

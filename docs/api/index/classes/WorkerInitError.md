@@ -6,7 +6,7 @@
 
 # Class: WorkerInitError
 
-Defined in: [core/errors.ts:100](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L100)
+Defined in: [core/errors.ts:100](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/errors.ts#L100)
 
 Worker bootstrap / crash / unsupported-environment failures.
 
@@ -32,7 +32,7 @@ try {
 
 > **new WorkerInitError**(`message`, `options?`): `WorkerInitError`
 
-Defined in: [core/errors.ts:101](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L101)
+Defined in: [core/errors.ts:101](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/errors.ts#L101)
 
 #### Parameters
 
@@ -58,7 +58,7 @@ Defined in: [core/errors.ts:101](https://github.com/jeyabbalas/data-table/blob/4
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -70,7 +70,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/44
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -82,7 +82,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/44
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/errors.ts#L66)
 
 #### Returns
 

@@ -6,7 +6,7 @@
 
 # Interface: LoadJSONOptions
 
-Defined in: [annotations/AnnotationStore.ts:127](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/AnnotationStore.ts#L127)
+Defined in: [annotations/AnnotationStore.ts:127](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/AnnotationStore.ts#L127)
 
 Options bag for [AnnotationStore.loadJSON](../classes/AnnotationStore.md#loadjson).
 
@@ -16,7 +16,7 @@ Options bag for [AnnotationStore.loadJSON](../classes/AnnotationStore.md#loadjso
 
 > `optional` **mode?**: `"replace"` \| `"merge"`
 
-Defined in: [annotations/AnnotationStore.ts:128](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/AnnotationStore.ts#L128)
+Defined in: [annotations/AnnotationStore.ts:128](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/AnnotationStore.ts#L128)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [annotations/AnnotationStore.ts:128](https://github.com/jeyabbalas/d
 
 > `optional` **validateTableName?**: `boolean`
 
-Defined in: [annotations/AnnotationStore.ts:134](https://github.com/jeyabbalas/data-table/blob/44506eead652a93da8d9e891a568f01017354a73/src/annotations/AnnotationStore.ts#L134)
+Defined in: [annotations/AnnotationStore.ts:134](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/annotations/AnnotationStore.ts#L134)
 
 When `true`, reject the load if `file.tableName` and the store's resolved
 table name are both non-null and unequal. Throws

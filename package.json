@@ -63,7 +63,7 @@
     "docs:api:check": "typedoc --emit none",
     "size": "size-limit",
     "changeset": "changeset",
-    "version": "changeset version",
+    "version": "changeset version && npm install --package-lock-only",
     "release": "changeset publish",
     "prepublishOnly": "npm run build && npm run test:coverage"
   },

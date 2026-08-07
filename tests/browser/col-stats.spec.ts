@@ -81,9 +81,7 @@ test('drag brush: committed Bin detail, byte-stable when a second filter lands',
   await openDemo(page);
   await loadCsv(page, 6);
 
-  const canvas = page
-    .locator('.dt-col-header[data-column="num_col_0"] .dt-col-viz canvas')
-    .first();
+  const canvas = page.locator('.dt-col-header[data-column="num_col_0"] .dt-col-viz canvas').first();
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
   const y = box!.y + box!.height * 0.5;
@@ -129,9 +127,7 @@ test('hover: line 1 stays visible, detail carries a match suffix while filtered'
   await clickPlot(page, 'cat_col_1');
   await expect(page.locator('.dt-filter-chip')).toHaveCount(1);
 
-  const canvas = page
-    .locator('.dt-col-header[data-column="num_col_3"] .dt-col-viz canvas')
-    .first();
+  const canvas = page.locator('.dt-col-header[data-column="num_col_3"] .dt-col-viz canvas').first();
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
 

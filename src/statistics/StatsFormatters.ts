@@ -96,7 +96,10 @@ export function escapeHtml(str: string): string {
  * - "1,234 / 1,234 rows"
  * - "1,234 rows · all null"
  */
-export function formatStatsLine1(stats: ColumnStatsData, messages: Strings = defaultStrings): string {
+export function formatStatsLine1(
+  stats: ColumnStatsData,
+  messages: Strings = defaultStrings,
+): string {
   const { totalRows, nullCount, filteredTotalRows } = stats;
   const s = messages.statistics;
 

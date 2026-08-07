@@ -117,7 +117,12 @@ import { Histogram } from '../../../src/visualizations/histogram/Histogram';
 import type { ColumnSchema, Filter } from '../../../src/core/types';
 import type { VisualizationOptions } from '../../../src/visualizations/BaseVisualization';
 
-const COLUMN: ColumnSchema = { name: 'v', type: 'integer', nullable: true, originalType: 'INTEGER' };
+const COLUMN: ColumnSchema = {
+  name: 'v',
+  type: 'integer',
+  nullable: true,
+  originalType: 'INTEGER',
+};
 
 function makeBridge(): VisualizationOptions['bridge'] {
   return { query: vi.fn() } as unknown as VisualizationOptions['bridge'];

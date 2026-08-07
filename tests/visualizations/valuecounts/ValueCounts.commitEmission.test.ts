@@ -245,9 +245,7 @@ describe('ValueCounts — committed-selection emission', () => {
 
   it('pattern filter highlights segments but emits NO committed detail', async () => {
     fg.counts = [0, 5, 0];
-    const viz = makeViz([
-      { type: 'pattern', column: 'country', pattern: 'CA', mode: 'contains' },
-    ]);
+    const viz = makeViz([{ type: 'pattern', column: 'country', pattern: 'CA', mode: 'contains' }]);
     await settled(viz);
     const selected = (viz as unknown as { selectedSegments: Set<number> }).selectedSegments;
     expect(selected.size).toBeGreaterThan(0);

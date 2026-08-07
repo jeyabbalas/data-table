@@ -199,7 +199,13 @@ async function mount(
     if (header.getAttribute('data-column') === 'label') uuidSlot = slot;
   }
   if (!amountSlot || !uuidSlot) throw new Error('stats slots not found');
-  return { table, container, viz: StubViz.instances[StubViz.instances.length - 1]!, amountSlot, uuidSlot };
+  return {
+    table,
+    container,
+    viz: StubViz.instances[StubViz.instances.length - 1]!,
+    amountSlot,
+    uuidSlot,
+  };
 }
 
 afterEach(() => {

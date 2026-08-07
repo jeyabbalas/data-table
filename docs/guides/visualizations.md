@@ -52,7 +52,7 @@ against the full dataset total** — the denominator never changes meaning
 from column to column or filter to filter.
 
 **Line 1 — the row-count line, identical on every column.** With no
-filters it reads `1,234 rows · 5 null`. While *any* filter is active it
+filters it reads `1,234 rows · 5 null`. While _any_ filter is active it
 becomes `892 / 1,234 rows · 3 null`: rows passing **all** active filters,
 out of the dataset total (nulls are counted within the filtered rows).
 Every column shows the same fraction, and it stays visible during hover

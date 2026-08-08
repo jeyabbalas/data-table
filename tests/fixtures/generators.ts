@@ -3,6 +3,13 @@
  *
  * Uses DuckDB's `generate_series()` to create tables directly in the
  * database, avoiding the overhead of generating and parsing CSV strings.
+ *
+ * **New scale work belongs in `./tiers.ts`, not here.** These builders use
+ * `random()`, so no cell oracle is possible and nothing they produce can be
+ * asserted against. `tiers.ts` defines the named tiers of
+ * `plans/scaling/README.md` §6 with a deterministic `cellOracle(i, c, seed)`
+ * for every cell. This file stays only because the existing perf suite
+ * references `generateTableSQL`.
  */
 
 /**

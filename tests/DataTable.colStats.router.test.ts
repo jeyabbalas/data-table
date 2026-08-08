@@ -322,6 +322,9 @@ describe('non-viz column stats (refreshNonVizStats)', () => {
     await Promise.resolve();
     await Promise.resolve();
     table.state.filteredRows.set(5);
+    // The refresh is coalesced into a microtask (one pass per filter cycle
+    // instead of one per signal), so it lands a turn after the `set`.
+    await Promise.resolve();
     expect(uuidSlot.querySelector('.dt-stats-line1')?.textContent).toBe('5 sur 20 lignes');
 
     table.state.filters.set([]);
@@ -336,6 +339,7 @@ describe('non-viz column stats (refreshNonVizStats)', () => {
     await Promise.resolve();
     await Promise.resolve();
     table.state.filteredRows.set(20);
+    await Promise.resolve();
     expect(uuidSlot.querySelector('.dt-stats-line1')?.textContent).toBe('20 / 20 rows');
     await table.destroy();
   });

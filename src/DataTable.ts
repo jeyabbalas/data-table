@@ -1395,8 +1395,25 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       header.getStatsElement().innerHTML = tableWideLine1Html();
     }
   };
-  unsubscribes.push(state.filters.subscribe(refreshNonVizStats));
-  unsubscribes.push(state.filteredRows.subscribe(refreshNonVizStats));
+  // `filters` and `filteredRows` both drive this, and both fire inside a
+  // single filter cycle — synchronously together on a filter *removal*
+  // (`updateFilteredRowCount` short-circuits to `totalRows` with no query),
+  // one turn apart on an add. Coalescing with the same `queueMicrotask` latch
+  // `scheduleAttach` uses collapses the same-turn case and any burst of
+  // filter writes into one pass over the headers, which at 1,000 columns is
+  // 1,000 `innerHTML` assignments saved per cycle. The microtask still runs
+  // before paint, so nothing is ever displayed stale.
+  let nonVizStatsScheduled = false;
+  const scheduleNonVizStatsRefresh = (): void => {
+    if (nonVizStatsScheduled || destroyed) return;
+    nonVizStatsScheduled = true;
+    queueMicrotask(() => {
+      nonVizStatsScheduled = false;
+      refreshNonVizStats();
+    });
+  };
+  unsubscribes.push(state.filters.subscribe(scheduleNonVizStatsRefresh));
+  unsubscribes.push(state.filteredRows.subscribe(scheduleNonVizStatsRefresh));
 
   // -------- vizReady --------
   // Charts are lazy, so "the visible ones have data" is no longer something

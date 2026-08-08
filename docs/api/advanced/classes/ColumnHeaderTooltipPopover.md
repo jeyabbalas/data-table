@@ -6,7 +6,7 @@
 
 # Class: ColumnHeaderTooltipPopover
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:133](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L133)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:133](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L133)
 
 Shared, body-portalled popover singleton that renders the structured
 column-header tooltip set via `actions.setColumnHeaderTooltip`. Anchored
@@ -20,7 +20,7 @@ collide.
 
 > **new ColumnHeaderTooltipPopover**(`options?`): `ColumnHeaderTooltipPopover`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:150](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L150)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:150](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L150)
 
 #### Parameters
 
@@ -38,7 +38,7 @@ Defined in: [table/ColumnHeaderTooltipPopover.ts:150](https://github.com/jeyabba
 
 > **cancelGraceHide**(): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:291](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L291)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:291](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L291)
 
 Cancel a pending grace-period hide (user moved pointer back in time).
 
@@ -52,7 +52,7 @@ Cancel a pending grace-period hide (user moved pointer back in time).
 
 > **destroy**(): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:299](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L299)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:299](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L299)
 
 Tear down the popover and remove its element from the DOM.
 
@@ -66,7 +66,7 @@ Tear down the popover and remove its element from the DOM.
 
 > **getElement**(): `HTMLElement` \| `null`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:183](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L183)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:183](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L183)
 
 The popover's DOM element, or null until first [show](#show).
 
@@ -80,7 +80,7 @@ The popover's DOM element, or null until first [show](#show).
 
 > **getId**(): `string`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:178](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L178)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:178](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L178)
 
 Element id for the popover. Anchors write this into `aria-describedby`.
 
@@ -94,7 +94,7 @@ Element id for the popover. Anchors write this into `aria-describedby`.
 
 > **hide**(): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:258](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L258)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:258](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L258)
 
 Dismiss the popover and detach all listeners. Idempotent.
 
@@ -108,7 +108,7 @@ Dismiss the popover and detach all listeners. Idempotent.
 
 > **isOpen**(): `boolean`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:195](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L195)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:195](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L195)
 
 `true` if the popover is open against any anchor.
 
@@ -122,7 +122,7 @@ Defined in: [table/ColumnHeaderTooltipPopover.ts:195](https://github.com/jeyabba
 
 > **isOpenFor**(`anchor`): `boolean`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:188](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L188)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:188](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L188)
 
 `true` if the popover is currently anchored to `anchor`.
 
@@ -142,7 +142,7 @@ Defined in: [table/ColumnHeaderTooltipPopover.ts:188](https://github.com/jeyabba
 
 > **refresh**(`anchor`, `content`): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:244](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L244)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:244](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L244)
 
 Re-render the popover in place when content changes for the currently
 shown anchor. No-op when not currently shown for `anchor` (so callers
@@ -169,7 +169,7 @@ popover open).
 
 > **scheduleGraceHide**(): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:281](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L281)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:281](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L281)
 
 Start a grace-period timer that hides the popover unless cancelled.
 
@@ -183,7 +183,7 @@ Start a grace-period timer that hides the popover unless cancelled.
 
 > **show**(`anchor`, `content`): `void`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:203](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnHeaderTooltipPopover.ts#L203)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:203](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnHeaderTooltipPopover.ts#L203)
 
 Display the popover anchored to `anchor` with the given content.
 Empty content (no title, description, or items) hides the popover.

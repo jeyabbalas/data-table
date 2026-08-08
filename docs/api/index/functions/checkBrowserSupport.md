@@ -8,7 +8,7 @@
 
 > **checkBrowserSupport**(): [`BrowserSupport`](../interfaces/BrowserSupport.md)
 
-Defined in: [core/checkBrowserSupport.ts:40](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/checkBrowserSupport.ts#L40)
+Defined in: [core/checkBrowserSupport.ts:40](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/core/checkBrowserSupport.ts#L40)
 
 Probe every browser API the library requires and report what is missing.
 

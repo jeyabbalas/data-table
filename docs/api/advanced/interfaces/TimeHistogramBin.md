@@ -6,7 +6,7 @@
 
 # Interface: TimeHistogramBin
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:30](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/TimeHistogramData.ts#L30)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:30](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/TimeHistogramData.ts#L30)
 
 A single time histogram bin with second ranges and count
 
@@ -16,7 +16,7 @@ A single time histogram bin with second ranges and count
 
 > **binEndSeconds**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:34](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/TimeHistogramData.ts#L34)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:34](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/TimeHistogramData.ts#L34)
 
 End of the bin in seconds from midnight (exclusive)
 
@@ -26,7 +26,7 @@ End of the bin in seconds from midnight (exclusive)
 
 > **binStartSeconds**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:32](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/TimeHistogramData.ts#L32)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:32](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/TimeHistogramData.ts#L32)
 
 Start of the bin in seconds from midnight
 
@@ -36,6 +36,6 @@ Start of the bin in seconds from midnight
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/TimeHistogramData.ts#L36)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/TimeHistogramData.ts#L36)
 
 Number of values in this bin

@@ -6,7 +6,7 @@
 
 # Interface: NotSetFilter
 
-Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L52)
+Defined in: [filters/FilterTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L52)
 
 Set-exclusion filter (`column NOT IN (values)`). Mirror of [SetFilter](SetFilter.md).
 
@@ -16,7 +16,7 @@ Set-exclusion filter (`column NOT IN (values)`). Mirror of [SetFilter](SetFilter
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L54)
+Defined in: [filters/FilterTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L54)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [filters/FilterTypes.ts:54](https://github.com/jeyabbalas/data-table
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L57)
+Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L57)
 
 When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`).
 
@@ -34,7 +34,7 @@ When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`).
 
 > **type**: `"not-set"`
 
-Defined in: [filters/FilterTypes.ts:53](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L53)
+Defined in: [filters/FilterTypes.ts:53](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L53)
 
 ***
 
@@ -42,4 +42,4 @@ Defined in: [filters/FilterTypes.ts:53](https://github.com/jeyabbalas/data-table
 
 > **values**: `unknown`[]
 
-Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L55)
+Defined in: [filters/FilterTypes.ts:55](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L55)

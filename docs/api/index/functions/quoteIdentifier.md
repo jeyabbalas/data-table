@@ -8,7 +8,7 @@
 
 > **quoteIdentifier**(`name`): `string`
 
-Defined in: [filters/FilterSQL.ts:29](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterSQL.ts#L29)
+Defined in: [filters/FilterSQL.ts:29](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterSQL.ts#L29)
 
 Quote a SQL identifier (table/column name) for safe DuckDB use.
 

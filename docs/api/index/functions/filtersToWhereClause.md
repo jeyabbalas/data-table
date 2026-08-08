@@ -8,7 +8,7 @@
 
 > **filtersToWhereClause**(`filters`, `excludeColumn?`): `string`
 
-Defined in: [filters/FilterSQL.ts:235](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterSQL.ts#L235)
+Defined in: [filters/FilterSQL.ts:235](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterSQL.ts#L235)
 
 Convert an array of filters to a SQL WHERE clause fragment.
 

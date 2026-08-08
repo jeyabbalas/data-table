@@ -6,7 +6,7 @@
 
 # Interface: DuckDBFunctionInfo
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:42](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/sql-editor/duckdbFunctionDetails.ts#L42)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:42](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/sql-editor/duckdbFunctionDetails.ts#L42)
 
 Single function entry: name, category, and one-line description.
 
@@ -16,7 +16,7 @@ Single function entry: name, category, and one-line description.
 
 > **category**: [`DuckDBFunctionCategory`](../type-aliases/DuckDBFunctionCategory.md)
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:46](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/sql-editor/duckdbFunctionDetails.ts#L46)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:46](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/sql-editor/duckdbFunctionDetails.ts#L46)
 
 Group used for the autocomplete `detail` chip.
 
@@ -26,7 +26,7 @@ Group used for the autocomplete `detail` chip.
 
 > **description**: `string`
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:48](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/sql-editor/duckdbFunctionDetails.ts#L48)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:48](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/sql-editor/duckdbFunctionDetails.ts#L48)
 
 One-line description shown in the autocomplete `info` panel.
 
@@ -36,6 +36,6 @@ One-line description shown in the autocomplete `info` panel.
 
 > **name**: `string`
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:44](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/sql-editor/duckdbFunctionDetails.ts#L44)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:44](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/sql-editor/duckdbFunctionDetails.ts#L44)
 
 Function identifier (lowercase, matches DuckDB resolution).

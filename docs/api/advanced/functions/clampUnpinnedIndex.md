@@ -8,7 +8,7 @@
 
 > **clampUnpinnedIndex**(`index`, `columns`, `pinnedColumns`): `number`
 
-Defined in: [table/ColumnReorder.ts:60](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/ColumnReorder.ts#L60)
+Defined in: [table/ColumnReorder.ts:60](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/table/ColumnReorder.ts#L60)
 
 Clamp an insertion index so an unpinned column cannot land inside the
 pinned block.

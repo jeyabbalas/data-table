@@ -6,7 +6,7 @@
 
 # Interface: HistogramBin
 
-Defined in: [visualizations/histogram/HistogramData.ts:92](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/HistogramData.ts#L92)
+Defined in: [visualizations/histogram/HistogramData.ts:92](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/HistogramData.ts#L92)
 
 A single histogram bin with range and count
 
@@ -16,7 +16,7 @@ A single histogram bin with range and count
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:98](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/HistogramData.ts#L98)
+Defined in: [visualizations/histogram/HistogramData.ts:98](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/HistogramData.ts#L98)
 
 Number of values in this bin
 
@@ -26,7 +26,7 @@ Number of values in this bin
 
 > **x0**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:94](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/HistogramData.ts#L94)
+Defined in: [visualizations/histogram/HistogramData.ts:94](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/HistogramData.ts#L94)
 
 Lower bound of the bin (inclusive)
 
@@ -36,6 +36,6 @@ Lower bound of the bin (inclusive)
 
 > **x1**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:96](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/HistogramData.ts#L96)
+Defined in: [visualizations/histogram/HistogramData.ts:96](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/histogram/HistogramData.ts#L96)
 
 Upper bound of the bin (exclusive, except for last bin)

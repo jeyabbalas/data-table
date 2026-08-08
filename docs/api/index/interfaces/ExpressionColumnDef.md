@@ -6,7 +6,7 @@
 
 # Interface: ExpressionColumnDef
 
-Defined in: [derived/types.ts:27](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L27)
+Defined in: [derived/types.ts:27](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L27)
 
 SQL expression column — DuckDB evaluates the expression
 
@@ -16,7 +16,7 @@ SQL expression column — DuckDB evaluates the expression
 
 > **expression**: `string`
 
-Defined in: [derived/types.ts:30](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L30)
+Defined in: [derived/types.ts:30](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L30)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [derived/types.ts:30](https://github.com/jeyabbalas/data-table/blob/
 
 > **kind**: `"expression"`
 
-Defined in: [derived/types.ts:28](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L28)
+Defined in: [derived/types.ts:28](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L28)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [derived/types.ts:28](https://github.com/jeyabbalas/data-table/blob/
 
 > **name**: `string`
 
-Defined in: [derived/types.ts:29](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L29)
+Defined in: [derived/types.ts:29](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L29)

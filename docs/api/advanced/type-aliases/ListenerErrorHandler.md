@@ -8,7 +8,7 @@
 
 > **ListenerErrorHandler**\<`Events`\> = (`error`, `event`) => `void`
 
-Defined in: [core/EventEmitter.ts:32](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/EventEmitter.ts#L32)
+Defined in: [core/EventEmitter.ts:32](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/core/EventEmitter.ts#L32)
 
 Optional listener-error handler hook for [EventEmitter](../classes/EventEmitter.md). Receives the
 thrown value and the event key whose listener threw. The default behaviour

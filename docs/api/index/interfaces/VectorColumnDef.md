@@ -6,7 +6,7 @@
 
 # Interface: VectorColumnDef
 
-Defined in: [derived/types.ts:34](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L34)
+Defined in: [derived/types.ts:34](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L34)
 
 Pre-computed vector column — values provided by JavaScript
 
@@ -16,7 +16,7 @@ Pre-computed vector column — values provided by JavaScript
 
 > **kind**: `"vector"`
 
-Defined in: [derived/types.ts:35](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L35)
+Defined in: [derived/types.ts:35](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L35)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [derived/types.ts:35](https://github.com/jeyabbalas/data-table/blob/
 
 > **name**: `string`
 
-Defined in: [derived/types.ts:36](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L36)
+Defined in: [derived/types.ts:36](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L36)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [derived/types.ts:36](https://github.com/jeyabbalas/data-table/blob/
 
 > **values**: `ArrayLike`\<`number`\> \| `ArrayLike`\<`string`\> \| `ArrayLike`\<`boolean`\>
 
-Defined in: [derived/types.ts:38](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L38)
+Defined in: [derived/types.ts:38](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L38)
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: [derived/types.ts:38](https://github.com/jeyabbalas/data-table/blob/
 
 > **vectorType**: [`VectorDataType`](../type-aliases/VectorDataType.md)
 
-Defined in: [derived/types.ts:37](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/derived/types.ts#L37)
+Defined in: [derived/types.ts:37](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/derived/types.ts#L37)

@@ -1,0 +1,29 @@
+{
+  "tier": "target",
+  "vizMode": "off",
+  "gitSha": "970698e",
+  "date": "2026-08-08",
+  "machine": {
+    "platform": "darwin",
+    "cpus": 10,
+    "node": "v22.23.2"
+  },
+  "genMs": 591514,
+  "exportMs": null,
+  "loadMs": null,
+  "workerMs": null,
+  "firstPaintMs": null,
+  "vizReadyMs": null,
+  "queryCount": 4,
+  "cacheHits": 0,
+  "domNodes": null,
+  "canvasCount": null,
+  "liveResizeObservers": null,
+  "liveMutationObservers": null,
+  "sortSignalSubscribers": null,
+  "heapMB": 19.6,
+  "oneSortMs": null,
+  "oneFilterMs": null,
+  "scrollStormFrameP95": null,
+  "notes": "Probes only — the file is written with COPY … TO parquet and read back through read_parquet. genMs is the COPY; no table is materialized until Phase 10."
+}

@@ -304,6 +304,49 @@ full peer-dep list. The corresponding programmatic APIs
 
 ## Measuring your workload
 
+### Load-stage marks
+
+Every `loadData` call emits [User Timing](https://developer.mozilla.org/en-US/docs/Web/API/Performance_API/User_timing)
+marks and measures, so a load can be split into stages in DevTools'
+Performance panel — or read programmatically — without instrumenting your
+own code:
+
+| Mark                 | Set when                                                  |
+| -------------------- | --------------------------------------------------------- |
+| `dt:load:start`      | the load begins, before `loadStart` is emitted            |
+| `dt:load:workerDone` | the worker has ingested the data and the schema is known  |
+| `dt:load:firstPaint` | the first viewport of rows is rendered                    |
+| `dt:load:vizReady`   | column visualizations have finished initializing          |
+| `dt:load:complete`   | everything is done, just before `loadComplete` is emitted |
+
+| Measure          | Span                   |
+| ---------------- | ---------------------- |
+| `dt:load:worker` | `start` → `workerDone` |
+| `dt:load:paint`  | `start` → `firstPaint` |
+| `dt:load:viz`    | `start` → `vizReady`   |
+| `dt:load:total`  | `start` → `complete`   |
+
+```ts
+await table.loadData(file);
+
+for (const m of performance.getEntriesByType('measure')) {
+  if (m.name.startsWith('dt:load:')) {
+    console.log(`${m.name}: ${m.duration.toFixed(0)} ms`);
+  }
+}
+```
+
+Two notes on reading them. `firstPaint` and `vizReady` race — visualizations
+initialize in parallel with the first render, so neither ordering is a bug.
+And `workerDone` is not a pure worker boundary: restoring a session and
+rebuilding derived columns happen before it, so a slow `dt:load:worker` on a
+table with derived columns is not necessarily a slow ingest.
+
+Marks are cleared at the start of each load, so what you read always
+describes the most recent one. They cost a handful of microseconds and are
+always on; if the browser has no User Timing support the calls are swallowed
+and nothing else changes.
+
 ### Time a query
 
 ```ts

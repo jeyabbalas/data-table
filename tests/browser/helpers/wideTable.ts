@@ -40,6 +40,67 @@ import {
 export const TIER_HOST_ID = 'tier-table-host';
 
 /**
+ * How deep the WIDE tier can actually be built today — the phase doc's §4.8
+ * truncation, applied for a reason it did not anticipate.
+ *
+ * WIDE is defined as 1,000 × 100,000 and **cannot be produced at that depth
+ * on this stack**. `exportToBuffer` wraps its SQL in
+ * `COPY (…) TO '<file>' (FORMAT PARQUET)` with no row-group option
+ * (`src/worker/dispatcher.ts:358-360`), so DuckDB uses its default
+ * `ROW_GROUP_SIZE` of 122,880 rows — more than the tier is deep. The whole
+ * 10⁸-cell tier therefore buffers as a single row group and the writer dies
+ * with `Out of Memory Error: Allocation failure` inside DuckDB-WASM's
+ * ~3.1 GiB heap. Measured: it is the column count that decides this, not
+ * the cell count — GRID (200 × 500,000) and DEEP (20 × 5,000,000) are the
+ * same 10⁸ cells and both complete.
+ *
+ * So the truncation is on the **row** axis, not the `cols=500` the doc
+ * suggested: the column axis is the entire point of this tier and Phases
+ * 2–6 are about it, while depth is what GRID and DEEP already cover. That
+ * TARGET — 1,000 columns × 5,000,000 rows — streams fine at
+ * `ROW_GROUP_SIZE 30720` is the control that pins the cause on the row
+ * group rather than the width.
+ *
+ * Bisected on the reference machine (macOS, Chromium, 1,000 columns, all
+ * through the demo harness's real export → load path):
+ *
+ * | rows    | result                            |
+ * | ------- | --------------------------------- |
+ * | 100,000 | OOM in the parquet writer         |
+ * | 95,000  | OOM in the parquet writer         |
+ * | 85,000  | ok — 21.9 s build, 13.1 s load    |
+ * | 75,000  | ok — 18.6 s build, 9.7 s load     |
+ * | 60,000  | ok — 15.0 s build, 8.3 s load     |
+ *
+ * 60,000 rather than the 85,000 the cliff would allow: `viz=on` adds
+ * ~1,000 canvases and ~1,000 aggregate queries on top of the same heap,
+ * and a tier pinned 10 % from a hard ceiling would fail intermittently for
+ * reasons that have nothing to do with the phase under test. `DT_WIDE_ROWS`
+ * overrides it on a machine with more headroom; a phase that gives
+ * `exportToBuffer` a row-group option (Phase 11 — streaming exports)
+ * should retest 100,000 and raise this.
+ */
+export const WIDE_MOUNT_ROWS = Number(process.env['DT_WIDE_ROWS'] ?? 60_000);
+
+/** Whether {@link wideMountOptions} is producing a truncated tier. */
+export const WIDE_IS_TRUNCATED = WIDE_MOUNT_ROWS < TIERS.wide.rows;
+
+/**
+ * Mount options for WIDE at the greatest depth that builds — full width,
+ * {@link WIDE_MOUNT_ROWS} deep. Shared by the gated spec and the baseline
+ * capture so both describe the same tier.
+ */
+export function wideMountOptions(viz: boolean): MountTierOptions {
+  return {
+    tier: 'custom',
+    cols: TIERS.wide.cols,
+    rows: WIDE_MOUNT_ROWS,
+    seed: TIERS.wide.seed,
+    viz,
+  };
+}
+
+/**
  * One probe-observed breach.
  *
  * `rowid` is the row oracle (`data-row-id === data-row-index`), carried by

@@ -126,6 +126,83 @@ diff tracking (`api-extractor`'s richer mode) isn't worth the config overhead
 at this scale; if the surface ever grows to warrant it, layer `api-extractor`
 on top of the existing snapshot without replacing it.
 
+### Dataset tiers and perf harness
+
+The committed fixtures top out at 100K rows × 19 columns, which is far below
+the sizes the library is being scaled for. `tests/fixtures/tiers.ts` defines
+parametric tiers instead — deterministic SQL generators plus a per-cell
+oracle, so nothing large has to be committed:
+
+| Tier       | Columns |      Rows | Used by                                                |
+| ---------- | ------: | --------: | ------------------------------------------------------ |
+| `wide-ci`  |     300 |    20,000 | `tests/browser/tiers.smoke.spec.ts`, in CI             |
+| `wide`     |   1,000 |   100,000 | gated specs, baselines (mounted at 60,000 — see below) |
+| `wide-csv` |   1,000 |     5,000 | the text-format load path                              |
+| `grid`     |     200 |   500,000 | gated specs, baselines                                 |
+| `deep`     |      20 | 5,000,000 | gated specs, baselines                                 |
+| `target`   |   1,000 | 5,000,000 | streamed to parquet and probed; never mounted          |
+
+Every column follows a 20-class cycle (integers, doubles with ~1% NULLs,
+short strings, ISO timestamp/date/time strings, a native timestamp, a
+boolean), and `cellOracle(row, col, seed)` predicts any cell without a
+lookup table. Classes 15–17 are generated as **text** on purpose: seeing
+them come back as `TIMESTAMP` / `DATE` / `TIME` is the proof that the real
+loader ran its detect-and-rewrite passes rather than something
+short-circuiting them at scale.
+
+`wide` is currently **mounted at 60,000 rows, not 100,000** — all 1,000
+columns, less depth. `WorkerBridge.exportToBuffer` builds
+`COPY (…) TO '<file>' (FORMAT PARQUET)` with no row-group option, so DuckDB
+uses its 122,880-row default; at 1,000 columns and 100,000 rows the whole
+tier buffers as one row group and overruns DuckDB-WASM's ~3.1 GiB heap.
+(TARGET is the same 1,000 columns and 50× deeper, and streams fine — it
+sets `ROW_GROUP_SIZE 30720` itself.) `DT_WIDE_ROWS` overrides the cap; see
+`WIDE_MOUNT_ROWS` in `tests/browser/helpers/wideTable.ts` for the measured
+bisect. Every truncated run says so in its log and in the capture's
+`notes`.
+
+#### Driving a tier in the browser
+
+The demo has a dev-only harness (`demo/perf.ts`), reached by adding `?gen=`
+to the demo URL. It is stripped from `npm run build:demo` by
+`import.meta.env.DEV` dead-code elimination, so it never ships:
+
+```
+?gen=wide|deep|grid|wide-ci|wide-csv|target|custom
+  &rows=<int>&cols=<int>&seed=<int>   # custom, or override a named tier
+  &viz=on|off                          # default off
+  &mode=load|sql                       # default load; target forces sql
+  &marks=on|off                        # default on
+```
+
+It publishes `#dt-perf-panel` (a `data-state` of
+`idle|generating|exporting|loading|ready|error` plus `[data-metric]`
+readouts) and `window.__dtPerf` — `{ snapshot, refresh, marks,
+resetQueryStats, oracle, table }`. Both are what a browser-automation agent
+asserts against.
+
+#### Gates
+
+Heavy suites self-skip unless their environment variable is set, so
+`npm run test:browser` stays CI-weight:
+
+```bash
+npm run test:browser        # tiers.smoke.spec.ts only (WIDE_CI, ~90 s)
+npm run test:browser:perf   # RUN_BROWSER_PERF=1 — WIDE/GRID/DEEP/TARGET, tens of minutes
+npm run perf:baseline       # RUN_BASELINE=1 — write plans/scaling/baselines/*.json
+npm run perf:baseline:report  # merge those JSONs into the baselines README
+```
+
+Budgets live in `tests/budgets.ts` under `DT_BUDGET`. The rule that file
+exists to enforce: anything asserted in a default suite is a
+machine-independent count or invariant (DOM nodes, query counts, observer
+gauges, oracle violations). Wall-clock numbers stay behind the `RUN_*`
+gates, where a slow machine makes a capture noisy rather than a build red.
+
+Baselines are append-only — the filename carries the short SHA, so a phase
+that improves a number adds a column next to the old one instead of
+erasing it. Background and per-phase plans are in `plans/scaling/`.
+
 ## Building
 
 ```bash

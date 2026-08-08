@@ -42,7 +42,6 @@ import {
   cellOracle,
   classDataType,
   columnName,
-  type TierName,
   type TierSpec,
 } from '../fixtures/tiers';
 
@@ -63,8 +62,12 @@ import {
   readColViolations,
   sweepHorizontal,
   waitForTierSettled,
+  wideMountOptions,
   TIER_HOST_ID,
+  WIDE_IS_TRUNCATED,
+  WIDE_MOUNT_ROWS,
   type ColViolation,
+  type MountTierOptions,
 } from './helpers/wideTable';
 
 test.skip(process.env['RUN_BROWSER_PERF'] !== '1', 'perf tier — set RUN_BROWSER_PERF=1');
@@ -179,12 +182,12 @@ async function scrollStorm(page: Page, stops: number[]): Promise<void> {
  * numbers incomparable across tiers, which is precisely what the baselines
  * need them to be.
  */
-async function exerciseTier(page: Page, tier: TierName, viz: boolean): Promise<TierRun> {
+async function exerciseTier(page: Page, opts: MountTierOptions): Promise<TierRun> {
   // Before the first navigation: the census patches constructors through
   // `addInitScript`, and anything already built is invisible to it.
   await installObserverCensus(page);
 
-  const mounted = await mountTierTable(page, { tier, viz });
+  const mounted = await mountTierTable(page, opts);
   await waitForTierSettled(page);
 
   // Read the counters before `readShape` spends two queries of its own, so
@@ -297,10 +300,27 @@ function expectTierIntact(run: TierRun): void {
   expect(run.finalStats!.maxInFlight).toBeGreaterThan(0);
 }
 
-test('WIDE — 1,000 columns × 100,000 rows, visualizations off', async ({ page }) => {
-  const consoleErrors = watchConsole(page);
+/**
+ * Say out loud when WIDE is not being built at its defined depth.
+ *
+ * A silent truncation is how a capture ends up reading as "we measured
+ * WIDE" when it measured something smaller — README §8.6's no-silent-caps
+ * rule. See {@link WIDE_MOUNT_ROWS} for why, and what would lift it.
+ */
+function announceWideTruncation(): void {
+  if (!WIDE_IS_TRUNCATED) return;
+  console.log(
+    `[tiers.full] WIDE truncated to ${WIDE_MOUNT_ROWS} rows of ` +
+      `${TIERS.wide.rows} (all ${TIERS.wide.cols} columns kept) — ` +
+      'exportToBuffer has no ROW_GROUP_SIZE option; set DT_WIDE_ROWS to override.',
+  );
+}
 
-  const run = await exerciseTier(page, 'wide', false);
+test('WIDE — 1,000 columns, visualizations off', async ({ page }) => {
+  const consoleErrors = watchConsole(page);
+  announceWideTruncation();
+
+  const run = await exerciseTier(page, wideMountOptions(false));
   report('wide viz=off', run);
   expectTierIntact(run);
 
@@ -321,14 +341,15 @@ test('WIDE — 1,000 columns × 100,000 rows, visualizations off', async ({ page
   expect(consoleErrors).toEqual([]);
 });
 
-test('WIDE — 1,000 columns × 100,000 rows, visualizations on', async ({ page }) => {
+test('WIDE — 1,000 columns, visualizations on', async ({ page }) => {
   // ~1,000 column charts, each at least one aggregate query, through a
   // serial dispatcher. This is the pathology Phase 2 exists to fix; the
   // timeout is sized to let it finish so there is a number to fix *from*.
   test.setTimeout(1_800_000);
   const consoleErrors = watchConsole(page);
+  announceWideTruncation();
 
-  const run = await exerciseTier(page, 'wide', true);
+  const run = await exerciseTier(page, wideMountOptions(true));
   report('wide viz=on', run);
   expectTierIntact(run);
 
@@ -359,7 +380,7 @@ test('WIDE — 1,000 columns × 100,000 rows, visualizations on', async ({ page 
 test('GRID — 200 columns × 500,000 rows', async ({ page }) => {
   const consoleErrors = watchConsole(page);
 
-  const run = await exerciseTier(page, 'grid', false);
+  const run = await exerciseTier(page, { tier: 'grid', viz: false });
   report('grid', run);
   expectTierIntact(run);
 
@@ -374,7 +395,7 @@ test('GRID — 200 columns × 500,000 rows', async ({ page }) => {
 test('DEEP — 20 columns × 5,000,000 rows', async ({ page }) => {
   const consoleErrors = watchConsole(page);
 
-  const run = await exerciseTier(page, 'deep', false);
+  const run = await exerciseTier(page, { tier: 'deep', viz: false });
   report('deep', run);
   expectTierIntact(run);
 

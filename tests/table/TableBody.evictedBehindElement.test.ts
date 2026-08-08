@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { rowsFor } from '../helpers/rowFetchBridge';
+import { bodyCells, isPlaceholder, rowElements } from '../helpers/tableBodyDom';
 import { HARNESS_COLUMNS, MockResizeObserver, setupTableBody } from '../helpers/tableBodyHarness';
 
 beforeEach(() => {
@@ -35,33 +36,35 @@ describe('TableBody — evicted cache entry behind a live element demotes to pla
 
     const internal = body as unknown as {
       rowDataCache: Map<number, unknown>;
-      rowElementMap: Map<number, HTMLElement>;
       renderVisibleRows(): void;
     };
 
     const victim = 3;
-    const before = internal.rowElementMap.get(victim)!;
-    expect(before.hasAttribute('data-placeholder')).toBe(false);
+    const before = rowElements(body).get(victim)!;
+    expect(isPlaceholder(before)).toBe(false);
     expect(before.children.length).toBe(HARNESS_COLUMNS.length);
+    expect(bodyCells(before)).toHaveLength(HARNESS_COLUMNS.length);
 
     // Simulate the eviction/invalidation race: the cache entry disappears
     // while the element stays mapped and painted.
     internal.rowDataCache.delete(victim);
     internal.renderVisibleRows();
 
-    const after = internal.rowElementMap.get(victim)!;
+    const after = rowElements(body).get(victim)!;
     expect(after).not.toBe(before);
-    expect(after.hasAttribute('data-placeholder')).toBe(true);
+    expect(isPlaceholder(after)).toBe(true);
     expect(after.getAttribute('aria-busy')).toBe('true');
     expect(after.children.length).toBe(1);
+    expect(bodyCells(after)).toHaveLength(1);
     expect(Number(after.getAttribute('data-row-index'))).toBe(victim);
     // The stale element is out of the DOM entirely.
     expect(before.isConnected).toBe(false);
 
     // Neighbours with intact cache entries are untouched.
-    const neighbour = internal.rowElementMap.get(victim + 1)!;
-    expect(neighbour.hasAttribute('data-placeholder')).toBe(false);
+    const neighbour = rowElements(body).get(victim + 1)!;
+    expect(isPlaceholder(neighbour)).toBe(false);
     expect(neighbour.children.length).toBe(HARNESS_COLUMNS.length);
+    expect(bodyCells(neighbour)).toHaveLength(HARNESS_COLUMNS.length);
 
     // DOM order/coverage invariant still holds with the demoted row.
     expect(body.__verifyDomOrderForTests()).toBe(true);

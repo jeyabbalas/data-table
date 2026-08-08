@@ -32,6 +32,14 @@ import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
 
 import { makeRowFetchBridge, parseRowWindow } from '../helpers/rowFetchBridge';
+import {
+  bodyCells,
+  cellFor,
+  isPlaceholder,
+  renderedColumns,
+  rowElements,
+  rowPool,
+} from '../helpers/tableBodyDom';
 
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}
@@ -117,12 +125,12 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     ]);
     await initPromise;
 
-    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
-      .rowElementMap;
+    const rowElementMap = rowElements(body);
     expect(rowElementMap.size).toBe(4);
     // Each row at this point is a full data row (2 visible cols).
     for (const [, rowEl] of rowElementMap) {
       expect(rowEl.children.length).toBe(2);
+      expect(bodyCells(rowEl)).toHaveLength(2);
     }
 
     // 2. Apply a filter — TableBody's filter subscriber synchronously runs
@@ -148,7 +156,9 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     for (let i = 4; i < expandedEnd; i++) {
       const row = rowElementMap.get(i);
       expect(row, `row ${i} rendered synchronously`).toBeDefined();
-      if (row && row.children.length === 1) placeholdersAfterExpansion++;
+      // `data-placeholder`, not a cell count: a count discriminator is ambiguous
+      // for a 1-column table and goes silently wrong once rows carry spacers.
+      if (row && isPlaceholder(row)) placeholdersAfterExpansion++;
     }
     expect(placeholdersAfterExpansion).toBe(expandedEnd - 4);
 
@@ -171,7 +181,7 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     for (let i = 4; i < expandedEnd; i++) {
       const row = rowElementMap.get(i);
       expect(row).toBeDefined();
-      if (row && row.children.length === 1) placeholdersBeforePromotion++;
+      if (row && isPlaceholder(row)) placeholdersBeforePromotion++;
     }
     expect(placeholdersBeforePromotion).toBeGreaterThan(0);
 
@@ -189,17 +199,23 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     //    cells. No 1-cell placeholders remain.
     for (const [idx, rowEl] of rowElementMap) {
       expect(rowEl.children.length, `row ${idx} cell count`).toBe(2);
-      // Cell 0 (id) and cell 1 (tag) both populated — the second column
+      expect(bodyCells(rowEl), `row ${idx} cell count`).toHaveLength(2);
+      // The ordering the old `children[0]` / `children[1]` lookups asserted
+      // implicitly, said out loud once.
+      expect(renderedColumns(rowEl), `row ${idx} column order`).toEqual(state.visibleColumns.get());
+      const idCell = cellFor(rowEl, 'id')!;
+      const tagCell = cellFor(rowEl, 'tag')!;
+      // The id cell and the tag cell are both populated — the second column
       // would have been blank under the bug.
-      expect(rowEl.children[0]!.textContent).toBeTruthy();
-      expect(rowEl.children[1]!.textContent).toBeTruthy();
+      expect(idCell.textContent).toBeTruthy();
+      expect(tagCell.textContent).toBeTruthy();
       // No promoted cell should still wear the placeholder tertiary-text
       // class — the replacement uses a fresh row from the pool.
-      expect(rowEl.children[0]!.classList.contains('dt-cell--placeholder')).toBe(false);
-      expect(rowEl.children[1]!.classList.contains('dt-cell--placeholder')).toBe(false);
+      expect(idCell.classList.contains('dt-cell--placeholder')).toBe(false);
+      expect(tagCell.classList.contains('dt-cell--placeholder')).toBe(false);
       // Loading-row class and the placeholder marker are also stripped.
       expect(rowEl.classList.contains('dt-row--loading')).toBe(false);
-      expect(rowEl.hasAttribute('data-placeholder')).toBe(false);
+      expect(isPlaceholder(rowEl)).toBe(false);
     }
 
     body.destroy();
@@ -247,11 +263,11 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     );
     await drainMicrotasks(4);
 
-    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
-      .rowElementMap;
+    const rowElementMap = rowElements(body);
     const visibleColumnCount = state.visibleColumns.get().length;
     for (const [idx, rowEl] of rowElementMap) {
       expect(rowEl.children.length, `row ${idx} cell count`).toBe(visibleColumnCount);
+      expect(bodyCells(rowEl), `row ${idx} cell count`).toHaveLength(visibleColumnCount);
     }
 
     body.destroy();
@@ -283,18 +299,21 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     state.filters.set([{ type: 'point', column: 'tag', value: 'Y' }]);
     await drainMicrotasks(2);
 
-    const rowPool = (body as unknown as { rowPool: HTMLElement[] }).rowPool;
-    for (const pooled of rowPool) {
-      expect(pooled.hasAttribute('data-placeholder'), 'placeholder row leaked into rowPool').toBe(
-        false,
-      );
-      const firstCell = pooled.firstElementChild as HTMLElement | null;
-      expect(
-        firstCell?.classList.contains('dt-cell--placeholder') ?? false,
-        'placeholder cell leaked into rowPool',
-      ).toBe(false);
-      // Defensive: pooled rows should be data-row shaped.
-      expect(pooled.children.length).toBeGreaterThanOrEqual(1);
+    const pool = rowPool(body);
+    for (const pooled of pool) {
+      expect(isPlaceholder(pooled), 'placeholder row leaked into rowPool').toBe(false);
+      // Every body cell, not just the first. `firstElementChild` is a pinned
+      // cell or a spacer on a windowed row, so the old `?? false` fallback made
+      // this guard unconditionally true.
+      for (const cell of bodyCells(pooled)) {
+        expect(
+          cell.classList.contains('dt-cell--placeholder'),
+          'placeholder cell leaked into rowPool',
+        ).toBe(false);
+      }
+      // Pooled rows are data-row shaped — exact, not "at least one child",
+      // which a lone placeholder cell would also have satisfied.
+      expect(bodyCells(pooled)).toHaveLength(state.visibleColumns.get().length);
     }
 
     body.destroy();
@@ -326,13 +345,13 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     );
     await drainMicrotasks(4);
 
-    const rowElementMap = (body as unknown as { rowElementMap: Map<number, HTMLElement> })
-      .rowElementMap;
+    const rowElementMap = rowElements(body);
     // Pick a row that was originally a placeholder (index >= 4 came from
     // the placeholder branch) and verify the hover signal flows.
     const promoted = rowElementMap.get(8);
     expect(promoted).toBeDefined();
     expect(promoted!.children.length).toBe(2);
+    expect(bodyCells(promoted!)).toHaveLength(2);
 
     promoted!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
     // mouseenter handler calls actions.setHoveredRow(index). Read the

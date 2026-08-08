@@ -11,6 +11,7 @@ import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { newRow, poolRow, rowElements } from '../helpers/tableBodyDom';
 
 // Mock ResizeObserver
 class MockResizeObserver implements ResizeObserver {
@@ -376,7 +377,6 @@ describe('Accessibility: ARIA attributes', () => {
     async function bodyWithRows(): Promise<{
       body: TableBody;
       rows: Map<number, HTMLElement>;
-      internal: { getOrCreateRow(n: number): HTMLElement; returnRowToPool(el: HTMLElement): void };
     }> {
       initializeColumnsFromSchema(state, testSchema);
       state.tableName.set('test_table');
@@ -384,37 +384,32 @@ describe('Accessibility: ARIA attributes', () => {
       // `initialize()` is what subscribes `updateSelectionStyles` to
       // `selectedRows`. totalRows is 0 here, so no fetch is attempted.
       await body.initialize();
-      const internal = body as unknown as {
-        getOrCreateRow(n: number): HTMLElement;
-        returnRowToPool(el: HTMLElement): void;
-        rowElementMap: Map<number, HTMLElement>;
-      };
-      return { body, rows: internal.rowElementMap, internal };
+      return { body, rows: rowElements(body) };
     }
 
     it('marks a freshly created row aria-selected="false"', async () => {
-      const { body, internal } = await bodyWithRows();
+      const { body } = await bodyWithRows();
 
-      expect(internal.getOrCreateRow(3).getAttribute('aria-selected')).toBe('false');
+      expect(newRow(body).getAttribute('aria-selected')).toBe('false');
 
       body.destroy();
     });
 
     it('hands back pooled rows as aria-selected="false", never bare', async () => {
-      const { body, internal } = await bodyWithRows();
+      const { body } = await bodyWithRows();
 
-      const rowEl = internal.getOrCreateRow(3);
+      const rowEl = newRow(body);
       rowEl.setAttribute('aria-selected', 'true');
-      internal.returnRowToPool(rowEl);
+      poolRow(body, rowEl);
 
-      expect(internal.getOrCreateRow(3).getAttribute('aria-selected')).toBe('false');
+      expect(newRow(body).getAttribute('aria-selected')).toBe('false');
 
       body.destroy();
     });
 
     it('flips aria-selected with the selection and back to "false", not off', async () => {
-      const { body, rows, internal } = await bodyWithRows();
-      const rowEl = internal.getOrCreateRow(testSchema.length);
+      const { body, rows } = await bodyWithRows();
+      const rowEl = newRow(body);
       rows.set(0, rowEl);
 
       actions.selectRow(0, 'replace');
@@ -431,8 +426,8 @@ describe('Accessibility: ARIA attributes', () => {
       // change and `renderVisibleRows` on every scroll frame; a no-op
       // setAttribute still costs a mutation record for anything observing the
       // grid.
-      const { body, rows, internal } = await bodyWithRows();
-      const rowEl = internal.getOrCreateRow(testSchema.length);
+      const { body, rows } = await bodyWithRows();
+      const rowEl = newRow(body);
       rows.set(0, rowEl);
       const setAttribute = vi.spyOn(rowEl, 'setAttribute');
 
@@ -510,6 +505,11 @@ describe('Accessibility: ARIA attributes', () => {
       const unsub = state.schema.subscribe(() => {
         const headerRow = tc.getHeaderRow();
         headersAtFirstRender = headerRow.querySelectorAll('.dt-col-header').length;
+        // Header-scoped, deliberately: this counts childless `[role="row"]`
+        // elements inside the *header* row, whose children are columnheaders,
+        // not body cells. Body rows are the ones that gain spacer children, so
+        // `childElementCount` stays the right question here — do not restate
+        // it in `bodyCells` terms.
         emptyRowsAtFirstRender = [...headerRow.querySelectorAll('[role="row"]')].filter(
           (row) => row.childElementCount === 0,
         ).length;

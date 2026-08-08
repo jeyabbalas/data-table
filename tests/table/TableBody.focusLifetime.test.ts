@@ -26,6 +26,8 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 
+import { bodyCells, rowElements, rowPool } from '../helpers/tableBodyDom';
+
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -47,10 +49,14 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/**
+ * The private surface this suite drives directly. Row-DOM reads and the
+ * `rowElementMap` / `rowPool` reaches go through `tests/helpers/tableBodyDom`
+ * instead; what is left here is the render-loop state these tests poke.
+ * `getOrCreateRow` stays because site 4 deliberately calls it off-window (see
+ * there).
+ */
 interface Internals {
-  rowElementMap: Map<number, HTMLElement>;
-  rowDataCache: Map<number, Record<string, unknown>>;
-  rowPool: HTMLElement[];
   currentRange: { start: number; end: number; offsetY: number };
   getOrCreateRow(columnCount: number): HTMLElement;
   renderVisibleRows(): void;
@@ -118,9 +124,9 @@ function setup(rowCount = 40) {
 /** Materialize rows and put real DOM focus on a cell, the way a click does. */
 async function focusACell(harness: Awaited<ReturnType<typeof setup>>, rowIndex: number) {
   await harness.body.initialize();
-  const rowEl = harness.internal.rowElementMap.get(rowIndex);
+  const rowEl = rowElements(harness.body).get(rowIndex);
   expect(rowEl).toBeDefined();
-  const cell = rowEl!.children[0] as HTMLElement;
+  const cell = bodyCells(rowEl!)[0]!;
   cell.focus();
   expect(document.activeElement).toBe(cell);
   return { rowEl: rowEl!, cell };
@@ -148,7 +154,7 @@ describe('TableBody — focus never outlives the element holding it', () => {
     harness.internal.currentRange = { start: 20, end: 30, offsetY: 20 * 32 };
     harness.internal.renderVisibleRows();
 
-    expect(harness.internal.rowElementMap.has(0)).toBe(false);
+    expect(rowElements(harness.body).has(0)).toBe(false);
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();
@@ -161,12 +167,17 @@ describe('TableBody — focus never outlives the element holding it', () => {
     // Shape the row like a placeholder (fewer cells than columns) so
     // renderVisibleRows takes the replace-from-pool branch, which detaches the
     // row without going through returnRowToPool.
-    rowEl.removeChild(rowEl.lastElementChild!);
-    expect(rowEl.children.length).not.toBe(harness.state.visibleColumns.get().length);
+    //
+    // The target is a *cell*, not whatever happens to be last: `lastElementChild`
+    // is the right column spacer on a windowed row, and removing that would take
+    // the branch for the wrong reason. The follow-up assertion is exact for the
+    // same reason — `not.toBe(N)` is satisfied by `N + 2` children too.
+    bodyCells(rowEl).at(-1)!.remove();
+    expect(bodyCells(rowEl)).toHaveLength(harness.state.visibleColumns.get().length - 1);
 
     harness.internal.renderVisibleRows();
 
-    expect(harness.internal.rowElementMap.get(0)).not.toBe(rowEl);
+    expect(rowElements(harness.body).get(0)).not.toBe(rowEl);
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();
@@ -180,16 +191,22 @@ describe('TableBody — focus never outlives the element holding it', () => {
     const harness = setup();
     await harness.body.initialize();
 
+    // Raw private calls on purpose: `newRow` always shapes a row for the body's
+    // current column window (2 cells here), and the whole point of this test is
+    // the mismatch — build a 2-cell row, then ask for a 1-cell one so
+    // getOrCreateRow's surplus-removal branch runs. The helper cannot express a
+    // count that is deliberately not `visibleColumns.length`.
     const pooled = harness.internal.getOrCreateRow(2);
     harness.container.appendChild(pooled);
-    const surplus = pooled.children[1] as HTMLElement;
+    const surplus = bodyCells(pooled)[1]!;
     surplus.focus();
     expect(document.activeElement).toBe(surplus);
 
-    harness.internal.rowPool.push(pooled);
+    rowPool(harness.body).push(pooled);
     harness.internal.getOrCreateRow(1);
 
     expect(pooled.children.length).toBe(1);
+    expect(bodyCells(pooled)).toHaveLength(1);
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();

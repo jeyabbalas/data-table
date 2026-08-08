@@ -7,6 +7,15 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
+import {
+  bodyCells,
+  isPlaceholder,
+  newRow,
+  placeholderRow,
+  poolRow,
+  renderRow,
+  renderedColumns,
+} from '../helpers/tableBodyDom';
 
 // Mock WorkerBridge
 const createMockBridge = () => {
@@ -131,18 +140,17 @@ describe('TableBody', () => {
   describe('row/cell ARIA', () => {
     it('newly-created rows have role="row" and cells have role="gridcell" with tabindex="-1"', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
-      // getOrCreateRow is internal; exercise it through the private accessor
-      // so we can verify the attributes on the construction path used during
-      // render without needing a materialized viewport.
-      const rowEl = (
-        tableBody as unknown as {
-          getOrCreateRow(n: number): HTMLElement;
-        }
-      ).getOrCreateRow(5);
+      // getOrCreateRow is internal; exercise it through the shared helper so
+      // we can verify the attributes on the construction path used during
+      // render without needing a materialized viewport. `newRow` shapes the
+      // row for the body's own column window, which here is the three columns
+      // of `testSchema`.
+      const rowEl = newRow(tableBody);
 
       expect(rowEl.getAttribute('role')).toBe('row');
-      expect(rowEl.children.length).toBe(5);
-      for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
+      expect(rowEl.children.length).toBe(3);
+      expect(bodyCells(rowEl)).toHaveLength(3);
+      for (const cell of bodyCells(rowEl)) {
         // `gridcell`, not `cell` — `cell` is only valid inside role="table",
         // and the owning element is role="grid".
         expect(cell.getAttribute('role')).toBe('gridcell');
@@ -154,22 +162,25 @@ describe('TableBody', () => {
 
     it('pooled rows keep role=gridcell and tabindex=-1, and shed stale ids', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
-      const internal = tableBody as unknown as {
-        getOrCreateRow(n: number): HTMLElement;
-        returnRowToPool(el: HTMLElement): void;
-      };
 
       // Simulate a row in use: the cursor ring plus the per-(row, column)
       // id that `updateRowContent` writes for aria-activedescendant.
-      const rowEl = internal.getOrCreateRow(3);
-      (rowEl.children[1] as HTMLElement).id = 'dt-t1-cell-7-1';
-      (rowEl.children[1] as HTMLElement).classList.add('dt-cell--focused');
+      const rowEl = newRow(tableBody);
+      // A freshly created row carries no column identity yet — `data-column`
+      // is written by `updateRowContent` — so there is no ordering here for a
+      // column lookup to stand on, and the cell is reached positionally by the
+      // visible-column index that `buildCellId` keys its ids on.
+      expect(renderedColumns(rowEl)).toEqual(['', '', '']);
+      const inUse = bodyCells(rowEl)[1]!;
+      inUse.id = 'dt-t1-cell-7-1';
+      inUse.classList.add('dt-cell--focused');
 
       // Return to pool and pull back out
-      internal.returnRowToPool(rowEl);
-      const reused = internal.getOrCreateRow(3);
+      poolRow(tableBody, rowEl);
+      const reused = newRow(tableBody);
 
-      for (const cell of Array.from(reused.children) as HTMLElement[]) {
+      expect(bodyCells(reused)).toHaveLength(3);
+      for (const cell of bodyCells(reused)) {
         expect(cell.getAttribute('role')).toBe('gridcell');
         expect(cell.getAttribute('tabindex')).toBe('-1');
         expect(cell.classList.contains('dt-cell--focused')).toBe(false);
@@ -183,31 +194,31 @@ describe('TableBody', () => {
 
     it('marks loading placeholder rows aria-busy and clears it on promotion', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
-      const internal = tableBody as unknown as {
-        createPlaceholderRow(index: number): HTMLElement;
-        updateRowContent(
-          rowEl: HTMLElement,
-          index: number,
-          data: Record<string, unknown>,
-          columns: string[],
-          schemaMap: Map<string, unknown>,
-        ): void;
-      };
 
       // A placeholder carries one cell while the grid advertises N columns.
       // `aria-busy` is what makes that legal — padding it out to N cells is
-      // not an option, because cell count is the only thing distinguishing a
-      // placeholder from a data row in `renderVisibleRows`.
-      const placeholder = internal.createPlaceholderRow(7);
+      // not an option, because the row still has to be distinguishable from a
+      // data row in `renderVisibleRows`. What distinguishes it there is the
+      // `data-placeholder` attribute, not the cell count: `isPlaceholderRow`
+      // has read the attribute ever since `createPlaceholderRow` started
+      // setting it, which is what keeps a single-column table unambiguous.
+      const placeholder = placeholderRow(tableBody, 7);
       expect(placeholder.getAttribute('role')).toBe('row');
       expect(placeholder.getAttribute('aria-busy')).toBe('true');
+      expect(isPlaceholder(placeholder)).toBe(true);
       expect(placeholder.children.length).toBe(1);
+      expect(bodyCells(placeholder)).toHaveLength(1);
 
       // A single-column grid promotes a placeholder in place (cell counts
       // match), so the marker has to come off there or the row stays busy
-      // forever.
-      internal.updateRowContent(placeholder, 7, { id: 1 }, ['id'], new Map());
+      // forever. Driven through the body's own path: the placeholder's single
+      // cell bounds `updateRowContent`'s column loop, so this is that same
+      // in-place promotion, and the markers come off ahead of the loop either
+      // way.
+      renderRow(tableBody, placeholder, 7, { id: 1 });
       expect(placeholder.hasAttribute('aria-busy')).toBe(false);
+      expect(isPlaceholder(placeholder)).toBe(false);
+      expect(renderedColumns(placeholder)).toEqual(['id']);
 
       tableBody.destroy();
     });

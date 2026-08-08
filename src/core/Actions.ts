@@ -42,6 +42,9 @@ import { ROWID_COLUMN } from './types';
 import { captureSnapshot, applySnapshot, derivedColumnsEqual, snapshotsEqual } from './UndoManager';
 import type { StateSnapshot, UndoManager } from './UndoManager';
 
+/** Shared empty "after" list for clearFilters' removal notification. */
+const EMPTY_FILTERS: readonly Filter[] = [];
+
 /**
  * Options for {@link StateActions.getColumnValues}.
  */
@@ -190,9 +193,29 @@ export class StateActions {
   }
 
   /**
-   * Set a callback invoked for each column whose filter is removed by undo/redo.
-   * Use this to clear visualization interaction state (brush, selection) that
-   * lives outside the signal-driven state.
+   * Set a callback invoked once for each column that loses its filter.
+   * Use this to clear state that tracks a filter but does not live in the
+   * signals — a chart's brush or bar selection, most obviously.
+   *
+   * Fires for every path that can drop a filter: {@link StateActions.removeFilter}
+   * (and so the filter chips, the filter panel, and a chart clearing its own
+   * selection), {@link StateActions.clearFilters},
+   * {@link StateActions.loadFilterPreset} when the preset does not carry a
+   * column forward, {@link StateActions.undo} / {@link StateActions.redo},
+   * {@link StateActions.resetToInitial}, and the derived-column paths that
+   * retype or delete a filtered column.
+   *
+   * It does *not* fire when a filter is merely replaced —
+   * {@link StateActions.addFilter} over an existing column, or a preset that
+   * gives that column a different filter. The column still has a filter, so
+   * state keyed to it is still live.
+   *
+   * Called synchronously, after the signals have settled: reading
+   * `state.filters` from inside the callback shows the post-removal list.
+   * Removing a filter from inside the callback is safe — removals are
+   * idempotent, so a callback that ends up asking for the same removal again
+   * (a chart clearing its brush routes back through `removeFilter`) is a
+   * no-op rather than a second undo entry and a second filter cycle.
    */
   setOnFilterRemove(callback: (column: string) => void): void {
     this.throwIfDestroyed('setOnFilterRemove');
@@ -233,8 +256,15 @@ export class StateActions {
     });
   }
 
-  /** Notify callback for each column that lost its filter between two states */
-  private notifyRemovedFilters(before: Filter[], after: Filter[]): void {
+  /**
+   * Notify callback for each column that lost its filter between two states.
+   *
+   * Compares by column, not by filter identity: a column that swapped one
+   * filter for another has not lost anything a consumer keys off. Both
+   * arguments are snapshots taken by the caller, so a callback that mutates
+   * `state.filters` cannot make this loop skip or repeat a column.
+   */
+  private notifyRemovedFilters(before: readonly Filter[], after: readonly Filter[]): void {
     if (!this.onFilterRemoveCallback) return;
     const afterColumns = new Set(after.map((f) => f.column));
     for (const f of before) {
@@ -637,36 +667,58 @@ export class StateActions {
   /**
    * Remove filter(s) for a column
    *
+   * Idempotent: asking to remove a filter that is not there changes nothing,
+   * pushes no undo entry, and notifies no subscriber. That matters beyond
+   * tidiness — a chart clearing its brush routes back through here while the
+   * removal that cleared it is still unwinding, and without the guard every
+   * chip click would cost a second filter cycle and leave a dead undo step.
+   *
    * @param column - Column name
    * @param type - Optional filter type to remove (if not specified, removes all filters for column)
    */
   removeFilter(column: string, type?: FilterType): void {
     this.throwIfDestroyed('removeFilter');
-    this.captureForUndo();
-    const current = this.state.filters.get();
-    const updated = current.filter((f) =>
+    const before = this.state.filters.get();
+    const after = before.filter((f) =>
       type ? !(f.column === column && f.type === type) : f.column !== column,
     );
-    this.state.filters.set(updated);
+    if (after.length === before.length) return;
+    this.captureForUndo();
+    this.state.filters.set(after);
+    this.notifyRemovedFilters(before, after);
   }
 
   /**
    * Clear all filters
+   *
+   * The `filteredRows` reset is unconditional — it repairs the count whether
+   * or not there was anything to clear — but the filter list is only written
+   * when it actually changes, so this is idempotent in the same way
+   * {@link StateActions.removeFilter} is.
    */
   clearFilters(): void {
     this.throwIfDestroyed('clearFilters');
-    this.captureForUndo();
-    this.state.filters.set([]);
+    const before = this.state.filters.get();
+    if (before.length > 0) {
+      this.captureForUndo();
+      this.state.filters.set([]);
+    }
     this.state.filteredRows.set(this.state.totalRows.get());
+    this.notifyRemovedFilters(before, EMPTY_FILTERS);
   }
 
   /**
    * Load a filter preset: replace all filters (and optionally sort) in one
    * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
    * entire pre-load state atomically.
+   *
+   * Columns the preset does not carry forward have lost their filter, so they
+   * are notified — outside the suppression window, since the callback may
+   * legitimately want to record an undo entry of its own.
    */
   loadFilterPreset(filters: Filter[], sortColumns?: SortColumn[]): void {
     this.throwIfDestroyed('loadFilterPreset');
+    const before = this.state.filters.get();
     this.captureForUndo();
     this.suppressUndoCapture = true;
     try {
@@ -679,6 +731,7 @@ export class StateActions {
     } finally {
       this.suppressUndoCapture = false;
     }
+    this.notifyRemovedFilters(before, this.state.filters.get());
   }
 
   // =========================================

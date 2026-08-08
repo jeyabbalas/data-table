@@ -861,10 +861,11 @@ Manual Chrome pass, at 1,000 columns:
    out and is corrected.
 2. **A brush outlived the filter it created.** Drag-brush, remove the filter via its chip, hide any
    column: the rebuild restores the brush, and the slot reads "60,000 rows" over "24,271 rows
-   (40.5 %)". Root cause is older than this phase — `StateActions.notifyRemovedFilters`
-   (`core/Actions.ts:236`) **is never called**, so `setOnFilterRemove` fires only for
-   derived-column removals — but before charts were re-created constantly the stale map entry was
-   unreachable. Guarded on the restore side.
+   (40.5 %)". Root cause is older than this phase — `StateActions.notifyRemovedFilters` was
+   reachable only from `undo`, `redo` and `resetToInitial`, so `setOnFilterRemove` never fired for
+   `removeFilter` or `clearFilters`, which is every removal a user performs — but before charts
+   were re-created constantly the stale map entry was unreachable. Guarded on the restore side
+   here; the root cause was fixed after the phase closed (see the entry below).
 
 Code review over the diff:
 
@@ -891,10 +892,16 @@ Code review over the diff:
 - **Phase 6 (interaction sweep).** Escape now walks only the charts on screen — see the changeset.
   If the interaction stack should survive a canvas being reclaimed, that is Phase 6's call;
   `saveInteractionState` / `restoreInteractionState` in `src/DataTable.ts` are the seam.
-- **Anyone touching filters.** `StateActions.notifyRemovedFilters` is dead code and
-  `setOnFilterRemove` therefore never fires for ordinary filter removals. Wiring it is a behaviour
-  change for a public callback and wants its own changeset; until then, no consumer of
-  `setOnFilterRemove` can assume it sees user-driven removals.
+- **Anyone touching filters.** ~~`setOnFilterRemove` never fires for ordinary filter removals.~~
+  **Resolved after the phase closed**, in its own commit and changeset
+  (`.changeset/filter-removal-callback.md`). Two corrections to what this document said while the
+  item was open: `notifyRemovedFilters` was never dead code — it had three callers (`undo`, `redo`,
+  `resetToInitial`) and the gap was that `removeFilter` and `clearFilters` were not among them.
+  And wiring it turned out to need `removeFilter` / `clearFilters` to become idempotent first:
+  clearing a chart's brush calls `onFilterChange(null)`, which the coordinator routes back into
+  `removeFilter` while the removal is still unwinding, so the callback re-enters its own caller.
+  `setOnFilterRemove` can now be relied on for user-driven removals; the paths that write
+  `state.filters` directly (session restore, `resetTableState`) still bypass it.
 - **Phase 11 (streaming exports).** Unchanged: `exportToBuffer` still has no `ROW_GROUP_SIZE`
   option, so WIDE is still truncated to 60,000 rows.
 

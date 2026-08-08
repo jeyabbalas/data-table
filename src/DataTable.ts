@@ -860,15 +860,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
    * since cleared — restoring it paints a chart that contradicts its own row
    * count ("60,000 rows" on line 1, "24,271 rows (40.5%)" underneath).
    *
-   * That state goes stale because `StateActions.notifyRemovedFilters`
-   * (`core/Actions.ts:236`) is never called: `setOnFilterRemove` — and so
-   * `clearVisualizationState` — fires only for derived-column removals, not
-   * when a user drops an ordinary filter. That is a pre-existing gap in
-   * `Actions`, and widening a public callback's firing conditions is not this
-   * phase's change to make; but before charts were re-created on every header
-   * rebuild the stale entry was unreachable, and now it is not. Checking the
-   * filters here fixes the symptom and is the more robust rule anyway — it
-   * holds however the entry came to be stale.
+   * `clearVisualizationState` now prunes the entry as the filter goes away, so
+   * in the ordinary case there is nothing here to skip. This check stays
+   * because it is the more robust rule: it holds however the entry came to be
+   * stale, including the paths that write `state.filters` directly and never
+   * reach `setOnFilterRemove` at all — session restore
+   * (`persistence/serialization.ts`) and `resetTableState`.
    */
   const restoreInteractionState = (columnName: string, viz: VisualizationType): void => {
     const savedBrush = brushStates.get(columnName);

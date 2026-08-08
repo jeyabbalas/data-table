@@ -8,16 +8,19 @@
  * "60,000 rows" on line 1 and "24,271 rows (40.5%)" underneath, which cannot
  * both be true.
  *
- * The stale entry itself predates this phase. `StateActions.notifyRemovedFilters`
- * (`core/Actions.ts:236`) is never called, so `setOnFilterRemove` — and with it
- * `clearVisualizationState` — fires only for derived-column removals, never
- * when a user drops an ordinary filter. What Phase 2 changed is that charts are
- * now re-created constantly (every header rebuild, every scroll back into
- * view), and `restoreInteractionState` reads that map on each one. Before, a
- * destroyed chart's state was simply lost and the stale entry unreachable.
+ * There are two defences and these tests cover the second one on its own.
+ * `StateActions` notifies `setOnFilterRemove` for every removal path, so
+ * `clearVisualizationState` prunes the saved brush as the filter goes away
+ * (`tests/core/Actions.filterRemove.test.ts` covers that half). The guard here
+ * is on the restore side: interaction state is only put back when a filter for
+ * that column is still active, which holds however the entry came to be stale
+ * — including the paths that write `state.filters` directly and never reach
+ * the callback.
  *
- * The guard is on the restore side: interaction state is only put back when a
- * filter for that column is still active.
+ * What Phase 2 changed is that charts are now re-created constantly (every
+ * header rebuild, every scroll back into view), and `restoreInteractionState`
+ * reads that map on each one. Before, a destroyed chart's state was simply
+ * lost and the stale entry unreachable.
  *
  * @vitest-environment jsdom
  */
@@ -96,6 +99,20 @@ class StubViz extends Histogram {
 
   override setBrushState(state: { startBinIndex: number; endBinIndex: number } | null): void {
     this.restored = state;
+  }
+
+  /**
+   * Mirror the real class, which this stub would otherwise diverge from in the
+   * way that matters here: `resetBrush()` drops the committed flag, so
+   * `getBrushState()` returns null afterwards and a teardown sweep re-saves
+   * nothing. It also signals the filter removal, which routes straight back
+   * into `removeFilter` — the re-entrant path this test should be crossing.
+   */
+  override clearBrush(): void {
+    const wasCommitted = this.committed !== null;
+    this.committed = null;
+    super.clearBrush();
+    if (wasCommitted) this.options.onFilterChange?.(null);
   }
 
   /** Simulate the user committing a brush, as a real drag would. */
@@ -200,8 +217,8 @@ describe('interaction state does not outlive its filter', () => {
     await Promise.resolve();
     expect(table.state.filters.get().map((f) => f.column)).toContain('a');
 
-    // The user drops the filter. Nothing clears the saved brush today —
-    // `clearVisualizationState` never fires for an ordinary removal.
+    // The real user path: the chip's X routes here, and `setOnFilterRemove`
+    // fires. Both defences are in play — see the isolating test below.
     table.actions.removeFilter('a');
     await Promise.resolve();
     await Promise.resolve();
@@ -237,6 +254,62 @@ describe('interaction state does not outlive its filter', () => {
     const rebuilt = StubViz.created.filter((v) => v.getColumn().name === 'a');
     expect(rebuilt.length).toBeGreaterThan(0);
     for (const v of rebuilt) expect(v.restored).toEqual({ startBinIndex: 2, endBinIndex: 5 });
+
+    await table.destroy();
+  });
+
+  it('does not resurrect an old brush under a new filter on the same column', async () => {
+    const { table } = await mount();
+    const viz = StubViz.created.find((v) => v.getColumn().name === 'a')!;
+
+    viz.commitBrush(2, 5);
+    await Promise.resolve();
+
+    // Drop the brush's filter and put a different one on the same column,
+    // with no header rebuild in between — the filter panel, not a chart.
+    table.actions.removeFilter('a');
+    await Promise.resolve();
+    table.actions.addFilter({ column: 'a', type: 'not-null' } as Filter);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    StubViz.created = [];
+    await rebuildHeaders(table);
+
+    // The restore-side guard cannot help here: there *is* a filter on 'a', so
+    // it hands the saved brush back. Only pruning the entry when the filter it
+    // belonged to went away keeps the chart from painting a range the user
+    // never selected over a not-null filter.
+    const rebuilt = StubViz.created.filter((v) => v.getColumn().name === 'a');
+    expect(rebuilt.length).toBeGreaterThan(0);
+    for (const v of rebuilt) expect(v.restored).toBeNull();
+
+    await table.destroy();
+  });
+
+  it('does not restore a brush when the filter vanished without notice', async () => {
+    const { table } = await mount();
+    const viz = StubViz.created.find((v) => v.getColumn().name === 'a')!;
+
+    viz.commitBrush(2, 5);
+    await Promise.resolve();
+    expect(table.state.filters.get().map((f) => f.column)).toContain('a');
+
+    // Write the signal directly, as session restore and `resetTableState` do.
+    // `setOnFilterRemove` never fires on this path, so `brushStates` keeps its
+    // entry and only the restore-side guard can catch it. This is the test
+    // that fails if that guard is removed — the two above are now covered by
+    // the callback as well, and would pass without it.
+    table.state.filters.set([]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    StubViz.created = [];
+    await rebuildHeaders(table);
+
+    const rebuilt = StubViz.created.filter((v) => v.getColumn().name === 'a');
+    expect(rebuilt.length).toBeGreaterThan(0);
+    for (const v of rebuilt) expect(v.restored).toBeNull();
 
     await table.destroy();
   });

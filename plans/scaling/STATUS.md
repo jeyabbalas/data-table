@@ -965,3 +965,71 @@ the initial wave never reached; `screenshot-1786216440173-8.jpg` dark theme.
 | `RUN_BROWSER_PERF=1 … viz-lazy.spec.ts tiers.full.spec.ts`         | WIDE viz=on 20 queries / 8 canvases / `loadMs` 3,546; GRID, DEEP, TARGET all pass unchanged |
 | `npm run perf:baseline` (WIDE both modes) + `perf:baseline:report` | 2 captures written at `51ba4ef`, README regenerated                                         |
 | `/code-review` at high effort over `9acecc2..HEAD`                 | 11 confirmed findings; 5 correctness fixes + 6 accuracy corrections landed in `c11e931`     |
+
+### Phase 3 — Body column windowing
+
+_In progress. Sections are appended as milestones land; the handoff is complete at M7._
+
+#### M1 — Alignment spike (§4.8), executed first
+
+Throwaway: a `spikeWindowRow` post-processor in `TableBody` reshaped every rendered row into
+`[2 pinned cells][left spacer][cells 10..29][right spacer]`, plus a temporary
+`tests/browser/spike-alignment.spec.ts`. Both reverted; this section is the record. Custom tier
+50 × 1,000, `viz=off`, 1280×720, Chromium.
+
+**Gated numerically, not photographically** — no `toHaveScreenshot` infrastructure is committed
+anywhere in `tests/browser/`, so the gate is `|header.getBoundingClientRect().x − cell.x| ≤ 1` for
+every rendered column plus `scrollWidth` unchanged. Screenshots were taken as the artifact.
+
+**Result: `maxDx = 0.000 px` and `maxDw = 0.000 px` at all three stops** (`scrollLeft` 0 / 3,253 /
+6,506 = max), across 22 rendered columns including two pinned ones, with `scrollWidth` a constant
+7,500 px and all 50 headers still rendered. Left spacer 1,200 px (8 × 150), right spacer 3,000 px
+(20 × 150) — exact.
+
+**What drives the scroll extent: the rows' natural overflow, not `setContentWidth`'s spacer.**
+Measured by zeroing each declared width in turn on a live mount:
+
+| declared widths                                             | `.dt-body-scroll.scrollWidth` |
+| ----------------------------------------------------------- | ----------------------------: |
+| baseline (spacer 7,500, content + viewport `min-width`)     |                         7,500 |
+| width spacer → 0                                            |                         7,500 |
+| width spacer → 0 **and** content + viewport `min-width` → 0 |                         7,500 |
+
+`.dt-body` carries `min-width: fit-content` (`02-shell.css:456`), so the flex rows' own width
+propagates all the way to the scroller and is what binds. **`VirtualScroller.ts:232-238`'s comment
+— "the absolutely positioned viewport doesn't contribute to scrollWidth" — is stale**; it predates
+`setContentWidth` writing `minWidth` on the viewport, and in any case the extent is
+`max(spacer, natural overflow)` with the second term winning today.
+
+The consequence is the opposite of reassuring, and it is why V1.1 exists: the spacer arithmetic is
+**load-bearing for scroll geometry**, not merely for looks. Wrong spacer widths would make
+`scrollWidth` breathe with the window, clamp `scrollLeft`, fire a scroll, and oscillate — and
+because `sweepHorizontal` derives its stop positions from `scrollWidth`, every other sweep
+assertion would silently be sampling the wrong places. The changeset carries **no** scroll-extent
+`Fixed` line: the extent is unchanged by construction, and the new assertion is what keeps it so.
+
+**Box overhead is the constant 0, measured with a control.** `offsetWidth − parseFloat(style.width)`
+over 12 sampled cells: `0` for all 12 as shipped, and `25` for all 12 with
+`.dt-cell { box-sizing: content-box }` forced through an injected stylesheet. That is the number the
+changeset's migration note quotes, and the uniform-box precondition (all 12 equal) is the assertion
+that actually validates the model.
+
+**Fractional widths — D10 confirmed, but not visible at 50 columns.** With every column set to
+150.3 px and rows rebuilt so the spacers recompute, the worst delta is **0.297 px, at `col_1` — a
+pinned column**, i.e. the sticky `left` write rounding, not the spacer. The left spacer measured
+1,202.390625 px against 8 header boxes summing to 1,202.375 px: **0.016 px of drift over 8
+columns**. Chrome snaps 150.3 to 150.296875 (1/64 px LayoutUnit), so the residue is 0.003125 px per
+column — 3.09 px across the ~990 columns a left spacer covers at WIDE, which is triple
+`ALIGNMENT_EPSILON_PX` and reachable only at that width. So the spike cannot show D10's failure and
+does not refute it; D10 ships, and C8's alignment probe runs at 75 % and max with a fractional-width
+negative control rather than only at 0.
+
+**One coupling demonstrated live rather than by reading.** The first run of the fractional
+measurement reported 2.375 px. The cause was not drift: `updateCellWidths` (`TableBody.ts:2019`)
+pairs `cells[i]` with `visibleColumns[i]` positionally, so on a windowed row it wrote column widths
+straight into the spacers. That is finding-list item §2's `updateCellWidths` coupling, observed as a
+2.4 px misalignment before any of the fix work started.
+
+Screenshots (session-local scratchpad, not committed): `spike-window-0.png` (`scrollLeft` 0),
+`spike-window-1.png` (mid-scroll — pinned `col_0`/`col_1` painted over the window, `col_24`…`col_27`
+sitting exactly under their headers), `spike-window-2.png` (max).

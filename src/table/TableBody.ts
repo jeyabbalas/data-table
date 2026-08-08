@@ -309,6 +309,19 @@ export class TableBody {
   // so it is replayed rather than lost.
   private inWidthUpdate = false;
   private widthUpdatePending = false;
+  /**
+   * How many times {@link TableBody.updateCellWidths} will replay a width
+   * write that arrived from inside its own re-render.
+   *
+   * A host writing a width from `onRowsRendered` is legitimate and converges
+   * in one extra pass: the replay renders its width, and the render's own
+   * notification produces no new write. A host that writes a *different*
+   * width every time never converges, and the replay used to be a tail call
+   * — so it recursed until the stack overflowed. Four replays on top of the
+   * first pass is well past any honest case, and small enough that the
+   * pathological one costs five renders and a warning instead of a crash.
+   */
+  private static readonly MAX_WIDTH_UPDATE_REPLAYS = 4;
 
   /**
    * Marks a row that was painted while the annotation store held something.
@@ -1941,10 +1954,21 @@ export class TableBody {
     // Spacers last, so a structural mistake above shows up as a missing cell
     // rather than as a silently mis-sized gap. Never rounded here: the prefix
     // sums already rounded every width they added, so these are exact.
+    //
+    // Matched by role, not just by position, for the same reason the cell
+    // loops above tolerate a short row: on a row that is structurally wrong,
+    // `children[pinnedCount]` is a real data cell, and writing a spacer's
+    // `flex` onto it would collapse or stretch one column's content by the
+    // width of every column standing behind the spacer. `updateCellWidths`
+    // has always checked; this path had not.
     const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;
-    if (leftSpacer) leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+    if (leftSpacer?.hasAttribute('data-col-spacer')) {
+      leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+    }
     const rightSpacer = children[win.pinnedCount + windowSize + 1] as HTMLElement | undefined;
-    if (rightSpacer) rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
+    if (rightSpacer?.hasAttribute('data-col-spacer')) {
+      rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
+    }
   }
 
   /**
@@ -2544,56 +2568,77 @@ export class TableBody {
       return;
     }
 
-    const columns = this.state.visibleColumns.get();
-    const columnWidths = this.state.columnWidths.get();
-    this.syncVisibleIndexMap(columns);
-    const win = this.computeColumnWindow(columns, columnWidths);
+    // Bounded, not recursive. The re-render branch notifies `onRowsRendered`,
+    // a host is entitled to write a width from there, and replaying that write
+    // re-enters this method from the top with the guard already down — so the
+    // old tail call was an unbounded recursion, not the "replayed once" the
+    // comment claimed. A host that writes a changing width on every render
+    // rode it to a stack overflow.
+    for (let replay = 0; replay <= TableBody.MAX_WIDTH_UPDATE_REPLAYS; replay++) {
+      const columns = this.state.visibleColumns.get();
+      const columnWidths = this.state.columnWidths.get();
+      this.syncVisibleIndexMap(columns);
+      const win = this.computeColumnWindow(columns, columnWidths);
 
-    const previous = this.columnWindow;
-    if (
-      win.start !== previous.start ||
-      win.end !== previous.end ||
-      win.pinnedCount !== previous.pinnedCount
-    ) {
-      this.inWidthUpdate = true;
-      this.widthUpdatePending = false;
-      try {
-        this.renderVisibleRows();
-      } finally {
-        this.inWidthUpdate = false;
-      }
-      // Replayed once, not in a loop: one pass is enough to honour a host's
-      // write, and a loop would let a host that writes unconditionally on
-      // every render spin forever.
-      if (this.widthUpdatePending) {
+      const previous = this.columnWindow;
+      if (
+        win.start !== previous.start ||
+        win.end !== previous.end ||
+        win.pinnedCount !== previous.pinnedCount
+      ) {
+        this.inWidthUpdate = true;
         this.widthUpdatePending = false;
-        this.updateCellWidths();
+        try {
+          this.renderVisibleRows();
+        } finally {
+          this.inWidthUpdate = false;
+        }
+        // No nested write, or the body is gone: this pass was the last one.
+        if (!this.widthUpdatePending || this.destroyed) {
+          this.widthUpdatePending = false;
+          return;
+        }
+        this.widthUpdatePending = false;
+        continue;
       }
+
+      this.columnWindow = win;
+      const windowSize = win.end - win.start;
+
+      for (const [, rowEl] of this.rowElementMap) {
+        if (this.isPlaceholderRow(rowEl)) continue;
+        for (const cellEl of this.bodyCellsOf(rowEl)) {
+          const colName = cellEl.getAttribute('data-column');
+          if (colName === null) continue;
+          cellEl.style.width = `${resolveColumnWidth(columnWidths.get(colName))}px`;
+        }
+        const children = rowEl.children;
+        const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;
+        if (leftSpacer?.hasAttribute('data-col-spacer')) {
+          leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+        }
+        const rightSpacer = children[win.pinnedCount + windowSize + 1] as HTMLElement | undefined;
+        if (rightSpacer?.hasAttribute('data-col-spacer')) {
+          rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
+        }
+      }
+
+      this.applyContentWidth(win.totalWidthPx);
       return;
     }
 
-    this.columnWindow = win;
-    const windowSize = win.end - win.start;
-
-    for (const [, rowEl] of this.rowElementMap) {
-      if (this.isPlaceholderRow(rowEl)) continue;
-      for (const cellEl of this.bodyCellsOf(rowEl)) {
-        const colName = cellEl.getAttribute('data-column');
-        if (colName === null) continue;
-        cellEl.style.width = `${resolveColumnWidth(columnWidths.get(colName))}px`;
-      }
-      const children = rowEl.children;
-      const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;
-      if (leftSpacer?.hasAttribute('data-col-spacer')) {
-        leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
-      }
-      const rightSpacer = children[win.pinnedCount + windowSize + 1] as HTMLElement | undefined;
-      if (rightSpacer?.hasAttribute('data-col-spacer')) {
-        rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
-      }
-    }
-
-    this.applyContentWidth(win.totalWidthPx);
+    // Out of replays. The last render honoured the host's second-to-last
+    // write, so the DOM is coherent — it is the host's newest width that is
+    // not painted, and only until whatever writes it next comes round. Say so
+    // rather than recursing: a silent stop here reads as "the width did not
+    // take" with nothing pointing at the loop that caused it.
+    this.widthUpdatePending = false;
+    console.warn(
+      `TableBody: a column width write from onRowsRendered moved the column window ` +
+        `${TableBody.MAX_WIDTH_UPDATE_REPLAYS} times in a row; abandoning the replay. ` +
+        'Write column widths conditionally — a host that writes a new width on every ' +
+        'render can never converge.',
+    );
   }
 
   // =========================================

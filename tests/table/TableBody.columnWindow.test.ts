@@ -25,6 +25,7 @@ import {
   SPACERS_PER_ROW,
   bodyCells,
   cellFor,
+  renderRow,
   renderedColumns,
   rowElements,
   rowPool,
@@ -584,6 +585,76 @@ describe('TableBody — inputs other than scrollLeft', () => {
 
     expect(harness.state.columnWidths.get().get('col_2')).toBe(321);
     expect(cellFor(firstRow(harness), 'col_2')?.style.width).toBe('321px');
+
+    harness.body.destroy();
+  });
+
+  it('bounds the replay when a host writes a new width on every render', async () => {
+    // The other side of the same seam. Replaying the write re-enters
+    // `updateCellWidths` from the top with the guard already down, so the tail
+    // call this used to make was an unbounded recursion — a host that writes a
+    // *changing* width rode it to a stack overflow. Widening by a viewport
+    // every time keeps moving the window, so no pass ever converges.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let onRender: (() => void) | null = null;
+    const harness = await mount({
+      body: { prefetch: false, onRowsRendered: () => onRender?.() },
+    });
+    harness.scrollToColumnPx(3000);
+
+    let renders = 0;
+    let width = COL_WIDTH + VIEWPORT;
+    onRender = () => {
+      renders++;
+      width += VIEWPORT;
+      const next = new Map(harness.state.columnWidths.get());
+      next.set('col_0', width);
+      harness.state.columnWidths.set(next);
+    };
+
+    const widths = new Map(harness.state.columnWidths.get());
+    widths.set('col_0', width);
+    harness.state.columnWidths.set(widths);
+
+    // Terminated, and said why. The exact render count is the bound plus the
+    // pass that discovered it; asserting it pins the loop rather than the
+    // recursion depth jsdom happens to allow.
+    expect(renders).toBe(5);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('onRowsRendered');
+
+    // The DOM is coherent with the window the body last published — it is the
+    // host's newest width that is unpainted, not the table's geometry.
+    const win = harness.body.getColumnWindow();
+    const row = firstRow(harness);
+    const painted = bodyCells(row).reduce((sum, cell) => sum + parseFloat(cell.style.width), 0);
+    const spacers = spacerWidths(row);
+    expect(spacers.left + painted + spacers.right).toBe(win.totalWidthPx);
+
+    harness.body.destroy();
+  });
+
+  it('leaves a structurally short row alone instead of writing a spacer onto a cell', async () => {
+    // The cell loops deliberately tolerate a row a direct `/advanced` caller
+    // built by hand — "render what fits" beats throwing partway. On such a row
+    // `children[pinnedCount]` is a real data cell, and an unguarded spacer
+    // write would give it `flex: 0 0 1500px`: one column stretched by the
+    // width of every column standing behind the left spacer.
+    const harness = await mount();
+    harness.scrollToColumnPx(3000);
+    expect(harness.body.getColumnWindow()).toMatchObject({ start: 10, leftSpacerPx: 1500 });
+
+    const shortRow = document.createElement('div');
+    shortRow.className = 'dt-row';
+    const onlyCell = document.createElement('div');
+    onlyCell.className = 'dt-cell';
+    onlyCell.setAttribute('data-column', 'col_10');
+    shortRow.appendChild(onlyCell);
+
+    renderRow(harness.body, shortRow, 0, { col_10: 1 });
+
+    expect(onlyCell.style.flex).toBe('');
+    expect(spacerWidths(shortRow)).toEqual({ left: 0, right: 0 });
 
     harness.body.destroy();
   });

@@ -47,6 +47,71 @@ const TIER = TIERS['wide-ci'];
 /** DuckDB boot + 6M cells generated, exported, and reloaded is not fast. */
 test.describe.configure({ timeout: 240_000 });
 
+/** One sampled cell per generator class: what rendered, and what was owed. */
+interface ClassSample {
+  /** The column the sample came from — which varies with the window. */
+  column: string;
+  rendered: string;
+  expected: string;
+  exact: boolean;
+}
+
+type ClassCensus = Record<number, ClassSample>;
+
+/**
+ * Sample one rendered cell per generator class from the first painted row.
+ *
+ * `c % CLASS_CYCLE` rather than `c`: the tier's columns cycle through
+ * {@link CLASS_CYCLE} generators, so any contiguous run of that many rendered
+ * columns covers every class. Which run is on screen depends on `scrollLeft`,
+ * and that is precisely why the census cannot name columns.
+ */
+async function censusPass(page: Parameters<typeof sweepHorizontal>[0]): Promise<ClassCensus> {
+  return page.evaluate(
+    ({ hostId, seed, cycle }) => {
+      const oracle = (window as any).__dtOracle as (
+        i: number,
+        c: number,
+        s: number,
+        force?: boolean,
+      ) => string | null;
+      const row = document.querySelector(
+        `#${hostId} .dt-body .dt-row[data-row-id]:not([data-placeholder])`,
+      );
+      const out: Record<number, ClassSample> = {};
+      if (!row) return out;
+      const index = Number(row.getAttribute('data-row-index'));
+      for (const cell of row.querySelectorAll('.dt-cell[data-column]')) {
+        const column = cell.getAttribute('data-column')!;
+        const c = Number(column.slice(4));
+        if (!Number.isFinite(c)) continue;
+        const klass = c % cycle;
+        if (out[klass]) continue;
+        const rendered = cell.textContent ?? '';
+        const expected = oracle(index, c, seed, true) ?? '';
+        out[klass] = { column, rendered, expected, exact: rendered === expected };
+      }
+      return out;
+    },
+    { hostId: TIER_HOST_ID, seed: TIER.seed, cycle: CLASS_CYCLE },
+  );
+}
+
+/**
+ * Fold a pass into the running census, keeping any mismatch.
+ *
+ * A later exact sample must never overwrite an earlier failing one — that
+ * would let a class that renders wrong at one scroll position pass because it
+ * rendered right at another.
+ */
+function mergeCensus(into: ClassCensus, pass: ClassCensus): void {
+  for (const [key, sample] of Object.entries(pass)) {
+    const klass = Number(key);
+    const existing = into[klass];
+    if (!existing || (existing.exact && !sample.exact)) into[klass] = sample;
+  }
+}
+
 test('mounts WIDE_CI through the real load path with both oracles clean', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('pageerror', (e) => consoleErrors.push(String(e)));
@@ -108,11 +173,29 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
   }
 
   // --- the column axis, swept end to end ---------------------------------
-  const stops = await sweepHorizontal(page, [0, 0.25, 0.5, 0.75, 1]);
+  //
+  // The text-oracle census rides along with the sweep rather than running
+  // once at the end. Body rows render only the horizontally visible column
+  // window now, so `col_0 … col_19` — the first class cycle, which the census
+  // used to read by name — do not exist in the DOM at any scrolled position.
+  // Keying the census by *class* (`c % CLASS_CYCLE`) over whatever columns are
+  // rendered, and accumulating across the stops, asks the same question of a
+  // moving window: does every text-comparable class render byte-exactly what
+  // `cellOracle` predicts. The old lookup would have thrown on the missing
+  // entry, which is a worse failure than a wrong one — it says nothing about
+  // the oracle at all.
+  const census: ClassCensus = {};
+  const stops: Awaited<ReturnType<typeof sweepHorizontal>> = [];
+  for (const at of [0, 0.25, 0.5, 0.75, 1]) {
+    const [stop] = await sweepHorizontal(page, [at]);
+    stops.push(stop!);
+    mergeCensus(census, await censusPass(page));
+  }
+
   for (const stop of stops) {
-    // Pre-column-virtualization every visible column is rendered, so the
-    // expected window is the whole list. Phase 3 narrows this; the probe
-    // installed above is what will hold it honest when it does.
+    // Headers, not body cells: `readVisibleGrid` reads `.dt-col-header`, and
+    // the header row is still built in full. Phase 4 narrows *this* number;
+    // the probe installed above is what holds it honest when it does.
     expect(stop.columns, `at scrollLeft ${stop.scrollLeft}`).toHaveLength(TIER.cols);
     expect(stop.columns.some((col) => col.fullyVisible)).toBe(true);
   }
@@ -127,46 +210,26 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
   expect(violations).toHaveLength(DT_BUDGET.WIDE_CI.ORACLE_VIOLATIONS);
 
   // --- the text oracle covers what it claims to cover --------------------
-  // A census over one full class cycle: which classes render byte-exactly
-  // what `cellOracle` predicts. Every class the oracle *claims* must match;
-  // the rest are reported so the included set stays an evidence-backed
-  // decision rather than a guess (see TEXT_COMPARABLE_CLASSES).
-  const census = await page.evaluate(
-    ({ hostId, seed, cycle }) => {
-      const oracle = (window as any).__dtOracle as (
-        i: number,
-        c: number,
-        s: number,
-        force?: boolean,
-      ) => string | null;
-      const row = document.querySelector(
-        `#${hostId} .dt-body .dt-row[data-row-id]:not([data-placeholder])`,
-      )!;
-      const index = Number(row.getAttribute('data-row-index'));
-      const out: Record<number, { rendered: string; expected: string; exact: boolean }> = {};
-      for (let c = 0; c < cycle; c++) {
-        const cell = row.querySelector(`.dt-cell[data-column="col_${c}"]`);
-        if (!cell) continue;
-        const rendered = cell.textContent ?? '';
-        const expected = oracle(index, c, seed, true) ?? '';
-        out[c] = { rendered, expected, exact: rendered === expected };
-      }
-      return { index, out };
-    },
-    { hostId: TIER_HOST_ID, seed: TIER.seed, cycle: CLASS_CYCLE },
-  );
-
-  const exactClasses = Object.entries(census.out)
+  // Every class the oracle *claims* must have been seen and must match; the
+  // rest are reported so the included set stays an evidence-backed decision
+  // rather than a guess (see TEXT_COMPARABLE_CLASSES).
+  const exactClasses = Object.entries(census)
     .filter(([, v]) => v.exact)
-    .map(([c]) => Number(c));
+    .map(([c]) => Number(c))
+    .sort((a, b) => a - b);
   console.log(
-    `[tiers.smoke] byte-exact classes at row ${census.index}: [${exactClasses.join(', ')}]`,
+    `[tiers.smoke] byte-exact classes across the sweep: [${exactClasses.join(', ')}] ` +
+      `(${Object.keys(census).length}/${CLASS_CYCLE} classes observed)`,
   );
   for (const klass of TEXT_COMPARABLE_CLASSES) {
-    const entry = census.out[klass]!;
+    const entry = census[klass];
+    // Explicit, because "never rendered" is exactly what a windowing bug
+    // looks like, and a census that silently covered nothing would pass.
+    expect(entry, `class ${klass} was never rendered anywhere in the sweep`).toBeDefined();
     expect(
-      entry.exact,
-      `class ${klass}: rendered "${entry.rendered}" vs oracle "${entry.expected}"`,
+      entry!.exact,
+      `class ${klass} (${entry!.column}): rendered "${entry!.rendered}" ` +
+        `vs oracle "${entry!.expected}"`,
     ).toBe(true);
   }
 

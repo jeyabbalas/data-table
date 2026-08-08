@@ -45,6 +45,10 @@ export type {
 
 export { TableBody } from './table/TableBody';
 export type { TableBodyOptions, RowData } from './table/TableBody';
+// The window `TableBody.getColumnWindow()` returns. Type only: the model that
+// computes it is TableBody's own, and a second instance of it would be a
+// second answer to "which columns are rendered".
+export type { ColumnWindow } from './table/ColumnWindow';
 
 export { AnnotationPopover } from './table/AnnotationPopover';
 export type { AnnotationPopoverOptions } from './table/AnnotationPopover';

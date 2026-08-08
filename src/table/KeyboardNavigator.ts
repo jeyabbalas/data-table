@@ -917,21 +917,17 @@ export class KeyboardNavigator {
     const pinnedColumns = this.state.pinnedColumns.get();
     if (pinnedColumns.includes(column)) return;
 
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnWidths = this.state.columnWidths.get();
-
-    let colLeft = 0;
-    for (const colName of visibleColumns) {
-      if (colName === column) break;
-      colLeft += columnWidths.get(colName) ?? 150;
-    }
-    const colWidth = columnWidths.get(column) ?? 150;
-    const colRight = colLeft + colWidth;
-
-    let pinnedWidth = 0;
-    for (const pinned of pinnedColumns) {
-      pinnedWidth += columnWidths.get(pinned) ?? 150;
-    }
+    // Column geometry comes from the body's own cached prefix sums — the same
+    // rounded widths it draws the cells and the spacers with, so scrolling to
+    // `left` lands exactly where the column is. The two O(N) loops this
+    // replaced summed *raw* widths, and the pinned one summed them over
+    // `pinnedColumns`, which still lists columns `hideColumn` has removed from
+    // view — one hidden pinned column pushed every target 150 px too far.
+    const span = body.getColumnSpan(column);
+    if (!span) return;
+    const colLeft = span.left;
+    const colRight = colLeft + span.width;
+    const pinnedWidth = body.getPinnedWidthPx();
 
     const scrollLeft = this.bodyScroll.scrollLeft;
     const viewportWidth = this.bodyScroll.clientWidth;
@@ -943,7 +939,16 @@ export class KeyboardNavigator {
       this.bodyScroll.scrollLeft = colLeft - pinnedWidth;
     } else if (colRight > effectiveRight) {
       this.bodyScroll.scrollLeft = colRight - viewportWidth;
+    } else {
+      return;
     }
+
+    // The body renders only the horizontally visible column window, and the
+    // browser does not dispatch `scroll` until this task ends — so without
+    // this the cell the cursor just moved to would not exist yet, and
+    // `syncActiveDescendant` (which resolves it by id) would drop the cursor
+    // for a frame. Synchronous by design.
+    body.refreshColumnWindow();
   }
 
   private async copySelectedRows(): Promise<void> {

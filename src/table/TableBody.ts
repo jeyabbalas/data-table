@@ -20,7 +20,9 @@ import {
   BOX_OVERHEAD_PX,
   ColumnWindowModel,
   DEFAULT_COLUMN_WIDTH,
+  MIN_OVERSCAN_COLUMNS,
   pinnedOffsets,
+  resolvePinnedCount,
   type ColumnWindow,
   type PinnedOffset,
 } from './ColumnWindow';
@@ -241,7 +243,17 @@ export class TableBody {
   private rowPool: HTMLElement[] = [];
   private rowElementMap = new Map<number, HTMLElement>();
   private previousHoveredRow: number | null = null;
-  private previousFocusedCell: { row: number; column: string } | null = null;
+  /**
+   * The element currently carrying the cursor ring.
+   *
+   * The *element*, not the `(row, column)` it was drawn for. Re-deriving it
+   * would mean resolving the old cursor through the current window, and a row
+   * repainted in place for a moved window of the same size resolves it to a
+   * different column's cell — or to nothing at all, which strands the ring on
+   * whatever cell used to hold it. Holding the reference makes the removal
+   * exact regardless of what moved in between, and costs one field.
+   */
+  private focusedCellEl: HTMLElement | null = null;
 
   // Cached column name -> 1-based presented index for aria-colindex
   private colIndexMap = new Map<string, number>();
@@ -271,6 +283,15 @@ export class TableBody {
   // `visibleColumns.indexOf` calls, which were O(N) on the focus path.
   private visibleIndexMap = new Map<string, number>();
   private visibleIndexSource: readonly string[] | null = null;
+  // The element whose `scrollLeft` the window is computed from, and the offset
+  // the current window was computed at. `-1` is "never computed", which no
+  // real offset can be.
+  private readonly columnScrollSource: HTMLElement;
+  private lastScrollLeft = -1;
+  private horizontalScrollRAF: number | null = null;
+  // Re-entrancy guard for the width path: `updateCellWidths` can re-render,
+  // and a render notifies its host, which is free to write column widths.
+  private inWidthUpdate = false;
 
   /**
    * Marks a row that was painted while the annotation store held something.
@@ -343,6 +364,18 @@ export class TableBody {
       rowHeight: this.rowHeight,
       classPrefix: this.classPrefix,
       externalScrollContainer: options.scrollContainer,
+    });
+
+    // Horizontal scroll drives the column window. A second listener on the
+    // same element rather than a hook into the scroller's own: `VirtualScroller`
+    // is deliberately ignorant of columns, and its `onScroll` fires only when
+    // the *row* range moves — which a purely horizontal scroll never does.
+    // Attached here and not in `initialize()` so a body driven directly
+    // through `/advanced`, which may never be initialized, still tracks the
+    // window.
+    this.columnScrollSource = this.virtualScroller.getScrollContainer();
+    this.columnScrollSource.addEventListener('scroll', this.handleHorizontalScroll, {
+      passive: true,
     });
 
     // Delegated annotation hover/focus listeners on the scroll container.
@@ -721,6 +754,32 @@ export class TableBody {
       void this.ensureFetched();
     }
   }
+
+  /**
+   * Handle a horizontal scroll: recompute the column window, once per frame.
+   *
+   * Mirrors `VirtualScroller.handleScroll` — one rAF in flight, every event in
+   * between dropped — because the two run off the same element and the same
+   * event storm, and a second throttling policy on the same stream is just a
+   * second thing to get wrong.
+   *
+   * The `scrollLeft` comparison is what makes vertical scrolling free: this
+   * listener fires on every wheel tick, and a vertical-only scroll leaves
+   * `scrollLeft` alone, so it costs one property read and returns. Wired to
+   * this instance as a field so `removeEventListener` in `destroy()` gets the
+   * same reference.
+   */
+  private readonly handleHorizontalScroll = (): void => {
+    if (this.destroyed) return;
+    if (this.columnScrollSource.scrollLeft === this.lastScrollLeft) return;
+    if (this.horizontalScrollRAF !== null) return;
+
+    this.horizontalScrollRAF = requestAnimationFrame(() => {
+      this.horizontalScrollRAF = null;
+      if (this.destroyed) return;
+      this.refreshColumnWindow();
+    });
+  };
 
   // =========================================
   // Data Fetching
@@ -1278,7 +1337,7 @@ export class TableBody {
     // every row. Cells stay `tabindex="-1"` permanently — the cursor is
     // published via `aria-activedescendant` on `.dt-grid`, not by moving DOM
     // focus, because a recycled row would take real focus with it into the
-    // pool. `applyFocusRing` also re-syncs `previousFocusedCell`, so a later
+    // pool. `applyFocusRing` also re-syncs `focusedCellEl`, so a later
     // `updateFocusStyles` still knows which element carries the class.
     this.applyFocusRing(focusedCell);
 
@@ -1323,25 +1382,76 @@ export class TableBody {
   }
 
   /**
-   * The window to render.
+   * The window to render at the body's current horizontal scroll offset.
    *
-   * Currently the **full** window — every visible column, both spacers at
-   * zero — so this commit changes the shape of a row and nothing a user can
-   * see. Narrowing it to the horizontally visible span is the next commit;
-   * this is the one line that changes.
+   * `clientWidth` is `0` in jsdom and before the first layout — precisely what
+   * `MIN_OVERSCAN_COLUMNS` exists for: the pixel band collapses to nothing and
+   * the column floor takes over, so an unmeasured viewport renders a small
+   * bounded window rather than an empty one.
+   *
+   * Callers must have called {@link syncVisibleIndexMap} for `columns` first —
+   * {@link extendWindowToFocus} resolves the cursor's column through that map.
    */
   private computeColumnWindow(
     columns: readonly string[],
     columnWidths: ReadonlyMap<string, number>,
   ): ColumnWindow {
-    return this.columnWindowModel.compute({
+    const win = this.columnWindowModel.compute({
       visibleColumns: columns,
       columnWidths,
       pinnedColumns: this.state.pinnedColumns.get(),
-      scrollLeft: 0,
-      viewportWidth: Number.POSITIVE_INFINITY,
+      scrollLeft: this.columnScrollSource.scrollLeft,
+      viewportWidth: this.columnScrollSource.clientWidth,
       boxOverheadPx: BOX_OVERHEAD_PX,
     });
+    return this.extendWindowToFocus(win);
+  }
+
+  /**
+   * Widen the window so the cursor's column is rendered — when it is close.
+   *
+   * The cursor is published as `aria-activedescendant`, which has to name an
+   * element that exists. `scrollFocusedCellIntoView` normally scrolls the
+   * cursor into the window before this ever matters, so the case left is the
+   * frame where a cursor move and its scroll have not yet agreed — plus the
+   * `/advanced` path, where a host can set `focusedCell` without scrolling at
+   * all.
+   *
+   * Clamped to the overscan budget on purpose: a cursor parked 900 columns
+   * from the viewport must not drag 900 cells into the DOM, which is the whole
+   * thing windowing exists to prevent. Past the budget the ring simply is not
+   * mounted — `syncActiveDescendant` resolves the id against the grid and
+   * drops the attribute when it finds nothing, which is the correct ARIA
+   * answer for a cursor that is scrolled out of view.
+   */
+  private extendWindowToFocus(win: ColumnWindow): ColumnWindow {
+    const focused = this.state.focusedCell.get();
+    if (!focused) return win;
+    const idx = this.visibleIndexMap.get(focused.column);
+    // Pinned columns are always rendered, so a cursor on one needs nothing.
+    if (idx === undefined || idx < win.pinnedCount) return win;
+
+    const budget = MIN_OVERSCAN_COLUMNS;
+    let start = win.start;
+    let end = win.end;
+    if (idx < start) {
+      if (start - idx > budget) return win;
+      start = idx;
+    } else if (idx >= end) {
+      if (idx + 1 - end > budget) return win;
+      end = idx + 1;
+    } else {
+      return win;
+    }
+
+    const n = this.columnWindowModel.size();
+    return {
+      ...win,
+      start,
+      end,
+      leftSpacerPx: this.columnWindowModel.spanPx(win.pinnedCount, start),
+      rightSpacerPx: this.columnWindowModel.spanPx(end, n),
+    };
   }
 
   /** Rebuild `name -> visibleColumns index` when the array identity changes. */
@@ -1576,21 +1686,21 @@ export class TableBody {
   /**
    * Move the cursor ring from wherever it was to wherever it now belongs.
    *
-   * Two element lookups, not a walk over every cell of every rendered row.
-   * An unmounted target is a no-op on both sides: a cursor can legitimately
-   * point at a row virtualization has recycled, and from the next commit at a
-   * column the horizontal window has scrolled out.
+   * One lookup, not a walk over every cell of every rendered row: the ring
+   * comes off the element that has it (remembered) and goes onto the element
+   * that should (resolved). An unmounted target is a no-op — a cursor can
+   * legitimately point at a row virtualization has recycled, or at a column
+   * the horizontal window has scrolled past.
+   *
+   * Remove-then-add, so the case where both resolve to the *same* element —
+   * a pooled cell repainted at the cursor's new position — still ends ringed.
    */
   private applyFocusRing(focusedCell: { row: number; column: string } | null): void {
     const focusClass = `${this.classPrefix}-cell--focused`;
-    const previous = this.previousFocusedCell;
-    if (previous) {
-      this.cellElement(previous.row, previous.column)?.classList.remove(focusClass);
-    }
-    if (focusedCell) {
-      this.cellElement(focusedCell.row, focusedCell.column)?.classList.add(focusClass);
-    }
-    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
+    this.focusedCellEl?.classList.remove(focusClass);
+    const next = focusedCell ? this.cellElement(focusedCell.row, focusedCell.column) : null;
+    next?.classList.add(focusClass);
+    this.focusedCellEl = next;
   }
 
   /**
@@ -2304,14 +2414,40 @@ export class TableBody {
    * are re-sized by their own `data-column` (spacers skipped, and only the
    * rendered window exists to visit), both spacers are re-derived from the
    * refreshed prefix sums, and the content extent is republished from the same
-   * numbers. The window itself is not recomputed here — a width change can
-   * move its boundaries, and that lands with the scroll wiring.
+   * numbers.
+   *
+   * Widening a column *can* push the window's boundaries — the columns after
+   * it move right, and some of them off screen. That case cannot be patched
+   * incrementally (the rows hold cells for the old window), so it falls back
+   * to a full re-render. Reaching it takes a wide column and a viewport-sized
+   * change, so the drag path stays on the incremental branch.
    */
   private updateCellWidths(): void {
+    // A render notifies the host (`onRowsRendered`), and a host is entitled to
+    // write column widths from there. Without this the re-render branch below
+    // could recurse.
+    if (this.inWidthUpdate) return;
+
     const columns = this.state.visibleColumns.get();
     const columnWidths = this.state.columnWidths.get();
     this.syncVisibleIndexMap(columns);
     const win = this.computeColumnWindow(columns, columnWidths);
+
+    const previous = this.columnWindow;
+    if (
+      win.start !== previous.start ||
+      win.end !== previous.end ||
+      win.pinnedCount !== previous.pinnedCount
+    ) {
+      this.inWidthUpdate = true;
+      try {
+        this.renderVisibleRows();
+      } finally {
+        this.inWidthUpdate = false;
+      }
+      return;
+    }
+
     this.columnWindow = win;
     const windowSize = win.end - win.start;
 
@@ -2352,6 +2488,112 @@ export class TableBody {
    */
   getVisibleRange(): VisibleRange {
     return this.currentRange;
+  }
+
+  /**
+   * Recompute the column window and re-render the body if it moved.
+   *
+   * Synchronous: when this returns, the DOM matches the current `scrollLeft`.
+   * That is the whole reason it is public. The browser does not dispatch
+   * `scroll` until after the current task, so code that *writes* `scrollLeft`
+   * — keyboard navigation, the filter-change scroll pin, the scroll restore
+   * after a re-render — would otherwise leave a frame in which the rows on
+   * screen belong to the previous offset. At 1,000 columns that frame is a
+   * blank body.
+   *
+   * Cheap when nothing moved: one binary search over cached prefix sums and a
+   * three-field comparison, no DOM work at all. Safe to call unconditionally
+   * after any programmatic scroll.
+   *
+   * @example
+   * ```typescript
+   * bodyScroll.scrollLeft = targetLeft;
+   * body.refreshColumnWindow(); // cells for the new offset exist now
+   * ```
+   */
+  refreshColumnWindow(): void {
+    if (this.destroyed) return;
+
+    const columns = this.state.visibleColumns.get();
+    this.syncVisibleIndexMap(columns);
+    const win = this.computeColumnWindow(columns, this.state.columnWidths.get());
+    // Record the offset this answer was computed at, whatever the answer is:
+    // the scroll listener skips work while `scrollLeft` still matches it.
+    this.lastScrollLeft = this.columnScrollSource.scrollLeft;
+
+    const current = this.columnWindow;
+    if (
+      win.start === current.start &&
+      win.end === current.end &&
+      win.pinnedCount === current.pinnedCount
+    ) {
+      return;
+    }
+
+    // `renderVisibleRows` recomputes the window itself and publishes it, so
+    // this is deliberately not `this.columnWindow = win` first — one writer.
+    this.renderVisibleRows();
+  }
+
+  /**
+   * The column window the rendered rows were built for.
+   *
+   * A copy: the live window is replaced wholesale on every pass, and handing
+   * out the object itself would let a caller hold something that silently
+   * stops describing the DOM.
+   *
+   * @example
+   * ```typescript
+   * const win = body.getColumnWindow();
+   * // rows render visibleColumns[0, win.pinnedCount) then [win.start, win.end)
+   * const rendered = win.pinnedCount + (win.end - win.start);
+   * ```
+   */
+  getColumnWindow(): ColumnWindow {
+    return { ...this.columnWindow };
+  }
+
+  /**
+   * Where `column` sits on the horizontal content axis, in px, or `null` when
+   * it is not a visible column.
+   *
+   * Reads the same cached prefix sums the window and the spacers are built
+   * from, so a caller that scrolls to `left` lands exactly where the body drew
+   * the column — which is what keyboard navigation needs and what a private
+   * `for` loop over `columnWidths` kept getting subtly wrong (it summed raw
+   * widths; the body sums rounded ones).
+   *
+   * @example
+   * ```typescript
+   * const span = body.getColumnSpan('price');
+   * if (span) bodyScroll.scrollLeft = span.left - body.getPinnedWidthPx();
+   * ```
+   */
+  getColumnSpan(column: string): { left: number; width: number } | null {
+    const columns = this.state.visibleColumns.get();
+    this.syncVisibleIndexMap(columns);
+    this.columnWindowModel.sync(columns, this.state.columnWidths.get(), BOX_OVERHEAD_PX);
+    const index = this.visibleIndexMap.get(column);
+    if (index === undefined) return null;
+    return {
+      left: this.columnWindowModel.columnLeftPx(index),
+      width: this.columnWindowModel.columnWidthPx(index),
+    };
+  }
+
+  /**
+   * Total width of the leading pinned run — where unpinned content starts, and
+   * the width of the sticky band covering it.
+   *
+   * Summed over `visibleColumns[0, pinnedCount)` rather than over
+   * `pinnedColumns`, because `hideColumn` leaves a hidden column in
+   * `pinnedColumns` and counting it overstates the band by a full column.
+   */
+  getPinnedWidthPx(): number {
+    const columns = this.state.visibleColumns.get();
+    this.columnWindowModel.sync(columns, this.state.columnWidths.get(), BOX_OVERHEAD_PX);
+    const { pinnedCount } = resolvePinnedCount(columns, this.state.pinnedColumns.get());
+    return this.columnWindowModel.spanPx(0, pinnedCount);
   }
 
   /**
@@ -2420,6 +2662,17 @@ export class TableBody {
       cancelAnimationFrame(this.scrollAnimationId);
     }
 
+    // Detach the column-window scroll listener and drop its pending frame.
+    // The scroll container outlives this body when it is external
+    // (`TableContainer` owns `.dt-body-scroll` and rebuilds the body into it),
+    // so an undetached listener would fire against a destroyed instance for as
+    // long as the table lives.
+    this.columnScrollSource.removeEventListener('scroll', this.handleHorizontalScroll);
+    if (this.horizontalScrollRAF !== null) {
+      cancelAnimationFrame(this.horizontalScrollRAF);
+      this.horizontalScrollRAF = null;
+    }
+
     // Detach delegated annotation listeners
     this.container.removeEventListener('pointerover', this.handleAnnotationPointerOver);
     this.container.removeEventListener('pointerout', this.handleAnnotationPointerOut);
@@ -2444,6 +2697,8 @@ export class TableBody {
     this.columnWindowModel.reset();
     this.visibleIndexMap.clear();
     this.visibleIndexSource = null;
+    this.lastScrollLeft = -1;
+    this.focusedCellEl = null;
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,
     // so a cell holding real focus (from a click) has to be rescued first —

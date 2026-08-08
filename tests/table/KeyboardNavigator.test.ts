@@ -30,6 +30,23 @@ const mockBridge = {
   clearQueryCache: vi.fn(),
 } as unknown as WorkerBridge;
 
+/**
+ * The column-geometry half of the stub body.
+ *
+ * `scrollFocusedCellIntoView` asks the body where a column is rather than
+ * summing `columnWidths` itself, so a stub without these silently skips the
+ * whole horizontal pass. A uniform 150 px grid over `schema` is exactly what
+ * the real body computes for a table whose widths were never set.
+ */
+const columnGeometry = {
+  getColumnSpan: (column: string): { left: number; width: number } | null => {
+    const index = schema.findIndex((c) => c.name === column);
+    return index < 0 ? null : { left: index * 150, width: 150 };
+  },
+  getPinnedWidthPx: (): number => 0,
+  refreshColumnWindow: (): void => {},
+};
+
 function makeStubBody(pageRows = 10): TableBody {
   const vs = {
     getViewportHeight: () => pageRows * 32,
@@ -40,6 +57,7 @@ function makeStubBody(pageRows = 10): TableBody {
   };
   return {
     getVirtualScroller: () => vs,
+    ...columnGeometry,
   } as unknown as TableBody;
 }
 
@@ -205,7 +223,7 @@ describe('KeyboardNavigator', () => {
       getVirtualScrollTop: () => 1_000_000, // rows 31,250–31,259 visible
       scrollToRow,
     };
-    const body = { getVirtualScroller: () => vs } as unknown as TableBody;
+    const body = { getVirtualScroller: () => vs, ...columnGeometry } as unknown as TableBody;
 
     const nav = new KeyboardNavigator({
       rootElement: root,

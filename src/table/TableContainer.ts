@@ -1096,6 +1096,11 @@ export class TableContainer {
         if (this.bodyScroll.scrollLeft !== savedLeft) {
           this.bodyScroll.scrollLeft = savedLeft;
           this.headerScroll.scrollLeft = savedLeft;
+          // Inside the `if` on purpose: this loop runs every frame for a
+          // second, and in the steady state (nothing moved scrollLeft) it must
+          // cost nothing. When something *did* move it, the body is rendering
+          // the column window for the wrong offset until it is told.
+          this.tableBody?.refreshColumnWindow();
         }
         if (performance.now() < deadline) {
           requestAnimationFrame(correct);
@@ -1570,6 +1575,14 @@ export class TableContainer {
         this.bodyScroll.scrollLeft = savedBodyScrollLeft;
         this.bodyScroll.scrollTop = savedBodyScrollTop;
         this.headerScroll.scrollLeft = savedHeaderScrollLeft;
+
+        // `render()` rebuilt the body at scrollLeft 0 and we have just put the
+        // offset back. The rows in the DOM are the window for 0 — every cell
+        // the user was looking at is a spacer — and they stay that way until
+        // a `scroll` event, which restoring the property does not produce
+        // reliably. This is the blank-body flash after any re-render at a
+        // scrolled-right offset.
+        this.tableBody?.refreshColumnWindow();
 
         // Restore focus only when this render is what destroyed it: the element
         // focus was on is gone from the table AND focus fell to nothing (body,

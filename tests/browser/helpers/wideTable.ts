@@ -353,14 +353,23 @@ export async function waitForTierSettled(
         host.querySelectorAll('.dt-col-header[data-column]').length +
         '#' +
         rows
-          .map(
-            (r) =>
+          .map((r) => {
+            // The row's *first rendered* cell, not `col_0`. Body rows render
+            // only the horizontally visible column window, so at any scrolled
+            // position `col_0` is absent and this term collapsed to `''` for
+            // every row — the settle key stopped seeing row content at all and
+            // reported "settled" while cells were still being painted.
+            const first = r.querySelector('.dt-cell[data-column]');
+            return (
               r.getAttribute('data-row-index') +
               ':' +
               r.getAttribute('data-row-id') +
               ':' +
-              (r.querySelector('.dt-cell[data-column="col_0"]')?.textContent ?? ''),
-          )
+              (first?.getAttribute('data-column') ?? '') +
+              '=' +
+              (first?.textContent ?? '')
+            );
+          })
           .join(',');
       const s = (w.__dtTierSettle ??= { last: '', stable: 0 });
       s.stable = key === s.last ? s.stable + 1 : 0;

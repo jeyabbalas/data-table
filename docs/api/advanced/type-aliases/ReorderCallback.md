@@ -8,7 +8,7 @@
 
 > **ReorderCallback** = (`newOrder`, `movedColumn`) => `void`
 
-Defined in: [table/ColumnReorder.ts:37](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/ColumnReorder.ts#L37)
+Defined in: [table/ColumnReorder.ts:37](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/table/ColumnReorder.ts#L37)
 
 Callback invoked when columns are reordered.
 

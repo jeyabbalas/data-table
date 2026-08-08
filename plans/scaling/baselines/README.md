@@ -41,49 +41,51 @@ that graduate into `tests/budgets.ts` when a phase tightens them.
 
 ### wide — visualizations off
 
-| Metric                      | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: | ---------------------: |
-| Generate (ms)               |                  15096 |                  14414 |
-| Load (ms)                   |                   4065 |                   8336 |
-| └ worker stage (ms)         |                 4062.8 |                 8334.4 |
-| └ first paint (ms)          |                 4063.1 |                 8334.7 |
-| └ viz ready (ms)            |                 4062.9 |                 8334.5 |
-| Queries sent                |                      4 |                      4 |
-| Cache hits                  |                      0 |                      0 |
-| DOM nodes                   |                  51052 |                  51052 |
-| Canvases                    |                      0 |                      0 |
-| Live ResizeObservers        |                      1 |                      1 |
-| Live MutationObservers      |                      1 |                      1 |
-| sortColumns subscribers     |                   1005 |                   1005 |
-| JS heap (MB)                |                   31.6 |                  227.9 |
-| One sort (ms)               |                  460.8 |                  391.9 |
-| One filter (ms)             |                  396.8 |                  381.1 |
-| Scroll storm frame p95 (ms) |                   37.3 |                     38 |
+| Metric                      | `51ba4ef` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)               |                  16961 |                  15096 |                  14414 |
+| Load (ms)                   |                   3859 |                   4065 |                   8336 |
+| └ worker stage (ms)         |                 3855.1 |                 4062.8 |                 8334.4 |
+| └ first paint (ms)          |                 3855.6 |                 4063.1 |                 8334.7 |
+| └ viz ready (ms)            |                 3855.3 |                 4062.9 |                 8334.5 |
+| Queries sent                |                      4 |                      4 |                      4 |
+| Cache hits                  |                      0 |                      0 |                      0 |
+| DOM nodes                   |                  52052 |                  51052 |                  51052 |
+| Canvases                    |                      0 |                      0 |                      0 |
+| Live ResizeObservers        |                      1 |                      1 |                      1 |
+| Live MutationObservers      |                      1 |                      1 |                      1 |
+| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |
+| JS heap (MB)                |                   31.6 |                   31.6 |                  227.9 |
+| One sort (ms)               |                  401.8 |                  460.8 |                  391.9 |
+| One filter (ms)             |                  423.7 |                  396.8 |                  381.1 |
+| Scroll storm frame p95 (ms) |                   36.2 |                   37.3 |                     38 |
 
+- `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `5285b63` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
 ### wide — visualizations on
 
-| Metric                      | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: |
-| Generate (ms)               |                  14461 |
-| Load (ms)                   |                  18884 |
-| └ worker stage (ms)         |                 8673.7 |
-| └ first paint (ms)          |                   8674 |
-| └ viz ready (ms)            |                  18884 |
-| Queries sent                |                   2004 |
-| Cache hits                  |                      0 |
-| DOM nodes                   |                  55052 |
-| Canvases                    |                   1000 |
-| Live ResizeObservers        |                   1001 |
-| Live MutationObservers      |                   1001 |
-| sortColumns subscribers     |                   1005 |
-| JS heap (MB)                |                  227.9 |
-| One sort (ms)               |                10514.6 |
-| One filter (ms)             |                 8274.7 |
-| Scroll storm frame p95 (ms) |                   44.8 |
+| Metric                      | `51ba4ef` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: |
+| Generate (ms)               |                  14716 |                  14461 |
+| Load (ms)                   |                   3743 |                  18884 |
+| └ worker stage (ms)         |                 3741.7 |                 8673.7 |
+| └ first paint (ms)          |                 3742.1 |                   8674 |
+| └ viz ready (ms)            |                 4291.7 |                  18884 |
+| Queries sent                |                     20 |                   2004 |
+| Cache hits                  |                      0 |                      0 |
+| DOM nodes                   |                  52076 |                  55052 |
+| Canvases                    |                      8 |                   1000 |
+| Live ResizeObservers        |                      9 |                   1001 |
+| Live MutationObservers      |                      2 |                   1001 |
+| sortColumns subscribers     |                   1005 |                   1005 |
+| JS heap (MB)                |                     28 |                  227.9 |
+| One sort (ms)               |                  450.3 |                10514.6 |
+| One filter (ms)             |                  506.2 |                 8274.7 |
+| Scroll storm frame p95 (ms) |                   40.5 |                   44.8 |
 
+- `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
 ### wide-csv — visualizations off

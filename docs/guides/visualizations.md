@@ -9,6 +9,7 @@ column type.
 ## You'll learn how to
 
 - Understand which built-in visualization applies to which column type
+- Know when a chart is created, and how to wait for the visible ones to draw
 - Register a custom visualization class
 - Override a built-in for specific columns
 - Share a single registry across multiple tables, or scope per-table
@@ -43,6 +44,125 @@ await createDataTable({ container, source, visualizations: false });
 
 With visualizations off, column headers still show column stats but no
 chart.
+
+## When charts are created
+
+Charts are **lazy**. A column's chart is created — canvas, observers,
+first query — when its header scrolls into view, not when the table
+loads. A 1,000-column table paints a few dozen charts, not a thousand,
+and the ones you never scroll to are never built.
+
+The rules, if you need to reason about them precisely:
+
+- One `IntersectionObserver` per table watches the `.dt-col-viz` slot in
+  every header, rooted at the header's own horizontal scroll container.
+- A chart is **created** when its header comes within **200 px** of that
+  viewport — the create band. The overscan is why a slow scroll finds
+  charts already drawn rather than watching them draw.
+- Its canvas is **reclaimed** when the header passes **400 px** away —
+  the keep band. The gap between the two thresholds is deliberate
+  hysteresis: creating and destroying at the same distance would thrash
+  on every pixel of scroll jitter, and a single sweep across a wide
+  table would still have built every canvas by the end.
+- **The data outlives the DOM.** Reclaiming a canvas snapshots the
+  chart's data first, and scrolling the column back rebuilds the chart
+  from that snapshot with **no query**. The same seam covers header
+  rebuilds: hiding, showing, pinning, or moving a column throws away the
+  entire header row and its chart instances, and costs zero
+  visualization queries.
+- Chart fetches run at the worker queue's **`'low'`** priority, below the
+  grid's own queries, with at most four in flight. Scrolling the body
+  never queues behind a wall of chart queries.
+
+If the environment has no `IntersectionObserver` — jsdom, very old
+browsers — every column is treated as visible and all charts are created
+at load, which is what the library did before. Nothing silently loses its
+charts.
+
+### Waiting for the charts: `vizReady` and `whenVizReady()`
+
+Because charts are lazy, the load promise no longer speaks for them.
+`await createDataTable({ source })` and `await table.loadData(…)` resolve
+at **first interactive paint** — the grid is painted and the filter
+counts are correct — and `loadComplete` fires there too.
+
+"The charts you can see are drawn" is a separate signal, available as
+either an event or a promise:
+
+```ts
+const table = await createDataTable({ container, source });
+// The grid is interactive here; charts may still be fetching.
+
+await table.whenVizReady();
+// Now the charts whose headers were visible at load have data.
+```
+
+```ts
+table.on('vizReady', ({ vizCount }) => {
+  console.log(`${vizCount} column charts drawn`);
+});
+```
+
+`vizReady` fires once per load. `vizCount` is the size of that first
+wave — the visible columns plus overscan, not the column count — and it
+is `0` when nothing was visible or when `visualizations: false`.
+`whenVizReady()` is replaced on every `loadData` call, so call it after
+starting the load you care about; a failed load settles it without
+firing `vizReady`, so an awaiter never hangs.
+
+**In a hidden document the wave is empty.** A background tab or a
+`display: none` host gets no `IntersectionObserver` callbacks from the
+browser, so nothing is visible, nothing is created, and `vizReady` fires
+immediately with `vizCount: 0`. That is the platform's behaviour, not a
+stall — the charts are created when the table becomes visible. Use
+`{ eager: true }` below if you need charts in a document that is never
+shown.
+
+### `visualizations: { eager: true }`
+
+The option is `boolean | { eager?: boolean }`:
+
+| Value                       | Behaviour                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `true` / `undefined` / `{}` | Lazy — the default described above                                                             |
+| `false`                     | No charts at all; headers still show column stats                                              |
+| `{ eager: true }`           | Every applicable column's chart is created and fetched during load, and the load promise waits |
+
+`{ eager: true }` is the pre-lazy contract, kept for pipelines that
+capture immediately after the await and have no chance to call
+`whenVizReady()` — screenshots, PDF rendering, print stylesheets, a
+hidden offscreen table:
+
+```ts
+const table = await createDataTable({
+  container,
+  source,
+  visualizations: { eager: true },
+});
+// Every chart is drawn. `vizReady` already fired, before `loadComplete`.
+```
+
+It costs what it used to: roughly two full-table scans per applicable
+column, serialized behind the load promise. On a wide table that is the
+difference between a load measured in seconds and one measured in tens
+of seconds — prefer `whenVizReady()` unless you genuinely need charts
+for columns nobody will look at.
+
+### Filter changes: visible now, stale later
+
+When a filter changes, only the charts that are **currently visible**
+refetch. An offscreen column is marked **stale** — no query — and
+refetches when it scrolls back into view, arriving already
+filter-correct with its brush or selection restored.
+
+Two consequences worth knowing:
+
+- A filter change on a wide table costs a couple of queries plus two per
+  visible chart, not two per column.
+- A chart created lazily **while a filter is active** costs one query or
+  two more than the unfiltered case, because it has to fetch both the
+  filtered series and the background series the crossfilter view draws
+  behind it.
 
 ## Reading the column stats
 
@@ -103,6 +223,42 @@ A continuous histogram can only draw bin-aligned brushes, so a range
 filter created through the panel or API snaps its drawn brush (and the
 selection label) to bin boundaries; line 1 always reflects the exact
 filter.
+
+### Distinct counts are approximate above 100,000 rows
+
+`12 unique` on a small table is an exact `COUNT(DISTINCT …)`. Above
+**100,000 rows** the count comes from DuckDB's `approx_count_distinct`
+(a HyperLogLog sketch) instead, because the exact form is a full scan
+per column and it was the single most expensive thing in the stats
+query. The line marks itself when it is an estimate:
+
+```
+~17,028 unique          ← above 100,000 rows: approximate
+12 unique               ← at or below: exact
+```
+
+Measured error against known cardinalities: exact through 7 distinct
+values, then 100 → 134, 20,000 → 17,028, 100,000 → 104,014. Close
+enough to size a column, not a number to quote.
+
+Two behaviours follow from the estimate being allowed to overshoot the
+true count:
+
+- The **"all unique"** shortcut is suppressed. That label is an
+  exact-equality claim (`distinctCount === nonNullCount`, read as "this
+  is an ID column"), and under HyperLogLog it would fire and misfire
+  about equally often. Above the threshold you get the tilde-marked
+  count instead.
+- The `uuid` percentage is **clamped to 100**, since `(103%)` reads as a
+  bug rather than as an approximation.
+
+The histogram's own use of the distinct count — deciding whether a
+numeric column has few enough values to draw as discrete bars — is
+unaffected: it only cares about cardinalities in the single digits,
+where the sketch is exact.
+
+A custom stats panel sees this on the stats object as
+`distinctCountApprox?: boolean`; render your own marker when it is set.
 
 All of these strings are localizable via `messages.statistics.*` — see
 the [i18n guide](./i18n.md).
@@ -266,11 +422,31 @@ filter back and forth and the brush follows).
 
 ### Reactive updates
 
-The library calls `updateFilters(newFilters)` on every visualization when the
-active filter set changes. Subclasses usually don't need to override this —
-the default implementation triggers `fetchData()` + `render()` on any change.
-Override it if you want to skip re-renders when the filter is unrelated to
-your column.
+The library calls `updateFilters(newFilters)` on every **live** visualization
+when the active filter set changes — that is, on the columns currently in
+view, not on every column in the table. A column with no live instance is
+marked stale and refetches when it scrolls back in. Subclasses usually don't
+need to override this — the default implementation triggers `fetchData()` +
+`render()` on any change. Override it if you want to skip re-renders when the
+filter is unrelated to your column.
+
+### Optional: surviving a header rebuild
+
+Every hide, show, pin, or reorder rebuilds the whole header row, which
+destroys your instance and constructs a new one. Two optional methods let the
+new instance start from the old one's data instead of re-querying:
+
+| Method                  | Purpose                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `exportDataSnapshot()`  | Return a plain, serializable copy of what `render()` consumes, or `null`      |
+| `importDataSnapshot(s)` | Adopt a snapshot from an instance of the same class; return `true` if adopted |
+
+The base implementations return `null` and `false`, so a subclass that
+ignores them simply refetches on rebuild — correct, just not free. Implement
+the pair and a column move costs your chart no queries at all. The library
+hands the snapshot back through `VisualizationOptions.initialSnapshot` on the
+replacement instance; only ever accept a snapshot your own
+`exportDataSnapshot` produced.
 
 ### Canvas scaling
 
@@ -278,12 +454,23 @@ your column.
 
 - High-DPI scaling (`devicePixelRatio`)
 - Responsive resizing (`ResizeObserver`)
-- Cleanup on `destroy()` (canvas removal, event listeners)
+- Theme repaints on a dark/light flip
+- Cleanup on `destroy()` (canvas removal, event listeners, observer
+  unregistration)
 
 Don't attach your own `resize` or global mouse listeners — the shared
 `WindowListenerManager` singleton dispatches window-level `mouseup` and
 `keydown` events to every registered instance so there's only one listener
 per page, no matter how many visualizations are on screen.
+
+The same collapse applies to theme changes. A table-owned watcher keeps
+**one** `data-dt-color-scheme` `MutationObserver` for all of its charts
+rather than one per chart, and the resolved `--dt-*` palette is cached per
+table and invalidated on the flip — so a repaint after a hover, a resize, or
+a data refresh costs no `getComputedStyle` lookups. Nothing is required of a
+subclass to get this. A visualization you construct yourself from
+`/advanced`, outside a table, gets no shared watcher and falls back to its own
+private observer, exactly as before.
 
 ## Error surfacing
 
@@ -338,15 +525,20 @@ registry.unregister('date-histogram');
 
 - **Shared `defaultVisualizationRegistry` is global.** A registration done without a per-instance registry affects every subsequent table on the page. Use a dedicated `VisualizationRegistry` if you need scoped behavior.
 - **Priority ties pick the first-registered.** Two registrations with the same priority are iterated in registration order. Be explicit about priority.
-- **`updateFilters` is called on _every_ filter change.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
+- **`loadComplete` does not mean the charts are drawn.** Await `whenVizReady()`, listen for `vizReady`, or pass `visualizations: { eager: true }`. See [Waiting for the charts](#waiting-for-the-charts-vizready-and-whenvizready).
+- **A chart you can't see does not exist.** No canvas, no instance, no data — so nothing that walks the DOM for `.dt-root canvas`, or holds a reference to a visualization instance, can assume one per column. Scroll the column into view first.
+- **Your instance is destroyed and rebuilt more often than you expect.** Any hide, show, pin, or reorder rebuilds the header row. Keep per-instance state either in `exportDataSnapshot()` or somewhere outside the instance.
+- **`updateFilters` is called on every filter change _for live instances_.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
 - **Don't call `this.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
-- **`BaseVisualization.destroy()` is called by the library on table destroy.** Override it to clean up your own resources, but always call `super.destroy()`.
+- **`BaseVisualization.destroy()` is called by the library on table destroy.** Override it to clean up your own resources, but always call `super.destroy()`. It is also called whenever the column scrolls far out of view — treat it as routine, not terminal.
 - **Canvas size can't be set directly.** Use `this.width` / `this.height`; the library recomputes them on resize. If you must override, do it inside `render()` and respect the DPR scaling.
+- **Distinct counts above 100,000 rows are estimates.** `~17,028 unique`, not `17,028 unique`. Don't build logic on the number being exact — check `distinctCountApprox` first.
 
 ## Related
 
-- Events: [Events guide — `error` event, `visualization` source](./events.md#errors-warnings-and-load-failures)
+- Events: [Events guide — `vizReady`](./events.md#event-catalog), [`error` event, `visualization` source](./events.md#errors-warnings-and-load-failures)
+- Performance: [Column visualizations](../performance.md#column-visualizations) for what lazy creation costs and saves
 - Multi-table: [Multi-table dashboards](./multi-table.md) for per-instance registry across tables
 - [Stats panels](./stats-panels.md) — sibling extension point for the `.dt-col-stats` slot below each visualization (replace the two-line stats display with your own DOM and DuckDB queries)
 - API reference: [`BaseVisualization`, `VisualizationRegistry`](../api-reference.md#visualizations)
-- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/utils.ts`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`
+- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VizDataController.ts` (the lazy state machine), `src/visualizations/ThemeWatcher.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/utils.ts`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`

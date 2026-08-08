@@ -39,7 +39,8 @@ createDataTable(options) ────► DataTable (facade)
                                │   └─ KeyboardNavigator             │ ──────────────
                                │                                    │
                                ├─ CrossfilterCoordinator            │ DuckDB-WASM
-                               │                                    │  (SQL engine)
+                               │   └─ VizDataController             │  (SQL engine)
+                               │      (lazy per-column chart state) │
                                ├─ DerivedColumnManager ─────────────┘
                                │
                                ├─ ModalHost    (body portal)
@@ -135,16 +136,19 @@ is a thin Promise-based RPC wrapper:
   ([`src/data/WorkerBridge.ts:51-63`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
-  [Row fetching](#row-fetching)) — and `priority: 'high' | 'normal'`
-  picks the worker queue.
+  [Row fetching](#row-fetching)) — and
+  `priority: 'high' | 'normal' | 'low'` picks the worker queue.
 - **Serial priority queue.** The worker runs one query at a time,
-  drained from an explicit two-priority FIFO — `'high'` for viewport row
-  fetches, `'normal'` for everything else
-  ([`src/worker/dispatcher.ts:46-72`](../../src/worker/dispatcher.ts)).
+  drained from three explicit FIFOs in strict order — `'high'` for
+  viewport row fetches, `'normal'` for everything interactive, `'low'`
+  for header charts and column-stats scans
+  ([`src/worker/dispatcher.ts`](../../src/worker/dispatcher.ts)).
   Serialization costs nothing real — SQL already executes serially
   inside DuckDB-WASM's single-threaded worker — and buys truthful
   cancel targeting, free cancellation of still-queued work, and
-  priority.
+  priority. Starvation is accepted at both ends of the range for the
+  same reason: `'high'` is bounded by scroll activity and `'low'` by the
+  visible column set, so neither can monopolize the queue.
 - **Abort support.** Every async method takes an optional
   `AbortSignal`; aborts reject the pending Promise locally and send a
   `cancel` message to the worker. `cancel` bypasses the queue: a queued
@@ -169,13 +173,30 @@ When a filter changes:
 2. `CrossfilterCoordinator` is subscribed; it receives the new filter list
 3. The coordinator recomputes `filteredRowCount` by querying DuckDB with
    the updated WHERE clause
-4. Each visualization receives the updated filter set via its
-   `updateFilters(filters)` method and re-renders itself
+4. The fan-out goes through `VizDataController`, which refreshes only the
+   visualizations that currently exist — the columns in view — via their
+   `updateFilters(filters)` method, and marks every other column stale
+   without issuing a query
 5. The `filterChange` event fires on the event bus
 
 The coordinator batches rapid-fire filter changes (histogram brushes can
 fire continuously during a drag) so the expensive count query runs only
 on settle.
+
+**`VizDataController`** is the per-column state machine that makes step 4
+sparse. It owns one `IntersectionObserver` rooted at the header's
+horizontal scroll container, and keeps each column in one of four states
+(`empty` / `fetching` / `fresh` / `stale`) with the filter epoch its data
+was fetched under. A column's chart instance is created when its header
+enters the create band and destroyed when it leaves the wider keep band;
+its _data_ is snapshotted across that boundary, so a header rebuild —
+which `TableContainer.render()` performs wholesale on every hide, show,
+pin, or reorder — costs no queries. Fetches are stamped with the epoch,
+so a result that lands after a newer filter has been applied is discarded
+rather than rendered. `CrossfilterCoordinator` and
+`StatsPanelCoordinator` both take the scheduler as an _optional_ hook: a
+coordinator composed standalone from `/advanced` fans out to every
+registration exactly as before.
 
 Visualizations can _own_ a filter: `Histogram`'s brush selection is a
 `range` filter on its column. When the user drags the brush, the viz
@@ -592,7 +613,7 @@ User drags a histogram brush:
 3. Coordinator calls `state.filters.set(updatedList)`
 4. Subscribers fire:
    - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause → sets `filteredRows`
-   - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE → re-renders
+   - `VizDataController` → `updateFilters(newFilters)` on every **live** visualization (the columns in view) → re-runs its fetch query at `'low'` priority with the new WHERE → re-renders; offscreen columns are marked stale and refetch when scrolled back in
    - `AutoSave` → debounce → save snapshot to IDB
    - `filterChange` event → notifies the facade → runs host-app handlers
    - `UndoManager` (via `captureForUndo()` _before_ the set) → records undoable snapshot

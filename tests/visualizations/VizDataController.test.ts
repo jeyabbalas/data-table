@@ -244,7 +244,7 @@ function makeHarness(
   opts: { useIO?: boolean; concurrency?: number } = {},
 ): Harness {
   const useIO = opts.useIO !== false;
-  let root = mountHeaders(names);
+  const root = mountHeaders(names);
   const filters: Filter[] = [];
   const errors: Array<{ error: unknown; column: string }> = [];
   const waves: Array<{ count: number; generation: number }> = [];

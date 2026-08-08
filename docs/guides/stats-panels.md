@@ -84,14 +84,14 @@ registration, so the library renders its built-in formatter for them.
 The library guarantees the following call ordering on every panel instance.
 Subclasses can rely on every step happening exactly as described.
 
-| Stage          | Method                                    | Notes                                                                                                                                                                                                 |
-| -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mount          | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Build any persistent DOM here so later updates are simple `textContent` writes.                                             |
-| Initial paint  | `update(null)`                            | Fires once on mount before any visualization stats have landed. Render a "loading" or empty state.                                                                                                    |
-| Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload). Columns without a visualization receive `update(null)` only.                      |
-| Filter change  | `updateFilters(filters)`                  | Fires on every filter-array change, **before** any subsequent `update(stats)` from a viz refetch. The default implementation only refreshes `this.options.filters`; override to issue your own query. |
-| Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.      |
-| Teardown       | `destroy()`                               | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                          |
+| Stage          | Method                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mount          | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Build any persistent DOM here so later updates are simple `textContent` writes.                                                                                                                                                                                                                                                                                                      |
+| Initial paint  | `update(null)`                            | Fires once on mount before any visualization stats have landed. Render a "loading" or empty state.                                                                                                                                                                                                                                                                                                                                                             |
+| Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload). Columns without a visualization receive `update(null)` only.                                                                                                                                                                                                                                                                               |
+| Filter change  | `updateFilters(filters)`                  | Fires on a filter-array change, **before** any subsequent `update(stats)` from a viz refetch. With visualizations enabled the fan-out is visibility-gated: panels whose header is on screen are called immediately, offscreen panels are deferred until their column scrolls back in (see [Offscreen panels](#offscreen-panels-are-deferred-not-skipped)). The default implementation only refreshes `this.options.filters`; override to issue your own query. |
+| Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.                                                                                                                                                                                                                                                               |
+| Teardown       | `destroy()`                               | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                                                                                                                                                                                                                                                                                   |
 
 Lifecycle quoted from `BaseStatsPanel`'s JSDoc
 ([`src/visualizations/BaseStatsPanel.ts:108-127`](../../src/visualizations/BaseStatsPanel.ts)).
@@ -161,7 +161,7 @@ arrive via `updateFilters(filters)` (the default implementation reassigns
 The whole point of `BaseStatsPanel` is that you can compute stats DuckDB's
 default doesn't carry — mean, standard deviation, percentiles, top-value
 percentages, custom domain-specific aggregates — and have them re-query
-on every filter change.
+when the filters change.
 
 Build the `WHERE` clause with [`filtersToWhereClause`](../api-reference.md#sql-authoring-helpers)
 (re-exported at the root) and quote identifiers with
@@ -350,11 +350,37 @@ the library renders its built-in formatter.
 ### Panel on a no-visualization column
 
 `uuid`, `interval`, and other types without a registered visualization
-still get filter-broadcast callbacks. The coordinator broadcasts to
-**every** registered panel regardless of whether its column has a
-visualization, so a panel can compute its own stats independently — for
-example, a `uuid` panel that runs `SELECT COUNT(DISTINCT col)` on every
-filter change.
+still get filter-broadcast callbacks. The coordinator broadcasts to every
+registered panel regardless of whether its column has a visualization, so
+a panel can compute its own stats independently — for example, a `uuid`
+panel that runs `SELECT COUNT(DISTINCT col)` when the filters change.
+
+### Offscreen panels are deferred, not skipped
+
+A panel instance is created for every applicable column, as before — panel
+creation is not lazy. What is gated is the **filter broadcast**: with
+visualizations enabled, a filter change calls `updateFilters` only on the
+panels whose column header is currently on screen. The rest are marked and
+called when their column scrolls into view, with the filter set current at
+that moment. This is what keeps a filter change on a 1,000-column table from
+firing 1,000 panel queries at once.
+
+Two consequences for a panel author:
+
+- **Don't assume `updateFilters` fires once per filter change.** It fires
+  once per filter change _your column is visible for_, plus once on
+  scroll-in if it was not. Make the handler idempotent for a given filter
+  set — a cheap signature comparison against the last-queried filters is
+  enough, and it is worth having anyway.
+- **A deferred panel keeps showing its previous value** until it is called.
+  That value is offscreen while it is stale, so it is never seen wrong, but
+  if you paint something time-sensitive, render from the filters passed to
+  `updateFilters` rather than from a captured closure.
+
+When you compose `StatsPanelCoordinator` yourself from `/advanced` there is
+no scheduler, and every registered panel is called on every change exactly as
+before. (`visualizations: false` doesn't arise here: it disables the
+per-column attach pass, so no stats panels are created either.)
 
 ### Sharing state across panels
 

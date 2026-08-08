@@ -6,7 +6,7 @@
 
 # Interface: SerializedRangeFilter
 
-Defined in: [persistence/types.ts:31](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L31)
+Defined in: [persistence/types.ts:31](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L31)
 
 JSON-safe form of [RangeFilter](RangeFilter.md): any `Date` operand becomes a [DateWrapper](DateWrapper.md).
 
@@ -16,7 +16,7 @@ JSON-safe form of [RangeFilter](RangeFilter.md): any `Date` operand becomes a [D
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L33)
+Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L33)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/b
 
 > **max**: `string` \| `number` \| [`DateWrapper`](DateWrapper.md)
 
-Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L35)
+Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L35)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **maxInclusive?**: `boolean`
 
-Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L36)
+Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L36)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/b
 
 > **min**: `string` \| `number` \| [`DateWrapper`](DateWrapper.md)
 
-Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L34)
+Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L34)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **minExclusive?**: `boolean`
 
-Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L37)
+Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L37)
 
 ***
 
@@ -56,4 +56,4 @@ Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"range"`
 
-Defined in: [persistence/types.ts:32](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/types.ts#L32)
+Defined in: [persistence/types.ts:32](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/types.ts#L32)

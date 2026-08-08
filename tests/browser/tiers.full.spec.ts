@@ -12,20 +12,20 @@
  * (`tests/performance/benchmarks.duckdb.test.ts:10-12`).
  *
  * What it is for: these are the sizes the scaling plan exists to fix, and
- * this file is where a later phase proves it did. Today the assertions are
- * the machine-independent ones — COUNT/DESCRIBE, converted types, both
- * oracles clean, deepest rendered row index — while the expensive numbers
- * (queries, DOM nodes, observers, subscribers, frame pacing) are *logged*
- * rather than capped. Phase 0 does not know yet which of them are
- * pathological and which are inherent; `perf-baseline.spec.ts` records
- * them, and the phase that improves one adds its cap to
- * `tests/budgets.ts` in the same commit.
+ * this file is where a later phase proves it did. Most numbers here are
+ * still *logged* rather than capped — Phase 0 did not know which were
+ * pathological and which inherent, `perf-baseline.spec.ts` records them, and
+ * the phase that improves one adds its cap to `tests/budgets.ts` in the same
+ * commit. Phase 2 did that for the visualization costs, so the `viz=on` test
+ * below now asserts against `DT_BUDGET.VIZ` instead of only reporting.
  *
  * Two deliberate departures from the phase doc's `test.setTimeout(600_000)`,
  * both under its own §4.8 "budget generous timeouts":
  *
- *  - **WIDE with `viz=on`** is pathological by construction — ~1,000 column
- *    charts, each at least one query, through a serial dispatcher.
+ *  - **WIDE with `viz=on`** was pathological by construction — ~1,000 column
+ *    charts, each at least one query, through a serial dispatcher. Phase 2
+ *    made it lazy; the timeout stays because the tier still generates and
+ *    exports 6 × 10⁷ cells before the mount begins.
  *  - **TARGET** streams 5 × 10⁹ cells into parquet; measured at 1,000 ×
  *    20,000 it extrapolates to ~10 minutes for the `COPY` alone.
  *
@@ -47,6 +47,7 @@ import {
 
 import {
   bridgeStats,
+  canvasCount,
   domNodeCount,
   frameSampler,
   installObserverCensus,
@@ -62,6 +63,7 @@ import {
   readColViolations,
   sweepHorizontal,
   waitForTierSettled,
+  waitForVizReady,
   wideMountOptions,
   TIER_HOST_ID,
   WIDE_IS_TRUNCATED,
@@ -98,7 +100,6 @@ interface TierShape {
   schema: Array<[string, string, string]>;
   totalRows: number;
   visibleColumns: number;
-  canvases: number;
 }
 
 /** Everything one heavy mount produced, assertions and log lines alike. */
@@ -108,6 +109,8 @@ interface TierRun {
   genMs: number;
   loadMs: number;
   shape: TierShape;
+  /** `.dt-root canvas` count once the initial visualization wave has settled. */
+  canvases: number;
   /** Bridge counters right after mount, before any probing added queries. */
   mountStats: BridgeStatsSnapshot | null;
   finalStats: BridgeStatsSnapshot | null;
@@ -142,7 +145,6 @@ async function readShape(page: Page): Promise<TierShape> {
       schema: (table.state.schema.get() as any[]).map((s) => [s.name, s.type, s.originalType]),
       totalRows: table.state.totalRows.get() as number,
       visibleColumns: (table.state.visibleColumns.get() as string[]).length,
-      canvases: document.querySelectorAll('.dt-root canvas').length,
     };
   });
 }
@@ -188,12 +190,18 @@ async function exerciseTier(page: Page, opts: MountTierOptions): Promise<TierRun
   await installObserverCensus(page);
 
   const mounted = await mountTierTable(page, opts);
+  // The load promise resolves at first interactive paint from Phase 2 on, so
+  // the chart wave is still running when `mountTierTable` returns. Every
+  // number below — canvases, observers, and above all `mountStats` — would
+  // otherwise be a snapshot of the middle of it.
+  await waitForVizReady(page);
   await waitForTierSettled(page);
 
   // Read the counters before `readShape` spends two queries of its own, so
   // `mountStats.sent.query` is the cost of mounting and nothing else.
   const mountStats = await bridgeStats(page);
   const nodes = await domNodeCount(page);
+  const canvases = await canvasCount(page);
   const observers = await readObserverCensus(page);
   const subscribers = await readSubscriberCounts(page);
   const shape = await readShape(page);
@@ -214,6 +222,7 @@ async function exerciseTier(page: Page, opts: MountTierOptions): Promise<TierRun
     genMs: mounted.genMs,
     loadMs: mounted.loadMs,
     shape,
+    canvases,
     mountStats,
     finalStats,
     nodes,
@@ -245,7 +254,7 @@ function report(label: string, run: TierRun): void {
         cacheHits: run.finalStats?.cacheHits ?? null,
         maxInFlight: run.finalStats?.maxInFlight ?? null,
         domNodes: run.nodes,
-        canvases: run.shape.canvases,
+        canvases: run.canvases,
         liveResizeObservers: run.observers.resize,
         liveMutationObservers: run.observers.mutation,
         sortColumnSubscribers: run.subscribers['sortColumns'] ?? null,
@@ -336,7 +345,7 @@ test('WIDE — 1,000 columns, visualizations off', async ({ page }) => {
 
   // Visualizations off means no canvases, whatever the column count — the
   // control for the `viz=on` test below.
-  expect(run.shape.canvases).toBe(0);
+  expect(run.canvases).toBe(0);
 
   // Phase 1's load-path budget. Gated with the rest of this file, so a
   // wall-clock assertion is legitimate here in a way it never is in CI —
@@ -348,9 +357,9 @@ test('WIDE — 1,000 columns, visualizations off', async ({ page }) => {
 });
 
 test('WIDE — 1,000 columns, visualizations on', async ({ page }) => {
-  // ~1,000 column charts, each at least one aggregate query, through a
-  // serial dispatcher. This is the pathology Phase 2 exists to fix; the
-  // timeout is sized to let it finish so there is a number to fix *from*.
+  // Generous rather than necessary since Phase 2 — the mount now costs
+  // roughly what `viz=off` costs — but the tier still generates and exports
+  // 6 × 10⁷ cells before any of that starts.
   test.setTimeout(1_800_000);
   const consoleErrors = watchConsole(page);
   announceWideTruncation();
@@ -359,26 +368,51 @@ test('WIDE — 1,000 columns, visualizations on', async ({ page }) => {
   report('wide viz=on', run);
   expectTierIntact(run);
 
-  // What visualizations cost at 1,000 columns is the number Phase 2 has to
-  // beat, so it is *recorded*, not capped: an assertion here would be a
-  // threshold with no measurement behind it, which is exactly what
-  // `tests/budgets.ts` forbids. The only claim made is that charts were
-  // actually built and actually queried.
-  expect(run.shape.canvases, 'canvases at 1,000 columns').toBeGreaterThan(0);
+  // Phase 0 recorded this rather than capping it, because nothing yet knew
+  // which part of the cost was pathological. Phase 2 answered that, and the
+  // caps live in `DT_BUDGET.VIZ` with their measurements. `viz-lazy.spec.ts`
+  // makes the detailed claims; what is asserted here is the headline — at
+  // 1,000 columns the charts cost the viewport, not the column count.
+  expect(run.canvases, 'canvases at 1,000 columns').toBeGreaterThan(0);
+  expect(run.canvases, 'canvases at 1,000 columns').toBeLessThanOrEqual(
+    DT_BUDGET.VIZ.CANVAS_COUNT_MAX,
+  );
+  expect(run.mountStats!.sent.query, 'queries to first chart wave').toBeLessThanOrEqual(
+    DT_BUDGET.VIZ.QUERIES_AT_LOAD_MAX,
+  );
+  expect(run.observers.mutation, 'live MutationObservers').toBeLessThanOrEqual(
+    DT_BUDGET.VIZ.MUTATION_OBSERVERS_MAX,
+  );
+  expect(run.observers.intersection, 'live IntersectionObservers').toBeLessThanOrEqual(
+    DT_BUDGET.VIZ.INTERSECTION_OBSERVERS_MAX,
+  );
   console.log(
     `[tiers.full] wide viz=on cost ${run.mountStats!.sent.query} mount queries and ` +
-      `${run.shape.canvases} canvases for ${TIERS.wide.cols} columns ` +
-      `(${(run.mountStats!.sent.query / TIERS.wide.cols).toFixed(2)} queries/column)`,
+      `${run.canvases} canvases for ${TIERS.wide.cols} columns ` +
+      `(${(run.mountStats!.sent.query / TIERS.wide.cols).toFixed(3)} queries/column)`,
   );
 
   // The viz stage has to have actually run for that number to mean
-  // anything — `dt:load:viz` is the library's own evidence that it did.
-  const vizMeasureMs = await page.evaluate(() => {
-    const entries = performance.getEntriesByName('dt:load:viz', 'measure');
-    return entries.length > 0 ? entries[entries.length - 1]!.duration : null;
+  // anything — `dt:load:viz` is the library's own evidence that it did, and
+  // that it lands *after* `dt:load:total` is the load-gate change itself.
+  const measured = await page.evaluate(() => {
+    const read = (name: string): number | null => {
+      const entries = performance.getEntriesByName(`dt:load:${name}`, 'measure');
+      return entries.length > 0 ? entries[entries.length - 1]!.duration : null;
+    };
+    return { viz: read('viz'), total: read('total') };
   });
-  console.log(`[tiers.full] wide viz=on dt:load:viz = ${vizMeasureMs} ms`);
-  expect(vizMeasureMs).not.toBeNull();
+  console.log(`[tiers.full] wide viz=on ${JSON.stringify(measured)}`);
+  expect(measured.viz).not.toBeNull();
+  expect(measured.total).not.toBeNull();
+  expect(measured.viz!, 'charts settle after the load promise resolves').toBeGreaterThan(
+    measured.total!,
+  );
+
+  // Turning charts on no longer changes what a load costs.
+  expect(run.loadMs, '1,000-column load with charts on').toBeLessThan(
+    DT_BUDGET.VIZ.LOAD_MS_WIDE_MAX,
+  );
 
   expect(consoleErrors).toEqual([]);
 });

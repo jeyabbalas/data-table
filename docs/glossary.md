@@ -130,11 +130,14 @@ See: [State model](./concepts/state-model.md) · [Architecture](./concepts/archi
 ### Crossfilter
 
 The coordination pattern in which a click on one visualization installs a
-filter that every _other_ visualization immediately respects. The library
-implements this via a `CrossfilterCoordinator` (on `/advanced`) that drives
-`fetchData()` across registered visualizations whenever the active filter set
-changes.
-See: [Visualizations](./guides/visualizations.md) · [Architecture](./concepts/architecture.md) · Source: `src/visualizations/CrossfilterCoordinator.ts`
+filter that every _other_ visualization respects. The library implements this
+via a `CrossfilterCoordinator` (on `/advanced`) that drives `fetchData()`
+whenever the active filter set changes. Inside a `DataTable` the fan-out is
+sparse: the visualizations currently on screen refetch immediately, and
+offscreen columns are marked stale and refetch when scrolled back into view.
+A coordinator composed standalone from `/advanced` fans out to every
+registration, as before.
+See: [Visualizations](./guides/visualizations.md) · [Architecture](./concepts/architecture.md) · Source: `src/visualizations/CrossfilterCoordinator.ts`, `src/visualizations/VizDataController.ts`
 
 ### DataTableError
 
@@ -500,8 +503,12 @@ A per-column summary widget — histogram, date histogram, value-counts bar,
 time histogram — rendered in the column header. Implements `BaseVisualization`
 (on `/advanced`); participates in [Crossfilter](#crossfilter) via
 `fetchData()`. Custom visualizations are registered through
-[VisualizationRegistry](#visualizationregistry).
-See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations/BaseVisualization.ts`
+[VisualizationRegistry](#visualizationregistry). Created **lazily**: an
+instance exists only while its column header is at or near the viewport, its
+data survives across destroy/recreate as a snapshot, and the `vizReady` event
+(or `table.whenVizReady()`) reports when the wave visible at load has
+finished fetching.
+See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VizDataController.ts`
 
 ### VisualizationRegistry
 

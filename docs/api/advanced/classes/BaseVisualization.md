@@ -6,7 +6,7 @@
 
 # Abstract Class: BaseVisualization
 
-Defined in: [visualizations/BaseVisualization.ts:147](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L147)
+Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L185)
 
 Abstract base class for column visualizations.
 
@@ -34,7 +34,7 @@ class Histogram extends BaseVisualization {
 
 > **new BaseVisualization**(`container`, `column`, `options`): `BaseVisualization`
 
-Defined in: [visualizations/BaseVisualization.ts:182](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L182)
+Defined in: [visualizations/BaseVisualization.ts:221](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L221)
 
 #### Parameters
 
@@ -60,7 +60,7 @@ Defined in: [visualizations/BaseVisualization.ts:182](https://github.com/jeyabba
 
 > `protected` **canvas**: `HTMLCanvasElement`
 
-Defined in: [visualizations/BaseVisualization.ts:148](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L148)
+Defined in: [visualizations/BaseVisualization.ts:186](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L186)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [visualizations/BaseVisualization.ts:148](https://github.com/jeyabba
 
 > `protected` **column**: [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:184](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L184)
+Defined in: [visualizations/BaseVisualization.ts:223](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L223)
 
 ***
 
@@ -76,7 +76,7 @@ Defined in: [visualizations/BaseVisualization.ts:184](https://github.com/jeyabba
 
 > `protected` **container**: `HTMLElement`
 
-Defined in: [visualizations/BaseVisualization.ts:183](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L183)
+Defined in: [visualizations/BaseVisualization.ts:222](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L222)
 
 ***
 
@@ -84,7 +84,7 @@ Defined in: [visualizations/BaseVisualization.ts:183](https://github.com/jeyabba
 
 > `protected` **ctx**: `CanvasRenderingContext2D`
 
-Defined in: [visualizations/BaseVisualization.ts:149](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L149)
+Defined in: [visualizations/BaseVisualization.ts:187](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L187)
 
 ***
 
@@ -92,7 +92,7 @@ Defined in: [visualizations/BaseVisualization.ts:149](https://github.com/jeyabba
 
 > `protected` **dataPromise**: `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:167](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L167)
+Defined in: [visualizations/BaseVisualization.ts:205](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L205)
 
 ***
 
@@ -100,7 +100,7 @@ Defined in: [visualizations/BaseVisualization.ts:167](https://github.com/jeyabba
 
 > `protected` **destroyed**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:153](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L153)
+Defined in: [visualizations/BaseVisualization.ts:191](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L191)
 
 ***
 
@@ -108,7 +108,7 @@ Defined in: [visualizations/BaseVisualization.ts:153](https://github.com/jeyabba
 
 > `protected` **dpr**: `number`
 
-Defined in: [visualizations/BaseVisualization.ts:152](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L152)
+Defined in: [visualizations/BaseVisualization.ts:190](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L190)
 
 ***
 
@@ -116,7 +116,7 @@ Defined in: [visualizations/BaseVisualization.ts:152](https://github.com/jeyabba
 
 > `protected` **height**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:151](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L151)
+Defined in: [visualizations/BaseVisualization.ts:189](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L189)
 
 ***
 
@@ -124,7 +124,7 @@ Defined in: [visualizations/BaseVisualization.ts:151](https://github.com/jeyabba
 
 > `protected` **isFilterUpdate**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:154](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L154)
+Defined in: [visualizations/BaseVisualization.ts:192](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L192)
 
 ***
 
@@ -132,7 +132,7 @@ Defined in: [visualizations/BaseVisualization.ts:154](https://github.com/jeyabba
 
 > `protected` **options**: [`VisualizationOptions`](../interfaces/VisualizationOptions.md)
 
-Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L185)
+Defined in: [visualizations/BaseVisualization.ts:224](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L224)
 
 ***
 
@@ -140,7 +140,7 @@ Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabba
 
 > `protected` **width**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L150)
+Defined in: [visualizations/BaseVisualization.ts:188](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L188)
 
 ## Accessors
 
@@ -150,7 +150,7 @@ Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabba
 
 > **get** `protected` **statsMessages**(): `object`
 
-Defined in: [visualizations/BaseVisualization.ts:170](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L170)
+Defined in: [visualizations/BaseVisualization.ts:208](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L208)
 
 Resolved i18n statistics strings; English defaults when no `messages` supplied.
 
@@ -189,6 +189,45 @@ Display value for the all-unique segment (count = distinct values).
 ###### value
 
 `string`
+
+###### Returns
+
+`string`
+
+###### approxUniqueCount
+
+> **approxUniqueCount**: (`count`) => `string`
+
+Distinct count from `approx_count_distinct` — used instead of
+`uniqueCount` above 100,000 rows. Keep a marker for "approximate" in
+the translation.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
+###### approxUniquePercent
+
+> **approxUniquePercent**: (`count`, `pct`) => `string`
+
+Approximate distinct count with its share of non-null rows — the
+approximate twin of `uniquePercent`.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### pct
+
+`number`
 
 ###### Returns
 
@@ -446,7 +485,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 > `protected` **clear**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:424](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L424)
+Defined in: [visualizations/BaseVisualization.ts:484](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L484)
 
 Clear the entire canvas
 
@@ -460,7 +499,7 @@ Clear the entire canvas
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:505](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L505)
+Defined in: [visualizations/BaseVisualization.ts:642](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L642)
 
 Destroy the visualization and clean up all resources.
 Must be called when the visualization is no longer needed.
@@ -475,7 +514,7 @@ Must be called when the visualization is no longer needed.
 
 > **dispatchWindowKeyDown**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:412](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L412)
+Defined in: [visualizations/BaseVisualization.ts:472](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L472)
 
 Called by WindowListenerManager to dispatch window keydown events.
 
@@ -495,7 +534,7 @@ Called by WindowListenerManager to dispatch window keydown events.
 
 > **dispatchWindowMouseUp**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:401](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L401)
+Defined in: [visualizations/BaseVisualization.ts:461](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L461)
 
 Called by WindowListenerManager to dispatch window mouseup events.
 Translates coordinates relative to this instance's canvas.
@@ -512,11 +551,45 @@ Translates coordinates relative to this instance's canvas.
 
 ***
 
+### exportDataSnapshot()
+
+> **exportDataSnapshot**(): `unknown`
+
+Defined in: [visualizations/BaseVisualization.ts:544](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L544)
+
+Capture this visualization's fetched data so it can outlive the
+instance. Returned values are treated as opaque by the caller and are
+only ever handed back to [importDataSnapshot](#importdatasnapshot) on a **new instance
+of the same class, for the same column**.
+
+The default returns `null` — "I have nothing worth keeping", which makes
+a re-created instance fetch as before. All five built-ins override it.
+
+Column header DOM is rebuilt wholesale on every hide / show / pin /
+reorder, so a visualization instance cannot survive one. This pair is
+what lets its *data* survive instead.
+
+#### Returns
+
+`unknown`
+
+#### Example
+
+```ts
+const snapshot = viz.exportDataSnapshot();
+viz.destroy();
+// …header rebuilt…
+const next = new Histogram(freshContainer, column, { ...options, initialSnapshot: snapshot });
+// `next` renders immediately and issues no query.
+```
+
+***
+
 ### fetchData()
 
 > `abstract` **fetchData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:259](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L259)
+Defined in: [visualizations/BaseVisualization.ts:319](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L319)
 
 Fetch data needed for this visualization from DuckDB.
 Called when the visualization is created and when filters change.
@@ -531,7 +604,7 @@ Called when the visualization is created and when filters change.
 
 > `protected` **formatNumber**(`value`): `string`
 
-Defined in: [visualizations/BaseVisualization.ts:431](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L431)
+Defined in: [visualizations/BaseVisualization.ts:491](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L491)
 
 Format a number with locale-specific formatting
 
@@ -551,7 +624,7 @@ Format a number with locale-specific formatting
 
 > **getColumn**(): [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:438](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L438)
+Defined in: [visualizations/BaseVisualization.ts:498](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L498)
 
 Get the column this visualization represents
 
@@ -565,7 +638,7 @@ Get the column this visualization represents
 
 > `abstract` `protected` **handleClick**(`x`, `y`, `event?`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:280](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L280)
+Defined in: [visualizations/BaseVisualization.ts:340](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L340)
 
 Handle click on the visualization.
 
@@ -599,7 +672,7 @@ Optional MouseEvent for detecting modifier keys
 
 > `abstract` `protected` **handleKeyDown**(`key`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:309](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L309)
+Defined in: [visualizations/BaseVisualization.ts:369](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L369)
 
 Handle keyboard events for the visualization.
 Used for canceling brush with Escape, etc.
@@ -622,7 +695,7 @@ The key that was pressed
 
 > `abstract` `protected` **handleMouseDown**(`x`, `y`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:294](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L294)
+Defined in: [visualizations/BaseVisualization.ts:354](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L354)
 
 Handle mouse down on the visualization.
 Used for brush/drag interactions.
@@ -651,7 +724,7 @@ Y coordinate relative to canvas
 
 > `abstract` `protected` **handleMouseLeave**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:286](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L286)
+Defined in: [visualizations/BaseVisualization.ts:346](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L346)
 
 Handle mouse leaving the visualization.
 Used to clear hover states.
@@ -666,7 +739,7 @@ Used to clear hover states.
 
 > `abstract` `protected` **handleMouseMove**(`x`, `y`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:272](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L272)
+Defined in: [visualizations/BaseVisualization.ts:332](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L332)
 
 Handle mouse movement over the visualization.
 
@@ -694,7 +767,7 @@ Y coordinate relative to canvas (0 to height)
 
 > `abstract` `protected` **handleMouseUp**(`x`, `y`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:302](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L302)
+Defined in: [visualizations/BaseVisualization.ts:362](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L362)
 
 Handle mouse up on the visualization.
 Used for completing brush/drag interactions.
@@ -719,11 +792,79 @@ Y coordinate relative to canvas
 
 ***
 
+### hydrateOrFetch()
+
+> `protected` **hydrateOrFetch**(): `Promise`\<`void`\>
+
+Defined in: [visualizations/BaseVisualization.ts:591](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L591)
+
+The eager-first-load idiom, factored so every built-in shares it: hydrate
+from `options.initialSnapshot` when one was supplied and accepted,
+otherwise fetch.
+
+Subclasses call this from **their own** constructor body
+(`this.dataPromise = this.hydrateOrFetch()`), never from an intermediate
+base's — a base-class constructor runs before the subclass's field
+initializers, so anything it wrote into a subclass field would be
+overwritten by `= null` a moment later.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+***
+
+### importDataSnapshot()
+
+> **importDataSnapshot**(`snapshot`): `boolean`
+
+Defined in: [visualizations/BaseVisualization.ts:575](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L575)
+
+Adopt a snapshot produced by [exportDataSnapshot](#exportdatasnapshot) and reflect it —
+an implementation is expected to leave the instance fully rendered, as
+though its fetch had just landed.
+
+#### Parameters
+
+##### snapshot
+
+`unknown`
+
+opaque value previously returned by
+  [exportDataSnapshot](#exportdatasnapshot) on an instance of the same class.
+
+#### Returns
+
+`boolean`
+
+`true` when the snapshot was recognized and adopted. `false`
+  (the default) means "not supported / not usable", and the caller
+  falls back to a normal fetch — so an unrecognized or corrupt snapshot
+  degrades to today's behavior rather than to an empty chart.
+
+#### Example
+
+```ts
+class SparkLine extends BaseVisualization {
+  private points: number[] = [];
+  override exportDataSnapshot() { return this.points.length ? { points: this.points } : null; }
+  override importDataSnapshot(s: unknown) {
+    const snap = s as { points?: number[] } | null;
+    if (!snap?.points) return false;
+    this.points = snap.points;
+    this.render();
+    return true;
+  }
+}
+```
+
+***
+
 ### isDestroyed()
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [visualizations/BaseVisualization.ts:445](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L445)
+Defined in: [visualizations/BaseVisualization.ts:505](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L505)
 
 Check if the visualization has been destroyed
 
@@ -737,7 +878,7 @@ Check if the visualization has been destroyed
 
 > `abstract` **render**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:265](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L265)
+Defined in: [visualizations/BaseVisualization.ts:325](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L325)
 
 Render the visualization on the canvas.
 Called after data fetch and on resize.
@@ -752,7 +893,7 @@ Called after data fetch and on resize.
 
 > **updateFilters**(`filters`): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:467](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L467)
+Defined in: [visualizations/BaseVisualization.ts:604](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L604)
 
 Update filters on a live visualization and re-fetch data.
 Used by CrossfilterCoordinator to push new filter arrays
@@ -774,7 +915,7 @@ without recreating the visualization.
 
 > `protected` **updateSize**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:319](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L319)
+Defined in: [visualizations/BaseVisualization.ts:379](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L379)
 
 Update canvas dimensions to match container.
 Accounts for device pixel ratio for crisp rendering.
@@ -789,7 +930,7 @@ Accounts for device pixel ratio for crisp rendering.
 
 > **waitForData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:458](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L458)
+Defined in: [visualizations/BaseVisualization.ts:518](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L518)
 
 Resolves once the visualization's initial `fetchData()` settles. The
 facade awaits this during `loadData` so a consumer chaining `addFilter`

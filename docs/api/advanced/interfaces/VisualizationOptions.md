@@ -6,7 +6,7 @@
 
 # Interface: VisualizationOptions
 
-Defined in: [visualizations/BaseVisualization.ts:96](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L96)
+Defined in: [visualizations/BaseVisualization.ts:97](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L97)
 
 Options for creating a visualization
 
@@ -16,7 +16,7 @@ Options for creating a visualization
 
 > **bridge**: [`WorkerBridge`](../../index/classes/WorkerBridge.md)
 
-Defined in: [visualizations/BaseVisualization.ts:100](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L100)
+Defined in: [visualizations/BaseVisualization.ts:101](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L101)
 
 Bridge for executing queries
 
@@ -26,9 +26,28 @@ Bridge for executing queries
 
 > **filters**: [`Filter`](../../index/type-aliases/Filter.md)[]
 
-Defined in: [visualizations/BaseVisualization.ts:102](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L102)
+Defined in: [visualizations/BaseVisualization.ts:103](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L103)
 
 Current active filters
+
+***
+
+### initialSnapshot?
+
+> `optional` **initialSnapshot?**: `unknown`
+
+Defined in: [visualizations/BaseVisualization.ts:150](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L150)
+
+Data captured from a previous instance of the same column via
+[BaseVisualization.exportDataSnapshot](../classes/BaseVisualization.md#exportdatasnapshot). When present, the built-in
+visualizations hydrate from it in their constructor instead of issuing
+their initial fetch — that is what makes a column hide/show/reorder cost
+**zero** DuckDB queries even though the header DOM (and therefore the
+instance) is rebuilt.
+
+Ignored by any subclass that does not implement
+[BaseVisualization.importDataSnapshot](../classes/BaseVisualization.md#importdatasnapshot); such a subclass simply
+fetches as before.
 
 ***
 
@@ -36,7 +55,7 @@ Current active filters
 
 > `optional` **maxBins?**: `number`
 
-Defined in: [visualizations/BaseVisualization.ts:112](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L112)
+Defined in: [visualizations/BaseVisualization.ts:113](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L113)
 
 Maximum number of histogram bins (default: 15)
 
@@ -46,7 +65,7 @@ Maximum number of histogram bins (default: 15)
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [visualizations/BaseVisualization.ts:110](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L110)
+Defined in: [visualizations/BaseVisualization.ts:111](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L111)
 
 Resolved i18n strings for viz-emitted stats text. Defaults to English.
 
@@ -56,7 +75,7 @@ Resolved i18n strings for viz-emitted stats text. Defaults to English.
 
 > `optional` **onBrushClear?**: (`columnName`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:116](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L116)
+Defined in: [visualizations/BaseVisualization.ts:154](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L154)
 
 Callback when brush is cleared (column name passed)
 
@@ -76,7 +95,7 @@ Callback when brush is cleared (column name passed)
 
 > `optional` **onBrushCommit?**: (`columnName`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:114](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L114)
+Defined in: [visualizations/BaseVisualization.ts:152](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L152)
 
 Callback when brush is committed (column name passed)
 
@@ -96,7 +115,7 @@ Callback when brush is committed (column name passed)
 
 > `optional` **onDefaultStatsChange?**: (`stats`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:108](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L108)
+Defined in: [visualizations/BaseVisualization.ts:109](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L109)
 
 Callback providing computed column stats for default display (not hover)
 
@@ -116,7 +135,7 @@ Callback providing computed column stats for default display (not hover)
 
 > `optional` **onError?**: (`error`, `context`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:125](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L125)
+Defined in: [visualizations/BaseVisualization.ts:163](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L163)
 
 Callback invoked when the visualization fails to fetch, render, or
 update filters. Receives a typed [DataTableError](../../index/classes/DataTableError.md) and a context
@@ -149,7 +168,7 @@ describing which stage failed. The facade routes these to the
 
 > `optional` **onFilterChange?**: (`filter`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:104](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L104)
+Defined in: [visualizations/BaseVisualization.ts:105](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L105)
 
 Callback when visualization creates/removes a filter (null = remove)
 
@@ -169,7 +188,7 @@ Callback when visualization creates/removes a filter (null = remove)
 
 > `optional` **onSelectionChange?**: (`columnName`, `hasSelection`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:118](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L118)
+Defined in: [visualizations/BaseVisualization.ts:156](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L156)
 
 Callback when selection changes (column name and hasSelection passed)
 
@@ -193,7 +212,7 @@ Callback when selection changes (column name and hasSelection passed)
 
 > `optional` **onStatsChange?**: (`stats`) => `void`
 
-Defined in: [visualizations/BaseVisualization.ts:106](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L106)
+Defined in: [visualizations/BaseVisualization.ts:107](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L107)
 
 Callback to update stats line on hover (null restores default)
 
@@ -213,6 +232,42 @@ Callback to update stats line on hover (null restores default)
 
 > **tableName**: `string`
 
-Defined in: [visualizations/BaseVisualization.ts:98](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseVisualization.ts#L98)
+Defined in: [visualizations/BaseVisualization.ts:99](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L99)
 
 Name of the DuckDB table
+
+***
+
+### themeWatcher?
+
+> `optional` **themeWatcher?**: `ThemeWatcher`
+
+Defined in: [visualizations/BaseVisualization.ts:137](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L137)
+
+Shared per-table ThemeWatcher. When supplied, this instance
+registers with it instead of installing its own `MutationObserver` on
+`.dt-root` — one observer per table rather than one per column.
+
+Omit it (standalone `/advanced` composition) and the private observer is
+used exactly as before.
+
+***
+
+### useApproxDistinct?
+
+> `optional` **useApproxDistinct?**: `boolean`
+
+Defined in: [visualizations/BaseVisualization.ts:128](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseVisualization.ts#L128)
+
+Compute distinct counts with DuckDB's HyperLogLog
+`approx_count_distinct(col)` instead of an exact `COUNT(DISTINCT col)`.
+
+The facade sets this from `state.totalRows` via
+`shouldUseApproxDistinct` (`histogram/HistogramData.ts`) — above
+`APPROX_DISTINCT_ROW_THRESHOLD` rows the exact count is the single most
+expensive term in the per-column stats scan.
+
+Absent (the default) keeps the exact count. When set, the count is a
+genuine estimate, so the stats line renders the `~` marker and the
+"all unique" shortcut is suppressed — see
+`StatsFormatters.formatStatsLine2`.

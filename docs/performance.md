@@ -157,6 +157,81 @@ aborts the worker outright; the limit turns that into an ordinary
 out-of-memory rejection you can catch on `loadError`, with the previous
 table still queryable.
 
+**The load promise stops at first interactive paint.** `await loadData(…)`
+resolves when the grid is painted and the filter counts are correct. Column
+charts are not part of that gate — see
+[Column visualizations](#column-visualizations) below and the
+[`vizReady` event](./guides/events.md#event-catalog).
+
+### Column visualizations
+
+Charts cost two full-table scans per column: a stats query and a bins or
+top-categories query. That is cheap on a normal table and ruinous on a wide
+one, so charts are created **lazily** — a column's chart is built when its
+header scrolls within 200 px of the header viewport, and its canvas is
+reclaimed when the header passes 400 px away. Cost is proportional to the
+columns you look at, not to the columns the table has.
+
+Where that matters, measured on 1,000 columns × 60,000 rows (macOS,
+10 cores, Chromium), before and after lazy creation:
+
+| Metric                   | Visualizations off | On, before | On, now  |
+| ------------------------ | ------------------ | ---------- | -------- |
+| Queries at load          | 4                  | 2,004      | 20       |
+| Canvases                 | 0                  | 1,000      | 8        |
+| Live `ResizeObserver`s   | 1                  | ~1,001     | 9        |
+| Live `MutationObserver`s | 1                  | 1,001      | 2        |
+| `loadData` resolves      | 3,859 ms           | 18,884 ms  | 3,743 ms |
+| One sort                 | 402 ms             | 10,515 ms  | 450 ms   |
+| One filter               | 424 ms             | 8,275 ms   | 506 ms   |
+
+Turning charts on used to more than double the load, and made every
+subsequent sort and filter go on paying for 990 columns nobody was looking
+at. It now costs roughly nothing at load and a few tens of milliseconds per
+interaction.
+
+Two caveats on reading that table. The "off" column is from the same capture
+run as "now" but not the same run as "before" — the load path itself got
+about twice as fast in the release before this one, so compare "before" and
+"now" against each other for the visualization cost and against the "off"
+column of their own era for the absolute figures. And the counts are
+viewport-dependent: 8 canvases is what a 1,280 px window shows, so a wider
+monitor sees proportionally more, which is the entire point.
+
+Four things bound the cost now:
+
+- **Creation is visibility-gated.** Only visible-plus-overscan columns hold a
+  canvas, a `ResizeObserver`, and chart data.
+- **Chart data outlives the canvas.** Reclaiming a canvas snapshots the data,
+  and scrolling back rebuilds from the snapshot with no query. Hiding,
+  showing, pinning, or reordering a column rebuilds the whole header row and
+  costs no chart queries at all — where it previously re-queried every
+  column (534 queries for one keyboard column move at 266 columns).
+- **Fetches run at `'low'` worker priority**, at most four in flight, so they
+  can never delay a viewport row fetch.
+- **A filter change refetches only visible charts.** Offscreen columns are
+  marked stale and refetch on scroll-in. Budget roughly
+  `2 + 2 × visibleCharts` queries per filter change, not `2 × columns`.
+
+Two fixed-cost reductions ride along: one `data-dt-color-scheme`
+`MutationObserver` per table instead of one per chart, and a per-table
+palette cache that removes about fifteen `getComputedStyle` lookups from
+every chart repaint. Together they are why a theme flip on a wide table is
+no longer a visible stall.
+
+**Above 100,000 rows the distinct-value count in the stats line is a
+HyperLogLog estimate** (`approx_count_distinct`), rendered with a `~`
+marker, rather than an exact `COUNT(DISTINCT …)` full scan — the most
+expensive part of the stats query, removed for the tables where it hurt.
+Detail in the
+[visualizations guide](./guides/visualizations.md#distinct-counts-are-approximate-above-100000-rows).
+
+If you need every chart drawn before the load promise resolves —
+screenshots, PDF rendering, a table that is never scrolled — pass
+`visualizations: { eager: true }` and accept the old cost. If you need the
+grid interactive first and the visible charts soon after, which is the
+default, `await table.whenVizReady()` is the seam.
+
 ### Query cache
 
 `WorkerBridge` has an LRU query cache, default size 100 entries. Cached
@@ -164,8 +239,12 @@ queries return instantly. The cache is invalidated automatically on any
 mutation (filter / sort / derived column) that changes the result set.
 
 **Implication:** filter-change → visualization-refresh loops stay fast
-because repeated "unchanged" viz queries hit the cache. Tuning the cache
-size can help if you have many visualizations and a lot of histogramming.
+because the visible charts' repeated "unchanged" queries hit the cache.
+Tuning the cache size can help if you have many visualizations and a lot
+of histogramming — though the cache is now the second line of defence:
+charts that are offscreen do not re-query at all, and a chart rebuilt
+after a header rebuild is seeded from a snapshot rather than from the
+cache.
 
 Viewport row fetches deliberately bypass this cache (`cache: false` on
 `WorkerBridge.query` — see `QueryOptions`,
@@ -175,8 +254,15 @@ the fetch epoch; a second SQL-keyed copy would only add a second
 staleness domain. Keeping scroll SQL out of the LRU also means a fast
 scroll no longer evicts the header-stats and histogram entries the cache
 exists to serve. The same options object carries
-`priority: 'high' | 'normal'`: viewport fetches go out at `'high'` and
-jump queued stats/histogram work in the worker's serial dispatch queue.
+`priority: 'high' | 'normal' | 'low'`, and the worker's serial dispatch
+queue drains strictly in that order: viewport row fetches go out at
+`'high'`, interactive-but-not-scroll work (filter counts, exports, loads,
+ad-hoc queries) at the default `'normal'`, and header charts and
+column-stats scans at `'low'`. Scrolling therefore jumps every queued
+chart query, and a chart query never delays a row. Starvation of `'low'`
+is by design and safe only because low-tier work is bounded by the
+visible column set — issue `'low'` for what is on screen, not for the
+whole table.
 
 ### Derived columns
 
@@ -328,6 +414,14 @@ await createDataTable({
 For a read-only display table, turning these off reduces initial JS +
 CSS footprint measurably.
 
+`visualizations: false` is a blunter lever than it used to be. Charts are
+already lazy, so leaving them on costs a couple of queries per column you
+actually scroll to rather than two per column in the table; turn them off
+because you don't want charts, not to make a wide table load. Conversely,
+`visualizations: { eager: true }` opts back into the old
+every-column-at-load cost — see
+[Column visualizations](#column-visualizations).
+
 With both `expressionFilter: false` and `derivedColumns: false`, the modals
 that bind CodeMirror are unreachable, so consumers can drop the
 `@codemirror/*` and `@lezer/highlight` peer dependencies entirely. See
@@ -345,13 +439,13 @@ marks and measures, so a load can be split into stages in DevTools'
 Performance panel — or read programmatically — without instrumenting your
 own code:
 
-| Mark                 | Set when                                                  |
-| -------------------- | --------------------------------------------------------- |
-| `dt:load:start`      | the load begins, before `loadStart` is emitted            |
-| `dt:load:workerDone` | the worker has ingested the data and the schema is known  |
-| `dt:load:firstPaint` | the first viewport of rows is rendered                    |
-| `dt:load:vizReady`   | column visualizations have finished initializing          |
-| `dt:load:complete`   | everything is done, just before `loadComplete` is emitted |
+| Mark                 | Set when                                                                    |
+| -------------------- | --------------------------------------------------------------------------- |
+| `dt:load:start`      | the load begins, before `loadStart` is emitted                              |
+| `dt:load:workerDone` | the worker has ingested the data and the schema is known                    |
+| `dt:load:firstPaint` | the first viewport of rows is rendered                                      |
+| `dt:load:vizReady`   | the column charts visible at load have finished fetching                    |
+| `dt:load:complete`   | the load promise's gate is satisfied, just before `loadComplete` is emitted |
 
 | Measure          | Span                   |
 | ---------------- | ---------------------- |
@@ -370,11 +464,19 @@ for (const m of performance.getEntriesByType('measure')) {
 }
 ```
 
-Two notes on reading them. `firstPaint` and `vizReady` race — visualizations
-initialize in parallel with the first render, so neither ordering is a bug.
-And `workerDone` is not a pure worker boundary: restoring a session and
-rebuilding derived columns happen before it, so a slow `dt:load:worker` on a
-table with derived columns is not necessarily a slow ingest.
+Three notes on reading them. `dt:load:vizReady` normally lands **after**
+`dt:load:complete`, because the load promise stops at first interactive paint
+and the charts settle behind it — `dt:load:viz` is the longer measure, and
+that is the healthy shape. The ordering inverts under `visualizations: false`
+and `{ eager: true }`, where the charts are done (or never start) before the
+gate opens. `firstPaint` and `vizReady` still race with each other; neither
+ordering between those two is a bug. And `workerDone` is not a pure worker
+boundary: restoring a session and rebuilding derived columns happen before
+it, so a slow `dt:load:worker` on a table with derived columns is not
+necessarily a slow ingest.
+
+Mark names have not changed and will not: `dt:load:vizReady` means the same
+thing it always did, it simply lands later in the sequence now.
 
 Marks are cleared at the start of each load, so what you read always
 describes the most recent one. They cost a handful of microseconds and are
@@ -416,10 +518,11 @@ The Performance tab in Chrome / Firefox DevTools shows where time is
 spent — worker messages, DOM updates, canvas rendering. Typical hot paths:
 
 - **WorkerBridge.query** — DuckDB query time + message round-trip. Every
-  query rides the worker's serial two-priority queue: viewport row fetches
-  go out at `'high'` and jump queued `'normal'` work, and an aborted fetch
-  is dequeued for free — or genuinely cancelled mid-query via DuckDB's
-  pending-query path
+  query rides the worker's serial three-tier priority queue, drained
+  `'high'` → `'normal'` → `'low'`: viewport row fetches go out at
+  `'high'` and jump both lower tiers, header charts and column-stats
+  scans sit at `'low'`, and an aborted fetch is dequeued for free — or
+  genuinely cancelled mid-query via DuckDB's pending-query path
 - **TableBody.renderVisibleRows** — row painting on every scroll frame:
   cached rows paint as data, missing rows paint as placeholders that are
   replaced whole when their block fetch lands

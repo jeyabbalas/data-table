@@ -6,7 +6,7 @@
 
 # Class: AutoSave
 
-Defined in: [persistence/AutoSave.ts:58](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L58)
+Defined in: [persistence/AutoSave.ts:58](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L58)
 
 Listens to `TableState` mutations and writes a snapshot to the
 [SessionStore](../../index/classes/SessionStore.md) on a debounced cadence so the table re-mounts in the
@@ -20,7 +20,7 @@ directly.
 
 > **new AutoSave**(`state`, `store`, `options?`): `AutoSave`
 
-Defined in: [persistence/AutoSave.ts:76](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L76)
+Defined in: [persistence/AutoSave.ts:76](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L76)
 
 #### Parameters
 
@@ -46,7 +46,7 @@ Defined in: [persistence/AutoSave.ts:76](https://github.com/jeyabbalas/data-tabl
 
 > **destroy**(): `void`
 
-Defined in: [persistence/AutoSave.ts:209](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L209)
+Defined in: [persistence/AutoSave.ts:209](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L209)
 
 Permanently disable auto-save and clean up.
 
@@ -60,7 +60,7 @@ Permanently disable auto-save and clean up.
 
 > **disable**(): `void`
 
-Defined in: [persistence/AutoSave.ts:165](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L165)
+Defined in: [persistence/AutoSave.ts:165](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L165)
 
 Unsubscribe from all signals and flush any pending save.
 
@@ -74,7 +74,7 @@ Unsubscribe from all signals and flush any pending save.
 
 > **enable**(): `void`
 
-Defined in: [persistence/AutoSave.ts:89](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L89)
+Defined in: [persistence/AutoSave.ts:89](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L89)
 
 Subscribe to all persistent state signals and begin auto-saving.
 
@@ -88,7 +88,7 @@ Subscribe to all persistent state signals and begin auto-saving.
 
 > **flushPendingSave**(): `void`
 
-Defined in: [persistence/AutoSave.ts:201](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/persistence/AutoSave.ts#L201)
+Defined in: [persistence/AutoSave.ts:201](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/persistence/AutoSave.ts#L201)
 
 If a debounced save is pending, execute it immediately and synchronously.
 Uses SessionStore.saveSync() to enqueue the IDB write without yielding

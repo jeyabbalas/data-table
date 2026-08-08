@@ -74,6 +74,19 @@ export async function domNodeCount(page: Page): Promise<number> {
 }
 
 /**
+ * Canvases under `.dt-root` — one per live column visualization.
+ *
+ * The direct gauge for lazy creation: before Phase 2 this was the applicable
+ * column count (1,000 at the WIDE tier), and after it is the visible window
+ * plus overscan. Hoisted here from the two identical copies it grew in
+ * (`tiers.full.spec.ts`'s `readShape`, `perf-baseline.spec.ts`) so a spec and
+ * the capture that is supposed to corroborate it cannot drift apart.
+ */
+export async function canvasCount(page: Page): Promise<number> {
+  return page.evaluate(() => document.querySelectorAll('.dt-root canvas').length);
+}
+
+/**
  * Wrap `EventTarget.prototype.add/removeEventListener` so
  * `window.__dtListeners` carries net counts per event type.
  *
@@ -134,8 +147,13 @@ export async function installObserverCensus(page: Page): Promise<void> {
       created: { resize: 0, mutation: 0, intersection: 0 },
     });
 
-    // Which instances have already been counted down, so a second
-    // `disconnect()` cannot drive the gauge negative.
+    // Which instances are currently counted, so a second `disconnect()`
+    // cannot drive the gauge negative and an `observe()` after one can bring
+    // the instance back. The second half matters from Phase 2 on: the
+    // visualization controller re-points its one IntersectionObserver by
+    // `disconnect()`-then-`observe()` on every header rebuild, and a gauge
+    // that only ever counted down would report 0 live observers for an
+    // observer that is very much alive.
     //
     // A `WeakSet` rather than a `#private` field, and this is not a style
     // choice: Playwright compiles init scripts through Babel, which lowers
@@ -148,7 +166,9 @@ export async function installObserverCensus(page: Page): Promise<void> {
 
     const wrap = (
       name: 'resize' | 'mutation' | 'intersection',
-      Original: undefined | (new (...args: never[]) => { disconnect: () => void }),
+      Original:
+        | undefined
+        | (new (...args: never[]) => { disconnect: () => void; observe: (...a: never[]) => void }),
     ): unknown => {
       if (!Original) return Original;
       // A subclass, not a Proxy: `class X extends ResizeObserver` keeps the
@@ -160,6 +180,13 @@ export async function installObserverCensus(page: Page): Promise<void> {
           counted.add(this);
           census[name]++;
           census.created[name]++;
+        }
+        override observe(...args: never[]): void {
+          if (!counted.has(this)) {
+            counted.add(this);
+            census[name]++;
+          }
+          super.observe(...args);
         }
         override disconnect(): void {
           if (counted.has(this)) {

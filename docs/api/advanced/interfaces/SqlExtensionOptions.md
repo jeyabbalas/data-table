@@ -6,7 +6,7 @@
 
 # Interface: SqlExtensionOptions
 
-Defined in: [sql-editor/extensions.ts:47](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/sql-editor/extensions.ts#L47)
+Defined in: [sql-editor/extensions.ts:47](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/sql-editor/extensions.ts#L47)
 
 Options accepted by `createSqlExtensions`.
 
@@ -16,7 +16,7 @@ Options accepted by `createSqlExtensions`.
 
 > `optional` **functions?**: readonly `string`[] \| readonly [`DuckDBFunctionInfo`](DuckDBFunctionInfo.md)[]
 
-Defined in: [sql-editor/extensions.ts:67](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/sql-editor/extensions.ts#L67)
+Defined in: [sql-editor/extensions.ts:67](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/sql-editor/extensions.ts#L67)
 
 Override the function list surfaced via autocomplete. Three behaviors:
 
@@ -35,7 +35,7 @@ Override the function list surfaced via autocomplete. Three behaviors:
 
 > `optional` **includeTheme?**: `boolean`
 
-Defined in: [sql-editor/extensions.ts:54](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/sql-editor/extensions.ts#L54)
+Defined in: [sql-editor/extensions.ts:54](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/sql-editor/extensions.ts#L54)
 
 Include `dataTableTheme` and `dataTableHighlighting` in the returned
 extension array. Defaults to `true`. Set to `false` if the host already
@@ -48,7 +48,7 @@ outside a `Compartment` so it survives reconfiguration).
 
 > `optional` **upperCaseKeywords?**: `boolean`
 
-Defined in: [sql-editor/extensions.ts:73](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/sql-editor/extensions.ts#L73)
+Defined in: [sql-editor/extensions.ts:73](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/sql-editor/extensions.ts#L73)
 
 Format SQL keyword completions as uppercase. Defaults to `true`,
 matching DuckDB's preferred style and the bundled

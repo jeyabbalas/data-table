@@ -6,7 +6,7 @@
 
 # Interface: QueryOptions
 
-Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L51)
+Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/WorkerBridge.ts#L51)
 
 Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
@@ -16,7 +16,7 @@ Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
 > `optional` **cache?**: `boolean`
 
-Defined in: [data/WorkerBridge.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L57)
+Defined in: [data/WorkerBridge.ts:57](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/WorkerBridge.ts#L57)
 
 Set `false` to bypass the SQL result cache — both the read (a cached
 result is ignored) and the write (the fresh result is not stored).
@@ -26,10 +26,24 @@ Default: SELECT queries are cached.
 
 ### priority?
 
-> `optional` **priority?**: `"high"` \| `"normal"`
+> `optional` **priority?**: `"high"` \| `"normal"` \| `"low"`
 
-Defined in: [data/WorkerBridge.ts:63](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L63)
+Defined in: [data/WorkerBridge.ts:77](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/WorkerBridge.ts#L77)
 
-Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
-stats/histogram queries) in the worker's serial dispatch queue —
-intended for viewport row fetches. Default `'normal'`.
+Worker queue priority. The worker's serial dispatch queue drains
+strictly `'high'` → `'normal'` → `'low'`. Default `'normal'`.
+
+- `'high'` — viewport row fetches. Jumps every queued `'normal'` and
+  `'low'` task so scrolling never waits on background work.
+- `'normal'` — everything interactive-but-not-scroll: filter counts,
+  exports, loads, ad-hoc queries.
+- `'low'` — background or decorative work that must never delay a
+  viewport row: header histograms / value-counts, column-stats
+  scans, and any host-app query whose result the user is not
+  currently waiting on. Pick this whenever the query is a full-table
+  scan issued on the host app's own initiative rather than in direct
+  response to a user action.
+
+Starvation of `'low'` is by design and safe only because low-tier
+work is bounded — issue it for what is on screen, not for the whole
+table.

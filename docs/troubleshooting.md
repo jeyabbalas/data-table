@@ -307,6 +307,8 @@ Symptom: you called `defaultVisualizationRegistry.register(...)` but the built-i
 
 Cause: either the `isApplicable` predicate returns `false` for the column's `DataType`, or your registration's `priority` is `≤ 0` (built-ins use `0` and are evaluated first for same-priority entries in insertion order).
 
+Before debugging the registry, check that the column's header is actually **on screen**. Charts are created lazily — a column more than 200 px outside the header viewport has no instance at all, so a registry that is wired correctly still looks broken from a `querySelector` or a screenshot. Scroll the column into view first; see [§27](#27-charts-are-missing-from-a-screenshot-or-a-scripted-check) and the [visualizations guide](./guides/visualizations.md#when-charts-are-created).
+
 Fix:
 
 ```ts
@@ -621,6 +623,33 @@ Cause: the container's height is zero. `calculateVisibleRange()` returns an empt
 This is the same root cause as §25 — an unresolved height chain — at the other extreme. Note that §2 also describes a blank table, but that one is SSR-specific and looks different: with SSR the library never mounts at all, so there is no `.dt-root` in the DOM. If `document.querySelector('.dt-root')` returns an element, it is a height problem, not an SSR problem.
 
 Fix: as in §25 — an explicit height on the mount element, or `flex: 1; min-height: 0` on a flex/grid child, with a resolved height on every ancestor up to the viewport. See [Sizing the container](../README.md#sizing-the-container) and the flex chain in [`examples/01-minimal`](../examples/01-minimal/).
+
+### 27. Charts are missing from a screenshot or a scripted check
+
+Symptom: `await createDataTable({ source })` resolves, but the column headers show empty chart slots — in a Playwright screenshot, a PDF render, a visual-regression baseline, or a `document.querySelectorAll('.dt-root canvas')` count that comes back far lower than the column count.
+
+Cause: two, and they compound.
+
+1. **The load promise no longer waits for charts.** It resolves at first interactive paint — rows painted, filter counts correct. Charts fetch behind it.
+2. **Charts are created lazily.** Only the columns within 200 px of the header viewport get an instance, so `canvas` elements are `O(visible columns)` by design, not `O(columns)`.
+
+Fix: pick the one that matches what you are doing.
+
+```ts
+// Capturing what a user would see: wait for the visible charts.
+const table = await createDataTable({ container, source });
+await table.whenVizReady();
+await page.screenshot();
+
+// Capturing every column's chart: opt back into eager creation.
+const table = await createDataTable({
+  container,
+  source,
+  visualizations: { eager: true },
+});
+```
+
+Special case worth knowing: **in a hidden document nothing is ever visible.** A background tab or a `display: none` host gets no `IntersectionObserver` callbacks from the browser, so the initial wave is empty and `whenVizReady()` resolves immediately with `vizCount: 0` and no charts. That is the platform's behaviour, not a stall — the charts appear when the table becomes visible. If you must render charts in a document that is never shown, `{ eager: true }` is the only option that works.
 
 ---
 

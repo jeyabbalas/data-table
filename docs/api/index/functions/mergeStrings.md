@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:867](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L867)
+Defined in: [core/Strings.ts:880](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L880)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -1139,7 +1139,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `approxUniqueCount?`: \{ \}; `approxUniquePercent?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1158,6 +1158,21 @@ Display value for the all-unique segment (count = distinct values).
 #### statistics.allValues?
 
 \{ \}
+
+#### statistics.approxUniqueCount?
+
+\{ \}
+
+Distinct count from `approx_count_distinct` — used instead of
+`uniqueCount` above 100,000 rows. Keep a marker for "approximate" in
+the translation.
+
+#### statistics.approxUniquePercent?
+
+\{ \}
+
+Approximate distinct count with its share of non-null rows — the
+approximate twin of `uniquePercent`.
 
 #### statistics.binLabel?
 

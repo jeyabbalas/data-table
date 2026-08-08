@@ -16,9 +16,8 @@
  * number it tightens the cap in the same commit and records the before →
  * after in `plans/scaling/STATUS.md`.
  *
- * The namespaces below `WIDE_CI` are deliberately empty. They are the
- * agreed landing sites for later phases (`DT_BUDGET.COLVIRT` in Phase 5,
- * `DT_BUDGET.VIZ.MAX_IN_FLIGHT` in Phase 2, and so on), named up front so
+ * The namespaces below that are still empty are the agreed landing sites for
+ * later phases (`DT_BUDGET.COLVIRT` in Phase 5, and so on), named up front so
  * thirteen agents do not invent thirteen conventions.
  */
 
@@ -122,8 +121,158 @@ export const DT_BUDGET = {
      */
     DEEP_LOAD_MS: 60_000,
   },
-  /** Phase 2 — lazy visualizations: viz query counts, `maxInFlight`. */
-  VIZ: {},
+  /**
+   * Phase 2 — lazy visualizations: viz query counts, `maxInFlight`.
+   *
+   * Every number below was measured on the reference machine (macOS, 10
+   * cores, Chromium, 1,280 px viewport) at both WIDE_CI (300 × 20,000) and
+   * WIDE (1,000 × 60,000). The two tiers agree on all of them, which is the
+   * point of the phase: what a lazy chart costs is a function of the
+   * *viewport*, not the column count.
+   *
+   * | metric                | WIDE before | WIDE after |
+   * | --------------------- | ----------- | ---------- |
+   * | queries at load       | 2,004       | 20         |
+   * | canvases              | 1,000       | 8          |
+   * | live MutationObservers| 1,001       | 2          |
+   * | live ResizeObservers  | ~1,001      | 9          |
+   * | `loadData` resolves   | 18,884 ms   | 3,947 ms   |
+   *
+   * The caps carry real headroom over the measured numbers because the
+   * measured numbers depend on viewport width, which a CI runner and a
+   * developer's monitor do not share. They are still one to two orders of
+   * magnitude below the eager shape they exist to catch — at WIDE_CI the
+   * same mount under `visualizations: { eager: true }` costs 604 queries and
+   * 300 canvases, so a regression fails these by 10× or more, not by 10 %.
+   */
+  VIZ: {
+    /**
+     * Bridge `sent.query` from load start to the initial chart wave settling
+     * (`whenVizReady()`), visualizations on.
+     *
+     * Measured **20** at both WIDE_CI and WIDE: 4 fixed (schema, first row
+     * block, count sync) plus 8 visible-plus-overscan charts × 2 aggregate
+     * queries each. Visualizations off is **4** at both tiers, which is the
+     * fixed part on its own.
+     *
+     * Cap at 66 — the phase doc's figure, and it survives measurement for a
+     * different reason than the doc gave: 66 covers a viewport roughly three
+     * times wider than the one measured (~30 charts), which is the widest
+     * realistic case. Eager at WIDE_CI is 604 and at WIDE 2,004, so the cap
+     * discriminates by more than 9×.
+     */
+    QUERIES_AT_LOAD_MAX: 66,
+    /**
+     * `.dt-root canvas` elements once the initial wave has settled.
+     *
+     * Measured **8** at both tiers; **0** with visualizations off; **300**
+     * (every applicable column) under `eager: true` at WIDE_CI and 1,000 at
+     * WIDE. Cap at 40 for the same viewport-width reason as above.
+     *
+     * This is the assertion that a scrolled-away column has *no* canvas, not
+     * merely an idle one — canvas memory is the second half of what made
+     * 1,000 charts untenable.
+     */
+    CANVAS_COUNT_MAX: 40,
+    /**
+     * Concurrent chart *fetch operations*, mirroring
+     * `DEFAULT_VIZ_FETCH_CONCURRENCY` in
+     * `src/visualizations/VizDataController.ts`.
+     *
+     * Mirrored rather than imported: `tests/` must not depend on the library
+     * bundle, and a budget that reads its own limit from the code it guards
+     * cannot fail.
+     */
+    FETCH_CONCURRENCY: 4,
+    /**
+     * Bridge `maxInFlight` high-water mark across a visualization-driven
+     * window.
+     *
+     * **Not the same number as {@link FETCH_CONCURRENCY}, and the difference
+     * is the whole reason this entry has a docblock.** The controller bounds
+     * concurrent *fetches* at 4; each histogram fetch issues two or three
+     * statements, and the grid's own traffic runs alongside. The bridge
+     * counter sees all of it.
+     *
+     * Measured: **5** at load, **4** over a horizontal sweep, **10** at the
+     * high-water mark of one filter fan-out (4 concurrent refreshes × 2
+     * statements, plus the count sync and a row block). Cap at 16 — above
+     * the worst measured case, far below the unbounded shape, where one
+     * filter over 1,000 columns would put ~2,000 statements in flight.
+     */
+    MAX_IN_FLIGHT: 16,
+    /**
+     * Queries one filter change costs before any chart is considered.
+     *
+     * Measured **3** with visualizations off: the filtered count, the row
+     * block, and the re-fetch the body issues once the count lands.
+     */
+    NONVIZ_QUERIES_PER_FILTER: 3,
+    /**
+     * Aggregate queries one *visible* chart re-issues per filter change.
+     *
+     * Measured **2** — foreground and background series. One filter at
+     * WIDE_CI with 10 visible charts cost exactly
+     * `3 + 2 × 10 = 23` queries, against ~2,000 before this phase.
+     */
+    QUERIES_PER_VIZ_PER_FILTER: 2,
+    /**
+     * Aggregate queries one chart costs when it is created by scrolling into
+     * view, with no filter active. Measured **2**.
+     */
+    QUERIES_PER_VIZ_CREATE: 2,
+    /**
+     * The same, with a filter active: measured **4**.
+     *
+     * A chart built under a filter needs the unfiltered background series as
+     * well as the filtered foreground one, and cannot reuse a cached
+     * unfiltered pass it never made. Budgeted separately rather than folded
+     * into one number, because collapsing them would hide a regression in
+     * whichever direction was the smaller of the two.
+     */
+    QUERIES_PER_VIZ_CREATE_FILTERED: 4,
+    /**
+     * Live `IntersectionObserver`s per table: exactly one, at any column
+     * count. The controller runs a single observer at the keep margin and
+     * derives the narrower create band per entry, rather than running two.
+     */
+    INTERSECTION_OBSERVERS_MAX: 1,
+    /**
+     * Live `MutationObserver`s with visualizations on.
+     *
+     * Measured **2** at both tiers — the table's own, plus the one shared
+     * `ThemeWatcher`. Off it is **1**. Before this phase every chart
+     * installed its own: 1,001 at WIDE. Cap at 4, which leaves room for a
+     * modal or portal observer and still fails a per-column regression by
+     * two orders of magnitude.
+     */
+    MUTATION_OBSERVERS_MAX: 4,
+    /**
+     * Mirror of `APPROX_DISTINCT_ROW_THRESHOLD` in
+     * `src/visualizations/histogram/HistogramData.ts` — above this many rows
+     * the distinct-value count switches to `approx_count_distinct`.
+     *
+     * Mirrored, not imported, for the reason given on
+     * {@link FETCH_CONCURRENCY}.
+     */
+    APPROX_DISTINCT_ROW_THRESHOLD: 100_000,
+    /**
+     * Wall clock for one WIDE load — 1,000 columns × 60,000 rows, Parquet,
+     * visualizations **on** (`RUN_BROWSER_PERF` only).
+     *
+     * Measured **3,947 ms** after this phase against **18,884 ms** before,
+     * and within 1 % of the same tier's viz=off number (3,912 ms) — which is
+     * the real claim: turning charts on no longer costs anything at load.
+     *
+     * Cap at 15,000. Unusually tight for a gated wall-clock number, and
+     * deliberately so: the regression it exists to catch is the load promise
+     * going back to waiting for every chart, which measured 18,884 ms here.
+     * A cap generous enough to absorb a 4× slower machine would sit above
+     * that and catch nothing. The machine-independent guards above are the
+     * ones that run everywhere; this one is a second opinion on a known box.
+     */
+    LOAD_MS_WIDE_MAX: 15_000,
+  },
   /** Phases 3–5 — column windowing and projection clipping. */
   COLVIRT: {},
   /** Phase 6 — resize / pin / keynav query and frame budgets. */

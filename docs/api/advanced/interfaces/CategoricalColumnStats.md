@@ -6,13 +6,13 @@
 
 # Interface: CategoricalColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:45](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L45)
+Defined in: [statistics/ColumnStatsTypes.ts:52](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L52)
 
 Stats for categorical columns (string, boolean, uuid).
 Line 2 varies by DataType:
-- string: "12 unique" or "all unique"
+- string: "12 unique", "~12 unique" (approximate), or "all unique"
 - boolean: "67% true"
-- uuid: "1,234 unique (100%)" or "all unique"
+- uuid: "1,234 unique (100%)", "~1,234 unique (98%)", or "all unique"
 
 ## Extends
 
@@ -24,7 +24,23 @@ Line 2 varies by DataType:
 
 > **distinctCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:47](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L47)
+Defined in: [statistics/ColumnStatsTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L54)
+
+***
+
+### distinctCountApprox?
+
+> `optional` **distinctCountApprox?**: `boolean`
+
+Defined in: [statistics/ColumnStatsTypes.ts:64](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L64)
+
+True when `distinctCount` is a HyperLogLog estimate from
+`approx_count_distinct` rather than an exact `COUNT(DISTINCT …)`.
+
+Drives two things in `formatStatsLine2`: the `~` marker on the rendered
+count, and suppression of the "all unique" shortcut — under HLL,
+`distinctCount === nonNullCount` is a coin flip, so the claim cannot be
+made. Absent or false means the count is exact.
 
 ***
 
@@ -32,7 +48,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:47](https://github.com/jeyabbalas/da
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -46,7 +62,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"categorical"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L46)
+Defined in: [statistics/ColumnStatsTypes.ts:53](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L53)
 
 ***
 
@@ -54,7 +70,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:46](https://github.com/jeyabbalas/da
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -68,7 +84,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -82,7 +98,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 
@@ -96,6 +112,6 @@ Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 
 > `optional` **trueCount?**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L49)
+Defined in: [statistics/ColumnStatsTypes.ts:66](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L66)
 
 Count of true values (boolean columns only)

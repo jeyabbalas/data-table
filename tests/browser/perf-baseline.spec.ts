@@ -39,6 +39,7 @@ import { TIERS, columnName } from '../fixtures/tiers';
 
 import {
   bridgeStats,
+  canvasCount,
   domNodeCount,
   frameSampler,
   installObserverCensus,
@@ -48,6 +49,7 @@ import {
 import {
   mountTierTable,
   waitForTierSettled,
+  waitForVizReady,
   wideMountOptions,
   TIER_HOST_ID,
   WIDE_IS_TRUNCATED,
@@ -136,10 +138,6 @@ async function heapMB(page: Page): Promise<number | null> {
   });
 }
 
-async function canvasCount(page: Page): Promise<number> {
-  return page.evaluate(() => document.querySelectorAll('.dt-root canvas').length);
-}
-
 /**
  * Time one user-visible interaction, page-side, from the action to a
  * re-resolved body.
@@ -201,6 +199,13 @@ async function timeInteraction(page: Page, action: 'sort' | 'filter'): Promise<n
 async function capture(page: Page, tier: string, opts: MountTierOptions): Promise<Baseline> {
   await installObserverCensus(page);
   const mounted = await mountTierTable(page, opts);
+  // `loadMs` above is the load promise, which since Phase 2 resolves at first
+  // interactive paint. `vizReadyMs` is the *other* half of the story and only
+  // exists once the initial chart wave settles — reading `dt:load:viz` before
+  // that would record `null` for the very tier the entry is there to
+  // describe. Everything else below (canvases, observers, query count) would
+  // likewise be a snapshot of the middle of the wave.
+  await waitForVizReady(page);
   await waitForTierSettled(page);
 
   const spec = mounted.spec;

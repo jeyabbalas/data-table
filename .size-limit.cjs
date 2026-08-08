@@ -20,13 +20,13 @@
  * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
- *   root entry · ESM                8.14 kB   →   8.6 kB cap (5.7 %)
- *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
- *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
- *   lazy ExportDialog chunk        69.91 kB   →  74 kB   cap (5.8 %)
+ *   root entry · ESM               10.76 kB   →  11.4 kB cap (5.9 %)
+ *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
+ *   stylesheet                     18.96 kB   →  19.6 kB cap (3.4 %)
+ *   lazy ExportDialog chunk        74.65 kB   →  78.5 kB cap (5.2 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
- *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
- *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
+ *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.9 %)
+ *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
  *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *
@@ -34,7 +34,30 @@
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
  *
- * Root-entry history. 7.65 → 8.14 kB is the Phase 1 load path: the
+ * Root-entry history. 8.12 → 10.76 kB is Phase 2, lazy visualizations, and it
+ * is the largest single-phase move this entry has made — worth stating rather
+ * than absorbing. Both halves land here because both are statically reachable
+ * from `src/DataTable.ts`: `VizDataController` (the per-column state machine,
+ * its IntersectionObserver plumbing and its bounded fetch pump) and the
+ * facade wiring around it (`normalizeVisualizations`, `whenVizReady`, the
+ * `vizReady` generation gate, snapshot seeding through `createVizForColumn`,
+ * and the coalesced stats sweep). `ThemeWatcher` and the approximate-distinct
+ * helpers are in the visualization chunk, not here.
+ *
+ * It is not obviously reducible: the controller has to exist synchronously
+ * when `attachVisualizations` runs, so moving it behind the dynamic `import()`
+ * that already lazies the chart classes would turn a synchronous seam
+ * asynchronous — the jsdom suites read a created instance two microtask turns
+ * after mount, and the fallback path creates instances inline for exactly
+ * that reason. Deferred rather than dismissed: a later phase that revisits
+ * the attach seam should reconsider it, and 2.6 kB of entry for charts that
+ * `visualizations: false` never uses is the argument for doing so.
+ *
+ * The visualization chunk moved far less — 73.57 → 74.65 kB — because the
+ * snapshot seams, the shared theme observer and the approximate-distinct
+ * switch are all small next to the chart classes already in it.
+ *
+ * Earlier root-entry history. 7.65 → 8.14 kB was the Phase 1 load path: the
  * `reading`-stage byte reporting and streaming URL read in `DataLoader`, the
  * BOM guard, the transfer list on `WorkerBridge`'s load message, and the
  * `loadProgress` clamp in `DataTable`. Note where those bytes did *not* come
@@ -70,7 +93,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '8.6 kB',
+    limit: '11.4 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',
@@ -85,7 +108,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '74 kB',
+    limit: '78.5 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

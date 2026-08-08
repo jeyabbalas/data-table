@@ -6,7 +6,7 @@
 
 # Interface: TemporalColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:56](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L56)
+Defined in: [statistics/ColumnStatsTypes.ts:73](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L73)
 
 Stats for date and timestamp columns.
 Line 2: "2020-01-01 – 2024-12-31"
@@ -21,7 +21,7 @@ Line 2: "2020-01-01 – 2024-12-31"
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -35,7 +35,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"temporal"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L57)
+Defined in: [statistics/ColumnStatsTypes.ts:74](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L74)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:57](https://github.com/jeyabbalas/da
 
 > **max**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:61](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L61)
+Defined in: [statistics/ColumnStatsTypes.ts:78](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L78)
 
 Maximum date/timestamp as ISO string, or null if all null
 
@@ -53,7 +53,7 @@ Maximum date/timestamp as ISO string, or null if all null
 
 > **min**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:59](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L59)
+Defined in: [statistics/ColumnStatsTypes.ts:76](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L76)
 
 Minimum date/timestamp as ISO string, or null if all null
 
@@ -63,7 +63,7 @@ Minimum date/timestamp as ISO string, or null if all null
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -77,7 +77,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -91,7 +91,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

@@ -6,7 +6,7 @@
 
 # Interface: StatsPanelErrorContext
 
-Defined in: [visualizations/BaseStatsPanel.ts:80](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L80)
+Defined in: [visualizations/BaseStatsPanel.ts:80](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseStatsPanel.ts#L80)
 
 Context passed to [StatsPanelOptions.onError](StatsPanelOptions.md#onerror) so listeners can
 disambiguate stats-panel errors from visualization or load errors. The
@@ -18,7 +18,7 @@ facade re-emits these on its `error` event with `source: 'stats-panel'`.
 
 > **column**: `string`
 
-Defined in: [visualizations/BaseStatsPanel.ts:82](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L82)
+Defined in: [visualizations/BaseStatsPanel.ts:82](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseStatsPanel.ts#L82)
 
 ***
 
@@ -26,7 +26,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:82](https://github.com/jeyabbalas/
 
 > **phase**: [`StatsPanelErrorPhase`](../type-aliases/StatsPanelErrorPhase.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:83](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L83)
+Defined in: [visualizations/BaseStatsPanel.ts:83](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseStatsPanel.ts#L83)
 
 ***
 
@@ -34,4 +34,4 @@ Defined in: [visualizations/BaseStatsPanel.ts:83](https://github.com/jeyabbalas/
 
 > **source**: `"stats-panel"`
 
-Defined in: [visualizations/BaseStatsPanel.ts:81](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L81)
+Defined in: [visualizations/BaseStatsPanel.ts:81](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/BaseStatsPanel.ts#L81)

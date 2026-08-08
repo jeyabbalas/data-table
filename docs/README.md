@@ -27,7 +27,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 - [Annotations](./guides/annotations.md) — programmatic row/column/cell overlays, severity tiers, intersection popover, JSON round-trip
 - [Column-header tooltips](./guides/column-header-tooltips.md) — structured popover for column metadata, XSS-safe by construction
 - [Events](./guides/events.md) — event catalog, lifecycle ordering, error discrimination
-- [Visualizations](./guides/visualizations.md) — built-ins and custom class registration
+- [Visualizations](./guides/visualizations.md) — built-ins, lazy chart creation and `vizReady`, custom class registration
 - [Stats panels](./guides/stats-panels.md) — replace the column-header `.dt-col-stats` slot with your own rendering and DuckDB queries
 - [SQL editor primitives](./guides/sql-editor-primitives.md) — assemble a CodeMirror SQL editor outside the data table; live or literal schema, theming control, function-list customization
 - [Session persistence](./guides/session-persistence.md) — IndexedDB lifecycle, sync-save, custom store

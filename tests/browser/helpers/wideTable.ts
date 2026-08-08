@@ -159,6 +159,12 @@ export interface MountTierOptions {
   seed?: number;
   /** Per-column charts. Off by default — 1,000 of them is its own experiment. */
   viz?: boolean;
+  /**
+   * Build every applicable column's chart at load and make the load promise
+   * wait for them — the pre-Phase-2 behavior, still reachable through
+   * `visualizations: { eager: true }`. Ignored when `viz` is not `true`.
+   */
+  eager?: boolean;
   rowHeight?: number;
 }
 
@@ -215,7 +221,7 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
   const csv = opts.tier === 'wide-csv' ? tierCSV(spec) : null;
 
   const timings = await page.evaluate(
-    async ({ sourceSql, csvText, viz, rowHeight, hostId, oracleSource }) => {
+    async ({ sourceSql, csvText, viz, eager, rowHeight, hostId, oracleSource }) => {
       const w = window as unknown as TierWindow;
       w.__wideTableStage = 'import';
       const mod = (await import(
@@ -234,7 +240,7 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
         // No IndexedDB: a restored session would quietly make this a
         // different test, and these tiers are far too large to snapshot.
         persistence: false,
-        visualizations: viz,
+        visualizations: viz && eager ? { eager: true } : viz,
         ...(rowHeight === undefined ? {} : { rowHeight }),
       });
       w.__t = table;
@@ -273,6 +279,7 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
       sourceSql: csv === null ? tierSelectSQL(spec) : '',
       csvText: csv,
       viz: opts.viz ?? false,
+      eager: opts.eager ?? false,
       rowHeight: opts.rowHeight,
       hostId: TIER_HOST_ID,
       oracleSource: ORACLE_FN_SOURCE,
@@ -305,6 +312,15 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
  * `scrollLeft` joins `scrollTop` in the stability key: horizontal sweeps
  * reposition the viewport without a row-content change, and a
  * content-only key would report "stable" mid-sweep.
+ *
+ * `inFlight === 0` joins them from Phase 2 on, and it is not redundant with
+ * the DOM key. Visualization fetches run at `'low'` priority and paint into
+ * canvases, which no part of the key above observes: a chart wave can be
+ * mid-flight while every row, header and scroll offset has been stable for
+ * three polls. A spec that counted canvases or queries at that moment would
+ * read a number from the middle of the wave and call it the total. The
+ * bridge counter is the only page-observable fact that covers the whole
+ * request set, whatever it renders into.
  */
 export async function waitForTierSettled(
   page: Page,
@@ -316,6 +332,15 @@ export async function waitForTierSettled(
       const host = document.querySelector(hostSelector);
       const scrollEl = host?.querySelector('.dt-body-scroll');
       if (!host || !scrollEl) return false;
+      // `__t` for a `mountTierTable` host, `__dtPerf.table` for the demo's
+      // `?gen=` harness — the same two places `bridgeStats` looks. Absent on
+      // a table mounted without the test hooks, which counts as quiet rather
+      // than hanging forever on a counter that will never appear.
+      const table =
+        w.__t ?? (window as unknown as { __dtPerf?: { table?: typeof w.__t } }).__dtPerf?.table;
+      const bridge = table?.bridge as unknown as
+        { __getStatsForTests?: () => { inFlight: number } } | undefined;
+      const inFlight = bridge?.__getStatsForTests?.().inFlight ?? 0;
       const placeholders = host.querySelectorAll('[data-placeholder]').length;
       const rows = Array.from(host.querySelectorAll('.dt-body .dt-row[data-row-id]'));
       const key =
@@ -340,7 +365,7 @@ export async function waitForTierSettled(
       const s = (w.__dtTierSettle ??= { last: '', stable: 0 });
       s.stable = key === s.last ? s.stable + 1 : 0;
       s.last = key;
-      return placeholders === 0 && rows.length > 0 && s.stable >= 2;
+      return placeholders === 0 && rows.length > 0 && inFlight === 0 && s.stable >= 2;
     },
     opts.host ?? `#${TIER_HOST_ID}`,
     { polling: 150, timeout: opts.timeout ?? 300_000 },
@@ -348,6 +373,26 @@ export async function waitForTierSettled(
   await page.evaluate(() => {
     // Reset so consecutive waits are independent.
     delete (window as unknown as TierWindow).__dtTierSettle;
+  });
+}
+
+/**
+ * Wait for the initial visualization wave — the charts whose headers were
+ * visible at load time — to finish fetching.
+ *
+ * Since Phase 2 the load promise resolves at first interactive paint and no
+ * longer waits for charts, so `mountTierTable` returning says nothing about
+ * them. Anything that counts canvases, reads `dt:load:viz`, or attributes a
+ * query total to "the load" has to gate on this instead, or it reads a
+ * number from the middle of the wave.
+ *
+ * Resolves immediately (with an empty wave) when `visualizations: false`, and
+ * on a table mounted without the test hooks.
+ */
+export async function waitForVizReady(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const w = window as unknown as TierWindow;
+    await w.__t?.whenVizReady();
   });
 }
 

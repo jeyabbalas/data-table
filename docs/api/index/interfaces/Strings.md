@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L337)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -486,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -550,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/c
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -944,7 +944,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:460](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L460)
+Defined in: [core/Strings.ts:471](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L471)
 
 #### stylesheetMissing
 
@@ -956,7 +956,7 @@ Defined in: [core/Strings.ts:460](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -1106,7 +1106,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1746,7 +1746,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1856,7 +1856,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L421)
+Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Strings.ts#L421)
 
 #### allNull
 
@@ -1891,6 +1891,45 @@ Display value for the all-unique segment (count = distinct values).
 ###### value
 
 `string`
+
+##### Returns
+
+`string`
+
+#### approxUniqueCount
+
+> **approxUniqueCount**: (`count`) => `string`
+
+Distinct count from `approx_count_distinct` — used instead of
+`uniqueCount` above 100,000 rows. Keep a marker for "approximate" in
+the translation.
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### approxUniquePercent
+
+> **approxUniquePercent**: (`count`, `pct`) => `string`
+
+Approximate distinct count with its share of non-null rows — the
+approximate twin of `uniquePercent`.
+
+##### Parameters
+
+###### count
+
+`number`
+
+###### pct
+
+`number`
 
 ##### Returns
 

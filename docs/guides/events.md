@@ -37,7 +37,8 @@ Every event is strongly typed. The full map lives at
 | `ready`           | `{ bridgeReady: true }`                          | Worker is initialized; the table can accept queries.                                                                                                                                                                                                                                                                                                                                                          |
 | `loadStart`       | `{ source: string }`                             | `loadData()` begins. `source` is a short description (URL or `'<buffer>'`).                                                                                                                                                                                                                                                                                                                                   |
 | `loadProgress`    | `ProgressInfo`                                   | Load progress: `percent` 0–100, non-decreasing, ending in exactly one `100`. Stages `reading` → `parsing` → `analyzing` → `indexing`. See [Loading data — Progress](./loading-data.md#progress-reporting).                                                                                                                                                                                                    |
-| `loadComplete`    | `{ tableName, rowCount, schema }`                | Data is loaded and schema is known.                                                                                                                                                                                                                                                                                                                                                                           |
+| `loadComplete`    | `{ tableName, rowCount, schema }`                | First interactive paint: data is loaded, the schema is known, the first rows are painted, and the filter counts are correct. It does **not** mean the column charts are drawn — that is `vizReady`.                                                                                                                                                                                                           |
+| `vizReady`        | `{ tableName, vizCount }`                        | Once per load, when the column charts whose headers were visible at load time have finished fetching. `vizCount` is that wave's size (visible columns plus overscan), `0` when nothing was visible or `visualizations: false`. Fires **after** `loadComplete` by default, **before** it under `visualizations: { eager: true }` or `false`. Not emitted at all if the load fails.                             |
 | `loadError`       | `{ error: Error }`                               | A load failed. `error` is always a `DataTableError` subclass.                                                                                                                                                                                                                                                                                                                                                 |
 | `error`           | `{ error: DataTableError, source }`              | Any recoverable typed error — see [Errors](#errors-warnings-and-load-failures).                                                                                                                                                                                                                                                                                                                               |
 | `warning`         | `{ code, message, details? }`                    | Non-fatal degradation (e.g., missing stylesheet, IndexedDB unavailable).                                                                                                                                                                                                                                                                                                                                      |
@@ -80,6 +81,9 @@ createDataTable()
                       └── loadComplete | loadError
                            └── derivedChange (if sessionStore restored derived columns)
                            └── columnChange, filterChange, sortChange (if session restored)
+                           └── vizReady (visible column charts drawn; after loadComplete,
+                                         but before it under `visualizations: { eager: true }`
+                                         or `visualizations: false`)
 
 user actions
   └── action events (filterChange, sortChange, selectionChange, columnChange, derivedChange)
@@ -94,6 +98,24 @@ Subscribe to `ready` before you assume the worker is available — for anything
 driven by `createDataTable({ source })`, `ready` fires _before_ `loadStart`.
 Raw `table.bridge.query()` calls made before `ready` will throw
 `ConfigurationError` with `code: 'BRIDGE_NOT_READY'`.
+
+`loadComplete` and `vizReady` split what used to be one moment. The load
+promise — `await table.loadData(…)`, `await createDataTable({ source })` —
+resolves with `loadComplete`, at first interactive paint: rows painted,
+counts correct, charts possibly still fetching. Column charts are created
+lazily as their headers scroll into view (see the
+[visualizations guide](./visualizations.md#when-charts-are-created)), so
+"the charts you can see are drawn" gets its own event, and its own promise:
+
+```ts
+const table = await createDataTable({ container, source });
+await table.whenVizReady(); // same moment as the `vizReady` event
+```
+
+Pass `visualizations: { eager: true }` if you need the load promise itself
+to wait for every chart. In a hidden document (background tab, `display:
+none` host) the browser delivers no `IntersectionObserver` callbacks, so
+nothing is visible, and `vizReady` fires immediately with `vizCount: 0`.
 
 ## Errors, warnings, and load failures
 
@@ -258,6 +280,11 @@ table.on('loadError', () => {
 });
 ```
 
+`loadComplete` is the right place to drop a spinner: the grid is interactive
+there. If your spinner is covering the _charts_ rather than the grid, hide it
+on `vizReady` instead — and hide it on `loadError` too, since a failed load
+never emits `vizReady`.
+
 ### Route errors to Sentry, but tolerate persistence failures
 
 ```ts
@@ -272,6 +299,8 @@ table.on('error', ({ error, source }) => {
 - **`on(event)` returns the unsubscribe.** Forgetting to store it leaks the handler until the table is destroyed.
 - **Handler exceptions don't crash the library.** They surface as an `error` event with `source: 'listener'`. Don't subscribe to `error` inside an `error` handler (you'll loop).
 - **`loadError` and `error` both fire for a load failure.** Choose one path.
+- **`loadComplete` no longer waits for column charts.** If you screenshot, measure, or reveal UI on it, you may be capturing empty chart slots. Use `vizReady` / `whenVizReady()`, or `visualizations: { eager: true }`.
+- **`vizReady` fires once per load, and not at all on a failed load.** `whenVizReady()` still settles on failure, so an awaiter never hangs — it just resolves without the event.
 - **`destroy` fires once.** After it, `table.isDestroyed()` is `true` and further API calls throw `DestroyedError`.
 - **`selectionChange` fires on filter changes too**, because the visible selection changes when previously-selected rows become filtered out. If you're rendering a selection badge, subscribe to both.
 - **`undoChange` fires after an undo or redo**, with the new `canUndo` / `canRedo` values reflecting the post-operation history boundary.
@@ -279,6 +308,7 @@ table.on('error', ({ error, source }) => {
 ## Related
 
 - Loading data: [Loading data guide](./loading-data.md) for `loadStart` / `loadProgress` / `loadComplete` / `loadError` details
+- Visualizations: [When charts are created](./visualizations.md#when-charts-are-created) for `vizReady`, `whenVizReady()`, and the `eager` opt-out
 - Troubleshooting: [Warnings reference](../troubleshooting.md)
 - API reference: [Event catalog](../api-reference.md#event-catalog)
-- Source: `src/core/TableEvents.ts:1-126`, `src/core/EventEmitter.ts`
+- Source: `src/core/TableEvents.ts`, `src/core/EventEmitter.ts`

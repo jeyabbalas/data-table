@@ -166,16 +166,36 @@ export function resolvePinnedCount(
  *
  * Rounded (see the module header) and guarded: `setColumnWidth` validates
  * nothing, and a restored session snapshot copies `columnWidths` in wholesale
- * (`serialization.ts`), so a `NaN` or an `Infinity` is reachable without
- * malice. One of those in the middle of the list poisons every prefix sum
- * after it, and the failure is **silent** — `flex: 0 0 NaNpx` and
- * `setContentWidth(NaN)` are both rejected by CSSOM, so the spacer and the
- * scroll extent quietly keep their previous values while the model believes
- * something else. Falling back to the default keeps one bad column bad
- * instead of taking the table's geometry with it.
+ * (`serialization.ts`), so anything a host can put in a `Map` is reachable
+ * without malice. Two families have to fall back to the default:
+ *
+ *  - **Non-finite.** A `NaN` or an `Infinity` in the middle of the list
+ *    poisons every prefix sum after it, and the failure is **silent** —
+ *    `width: NaNpx`, `flex: 0 0 NaNpx` and `setContentWidth(NaN)` are all
+ *    rejected by CSSOM, so the element quietly keeps whatever width it had
+ *    (for a pooled row, some other column's) while the model believes 150.
+ *  - **Negative.** `Number.isFinite(-50)` is `true`, so a negative width used
+ *    to sum straight into `prefix` — and a decreasing step there breaks the
+ *    sorted-array precondition `lowerBound` / `upperBound` are only correct
+ *    under, which makes the window boundaries arbitrary rather than merely
+ *    wrong. This failure mode did not exist before the prefix sums did.
+ *
+ * `0` is **not** rejected: it keeps `prefix` non-decreasing, ties leave both
+ * binary searches correct, and `width: 0px` is a value CSSOM accepts — so a
+ * host that collapses a column to nothing gets what it asked for on both
+ * sides. See `compute`'s note on zero-width columns and the visible-range
+ * suite's case for it.
+ *
+ * Falling back to the default keeps one bad column bad instead of taking the
+ * table's geometry with it.
+ *
+ * Exported because every site that writes a width to the DOM has to resolve
+ * it exactly the way the prefix sums do. A header, a cell, and the spacer
+ * standing in for their neighbours disagreeing about one column's width is
+ * the failure this whole module exists to prevent.
  */
-function occupiedWidth(declared: number | undefined): number {
-  return declared !== undefined && Number.isFinite(declared)
+export function resolveColumnWidth(declared: number | undefined): number {
+  return declared !== undefined && Number.isFinite(declared) && declared >= 0
     ? Math.round(declared)
     : DEFAULT_COLUMN_WIDTH;
 }
@@ -222,7 +242,7 @@ export function pinnedOffsets(
   let left = 0;
   for (let i = 0; i < pinnedCount && i < visibleColumns.length; i++) {
     const name = visibleColumns[i]!;
-    const width = occupiedWidth(columnWidths.get(name));
+    const width = resolveColumnWidth(columnWidths.get(name));
     // An unpinned column inside the span still occupies its width — the
     // pinned columns after it sit that much further right — it just does not
     // become sticky itself.
@@ -312,7 +332,7 @@ export class ColumnWindowModel {
     this.prefix[0] = 0;
     for (let i = 0; i < n; i++) {
       // Round the declared width, then sum exactly — see the module header.
-      running += occupiedWidth(columnWidths.get(visibleColumns[i]!));
+      running += resolveColumnWidth(columnWidths.get(visibleColumns[i]!));
       running += boxOverheadPx;
       this.prefix[i + 1] = running;
     }

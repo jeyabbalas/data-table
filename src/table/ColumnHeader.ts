@@ -20,6 +20,7 @@ import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
 import type { AnnotationPopover } from './AnnotationPopover';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnResizer } from './ColumnResizer';
+import { resolveColumnWidth } from './ColumnWindow';
 
 /**
  * Options for configuring the ColumnHeader
@@ -875,12 +876,15 @@ export class ColumnHeader {
    * The current width of this column, in pixels.
    *
    * Reads `columnWidths` rather than the element, so it reports the state the
-   * next resize step will build on even before layout has flushed. Falls back
-   * to the 150px default the renderer uses when the column has never been
-   * sized.
+   * next resize step will build on even before layout has flushed. Resolved
+   * through the renderer's own helper, so an unsized column reports the
+   * default the renderer will draw and a width the renderer refuses
+   * (non-finite, non-positive) does not become the base of the next step —
+   * `Math.max(min, Math.min(max, NaN))` is `NaN`, which would make every
+   * subsequent resize a no-op.
    */
   getWidth(): number {
-    return this.state.columnWidths.get().get(this.column.name) ?? 150;
+    return resolveColumnWidth(this.state.columnWidths.get().get(this.column.name));
   }
 
   /**

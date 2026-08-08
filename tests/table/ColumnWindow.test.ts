@@ -552,15 +552,19 @@ describe('pinnedOffsets', () => {
 
 describe('ColumnWindowModel — hostile widths', () => {
   // `setColumnWidth` validates nothing and a restored session snapshot copies
-  // `columnWidths` in wholesale, so a non-finite width is reachable without
-  // malice. One of them used to poison every prefix sum after it — and
-  // silently, because `flex: 0 0 NaNpx` and `setContentWidth(NaN)` are both
-  // rejected by CSSOM, so the spacer and the scroll extent kept their previous
-  // values while the model believed something else.
+  // `columnWidths` in wholesale, so a non-finite or negative width is
+  // reachable without malice. A non-finite one used to poison every prefix sum
+  // after it — and silently, because `flex: 0 0 NaNpx` and
+  // `setContentWidth(NaN)` are both rejected by CSSOM, so the spacer and the
+  // scroll extent kept their previous values while the model believed
+  // something else. A negative one is worse: it makes `prefix` decrease, and
+  // the binary searches are only correct on a sorted array. `0` is not in this
+  // list — it is a legitimate width, and the visible-range suite pins it.
   for (const [label, bad] of [
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],
     ['-Infinity', Number.NEGATIVE_INFINITY],
+    ['negative', -50],
   ] as const) {
     it(`falls back to the default for a ${label} width instead of poisoning the tail`, () => {
       const model = new ColumnWindowModel();
@@ -576,6 +580,35 @@ describe('ColumnWindowModel — hostile widths', () => {
       expect(model.columnLeftPx(4)).toBe(100 + 100 + DEFAULT_COLUMN_WIDTH + 100);
     });
   }
+
+  it('keeps the prefix sums monotonic through a negative width', () => {
+    // The precondition, stated once: `lowerBound` / `upperBound` binary-search
+    // `prefix`, so a single decreasing step there does not merely misplace one
+    // column — it makes both boundaries arbitrary, and the window can land
+    // anywhere. `columnLeftPx(i)` is `prefix[i]`.
+    const model = new ColumnWindowModel();
+    const names = columns(6);
+    const w = widths(names, 100);
+    w.set('c3', -400);
+    model.sync(names, w);
+
+    for (let i = 1; i <= names.length; i++) {
+      expect(model.columnLeftPx(i), `prefix[${i}]`).toBeGreaterThanOrEqual(
+        model.columnLeftPx(i - 1),
+      );
+    }
+    // …and the window it hands back is the one that arithmetic implies.
+    const win = model.compute({
+      visibleColumns: names,
+      columnWidths: w,
+      pinnedColumns: [],
+      scrollLeft: 0,
+      viewportWidth: 200,
+      minOverscanColumns: 0,
+      overscanViewports: 0,
+    });
+    expect(win).toMatchObject({ start: 0, end: 2 });
+  });
 
   it('keeps the window and both spacers finite', () => {
     const names = columns(60);

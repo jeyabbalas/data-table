@@ -19,9 +19,9 @@ import { CellRenderer } from './Cell';
 import {
   BOX_OVERHEAD_PX,
   ColumnWindowModel,
-  DEFAULT_COLUMN_WIDTH,
   MIN_OVERSCAN_COLUMNS,
   pinnedOffsets,
+  resolveColumnWidth,
   resolvePinnedCount,
   type ColumnWindow,
   type PinnedOffset,
@@ -1988,9 +1988,10 @@ export class TableBody {
     // sibling indices.
     cellEl.setAttribute('data-column', colName);
 
-    // Apply dynamic width, rounded the same way the prefix sums round it so a
-    // cell and the spacer standing in for its neighbours cannot disagree.
-    cellEl.style.width = `${Math.round(pass.columnWidths.get(colName) ?? DEFAULT_COLUMN_WIDTH)}px`;
+    // Apply dynamic width, resolved through the same helper the prefix sums
+    // use so a cell and the spacer standing in for its neighbours cannot
+    // disagree — including about a width the model refused.
+    cellEl.style.width = `${resolveColumnWidth(pass.columnWidths.get(colName))}px`;
 
     // Apply pinned cell styles
     const offset = pass.pinned.get(colName);
@@ -2579,7 +2580,7 @@ export class TableBody {
       for (const cellEl of this.bodyCellsOf(rowEl)) {
         const colName = cellEl.getAttribute('data-column');
         if (colName === null) continue;
-        cellEl.style.width = `${Math.round(columnWidths.get(colName) ?? DEFAULT_COLUMN_WIDTH)}px`;
+        cellEl.style.width = `${resolveColumnWidth(columnWidths.get(colName))}px`;
       }
       const children = rowEl.children;
       const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;

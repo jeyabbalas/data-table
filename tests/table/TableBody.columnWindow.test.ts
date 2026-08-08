@@ -441,6 +441,40 @@ describe('TableBody — shared column geometry', () => {
     harness.body.destroy();
   });
 
+  it('paints a width the model refused exactly as the model resolved it', async () => {
+    // The invariant, stated once: what a cell declares and what the prefix
+    // sums believe are the same number, for every column, including one whose
+    // declared width the model would not accept. `Math.round(NaN)` is `NaN`
+    // and `width: NaNpx` is rejected by CSSOM, so the cell used to keep the
+    // 200 px it was last given while the model moved on to the 150 px default
+    // — and the spacer, the header and the scroll extent all sized themselves
+    // off the model. Everything right of col_2 was then 50 px out.
+    const harness = await mount();
+
+    const sized = new Map(harness.state.columnWidths.get());
+    sized.set('col_2', 200);
+    harness.state.columnWidths.set(sized);
+    expect(cellFor(firstRow(harness), 'col_2')!.style.width).toBe('200px');
+
+    for (const refused of [Number.NaN, -50, Number.POSITIVE_INFINITY]) {
+      const hostile = new Map(harness.state.columnWidths.get());
+      hostile.set('col_2', refused);
+      harness.state.columnWidths.set(hostile);
+
+      const span = harness.body.getColumnSpan('col_2')!;
+      expect(span.width, String(refused)).toBe(COL_WIDTH);
+
+      const row = firstRow(harness);
+      expect(cellFor(row, 'col_2')!.style.width, String(refused)).toBe(`${span.width}px`);
+      // …so the row still tiles the full extent, which is what the header and
+      // the scrollbar are sized from.
+      const spacers = spacerWidths(row);
+      expect(spacers.left + bodyCells(row).length * COL_WIDTH + spacers.right).toBe(TOTAL_WIDTH);
+    }
+
+    harness.body.destroy();
+  });
+
   it('hands out a copy of the window, not the live object', async () => {
     const harness = await mount();
     const win = harness.body.getColumnWindow();

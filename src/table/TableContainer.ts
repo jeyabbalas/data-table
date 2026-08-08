@@ -49,7 +49,7 @@ import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnReorder } from './ColumnReorder';
-import { pinnedOffsets, resolvePinnedCount } from './ColumnWindow';
+import { pinnedOffsets, resolveColumnWidth, resolvePinnedCount } from './ColumnWindow';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
@@ -1191,14 +1191,16 @@ export class TableContainer {
   private updateColumnWidths(): void {
     const columnWidths = this.state.columnWidths.get();
 
-    // Update header widths. Rounded exactly as the body's prefix sums round
-    // them: a fractional width is reachable (`setColumnWidth` does not round,
-    // and a drag under page zoom passes a fractional `clientX`), and a residue
-    // that multiplies by M in the header and by 1 in the body's spacer is what
-    // pulls the two apart at 1,000 columns.
+    // Update header widths through the body's own resolver, which rounds and
+    // guards: a fractional width is reachable (`setColumnWidth` does not
+    // round, and a drag under page zoom passes a fractional `clientX`), and a
+    // residue that multiplies by M in the header and by 1 in the body's spacer
+    // is what pulls the two apart at 1,000 columns. A width the resolver
+    // refuses has to be refused identically on both sides, or the header moves
+    // and the body does not.
     for (const header of this.columnHeaders) {
       const col = header.getColumn();
-      const width = Math.round(columnWidths.get(col.name) ?? 150);
+      const width = resolveColumnWidth(columnWidths.get(col.name));
       header.getElement().style.width = `${width}px`;
     }
   }
@@ -1226,7 +1228,7 @@ export class TableContainer {
     const offsets = pinnedOffsets(visibleColumns, columnWidths, pinnedCount, baseZ, pinnedColumns);
     let pinnedWidth = 0;
     for (let i = 0; i < pinnedCount; i++) {
-      pinnedWidth += Math.round(columnWidths.get(visibleColumns[i]!) ?? 150);
+      pinnedWidth += resolveColumnWidth(columnWidths.get(visibleColumns[i]!));
     }
 
     // Apply to header elements
@@ -1389,10 +1391,10 @@ export class TableContainer {
             });
             this.columnHeaders.push(columnHeader);
 
-            // Apply dynamic width from state (default to 150px), rounded to
-            // match the body's prefix sums — see `updateColumnWidths`.
+            // Apply dynamic width from state, resolved to match the body's
+            // prefix sums — see `updateColumnWidths`.
             const headerEl = columnHeader.getElement();
-            const width = Math.round(columnWidths.get(colName) ?? 150);
+            const width = resolveColumnWidth(columnWidths.get(colName));
             headerEl.style.width = `${width}px`;
 
             headerRowEl.appendChild(headerEl);
@@ -1410,11 +1412,11 @@ export class TableContainer {
             colEl.setAttribute('role', 'columnheader');
             colEl.style.padding = '0.5rem';
 
-            // Apply dynamic width from state (default to 150px), rounded the
-            // same way the body's prefix sums round it — a fractional width
-            // written here and floored there puts this header a growing
-            // fraction of a pixel away from its own cells.
-            const width = Math.round(columnWidths.get(colName) ?? 150);
+            // Apply dynamic width from state, resolved the same way the body's
+            // prefix sums resolve it — a fractional width written here and
+            // floored there puts this header a growing fraction of a pixel
+            // away from its own cells.
+            const width = resolveColumnWidth(columnWidths.get(colName));
             colEl.style.width = `${width}px`;
 
             // Build the placeholder header via DOM nodes so a hostile column
@@ -1478,7 +1480,7 @@ export class TableContainer {
         {
           let totalWidth = 0;
           for (const colName of visibleColumns) {
-            totalWidth += Math.round(columnWidths.get(colName) ?? 150);
+            totalWidth += resolveColumnWidth(columnWidths.get(colName));
           }
           this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
         }

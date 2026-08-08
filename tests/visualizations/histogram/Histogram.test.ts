@@ -144,13 +144,15 @@ describe('Histogram', () => {
       // Wait for async fetchData
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // Default maxBins is 15
+      // Default maxBins is 15; distinct counts are exact unless the facade
+      // opts in via `useApproxDistinct` (Phase 2 §4.6).
       expect(fetchHistogramData).toHaveBeenCalledWith(
         'test_table',
         'test_column',
         15,
         [],
         options.bridge,
+        { useApproxDistinct: false },
       );
     });
   });

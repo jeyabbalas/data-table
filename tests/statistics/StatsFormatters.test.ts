@@ -6,6 +6,7 @@ import {
   formatStatsLine1,
   formatStatsLine2,
 } from '../../src/statistics/StatsFormatters';
+import { defaultStrings, mergeStrings } from '../../src/core/Strings';
 import type {
   NumericColumnStats,
   CategoricalColumnStats,
@@ -469,6 +470,110 @@ describe('formatDefaultStats - Categorical Line 2', () => {
   it('shows "all unique" for uuid when all distinct', () => {
     const result = formatDefaultStats(makeCategorical({ distinctCount: 1000 }), 'uuid');
     expect(result).toContain('all unique');
+  });
+});
+
+// =========================================
+// formatDefaultStats - Line 2: Approximate distinct counts (Phase 2 §4.6)
+// =========================================
+
+describe('formatDefaultStats - Categorical Line 2 under approximate distinct counts', () => {
+  const makeCategorical = (
+    overrides: Partial<CategoricalColumnStats> = {},
+  ): CategoricalColumnStats => ({
+    kind: 'categorical',
+    totalRows: 200_000,
+    nonNullCount: 200_000,
+    nullCount: 0,
+    filteredTotalRows: null,
+    distinctCount: 1234,
+    distinctCountApprox: true,
+    ...overrides,
+  });
+
+  it('marks a string unique count with the ~ prefix', () => {
+    const result = formatDefaultStats(makeCategorical(), 'string');
+    expect(result).toContain('~1,234 unique');
+  });
+
+  it('marks a uuid unique count and percentage with the ~ prefix', () => {
+    const result = formatDefaultStats(
+      makeCategorical({ distinctCount: 100_000, nonNullCount: 200_000 }),
+      'uuid',
+    );
+    expect(result).toContain('~100,000 unique');
+    expect(result).toContain('(50%)');
+  });
+
+  it('suppresses the "all unique" shortcut when the count is approximate', () => {
+    // distinctCount === nonNullCount is a coin flip under HyperLogLog, so the
+    // exact-equality claim must not fire.
+    const result = formatDefaultStats(
+      makeCategorical({ distinctCount: 200_000, nonNullCount: 200_000 }),
+      'string',
+    );
+    expect(result).not.toContain('all unique');
+    expect(result).toContain('~200,000 unique');
+  });
+
+  it('suppresses the "all unique" shortcut for uuid too', () => {
+    const result = formatDefaultStats(
+      makeCategorical({ distinctCount: 200_000, nonNullCount: 200_000 }),
+      'uuid',
+    );
+    expect(result).not.toContain('all unique');
+    expect(result).toContain('~200,000 unique (100%)');
+  });
+
+  it('clamps an over-estimating HLL percentage to 100%', () => {
+    // The sketch can overshoot the true cardinality; "(103%)" reads as a bug.
+    const result = formatDefaultStats(
+      makeCategorical({ distinctCount: 206_000, nonNullCount: 200_000 }),
+      'uuid',
+    );
+    expect(result).toContain('~206,000 unique (100%)');
+    expect(result).not.toContain('103%');
+  });
+
+  it('keeps the exact forms when distinctCountApprox is false or absent', () => {
+    const explicit = formatDefaultStats(
+      makeCategorical({ distinctCountApprox: false, distinctCount: 12, nonNullCount: 1000 }),
+      'string',
+    );
+    expect(explicit).toContain('12 unique');
+    expect(explicit).not.toContain('~');
+
+    const absent = formatDefaultStats(
+      {
+        kind: 'categorical',
+        totalRows: 1000,
+        nonNullCount: 1000,
+        nullCount: 0,
+        filteredTotalRows: null,
+        distinctCount: 1000,
+      },
+      'string',
+    );
+    expect(absent).toContain('all unique');
+  });
+
+  it('does not touch the boolean branch', () => {
+    const result = formatDefaultStats(
+      makeCategorical({ trueCount: 120_000, nonNullCount: 200_000 }),
+      'boolean',
+    );
+    expect(result).toContain('60% true');
+    expect(result).not.toContain('~');
+  });
+
+  it('honours a messages override for the approximate keys', () => {
+    const messages = mergeStrings(defaultStrings, {
+      statistics: {
+        approxUniqueCount: (count: number) => `env ${count} uniques`,
+      },
+    });
+    const result = formatDefaultStats(makeCategorical(), 'string', messages);
+    expect(result).toContain('env 1234 uniques');
   });
 });
 

@@ -178,21 +178,31 @@ function formatCategoricalLine2(
 
   // string or uuid
   const { distinctCount, nonNullCount } = stats;
+  const isApprox = stats.distinctCountApprox === true;
 
-  if (distinctCount === nonNullCount && nonNullCount > 1) {
+  // "all unique" is an exact-equality claim, so it is only available from an
+  // exact count. `approx_count_distinct` is a HyperLogLog sketch: on a truly
+  // all-unique column `distinctCount === nonNullCount` holds about as often
+  // as it doesn't, and on a near-unique one it fires spuriously. Under
+  // approximation the tilde-marked count below is the honest answer.
+  if (!isApprox && distinctCount === nonNullCount && nonNullCount > 1) {
     return s.allUnique;
   }
 
   if (dataType === 'uuid') {
     if (nonNullCount > 0) {
       const pct = Math.round((distinctCount / nonNullCount) * 100);
-      return s.uniquePercent(distinctCount, pct);
+      // An HLL estimate can overshoot the true cardinality, and "(103%)"
+      // reads as a bug rather than as an approximation.
+      return isApprox
+        ? s.approxUniquePercent(distinctCount, Math.min(100, pct))
+        : s.uniquePercent(distinctCount, pct);
     }
     return '';
   }
 
   // string
-  return s.uniqueCount(distinctCount);
+  return isApprox ? s.approxUniqueCount(distinctCount) : s.uniqueCount(distinctCount);
 }
 
 /**

@@ -40,7 +40,7 @@ import {
   fetchHistogramBins,
   fetchDiscreteBins,
 } from './HistogramData';
-import type { HistogramData } from './HistogramData';
+import type { DistinctCountOptions, HistogramData } from './HistogramData';
 import {
   SharedHistogramBase,
   FONTS,
@@ -160,6 +160,15 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   // =========================================
 
   /**
+   * The approx-distinct switch, in the shape the data helpers take. Read off
+   * `options` per fetch rather than cached, since `updateFilters` replaces
+   * the options object.
+   */
+  private get distinctCountOptions(): DistinctCountOptions {
+    return { useApproxDistinct: this.options.useApproxDistinct === true };
+  }
+
+  /**
    * Ensure initialData is cached (unfiltered fetch).
    * Returns immediately if already cached. Deduplicates concurrent calls.
    */
@@ -171,7 +180,14 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       const { tableName, bridge } = this.options;
       const col = this.column.name;
 
-      this.initialDataPromise = fetchHistogramData(tableName, col, maxBins, [], bridge)
+      this.initialDataPromise = fetchHistogramData(
+        tableName,
+        col,
+        maxBins,
+        [],
+        bridge,
+        this.distinctCountOptions,
+      )
         .then((data) => {
           this.initialData = data;
         })
@@ -200,14 +216,21 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
     // Handle edge cases: no bins in initial data
     if (initial.bins.length === 0) {
-      return fetchHistogramData(tableName, col, this.options.maxBins ?? 15, filters, bridge);
+      return fetchHistogramData(
+        tableName,
+        col,
+        this.options.maxBins ?? 15,
+        filters,
+        bridge,
+        this.distinctCountOptions,
+      );
     }
 
     if (initial.isDiscrete) {
       const discreteVals = initial.bins.map((b) => b.x0);
       const [fgDiscreteBins, fgStats] = await Promise.all([
         fetchDiscreteBins(tableName, col, discreteVals, filters, bridge),
-        fetchColumnStats(tableName, col, filters, bridge),
+        fetchColumnStats(tableName, col, filters, bridge, this.distinctCountOptions),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -221,6 +244,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: true,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        distinctCountApprox: fgStats.distinctCountApprox === true,
       };
     } else {
       const [fgBins, fgStats] = await Promise.all([
@@ -233,7 +257,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           filters,
           bridge,
         ),
-        fetchColumnStats(tableName, col, filters, bridge),
+        fetchColumnStats(tableName, col, filters, bridge, this.distinctCountOptions),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -247,6 +271,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: false,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        distinctCountApprox: fgStats.distinctCountApprox === true,
       };
     }
   }
@@ -292,6 +317,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           maxBins,
           allFilters,
           this.options.bridge,
+          this.distinctCountOptions,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.data = fetched;
@@ -349,6 +375,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       max: isNaN(this.data.max) ? null : this.data.max,
       median: this.data.median,
       distinctCount: this.data.distinctCount,
+      distinctCountApprox: this.data.distinctCountApprox === true,
     };
     this.options.onDefaultStatsChange(stats);
   }

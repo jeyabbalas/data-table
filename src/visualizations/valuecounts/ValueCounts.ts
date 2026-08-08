@@ -24,7 +24,8 @@ import type { ColumnSchema, Filter } from '../../core/types';
 import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
-import { resolveColor, resolveScope } from '../palette';
+import type { DistinctCountOptions } from '../histogram/HistogramData';
+import { createPaletteCache, resolveCachedPalette, resolveColor } from '../palette';
 import { formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
@@ -55,13 +56,24 @@ interface ValueCountsColors {
 }
 
 /**
+ * One resolved palette per `.dt-root`, shared by every value-counts chart in
+ * that table. Retired on theme flip — see `palette.ts`.
+ */
+const valueCountsColorCache = createPaletteCache<ValueCountsColors>();
+
+/**
  * Resolve the value-counts palette from CSS custom properties. Called once
- * per render() so host-app `--dt-*` overrides and dark-mode flips propagate
- * on the next paint. Crossfilter alphas use the 50% stops (vs histogram's
- * 20%) so white segment labels remain legible on partially-filled bars.
+ * per render(), but served from a per-`.dt-root` cache so the 18
+ * `getComputedStyle` lookups run once per table per theme flip rather than
+ * once per column per paint. Crossfilter alphas use the 50% stops (vs
+ * histogram's 20%) so white segment labels remain legible on partially-filled
+ * bars.
  */
 function getValueCountsColors(canvas: HTMLCanvasElement): ValueCountsColors {
-  const scope = resolveScope(canvas);
+  return resolveCachedPalette(canvas, valueCountsColorCache, computeValueCountsColors);
+}
+
+function computeValueCountsColors(scope: HTMLElement): ValueCountsColors {
   const r = (cssVar: string, fallback: string) => resolveColor(scope, cssVar, fallback);
   return {
     barFill: r('--dt-primary', '#3b82f6'),
@@ -243,13 +255,9 @@ export class ValueCounts extends BaseVisualization {
       initialData: this.initialData,
       initialCategoryOrder: this.initialCategoryOrder,
       initialHasOther: this.initialHasOther,
-      initialSegmentCounts: this.initialSegmentCounts
-        ? new Map(this.initialSegmentCounts)
-        : null,
+      initialSegmentCounts: this.initialSegmentCounts ? new Map(this.initialSegmentCounts) : null,
       topCategoryValues: [...this.topCategoryValues],
-      foldedCountOverrides: this.foldedCountOverrides
-        ? new Map(this.foldedCountOverrides)
-        : null,
+      foldedCountOverrides: this.foldedCountOverrides ? new Map(this.foldedCountOverrides) : null,
     };
   }
 
@@ -286,6 +294,15 @@ export class ValueCounts extends BaseVisualization {
   // =========================================
 
   /**
+   * The approx-distinct switch, in the shape the data helpers take. Read off
+   * `options` per fetch rather than cached, since `updateFilters` replaces
+   * the options object.
+   */
+  private get distinctCountOptions(): DistinctCountOptions {
+    return { useApproxDistinct: this.options.useApproxDistinct === true };
+  }
+
+  /**
    * Fetch value counts data from DuckDB.
    *
    * Two-branch crossfilter pattern:
@@ -315,6 +332,7 @@ export class ValueCounts extends BaseVisualization {
             [],
             this.options.bridge,
             MAX_CATEGORIES,
+            this.distinctCountOptions,
           );
           if (seq !== this.fetchSequence || this.destroyed) return;
           this.initialCategoryOrder = unfilteredData.segments
@@ -339,6 +357,7 @@ export class ValueCounts extends BaseVisualization {
           this.initialHasOther,
           allFilters,
           this.options.bridge,
+          this.distinctCountOptions,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
 
@@ -353,6 +372,7 @@ export class ValueCounts extends BaseVisualization {
           allFilters,
           this.options.bridge,
           MAX_CATEGORIES,
+          this.distinctCountOptions,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.data = fetched;
@@ -430,6 +450,7 @@ export class ValueCounts extends BaseVisualization {
       nullCount: this.data.nullCount,
       filteredTotalRows: bgTotal !== null ? this.data.total : null,
       distinctCount: this.data.distinctCount,
+      distinctCountApprox: this.data.distinctCountApprox === true,
       trueCount,
     };
     this.options.onDefaultStatsChange(stats);

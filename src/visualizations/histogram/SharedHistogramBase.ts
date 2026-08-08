@@ -13,7 +13,7 @@
 import type { ColumnSchema } from '../../core/types';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
-import { resolveColor, resolveScope } from '../palette';
+import { createPaletteCache, resolveCachedPalette, resolveColor } from '../palette';
 import { formatPercent, truncateText, findSlotAtX } from '../utils';
 
 // =========================================
@@ -46,12 +46,23 @@ export interface HistogramColors {
 }
 
 /**
+ * One resolved palette per `.dt-root`, shared by every histogram in that
+ * table. Retired on theme flip — see `palette.ts` for the two invalidation
+ * paths.
+ */
+const histogramColorCache = createPaletteCache<HistogramColors>();
+
+/**
  * Resolve the histogram palette from CSS custom properties. Called once per
- * `render()` so host-app theme overrides and dark-mode flips propagate on
- * the next paint. Fallback hex values match the pre-variable defaults.
+ * `render()`, but served from a per-`.dt-root` cache: the 16
+ * `getComputedStyle` lookups run once per table per theme flip, not once per
+ * column per paint. Fallback hex values match the pre-variable defaults.
  */
 export function getHistogramColors(canvas: HTMLCanvasElement): HistogramColors {
-  const scope = resolveScope(canvas);
+  return resolveCachedPalette(canvas, histogramColorCache, computeHistogramColors);
+}
+
+function computeHistogramColors(scope: HTMLElement): HistogramColors {
   const r = (cssVar: string, fallback: string) => resolveColor(scope, cssVar, fallback);
   return {
     barFill: r('--dt-primary', '#3b82f6'),

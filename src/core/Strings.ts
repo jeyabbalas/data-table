@@ -432,6 +432,17 @@ export interface Strings {
     allUnique: string;
     uniqueCount: (count: number) => string;
     uniquePercent: (count: number, pct: number) => string;
+    /**
+     * Distinct count from `approx_count_distinct` — used instead of
+     * `uniqueCount` above 100,000 rows. Keep a marker for "approximate" in
+     * the translation.
+     */
+    approxUniqueCount: (count: number) => string;
+    /**
+     * Approximate distinct count with its share of non-null rows — the
+     * approximate twin of `uniquePercent`.
+     */
+    approxUniquePercent: (count: number, pct: number) => string;
     /** " · " separator used between stats segments. */
     separator: string;
     /** Bold label prefix for a histogram bin/brush selection detail line. */
@@ -820,6 +831,8 @@ export const defaultStrings: Strings = {
     allUnique: 'all unique',
     uniqueCount: (count) => `${count.toLocaleString()} unique`,
     uniquePercent: (count, pct) => `${count.toLocaleString()} unique (${pct}%)`,
+    approxUniqueCount: (count) => `~${count.toLocaleString()} unique`,
+    approxUniquePercent: (count, pct) => `~${count.toLocaleString()} unique (${pct}%)`,
     separator: ' \u00B7 ',
     binLabel: 'Bin:',
     categoryLabel: 'Category:',

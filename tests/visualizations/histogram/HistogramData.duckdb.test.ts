@@ -148,6 +148,68 @@ describe('column stats — NULL semantics, return types, distinct counts', () =>
     });
   });
 
+  describe('numeric — approximate distinct counts (Phase 2 §4.6)', () => {
+    it('approx_count_distinct is a real DuckDB-WASM aggregate; other stats unaffected', async () => {
+      const t = tableName('approx');
+      await harness.conn.query(
+        `CREATE TABLE "${t}" AS SELECT CAST(range AS DOUBLE) AS v FROM range(20000)`,
+      );
+
+      const exact = await fetchColumnStats(t, 'v', [], bridge);
+      expect(exact.distinctCount).toBe(20_000);
+      expect(exact.distinctCountApprox).toBe(false);
+
+      const approx = await fetchColumnStats(t, 'v', [], bridge, { useApproxDistinct: true });
+      expect(approx.distinctCountApprox).toBe(true);
+      // Deliberately loose: this HyperLogLog is not a rounding error. At
+      // 20,000 distinct values DuckDB-WASM returns ~17,000 — a 15%
+      // undercount. That inaccuracy is the reason the stats line marks the
+      // value with `~` and the "all unique" claim is suppressed; the bound
+      // here only pins "same order of magnitude, not a broken query".
+      expect(approx.distinctCount).toBeGreaterThan(14_000);
+      expect(approx.distinctCount).toBeLessThan(26_000);
+      // Everything else in the scan is untouched by the swap.
+      expect(approx.count).toBe(exact.count);
+      expect(approx.min).toBe(exact.min);
+      expect(approx.max).toBe(exact.max);
+      expect(approx.nullCount).toBe(exact.nullCount);
+    });
+
+    it('is exact at and below the discrete-bin threshold', async () => {
+      // The load-bearing claim behind DISCRETE_BIN_THRESHOLD = 5: the
+      // discrete/continuous decision reads an approximate distinctCount, so
+      // it is only safe if the sketch is exact down here. Measured: exact
+      // through cardinality 7, first deviation at 8.
+      for (const cardinality of [1, 2, 3, 4, 5, 6, 7]) {
+        const t = tableName(`approx_small_${cardinality}`);
+        await harness.conn.query(
+          `CREATE TABLE "${t}" AS SELECT CAST(range % ${cardinality} AS DOUBLE) AS v FROM range(5000)`,
+        );
+        const approx = await fetchColumnStats(t, 'v', [], bridge, { useApproxDistinct: true });
+        expect(approx.distinctCount).toBe(cardinality);
+      }
+    });
+
+    it('respects active filters', async () => {
+      const t = tableName('approx_filtered');
+      await harness.conn.query(
+        `CREATE TABLE "${t}" AS SELECT CAST(range AS DOUBLE) AS v FROM range(1000)`,
+      );
+      const approx = await fetchColumnStats(
+        t,
+        'v',
+        [{ type: 'range', column: 'v', min: 0, max: 9, maxInclusive: true } as never],
+        bridge,
+        { useApproxDistinct: true },
+      );
+      // The WHERE clause is applied — the sketch sees 10 rows, not 1,000.
+      // (It reports 11 for a true 10; above the exactness boundary already.)
+      expect(approx.count).toBe(10);
+      expect(approx.distinctCount).toBeGreaterThanOrEqual(9);
+      expect(approx.distinctCount).toBeLessThanOrEqual(12);
+    });
+  });
+
   describe('temporal — fetchDateStats returns Date instances', () => {
     it('TIMESTAMP column min/max are Date, not string (locks the consumer-visible type)', async () => {
       const t = tableName('date_types');

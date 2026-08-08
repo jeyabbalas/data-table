@@ -77,12 +77,14 @@ import type { BaseVisualization } from './visualizations/BaseVisualization';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 import { DateHistogram } from './visualizations/histogram/DateHistogram';
 import { Histogram } from './visualizations/histogram/Histogram';
+import { shouldUseApproxDistinct } from './visualizations/histogram/HistogramData';
 import { IntervalHistogram } from './visualizations/histogram/IntervalHistogram';
 import { TimeHistogram } from './visualizations/histogram/TimeHistogram';
 import { InteractionManager } from './visualizations/InteractionManager';
 import { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
 import type { StatsPanelRegistry } from './visualizations/StatsPanelRegistry';
 import { defaultStatsPanelRegistry } from './visualizations/StatsPanelRegistry';
+import { ThemeWatcher } from './visualizations/ThemeWatcher';
 import { ValueCounts } from './visualizations/valuecounts/ValueCounts';
 import type { VisualizationRegistry } from './visualizations/VisualizationRegistry';
 import { defaultVisualizationRegistry } from './visualizations/VisualizationRegistry';
@@ -710,6 +712,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // -------- Visualizations (auto-attach) --------
   const vizMode = normalizeVisualizations(opts.visualizations);
   const interactionManager = vizMode.enabled ? new InteractionManager() : null;
+  // One `data-dt-color-scheme` observer for the whole table instead of one
+  // per visualization. The WIDE baseline measured 1,001 live MutationObservers
+  // with charts on against 1 with them off; this is the 1,000.
+  const themeWatcher = vizMode.enabled ? new ThemeWatcher(tableContainer.getElement()) : null;
   // Assigned a few statements below; the coordinators' scheduler hooks close
   // over this binding rather than the instance, because the controller's host
   // callbacks need the coordinators and the coordinators need the scheduler.
@@ -952,6 +958,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       filters: state.filters.get(),
       messages,
       initialSnapshot: seedSnapshot ?? undefined,
+      // Above ~100k rows an exact `COUNT(DISTINCT col)` is a full scan per
+      // column; HyperLogLog answers the same question in a fraction of the
+      // time and the stats line only ever shows a rounded figure anyway.
+      useApproxDistinct: shouldUseApproxDistinct(state.totalRows.get()),
+      ...(themeWatcher ? { themeWatcher } : {}),
       onFilterChange: (filter: Filter | null) => {
         coordinator.handleFilterChange(column.name, filter);
       },
@@ -1656,9 +1667,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     resolveVizReady?.();
     resolveVizReady = null;
 
-    // The controller owns every live instance and its observer.
+    // The controller owns every live instance and its observer. Instances
+    // unregister from the theme watcher as they go, so it is disconnected
+    // by the time we tear it down — the call is the belt to that braces.
     vizController?.destroy();
     vizController = null;
+    themeWatcher?.destroy();
     interactionManager?.destroy();
     coordinator.destroy();
 

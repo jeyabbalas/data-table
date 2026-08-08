@@ -33,18 +33,35 @@ export interface NumericColumnStats extends BaseColumnStats {
   max: number | null;
   median: number | null;
   distinctCount: number;
+  /**
+   * True when `distinctCount` is a HyperLogLog estimate from
+   * `approx_count_distinct` rather than an exact `COUNT(DISTINCT …)`. The
+   * visualizations set it above `APPROX_DISTINCT_ROW_THRESHOLD` rows.
+   * Absent or false means the count is exact.
+   */
+  distinctCountApprox?: boolean | undefined;
 }
 
 /**
  * Stats for categorical columns (string, boolean, uuid).
  * Line 2 varies by DataType:
- * - string: "12 unique" or "all unique"
+ * - string: "12 unique", "~12 unique" (approximate), or "all unique"
  * - boolean: "67% true"
- * - uuid: "1,234 unique (100%)" or "all unique"
+ * - uuid: "1,234 unique (100%)", "~1,234 unique (98%)", or "all unique"
  */
 export interface CategoricalColumnStats extends BaseColumnStats {
   kind: 'categorical';
   distinctCount: number;
+  /**
+   * True when `distinctCount` is a HyperLogLog estimate from
+   * `approx_count_distinct` rather than an exact `COUNT(DISTINCT …)`.
+   *
+   * Drives two things in `formatStatsLine2`: the `~` marker on the rendered
+   * count, and suppression of the "all unique" shortcut — under HLL,
+   * `distinctCount === nonNullCount` is a coin flip, so the claim cannot be
+   * made. Absent or false means the count is exact.
+   */
+  distinctCountApprox?: boolean | undefined;
   /** Count of true values (boolean columns only) */
   trueCount?: number | undefined;
 }

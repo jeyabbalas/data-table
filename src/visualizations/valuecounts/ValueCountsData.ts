@@ -11,6 +11,8 @@ import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
+import { distinctCountExpr } from '../histogram/HistogramData';
+import type { DistinctCountOptions } from '../histogram/HistogramData';
 
 // Re-export SQL utilities for use by other modules
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
@@ -48,8 +50,18 @@ export interface ValueCountsData {
   distinctCount: number;
   /** Total row count (including nulls) */
   total: number;
-  /** True when every value is unique (no repeated values) */
+  /**
+   * True when every value is unique (no repeated values).
+   *
+   * Always `false` when {@link ValueCountsData.distinctCountApprox} is set —
+   * see the derivation in `fetchValueCountsData`.
+   */
   isAllUnique: boolean;
+  /**
+   * True when `distinctCount` came from `approx_count_distinct` rather than
+   * an exact `COUNT(DISTINCT …)`. Absent means exact.
+   */
+  distinctCountApprox?: boolean;
 }
 
 /**
@@ -82,6 +94,7 @@ async function fetchColumnStats(
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
+  useApproxDistinct: boolean,
 ): Promise<{ total: number; nonNullCount: number; nullCount: number; distinctCount: number }> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -93,7 +106,7 @@ async function fetchColumnStats(
       COUNT(*) as total,
       COUNT(${col}) as non_null_count,
       COUNT(*) - COUNT(${col}) as null_count,
-      COUNT(DISTINCT ${col}) as distinct_count
+      ${distinctCountExpr(col, useApproxDistinct)} as distinct_count
     FROM ${tbl}
     ${whereSQL}
   `;
@@ -158,6 +171,7 @@ async function fetchTopCategories(
  * @param filters - Active filters to apply
  * @param bridge - WorkerBridge for executing queries
  * @param maxCategories - Maximum number of top categories to show (default: 10)
+ * @param options - `{ useApproxDistinct }`; omitted means exact distinct count
  * @returns ValueCountsData with segments and metadata
  */
 export async function fetchValueCountsData(
@@ -166,10 +180,12 @@ export async function fetchValueCountsData(
   filters: Filter[],
   bridge: WorkerBridge,
   maxCategories: number = DEFAULT_MAX_CATEGORIES,
+  options?: DistinctCountOptions,
 ): Promise<ValueCountsData> {
+  const useApproxDistinct = options?.useApproxDistinct === true;
   try {
     // Step 1: Fetch column statistics
-    const stats = await fetchColumnStats(tableName, column, filters, bridge);
+    const stats = await fetchColumnStats(tableName, column, filters, bridge, useApproxDistinct);
 
     // Handle edge case: no data (all nulls or empty)
     if (stats.nonNullCount === 0) {
@@ -179,6 +195,7 @@ export async function fetchValueCountsData(
         distinctCount: 0,
         total: stats.total,
         isAllUnique: false,
+        distinctCountApprox: useApproxDistinct,
       };
     }
 
@@ -222,7 +239,16 @@ export async function fetchValueCountsData(
 
     // Step 5: Determine if all values are unique
     // (every non-null value appears exactly once)
-    const isAllUnique = stats.distinctCount === stats.nonNullCount && stats.nonNullCount > 1;
+    //
+    // Suppressed under approximate counts: `approx_count_distinct` is a
+    // HyperLogLog sketch carrying ~2% error, so `distinctCount ===
+    // nonNullCount` becomes a coin flip on a genuinely all-unique column and
+    // an occasional false positive on one that is merely near-unique. The
+    // flag drives a full-width display-only "All unique (n)" segment that
+    // emits no filter and replaces the real category breakdown, so getting
+    // it wrong is a visible, un-clickable lie rather than a rounding error.
+    const isAllUnique =
+      !useApproxDistinct && stats.distinctCount === stats.nonNullCount && stats.nonNullCount > 1;
 
     return {
       segments,
@@ -230,6 +256,7 @@ export async function fetchValueCountsData(
       distinctCount: stats.distinctCount,
       total: stats.total,
       isAllUnique,
+      distinctCountApprox: useApproxDistinct,
     };
   } catch (error) {
     throw new QueryError(
@@ -252,6 +279,7 @@ export async function fetchValueCountsData(
  * @param backgroundHasOther - Whether the background data has an "Other" segment
  * @param filters - Active filters to apply (all filters including own)
  * @param bridge - WorkerBridge for executing queries
+ * @param options - `{ useApproxDistinct }`; omitted means exact distinct count
  * @returns ValueCountsData with segments aligned to background categories
  */
 export async function fetchAlignedValueCountsData(
@@ -261,10 +289,12 @@ export async function fetchAlignedValueCountsData(
   backgroundHasOther: boolean,
   filters: Filter[],
   bridge: WorkerBridge,
+  options?: DistinctCountOptions,
 ): Promise<ValueCountsData> {
+  const useApproxDistinct = options?.useApproxDistinct === true;
   try {
     // Step 1: Fetch foreground column statistics
-    const stats = await fetchColumnStats(tableName, column, filters, bridge);
+    const stats = await fetchColumnStats(tableName, column, filters, bridge, useApproxDistinct);
 
     // Handle edge case: no non-null data
     if (stats.nonNullCount === 0) {
@@ -288,6 +318,7 @@ export async function fetchAlignedValueCountsData(
         distinctCount: 0,
         total: stats.total,
         isAllUnique: false,
+        distinctCountApprox: useApproxDistinct,
       };
     }
 
@@ -345,8 +376,12 @@ export async function fetchAlignedValueCountsData(
       });
     }
 
-    // Step 4: Determine if all values are unique
-    const isAllUnique = stats.distinctCount === stats.nonNullCount && stats.nonNullCount > 1;
+    // Step 4: Determine if all values are unique.
+    // Suppressed under approximate counts for the same reason as the
+    // unfiltered path above — a HyperLogLog estimate cannot support an
+    // exact-equality claim.
+    const isAllUnique =
+      !useApproxDistinct && stats.distinctCount === stats.nonNullCount && stats.nonNullCount > 1;
 
     return {
       segments,
@@ -354,6 +389,7 @@ export async function fetchAlignedValueCountsData(
       distinctCount: stats.distinctCount,
       total: stats.total,
       isAllUnique,
+      distinctCountApprox: useApproxDistinct,
     };
   } catch (error) {
     throw new QueryError(

@@ -56,6 +56,18 @@ describe('Strings', () => {
       expect(s.matchCount(0)).toBe('0 match');
       expect(s.valueListSuffix(8)).toBe(', ... (8 values)');
     });
+
+    it('ships defaults for the approximate distinct-count stats keys', () => {
+      // Phase 2 §4.6: above 100,000 rows the distinct count comes from
+      // `approx_count_distinct`, and the stats line says so with a `~`.
+      const s = defaultStrings.statistics;
+      expect(s.approxUniqueCount(1234)).toBe('~1,234 unique');
+      expect(s.approxUniqueCount(1)).toBe('~1 unique');
+      expect(s.approxUniquePercent(1234, 98)).toBe('~1,234 unique (98%)');
+      // The exact twins keep their unmarked form.
+      expect(s.uniqueCount(1234)).toBe('1,234 unique');
+      expect(s.uniquePercent(1234, 98)).toBe('1,234 unique (98%)');
+    });
   });
 
   describe('mergeStrings', () => {

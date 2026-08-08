@@ -15,8 +15,72 @@ import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
 // Re-export for backward compatibility
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
 
-/** Maximum distinct values to use discrete binning (one bin per unique value) */
+/**
+ * Maximum distinct values to use discrete binning (one bin per unique value)
+ *
+ * Safe to evaluate against an approximate `distinctCount`. DuckDB-WASM's
+ * `approx_count_distinct` is *exact* through cardinality 7 — its first
+ * deviation is at 8 distinct values, measured in
+ * `tests/visualizations/histogram/HistogramData.duckdb.test.ts` — so a
+ * threshold of 5 is never mis-evaluated and the discrete/continuous choice
+ * is unaffected by the approximation. Accepted per Phase 2 §4.6.
+ *
+ * Even if a future DuckDB moved that boundary the failure would be cosmetic:
+ * `fetchDiscreteValues` enumerates the real values, so a mis-classified
+ * column renders as a continuous histogram rather than as a wrong one.
+ */
 const DISCRETE_BIN_THRESHOLD = 5;
+
+/**
+ * Row count above which the viz stats scans swap the exact
+ * `COUNT(DISTINCT col)` for DuckDB's HyperLogLog `approx_count_distinct(col)`.
+ * At or below it the count stays exact.
+ *
+ * The exact aggregate builds a full hash table over the column and is the
+ * dominant term of the per-column stats scan on wide tables; the sketch is
+ * bounded-memory. The trade is real accuracy, not just rounding — measured
+ * error against DuckDB-WASM runs to ±15% in the thousands — which is why
+ * every consumer of an approximate count marks it (`~` in the stats line)
+ * and why the exact-equality "all unique" claim is withheld entirely.
+ *
+ * `tests/budgets.ts` mirrors the literal rather than importing it — tests
+ * never import from the library bundle.
+ */
+export const APPROX_DISTINCT_ROW_THRESHOLD = 100_000;
+
+/**
+ * Whether a table of `totalRows` rows should use approximate distinct counts.
+ * The facade owns `state.totalRows` and passes the result into
+ * `VisualizationOptions.useApproxDistinct`.
+ *
+ * Strictly greater-than: a table of exactly
+ * {@link APPROX_DISTINCT_ROW_THRESHOLD} rows still gets exact counts.
+ */
+export function shouldUseApproxDistinct(totalRows: number): boolean {
+  return totalRows > APPROX_DISTINCT_ROW_THRESHOLD;
+}
+
+/**
+ * Per-call tuning for the two stats scans that count distinct values.
+ * Omitted entirely — the default everywhere except the facade's viz path —
+ * means "exact counts", i.e. the pre-Phase-2 behavior.
+ */
+export interface DistinctCountOptions {
+  /** Use `approx_count_distinct` instead of `COUNT(DISTINCT …)`. */
+  useApproxDistinct?: boolean;
+}
+
+/**
+ * The distinct-count aggregate expression for an already-quoted column
+ * reference. Single source of truth for both stats SQLs — the histogram's
+ * here and the value-counts one in `valuecounts/ValueCountsData.ts`.
+ *
+ * @param col - column reference, already through `quoteIdentifier`
+ * @param useApproxDistinct - swap in the HyperLogLog sketch
+ */
+export function distinctCountExpr(col: string, useApproxDistinct: boolean | undefined): string {
+  return useApproxDistinct ? `approx_count_distinct(${col})` : `COUNT(DISTINCT ${col})`;
+}
 
 // =========================================
 // Interfaces
@@ -56,6 +120,11 @@ export interface HistogramData {
   median: number | null;
   /** Count of distinct non-null values */
   distinctCount: number;
+  /**
+   * True when `distinctCount` came from `approx_count_distinct` rather than
+   * an exact `COUNT(DISTINCT …)`. Absent means exact.
+   */
+  distinctCountApprox?: boolean;
 }
 
 /**
@@ -70,6 +139,8 @@ export interface ColumnStats {
   q3: number | null;
   median: number | null;
   distinctCount: number;
+  /** True when `distinctCount` is a HyperLogLog estimate. Absent means exact. */
+  distinctCountApprox?: boolean;
 }
 
 /**
@@ -171,17 +242,25 @@ function clampBins(numBins: number, maxBins = 100): number {
 
 /**
  * Fetch column statistics needed for histogram calculation
+ *
+ * @param tableName - Name of the DuckDB table
+ * @param column - Name of the column
+ * @param filters - Filters to apply
+ * @param bridge - WorkerBridge for executing queries
+ * @param options - `{ useApproxDistinct }`; omitted means exact distinct count
  */
 export async function fetchColumnStats(
   tableName: string,
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
+  options?: DistinctCountOptions,
 ): Promise<ColumnStats> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const useApproxDistinct = options?.useApproxDistinct === true;
 
   // CAST to DOUBLE ensures consistent JavaScript number types regardless of
   // source column type (DECIMAL, FLOAT, HUGEINT from parquet, etc.)
@@ -194,7 +273,7 @@ export async function fetchColumnStats(
       CAST(APPROX_QUANTILE(${col}, 0.25) AS DOUBLE) as q1,
       CAST(APPROX_QUANTILE(${col}, 0.5) AS DOUBLE) as median,
       CAST(APPROX_QUANTILE(${col}, 0.75) AS DOUBLE) as q3,
-      COUNT(DISTINCT ${col}) as distinct_count
+      ${distinctCountExpr(col, useApproxDistinct)} as distinct_count
     FROM ${tbl}
     ${whereSQL}
   `;
@@ -211,6 +290,7 @@ export async function fetchColumnStats(
       q3: null,
       median: null,
       distinctCount: 0,
+      distinctCountApprox: useApproxDistinct,
     };
   }
 
@@ -224,6 +304,7 @@ export async function fetchColumnStats(
     q3: row.q3,
     median: row.median ?? null,
     distinctCount: Number(row.distinct_count),
+    distinctCountApprox: useApproxDistinct,
   };
 }
 
@@ -389,6 +470,7 @@ export async function fetchDiscreteBins(
  * @param maxBins - Maximum number of bins (optimal bins calculated and clamped to this)
  * @param filters - Active filters to apply
  * @param bridge - WorkerBridge for executing queries
+ * @param options - `{ useApproxDistinct }`; omitted means exact distinct count
  * @returns HistogramData with bins and metadata
  */
 export async function fetchHistogramData(
@@ -397,10 +479,12 @@ export async function fetchHistogramData(
   maxBins: number | 'auto',
   filters: Filter[],
   bridge: WorkerBridge,
+  options?: DistinctCountOptions,
 ): Promise<HistogramData> {
+  const useApproxDistinct = options?.useApproxDistinct === true;
   try {
     // Step 1: Fetch column statistics
-    const stats = await fetchColumnStats(tableName, column, filters, bridge);
+    const stats = await fetchColumnStats(tableName, column, filters, bridge, options);
 
     // Handle edge case: no data (all nulls or empty)
     if (stats.count === 0 || stats.min === null || stats.max === null) {
@@ -414,6 +498,7 @@ export async function fetchHistogramData(
         isDiscrete: false,
         median: null,
         distinctCount: 0,
+        distinctCountApprox: useApproxDistinct,
       };
     }
 
@@ -434,10 +519,13 @@ export async function fetchHistogramData(
         isDiscrete: true, // Single value is also discrete
         median: stats.median,
         distinctCount: stats.distinctCount,
+        distinctCountApprox: useApproxDistinct,
       };
     }
 
-    // Step 2.5: Check for discrete binning (few unique values)
+    // Step 2.5: Check for discrete binning (few unique values).
+    // See DISCRETE_BIN_THRESHOLD: an approximate `distinctCount` is safe here
+    // because HyperLogLog is effectively exact at this cardinality.
     if (stats.distinctCount <= DISCRETE_BIN_THRESHOLD) {
       const discreteValues = await fetchDiscreteValues(tableName, column, filters, bridge);
 
@@ -458,6 +546,7 @@ export async function fetchHistogramData(
         isDiscrete: true,
         median: stats.median,
         distinctCount: stats.distinctCount,
+        distinctCountApprox: useApproxDistinct,
       };
     }
 
@@ -482,6 +571,7 @@ export async function fetchHistogramData(
       isDiscrete: false,
       median: stats.median,
       distinctCount: stats.distinctCount,
+      distinctCountApprox: useApproxDistinct,
     };
   } catch (error) {
     throw new QueryError(

@@ -38,7 +38,8 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColumnStatsData } from '../statistics/ColumnStatsTypes';
-import { resolveScope } from './palette';
+import { invalidatePaletteCache, resolveScope } from './palette';
+import type { ThemeChangeListener, ThemeWatcher } from './ThemeWatcher';
 
 /**
  * Manages shared window-level event listeners for all BaseVisualization instances.
@@ -110,6 +111,30 @@ export interface VisualizationOptions {
   messages?: Strings;
   /** Maximum number of histogram bins (default: 15) */
   maxBins?: number;
+  /**
+   * Compute distinct counts with DuckDB's HyperLogLog
+   * `approx_count_distinct(col)` instead of an exact `COUNT(DISTINCT col)`.
+   *
+   * The facade sets this from `state.totalRows` via
+   * `shouldUseApproxDistinct` (`histogram/HistogramData.ts`) — above
+   * `APPROX_DISTINCT_ROW_THRESHOLD` rows the exact count is the single most
+   * expensive term in the per-column stats scan.
+   *
+   * Absent (the default) keeps the exact count. When set, the count is a
+   * genuine estimate, so the stats line renders the `~` marker and the
+   * "all unique" shortcut is suppressed — see
+   * `StatsFormatters.formatStatsLine2`.
+   */
+  useApproxDistinct?: boolean;
+  /**
+   * Shared per-table {@link ThemeWatcher}. When supplied, this instance
+   * registers with it instead of installing its own `MutationObserver` on
+   * `.dt-root` — one observer per table rather than one per column.
+   *
+   * Omit it (standalone `/advanced` composition) and the private observer is
+   * used exactly as before.
+   */
+  themeWatcher?: ThemeWatcher;
   /**
    * Data captured from a previous instance of the same column via
    * {@link BaseVisualization.exportDataSnapshot}. When present, the built-in
@@ -191,6 +216,7 @@ export abstract class BaseVisualization {
   private boundMouseDown: (e: MouseEvent) => void;
   private resizeObserver: ResizeObserver;
   private colorSchemeObserver: MutationObserver | null = null;
+  private themeListener: ThemeChangeListener | null = null;
 
   constructor(
     protected container: HTMLElement,
@@ -242,18 +268,39 @@ export abstract class BaseVisualization {
   }
 
   /**
-   * Install a MutationObserver on the nearest `.dt-root` that calls `render()`
-   * whenever `data-dt-color-scheme` flips. Palette resolution happens inside
-   * `render()`, so the single re-render is enough to pick up the new theme.
+   * Arrange to `render()` whenever `data-dt-color-scheme` flips on the
+   * nearest `.dt-root`. Palette resolution happens inside `render()`, so the
+   * single re-render is enough to pick up the new theme.
+   *
+   * Two paths, same observable behavior:
+   *
+   * - `options.themeWatcher` supplied (the facade's path) — register with the
+   *   table's one shared observer. It retires the palette caches itself
+   *   before notifying, so N columns cost 1 observer and 1 palette resolve
+   *   per flip instead of N and N.
+   * - No watcher (standalone `/advanced` composition) — install a private
+   *   observer, as before. It retires the caches on its own, so a lone
+   *   visualization outside a DataTable stays correct across a flip.
    */
   private setupColorSchemeWatcher(): void {
+    const watcher = this.options.themeWatcher;
+    if (watcher) {
+      this.themeListener = () => {
+        if (!this.destroyed) this.render();
+      };
+      watcher.register(this.themeListener);
+      return;
+    }
+
     if (typeof MutationObserver === 'undefined') return;
     const scope = resolveScope(this.canvas);
     // `resolveScope` falls back to the canvas itself when no `.dt-root`
     // ancestor exists; that fallback has no attribute to watch, so skip it.
     if (scope === (this.canvas as unknown as HTMLElement)) return;
     this.colorSchemeObserver = new MutationObserver(() => {
-      if (!this.destroyed) this.render();
+      if (this.destroyed) return;
+      invalidatePaletteCache();
+      this.render();
     });
     this.colorSchemeObserver.observe(scope, {
       attributes: true,
@@ -608,7 +655,12 @@ export abstract class BaseVisualization {
     // Stop observing resize (optional chaining in case constructor failed partially)
     this.resizeObserver?.disconnect();
 
-    // Stop watching the root for color-scheme flips
+    // Stop watching the root for color-scheme flips — whichever of the two
+    // paths `setupColorSchemeWatcher` took.
+    if (this.themeListener) {
+      this.options.themeWatcher?.unregister(this.themeListener);
+      this.themeListener = null;
+    }
     this.colorSchemeObserver?.disconnect();
     this.colorSchemeObserver = null;
 

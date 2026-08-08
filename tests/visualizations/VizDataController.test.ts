@@ -237,14 +237,20 @@ interface Harness {
   io(): FakeIntersectionObserver;
   /** Rebuild the header DOM, as `TableContainer.render()` does. */
   rebuildHeaders(names: string[]): void;
+  /** Flip what the host's `getRoot()` answers — a root that resolves late. */
+  setRootAvailable(available: boolean): void;
 }
 
 function makeHarness(
   names: string[],
-  opts: { useIO?: boolean; concurrency?: number } = {},
+  opts: { useIO?: boolean; concurrency?: number; rootAvailable?: boolean } = {},
 ): Harness {
   const useIO = opts.useIO !== false;
   const root = mountHeaders(names);
+  // `getRoot` is the host's seam, not the DOM's: it can answer `null` for a
+  // pass while the header container it names is still being mounted, and the
+  // controller re-resolves it on every sync for exactly that reason.
+  let rootAvailable = opts.rootAvailable !== false;
   const filters: Filter[] = [];
   const errors: Array<{ error: unknown; column: string }> = [];
   const waves: Array<{ count: number; generation: number }> = [];
@@ -260,7 +266,7 @@ function makeHarness(
 
   const controller = new VizDataController({
     host,
-    getRoot: () => root,
+    getRoot: () => (rootAvailable ? root : null),
     concurrency: opts.concurrency ?? 4,
     intersectionObserverFactory: useIO
       ? (cb, init) => new FakeIntersectionObserver(cb, init) as unknown as IntersectionObserver
@@ -280,6 +286,9 @@ function makeHarness(
     io: () => FakeIntersectionObserver.instances[FakeIntersectionObserver.instances.length - 1]!,
     rebuildHeaders(next: string[]) {
       mountHeaders(next, root);
+    },
+    setRootAvailable(available: boolean) {
+      rootAvailable = available;
     },
   };
 }
@@ -320,6 +329,39 @@ describe('fallback mode (no IntersectionObserver)', () => {
     h.controller.sync([column('a')], 1);
     expect(h.controller.hasLiveViz('a')).toBe(true);
     expect(h.controller.hasLiveViz('missing')).toBe(false);
+  });
+});
+
+describe('a root that resolves late', () => {
+  it('retries the observer on the next sync rather than latching create-everything', async () => {
+    const h = makeHarness(['a', 'b', 'c'], { rootAvailable: false });
+
+    // Nothing to root an observer at, so this pass falls back to
+    // treat-everything-visible — correct for the pass, and the same shape
+    // `eager` asks for.
+    h.controller.sync([column('a'), column('b'), column('c')], 1);
+    expect(StubViz.created).toHaveLength(3);
+    expect(FakeIntersectionObserver.instances).toHaveLength(0);
+    await expect(h.controller.whenWaveSettled()).resolves.toBe(3);
+
+    // The host's container resolves. Nothing was latched by the null root, so
+    // this sync builds the observer it could not build before. Latching would
+    // have pinned the table into create-everything for its whole life —
+    // 1,000 canvases and ~2,000 queries at the WIDE tier, with no error.
+    h.setRootAvailable(true);
+    h.controller.sync([column('a'), column('b'), column('c')], 2);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    expect(h.io().observed.size).toBe(3);
+    // The headers were not rebuilt, so the instances from the rootless pass
+    // are still mounted and none is built twice.
+    expect(StubViz.created).toHaveLength(3);
+
+    // Visibility gating is back in force: the first callback reclaims what
+    // the rootless sweep created outside the create band.
+    h.io().emit({ a: 'create', b: 'create', c: 'outside' });
+    await drain();
+    expect(h.controller.liveVizCount()).toBe(2);
+    expect(h.controller.getEntry('c')?.viz).toBeNull();
   });
 });
 
@@ -563,6 +605,74 @@ describe('filter staleness', () => {
     h.io().emit({ b: 'create' });
     await drain();
     expect(refreshed).toContain('b');
+  });
+
+  it('a throwing viz refresh leaves the columns queued behind it refreshed', async () => {
+    // Concurrency 1 so 'a' is genuinely *ahead* of the others in one worker's
+    // queue rather than beside them.
+    const h = makeHarness(['a', 'b', 'c'], { concurrency: 1 });
+    h.controller.sync([column('a'), column('b'), column('c')], 1);
+    h.io().emit({ a: 'create', b: 'create', c: 'create' });
+    await drain();
+
+    const boom = new Error('viz refresh exploded');
+    const refreshed: string[] = [];
+    await expect(
+      h.controller.refreshOnFilters(
+        request(['a', 'b', 'c'], async (name) => {
+          if (name === 'a') throw boom;
+          refreshed.push(name);
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(refreshed).toEqual(['b', 'c']);
+    expect(h.errors).toEqual([{ error: boom, column: 'a' }]);
+    // 'a' stays stale, so it retries when it next scrolls in.
+    expect(h.controller.getEntry('a')?.status).toBe('stale');
+  });
+
+  it('a throwing panel refresh leaves the panels queued behind it refreshed', async () => {
+    const h = makeHarness(['a', 'b', 'c'], { concurrency: 1 });
+    h.controller.sync([column('a'), column('b'), column('c')], 1);
+    h.io().emit({ a: 'create', b: 'create', c: 'create' });
+    await drain();
+
+    // The shipped panel path swallows in `StatsPanelCoordinator`, but a
+    // rejection reaching here propagates through `broadcast` into the bare
+    // `void this.onFiltersChanged(filters)` of the filters subscription —
+    // unhandled, with the panels behind it never refreshed.
+    const boom = new Error('panel refresh exploded');
+    const refreshed: string[] = [];
+    await expect(
+      h.controller.panelScheduler.refreshOnFilters(
+        request(['a', 'b', 'c'], async (name) => {
+          if (name === 'a') throw boom;
+          refreshed.push(name);
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(refreshed).toEqual(['b', 'c']);
+    expect(h.errors).toEqual([{ error: boom, column: 'a' }]);
+  });
+
+  it('routes a rejection from a deferred panel refresh to onError', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'outside' });
+    await drain();
+
+    const boom = new Error('deferred panel exploded');
+    await h.controller.panelScheduler.refreshOnFilters(request(['a'], () => Promise.reject(boom)));
+    expect(h.errors).toEqual([]);
+
+    // Scrolling in dispatches the deferred refresh from inside the observer
+    // callback, where there is no caller to hold the promise: unhandled
+    // unless the controller catches it itself.
+    h.io().emit({ a: 'create' });
+    await drain();
+    expect(h.errors).toEqual([{ error: boom, column: 'a' }]);
   });
 
   it('the panel scheduler does not disturb the viz filter epoch', async () => {

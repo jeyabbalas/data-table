@@ -219,8 +219,14 @@ export class VizDataController implements FilterFanOutScheduler {
   private io: IntersectionObserver | null = null;
   private ioRoot: Element | null = null;
   /**
-   * True when no observer could be constructed. Everything is then treated as
-   * visible and created synchronously — the jsdom path.
+   * True when this environment has no `IntersectionObserver` to construct at
+   * all — jsdom, and browsers predating the API. Everything is then treated
+   * as visible and created synchronously.
+   *
+   * A latch, and only facts that cannot change may set it: `sync()` reads it
+   * before `ensureObserver()`, so once it is true no observer is ever built
+   * again. "No observer constructor exists" qualifies. "`getRoot()` returned
+   * null this pass" does not — see {@link ensureObserver}.
    */
   private fallbackVisible = false;
 
@@ -532,7 +538,21 @@ export class VizDataController implements FilterFanOutScheduler {
       if (!entry || entry.visible) now.push(name);
       else this.stalePanels.add(name);
     }
-    await this.runBounded(now, (name) => request.refresh(name));
+    await this.runBounded(now, async (name) => {
+      // Per panel, for the reason `refreshOnFilters` does it per column: the
+      // one shipped `refresh` swallows (`StatsPanelCoordinator`'s
+      // `callUpdateFilters`), but a custom one need not, and one throwing
+      // panel must not abandon the panels queued behind it — nor reject the
+      // caller, which reaches this through a bare
+      // `void this.onFiltersChanged(...)` and would surface an unhandled
+      // rejection. The name stays out of `stalePanels`, so the panel retries
+      // on the next filter change rather than on scroll-in.
+      try {
+        await request.refresh(name);
+      } catch (error) {
+        this.options.host.onError?.(error, name);
+      }
+    });
   }
 
   /**
@@ -579,10 +599,18 @@ export class VizDataController implements FilterFanOutScheduler {
         ? (cb: IntersectionObserverCallback, init: IntersectionObserverInit) =>
             new IntersectionObserver(cb, init)
         : null);
-    if (!factory || !root) {
+    if (!factory) {
       this.fallbackVisible = true;
       return false;
     }
+    // A root that is not there *yet* is a different fact, and must not latch.
+    // `getRoot` is re-resolved every sync precisely because the container it
+    // names can appear, move or be rebuilt; a host whose first `sync()` lands
+    // one tick before `.dt-header-scroll` is mounted would otherwise pin this
+    // table into create-everything for its whole life — the 1,000-canvas /
+    // ~2,000-query shape lazy creation exists to remove, restored with no
+    // error to say so. Fall back for this pass only; the next sync re-probes.
+    if (!root) return false;
 
     this.io = factory((entries) => this.onIntersections(entries), {
       root,
@@ -615,12 +643,33 @@ export class VizDataController implements FilterFanOutScheduler {
 
       record.visible = true;
       if (!record.viz || record.status === 'stale') this.enqueue(name);
-      if (this.stalePanels.delete(name)) void this.panelRefresh?.(name);
+      if (this.stalePanels.delete(name)) this.refreshDeferredPanel(name);
     }
     this.pump();
     // Every observed target reports in the first callback after `observe()`,
     // so one pass is the whole initial wave.
     this.closeWave();
+  }
+
+  /**
+   * Fire the panel refresh {@link refreshPanels} deferred while this column
+   * was offscreen.
+   *
+   * Fire-and-forget by construction — an observer callback cannot await — so
+   * it carries its own error routing rather than borrowing a caller's. A
+   * rejection would otherwise be unhandled (nobody holds this promise), and a
+   * synchronous throw would abandon the rest of the callback batch: the
+   * remaining entries, the `pump()` and the `closeWave()` that resolves
+   * `whenVizReady()`.
+   */
+  private refreshDeferredPanel(name: string): void {
+    try {
+      void this.panelRefresh?.(name).catch((error: unknown) =>
+        this.options.host.onError?.(error, name),
+      );
+    } catch (error) {
+      this.options.host.onError?.(error, name);
+    }
   }
 
   // =========================================

@@ -19,6 +19,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { runLimited } from '../core/concurrency';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -32,6 +33,35 @@ import type { BaseVisualization } from './BaseVisualization';
 const DEFAULT_VIZ_CONCURRENCY = 4;
 
 /**
+ * Request handed to a {@link FilterFanOutScheduler} in place of a coordinator's
+ * own per-registration fan-out.
+ */
+export interface FilterFanOutRequest {
+  /** The filter array being broadcast. */
+  filters: Filter[];
+  /** The coordinator's monotonic filter sequence for this cycle. */
+  sequence: number;
+  /** Column names with a live (non-destroyed) registration, in registration order. */
+  columns: string[];
+  /**
+   * Perform the coordinator's normal per-column update. Resolves when it
+   * settles. Calling it for a column that is no longer registered (or whose
+   * registration has been destroyed) is a no-op.
+   */
+  refresh: (columnName: string) => Promise<void>;
+}
+
+/**
+ * Optional hook that takes over a coordinator's per-registration fan-out on
+ * filter change. When supplied, `refreshOnFilters` is called *instead of*
+ * iterating registrations: the scheduler decides which entries refresh now
+ * (typically only the visible ones) and which are deferred.
+ */
+export interface FilterFanOutScheduler {
+  refreshOnFilters(request: FilterFanOutRequest): Promise<void>;
+}
+
+/**
  * Optional hooks the facade can pass into the coordinator. `onFilterCycleComplete`
  * fires at the trailing edge of every filter cycle, *after* the async row-count
  * query has settled — that's the contract the public `filterChange` event
@@ -39,6 +69,11 @@ const DEFAULT_VIZ_CONCURRENCY = 4;
  */
 export interface CrossfilterCoordinatorOptions {
   onFilterCycleComplete?: (filters: Filter[]) => void;
+  /**
+   * See {@link FilterFanOutScheduler}. Absent (the standalone `/advanced`
+   * composition) = today's fan-out over every registered visualization.
+   */
+  vizScheduler?: FilterFanOutScheduler;
 }
 
 /**
@@ -105,18 +140,13 @@ export class CrossfilterCoordinator {
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
     const seq = ++this.filterSequence;
 
-    const vizTasks = [...this.visualizations.entries()]
-      .filter(([, viz]) => !viz.isDestroyed())
-      .map(
-        ([, viz]) =>
-          () =>
-            viz.updateFilters(filters),
-      );
-
     // Run visualization updates and filtered row count in parallel (independent
     // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
     // single-threaded worker on wide tables.
-    await Promise.all([this.runLimited(vizTasks), this.updateFilteredRowCount(filters, seq)]);
+    await Promise.all([
+      this.fanOutToVisualizations(filters, seq),
+      this.updateFilteredRowCount(filters, seq),
+    ]);
 
     // Trailing-edge hook: fires *after* state.filteredRows has settled so the
     // public `filterChange` event payload carries an up-to-date count. Skip
@@ -126,23 +156,47 @@ export class CrossfilterCoordinator {
     this.options.onFilterCycleComplete?.(filters);
   }
 
-  /** Run async tasks with a ceiling on simultaneous in-flight count.
-   *  Semantics mirror `Promise.all(tasks.map(t => t()))`: results preserve input
-   *  order, and the first rejection aborts the combined promise while sibling
-   *  tasks continue to run to completion in the background. */
-  private async runLimited<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
-    const results: T[] = new Array(tasks.length);
-    let cursor = 0;
-    const workerCount = Math.min(this.concurrency, tasks.length);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= tasks.length) return;
-        results[i] = await tasks[i]!();
-      }
-    });
-    await Promise.all(workers);
-    return results;
+  /**
+   * Push `filters` to the registered visualizations for one cycle.
+   *
+   * With a {@link FilterFanOutScheduler} attached, the scheduler owns the
+   * decision of which registrations refresh now and which are deferred (it
+   * typically refreshes only what is on screen and marks the rest stale), so
+   * this coordinator hands it the live column list and a `refresh` callback
+   * instead of iterating registrations itself. Without one, every live
+   * registration is refreshed through the bounded pool — the historical
+   * behavior, which standalone `/advanced` compositions rely on.
+   */
+  private fanOutToVisualizations(filters: Filter[], seq: number): Promise<unknown> {
+    const live = [...this.visualizations.entries()].filter(([, viz]) => !viz.isDestroyed());
+
+    const scheduler = this.options.vizScheduler;
+    if (scheduler) {
+      const request: FilterFanOutRequest = {
+        filters,
+        sequence: seq,
+        columns: live.map(([columnName]) => columnName),
+        refresh: (columnName) => this.refreshColumn(columnName, filters),
+      };
+      return scheduler.refreshOnFilters(request);
+    }
+
+    return runLimited(
+      live.map(
+        ([, viz]) =>
+          () =>
+            viz.updateFilters(filters),
+      ),
+      this.concurrency,
+    );
+  }
+
+  /** The per-column update a fan-out performs. No-op for a column that has
+   *  been unregistered or destroyed since the cycle started. */
+  private refreshColumn(columnName: string, filters: Filter[]): Promise<void> {
+    const viz = this.visualizations.get(columnName);
+    if (!viz || viz.isDestroyed()) return Promise.resolve();
+    return viz.updateFilters(filters);
   }
 
   private async updateFilteredRowCount(filters: Filter[], seq: number): Promise<void> {

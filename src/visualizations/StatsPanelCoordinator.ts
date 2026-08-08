@@ -29,9 +29,11 @@
  * @see CrossfilterCoordinator
  */
 
+import { runLimited } from '../core/concurrency';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { BaseStatsPanel } from './BaseStatsPanel';
+import type { FilterFanOutRequest, FilterFanOutScheduler } from './CrossfilterCoordinator';
 
 /**
  * Default max number of panel updates in flight at once. Sized
@@ -40,6 +42,12 @@ import type { BaseStatsPanel } from './BaseStatsPanel';
  * to flood the single-threaded worker on wide tables.
  */
 const DEFAULT_PANEL_CONCURRENCY = 4;
+
+/** Optional hooks for the panel coordinator. */
+export interface StatsPanelCoordinatorOptions {
+  /** See {@link FilterFanOutScheduler}. Absent = today's fan-out over every registered panel. */
+  vizScheduler?: FilterFanOutScheduler;
+}
 
 /**
  * Mirrors {@link CrossfilterCoordinator} for `BaseStatsPanel` subclasses:
@@ -63,9 +71,15 @@ export class StatsPanelCoordinator {
    * `CrossfilterCoordinator.filterSequence`.
    */
   private filterSequence = 0;
+  private readonly options: StatsPanelCoordinatorOptions;
 
-  constructor(state: TableState, concurrency: number = DEFAULT_PANEL_CONCURRENCY) {
+  constructor(
+    state: TableState,
+    concurrency: number = DEFAULT_PANEL_CONCURRENCY,
+    options: StatsPanelCoordinatorOptions = {},
+  ) {
     this.concurrency = Math.max(1, concurrency);
+    this.options = options;
     this.unsubscribe = state.filters.subscribe((filters) => void this.onFiltersChanged(filters));
   }
 
@@ -100,21 +114,66 @@ export class StatsPanelCoordinator {
    * Useful after registering new panels so they see filters that were
    * already in state (e.g., restored from persistence) before the
    * coordinator was created or the panel was registered.
+   *
+   * Deliberately asymmetric with the `state.filters` subscription path: this
+   * one **always** fans out directly over every registered panel, even when a
+   * {@link FilterFanOutScheduler} is attached. The facade's load gate awaits
+   * this call, so routing it through the scheduler would make load completion
+   * depend on the header-visibility wave — precisely the coupling the lazy
+   * visualization work removes. A scheduler only ever owns filter *changes*.
    */
   syncExistingFilters(filters: Filter[]): Promise<void> {
     if (this.destroyed) return Promise.resolve();
-    return this.onFiltersChanged(filters);
+    return this.broadcast(filters, undefined);
   }
 
-  private async onFiltersChanged(filters: Filter[]): Promise<void> {
+  private onFiltersChanged(filters: Filter[]): Promise<void> {
+    return this.broadcast(filters, this.options.vizScheduler);
+  }
+
+  /**
+   * Broadcast one filter array to the registered panels under a fresh
+   * sequence number. With a scheduler, it decides which panels refresh now
+   * (typically only the visible ones) and which are deferred; without one,
+   * every live panel is refreshed through the bounded pool.
+   */
+  private async broadcast(
+    filters: Filter[],
+    scheduler: FilterFanOutScheduler | undefined,
+  ): Promise<void> {
     if (this.destroyed) return;
 
     const seq = ++this.filterSequence;
-    const tasks = [...this.panels.values()]
-      .filter((p) => !p.isDestroyed())
-      .map((p) => () => this.callUpdateFilters(p, filters, seq));
+    const live = [...this.panels.entries()].filter(([, p]) => !p.isDestroyed());
 
-    await this.runLimited(tasks);
+    if (scheduler) {
+      const request: FilterFanOutRequest = {
+        filters,
+        sequence: seq,
+        columns: live.map(([columnName]) => columnName),
+        refresh: (columnName) => this.refreshColumn(columnName, filters, seq),
+      };
+      await scheduler.refreshOnFilters(request);
+      return;
+    }
+
+    await runLimited(
+      live.map(
+        ([, p]) =>
+          () =>
+            this.callUpdateFilters(p, filters, seq),
+      ),
+      this.concurrency,
+    );
+  }
+
+  /** The per-column update a scheduler-driven fan-out performs. Routed
+   *  through `callUpdateFilters` so the destroyed / stale-sequence /
+   *  error-swallowing guards apply exactly as they do on the direct path. */
+  private refreshColumn(columnName: string, filters: Filter[], seq: number): Promise<void> {
+    const panel = this.panels.get(columnName);
+    if (!panel) return Promise.resolve();
+    return this.callUpdateFilters(panel, filters, seq);
   }
 
   private async callUpdateFilters(
@@ -133,25 +192,6 @@ export class StatsPanelCoordinator {
       // the facade's `error` event fires with full context. We still want
       // a thrown error in one panel to leave the others intact.
     }
-  }
-
-  /**
-   * Run async tasks with a ceiling on simultaneous in-flight count.
-   * Mirrors the implementation in `CrossfilterCoordinator` so behavior
-   * stays consistent across the two coordinators.
-   */
-  private async runLimited(tasks: (() => Promise<void>)[]): Promise<void> {
-    if (tasks.length === 0) return;
-    let cursor = 0;
-    const workerCount = Math.min(this.concurrency, tasks.length);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= tasks.length) return;
-        await tasks[i]!();
-      }
-    });
-    await Promise.all(workers);
   }
 
   /** Clean up the signal subscription and clear registrations. */

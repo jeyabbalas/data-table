@@ -24,15 +24,88 @@ function generateTableName(): string {
 }
 
 /**
- * Detect if data is NDJSON (newline-delimited JSON)
- * NDJSON has one JSON object per line, not wrapped in an array
+ * Byte budget for the {@link isNDJSON} format sniff.
+ *
+ * The sniff only ever needs the source's first line, so touching the whole
+ * document is pure waste: the previous implementation decoded the entire
+ * buffer and then `split('\n')`-ed it into one string per line — for a 500 MB
+ * NDJSON file that is a full decode plus millions of substring allocations to
+ * read line 1. 1 MiB is orders of magnitude more than any realistic first
+ * record needs while making the sniff O(1) in the source size.
+ *
+ * Documented failure mode: a source whose *first line* is longer than this
+ * window has no `\n` inside the window and is therefore classified as
+ * `'array'`. A file with a first NDJSON record larger than 1 MiB must say so
+ * explicitly — `options.format` is the escape hatch.
+ *
+ * @internal Not part of the public API; exported so the unit tests can assert
+ *   against the budget by name.
  */
-function isNDJSON(data: string): boolean {
-  const lines = data.trim().split('\n');
-  if (lines.length < 2) return false;
+export const SNIFF_WINDOW_BYTES = 1024 * 1024;
+
+/**
+ * Detect if data is NDJSON (newline-delimited JSON).
+ *
+ * Inspects at most {@link SNIFF_WINDOW_BYTES} from the head of the source and
+ * reports NDJSON only when all three hold:
+ *
+ * 1. the window contains a `\n`;
+ * 2. the text before that `\n` parses as a JSON object that is not an array;
+ * 3. at least one non-whitespace character follows that `\n` in the window.
+ *
+ * Rule 3 preserves the previous implementation's `lines.length < 2` check — a
+ * lone JSON object, with or without a trailing newline, is still `'array'` —
+ * without counting the lines of the whole document, which a bounded window
+ * cannot do.
+ *
+ * @internal Not part of the public API; exported for unit tests
+ *   (`tests/worker/loaders/jsonSniff.test.ts`).
+ */
+export function isNDJSON(data: string | ArrayBuffer): boolean {
+  let head: string;
+  if (data instanceof ArrayBuffer) {
+    // Decode the prefix only. Cutting at an arbitrary byte can split a
+    // multi-byte UTF-8 sequence; the default TextDecoder is non-fatal and
+    // substitutes U+FFFD instead of throwing. That is deliberate and safe
+    // here — a truncated sequence can only ever land at the very end of the
+    // window, and the only text handed to JSON.parse is what precedes the
+    // first `\n`. Do NOT "fix" this into a `{ fatal: true }` decoder.
+    head = new TextDecoder().decode(
+      new Uint8Array(data, 0, Math.min(data.byteLength, SNIFF_WINDOW_BYTES)),
+    );
+  } else {
+    // A string source is already fully in memory, so the only cost worth
+    // bounding is the scan below. Slicing by *characters* is a cheap,
+    // deliberately approximate stand-in for the byte budget (a UTF-8
+    // character is at least one byte, so this window is never larger).
+    head = data.slice(0, SNIFF_WINDOW_BYTES);
+  }
+
+  // The previous implementation trimmed the whole document before splitting,
+  // so leading whitespace — blank lines, a stray BOM (U+FEFF is whitespace
+  // for String.prototype.trim) — was skipped and the first *content* line was
+  // the one parsed. Keep that: an NDJSON file opening with a blank line still
+  // detects as NDJSON.
+  head = head.trimStart();
+
+  const eol = head.indexOf('\n');
+  // No newline in the window: either a genuinely single-line document (the
+  // common `[{…},{…}]` case) or a first line that overflowed the window. Both
+  // fall back to 'array' — see SNIFF_WINDOW_BYTES for the escape hatch.
+  if (eol === -1) return false;
+  // Nothing but whitespace after the first newline: one JSON value, not a
+  // newline-delimited stream of them.
+  if (!/\S/.test(head.slice(eol + 1))) return false;
+
+  // Drop one trailing `\r` so a CRLF source takes exactly the same path as an
+  // LF one. (`JSON.parse` happens to tolerate a trailing CR — it is JSON
+  // whitespace — so this is belt-and-braces rather than a behavior change,
+  // but the sniff should not depend on that quirk.)
+  const rawFirstLine = head.slice(0, eol);
+  const firstLine = rawFirstLine.endsWith('\r') ? rawFirstLine.slice(0, -1) : rawFirstLine;
 
   try {
-    const first = JSON.parse(lines[0]!);
+    const first: unknown = JSON.parse(firstLine);
     // NDJSON has objects on each line, not an array
     return typeof first === 'object' && !Array.isArray(first);
   } catch {
@@ -76,7 +149,9 @@ export async function loadJSON(
   const jsonString = data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data;
 
   // Detect format if not specified
-  const format = options.format || (isNDJSON(jsonString) ? 'ndjson' : 'array');
+  // Sniff the original source, not `jsonString` — the sniff reads a bounded
+  // byte prefix and must not depend on the full decode above.
+  const format = options.format || (isNDJSON(data) ? 'ndjson' : 'array');
 
   // Convert to Uint8Array for DuckDB's file system
   const content = new TextEncoder().encode(jsonString);

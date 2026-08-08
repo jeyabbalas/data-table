@@ -319,6 +319,32 @@ export function tierSelectList(spec: TierSpec): string {
 }
 
 /**
+ * The whole tier as one streamed `SELECT`, materializing nothing.
+ *
+ * This is what a browser harness should feed to `exportToBuffer`, and the
+ * distinction is not cosmetic. `exportToBuffer` wraps its argument in
+ * `COPY (…) TO '<file>' (FORMAT PARQUET)`
+ * (`src/worker/dispatcher.ts:358-362`), so given this expression DuckDB
+ * streams `range()` straight into the parquet writer. Given
+ * {@link tierTableSQL} first, the tier is materialized *and* copied, and
+ * both live in the same ~3 GB WASM heap: measured, that is what put WIDE
+ * (1,000 × 100,000) and GRID (200 × 500,000) over the ceiling with
+ * `Out of Memory Error: failed to allocate data of size 1.0 MiB
+ * (3.1 GiB/3.1 GiB used)` while DEEP (20 × 5,000,000) — the same 10⁸ cells
+ * in a twentieth of the columns — completed.
+ *
+ * No `ORDER BY`: `range()` is scanned in order and `COPY` preserves it,
+ * whereas an explicit sort would force exactly the full materialization
+ * this exists to avoid. The row oracle
+ * (`data-row-id === data-row-index === col_0`) is what checks that
+ * assumption on every mount, so a DuckDB release that stopped preserving
+ * order would fail loudly rather than silently.
+ */
+export function tierSelectSQL(spec: TierSpec): string {
+  return `SELECT ${tierSelectList(spec)} FROM range(0, ${spec.rows}) t(i)`;
+}
+
+/**
  * Streamed `COPY (…) TO '<fileName>' (FORMAT PARQUET, ROW_GROUP_SIZE …)`
  * for the TARGET tier — the only route to 1,000 × 5,000,000, since that
  * many cells can never be materialized inside DuckDB-WASM's 4 GB ceiling

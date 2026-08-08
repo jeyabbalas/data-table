@@ -134,6 +134,18 @@ export async function installObserverCensus(page: Page): Promise<void> {
       created: { resize: 0, mutation: 0, intersection: 0 },
     });
 
+    // Which instances have already been counted down, so a second
+    // `disconnect()` cannot drive the gauge negative.
+    //
+    // A `WeakSet` rather than a `#private` field, and this is not a style
+    // choice: Playwright compiles init scripts through Babel, which lowers
+    // `#name` to a `_classPrivateFieldInitSpec` helper it does not inject
+    // into the page. The subclass then throws `ReferenceError` the first
+    // time the library constructs a `ResizeObserver` — which is during
+    // `new TableContainer`, so every mount fails. Keep this file to syntax
+    // that survives that transpile.
+    const counted = new WeakSet<object>();
+
     const wrap = (
       name: 'resize' | 'mutation' | 'intersection',
       Original: undefined | (new (...args: never[]) => { disconnect: () => void }),
@@ -143,15 +155,15 @@ export async function installObserverCensus(page: Page): Promise<void> {
       // prototype chain and `instanceof` intact for library code that
       // checks either.
       return class extends Original {
-        #counted = true;
         constructor(...args: never[]) {
           super(...args);
+          counted.add(this);
           census[name]++;
           census.created[name]++;
         }
         override disconnect(): void {
-          if (this.#counted) {
-            this.#counted = false;
+          if (counted.has(this)) {
+            counted.delete(this);
             census[name]--;
           }
           super.disconnect();

@@ -36,7 +36,7 @@ import {
   resolveTier,
   targetCopySQL,
   tierCSV,
-  tierTableSQL,
+  tierSelectSQL,
   type TierSpec,
 } from '../tests/fixtures/tiers';
 
@@ -50,7 +50,6 @@ const METRICS = [
   'cols',
   'bootMs',
   'genMs',
-  'exportMs',
   'loadMs',
   'firstPaintMs',
   'vizReadyMs',
@@ -73,8 +72,8 @@ interface PerfSnapshot {
   state: PerfState;
   /** `createDataTable` — worker spawn + DuckDB WASM boot. */
   bootMs: number | null;
+  /** Building the parquet source: generation and encoding, streamed as one. */
   genMs: number | null;
-  exportMs: number | null;
   loadMs: number | null;
   firstPaintMs: number | null;
   vizReadyMs: number | null;
@@ -104,7 +103,6 @@ declare global {
   }
 }
 
-const SCRATCH_TABLE = 'dt_perf_src';
 const TARGET_FILE = 'dt_target.parquet';
 
 // --- panel ---------------------------------------------------------------
@@ -307,7 +305,6 @@ export async function installPerfHarness(
   let table: DataTable | null = null;
   let bootMs: number | null = null;
   let genMs: number | null = null;
-  let exportMs: number | null = null;
   let loadMs: number | null = null;
   let probe: PerfSnapshot['probe'];
   let error: string | null = null;
@@ -323,7 +320,6 @@ export async function installPerfHarness(
       state: (panel.root.dataset['state'] ?? 'idle') as PerfState,
       bootMs,
       genMs,
-      exportMs,
       loadMs,
       firstPaintMs: marks ? measureMs('paint') : null,
       vizReadyMs: marks ? measureMs('viz') : null,
@@ -341,7 +337,6 @@ export async function installPerfHarness(
     const snap = snapshot();
     panel.set('bootMs', snap.bootMs);
     panel.set('genMs', snap.genMs);
-    panel.set('exportMs', snap.exportMs);
     panel.set('loadMs', snap.loadMs);
     panel.set('firstPaintMs', snap.firstPaintMs);
     panel.set('vizReadyMs', snap.vizReadyMs);
@@ -385,7 +380,13 @@ export async function installPerfHarness(
     bootMs = performance.now() - bootStart;
 
     if (mode === 'sql') {
-      probe = await generateTargetFile(table, spec);
+      const t0 = performance.now();
+      await table.bridge.query(targetCopySQL(spec, TARGET_FILE));
+      // The `COPY` alone, not the probes that follow it: at 5 × 10⁹ cells
+      // this is the whole cost, and a baseline that folded three cheap
+      // `read_parquet` queries into it would drift for no reason.
+      genMs = performance.now() - t0;
+      probe = await probeTargetFile(table, spec);
     } else if (tier === 'wide-csv') {
       const t0 = performance.now();
       const csv = tierCSV(spec);
@@ -395,20 +396,16 @@ export async function installPerfHarness(
       await table.loadData(csv, { sourceFormat: 'csv' });
       loadMs = performance.now() - t1;
     } else {
-      const t0 = performance.now();
-      await table.bridge.query(tierTableSQL(spec, SCRATCH_TABLE));
-      genMs = performance.now() - t0;
-
       setState('exporting');
-      const t1 = performance.now();
-      const buf = await table.bridge.exportToBuffer(
-        `SELECT * FROM "${SCRATCH_TABLE}" ORDER BY "${columnName(0)}"`,
-        'parquet',
-      );
-      exportMs = performance.now() - t1;
-      // Drop before loading so two copies of the tier never coexist in the
-      // 4 GB WASM heap.
-      await table.bridge.query(`DROP TABLE "${SCRATCH_TABLE}"`);
+      const t0 = performance.now();
+      // Streamed straight from `range()` into the parquet writer:
+      // `exportToBuffer` wraps this in `COPY (…) TO parquet`, so the tier
+      // never exists as a table. Materializing it first — as this did
+      // originally — leaves the whole tier resident while the writer needs
+      // room of its own, which is what put WIDE and GRID over
+      // DuckDB-WASM's ~3 GB ceiling.
+      const buf = await table.bridge.exportToBuffer(tierSelectSQL(spec), 'parquet');
+      genMs = performance.now() - t0;
 
       setState('loading');
       const t2 = performance.now();
@@ -427,17 +424,15 @@ export async function installPerfHarness(
 }
 
 /**
- * `mode=sql`: stream the TARGET tier straight to a parquet file in DuckDB's
- * virtual filesystem, then read it back through `read_parquet` without ever
- * materializing a table. Until Phase 10, the table area stays empty — this
- * is a generator and a probe, not a load.
+ * `mode=sql`: read the streamed TARGET parquet file back through
+ * `read_parquet` without ever materializing a table. Until Phase 10, the
+ * table area stays empty — this is a probe, not a load.
+ *
+ * The `COPY` that writes the file is timed by the caller, so `genMs`
+ * measures the write and nothing else.
  */
-async function generateTargetFile(
-  table: DataTable,
-  spec: TierSpec,
-): Promise<PerfSnapshot['probe']> {
+async function probeTargetFile(table: DataTable, spec: TierSpec): Promise<PerfSnapshot['probe']> {
   const file = TARGET_FILE;
-  await table.bridge.query(targetCopySQL(spec, file));
 
   const [counted] = await table.bridge.query<{ n: number }>(
     `SELECT COUNT(*) AS n FROM read_parquet('${file}')`,

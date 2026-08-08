@@ -39,6 +39,7 @@ import {
   resolveTier,
   targetCopySQL,
   tierCSV,
+  tierSelectSQL,
   tierTableSQL,
   type TierSpec,
 } from './tiers';
@@ -211,6 +212,26 @@ describe('emitted SQL', () => {
     const sql = tierTableSQL(MICRO, 'scratch');
     for (let c = 0; c < MICRO.cols; c++) expect(sql).toContain(`AS "${columnName(c)}"`);
     expect(sql.indexOf('AS "col_0"')).toBeLessThan(sql.indexOf('AS "col_39"'));
+  });
+
+  it('builds a streamed SELECT with the same projection and no table', () => {
+    const spec = { name: 't', rows: 5, cols: 3, seed: 0 };
+    const select = tierSelectSQL(spec);
+    expect(select).toBe(
+      'SELECT CAST(i AS INTEGER) AS "col_0", ' +
+        'CASE WHEN (i + 1) % 100 = 0 THEN NULL ELSE CAST((i * 31 + 17) % 100000 AS DOUBLE) / CAST(100 AS DOUBLE) END AS "col_1", ' +
+        'CASE WHEN (i + 2) % 100 = 0 THEN NULL ELSE CAST((i * 31 + 34) % 100000 AS DOUBLE) / CAST(100 AS DOUBLE) END AS "col_2" ' +
+        'FROM range(0, 5) t(i)',
+    );
+    // Same columns as the materializing form — the browser harness swapped
+    // to this one to stay inside DuckDB-WASM's heap, and a projection that
+    // drifted from `tierTableSQL` would make the two paths different tiers.
+    for (let c = 0; c < spec.cols; c++) {
+      expect(select).toContain(`AS "${columnName(c)}"`);
+    }
+    // Deliberately unsorted: an ORDER BY would force the materialization
+    // this form exists to avoid. `range()` scan order is the contract.
+    expect(select).not.toContain('ORDER BY');
   });
 
   it('folds the seed into every class expression', () => {

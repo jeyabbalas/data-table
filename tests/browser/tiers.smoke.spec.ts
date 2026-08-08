@@ -220,7 +220,6 @@ test('demo readout agrees with the wall clock and the bridge counters', async ({
       cols: Number(read('cols')),
       bootMs: Number(read('bootMs')),
       genMs: Number(read('genMs')),
-      exportMs: Number(read('exportMs')),
       loadMs: Number(read('loadMs')),
       queryCount: Number(read('queryCount')),
       cacheHits: Number(read('cacheHits')),
@@ -238,12 +237,12 @@ test('demo readout agrees with the wall clock and the bridge counters', async ({
 
   // The panel is a measuring instrument for every later phase; a readout
   // that drifts from the wall clock would quietly corrupt every baseline.
-  const staged = readout.bootMs + readout.genMs + readout.exportMs + readout.loadMs;
+  const staged = readout.bootMs + readout.genMs + readout.loadMs;
   const drift = Math.abs(staged - wallMs) / wallMs;
   console.log(
-    `[tiers.smoke] boot ${readout.bootMs} + gen ${readout.genMs} + export ` +
-      `${readout.exportMs} + load ${readout.loadMs} = ${staged.toFixed(0)} ms ` +
-      `vs wall ${wallMs} ms (${(drift * 100).toFixed(1)}% drift)`,
+    `[tiers.smoke] boot ${readout.bootMs} + gen ${readout.genMs} + load ` +
+      `${readout.loadMs} = ${staged.toFixed(0)} ms vs wall ${wallMs} ms ` +
+      `(${(drift * 100).toFixed(1)}% drift)`,
   );
   expect(drift, `staged ${staged.toFixed(0)} ms vs wall ${wallMs} ms`).toBeLessThanOrEqual(
     DT_BUDGET.READOUT_TOLERANCE,

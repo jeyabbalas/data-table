@@ -31,16 +31,13 @@ import {
   columnName,
   resolveTier,
   tierCSV,
-  tierTableSQL,
+  tierSelectSQL,
   type TierName,
   type TierSpec,
 } from '../../fixtures/tiers';
 
 /** Host element id, for host-scoped locators in the specs. */
 export const TIER_HOST_ID = 'tier-table-host';
-
-/** Scratch table the tier is generated into before the parquet round trip. */
-const SCRATCH_TABLE = 'dt_tier_src';
 
 /**
  * One probe-observed breach.
@@ -69,6 +66,20 @@ export interface HostOptions {
   host?: string;
 }
 
+/** Extra knobs for {@link installColumnInvariantProbe}. */
+export interface ProbeOptions extends HostOptions {
+  /**
+   * Check every rendered cell each pass instead of sampling one. Costlier
+   * — use it on small tiers, or where a specific cell must be found.
+   */
+  exhaustive?: boolean;
+  /**
+   * Install the validator without the `MutationObserver` or the rAF loop,
+   * so passes only happen via {@link runColumnProbePass}.
+   */
+  manual?: boolean;
+}
+
 /** A rendered column, as read back by {@link readVisibleGrid}. */
 export interface VisibleColumn {
   name: string;
@@ -93,8 +104,15 @@ export interface MountTierOptions {
 /** Timings the mount collected, so a spec can assert against the readout. */
 export interface MountTierResult {
   spec: TierSpec;
+  /**
+   * Building the parquet source: generation and encoding together.
+   *
+   * One number rather than the generate/export pair an earlier draft had,
+   * because on the streamed path there is no seam between them — see
+   * {@link tierSelectSQL}. Splitting them again would mean materializing
+   * the tier, which is what made the wide tiers unmountable.
+   */
   genMs: number;
-  exportMs: number;
   loadMs: number;
 }
 
@@ -105,6 +123,7 @@ type TierWindow = {
   __dtTierSettle?: { last: string; stable: number };
   __dtColViolations?: ColViolation[];
   __dtColProbe?: { observer: MutationObserver; rafId: number; active: boolean };
+  __dtColValidate?: () => void;
   __dtOracle?: (i: number, c: number, seed: number) => string | null;
 };
 
@@ -135,7 +154,7 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
   const csv = opts.tier === 'wide-csv' ? tierCSV(spec) : null;
 
   const timings = await page.evaluate(
-    async ({ createSql, exportSql, csvText, viz, rowHeight, hostId, oracleSource, scratch }) => {
+    async ({ sourceSql, csvText, viz, rowHeight, hostId, oracleSource }) => {
       const w = window as unknown as TierWindow;
       w.__wideTableStage = 'import';
       const mod = (await import(
@@ -161,30 +180,24 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
       w.__dtOracle = new Function(oracleSource)() as TierWindow['__dtOracle'];
 
       let genMs: number;
-      // `wide-csv` arrives already built (there is no SQL stage), so its
-      // generate and export phases are both zero-cost by construction.
-      let exportMs = 0;
       let source: string | ArrayBuffer;
 
       const t0 = performance.now();
       w.__wideTableStage = 'generate';
       if (csvText !== null) {
+        // `wide-csv` arrives already built — there is no SQL stage at all.
         genMs = performance.now() - t0;
         source = csvText;
       } else {
-        await table.bridge.query(createSql);
+        // One streamed step: `exportToBuffer` wraps this in `COPY (…) TO
+        // parquet`, so the tier goes from `range()` to parquet without ever
+        // existing as a table. The earlier two-step version (CREATE TABLE,
+        // then export) left the whole tier resident while the writer needed
+        // room of its own, and put WIDE and GRID over DuckDB-WASM's ceiling.
+        // The select list never includes __rowid__ — the loader rejects
+        // sources that carry one.
+        const buf = await table.bridge.exportToBuffer(sourceSql, 'parquet');
         genMs = performance.now() - t0;
-
-        w.__wideTableStage = 'export';
-        const t1 = performance.now();
-        // Never export __rowid__ — the loader rejects sources that carry it.
-        const buf = await table.bridge.exportToBuffer(exportSql, 'parquet');
-        exportMs = performance.now() - t1;
-
-        // Drop before loading so two copies of the tier never coexist in
-        // the 4 GB WASM heap.
-        w.__wideTableStage = 'drop';
-        await table.bridge.query(`DROP TABLE "${scratch}"`);
         source = buf.buffer as ArrayBuffer;
       }
 
@@ -193,17 +206,15 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
       await table.loadData(source, { sourceFormat: csvText !== null ? 'csv' : 'parquet' });
       const loadMs = performance.now() - t2;
       w.__wideTableStage = 'done';
-      return { genMs, exportMs, loadMs };
+      return { genMs, loadMs };
     },
     {
-      createSql: csv === null ? tierTableSQL(spec, SCRATCH_TABLE) : '',
-      exportSql: `SELECT * FROM "${SCRATCH_TABLE}" ORDER BY "${columnName(0)}"`,
+      sourceSql: csv === null ? tierSelectSQL(spec) : '',
       csvText: csv,
       viz: opts.viz ?? false,
       rowHeight: opts.rowHeight,
       hostId: TIER_HOST_ID,
       oracleSource: ORACLE_FN_SOURCE,
-      scratch: SCRATCH_TABLE,
     },
   );
 
@@ -296,10 +307,10 @@ export async function waitForTierSettled(
 export async function installColumnInvariantProbe(
   page: Page,
   seed: number,
-  opts: HostOptions = {},
+  opts: ProbeOptions = {},
 ): Promise<void> {
   await page.evaluate(
-    ({ hostSelector, seedValue }) => {
+    ({ hostSelector, seedValue, exhaustive, manual }) => {
       const w = window as unknown as TierWindow;
       const host = document.querySelector(hostSelector);
       const grid = host?.querySelector('.dt-grid');
@@ -351,75 +362,114 @@ export async function installColumnInvariantProbe(
           const wanted = order.indexOf(name) + 1;
           if (!Number.isFinite(index) || index <= previous) {
             push('colindex', `${name}: aria-colindex ${index} does not ascend past ${previous}`);
-            break;
+            return;
           }
           if (wanted > 0 && index !== wanted) {
             push('colindex', `${name}: aria-colindex ${index}, columnOrder says ${wanted}`);
-            break;
+            return;
           }
           previous = index;
         }
 
-        // (c) Header and body must agree, and a sampled resolved cell must
-        // render exactly what the oracle says. One cell per tick keeps the
-        // sampler cheap enough to run at frame rate on a 1,000-column grid.
-        const rows = host!.querySelectorAll(
-          '.dt-body .dt-row[data-row-id]:not([data-placeholder])',
-        );
+        // (c) The row oracle, header/body agreement, and the cell oracle.
+        //
+        // Sampling mode looks at one random row and one random cell per
+        // pass: at frame rate over a scroll storm that still covers
+        // thousands of cells, and it is cheap enough not to perturb the
+        // rendering it is measuring. `exhaustive` checks every rendered
+        // cell instead — for the negative controls, which need a
+        // deliberately corrupted cell to be found with certainty.
+        const rows = Array.from(
+          host!.querySelectorAll('.dt-body .dt-row[data-row-id]:not([data-placeholder])'),
+        ) as HTMLElement[];
         if (rows.length === 0) return;
-        const row = rows[Math.floor(Math.random() * rows.length)] as HTMLElement;
-        const rowIndex = Number(row.getAttribute('data-row-index'));
-        const rowId = Number(row.getAttribute('data-row-id'));
-        const cells = row.querySelectorAll('.dt-cell[data-column]');
-        if (cells.length === 0) return;
-        const cell = cells[Math.floor(Math.random() * cells.length)] as HTMLElement;
-        const colName = cell.getAttribute('data-column')!;
-        const header = headers.find((h) => h.getAttribute('data-column') === colName);
-        if (header) {
-          const headerIndex = header.getAttribute('aria-colindex');
-          const cellIndex = cell.getAttribute('aria-colindex');
-          if (headerIndex !== cellIndex) {
-            push(
-              'colindex',
-              `${colName}: header aria-colindex ${headerIndex} vs cell ${cellIndex}`,
-            );
+        const pickRow = exhaustive ? rows : [rows[Math.floor(Math.random() * rows.length)]!];
+
+        for (const row of pickRow) {
+          const rowIndex = Number(row.getAttribute('data-row-index'));
+          const rowId = Number(row.getAttribute('data-row-id'));
+          // The row oracle: while unsorted and unfiltered every rendered
+          // row carries `__rowid__ === position`. The cell oracle is keyed
+          // by source row index, so it is only meaningful once this holds.
+          if (rowId !== rowIndex) {
+            push('rowid', `row ${rowIndex}: data-row-id ${rowId}`);
             return;
           }
-        }
-        // The row oracle: while unsorted and unfiltered every rendered row
-        // carries `__rowid__ === position`. The cell oracle is keyed by
-        // source row index, so it is only meaningful once this holds.
-        if (rowId !== rowIndex) {
-          push('rowid', `row ${rowIndex}: data-row-id ${rowId}`);
-          return;
-        }
-        const c = Number(colName.slice(4));
-        if (!Number.isFinite(c)) return;
-        const want = oracle(rowIndex, c, seedValue);
-        if (want !== null && cell.textContent !== want) {
-          push('cell', `row ${rowIndex} ${colName}: "${cell.textContent}" != "${want}"`);
+          const cells = Array.from(row.querySelectorAll('.dt-cell[data-column]')) as HTMLElement[];
+          if (cells.length === 0) continue;
+          const pickCell = exhaustive ? cells : [cells[Math.floor(Math.random() * cells.length)]!];
+
+          for (const cell of pickCell) {
+            const colName = cell.getAttribute('data-column')!;
+            const header = headers.find((h) => h.getAttribute('data-column') === colName);
+            if (
+              header &&
+              header.getAttribute('aria-colindex') !== cell.getAttribute('aria-colindex')
+            ) {
+              push(
+                'colindex',
+                `${colName}: header aria-colindex ${header.getAttribute('aria-colindex')} ` +
+                  `vs cell ${cell.getAttribute('aria-colindex')}`,
+              );
+              return;
+            }
+            const c = Number(colName.slice(4));
+            if (!Number.isFinite(c)) continue;
+            const want = oracle(rowIndex, c, seedValue);
+            if (want !== null && cell.textContent !== want) {
+              push('cell', `row ${rowIndex} ${colName}: "${cell.textContent}" != "${want}"`);
+              return;
+            }
+          }
         }
       };
+      w.__dtColValidate = validate;
 
+      // `manual` installs the validator and nothing else: no observer, no
+      // rAF loop. That is what lets a negative control corrupt one thing,
+      // run exactly one pass, and see exactly one violation.
       const observer = new MutationObserver(validate);
-      observer.observe(grid, {
-        subtree: true,
-        childList: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: ['data-column', 'aria-colindex'],
-      });
-      const probe = { observer, rafId: 0, active: true };
+      if (!manual) {
+        observer.observe(grid, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+          attributes: true,
+          attributeFilter: ['data-column', 'aria-colindex'],
+        });
+      }
+      const probe = { observer, rafId: 0, active: !manual };
       const loop = (): void => {
         if (!probe.active) return;
         validate();
         probe.rafId = requestAnimationFrame(loop);
       };
-      probe.rafId = requestAnimationFrame(loop);
+      if (!manual) probe.rafId = requestAnimationFrame(loop);
       w.__dtColProbe = probe;
     },
-    { hostSelector: opts.host ?? `#${TIER_HOST_ID}`, seedValue: seed },
+    {
+      hostSelector: opts.host ?? `#${TIER_HOST_ID}`,
+      seedValue: seed,
+      exhaustive: opts.exhaustive === true,
+      manual: opts.manual === true,
+    },
   );
+}
+
+/**
+ * Run one probe pass on demand and return the violation count so far.
+ *
+ * Only meaningful with `manual: true`, where nothing else drives the
+ * probe. This is what makes the negative controls exact: corrupt one
+ * thing, run exactly one pass, expect exactly one violation.
+ */
+export async function runColumnProbePass(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const w = window as unknown as TierWindow;
+    if (!w.__dtColValidate) throw new Error('column probe: not installed');
+    w.__dtColValidate();
+    return (w.__dtColViolations ?? []).length;
+  });
 }
 
 /**
@@ -439,6 +489,7 @@ export async function readColViolations(page: Page): Promise<ColViolation[]> {
     const v = w.__dtColViolations ?? [];
     delete w.__dtColProbe;
     delete w.__dtColViolations;
+    delete w.__dtColValidate;
     return v;
   });
 }

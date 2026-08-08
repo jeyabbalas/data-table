@@ -112,6 +112,40 @@ export interface WorkerBridgeOptions {
   duckdbBundles?: DuckDBBundles | undefined;
 }
 
+/**
+ * Worker round-trip counters, as read by
+ * {@link WorkerBridge.__getStatsForTests}.
+ *
+ * Counters only, no timings: the phase-0 design also specified a 512-entry
+ * ring of recent round-trip durations, but it cost 130 B brotli of the
+ * root bundle's remaining budget and no consumer reads it — the
+ * `dt:load:*` measures already give the stage breakdown. See
+ * `plans/scaling/STATUS.md` (Phase 0 deviations).
+ *
+ * @internal Test-only — not part of the public API and not exported from
+ * the package entry points. See `plans/scaling/phase-00-harness.md` §4.2.
+ */
+export interface BridgeStats {
+  /** Messages that reached `postMessage`, per type. */
+  sent: { query: number; load: number; export: number };
+  /** `query()` calls served from the SQL result cache (no round trip). */
+  cacheHits: number;
+  /** Gauge: round trips currently awaiting a worker reply. */
+  inFlight: number;
+  /** High-water mark of {@link inFlight} since the last reset. */
+  maxInFlight: number;
+}
+
+/** A zeroed {@link BridgeStats}, shared by construction and reset. */
+function emptyStats(inFlight = 0): BridgeStats {
+  return {
+    sent: { query: 0, load: 0, export: 0 },
+    cacheHits: 0,
+    inFlight,
+    maxInFlight: inFlight,
+  };
+}
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -158,6 +192,7 @@ export class WorkerBridge {
   private workerFactory?: (() => Worker) | undefined;
   private workerUrl?: string | URL | undefined;
   private duckdbBundles?: DuckDBBundles | undefined;
+  private stats: BridgeStats = emptyStats();
 
   constructor(options?: WorkerBridgeOptions) {
     this.queryCache = new QueryCache(options?.cache);
@@ -323,6 +358,7 @@ export class WorkerBridge {
     if (cacheable) {
       const cached = this.queryCache.get<T>(sql);
       if (cached !== undefined) {
+        this.stats.cacheHits++;
         return cached;
       }
     }
@@ -461,7 +497,65 @@ export class WorkerBridge {
     return `msg-${++this.messageId}`;
   }
 
+  /**
+   * Instrumented wrapper around {@link dispatch}.
+   *
+   * `dispatch` is a bare promise executor whose settlement happens at five
+   * unrelated sites (`handleMessage`'s `result` / `error` / unknown-type
+   * branches, the abort handler, and `terminate()`), so `.finally()` is the
+   * only hook that covers all of them uniformly — there is no single
+   * `await` to wrap. Cost is three counter bumps per round trip, which is
+   * noise next to a structured-clone postMessage, so it stays on in
+   * production and the stats are simply not readable through any public
+   * API.
+   */
   private sendMessage(
+    type: WorkerMessageType,
+    payload: unknown,
+    onProgress?: ProgressCallback,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    // An already-aborted send rejects before `postMessage` — it never
+    // reaches the worker, so counting it would inflate `sent`.
+    if (signal?.aborted) return this.dispatch(type, payload, onProgress, signal);
+
+    const stats = this.stats;
+    if (type === 'query' || type === 'load' || type === 'export') stats.sent[type]++;
+    if (++stats.inFlight > stats.maxInFlight) stats.maxInFlight = stats.inFlight;
+
+    return this.dispatch(type, payload, onProgress, signal).finally(() => {
+      this.stats.inFlight--;
+    });
+  }
+
+  /**
+   * @internal Test-only — snapshot the worker round-trip counters.
+   *
+   * Two behaviors this deliberately reports rather than hides: `cancel`
+   * messages are posted inline from the abort handler and never pass
+   * through `sendMessage`, so they are invisible here; and
+   * {@link dropTable} issues its `DROP TABLE` through {@link query}, so it
+   * lands in `sent.query` like any other statement.
+   */
+  __getStatsForTests(): BridgeStats {
+    return { ...this.stats, sent: { ...this.stats.sent } };
+  }
+
+  /**
+   * @internal Test-only — zero every counter.
+   *
+   * `inFlight` is carried over rather than zeroed: it is a gauge, and
+   * resetting it mid-flight would let the pending requests' `.finally()`
+   * decrements drive it negative. `maxInFlight` restarts from the current
+   * gauge for the same reason. Those pending requests decrement whatever
+   * `this.stats` holds when they settle — the replacement object — which
+   * is exactly why it must be seeded with the live gauge.
+   */
+  __resetStatsForTests(): void {
+    this.stats = emptyStats(this.stats.inFlight);
+  }
+
+  private dispatch(
     type: WorkerMessageType,
     payload: unknown,
     onProgress?: ProgressCallback,

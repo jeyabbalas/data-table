@@ -6,7 +6,7 @@
 
 # Interface: PointFilter
 
-Defined in: [filters/FilterTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L31)
+Defined in: [filters/FilterTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/filters/FilterTypes.ts#L31)
 
 Equality filter (`column = value`). NULL is allowed as a literal value;
 it generates `column IS NULL`.
@@ -17,7 +17,7 @@ it generates `column IS NULL`.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L33)
+Defined in: [filters/FilterTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/filters/FilterTypes.ts#L33)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:33](https://github.com/jeyabbalas/data-table
 
 > **type**: `"point"`
 
-Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L32)
+Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/filters/FilterTypes.ts#L32)
 
 ***
 
@@ -33,4 +33,4 @@ Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table
 
 > **value**: `string` \| `number` \| `boolean` \| `Date` \| `null`
 
-Defined in: [filters/FilterTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/filters/FilterTypes.ts#L34)
+Defined in: [filters/FilterTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/filters/FilterTypes.ts#L34)

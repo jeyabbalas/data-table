@@ -161,6 +161,25 @@ export function resolvePinnedCount(
   return { pinnedCount: lastPinnedIndex + 1, violated: true };
 }
 
+/**
+ * The integer width a declared column width occupies.
+ *
+ * Rounded (see the module header) and guarded: `setColumnWidth` validates
+ * nothing, and a restored session snapshot copies `columnWidths` in wholesale
+ * (`serialization.ts`), so a `NaN` or an `Infinity` is reachable without
+ * malice. One of those in the middle of the list poisons every prefix sum
+ * after it, and the failure is **silent** — `flex: 0 0 NaNpx` and
+ * `setContentWidth(NaN)` are both rejected by CSSOM, so the spacer and the
+ * scroll extent quietly keep their previous values while the model believes
+ * something else. Falling back to the default keeps one bad column bad
+ * instead of taking the table's geometry with it.
+ */
+function occupiedWidth(declared: number | undefined): number {
+  return declared !== undefined && Number.isFinite(declared)
+    ? Math.round(declared)
+    : DEFAULT_COLUMN_WIDTH;
+}
+
 /** Sticky placement for one pinned column. */
 export interface PinnedOffset {
   /** `left` in px — Σ occupied widths of the pinned columns before it. */
@@ -172,13 +191,21 @@ export interface PinnedOffset {
 /**
  * Sticky `left` / `z-index` for every pinned column, keyed by column name.
  *
- * Computed over `visibleColumns[0, pinnedCount)` — **not** by walking
- * `pinnedColumns`. The difference is a real bug: `hideColumn` never removes a
- * column from `pinnedColumns`, so a pinned-then-hidden column used to consume
- * a slot in the cumulative sum and push every later pinned column's `left`,
- * and the demarcation line, one column too far right. Header and body both did
- * it, so they agreed with each other and disagreed with the flow — which is
- * why it went unnoticed.
+ * Walks `visibleColumns[0, pinnedCount)` rather than `pinnedColumns`, and
+ * that is a real fix: `hideColumn` never removes a column from
+ * `pinnedColumns`, so a pinned-then-hidden column used to consume a slot in
+ * the cumulative sum and push every later pinned column's `left`, and the
+ * demarcation line, one column too far right. Header and body both did it, so
+ * they agreed with each other and disagreed with the layout — which is why it
+ * went unnoticed.
+ *
+ * It also *filters* that span by `pinnedColumns`, which matters only in the
+ * {@link ColumnWindow.pinnedPrefixViolated} case. There `pinnedCount` is the
+ * permissive "through the last pinned column", which is the right answer for
+ * deciding what to **render** and the wrong one for deciding what to make
+ * **sticky** — an unpinned column caught inside that span would freeze itself
+ * to the viewport edge, and nothing the user did asked for that. Rendering
+ * stays permissive; styling stays exact.
  *
  * Widths are rounded the same way the prefix sums round them, so a fractional
  * column width cannot make a sticky offset disagree with the cell it pins.
@@ -188,13 +215,21 @@ export function pinnedOffsets(
   columnWidths: ReadonlyMap<string, number>,
   pinnedCount: number,
   baseZ: number,
+  pinnedColumns?: readonly string[],
 ): Map<string, PinnedOffset> {
   const offsets = new Map<string, PinnedOffset>();
+  const pinned = pinnedColumns ? new Set(pinnedColumns) : null;
   let left = 0;
   for (let i = 0; i < pinnedCount && i < visibleColumns.length; i++) {
     const name = visibleColumns[i]!;
-    offsets.set(name, { left, zIndex: baseZ + (pinnedCount - i) });
-    left += Math.round(columnWidths.get(name) ?? DEFAULT_COLUMN_WIDTH);
+    const width = occupiedWidth(columnWidths.get(name));
+    // An unpinned column inside the span still occupies its width — the
+    // pinned columns after it sit that much further right — it just does not
+    // become sticky itself.
+    if (!pinned || pinned.has(name)) {
+      offsets.set(name, { left, zIndex: baseZ + (pinnedCount - i) });
+    }
+    left += width;
   }
   return offsets;
 }
@@ -277,7 +312,7 @@ export class ColumnWindowModel {
     this.prefix[0] = 0;
     for (let i = 0; i < n; i++) {
       // Round the declared width, then sum exactly — see the module header.
-      running += Math.round(columnWidths.get(visibleColumns[i]!) ?? DEFAULT_COLUMN_WIDTH);
+      running += occupiedWidth(columnWidths.get(visibleColumns[i]!));
       running += boxOverheadPx;
       this.prefix[i + 1] = running;
     }

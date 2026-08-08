@@ -6,7 +6,7 @@
 
 # Interface: SortColumn
 
-Defined in: [core/types.ts:72](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/core/types.ts#L72)
+Defined in: [core/types.ts:72](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L72)
 
 One row in the multi-column sort key. Order in `state.sortColumns` reflects
 sort precedence (first entry is primary sort).
@@ -17,7 +17,7 @@ sort precedence (first entry is primary sort).
 
 > **column**: `string`
 
-Defined in: [core/types.ts:73](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/core/types.ts#L73)
+Defined in: [core/types.ts:73](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L73)
 
 ***
 
@@ -25,4 +25,4 @@ Defined in: [core/types.ts:73](https://github.com/jeyabbalas/data-table/blob/0b7
 
 > **direction**: [`SortDirection`](../type-aliases/SortDirection.md)
 
-Defined in: [core/types.ts:74](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/core/types.ts#L74)
+Defined in: [core/types.ts:74](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L74)

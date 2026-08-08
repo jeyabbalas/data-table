@@ -620,4 +620,98 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
   });
+
+  describe('width-reset animation targets', () => {
+    /**
+     * A body row as `TableBody` builds it now:
+     * `[P pinned cells][left spacer][W window cells][right spacer]`, holding a
+     * *window* of the visible columns rather than all of them.
+     */
+    function windowedRoot(renderedColumns: string[], pinnedCount = 0): HTMLElement {
+      const root = document.createElement('div');
+      root.className = 'dt-root';
+      const row = document.createElement('div');
+      row.className = 'dt-row';
+      const spacer = (side: string): HTMLElement => {
+        const el = document.createElement('div');
+        el.className = 'dt-col-spacer';
+        el.setAttribute('data-col-spacer', side);
+        return el;
+      };
+      const cell = (name: string): HTMLElement => {
+        const el = document.createElement('div');
+        el.className = 'dt-cell';
+        el.setAttribute('data-column', name);
+        return el;
+      };
+      for (const name of renderedColumns.slice(0, pinnedCount)) row.appendChild(cell(name));
+      row.appendChild(spacer('left'));
+      for (const name of renderedColumns.slice(pinnedCount)) row.appendChild(cell(name));
+      row.appendChild(spacer('right'));
+      root.appendChild(row);
+      document.body.appendChild(root);
+      return root;
+    }
+
+    /** Run one double-click reset and report which cells got the class. */
+    function resetAndCollect(header: ColumnHeader, root: HTMLElement): string[] {
+      const handle = header.getElement().querySelector('.dt-col-resize-handle')!;
+      handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      return Array.from(root.querySelectorAll('.dt-cell.dt-col-resetting')).map(
+        (el) => el.getAttribute('data-column') ?? '',
+      );
+    }
+
+    afterEach(() => {
+      document.body.innerHTML = '';
+    });
+
+    it('animates the cells of its own column, wherever the window sits', () => {
+      // `test_column` is visible index 4 but rendered at child index 3 (two
+      // window cells in, past the left spacer). A `:nth-child(5)` lookup —
+      // what this used to do — lands on `c` instead.
+      state.visibleColumns.set(['a', 'b', 'c', 'd', 'test_column', 'f', 'g']);
+      state.columnOrder.set(['a', 'b', 'c', 'd', 'test_column', 'f', 'g']);
+      const root = windowedRoot(['c', 'd', 'test_column', 'f']);
+
+      const header = new ColumnHeader(column, state, actions);
+      root.appendChild(header.getElement());
+
+      expect(resetAndCollect(header, root)).toEqual(['test_column']);
+
+      header.destroy();
+    });
+
+    it('animates nothing when its column is outside the rendered window', () => {
+      // Not a failure mode: a column the user cannot see has no cells to
+      // transition, and the header still animates on its own.
+      state.visibleColumns.set(['test_column', 'a', 'b', 'c', 'd']);
+      state.columnOrder.set(['test_column', 'a', 'b', 'c', 'd']);
+      const root = windowedRoot(['c', 'd']);
+
+      const header = new ColumnHeader(column, state, actions);
+      root.appendChild(header.getElement());
+
+      expect(resetAndCollect(header, root)).toEqual([]);
+      expect(header.getElement().classList.contains('dt-col-resetting')).toBe(true);
+
+      header.destroy();
+    });
+
+    it('never targets a column spacer', () => {
+      // The left spacer sits exactly where a positional lookup for the first
+      // unpinned column used to land.
+      state.visibleColumns.set(['pinned', 'test_column', 'b', 'c']);
+      state.columnOrder.set(['pinned', 'test_column', 'b', 'c']);
+      const root = windowedRoot(['pinned', 'test_column', 'b'], 1);
+
+      const header = new ColumnHeader(column, state, actions);
+      root.appendChild(header.getElement());
+
+      expect(resetAndCollect(header, root)).toEqual(['test_column']);
+      expect(root.querySelectorAll('[data-col-spacer].dt-col-resetting')).toHaveLength(0);
+
+      header.destroy();
+    });
+  });
 });

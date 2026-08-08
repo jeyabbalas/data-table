@@ -6,7 +6,7 @@
 
 # Class: CrossfilterCoordinator
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:85](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L85)
+Defined in: [visualizations/CrossfilterCoordinator.ts:85](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L85)
 
 Coordinates filter rebroadcasting across all column-header visualizations
 on a table. Composed by the facade; rarely needed directly. Bounds in-flight
@@ -19,7 +19,7 @@ responsive on wide tables.
 
 > **new CrossfilterCoordinator**(`state`, `actions`, `bridge`, `concurrency?`, `options?`): `CrossfilterCoordinator`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:92](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L92)
+Defined in: [visualizations/CrossfilterCoordinator.ts:92](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L92)
 
 #### Parameters
 
@@ -53,7 +53,7 @@ Defined in: [visualizations/CrossfilterCoordinator.ts:92](https://github.com/jey
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:222](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L222)
+Defined in: [visualizations/CrossfilterCoordinator.ts:222](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L222)
 
 Clean up signal subscription and clear registrations
 
@@ -67,7 +67,7 @@ Clean up signal subscription and clear registrations
 
 > **handleFilterChange**(`columnName`, `filter`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:132](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L132)
+Defined in: [visualizations/CrossfilterCoordinator.ts:132](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L132)
 
 Route a visualization's onFilterChange to StateActions
 
@@ -91,7 +91,7 @@ Route a visualization's onFilterChange to StateActions
 
 > **register**(`columnName`, `viz`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:105](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L105)
+Defined in: [visualizations/CrossfilterCoordinator.ts:105](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L105)
 
 Register a visualization for crossfilter updates
 
@@ -115,7 +115,7 @@ Register a visualization for crossfilter updates
 
 > **syncExistingFilters**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:121](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L121)
+Defined in: [visualizations/CrossfilterCoordinator.ts:121](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L121)
 
 Sync filtered row count with current filter state. Returns a promise
 that resolves once the row-count query settles (or immediately when
@@ -135,7 +135,7 @@ restored from persistence before the coordinator was created.
 
 > **unregister**(`columnName`): `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:110](https://github.com/jeyabbalas/data-table/blob/0b73c558cde923c255ac5cae38ca0055d95b560c/src/visualizations/CrossfilterCoordinator.ts#L110)
+Defined in: [visualizations/CrossfilterCoordinator.ts:110](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/visualizations/CrossfilterCoordinator.ts#L110)
 
 Unregister a visualization
 

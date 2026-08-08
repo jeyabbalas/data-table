@@ -220,6 +220,37 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    // The `/advanced` no-actions shell builds its own placeholder headers
+    // instead of `ColumnHeader`s. It is the last width write in the codebase
+    // that could disagree with the body: the column window sums *rounded*
+    // widths for its cells and its spacers, so a fractional width written
+    // straight into a header puts it a growing fraction of a pixel away from
+    // its own column — 40 px out at 100 columns and a 150.4 width.
+    it('should round the placeholder header width the way the body rounds it', () => {
+      state.tableName.set('t');
+      initializeColumnsFromSchema(state, [
+        { name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 'b', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      ]);
+      state.totalRows.set(1);
+      state.columnWidths.set(
+        new Map([
+          ['a', 150.4],
+          ['b', 150.6],
+        ]),
+      );
+
+      const tableContainer = new TableContainer(container, state);
+      tableContainer.render();
+
+      const headers = tableContainer.getElement().querySelectorAll<HTMLElement>('.dt-col-header');
+      expect(headers).toHaveLength(2);
+      expect(headers[0]!.style.width).toBe('150px');
+      expect(headers[1]!.style.width).toBe('151px');
+
+      tableContainer.destroy();
+    });
+
     it('should set up resize observer', () => {
       const tableContainer = new TableContainer(container, state);
       const mockInstance = MockResizeObserver.getLastInstance();

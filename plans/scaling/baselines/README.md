@@ -18,73 +18,76 @@ that graduate into `tests/budgets.ts` when a phase tightens them.
 
 ### wide-ci — visualizations off
 
-| Metric                      | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: |
-| Generate (ms)               |                   1689 |
-| Load (ms)                   |                   1448 |
-| └ worker stage (ms)         |                 1447.6 |
-| └ first paint (ms)          |                 1447.7 |
-| └ viz ready (ms)            |                 1447.6 |
-| Queries sent                |                      4 |
-| Cache hits                  |                      0 |
-| DOM nodes                   |                  15352 |
-| Canvases                    |                      0 |
-| Live ResizeObservers        |                      1 |
-| Live MutationObservers      |                      1 |
-| sortColumns subscribers     |                    305 |
-| JS heap (MB)                |                   19.6 |
-| One sort (ms)               |                  114.9 |
-| One filter (ms)             |                  120.5 |
-| Scroll storm frame p95 (ms) |                   12.1 |
+| Metric                      | `202bb18` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: |
+| Generate (ms)               |                   1726 |                   1689 |
+| Load (ms)                   |                    913 |                   1448 |
+| └ worker stage (ms)         |                  905.6 |                 1447.6 |
+| └ first paint (ms)          |                  912.4 |                 1447.7 |
+| └ viz ready (ms)            |                  905.7 |                 1447.6 |
+| Queries sent                |                      4 |                      4 |
+| Cache hits                  |                      0 |                      0 |
+| DOM nodes                   |                  11156 |                  15352 |
+| Canvases                    |                      0 |                      0 |
+| Live ResizeObservers        |                      1 |                      1 |
+| Live MutationObservers      |                      1 |                      1 |
+| sortColumns subscribers     |                    305 |                    305 |
+| JS heap (MB)                |                   19.6 |                   19.6 |
+| One sort (ms)               |                   45.3 |                  114.9 |
+| One filter (ms)             |                   39.1 |                  120.5 |
+| Scroll storm frame p95 (ms) |                    9.3 |                   12.1 |
 
+- `202bb18` — darwin, 10 cpus, node v22.23.2.
 - `970698e` — darwin, 10 cpus, node v22.23.2.
 
 ### wide — visualizations off
 
-| Metric                      | `51ba4ef` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: | ---------------------: | ---------------------: |
-| Generate (ms)               |                  16961 |                  15096 |                  14414 |
-| Load (ms)                   |                   3859 |                   4065 |                   8336 |
-| └ worker stage (ms)         |                 3855.1 |                 4062.8 |                 8334.4 |
-| └ first paint (ms)          |                 3855.6 |                 4063.1 |                 8334.7 |
-| └ viz ready (ms)            |                 3855.3 |                 4062.9 |                 8334.5 |
-| Queries sent                |                      4 |                      4 |                      4 |
-| Cache hits                  |                      0 |                      0 |                      0 |
-| DOM nodes                   |                  52052 |                  51052 |                  51052 |
-| Canvases                    |                      0 |                      0 |                      0 |
-| Live ResizeObservers        |                      1 |                      1 |                      1 |
-| Live MutationObservers      |                      1 |                      1 |                      1 |
-| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |
-| JS heap (MB)                |                   31.6 |                   31.6 |                  227.9 |
-| One sort (ms)               |                  401.8 |                  460.8 |                  391.9 |
-| One filter (ms)             |                  423.7 |                  396.8 |                  381.1 |
-| Scroll storm frame p95 (ms) |                   36.2 |                   37.3 |                     38 |
+| Metric                      | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)               |                  14538 |                  16961 |                  15096 |                  14414 |
+| Load (ms)                   |                   3866 |                   3859 |                   4065 |                   8336 |
+| └ worker stage (ms)         |                 3845.6 |                 3855.1 |                 4062.8 |                 8334.4 |
+| └ first paint (ms)          |                 3865.2 |                 3855.6 |                 4063.1 |                 8334.7 |
+| └ viz ready (ms)            |                 3845.7 |                 3855.3 |                 4062.9 |                 8334.5 |
+| Queries sent                |                      4 |                      4 |                      4 |                      4 |
+| Cache hits                  |                      0 |                      0 |                      0 |                      0 |
+| DOM nodes                   |                  36356 |                  52052 |                  51052 |                  51052 |
+| Canvases                    |                      0 |                      0 |                      0 |                      0 |
+| Live ResizeObservers        |                      1 |                      1 |                      1 |                      1 |
+| Live MutationObservers      |                      1 |                      1 |                      1 |                      1 |
+| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |                   1005 |
+| JS heap (MB)                |                     28 |                   31.6 |                   31.6 |                  227.9 |
+| One sort (ms)               |                  164.3 |                  401.8 |                  460.8 |                  391.9 |
+| One filter (ms)             |                  152.1 |                  423.7 |                  396.8 |                  381.1 |
+| Scroll storm frame p95 (ms) |                    9.8 |                   36.2 |                   37.3 |                     38 |
 
+- `202bb18` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `5285b63` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
 ### wide — visualizations on
 
-| Metric                      | `51ba4ef` (2026-08-08) | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: | ---------------------: |
-| Generate (ms)               |                  14716 |                  14461 |
-| Load (ms)                   |                   3743 |                  18884 |
-| └ worker stage (ms)         |                 3741.7 |                 8673.7 |
-| └ first paint (ms)          |                 3742.1 |                   8674 |
-| └ viz ready (ms)            |                 4291.7 |                  18884 |
-| Queries sent                |                     20 |                   2004 |
-| Cache hits                  |                      0 |                      0 |
-| DOM nodes                   |                  52076 |                  55052 |
-| Canvases                    |                      8 |                   1000 |
-| Live ResizeObservers        |                      9 |                   1001 |
-| Live MutationObservers      |                      2 |                   1001 |
-| sortColumns subscribers     |                   1005 |                   1005 |
-| JS heap (MB)                |                     28 |                  227.9 |
-| One sort (ms)               |                  450.3 |                10514.6 |
-| One filter (ms)             |                  506.2 |                 8274.7 |
-| Scroll storm frame p95 (ms) |                   40.5 |                   44.8 |
+| Metric                      | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)               |                  14154 |                  14716 |                  14461 |
+| Load (ms)                   |                   3860 |                   3743 |                  18884 |
+| └ worker stage (ms)         |                 3839.5 |                 3741.7 |                 8673.7 |
+| └ first paint (ms)          |                 3859.1 |                 3742.1 |                   8674 |
+| └ viz ready (ms)            |                 4157.6 |                 4291.7 |                  18884 |
+| Queries sent                |                     20 |                     20 |                   2004 |
+| Cache hits                  |                      0 |                      0 |                      0 |
+| DOM nodes                   |                  36380 |                  52076 |                  55052 |
+| Canvases                    |                      8 |                      8 |                   1000 |
+| Live ResizeObservers        |                      9 |                      9 |                   1001 |
+| Live MutationObservers      |                      2 |                      2 |                   1001 |
+| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |
+| JS heap (MB)                |                   24.8 |                     28 |                  227.9 |
+| One sort (ms)               |                  163.8 |                  450.3 |                10514.6 |
+| One filter (ms)             |                  230.7 |                  506.2 |                 8274.7 |
+| Scroll storm frame p95 (ms) |                   10.1 |                   40.5 |                   44.8 |
 
+- `202bb18` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
@@ -113,48 +116,50 @@ that graduate into `tests/budgets.ts` when a phase tightens them.
 
 ### grid — visualizations off
 
-| Metric                      | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: |
-| Generate (ms)               |                  23954 |
-| Load (ms)                   |                  10943 |
-| └ worker stage (ms)         |                10936.4 |
-| └ first paint (ms)          |                10936.6 |
-| └ viz ready (ms)            |                10936.4 |
-| Queries sent                |                      4 |
-| Cache hits                  |                      0 |
-| DOM nodes                   |                  10252 |
-| Canvases                    |                      0 |
-| Live ResizeObservers        |                      1 |
-| Live MutationObservers      |                      1 |
-| sortColumns subscribers     |                    205 |
-| JS heap (MB)                |                   17.4 |
-| One sort (ms)               |                  167.1 |
-| One filter (ms)             |                  102.3 |
-| Scroll storm frame p95 (ms) |                    9.5 |
+| Metric                      | `202bb18` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: |
+| Generate (ms)               |                  23672 |                  23954 |
+| Load (ms)                   |                   3769 |                  10943 |
+| └ worker stage (ms)         |                   3760 |                10936.4 |
+| └ first paint (ms)          |                 3764.5 |                10936.6 |
+| └ viz ready (ms)            |                 3760.2 |                10936.4 |
+| Queries sent                |                      4 |                      4 |
+| Cache hits                  |                      0 |                      0 |
+| DOM nodes                   |                   7556 |                  10252 |
+| Canvases                    |                      0 |                      0 |
+| Live ResizeObservers        |                      1 |                      1 |
+| Live MutationObservers      |                      1 |                      1 |
+| sortColumns subscribers     |                    205 |                    205 |
+| JS heap (MB)                |                   19.6 |                   17.4 |
+| One sort (ms)               |                    129 |                  167.1 |
+| One filter (ms)             |                   60.6 |                  102.3 |
+| Scroll storm frame p95 (ms) |                    9.4 |                    9.5 |
 
+- `202bb18` — darwin, 10 cpus, node v22.23.2.
 - `970698e` — darwin, 10 cpus, node v22.23.2.
 
 ### deep — visualizations off
 
-| Metric                      | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: | ---------------------: |
-| Generate (ms)               |                  21848 |                  21063 |
-| Load (ms)                   |                   4243 |                  11192 |
-| └ worker stage (ms)         |                 4236.9 |                11191.7 |
-| └ first paint (ms)          |                 4237.1 |                11191.9 |
-| └ viz ready (ms)            |                 4236.9 |                11191.8 |
-| Queries sent                |                      4 |                      4 |
-| Cache hits                  |                      0 |                      0 |
-| DOM nodes                   |                   1072 |                   1072 |
-| Canvases                    |                      0 |                      0 |
-| Live ResizeObservers        |                      1 |                      1 |
-| Live MutationObservers      |                      1 |                      1 |
-| sortColumns subscribers     |                     25 |                     25 |
-| JS heap (MB)                |                   16.3 |                  347.1 |
-| One sort (ms)               |                  120.5 |                  124.8 |
-| One filter (ms)             |                   28.7 |                   38.9 |
-| Scroll storm frame p95 (ms) |                    9.3 |                    9.3 |
+| Metric                      | `202bb18` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) |
+| --------------------------- | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)               |                  21412 |                  21848 |                  21063 |
+| Load (ms)                   |                   3783 |                   4243 |                  11192 |
+| └ worker stage (ms)         |                 3777.3 |                 4236.9 |                11191.7 |
+| └ first paint (ms)          |                 3777.9 |                 4237.1 |                11191.9 |
+| └ viz ready (ms)            |                 3777.3 |                 4236.9 |                11191.8 |
+| Queries sent                |                      4 |                      4 |                      4 |
+| Cache hits                  |                      0 |                      0 |                      0 |
+| DOM nodes                   |                   1076 |                   1072 |                   1072 |
+| Canvases                    |                      0 |                      0 |                      0 |
+| Live ResizeObservers        |                      1 |                      1 |                      1 |
+| Live MutationObservers      |                      1 |                      1 |                      1 |
+| sortColumns subscribers     |                     25 |                     25 |                     25 |
+| JS heap (MB)                |                   17.4 |                   16.3 |                  347.1 |
+| One sort (ms)               |                  119.2 |                  120.5 |                  124.8 |
+| One filter (ms)             |                   26.5 |                   28.7 |                   38.9 |
+| Scroll storm frame p95 (ms) |                    9.3 |                    9.3 |                    9.3 |
 
+- `202bb18` — darwin, 10 cpus, node v22.23.2.
 - `5285b63` — darwin, 10 cpus, node v22.23.2.
 - `970698e` — darwin, 10 cpus, node v22.23.2.
 

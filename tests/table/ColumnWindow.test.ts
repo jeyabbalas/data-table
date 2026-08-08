@@ -18,6 +18,7 @@ import {
   DEFAULT_COLUMN_WIDTH,
   MIN_OVERSCAN_COLUMNS,
   OVERSCAN_VIEWPORTS,
+  pinnedOffsets,
   pinnedPrefixLength,
 } from '@/table/ColumnWindow';
 
@@ -491,5 +492,115 @@ describe('the pinned-prefix fallback is reachable through public API', () => {
     expect(win.pinnedCount).toBe(1);
     expect(win.pinnedPrefixViolated).toBe(false);
     expect(win.pinnedWidthPx).toBe(DEFAULT_COLUMN_WIDTH);
+  });
+});
+
+describe('pinnedOffsets', () => {
+  const Z = 20;
+
+  it('places each pinned column after the ones before it', () => {
+    const names = ['a', 'b', 'c', 'd'];
+    const offsets = pinnedOffsets(names, widths(names), 2, Z, ['a', 'b']);
+
+    expect(offsets.get('a')).toEqual({ left: 0, zIndex: Z + 2 });
+    expect(offsets.get('b')).toEqual({ left: 150, zIndex: Z + 1 });
+    // z descending left to right, so an earlier column paints over a later
+    // one when they overlap at the sticky edge.
+    expect(offsets.get('a')!.zIndex).toBeGreaterThan(offsets.get('b')!.zIndex);
+    expect(offsets.has('c')).toBe(false);
+  });
+
+  it('rounds each width before accumulating, like the prefix sums do', () => {
+    const names = ['a', 'b', 'c'];
+    const offsets = pinnedOffsets(names, widths(names, 150.6), 3, Z, names);
+    expect(offsets.get('b')!.left).toBe(151);
+    expect(offsets.get('c')!.left).toBe(302);
+  });
+
+  it('does not make an unpinned column sticky when the prefix is violated', () => {
+    // `showColumn` can splice an unpinned column in front of a pinned one, so
+    // `pinnedCount` falls back to "through the last pinned column" — the right
+    // answer for deciding what to *render*, and the wrong one for deciding
+    // what to freeze. Without the filter, `b` would pin itself to the
+    // viewport edge and no user action asked for it.
+    const names = ['a', 'b', 'd'];
+    const offsets = pinnedOffsets(names, widths(names), 3, Z, ['a', 'd']);
+
+    expect(offsets.has('b')).toBe(false);
+    expect(offsets.get('a')).toEqual({ left: 0, zIndex: Z + 3 });
+    // `b` is not sticky but it still occupies its width, so `d` sits past it.
+    expect(offsets.get('d')).toEqual({ left: 300, zIndex: Z + 1 });
+  });
+
+  it('omits a pinned column that is no longer visible', () => {
+    // `hideColumn` leaves the column in `pinnedColumns`. Walking that list
+    // gave the hidden column a slot and pushed every later offset — and the
+    // demarcation line — one column too far right.
+    const names = ['a', 'c'];
+    const offsets = pinnedOffsets(names, widths(names), 2, Z, ['a', 'b', 'c']);
+
+    expect([...offsets.keys()]).toEqual(['a', 'c']);
+    expect(offsets.get('c')!.left).toBe(150);
+  });
+
+  it('is empty for an unpinned table and clamps past the end of the list', () => {
+    const names = ['a', 'b'];
+    expect(pinnedOffsets(names, widths(names), 0, Z, [])).toEqual(new Map());
+    expect([...pinnedOffsets(names, widths(names), 9, Z, names).keys()]).toEqual(['a', 'b']);
+  });
+});
+
+describe('ColumnWindowModel — hostile widths', () => {
+  // `setColumnWidth` validates nothing and a restored session snapshot copies
+  // `columnWidths` in wholesale, so a non-finite width is reachable without
+  // malice. One of them used to poison every prefix sum after it — and
+  // silently, because `flex: 0 0 NaNpx` and `setContentWidth(NaN)` are both
+  // rejected by CSSOM, so the spacer and the scroll extent kept their previous
+  // values while the model believed something else.
+  for (const [label, bad] of [
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['-Infinity', Number.NEGATIVE_INFINITY],
+  ] as const) {
+    it(`falls back to the default for a ${label} width instead of poisoning the tail`, () => {
+      const model = new ColumnWindowModel();
+      const names = columns(5);
+      const w = widths(names, 100);
+      w.set('c2', bad);
+      model.sync(names, w);
+
+      expect(model.totalWidthPx()).toBe(4 * 100 + DEFAULT_COLUMN_WIDTH);
+      expect(model.columnWidthPx(2)).toBe(DEFAULT_COLUMN_WIDTH);
+      // Everything after the bad column is still a finite, usable number.
+      expect(Number.isFinite(model.columnLeftPx(4))).toBe(true);
+      expect(model.columnLeftPx(4)).toBe(100 + 100 + DEFAULT_COLUMN_WIDTH + 100);
+    });
+  }
+
+  it('keeps the window and both spacers finite', () => {
+    const names = columns(60);
+    const w = widths(names);
+    w.set('c3', Number.NaN);
+    const win = new ColumnWindowModel().compute({
+      visibleColumns: names,
+      columnWidths: w,
+      pinnedColumns: [],
+      scrollLeft: 3000,
+      viewportWidth: 600,
+    });
+
+    for (const [key, value] of Object.entries(win)) {
+      if (typeof value === 'number') expect(Number.isFinite(value), key).toBe(true);
+    }
+    expect(win.leftSpacerPx + win.rightSpacerPx).toBeLessThan(win.totalWidthPx);
+  });
+
+  it('does not let a non-finite width reach a sticky offset', () => {
+    const names = ['a', 'b', 'c'];
+    const w = widths(names);
+    w.set('a', Number.NaN);
+    const offsets = pinnedOffsets(names, w, 3, 20, names);
+    expect(offsets.get('b')!.left).toBe(DEFAULT_COLUMN_WIDTH);
+    expect(offsets.get('c')!.left).toBe(DEFAULT_COLUMN_WIDTH + 150);
   });
 });

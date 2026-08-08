@@ -250,6 +250,108 @@ styles it, because it belongs to the host page. `container` is an
 `HTMLElement` the host provides; the library only appends its own root
 into it.
 
+### Column windowing
+
+The height chain bounds the row axis; nothing bounded the column axis. A
+body row carried one `.dt-cell` per visible column, so a 1,000-column
+table put ~30,000 cells in the DOM regardless of how many a user could
+see. A row's children are now exactly:
+
+```
+[P pinned cells][left spacer][W window cells][right spacer]
+```
+
+`P` is the leading run of pinned columns in `state.visibleColumns` —
+pinned columns are sticky, so they are on screen at every horizontal
+offset and are rendered outside the window. `[start, end)` is the window:
+the columns whose pixel span intersects the horizontal viewport,
+overscanned by one viewport per side and widened to a floor of ten
+columns per side (`MIN_OVERSCAN_COLUMNS`,
+[`src/table/ColumnWindow.ts:47`, `:50`](../../src/table/ColumnWindow.ts)).
+The floor is what carries a viewport that measures 0 — jsdom, and the
+frame before first layout — where the pixel term collapses to nothing.
+The two spacers are `div.dt-col-spacer` with `role="presentation"`,
+`aria-hidden="true"`, `data-col-spacer="left" | "right"` and an inline
+`flex: 0 0 Npx`
+([`src/table/TableBody.ts:1652-1660`](../../src/table/TableBody.ts)).
+They stand in for the total width of the columns not rendered, which is
+what keeps the horizontal scroll extent and every rendered cell's
+x-position identical to the un-windowed layout.
+
+Each row stamps its own structure as `data-window="P:W"`
+([`src/table/TableBody.ts:318-319`](../../src/table/TableBody.ts)) — a
+_structure_ signature, never a position one. A window that slides at
+constant size leaves every mounted row's shape valid, so those rows are
+repainted in place; only a change in `P` or `W` reshapes a row. The cell
+for absolute visible-column index `absIdx` sits at
+`absIdx < P ? absIdx : absIdx - start + P + 1`
+([`src/table/TableBody.ts:1679-1682`](../../src/table/TableBody.ts)),
+which is how a row's DOM is read and written without scanning it.
+
+The arithmetic lives in
+[`src/table/ColumnWindow.ts`](../../src/table/ColumnWindow.ts) and is
+pure — it measures nothing and reads no element. `ColumnWindowModel`
+keeps prefix sums over per-column occupied width in a `Float64Array`, so
+the span of `[i, j)` is one subtraction and the visible range is two
+binary searches
+([`src/table/ColumnWindow.ts:262-288`, `:335-405`](../../src/table/ColumnWindow.ts)).
+The sums are rebuilt only when the `visibleColumns` array identity, the
+`columnWidths` map identity, or the box overhead changes — all three are
+replaced wholesale by the state layer rather than mutated, so identity is
+a sound cache key and every other call is a pointer comparison.
+
+Two preconditions are what make a DOM-free model possible. `.dt-cell` and
+`.dt-col-header` declare `box-sizing: border-box`
+([`src/styles/05-data-grid.css:220`](../../src/styles/05-data-grid.css),
+[`src/styles/03-columns.css:15`](../../src/styles/03-columns.css)), so a
+configured width _is_ the occupied width and the per-column box overhead
+is the constant 0 rather than a quantity to measure. And declared widths
+are rounded to integers before they are summed
+([`src/table/ColumnWindow.ts:280`](../../src/table/ColumnWindow.ts)) — a
+fractional width is reachable, since `setColumnWidth` does not round and
+a mouse resize under page zoom passes a fractional `clientX`. The header
+snaps each column box independently, so a sub-pixel residue stays
+sub-pixel there; one body spacer covers ~990 columns at 1,000 and would
+carry every one of those residues at once. Round the inputs, sum
+exactly, never round the spacer itself.
+
+Recompute is driven by a passive, rAF-throttled `scroll` listener on the
+body scroll container
+([`src/table/TableBody.ts:782-792`](../../src/table/TableBody.ts)): a
+second listener on the same element rather than a hook into the
+scroller's own, because `VirtualScroller.onScroll` fires only when the
+_row_ range moves, which a purely horizontal scroll never does. It
+returns after one property read when only `scrollTop` moved, so vertical
+scrolling stays free, and it re-renders only when
+`(start, end, pinnedCount)` actually changed. `refreshColumnWindow()`
+([`src/table/TableBody.ts:2574-2596`](../../src/table/TableBody.ts)) is
+the synchronous form, called after every programmatic `scrollLeft` write
+— keyboard navigation, the filter-change scroll pin, the scroll restore
+after a re-render — because the browser does not dispatch `scroll` until
+the current task ends, and the frame in between would otherwise show
+cells built for the previous offset.
+
+Measured in Chromium at 1280 × 720 on 300 columns × 20,000 rows, the
+`.dt-root` subtree fell from 15,051 nodes to 11,136 and the `.dt-cell`
+count under `.dt-body` from ~4,500 to 255–420, with header and body
+agreeing to 0.000 px at every stop of a horizontal sweep. A row holds 17
+cells at rest and 28 mid-scroll — the same numbers at 60 columns as at
+300, which is the property being bought. What is left at 300 columns is
+dominated by the 300 eagerly built column headers; the header row is not
+windowed yet.
+
+The one user-visible consequence is that body cells for horizontally
+off-screen columns are no longer in the DOM, so code that selects
+`[data-column="…"]` inside the body must scroll the column into view
+first. `aria-colcount` / `aria-colindex` stay _absolute_ over
+`columnOrder`, so a windowed row reports a gapped, non-1-based colindex
+run — which is exactly what the ARIA grid pattern prescribes for a
+partially rendered row. `/advanced` exposes the geometry rather than
+making callers re-derive it: `refreshColumnWindow()`,
+`getColumnWindow()`, `getColumnSpan(column)` and `getPinnedWidthPx()` on
+`TableBody`, with the `ColumnWindow` type re-exported from
+[`src/advanced.ts`](../../src/advanced.ts).
+
 ### Scroll-space compression
 
 A spacer of `totalRows × rowHeight` px stops working at some point,

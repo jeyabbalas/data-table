@@ -9,7 +9,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines      |
 | 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress    |
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
-| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | in progress | 2026-08-08 | —          | Body renders the column window only      |
+| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                        |
 | 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
@@ -968,7 +968,28 @@ the initial wave never reached; `screenshot-1786216440173-8.jpg` dark theme.
 
 ### Phase 3 — Body column windowing
 
-_In progress. Sections are appended as milestones land; the handoff is complete at M7._
+A body row used to carry one cell per visible column, whatever the viewport. It now carries
+`[P pinned cells][left spacer][W window cells][right spacer]`, where `[start, end)` is the run of
+columns whose pixel span intersects the horizontal viewport, overscanned one viewport per side and
+floored at ten columns per side. The two spacers sum to exactly the width of what is not rendered,
+so the scroll extent and every cell's x-position are unchanged.
+
+#### Headline — WIDE_CI (300 × 20,000), visualizations off
+
+Reference machine (macOS, 10 cores, Chromium), viewport now pinned to 1,280 × 720 in
+`playwright.config.ts`.
+
+| Metric                             | Before                | After                       |
+| ---------------------------------- | --------------------- | --------------------------- |
+| Elements under `.dt-root`          | 15,051                | **11,136**                  |
+| Cells in one body row              | 300                   | **17** at rest, 28 scrolled |
+| `.dt-cell` under `.dt-body`        | ~4,500                | **255–420**                 |
+| The same row at **60** columns     | 60                    | **17** — the same number    |
+| Header ↔ cell horizontal agreement | (one cell per column) | **0.000 px** at every stop  |
+
+The fourth row is the claim: what a row costs is a function of the viewport, not of the schema. The
+remaining 11,136 is dominated by the 300 eagerly built `ColumnHeader`s — **Phase 4's number to
+cut**, and the reason this one did not fall further.
 
 #### M1 — Alignment spike (§4.8), executed first
 
@@ -1033,3 +1054,345 @@ straight into the spacers. That is finding-list item §2's `updateCellWidths` co
 Screenshots (session-local scratchpad, not committed): `spike-window-0.png` (`scrollLeft` 0),
 `spike-window-1.png` (mid-scroll — pinned `col_0`/`col_1` painted over the window, `col_24`…`col_27`
 sitting exactly under their headers), `spike-window-2.png` (max).
+
+#### Design deltas D0–D10, as shipped
+
+Recorded because each one departs from the phase doc's literal text, and a later phase reading the
+doc rather than the code would be wrong about all eleven.
+
+- **D0 — box overhead is the constant `0`, and it is still an input.** `.dt-cell` and
+  `.dt-col-header` ship `box-sizing: border-box` (C1), so a configured width _is_ the occupied
+  width. `ColumnWindow` keeps `boxOverheadPx` as an option field rather than baking the zero in, so
+  the model can be driven — and unit-tested — against a host that changes it.
+- **D1 — `getColumnWindow()` ships alongside `refreshColumnWindow()`**, and the `ColumnWindow`
+  **type** is re-exported from `src/advanced.ts`. Type-only, so the `Object.keys` API snapshot does
+  not move. `computeColumnWindow` stays private.
+- **D2 — both `:last-child { border-right: none }` rules deleted** rather than replaced by a
+  `--last` class. Under `border-box` the last column's border sits inside its declared width like
+  every other; the rule only made that column's content 1 px wider.
+- **D3 — keyboard navigation consumes shared accessors.** `scrollFocusedCellIntoView` calls
+  `TableBody.getColumnSpan()` / `getPinnedWidthPx()`; its two O(N)-per-cursor-move loops
+  (`KeyboardNavigator.ts:923-934`) are gone. §4.5's focused-cell fallback is **clamped to
+  `MIN_OVERSCAN_COLUMNS`** — a cursor parked 900 columns away must not drag 900 cells into the DOM,
+  and `syncActiveDescendant` already drops the attribute when the id resolves to nothing, which is
+  the correct ARIA answer for a cursor scrolled out of view.
+- **D4 — `tests/helpers/tableBodyDom.ts` landed in its own commit before the rewrite** (C4), green
+  with zero product delta. That is what proves the helpers faithful rather than merely convenient:
+  pre-windowing, `bodyCells` _is_ `children` and `spacerWidths` _is_ `{0, 0}`, so the migrated
+  assertions mean the same thing on both sides of the change.
+- **D5 — `readBodyWindow(page, opts)`** is a new browser reader, because `readVisibleGrid` reads
+  `.dt-col-header` and the header row does not window until Phase 4. Asserting the body's window
+  against a header-derived count would silently pass whatever the body did. `readAlignment` is its
+  sibling, pairing cells to headers by `data-column`.
+- **D6 — `tiers.smoke`'s text-oracle census is re-keyed by generator class (`c % CLASS_CYCLE`) and
+  accumulated across the sweep.** Landed in **C6, not C8**: the old census read `col_0 … col_19` by
+  name, and those columns do not exist at any scrolled position, so it threw on `undefined` the
+  moment windowing went live. The silent `census.out[klass]!` is replaced by an explicit "this class
+  was never rendered anywhere in the sweep" failure.
+- **D7 — `waitForTierSettled` keys on each row's first _rendered_ `data-column`**, not the
+  hardcoded `col_0`. Same reason, same commit; without it the settle key stopped seeing row content
+  at all and reported "settled" while cells were still being painted.
+- **D8 — `refreshColumnWindow()` at all four programmatic `scrollLeft` writers**:
+  `KeyboardNavigator:943`/`:945` (one call, after the branch), `TableContainer:1096` inside the
+  existing `if` so the filter-scroll pin's steady state stays free, and `TableContainer:1570`, the
+  blank body after any re-render at a scrolled-right offset. Deliberately **not** in
+  `setupScrollSync`'s reverse handler (`:697-702`): that writes `bodyScroll.scrollLeft` from inside
+  a real scroll event, so the body's own listener follows and a call there would recompute twice a
+  frame.
+- **D9 — one shared pinned-width helper over `visibleColumns[0, P)`.** `pinnedOffsets()` in
+  `ColumnWindow.ts` serves the body, the header and the demarcation line.
+- **D10 — declared widths are quantized to integers at the render write sites**, not in `Actions`.
+  Rounding in `setColumnWidth` would change a public value a host set; rounding at the write sites
+  changes only what is drawn, which is where the requirement actually is.
+
+#### Assumption drift
+
+- **`ColumnWindow` carries eight fields, not §4.1's five.** `pinnedWidthPx`, `totalWidthPx` and
+  `pinnedPrefixViolated` are additions. The first two are free (the prefix sums already have them)
+  and remove two duplicate summations from `TableContainer`; the third names a state that is
+  reachable through public API and would otherwise be silent.
+- **`pinnedPrefixViolated` is reachable, and the sequence is exact.** `showColumn` splices through
+  `computeRestoreIndex` without clamping to the pinned prefix, so
+  `toggleColumnPin('A') → hideColumn('C') → toggleColumnPin('D') → showColumn('C')` yields visible
+  `[A, C, D]` with pinned `[A, D]` — a pinned column behind an unpinned one. `resolvePinnedCount`
+  falls back to "through the last pinned column", which is correct and merely renders more than it
+  has to. Unit-tested through the real public API, not by constructing the state.
+- **The test blast radius was ~140 sites, not the doc's estimate**: ~40 `getOrCreateRow` and ~39
+  `updateRowContent` call sites plus ~59 `.children` reads, across six jsdom files. Three of them
+  were **vacuous** — a pooled-row `firstElementChild` guard, a `lastElementChild` removal that would
+  have hit the right spacer post-C5, and placeholder counters keyed on `children.length === 1` — and
+  were re-keyed rather than migrated.
+- **`VirtualScroller.ts:232-238`'s comment is stale** ("the absolutely positioned viewport doesn't
+  contribute to scrollWidth"). See M1: the extent is `max(spacer, natural overflow)` and the second
+  term binds today. Left in place, contradicted in the M1 record, and worth a cleanup in a phase
+  that touches the scroller.
+
+#### Files created
+
+`src/table/ColumnWindow.ts` (internal; the type alone is re-exported from `/advanced`);
+`tests/helpers/tableBodyDom.ts`, `tests/table/ColumnWindow.test.ts`,
+`tests/table/TableBody.rowStructure.test.ts`, `tests/table/TableBody.columnWindow.test.ts`,
+`tests/table/TableBody.rowPool.test.ts`, `tests/browser/column-window.spec.ts`.
+
+`tests/helpers/tableBodyHarness.ts` gained `clientWidth` (**default absent — jsdom's `0` stands, so
+every existing suite is unchanged**), a `schema` option, `wideHarnessSchema(n)`, `scrollToColumnPx`
+/ `scrollToColumn`, `fireScroll`, and a queue-and-drain `requestAnimationFrame` stub installed only
+when `clientWidth` is passed.
+
+#### Budgets
+
+New, under `DT_BUDGET.COLVIRT`: `WINDOW_COLUMNS_MAX 48` (measured 17 at rest / 28 mid-sweep,
+identical at 60 and 300 columns), `BODY_CELLS_MAX 900` (measured 420), `HEADER_BODY_ALIGN_PX 1`
+(measured 0.000).
+
+Tightened: `WIDE_CI.DOM_NODES_MAX` **18,000 → 13,500**, against 15,051 → 11,136 measured.
+
+`playwright.config.ts` now pins `viewport: { width: 1280, height: 720 }` — the value
+`devices['Desktop Chrome']` already defaults to, so nothing moves, but a column window is a
+function of viewport width and every count above would otherwise drift with a Playwright release.
+
+#### Size
+
+Root entry **10.82 → 10.83 kB** brotli. `ColumnWindow`'s prefix sums, binary search and window
+arithmetic land there (`TableBody` is statically reachable from `DataTable`) and are offset almost
+exactly by what the phase deleted: keynav's two per-move O(N) loops, the per-row `getComputedStyle`
+and pinned-offset rebuild, and `returnRowToPool`'s `cloneNode` path. Cap unchanged at 11.4 kB.
+
+Stylesheet **18.96 → 19.65 kB**, which put it 47 B over. The rules are three lines minus two
+deleted blocks; the rest is comment prose, which `buildStylesPlugin` ships verbatim. Cap raised
+19.6 → 20.7 kB to restore the file's ~5 % convention.
+
+#### Deviations from the phase doc
+
+- **The cursor ring is tracked by element reference, not by `(row, column)`.** Re-deriving the
+  previous cursor through the _current_ window resolves it to a different column's cell — or to
+  nothing — whenever a window moves at constant size, which is every horizontal scroll step. The
+  class was left stranded on whatever now occupied that child position: a second cursor, in the
+  wrong place. Found by the jsdom window suite, not by review.
+- **`updateCellWidths` re-renders when a width change moves the window**, behind an `inWidthUpdate`
+  re-entrancy flag. The doc has it patching incrementally only; a wide-enough column pushes the
+  boundaries, and the rows in the DOM are then for the old window.
+- **The window-mismatch branch pools its row and takes one straight back** rather than dropping it.
+  A window that changes size does so for every mounted row at once, so the drop path allocated a
+  full row per row per reshape. Same element, reshaped in place.
+- **C7 is a pool rework, not only a listener rework.** `returnRowToPool`'s `cloneNode(true)` went
+  with the anonymous listeners it existed to shed: it deep-copied every cell, text node and
+  attribute of a row about to be overwritten wholesale — ~50 node copies per recycled row per
+  scroll frame at a 24-column window — to produce an element indistinguishable from the original.
+  Row handlers now hang off one `AbortController` per row.
+- **The probe's new `window` check is deliberately narrower than "the right columns are
+  rendered".** `installColumnInvariantProbe` runs on every rAF and every mutation, where a render
+  one frame behind the scroll offset is legitimate. It asserts only frame-independent facts: the
+  row matches its own `data-window` stamp, the spacers are where the stamp says, the cells are
+  `visibleColumns[0, P)` followed by a contiguous run, and every rendered row was built for the same
+  window. The frame-_dependent_ facts — every viewport-intersecting column is present, the spacers
+  sum to the content width, headers and cells line up — are asserted at `sweepHorizontal`'s settled
+  stops instead.
+- **No scroll-extent `Fixed` line in the changeset.** M1 measured the extent to be driven by the
+  flex rows' natural overflow, and it is unchanged by construction. The new invariance assertion is
+  what keeps it so.
+
+#### Defects found after the implementation was green
+
+Recording these because a green suite saw none of them.
+
+1. **`ColumnWindowModel.compute` answered `n - 1` for a band past the end of the content.**
+   `upperBound` is bounded at `n`, so at `scrollLeft = 1,000,000` over 60 columns it reported the
+   last column as the window start instead of `n`. Fixed with an explicit `x >= total` branch; the
+   unit test that caught it drives the model past the end deliberately.
+2. **The stranded cursor ring**, above.
+3. **`updateRowContent` threw on a structurally-wrong row.** Reaching `children[abs - start + P + 1]`
+   on a 1-child placeholder is `undefined`. `renderVisibleRows` guarantees the structure, but a
+   direct `/advanced` caller does not, and rendering what fits beats throwing partway.
+4. **The C2 spike's own fractional measurement was contaminated** — 2.375 px, which was not drift
+   but `updateCellWidths` pairing `cells[i]` with `visibleColumns[i]` positionally and writing
+   column widths into the spacers. Recorded in M1 as live evidence of the coupling the phase then
+   removed.
+
+#### For the next phases
+
+- **Phase 4 (header windowing).** `pinnedOffsets()` and `resolvePinnedCount()` in
+  `src/table/ColumnWindow.ts` are already shared with the header path
+  (`TableContainer.updatePinnedColumnStyles`), and `ColumnWindowModel` is a per-`TableBody`
+  instance — the header will need the same numbers, and a second model would be a second answer to
+  "which columns are rendered". Consider hoisting it. `readVisibleGrid` in
+  `tests/browser/helpers/wideTable.ts` reads `.dt-col-header` and currently asserts
+  `toHaveLength(TIER.cols)` in `tiers.smoke.spec.ts:~200`; that assertion is Phase 4's to change,
+  and `installColumnInvariantProbe`'s check (a) already tolerates a windowed header sequence.
+  `WIDE_CI.DOM_NODES_MAX` is Phase 4's number to tighten again.
+- **Phase 5 (projection clipping).** Untouched here on purpose: `buildRowQuery` and `rowDataCache`
+  still fetch and cache the **full** row width. `TableBody.getColumnWindow()` is the seam — the
+  window is published before any fetch is issued, and `refreshColumnWindow` is where a projection
+  change would have to invalidate.
+- **Phase 6 (interaction sweep).** Three things deliberately left:
+  `ColumnResizer.ts:194` seeds a drag from `header.offsetWidth` rather than from state — correct
+  now that cells are `border-box`, but still a measurement where a value exists; `showColumn` does
+  not route through `clampUnpinnedIndex`, which is what makes `pinnedPrefixViolated` reachable at
+  all; and the resize gesture still writes fractional widths that the render sites round (D10)
+  rather than being quantized at the source.
+- **Everyone.** Body cells for off-screen columns are **not in the DOM**. A spec that selects
+  `.dt-cell[data-column="x"]` must scroll x into view first — `readBodyWindow` and
+  `TableBody.getColumnSpan()` exist for that. `aria-colindex` remains absolute over `columnOrder`,
+  so a windowed row's indices are gapped and do not start at 1.
+
+#### Manual verification (Claude in Chrome)
+
+`?gen=custom&rows=5000&cols=300&viz=off`, Chromium, 1,512 px window (body viewport 810 px). Zero
+console errors across the whole session.
+
+**A full horizontal sweep.** `scrollWidth` a constant **45,000 px** at every stop, and
+`leftSpacer + Σ cell widths + rightSpacer` equal to it exactly at every stop:
+
+| `scrollLeft` | window | first cell | left spacer | right spacer |    sum | worst header↔cell Δ |
+| -----------: | :----- | :--------- | ----------: | -----------: | -----: | ------------------: |
+|            0 | `0:18` | `col_0`    |           0 |       42,300 | 45,000 |        **0.000 px** |
+|       10,951 | `0:28` | `col_63`   |       9,450 |       31,350 | 45,000 |        **0.000 px** |
+|       21,902 | `0:28` | `col_136`  |      20,400 |       20,400 | 45,000 |        **0.000 px** |
+|       32,853 | `0:28` | `col_209`  |      31,350 |        9,450 | 45,000 |        **0.000 px** |
+|       43,804 | `0:18` | `col_282`  |      42,300 |            0 | 45,000 |        **0.000 px** |
+
+**Keyboard navigation, the D8 path.** From a clicked cell at row 2:
+
+| action            | `aria-activedescendant` | resolves | `scrollLeft` | rings |
+| ----------------- | ----------------------- | -------- | -----------: | ----: |
+| click `col_1`     | `…-cell-2-1`            | ✅       |            0 |     1 |
+| 40 × `ArrowRight` | `…-cell-2-41`           | ✅       |        5,104 |     1 |
+| `End`             | `…-cell-2-299`          | ✅       |       43,804 |     1 |
+| `Home`            | `…-cell-2-0`            | ✅       |            0 |     1 |
+
+Every cursor target **resolves to a live element** — that is `refreshColumnWindow()` running
+synchronously inside the keystroke — and there is exactly one ring at every step, which is the
+stranded-ring regression.
+
+**Pinning, at `scrollLeft` 20,000.** `data-window="1:29"`; first rendered cell `col_0`
+(`position: sticky`, `left: 0px`, `dt-cell--pinned`), second `col_123`; header and cell for `col_0`
+agree to 0.000 px; demarcation at 150 px; `scrollWidth` still 45,000.
+
+**A real resize drag** on `col_136`'s border, 150 → **373 px**: `scrollWidth` and the header row's
+`min-width` both moved to **45,223** and agree exactly; the spacer identity still holds at 45,223;
+alignment still 0.000 px on every rendered column; every declared cell width still an integer
+(D10); the window narrowed 29 → 27 and every row was rebuilt for it.
+
+**Re-render at a scrolled offset**, the blank-body flash. `hideColumn('col_299')` at
+`scrollLeft` 20,000: after the rebuild the body is back at `scrollLeft` 20,000 with
+`data-window="1:27"` and cells `col_0` + `col_123 … col_149` — the columns actually under the
+viewport, not `col_0 … col_27`. Adding a range filter at the same offset likewise preserved both
+the offset and the window (`filteredRows` 5,000 → 999).
+
+Screenshots (session-local, not committed): the pinned-column state at `scrollLeft` 20,000 and the
+same view after the `col_136` resize.
+
+#### Baselines
+
+Re-captured append-only at `202bb18`, reference machine (macOS, 10 cores, Chromium). Comparison is
+against each tier's last capture — `51ba4ef` for WIDE (Phase 2), `970698e` for GRID and DEEP
+(Phase 0), which is why the load times for the latter two also move: Phase 1 sits in the gap.
+
+**DOM nodes under `.dt-root`, the number this phase exists to change:**
+
+| Tier                           | Before |      After | Change    |
+| ------------------------------ | -----: | ---------: | --------- |
+| WIDE — 1,000 × 60,000, viz off | 52,052 | **36,356** | **−30 %** |
+| WIDE — 1,000 × 60,000, viz on  | 52,076 | **36,380** | **−30 %** |
+| WIDE_CI — 300 × 20,000         | 15,352 | **11,156** | **−27 %** |
+| GRID — 200 × 500,000           | 10,252 |  **7,556** | **−26 %** |
+| DEEP — 20 × 5,000,000          |  1,072 |      1,076 | +4        |
+
+**DEEP is the control, and it is flat by construction.** At 20 columns the ten-column overscan
+floor covers the whole axis, so every column is still rendered and a row's only new nodes are its
+two spacers. A narrow table pays nothing for windowing, which is what makes the mechanism safe to
+leave always on.
+
+The 36,356 that remain at WIDE are ~1,000 eagerly built `ColumnHeader`s: the body is ~476 cells
+where it was ~17,000. Phase 4's number to cut is the other 36,000.
+
+**The interaction numbers moved more than the node count did**, and were not the point. WIDE_CI,
+`970698e` → `202bb18`:
+
+| Metric                 | Before   | After       |
+| ---------------------- | -------- | ----------- |
+| One sort               | 114.9 ms | **45.3 ms** |
+| One filter             | 120.5 ms | **39.1 ms** |
+| Scroll storm frame p95 | 12.1 ms  | **9.3 ms**  |
+| Load                   | 1,448 ms | 913 ms      |
+
+A sort or a filter repaints every mounted row, and a row is now 17–28 cells instead of 300 — so
+the ~2.7× is the same ratio as the cell count, arriving as latency. (Load also carries Phase 1,
+which sits between these two captures; the render numbers do not.)
+
+`tiers.full.spec.ts` (gated, `RUN_BROWSER_PERF=1`): all five pass, including TARGET —
+1,000 × 5,000,000 streamed to parquet and probed at row 4,999,999 — in 10.1 min at a 19.6 MB heap.
+WIDE viz=on still costs 20 mount queries and 8 canvases for 1,000 columns; the column axis changing
+underneath it moved nothing there.
+
+#### Code review over the phase diff
+
+Two reviews at high effort over `f0b10d6..202bb18`, one on correctness (which drove the real
+`TableBody` in jsdom with an invariant oracle across ~30 scripted transitions) and one on
+integration (which swept `src/`, `examples/`, `demo/` and the stylesheet for code still assuming the
+old contract). **Seven defects, all fixed with regression tests in the final commit.** Every one was
+invisible to a green 4,521-test suite, which is the point of recording them.
+
+1. **`ColumnHeader.getColumnCells()` still resolved body cells by `:nth-child`** — the one
+   positional read the C4 migration missed, and the highest-impact finding. `columnIndex + 1`
+   against `[P cells][left spacer][W cells][right spacer]` lands on a spacer, on a different
+   column's cell, or on nothing. Concretely: at 1,000 columns scrolled to column 400 the
+   double-click width reset tagged **nothing** and the body snapped while the header glided over
+   200 ms; at `scrollLeft = 0` it tagged the **previous** column's cells, which then carried a live
+   `transition: width` into the row pool and sheared on the next horizontal scroll. Now matched by
+   `data-column`, and matched in JS rather than interpolated into a selector — column names come
+   from user data and a quote in one would reshape the query.
+2. **`pinnedOffsets` made genuinely-unpinned columns sticky** in the `pinnedPrefixViolated` case.
+   The permissive `pinnedCount` is the right answer for deciding what to _render_ and the wrong one
+   for deciding what to _freeze_: an unpinned column caught in the span got `position: sticky` and
+   the pinned background. Now filtered by `pinnedColumns` — it still occupies its width so the
+   pinned columns after it sit correctly, it just is not sticky itself.
+3. **A viewport that grew never recomputed the window.** The window is a function of `scrollLeft`
+   **and** `clientWidth`, and only the first produced an event. Collapse a sidebar or maximize the
+   window and the new width was bare right-spacer — measured at 60 columns: viewport 600 → 4,000
+   left ~13 columns of blank. Worse, a cursor arrowed into that space took
+   `scrollFocusedCellIntoView`'s "already visible" branch, so nothing scrolled, nothing refreshed,
+   the cell was never mounted and `syncActiveDescendant` **dropped `aria-activedescendant`** — an
+   invisible, unannounced cursor that every further keypress reproduced. `TableBody` now owns a
+   `ResizeObserver` on its scroll container, keyed on `clientWidth` so a height-only resize costs a
+   comparison. (The row axis has the same shape and always has — `VirtualScroller` reads
+   `clientHeight` only on scroll. Left for Phase 6; touching it means touching scroll-space
+   compression.)
+4. **`extendWindowToFocus` widened the body window for a header-row cursor.** `focusedCell.row` was
+   never checked, so a header cursor mounted up to ten columns of cells in every row for a ring the
+   body can never draw — and moved `end`, so every mounted row reshaped whenever the header cursor
+   crossed the boundary. One guard on `HEADER_ROW_INDEX`.
+5. **A width write made from `onRowsRendered` during a window-moving render was silently dropped.**
+   `inWidthUpdate` prevented recursion by discarding the nested notification, so the body kept
+   painting the old width while `TableContainer.updateColumnWidths` — a separate subscription —
+   moved the header. That is exactly the header/body disagreement this phase exists to remove, and
+   `onRowsRendered` is a documented `/advanced` seam. Now recorded and replayed once after the
+   outer pass unwinds; a host that writes on every render still terminates.
+6. **A non-finite column width poisoned every prefix sum after it.** Reachable without malice —
+   `setColumnWidth` validates nothing and a restored session snapshot copies `columnWidths` in
+   wholesale — and silent, because `flex: 0 0 NaNpx` and `setContentWidth(NaN)` are both rejected
+   by CSSOM, so the spacer and the scroll extent kept their previous values while the model
+   believed something else. `getColumnSpan` then returned `NaN`, which passed keyboard navigation's
+   `if (!span) return` and assigned `NaN` to `scrollLeft`, yanking the table to the far left on
+   every arrow press past the bad column. Widths now fall back to the default unless finite.
+7. **One unrounded width write left**, on the `/advanced` no-actions placeholder-header path — the
+   last site that could put a header a growing fraction of a pixel from its own cells.
+
+Both reviewers independently cleared the areas that mattered most and said so with evidence: index
+arithmetic at `P = 0` / `P = N` / `W = 0` / single-column; the binary search at every degenerate
+input including NaN and Infinity viewports; cache invalidation (every writer of `visibleColumns` and
+`columnWidths` in `src/` replaces the collection, so identity is a sound key); pool hygiene (no
+attached element and no duplicate ever reaches `rowPool`); the cursor ring (exactly one ring in the
+document iff the cursor's cell is mounted, across every transition); export, clipboard, reorder,
+visualization and CSS paths; and the box-model change, where `ColumnResizer.ts:194`'s
+`offsetWidth` seed is now correct rather than 25 px out.
+
+One note taken and **not** acted on: `ColumnResizer`'s `minWidth: 50` / `maxWidth: 500` were
+calibrated as content widths and are now occupied widths, so a 50 px column shows 25 px of text
+rather than 50. That is the border-box change working as intended and the changeset says so; whether
+the clamps should move is a product decision for Phase 6, not a defect.
+
+Also declined, per the phase doc: `refreshColumnWindow()` in `setupScrollSync`'s reverse handler
+(`TableContainer.ts:698-703`). It writes `bodyScroll.scrollLeft` from inside a real scroll event, so
+the body's own listener follows and the lag is one frame that self-corrects; a call there would
+recompute twice per frame for the whole duration of a header scrollbar drag.

@@ -712,21 +712,34 @@ export class ColumnHeader {
   }
 
   /**
-   * Get all cells in this column for transition animations
+   * Get all rendered body cells in this column, for transition animations.
+   *
+   * By `data-column`, not by `:nth-child`. A body row is
+   * `[P pinned cells][left spacer][W window cells][right spacer]`, so the
+   * n-th child is not the n-th visible column — at any scrolled position it
+   * is a cell for some other column, or a spacer, or nothing at all. The
+   * double-click width reset used to tag whichever elements that formula
+   * landed on: at 1,000 columns scrolled to column 400 it tagged none and the
+   * body snapped while the header glided, and at `scrollLeft = 0` it tagged
+   * the *previous* column's cells, which then carried a live width transition
+   * into the row pool.
+   *
+   * Returns only the cells that exist. That is the correct set: a column
+   * outside the window has nothing to animate.
    */
   private getColumnCells(): HTMLElement[] {
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnIndex = visibleColumns.indexOf(this.column.name);
-    if (columnIndex === -1) return [];
-
     const root = this.element.closest(`.${this.classPrefix}-root`);
     if (!root) return [];
 
-    // Query all cells at this column index (nth-child is 1-based)
-    const cells = root.querySelectorAll(
-      `.${this.classPrefix}-row > .${this.classPrefix}-cell:nth-child(${columnIndex + 1})`,
-    );
-    return Array.from(cells) as HTMLElement[];
+    // Matched in JS rather than interpolated into the selector: column names
+    // come from user data and a quote or a bracket in one would break — or
+    // reshape — an attribute selector. At most a few hundred cells exist, and
+    // this runs once per double-click.
+    return Array.from(
+      root.querySelectorAll<HTMLElement>(
+        `.${this.classPrefix}-row > .${this.classPrefix}-cell[data-column]`,
+      ),
+    ).filter((cell) => cell.getAttribute('data-column') === this.column.name);
   }
 
   // =========================================

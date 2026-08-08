@@ -78,6 +78,38 @@ for (const theme of ['light', 'dark'] as const) {
     await loadCsv(page, WIDE_COLUMNS);
     await setTheme(page, theme);
     assertClean(await scan(page), `${WIDE_COLUMNS} columns, ${theme}`);
+
+    // …and again scrolled off column 0, which is where the body's column
+    // window is actually novel: both presentational spacers non-empty, and an
+    // `aria-colindex` run that neither starts at 1 nor reaches
+    // `aria-colcount`. ARIA prescribes exactly that for a partially rendered
+    // row, and `aria-required-children` is the rule that would object if the
+    // spacers were exposed. A second scan of the same mount rather than a
+    // second test: loading 266 columns of CSV is the expensive part, and the
+    // state under test is one scroll away from the one already loaded.
+    const scrolled = await page.evaluate(() => {
+      const el = document.querySelector('.dt-body-scroll') as HTMLElement;
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+      return el.scrollLeft;
+    });
+    expect(scrolled, 'the sweep must actually move off column 0').toBeGreaterThan(0);
+    const shape = await page
+      .locator('.dt-body .dt-row[data-row-id]:not([data-placeholder])')
+      .first()
+      .evaluate((row) => ({
+        cells: row.querySelectorAll('.dt-cell[data-column]').length,
+        firstColIndex: Number(
+          row.querySelector('.dt-cell[data-column]')?.getAttribute('aria-colindex'),
+        ),
+        spacers: row.querySelectorAll('[data-col-spacer]').length,
+      }));
+    // Refuse to scan a body that is not windowed — it would pass and prove
+    // nothing.
+    expect(shape.spacers).toBe(2);
+    expect(shape.cells).toBeLessThan(WIDE_COLUMNS);
+    expect(shape.firstColIndex).toBeGreaterThan(1);
+
+    assertClean(await scan(page), `${WIDE_COLUMNS} columns scrolled, ${theme}`);
   });
 
   test(`column layout mode is axe-clean in ${theme}`, async ({ page }) => {

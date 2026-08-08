@@ -1223,7 +1223,7 @@ export class TableContainer {
     // which still lists columns `hideColumn` has removed from view. The same
     // helper the body uses, so the two cannot disagree.
     const { pinnedCount } = resolvePinnedCount(visibleColumns, pinnedColumns);
-    const offsets = pinnedOffsets(visibleColumns, columnWidths, pinnedCount, baseZ);
+    const offsets = pinnedOffsets(visibleColumns, columnWidths, pinnedCount, baseZ, pinnedColumns);
     let pinnedWidth = 0;
     for (let i = 0; i < pinnedCount; i++) {
       pinnedWidth += Math.round(columnWidths.get(visibleColumns[i]!) ?? 150);
@@ -1410,8 +1410,11 @@ export class TableContainer {
             colEl.setAttribute('role', 'columnheader');
             colEl.style.padding = '0.5rem';
 
-            // Apply dynamic width from state (default to 150px)
-            const width = columnWidths.get(colName) ?? 150;
+            // Apply dynamic width from state (default to 150px), rounded the
+            // same way the body's prefix sums round it — a fractional width
+            // written here and floored there puts this header a growing
+            // fraction of a pixel away from its own cells.
+            const width = Math.round(columnWidths.get(colName) ?? 150);
             colEl.style.width = `${width}px`;
 
             // Build the placeholder header via DOM nodes so a hostile column

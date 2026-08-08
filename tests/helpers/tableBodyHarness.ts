@@ -26,10 +26,46 @@ import {
   type RowFetchBridgeOptions,
 } from './rowFetchBridge';
 
+/**
+ * Records its callback so a test can deliver a resize on demand.
+ *
+ * jsdom performs no layout and dispatches no `ResizeObserver` entries, so
+ * anything that recomputes on a viewport change — `TableBody`'s column window
+ * does, since the window is a function of `clientWidth` — is untestable
+ * without this. Live instances are tracked rather than every instance ever
+ * constructed: `disconnect()` deregisters, so `triggerAll` cannot fire against
+ * a destroyed body.
+ */
 export class MockResizeObserver implements ResizeObserver {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
+  private static live = new Set<MockResizeObserver>();
+  private readonly targets = new Set<Element>();
+
+  constructor(private readonly callback?: ResizeObserverCallback) {}
+
+  observe(target?: Element): void {
+    if (target) this.targets.add(target);
+    MockResizeObserver.live.add(this);
+  }
+
+  unobserve(target?: Element): void {
+    if (target) this.targets.delete(target);
+  }
+
+  disconnect(): void {
+    this.targets.clear();
+    MockResizeObserver.live.delete(this);
+  }
+
+  /** Deliver an entry for every observed element of every live observer. */
+  static triggerAll(): void {
+    for (const observer of [...MockResizeObserver.live]) {
+      const entries = [...observer.targets].map(
+        (target) =>
+          ({ target, contentRect: target.getBoundingClientRect() }) as ResizeObserverEntry,
+      );
+      if (entries.length > 0) observer.callback?.(entries, observer);
+    }
+  }
 }
 
 export const HARNESS_SCHEMA: ColumnSchema[] = [
@@ -78,6 +114,12 @@ export interface TableBodyHarness {
   scrollToColumnPx: (px: number) => void;
   /** {@link TableBodyHarness.scrollToColumnPx} to the left edge of `columns[index]`. */
   scrollToColumn: (index: number) => void;
+  /**
+   * Restub the scroll container's `clientWidth` and deliver a
+   * `ResizeObserver` entry for it — a sidebar collapsing, a window
+   * maximizing, a hidden tab panel being revealed.
+   */
+  resizeViewport: (width: number) => void;
   /** Dispatch a real `scroll` event on the scroll container. */
   fireScroll: () => void;
   /**
@@ -182,6 +224,11 @@ export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBody
     body.refreshColumnWindow();
   };
 
+  const resizeViewport = (width: number): void => {
+    Object.defineProperty(scrollContainer, 'clientWidth', { value: width, configurable: true });
+    MockResizeObserver.triggerAll();
+  };
+
   const scrollToColumn = (index: number): void => {
     const widths = state.columnWidths.get();
     let left = 0;
@@ -216,6 +263,7 @@ export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBody
     scrollToRow,
     scrollToColumnPx,
     scrollToColumn,
+    resizeViewport,
     fireScroll,
     flushFrames,
     drain,

@@ -62,6 +62,7 @@
 - [ColumnHeaderOptions](interfaces/ColumnHeaderOptions.md)
 - [ColumnHeaderTooltipPopoverOptions](interfaces/ColumnHeaderTooltipPopoverOptions.md)
 - [ColumnReorderOptions](interfaces/ColumnReorderOptions.md)
+- [ColumnWindow](interfaces/ColumnWindow.md)
 - [DateHistogramBin](interfaces/DateHistogramBin.md)
 - [DateHistogramData](interfaces/DateHistogramData.md)
 - [DerivedColumnEditPanelOptions](interfaces/DerivedColumnEditPanelOptions.md)

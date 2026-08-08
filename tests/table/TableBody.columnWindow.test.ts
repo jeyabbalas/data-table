@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { MIN_OVERSCAN_COLUMNS } from '@/table/ColumnWindow';
+import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
 
 import { rowsFor } from '../helpers/rowFetchBridge';
 import {
@@ -445,6 +446,110 @@ describe('TableBody — shared column geometry', () => {
     const win = harness.body.getColumnWindow();
     win.start = 999;
     expect(harness.body.getColumnWindow().start).toBe(0);
+
+    harness.body.destroy();
+  });
+});
+
+describe('TableBody — inputs other than scrollLeft', () => {
+  it('widens the window when the viewport grows without a scroll', async () => {
+    // The window is a function of `scrollLeft` **and** `clientWidth`, and only
+    // one of those produces a scroll event. Collapse a sidebar, maximize the
+    // window, reveal a tab panel that was `display: none` at mount — the extra
+    // width was bare right-spacer until something happened to scroll, and a
+    // cursor moved into it landed on a cell that did not exist, so
+    // `aria-activedescendant` was dropped and the cursor went silent.
+    const harness = await mount();
+    const before = harness.body.getColumnWindow();
+    expect(before).toMatchObject({ start: 0, end: 14 });
+
+    harness.resizeViewport(VIEWPORT * 4);
+
+    const after = harness.body.getColumnWindow();
+    expect(after.end).toBeGreaterThan(before.end);
+    // Enough cells to cover the new viewport, not 14 cells and 1,800 px of gap.
+    const row = firstRow(harness);
+    expect(bodyCells(row).length * COL_WIDTH).toBeGreaterThanOrEqual(VIEWPORT * 4);
+    expect(spacerWidths(row).left + bodyCells(row).length * COL_WIDTH).toBeGreaterThanOrEqual(
+      VIEWPORT * 4,
+    );
+
+    harness.body.destroy();
+  });
+
+  it('does nothing when the resize did not change the width', async () => {
+    let renders = 0;
+    const harness = await mount({ body: { prefetch: false, onRowsRendered: () => renders++ } });
+    harness.resizeViewport(VIEWPORT);
+    renders = 0;
+
+    // A vertical-only resize delivers an entry too; recomputing a window that
+    // cannot have moved would put a binary search on every such frame.
+    harness.resizeViewport(VIEWPORT);
+    expect(renders).toBe(0);
+
+    harness.body.destroy();
+  });
+
+  it('stops watching the viewport once destroyed', async () => {
+    let renders = 0;
+    const harness = await mount({ body: { prefetch: false, onRowsRendered: () => renders++ } });
+    harness.body.destroy();
+    renders = 0;
+
+    expect(() => harness.resizeViewport(VIEWPORT * 4)).not.toThrow();
+    expect(renders).toBe(0);
+  });
+
+  it('does not widen the window for a header-row cursor', async () => {
+    // A header cursor's target is a `ColumnHeader`, which is always built.
+    // Widening the body window for it mounted up to ten columns of cells in
+    // every row for a ring the body can never draw — and reshaped every row
+    // each time the cursor crossed the boundary.
+    const harness = await mount();
+    const before = harness.body.getColumnWindow();
+
+    harness.state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'col_18' });
+    harness.body.refreshColumnWindow();
+    expect(harness.body.getColumnWindow()).toMatchObject({ start: 0, end: before.end });
+    expect(cellFor(firstRow(harness), 'col_18')).toBeNull();
+
+    // The same column, as a *body* cursor, is inside the budget and is pulled in.
+    harness.state.focusedCell.set({ row: 0, column: 'col_18' });
+    harness.body.refreshColumnWindow();
+    expect(harness.body.getColumnWindow().end).toBe(19);
+
+    harness.body.destroy();
+  });
+
+  it('replays a width write that arrived while a window-moving render was in flight', async () => {
+    // `onRowsRendered` is a supported `/advanced` seam and a host may write
+    // column widths from it. Dropping that write left the body painting the
+    // old width while `TableContainer.updateColumnWidths` — a separate
+    // subscription — moved the header, which is the exact header/body
+    // disagreement this phase exists to remove.
+    // Armed after mount: `onRowsRendered` also fires during `initialize`,
+    // where a write would be an ordinary top-level one and prove nothing.
+    let onRender: (() => void) | null = null;
+    const harness = await mount({
+      body: { prefetch: false, onRowsRendered: () => onRender?.() },
+    });
+
+    onRender = () => {
+      onRender = null; // one shot
+      const nested = new Map(harness.state.columnWidths.get());
+      nested.set('col_2', 321);
+      harness.state.columnWidths.set(nested);
+    };
+
+    // Move the window with a width change, so the re-render branch runs and
+    // the nested write lands under the re-entrancy guard.
+    const widths = new Map(harness.state.columnWidths.get());
+    widths.set('col_0', COL_WIDTH + 3000);
+    harness.state.columnWidths.set(widths);
+
+    expect(harness.state.columnWidths.get().get('col_2')).toBe(321);
+    expect(cellFor(firstRow(harness), 'col_2')?.style.width).toBe('321px');
 
     harness.body.destroy();
   });

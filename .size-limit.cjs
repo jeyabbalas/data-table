@@ -22,7 +22,7 @@
  * helper code into VisualizationRegistry):
  *   root entry · ESM               10.82 kB   →  11.4 kB cap (5.4 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
- *   stylesheet                     18.96 kB   →  19.6 kB cap (3.4 %)
+ *   stylesheet                     19.65 kB   →  20.7 kB cap (5.3 %)
  *   lazy ExportDialog chunk        74.65 kB   →  78.5 kB cap (5.2 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.9 %)
@@ -67,6 +67,22 @@
  * restore the ~5 % headroom the file's convention asks for; the previous cap
  * had 38 B left.
  *
+ * Phase 3, body column windowing, moved almost nothing here and that is the
+ * interesting part. The root entry went 10.82 → 10.83 kB — `ColumnWindow`'s
+ * prefix sums, binary search and window arithmetic land in it (`TableBody` is
+ * statically reachable from `DataTable`), and they are offset almost exactly
+ * by what the same phase deleted: the two per-cursor-move O(N) loops in
+ * `KeyboardNavigator`, the per-row `getComputedStyle` and pinned-offset
+ * rebuild, and `returnRowToPool`'s `cloneNode` path. The cap stays at 11.4 kB
+ * with ~0.57 kB of headroom.
+ *
+ * The **stylesheet** did move, 18.96 → 19.65 kB, which put it 47 B over its
+ * cap. The rules themselves are three lines — `box-sizing: border-box` on
+ * `.dt-cell` and `.dt-col-header`, and a two-property `.dt-col-spacer` — minus
+ * two deleted `:last-child` blocks. The rest is the comment prose explaining
+ * why, which ships verbatim (see the note below on `buildStylesPlugin`). Cap
+ * raised 19.6 → 20.7 kB to restore this file's ~5 % convention.
+ *
  * Stylesheet history. The line above previously read 16.94 kB; that figure was
  * never measured — the real size at that commit was 17.11 kB, so the gate had
  * ~0.7 kB less headroom than it advertised. The accessibility follow-up to
@@ -103,7 +119,7 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '19.6 kB',
+    limit: '20.7 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',

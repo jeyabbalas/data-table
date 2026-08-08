@@ -169,6 +169,55 @@ test('scrolling moves the window without moving the extent', async ({ page }) =>
   ).toHaveLength(DT_BUDGET.WIDE_CI.ORACLE_VIOLATIONS);
 });
 
+test('fractional column widths do not accumulate across a spacer', async ({ page }) => {
+  // The negative control for D10 — quantizing declared widths to integers
+  // before summing them. `setColumnWidth` does not round, and the mouse
+  // resize path passes a fractional `clientX` under page zoom, so 150.3 is
+  // reachable. Chrome snaps it to 150.296875 (its 1/64 px layout unit), which
+  // leaves 0.003125 px of residue per column: invisible over the eight
+  // columns the C2 spike could cover at 50 columns, and 3.1 px — triple the
+  // tolerance — across the ~990 a left spacer covers at 1,000. Summing the
+  // *rounded* width is what makes the spacer agree with the boxes it stands
+  // in for; this is the test that would notice if it stopped.
+  await mountTierTable(page, { tier: 'custom', rows: ROWS, cols: 300, seed: SEED, viz: false });
+  await waitForTierSettled(page);
+
+  await page.evaluate(() => {
+    const table = (window as any).__t;
+    const widths = new Map(table.state.columnWidths.get());
+    for (const column of table.state.visibleColumns.get()) widths.set(column, 150.3);
+    table.state.columnWidths.set(widths);
+  });
+  await waitForTierSettled(page);
+
+  // 75 % and max, where the left spacer covers the most columns — the only
+  // place a per-column residue is large enough to see.
+  const stops = await sweepHorizontal(page, [0.75, 1]);
+  for (const stop of stops) {
+    const where = `at scrollLeft ${stop.scrollLeft}`;
+    expect(stop.alignment.length, `${where}: no columns to align`).toBeGreaterThan(0);
+    const worst = stop.alignment.reduce((a, b) => (b.delta > a.delta ? b : a));
+    console.log(
+      `[column-window] fractional ${where}: worst ${worst.delta.toFixed(4)} px ` +
+        `at ${worst.column}, left spacer ${stop.body.leftSpacerPx}`,
+    );
+    expect(
+      worst.delta,
+      `${where}: ${worst.column} header x ${worst.headerX} vs cell x ${worst.cellX}`,
+    ).toBeLessThanOrEqual(DT_BUDGET.COLVIRT.HEADER_BODY_ALIGN_PX);
+    // Integers all the way through: the spacers are sums of rounded widths,
+    // so they cannot be fractional however fractional the input was.
+    expect(Number.isInteger(stop.body.leftSpacerPx), `${where}: left spacer`).toBe(true);
+    expect(Number.isInteger(stop.body.rightSpacerPx), `${where}: right spacer`).toBe(true);
+    expect(stop.body.leftSpacerPx + stop.body.renderedWidthPx + stop.body.rightSpacerPx).toBe(
+      stop.body.contentWidthPx,
+    );
+  }
+  expect(stops[0]!.body.leftSpacerPx, 'the sweep must reach a deep left spacer').toBeGreaterThan(
+    10_000,
+  );
+});
+
 test('a pinned column stays rendered wherever the window is', async ({ page }) => {
   // Pinned columns are sticky, so they are on screen at every offset and must
   // be rendered at every offset — outside the window, ahead of the left

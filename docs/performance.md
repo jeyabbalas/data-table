@@ -112,6 +112,42 @@ range until the next interaction. Sizing the container before mount, and
 letting CSS resolve the height rather than assigning it imperatively
 afterwards, sidesteps this.
 
+The column axis is windowed the same way, and that is the axis a wide
+table feels. A body row used to carry one cell per visible column, so 300
+columns × ~15 rendered rows put ~4,500 cells in the DOM whether or not
+you could see them, and 1,000 columns put ~30,000 there. A row now
+renders its pinned columns, the columns whose pixel span intersects the
+horizontal viewport (overscanned by one viewport per side, floored at 10
+columns), and two empty spacer elements standing in for the combined
+width of everything skipped — so the horizontal scroll extent and every
+cell's x-position are exactly where they were before.
+
+Measured in Chromium at 1280 × 720 on 300 columns × 20,000 rows: the
+`.dt-root` subtree fell from 15,051 nodes to 11,136, and `.dt-cell`
+elements under `.dt-body` from ~4,500 to 255–420. Cells per row is 17 at
+rest and 28 mid-scroll — the same figures at 60 columns as at 300.
+Header and body stayed aligned to 0.000 px at every stop of a horizontal
+scroll sweep.
+
+**Implication:** body DOM cost stops tracking column count, so a wide
+table pays for a viewport rather than for a schema — the same bargain
+row virtualization already made on the other axis.
+
+The caveat is that body cells for horizontally off-screen columns are no
+longer in the DOM. `body.querySelector('[data-column="revenue"]')` finds
+nothing until that column is scrolled into view; headers are unaffected,
+and `aria-colindex` stays absolute over the column order, so a windowed
+row reports a gapped index run rather than a renumbered one. On
+`/advanced`, `TableBody.getColumnSpan(column)` and `getPinnedWidthPx()`
+give you the offset to scroll to, and `refreshColumnWindow()` makes the
+cells for a freshly written `scrollLeft` exist synchronously rather than
+one frame later.
+
+Column headers are not windowed yet. The ~11,000 nodes left at 300
+columns are dominated by the 300 eagerly built headers, so the total
+subtree still grows with column count even though the body no longer
+does. Windowing the header row is the next phase of this work.
+
 ### DuckDB in WASM
 
 DuckDB runs in a Web Worker. By default it uses the single-thread bundle

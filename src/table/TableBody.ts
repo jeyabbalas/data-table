@@ -299,9 +299,16 @@ export class TableBody {
   private readonly columnScrollSource: HTMLElement;
   private lastScrollLeft = -1;
   private horizontalScrollRAF: number | null = null;
+  // Watches the scroll container's box, because the window depends on its
+  // width as much as on the scroll offset. `-1` is "never measured".
+  private readonly columnResizeObserver: ResizeObserver;
+  private lastClientWidth = -1;
   // Re-entrancy guard for the width path: `updateCellWidths` can re-render,
   // and a render notifies its host, which is free to write column widths.
+  // `widthUpdatePending` records a write that arrived while the guard was up,
+  // so it is replayed rather than lost.
   private inWidthUpdate = false;
+  private widthUpdatePending = false;
 
   /**
    * Marks a row that was painted while the annotation store held something.
@@ -387,6 +394,16 @@ export class TableBody {
     this.columnScrollSource.addEventListener('scroll', this.handleHorizontalScroll, {
       passive: true,
     });
+
+    // The window is a function of `scrollLeft` **and** `clientWidth`, so a
+    // viewport that grows without scrolling has to recompute too. Collapse a
+    // sidebar, maximize the window, or reveal a tab panel that was
+    // `display: none` at mount, and without this the extra width is bare
+    // right-spacer until something happens to scroll — and a cursor moved
+    // into it lands on a cell that does not exist, so `aria-activedescendant`
+    // is dropped and the cursor goes silent.
+    this.columnResizeObserver = new ResizeObserver(this.handleViewportResize);
+    this.columnResizeObserver.observe(this.columnScrollSource);
 
     // Delegated annotation hover/focus listeners on the scroll container.
     // Attached even when no annotations are present (bail-out is cheap) so
@@ -789,6 +806,23 @@ export class TableBody {
       if (this.destroyed) return;
       this.refreshColumnWindow();
     });
+  };
+
+  /**
+   * Recompute the column window when the viewport's *width* changes.
+   *
+   * Keyed on `clientWidth` alone: a height change moves the row range, which
+   * is `VirtualScroller`'s business, and recomputing a window that cannot
+   * have moved would put a binary search on every vertical resize frame.
+   * `refreshColumnWindow` is already a no-op when the window did not move, so
+   * the observer's initial delivery costs one comparison.
+   */
+  private readonly handleViewportResize = (): void => {
+    if (this.destroyed) return;
+    const width = this.columnScrollSource.clientWidth;
+    if (width === this.lastClientWidth) return;
+    this.lastClientWidth = width;
+    this.refreshColumnWindow();
   };
 
   // =========================================
@@ -1391,7 +1425,13 @@ export class TableBody {
       schemaMap,
       columnWidths,
       win,
-      pinned: pinnedOffsets(columns, columnWidths, win.pinnedCount, baseZ),
+      pinned: pinnedOffsets(
+        columns,
+        columnWidths,
+        win.pinnedCount,
+        baseZ,
+        this.state.pinnedColumns.get(),
+      ),
       annotationsActive: (this.annotations?.count() ?? 0) > 0,
     };
   }
@@ -1442,6 +1482,12 @@ export class TableBody {
   private extendWindowToFocus(win: ColumnWindow): ColumnWindow {
     const focused = this.state.focusedCell.get();
     if (!focused) return win;
+    // A header cursor's target is a `ColumnHeader`, which is always built.
+    // Widening the *body* window for it mounts up to ten columns of cells in
+    // every row for a ring the body can never draw — and changes `end`, so
+    // every mounted row reshapes each time a header cursor crosses the
+    // boundary.
+    if (focused.row === HEADER_ROW_INDEX) return win;
     const idx = this.visibleIndexMap.get(focused.column);
     // Pinned columns are always rendered, so a cursor on one needs nothing.
     if (idx === undefined || idx < win.pinnedCount) return win;
@@ -2484,9 +2530,18 @@ export class TableBody {
    */
   private updateCellWidths(): void {
     // A render notifies the host (`onRowsRendered`), and a host is entitled to
-    // write column widths from there. Without this the re-render branch below
-    // could recurse.
-    if (this.inWidthUpdate) return;
+    // write column widths from there — so the re-render branch below can
+    // re-enter this method. Record the write instead of dropping it: a
+    // discarded one would leave the body painting the old width while
+    // `TableContainer.updateColumnWidths`, a separate subscription, moved the
+    // header — which is precisely the header/body disagreement this phase
+    // exists to remove. The outer call replays it once after it unwinds; a
+    // host that writes on *every* render still terminates, having had its
+    // last write honoured.
+    if (this.inWidthUpdate) {
+      this.widthUpdatePending = true;
+      return;
+    }
 
     const columns = this.state.visibleColumns.get();
     const columnWidths = this.state.columnWidths.get();
@@ -2500,10 +2555,18 @@ export class TableBody {
       win.pinnedCount !== previous.pinnedCount
     ) {
       this.inWidthUpdate = true;
+      this.widthUpdatePending = false;
       try {
         this.renderVisibleRows();
       } finally {
         this.inWidthUpdate = false;
+      }
+      // Replayed once, not in a loop: one pass is enough to honour a host's
+      // write, and a loop would let a host that writes unconditionally on
+      // every render spin forever.
+      if (this.widthUpdatePending) {
+        this.widthUpdatePending = false;
+        this.updateCellWidths();
       }
       return;
     }
@@ -2728,6 +2791,7 @@ export class TableBody {
     // so an undetached listener would fire against a destroyed instance for as
     // long as the table lives.
     this.columnScrollSource.removeEventListener('scroll', this.handleHorizontalScroll);
+    this.columnResizeObserver.disconnect();
     if (this.horizontalScrollRAF !== null) {
       cancelAnimationFrame(this.horizontalScrollRAF);
       this.horizontalScrollRAF = null;
@@ -2758,6 +2822,7 @@ export class TableBody {
     this.visibleIndexMap.clear();
     this.visibleIndexSource = null;
     this.lastScrollLeft = -1;
+    this.lastClientWidth = -1;
     this.focusedCellEl = null;
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,

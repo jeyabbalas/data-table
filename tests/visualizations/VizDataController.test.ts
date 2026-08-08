@@ -615,7 +615,7 @@ describe('filter staleness', () => {
     expect(h.controller.getEntry('a')?.status).toBe('stale');
   });
 
-  it('invalidateAll marks everything stale and refetches the live instances', async () => {
+  it('invalidateAll retires the snapshots and marks stale without querying', async () => {
     const h = makeHarness(['a', 'b']);
     h.controller.sync([column('a'), column('b')], 1);
     h.io().emit({ a: 'create', b: 'outside' });
@@ -624,10 +624,34 @@ describe('filter staleness', () => {
     h.controller.invalidateAll();
     await drain();
 
-    expect(h.controller.getEntry('a')?.status).toBe('fresh');
-    expect(StubViz.created[0]!.updateCount).toBe(1);
+    expect(h.controller.getEntry('a')?.status).toBe('stale');
     expect(h.controller.getEntry('b')?.status).toBe('empty');
     expect(h.controller.getEntry('a')?.snapshot).toBeNull();
+    // No refetch. Its one caller syncs immediately afterwards, and a query
+    // issued here would run against the relation the instance was
+    // *constructed* with — `updateFilters` replaces `options.filters`, never
+    // `options.tableName` — then land on an instance `sync()` destroys.
+    expect(StubViz.created[0]!.updateCount).toBe(0);
+  });
+
+  it('the sync after invalidateAll re-creates without the retired snapshot', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    h.controller.invalidateAll();
+    h.rebuildHeaders(['a']);
+    StubViz.created = [];
+    h.controller.sync([column('a')], 2);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    // A plain fetch against the new relation, correct in one step.
+    const rebuilt = StubViz.created[0]!;
+    expect(rebuilt.seeded).toBeNull();
+    expect(rebuilt.fetchCount).toBe(1);
+    expect(h.controller.getEntry('a')?.status).toBe('fresh');
   });
 });
 
@@ -660,6 +684,132 @@ describe('observer hygiene', () => {
     expect(h.io().root).toBe(h.root);
     expect(h.io().rootMargin).toBe(`0px ${VIZ_KEEP_MARGIN_PX}px`);
     expect(VIZ_KEEP_MARGIN_PX).toBe(VIZ_CREATE_MARGIN_PX * 2);
+  });
+});
+
+describe('waves that have nothing to wait for', () => {
+  it('settles a sync with no columns instead of waiting for a callback', async () => {
+    // Reachable through the public `visualizationRegistry` option: a registry
+    // matching none of the table's column types leaves `vizColumns` empty, so
+    // nothing is observed, no callback is ever delivered, and `whenVizReady()`
+    // would never settle on a table that is otherwise working perfectly.
+    const h = makeHarness([]);
+    h.controller.sync([], 1);
+    await expect(h.controller.whenWaveSettled()).resolves.toBe(0);
+  });
+
+  it('settles when every column is present but none has a container', async () => {
+    const h = makeHarness(['a', 'b']);
+    // Headers exist in the controller's list but not in the DOM — the state a
+    // sync racing a container teardown lands in.
+    h.root.innerHTML = '';
+    h.controller.sync([column('a'), column('b')], 1);
+    await expect(h.controller.whenWaveSettled()).resolves.toBe(0);
+  });
+});
+
+describe('a fetch whose instance is reclaimed mid-flight', () => {
+  it('leaves the entry stale, so the snapshot is not reused as if current', async () => {
+    const h = makeHarness(['a']);
+    StubViz.fetchGate = deferred<void>();
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    // The header scrolls past the keep band while its first fetch is still in
+    // flight. `destroyInstance` snapshots whatever the chart held *before*
+    // that fetch — one filter context behind.
+    h.io().emit({ a: 'outside' });
+    await drain();
+    expect(h.controller.getEntry('a')?.viz).toBeNull();
+
+    StubViz.fetchGate.resolve();
+    StubViz.fetchGate = null;
+    await drain();
+
+    // Calling this 'fresh' is what would seed the superseded snapshot into the
+    // re-created chart, which then issues no query and never self-corrects.
+    expect(h.controller.getEntry('a')?.status).toBe('stale');
+
+    // …and the proof that it matters: scrolling back re-creates with a plain
+    // fetch rather than the stale seed.
+    StubViz.created = [];
+    h.io().emit({ a: 'create' });
+    await drain();
+    const rebuilt = StubViz.created[0]!;
+    expect(rebuilt.seeded).toBeNull();
+    expect(rebuilt.fetchCount).toBe(1);
+  });
+});
+
+describe('hidden document', () => {
+  /**
+   * A background tab gets no rendering opportunity, so the browser delivers
+   * no IntersectionObserver callbacks at all — not even the initial "here is
+   * every target's state" batch that normally closes the wave. Measured on a
+   * 1,000-column load in a background tab: the load promise resolved at
+   * 3,637 ms while `dt:load:viz` came out at 57,151 ms, settling only when
+   * the tab was foregrounded 53 seconds later. Nobody looking means it never
+   * settles at all, and `whenVizReady()` hangs for the life of the tab.
+   */
+  function hideDocument(): () => void {
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    return () => {
+      delete (document as unknown as Record<string, unknown>)['visibilityState'];
+      if (original) Object.defineProperty(Document.prototype, 'visibilityState', original);
+    };
+  }
+
+  it('settles the wave immediately instead of waiting for a callback that never comes', async () => {
+    const restore = hideDocument();
+    try {
+      const h = makeHarness(['a', 'b']);
+      h.controller.sync([column('a'), column('b')], 1);
+      // Nothing is visible, so the visible wave is empty — and saying so is
+      // the whole point. The alternative is an awaiter that never returns.
+      await expect(h.controller.whenWaveSettled()).resolves.toBe(0);
+      expect(StubViz.created).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still observes, so the charts are built once the document is shown', async () => {
+    const restore = hideDocument();
+    let h: ReturnType<typeof makeHarness>;
+    try {
+      h = makeHarness(['a', 'b']);
+      h.controller.sync([column('a'), column('b')], 1);
+      await expect(h.controller.whenWaveSettled()).resolves.toBe(0);
+      expect(h.io().observed.size).toBe(2);
+    } finally {
+      restore();
+    }
+    // The tab comes to the front: the observer fires its backlog and the
+    // visible columns get their charts, late but correct.
+    h!.io().emit({ a: 'create', b: 'create' });
+    await drain();
+    expect(StubViz.created.map((v) => v.columnName)).toEqual(['a', 'b']);
+  });
+
+  it('a visible document still waits for the observer', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    let settled = false;
+    void h.controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    await drain();
+    // No callback yet, so the wave is still open — the hidden-document early
+    // close must not leak into the ordinary path.
+    expect(settled).toBe(false);
+    h.io().emit({ a: 'create' });
+    await drain();
+    expect(settled).toBe(true);
   });
 });
 

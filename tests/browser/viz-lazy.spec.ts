@@ -219,7 +219,11 @@ test('scrolling right streams charts in and drops the ones left behind', async (
 
   await resetBridgeStats(page);
   await sweepHorizontal(page, [0.5]);
-  await waitForVizReady(page);
+  // `waitForVizReady` is deliberately *not* used here: `whenVizReady()`
+  // returns the load's promise, which settled long before this sweep, so it
+  // would gate on nothing. A scroll-triggered wave has no public promise —
+  // `waitForTierSettled`'s `inFlight === 0` term is what actually waits for
+  // the new charts' queries to land.
   await waitForTierSettled(page);
   const stats = await bridgeStats(page);
   const after = await canvasCount(page);
@@ -303,7 +307,8 @@ test('an offscreen column refreshes when it scrolls back into a filtered view', 
   // never fetched, and have to come up filter-aware in one step.
   await resetBridgeStats(page);
   await sweepHorizontal(page, [0.8]);
-  await waitForVizReady(page);
+  // See the note in the streaming test: the load's `whenVizReady()` cannot
+  // gate a scroll-triggered wave; `inFlight === 0` inside the settle can.
   await waitForTierSettled(page);
   const stats = await bridgeStats(page);
   const after = await canvasCount(page);

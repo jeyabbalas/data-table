@@ -154,7 +154,12 @@ export interface VizDataControllerOptions {
   /**
    * Fires once per {@link VizDataController.sync} wave, when every fetch that
    * wave scheduled has settled. `generation` is the value passed to `sync`,
-   * so a late wave from a superseded load can be dropped by the caller.
+   * so a late wave from a superseded pass can be identified.
+   *
+   * A test seam, and honest to say so: the facade does not supply it. It
+   * drops a superseded wave with its own `loadGeneration` counter in
+   * `DataTable.ts`, which is the one that knows about loads. Kept because the
+   * controller's wave bookkeeping is otherwise unobservable from outside.
    */
   onWaveSettled?: (vizCount: number, generation: number) => void;
 }
@@ -163,9 +168,14 @@ export interface VizDataControllerOptions {
 export interface VizSyncOptions {
   /**
    * Create and fetch every column now, ignoring visibility — the
-   * `visualizations: { eager: true }` opt-out. No observer is constructed at
-   * all, so `eager` cannot silently reintroduce the O(columns) fan-out this
-   * phase removed.
+   * `visualizations: { eager: true }` opt-out.
+   *
+   * This **is** the O(columns) fan-out the phase removed, restored on
+   * request: no observer is constructed, every applicable column is built
+   * synchronously, and the load promise waits for all of them. At the WIDE_CI
+   * tier that measures 604 queries and 300 canvases against 20 and 8 lazily
+   * (`tests/browser/viz-lazy.spec.ts`). It exists for callers who need every
+   * chart drawn before the load resolves and are willing to pay for it.
    */
   eager?: boolean;
 }
@@ -240,12 +250,16 @@ export class VizDataController implements FilterFanOutScheduler {
   // Public surface
   // =========================================
 
-  /** Snapshot of the entry map, for tests and for the facade's diffing. */
+  /**
+   * One entry, live — not a copy. Inspection only; the facade reaches for
+   * {@link hasLiveViz} instead, and mutating what comes back here would
+   * desynchronise the state machine from the DOM.
+   */
   getEntry(columnName: string): VizColumnEntry | undefined {
     return this.entries.get(columnName);
   }
 
-  /** Column names the controller currently tracks. */
+  /** Column names the controller currently tracks. Inspection only. */
   getColumnNames(): string[] {
     return [...this.entries.keys()];
   }
@@ -328,8 +342,15 @@ export class VizDataController implements FilterFanOutScheduler {
       }
     }
 
-    // Anything queued referred to the previous header generation.
+    // Anything queued referred to the previous header generation, and so did
+    // the deferred panel set: `attachVisualizations` destroys and recreates
+    // the `StatsPanelCoordinator` on every pass, so a name held over from
+    // before would dispatch `panelRefresh` into a dead coordinator — a silent
+    // no-op — and a column dropped from the schema would sit in the set for
+    // the table's lifetime. The new coordinator re-broadcasts on its own.
     this.queue = [];
+    this.stalePanels.clear();
+    this.panelRefresh = null;
     this.startWave(generation);
 
     if (opts.eager || this.fallbackVisible || !this.ensureObserver()) {
@@ -367,30 +388,69 @@ export class VizDataController implements FilterFanOutScheduler {
     this.pump();
 
     this.io!.disconnect();
+    let observed = 0;
     for (const column of columns) {
       const container = this.options.host.getVizContainer(column.name);
-      if (container) this.io!.observe(container);
+      if (container) {
+        this.io!.observe(container);
+        observed++;
+      }
     }
     // The wave closes on the observer's first callback for this pass, which
     // reports every observed target's initial state at once. That callback is
     // the definition of "the initial visible wave".
+    //
+    // Unless there is nothing to observe, in which case there is no callback
+    // to wait for and the wave would stay open forever. Reachable through the
+    // public `visualizationRegistry` option: a registry whose registrations
+    // match none of the table's column types leaves `vizColumns` empty, and
+    // `whenVizReady()` would then never settle on a table that is otherwise
+    // working perfectly.
+    if (observed === 0) {
+      this.closeWave();
+      return;
+    }
+    //
+    // Except in a hidden document, where it never arrives: a background tab
+    // gets no rendering opportunity, so the browser delivers no
+    // IntersectionObserver callbacks at all. Measured on a 1,000-column load
+    // in a background tab, `dt:load:viz` came out at 57,151 ms against a
+    // 3,637 ms load — it settled when the tab was foregrounded, 53 seconds
+    // later, and would not have settled at all had nobody looked. Close the
+    // wave here instead: nothing is visible, so the visible wave is empty and
+    // `whenVizReady()` is right to resolve with 0. The observer still fires
+    // when the document is shown, and the charts are built then.
+    //
+    // A document that goes hidden *after* this point but before the first
+    // callback still waits for it — that window is one frame wide, and the
+    // callback arrives when the user returns.
+    if (documentHidden()) this.closeWave();
   }
 
   /**
-   * Mark every entry stale without issuing a query, then refresh the ones
-   * with a live instance. Used for the derived-column VIEW switch, where
-   * `tableName` changes without a header rebuild — the data is all computed
-   * against the old relation.
+   * Retire every cached snapshot and mark every entry stale, without issuing
+   * a query. Used for the derived-column VIEW switch, where `tableName`
+   * changes without a header rebuild — every chart's data was computed
+   * against the previous relation.
+   *
+   * Deliberately does **not** refetch. Its one caller, `attachVisualizations`,
+   * calls it immediately before `sync()`, and a refetch here would run against
+   * the relation the instances were *constructed* with:
+   * `BaseVisualization.updateFilters` replaces `options.filters` but not
+   * `options.tableName`, which is fixed at construction. So the queries would
+   * scan the old view, land on instances `sync()` is about to destroy, and be
+   * discarded — up to four full-table scans of pure waste per derived-column
+   * change. Marking stale is enough: `sync()` re-creates what is visible, and
+   * a stale entry re-creates without its snapshot, so it comes up correct
+   * against the new relation in one step.
    */
   invalidateAll(): void {
     if (this.destroyed) return;
     this.filterEpoch++;
-    for (const [name, entry] of this.entries) {
+    for (const entry of this.entries.values()) {
       entry.snapshot = null;
       if (entry.status !== 'empty') entry.status = 'stale';
-      if (entry.viz) this.enqueue(name);
     }
-    this.pump();
   }
 
   /**
@@ -422,7 +482,18 @@ export class VizDataController implements FilterFanOutScheduler {
     const extra = request.columns.filter((name) => !this.entries.has(name));
 
     await this.runBounded([...live, ...extra], async (name) => {
-      await request.refresh(name);
+      // Per column, not around the whole fan-out: both shipped `refresh`
+      // implementations swallow their own errors, but a custom one need not,
+      // and one throwing column must not abandon the columns queued behind it
+      // — nor reject the caller, which reaches this through a bare
+      // `void this.onFiltersChanged(...)` and would surface an unhandled
+      // rejection. The column stays `'stale'`, so it retries on scroll-in.
+      try {
+        await request.refresh(name);
+      } catch (error) {
+        this.options.host.onError?.(error, name);
+        return;
+      }
       const entry = this.entries.get(name);
       if (!entry || epoch !== this.filterEpoch) return;
       entry.status = entry.viz ? 'fresh' : entry.status;
@@ -627,6 +698,17 @@ export class VizDataController implements FilterFanOutScheduler {
       entry.status = 'stale';
       return;
     }
+    if (!entry.viz) {
+      // The instance was reclaimed while its fetch was in flight, so the
+      // result landed nowhere: the snapshot `destroyInstance` captured is
+      // whatever the chart held *before* this fetch, one filter context
+      // behind. Calling that `'fresh'` is how a superseded snapshot gets
+      // seeded into the re-created chart — which then issues no query,
+      // because it believes it is current, and never corrects itself.
+      // `refreshOnFilters` has the same guard for the same reason.
+      entry.status = 'stale';
+      return;
+    }
     entry.status = 'fresh';
     entry.filterEpoch = epoch;
   }
@@ -748,6 +830,17 @@ export class VizDataController implements FilterFanOutScheduler {
     wave.gate.resolve(wave.count);
     this.options.onWaveSettled?.(wave.count, wave.generation);
   }
+}
+
+/**
+ * Is the document currently hidden — a background tab, a minimized window?
+ *
+ * Guarded for environments with no `document` (a worker, an SSR pass) rather
+ * than assumed: this runs on the load path, and throwing there would take the
+ * whole table with it.
+ */
+function documentHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
 /** Resolve the column a `.dt-col-viz` element belongs to. */

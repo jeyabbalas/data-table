@@ -20,7 +20,7 @@
  * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
- *   root entry · ESM               10.76 kB   →  11.4 kB cap (5.9 %)
+ *   root entry · ESM               10.82 kB   →  11.4 kB cap (5.4 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
  *   stylesheet                     18.96 kB   →  19.6 kB cap (3.4 %)
  *   lazy ExportDialog chunk        74.65 kB   →  78.5 kB cap (5.2 %)
@@ -34,7 +34,7 @@
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
  *
- * Root-entry history. 8.12 → 10.76 kB is Phase 2, lazy visualizations, and it
+ * Root-entry history. 8.12 → 10.82 kB is Phase 2, lazy visualizations, and it
  * is the largest single-phase move this entry has made — worth stating rather
  * than absorbing. Both halves land here because both are statically reachable
  * from `src/DataTable.ts`: `VizDataController` (the per-column state machine,

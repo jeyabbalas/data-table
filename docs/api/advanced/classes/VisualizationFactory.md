@@ -6,7 +6,7 @@
 
 # ~~Class: VisualizationFactory~~
 
-Defined in: [visualizations/VisualizationFactory.ts:55](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L55)
+Defined in: [visualizations/VisualizationFactory.ts:55](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L55)
 
 Legacy static wrapper that forwards every method to the shared
 `defaultVisualizationRegistry` (exported from the root entry). Kept
@@ -36,7 +36,7 @@ removed in a future minor.
 
 > `static` **create**(`container`, `column`, `options`): [`BaseVisualization`](BaseVisualization.md) \| `null`
 
-Defined in: [visualizations/VisualizationFactory.ts:69](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L69)
+Defined in: [visualizations/VisualizationFactory.ts:69](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L69)
 
 #### Parameters
 
@@ -66,7 +66,7 @@ Use `VisualizationRegistry#create` on an instance.
 
 > `static` **getRegisteredTypes**(): `string`[]
 
-Defined in: [visualizations/VisualizationFactory.ts:85](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L85)
+Defined in: [visualizations/VisualizationFactory.ts:85](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L85)
 
 #### Returns
 
@@ -82,7 +82,7 @@ Use `VisualizationRegistry#getRegisteredTypes` on an instance.
 
 > `static` **isApplicable**(`column`): `boolean`
 
-Defined in: [visualizations/VisualizationFactory.ts:79](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L79)
+Defined in: [visualizations/VisualizationFactory.ts:79](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L79)
 
 #### Parameters
 
@@ -104,7 +104,7 @@ Use `VisualizationRegistry#isApplicable` on an instance.
 
 > `static` **register**(`registration`): `void`
 
-Defined in: [visualizations/VisualizationFactory.ts:57](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L57)
+Defined in: [visualizations/VisualizationFactory.ts:57](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L57)
 
 #### Parameters
 
@@ -126,7 +126,7 @@ Use `VisualizationRegistry#register` on an instance.
 
 > `static` **resetToDefaults**(): `void`
 
-Defined in: [visualizations/VisualizationFactory.ts:91](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L91)
+Defined in: [visualizations/VisualizationFactory.ts:91](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L91)
 
 #### Returns
 
@@ -142,7 +142,7 @@ Use `VisualizationRegistry#resetToDefaults` on an instance.
 
 > `static` **unregister**(`name`): `boolean`
 
-Defined in: [visualizations/VisualizationFactory.ts:63](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/VisualizationFactory.ts#L63)
+Defined in: [visualizations/VisualizationFactory.ts:63](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/VisualizationFactory.ts#L63)
 
 #### Parameters
 

@@ -6,7 +6,7 @@
 
 # Class: ExportError
 
-Defined in: [core/errors.ts:239](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/errors.ts#L239)
+Defined in: [core/errors.ts:239](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/errors.ts#L239)
 
 Export-pipeline failure (CSV / JSON / Parquet / clipboard).
 
@@ -31,7 +31,7 @@ table.on('error', ({ error, source }) => {
 
 > **new ExportError**(`message`, `options?`): `ExportError`
 
-Defined in: [core/errors.ts:240](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/errors.ts#L240)
+Defined in: [core/errors.ts:240](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/errors.ts#L240)
 
 #### Parameters
 
@@ -57,7 +57,7 @@ Defined in: [core/errors.ts:240](https://github.com/jeyabbalas/data-table/blob/5
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -69,7 +69,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/51
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -81,7 +81,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/51
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/errors.ts#L66)
 
 #### Returns
 

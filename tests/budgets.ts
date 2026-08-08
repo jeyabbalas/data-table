@@ -136,7 +136,7 @@ export const DT_BUDGET = {
    * | canvases              | 1,000       | 8          |
    * | live MutationObservers| 1,001       | 2          |
    * | live ResizeObservers  | ~1,001      | 9          |
-   * | `loadData` resolves   | 18,884 ms   | 3,947 ms   |
+   * | `loadData` resolves   | 18,884 ms   | 3,743 ms   |
    *
    * The caps carry real headroom over the measured numbers because the
    * measured numbers depend on viewport width, which a CI runner and a
@@ -260,9 +260,11 @@ export const DT_BUDGET = {
      * Wall clock for one WIDE load — 1,000 columns × 60,000 rows, Parquet,
      * visualizations **on** (`RUN_BROWSER_PERF` only).
      *
-     * Measured **3,947 ms** after this phase against **18,884 ms** before,
-     * and within 1 % of the same tier's viz=off number (3,912 ms) — which is
-     * the real claim: turning charts on no longer costs anything at load.
+     * Measured **3,743 ms** after this phase against **18,884 ms** before,
+     * and *faster* than the same capture run's viz=off number of 3,859 ms —
+     * i.e. within run-to-run noise of it, which is the real claim: turning
+     * charts on no longer costs anything at load. Both figures are from
+     * `plans/scaling/baselines/baseline-wide-{on,off}-51ba4ef.json`.
      *
      * Cap at 15,000. Unusually tight for a gated wall-clock number, and
      * deliberately so: the regression it exists to catch is the load promise

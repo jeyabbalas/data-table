@@ -8,7 +8,7 @@
 
 > **ScrollCallback** = (`range`) => `void`
 
-Defined in: [table/VirtualScroller.ts:57](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/table/VirtualScroller.ts#L57)
+Defined in: [table/VirtualScroller.ts:57](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/table/VirtualScroller.ts#L57)
 
 Callback type for scroll events
 

@@ -6,7 +6,7 @@
 
 # Interface: BrowserSupport
 
-Defined in: [core/checkBrowserSupport.ts:14](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/checkBrowserSupport.ts#L14)
+Defined in: [core/checkBrowserSupport.ts:14](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/checkBrowserSupport.ts#L14)
 
 Result of [checkBrowserSupport](../functions/checkBrowserSupport.md).
 
@@ -16,7 +16,7 @@ Result of [checkBrowserSupport](../functions/checkBrowserSupport.md).
 
 > **missing**: `string`[]
 
-Defined in: [core/checkBrowserSupport.ts:18](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/checkBrowserSupport.ts#L18)
+Defined in: [core/checkBrowserSupport.ts:18](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/checkBrowserSupport.ts#L18)
 
 Names of APIs that were probed and found missing. Empty when `supported`.
 
@@ -26,6 +26,6 @@ Names of APIs that were probed and found missing. Empty when `supported`.
 
 > **supported**: `boolean`
 
-Defined in: [core/checkBrowserSupport.ts:16](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/checkBrowserSupport.ts#L16)
+Defined in: [core/checkBrowserSupport.ts:16](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/checkBrowserSupport.ts#L16)
 
 `true` if every probed API is present.

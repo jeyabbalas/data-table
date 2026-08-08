@@ -6,7 +6,7 @@
 
 # Interface: FilterPreset
 
-Defined in: [filters/FilterPresetTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L18)
+Defined in: [filters/FilterPresetTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L18)
 
 One named filter preset — a saved snapshot of `state.filters` plus optional
 `state.sortColumns`. Stored by [FilterPresetManager](../classes/FilterPresetManager.md); round-trips
@@ -19,7 +19,7 @@ through `exportToJSON` / `importFromJSON` for handoff to downstream apps
 
 > **createdAt**: `number`
 
-Defined in: [filters/FilterPresetTypes.ts:24](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L24)
+Defined in: [filters/FilterPresetTypes.ts:24](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L24)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [filters/FilterPresetTypes.ts:24](https://github.com/jeyabbalas/data
 
 > `optional` **description?**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L21)
+Defined in: [filters/FilterPresetTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L21)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [filters/FilterPresetTypes.ts:21](https://github.com/jeyabbalas/data
 
 > **filters**: [`SerializedFilter`](../type-aliases/SerializedFilter.md)[]
 
-Defined in: [filters/FilterPresetTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L22)
+Defined in: [filters/FilterPresetTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L22)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [filters/FilterPresetTypes.ts:22](https://github.com/jeyabbalas/data
 
 > **id**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L19)
+Defined in: [filters/FilterPresetTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L19)
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: [filters/FilterPresetTypes.ts:19](https://github.com/jeyabbalas/data
 
 > **name**: `string`
 
-Defined in: [filters/FilterPresetTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L20)
+Defined in: [filters/FilterPresetTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L20)
 
 ***
 
@@ -59,7 +59,7 @@ Defined in: [filters/FilterPresetTypes.ts:20](https://github.com/jeyabbalas/data
 
 > `optional` **sortColumns?**: [`SortColumn`](SortColumn.md)[]
 
-Defined in: [filters/FilterPresetTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L23)
+Defined in: [filters/FilterPresetTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L23)
 
 ***
 
@@ -67,4 +67,4 @@ Defined in: [filters/FilterPresetTypes.ts:23](https://github.com/jeyabbalas/data
 
 > **updatedAt**: `number`
 
-Defined in: [filters/FilterPresetTypes.ts:25](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L25)
+Defined in: [filters/FilterPresetTypes.ts:25](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L25)

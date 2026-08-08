@@ -8,7 +8,7 @@
 
 > **formatDefaultStats**(`stats`, `dataType`, `messages?`): `string`
 
-Defined in: [statistics/StatsFormatters.ts:336](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/StatsFormatters.ts#L336)
+Defined in: [statistics/StatsFormatters.ts:336](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/StatsFormatters.ts#L336)
 
 Format the complete two-line default stats HTML for a column header.
 

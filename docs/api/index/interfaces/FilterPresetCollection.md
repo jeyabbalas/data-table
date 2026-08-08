@@ -6,7 +6,7 @@
 
 # Interface: FilterPresetCollection
 
-Defined in: [filters/FilterPresetTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L33)
+Defined in: [filters/FilterPresetTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L33)
 
 JSON file shape emitted by [FilterPresetManager.exportToJSON](../classes/FilterPresetManager.md#exporttojson) and
 accepted by [FilterPresetManager.importFromJSON](../classes/FilterPresetManager.md#importfromjson). The `version`
@@ -18,7 +18,7 @@ field gates back-compat parsing.
 
 > **presets**: [`FilterPreset`](FilterPreset.md)[]
 
-Defined in: [filters/FilterPresetTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L35)
+Defined in: [filters/FilterPresetTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L35)
 
 ***
 
@@ -26,4 +26,4 @@ Defined in: [filters/FilterPresetTypes.ts:35](https://github.com/jeyabbalas/data
 
 > **version**: `number`
 
-Defined in: [filters/FilterPresetTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterPresetTypes.ts#L34)
+Defined in: [filters/FilterPresetTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterPresetTypes.ts#L34)

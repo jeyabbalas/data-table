@@ -6,7 +6,7 @@
 
 # Interface: ValueCountsData
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:44](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L44)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:44](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L44)
 
 Complete value counts data including segments and metadata
 
@@ -16,7 +16,7 @@ Complete value counts data including segments and metadata
 
 > **distinctCount**: `number`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:50](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L50)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:50](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L50)
 
 Total number of distinct non-null values
 
@@ -26,7 +26,7 @@ Total number of distinct non-null values
 
 > `optional` **distinctCountApprox?**: `boolean`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:64](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L64)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:64](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L64)
 
 True when `distinctCount` came from `approx_count_distinct` rather than
 an exact `COUNT(DISTINCT …)`. Absent means exact.
@@ -37,7 +37,7 @@ an exact `COUNT(DISTINCT …)`. Absent means exact.
 
 > **isAllUnique**: `boolean`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:59](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L59)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:59](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L59)
 
 True when every value is unique (no repeated values).
 
@@ -50,7 +50,7 @@ see the derivation in `fetchValueCountsData`.
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:48](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L48)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:48](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L48)
 
 Count of null values in the column
 
@@ -60,7 +60,7 @@ Count of null values in the column
 
 > **segments**: [`CategorySegment`](CategorySegment.md)[]
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:46](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L46)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:46](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L46)
 
 Array of category segments (top N + "Other" if applicable)
 
@@ -70,6 +70,6 @@ Array of category segments (top N + "Other" if applicable)
 
 > **total**: `number`
 
-Defined in: [visualizations/valuecounts/ValueCountsData.ts:52](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/valuecounts/ValueCountsData.ts#L52)
+Defined in: [visualizations/valuecounts/ValueCountsData.ts:52](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/valuecounts/ValueCountsData.ts#L52)
 
 Total row count (including nulls)

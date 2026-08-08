@@ -6,7 +6,7 @@
 
 # Interface: TimeColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:85](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L85)
+Defined in: [statistics/ColumnStatsTypes.ts:85](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L85)
 
 Stats for time columns.
 Line 2: "08:00 – 23:45"
@@ -21,7 +21,7 @@ Line 2: "08:00 – 23:45"
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -35,7 +35,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"time"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:86](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L86)
+Defined in: [statistics/ColumnStatsTypes.ts:86](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L86)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:86](https://github.com/jeyabbalas/da
 
 > **maxSeconds**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:90](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L90)
+Defined in: [statistics/ColumnStatsTypes.ts:90](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L90)
 
 Maximum time as seconds from midnight, or null if all null
 
@@ -53,7 +53,7 @@ Maximum time as seconds from midnight, or null if all null
 
 > **minSeconds**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:88](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L88)
+Defined in: [statistics/ColumnStatsTypes.ts:88](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L88)
 
 Minimum time as seconds from midnight, or null if all null
 
@@ -63,7 +63,7 @@ Minimum time as seconds from midnight, or null if all null
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -77,7 +77,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -91,7 +91,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

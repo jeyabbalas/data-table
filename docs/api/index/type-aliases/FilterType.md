@@ -8,6 +8,6 @@
 
 > **FilterType** = [`Filter`](Filter.md)\[`"type"`\]
 
-Defined in: [filters/FilterTypes.ts:119](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/filters/FilterTypes.ts#L119)
+Defined in: [filters/FilterTypes.ts:119](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/filters/FilterTypes.ts#L119)
 
 String literal union of every [Filter](Filter.md) discriminator value.

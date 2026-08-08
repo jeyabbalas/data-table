@@ -8,6 +8,6 @@
 
 > **DataFormat** = `"csv"` \| `"json"` \| `"parquet"`
 
-Defined in: [data/DataLoader.ts:11](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/DataLoader.ts#L11)
+Defined in: [data/DataLoader.ts:11](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/data/DataLoader.ts#L11)
 
 Recognized data formats for [createDataTable](../functions/createDataTable.md)'s `source` argument.

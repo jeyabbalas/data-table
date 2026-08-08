@@ -6,7 +6,7 @@
 
 # Interface: QueryCacheOptions
 
-Defined in: [data/QueryCache.ts:17](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/QueryCache.ts#L17)
+Defined in: [data/QueryCache.ts:17](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/data/QueryCache.ts#L17)
 
 Tuning knobs for the per-bridge query result cache. Pass via
 [WorkerBridgeOptions.cache](WorkerBridgeOptions.md#cache) (a `Partial<QueryCacheOptions>`) to
@@ -19,7 +19,7 @@ Set `maxEntries: 0` to disable caching entirely.
 
 > **maxEntries**: `number`
 
-Defined in: [data/QueryCache.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/QueryCache.ts#L19)
+Defined in: [data/QueryCache.ts:19](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/data/QueryCache.ts#L19)
 
 Maximum number of cached query results. Set to 0 to disable caching. Default: 100
 
@@ -29,6 +29,6 @@ Maximum number of cached query results. Set to 0 to disable caching. Default: 10
 
 > **ttlMs**: `number`
 
-Defined in: [data/QueryCache.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/data/QueryCache.ts#L21)
+Defined in: [data/QueryCache.ts:21](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/data/QueryCache.ts#L21)
 
 Time-to-live in milliseconds for each cached entry. Default: 30000 (30s)

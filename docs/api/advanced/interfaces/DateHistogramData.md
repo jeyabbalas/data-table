@@ -6,7 +6,7 @@
 
 # Interface: DateHistogramData
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:38](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L38)
+Defined in: [visualizations/histogram/DateHistogramData.ts:38](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L38)
 
 Complete date histogram data including bins and metadata
 
@@ -16,7 +16,7 @@ Complete date histogram data including bins and metadata
 
 > **bins**: [`DateHistogramBin`](DateHistogramBin.md)[]
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L40)
+Defined in: [visualizations/histogram/DateHistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L40)
 
 Array of bins sorted by binStart
 
@@ -26,7 +26,7 @@ Array of bins sorted by binStart
 
 > **interval**: [`TimeInterval`](../type-aliases/TimeInterval.md)
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L50)
+Defined in: [visualizations/histogram/DateHistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L50)
 
 Detected/used interval for binning
 
@@ -36,7 +36,7 @@ Detected/used interval for binning
 
 > **isNumericBinning**: `boolean`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L54)
+Defined in: [visualizations/histogram/DateHistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L54)
 
 True when using numeric binning fallback (bins not aligned to calendar intervals)
 
@@ -46,7 +46,7 @@ True when using numeric binning fallback (bins not aligned to calendar intervals
 
 > **isSingleValue**: `boolean`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L52)
+Defined in: [visualizations/histogram/DateHistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L52)
 
 True when all non-null values are identical (single timestamp)
 
@@ -56,7 +56,7 @@ True when all non-null values are identical (single timestamp)
 
 > **max**: `Date` \| `null`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L46)
+Defined in: [visualizations/histogram/DateHistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L46)
 
 Maximum non-null date
 
@@ -66,7 +66,7 @@ Maximum non-null date
 
 > **min**: `Date` \| `null`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L44)
+Defined in: [visualizations/histogram/DateHistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L44)
 
 Minimum non-null date
 
@@ -76,7 +76,7 @@ Minimum non-null date
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L42)
+Defined in: [visualizations/histogram/DateHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L42)
 
 Count of null values in the column
 
@@ -86,6 +86,6 @@ Count of null values in the column
 
 > **total**: `number`
 
-Defined in: [visualizations/histogram/DateHistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/visualizations/histogram/DateHistogramData.ts#L48)
+Defined in: [visualizations/histogram/DateHistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/visualizations/histogram/DateHistogramData.ts#L48)
 
 Total count of all values (including nulls)

@@ -6,7 +6,7 @@
 
 # Interface: ProgressInfo
 
-Defined in: [core/Progress.ts:13](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L13)
+Defined in: [core/Progress.ts:13](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L13)
 
 Progress information for long-running operations
 
@@ -16,7 +16,7 @@ Progress information for long-running operations
 
 > **cancelable**: `boolean`
 
-Defined in: [core/Progress.ts:25](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L25)
+Defined in: [core/Progress.ts:25](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L25)
 
 Whether the operation can be cancelled
 
@@ -26,7 +26,7 @@ Whether the operation can be cancelled
 
 > `optional` **estimatedRemaining?**: `number`
 
-Defined in: [core/Progress.ts:23](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L23)
+Defined in: [core/Progress.ts:23](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L23)
 
 Estimated time remaining in milliseconds
 
@@ -36,7 +36,7 @@ Estimated time remaining in milliseconds
 
 > `optional` **loaded?**: `number`
 
-Defined in: [core/Progress.ts:19](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L19)
+Defined in: [core/Progress.ts:19](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L19)
 
 Bytes or rows loaded so far
 
@@ -46,7 +46,7 @@ Bytes or rows loaded so far
 
 > **percent**: `number`
 
-Defined in: [core/Progress.ts:17](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L17)
+Defined in: [core/Progress.ts:17](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L17)
 
 Completion percentage (0-100)
 
@@ -56,7 +56,7 @@ Completion percentage (0-100)
 
 > **stage**: [`ProgressStage`](../type-aliases/ProgressStage.md)
 
-Defined in: [core/Progress.ts:15](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L15)
+Defined in: [core/Progress.ts:15](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L15)
 
 Current processing stage
 
@@ -66,6 +66,6 @@ Current processing stage
 
 > `optional` **total?**: `number`
 
-Defined in: [core/Progress.ts:21](https://github.com/jeyabbalas/data-table/blob/51ba4ef4aa1b4adfe8a0a7317bb8afc40fcaf160/src/core/Progress.ts#L21)
+Defined in: [core/Progress.ts:21](https://github.com/jeyabbalas/data-table/blob/a7f22ed188c02320dd2e0b381eef2c6831c212fa/src/core/Progress.ts#L21)
 
 Total bytes or rows expected

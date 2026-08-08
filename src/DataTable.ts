@@ -414,13 +414,14 @@ export interface DataTable {
    * With `visualizations: false` or `{ eager: true }` it has already
    * resolved by the time `loadData` does.
    *
-   * @remarks **It can stay pending while the document is hidden.** Chart
-   * creation is driven by an `IntersectionObserver`, and a browser gives a
-   * background or minimized window no rendering opportunity, so no
-   * intersection is ever computed and no chart is ever created. That is the
-   * platform's behavior, not a stall; the promise settles when the tab
-   * becomes visible. Use `{ eager: true }` if you must have charts in a
-   * hidden document.
+   * @remarks **In a hidden document it resolves immediately, with no charts
+   * drawn.** Chart creation is driven by an `IntersectionObserver`, and a
+   * browser gives a background or minimized window no rendering opportunity,
+   * so no intersection is ever computed and nothing is ever visible. The
+   * visible wave is therefore empty, `vizReady` fires with `vizCount: 0`, and
+   * this resolves rather than waiting for a callback that is not coming. The
+   * charts are built when the document is shown. Use `{ eager: true }` if you
+   * need them drawn in a document that is never shown.
    *
    * @example
    * ```ts
@@ -850,11 +851,34 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
   };
 
-  /** Put a saved brush/selection back on a freshly-created instance. */
+  /**
+   * Put a saved brush/selection back on a freshly-created instance.
+   *
+   * Only when a filter for that column is still active. Committing a brush or
+   * a selection is what creates the filter in the first place, so a saved
+   * interaction with no filter behind it describes a selection the user has
+   * since cleared — restoring it paints a chart that contradicts its own row
+   * count ("60,000 rows" on line 1, "24,271 rows (40.5%)" underneath).
+   *
+   * That state goes stale because `StateActions.notifyRemovedFilters`
+   * (`core/Actions.ts:236`) is never called: `setOnFilterRemove` — and so
+   * `clearVisualizationState` — fires only for derived-column removals, not
+   * when a user drops an ordinary filter. That is a pre-existing gap in
+   * `Actions`, and widening a public callback's firing conditions is not this
+   * phase's change to make; but before charts were re-created on every header
+   * rebuild the stale entry was unreachable, and now it is not. Checking the
+   * filters here fixes the symptom and is the more robust rule anyway — it
+   * holds however the entry came to be stale.
+   */
   const restoreInteractionState = (columnName: string, viz: VisualizationType): void => {
     const savedBrush = brushStates.get(columnName);
     const savedSel = selectionStates.get(columnName);
     if (!savedBrush && !savedSel) return;
+    if (!state.filters.get().some((f) => f.column === columnName)) {
+      brushStates.delete(columnName);
+      selectionStates.delete(columnName);
+      return;
+    }
     void viz.waitForData().then(() => {
       if (viz.isDestroyed()) return;
       if (

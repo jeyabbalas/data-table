@@ -98,7 +98,7 @@ async function fetchColumnStats(
     ${whereSQL}
   `;
 
-  const results = await bridge.query<StatsResult>(sql);
+  const results = await bridge.query<StatsResult>(sql, undefined, { priority: 'low' });
 
   if (results.length === 0) {
     return {
@@ -147,7 +147,7 @@ async function fetchTopCategories(
     LIMIT ${limit}
   `;
 
-  return bridge.query<CategoryResult>(sql);
+  return bridge.query<CategoryResult>(sql, undefined, { priority: 'low' });
 }
 
 /**
@@ -314,7 +314,7 @@ export async function fetchAlignedValueCountsData(
         GROUP BY CAST(${col} AS VARCHAR)
       `;
 
-      const results = await bridge.query<CategoryResult>(sql);
+      const results = await bridge.query<CategoryResult>(sql, undefined, { priority: 'low' });
       const countByValue = new Map<string, number>();
       for (const row of results) {
         countByValue.set(row.value, Number(row.count));

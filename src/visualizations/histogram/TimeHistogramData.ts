@@ -289,7 +289,7 @@ export async function fetchTimeStats(
     ${whereSQL}
   `;
 
-  const results = await bridge.query<TimeStatsResult>(sql);
+  const results = await bridge.query<TimeStatsResult>(sql, undefined, { priority: 'low' });
 
   if (results.length === 0) {
     return { minSeconds: null, maxSeconds: null, count: 0, nullCount: 0 };
@@ -405,7 +405,7 @@ async function fetchTimeHistogramWithNumericBinning(
     stats.maxSeconds,
     filters,
   );
-  const binResults = await bridge.query<NumericBinResult>(sql);
+  const binResults = await bridge.query<NumericBinResult>(sql, undefined, { priority: 'low' });
 
   // Create all bins (even empty ones) for consistent visualization
   const bins: TimeHistogramBin[] = [];
@@ -460,7 +460,7 @@ export async function fetchTimeHistogramBins(
   bridge: WorkerBridge,
 ): Promise<TimeHistogramBin[]> {
   const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
-  const binResults = await bridge.query<TimeBinResult>(sql);
+  const binResults = await bridge.query<TimeBinResult>(sql, undefined, { priority: 'low' });
 
   const bins: TimeHistogramBin[] = [];
   for (const result of binResults) {
@@ -502,7 +502,7 @@ export async function fetchTimeNumericBins(
   const binWidth = (maxSec - minSec) / numBins;
 
   const sql = buildNumericTimeHistogramSQL(tableName, column, numBins, minSec, maxSec, filters);
-  const binResults = await bridge.query<NumericBinResult>(sql);
+  const binResults = await bridge.query<NumericBinResult>(sql, undefined, { priority: 'low' });
 
   // Create all bins (even empty ones) for consistent visualization
   const bins: TimeHistogramBin[] = [];
@@ -615,7 +615,7 @@ export async function fetchTimeHistogramData(
 
     // Step 3: Fetch binned data using EPOCH extraction
     const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
-    const binResults = await bridge.query<TimeBinResult>(sql);
+    const binResults = await bridge.query<TimeBinResult>(sql, undefined, { priority: 'low' });
 
     // Step 4: Convert results to TimeHistogramBin format
     const bins: TimeHistogramBin[] = [];

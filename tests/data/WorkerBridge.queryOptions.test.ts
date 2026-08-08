@@ -3,8 +3,10 @@
  *
  * `cache: false` bypasses the SQL result cache on read AND write (virtual-
  * scroll row fetches must never serve or pollute cached pages), and
- * `priority: 'high'` is forwarded in the wire QueryPayload so the worker can
- * order its queue. Caching is asserted purely via posted-message counts.
+ * `priority` is forwarded verbatim in the wire QueryPayload so the worker
+ * can order its three-tier queue (`'high'` viewport rows → `'normal'` →
+ * `'low'` viz/stats scans). Caching is asserted purely via posted-message
+ * counts.
  */
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
@@ -71,7 +73,7 @@ describe('WorkerBridge.query options', () => {
     expect(second).toEqual(first);
   });
 
-  it('priority high is forwarded in the payload; absent otherwise', async () => {
+  it('every explicit priority tier is forwarded in the payload; absent otherwise', async () => {
     mock = createMockWorker({
       onMessage: (msg) =>
         msg.type === 'query'
@@ -83,10 +85,16 @@ describe('WorkerBridge.query options', () => {
 
     await bridge.query('SELECT 2 AS y', undefined, { priority: 'high' });
     await bridge.query('SELECT 3 AS z');
+    // 'low' is what every viz/stats fetch sends — it must survive the trip
+    // to the wire unchanged, or the whole tier is inert.
+    await bridge.query('SELECT 4 AS w', undefined, { priority: 'low' });
+    await bridge.query('SELECT 5 AS v', undefined, { priority: 'normal' });
 
     const posts = queryPosts();
-    expect(posts.length).toBe(2);
+    expect(posts.length).toBe(4);
     expect(posts[0]!.payload).toMatchObject({ sql: 'SELECT 2 AS y', priority: 'high' });
+    expect(posts[2]!.payload).toMatchObject({ sql: 'SELECT 4 AS w', priority: 'low' });
+    expect(posts[3]!.payload).toMatchObject({ sql: 'SELECT 5 AS v', priority: 'normal' });
 
     const secondPayload = posts[1]!.payload as Record<string, unknown>;
     expect(secondPayload.sql).toBe('SELECT 3 AS z');

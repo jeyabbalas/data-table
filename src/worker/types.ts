@@ -35,8 +35,14 @@ export interface InitPayload {
 
 export interface QueryPayload {
   sql: string;
-  /** Worker queue priority. 'high' = viewport row fetches jump stats/histogram work. */
-  priority?: 'high' | 'normal';
+  /**
+   * Worker queue priority. The dispatcher drains high → normal → low.
+   * 'high' = viewport row fetches, which jump everything else; 'low' =
+   * visualization / column-stats scans, which yield to everything else;
+   * omitted = 'normal'. Only `query` messages carry this field —
+   * `load` / `export` are always normal-tier.
+   */
+  priority?: 'high' | 'normal' | 'low';
 }
 
 export interface LoadPayload {

@@ -45,12 +45,14 @@ interface QueueEntry {
 }
 
 /**
- * Messages are serialized through an explicit two-priority FIFO: `high`
- * for viewport row fetches, `normal` for everything else. `pump()` runs
- * exactly one task at a time (`running`); `cancel` messages bypass the
- * queue entirely — a queued target is removed without touching DuckDB,
- * the running target is interrupted via the connection's pending-query
- * cancel.
+ * Messages are serialized through an explicit three-priority FIFO:
+ * `high` for viewport row fetches, `low` for visualization and
+ * column-stats scans, `normal` for everything else — `init`, `load`,
+ * `export`, and every query that did not ask for a tier. `pump()` drains
+ * strictly high → normal → low and runs exactly one task at a time
+ * (`running`); `cancel` messages bypass the queue entirely — a queued
+ * target is removed without touching DuckDB, the running target is
+ * interrupted via the connection's pending-query cancel.
  *
  * Why serialization does not hurt: SQL execution already serializes
  * inside duckdb-wasm's single-threaded WASM worker, so concurrent
@@ -67,12 +69,19 @@ interface QueueEntry {
  * pending slot and returns `false` — it never throws at an innocent
  * query.
  *
- * Priority starvation is accepted by design: only viewport row fetches
- * should be posted with `priority: 'high'`, and those are bounded by
- * scroll activity.
+ * Priority starvation is accepted by design at both ends, for the same
+ * reason. Only viewport row fetches should be posted with
+ * `priority: 'high'`, and those are bounded by scroll activity.
+ * Symmetrically, `'low'` work may be starved by a busy grid because it
+ * too is bounded — by the **visible column set**: viz/stats fetches are
+ * issued only for headers currently on screen, so the low queue is
+ * O(visible columns), not O(table width), and it drains the moment
+ * scrolling pauses. Decorative work waiting on interactive work is the
+ * outcome we want.
  */
 let highQueue: QueueEntry[] = [];
 let normalQueue: QueueEntry[] = [];
+let lowQueue: QueueEntry[] = [];
 let running: { id: string; type: RunnableType } | null = null;
 
 /**
@@ -91,6 +100,7 @@ export function __resetDispatcherForTests(): void {
   epoch += 1;
   highQueue = [];
   normalQueue = [];
+  lowQueue = [];
   running = null;
 }
 
@@ -104,8 +114,8 @@ export function __getRunningForTests(): { id: string; type: RunnableType } | nul
 /**
  * @internal Test-only — read the queue depths for assertions.
  */
-export function __getQueueDepthsForTests(): { high: number; normal: number } {
-  return { high: highQueue.length, normal: normalQueue.length };
+export function __getQueueDepthsForTests(): { high: number; normal: number; low: number } {
+  return { high: highQueue.length, normal: normalQueue.length, low: lowQueue.length };
 }
 
 /**
@@ -182,8 +192,15 @@ export function handleMessage(message: WorkerMessage, respond: Respond): Promise
   }
 
   return new Promise<void>((resolve) => {
-    const high = type === 'query' && (payload as QueryPayload | undefined)?.priority === 'high';
-    (high ? highQueue : normalQueue).push({ message, type, respond, done: resolve });
+    // Only a `query` can leave the default tier, and only by asking for
+    // one explicitly. `init`, `load`, and `export` carry no `priority`
+    // field at all, so they must fall through to `normalQueue` — never to
+    // `low`. Demoting them would put a background load behind every
+    // queued viz scan (a thousand of them on a wide table), converting a
+    // foreground data load into an unbounded wait on decorative work.
+    const priority = type === 'query' ? (payload as QueryPayload | undefined)?.priority : undefined;
+    const queue = priority === 'high' ? highQueue : priority === 'low' ? lowQueue : normalQueue;
+    queue.push({ message, type, respond, done: resolve });
     pump();
   });
 }
@@ -196,7 +213,7 @@ export function handleMessage(message: WorkerMessage, respond: Respond): Promise
  */
 function pump(): void {
   if (running) return;
-  const entry = highQueue.shift() ?? normalQueue.shift();
+  const entry = highQueue.shift() ?? normalQueue.shift() ?? lowQueue.shift();
   if (!entry) return;
 
   running = { id: entry.message.id, type: entry.type };
@@ -390,12 +407,16 @@ async function handleCancel(message: WorkerMessage, respond: Respond): Promise<v
     return;
   }
 
-  const queued =
-    highQueue.find((entry) => entry.message.id === targetId) ??
-    normalQueue.find((entry) => entry.message.id === targetId);
-  if (queued) {
-    const queue = highQueue.includes(queued) ? highQueue : normalQueue;
-    queue.splice(queue.indexOf(queued), 1);
+  // Every tier is scanned, and the tier that held the entry is known from
+  // the loop rather than re-derived afterwards. A `find`-then-`includes`
+  // pair silently misses whichever queue it was not taught about, and a
+  // missed queued target falls through to `no-matching-inflight` below
+  // without ever calling `done()` — leaking the promise `handleMessage`
+  // returned for the cancelled message for the lifetime of the worker.
+  for (const queue of [highQueue, normalQueue, lowQueue]) {
+    const index = queue.findIndex((entry) => entry.message.id === targetId);
+    if (index === -1) continue;
+    const [queued] = queue.splice(index, 1);
     queued.respond(targetId, 'error', {
       message: 'Cancelled before execution',
       code: 'QUERY_CANCELLED',

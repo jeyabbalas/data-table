@@ -314,7 +314,7 @@ export async function fetchDateStats(
     ${whereSQL}
   `;
 
-  const results = await bridge.query<DateStatsResult>(sql);
+  const results = await bridge.query<DateStatsResult>(sql, undefined, { priority: 'low' });
 
   if (results.length === 0) {
     return { min: null, max: null, count: 0, nullCount: 0 };
@@ -425,7 +425,7 @@ async function fetchDateHistogramWithNumericBinning(
   const binWidth = (maxMs - minMs) / numBins;
 
   const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
-  const binResults = await bridge.query<NumericBinResult>(sql);
+  const binResults = await bridge.query<NumericBinResult>(sql, undefined, { priority: 'low' });
 
   // Create all bins (even empty ones) for consistent visualization
   const bins: DateHistogramBin[] = [];
@@ -479,7 +479,7 @@ export async function fetchDateHistogramBins(
   bridge: WorkerBridge,
 ): Promise<DateHistogramBin[]> {
   const sql = buildDateHistogramSQL(tableName, column, interval, filters);
-  const binResults = await bridge.query<DateBinResult>(sql);
+  const binResults = await bridge.query<DateBinResult>(sql, undefined, { priority: 'low' });
 
   const bins: DateHistogramBin[] = [];
   for (const result of binResults) {
@@ -524,7 +524,7 @@ export async function fetchDateNumericBins(
   const binWidth = (maxMs - minMs) / numBins;
 
   const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
-  const binResults = await bridge.query<NumericBinResult>(sql);
+  const binResults = await bridge.query<NumericBinResult>(sql, undefined, { priority: 'low' });
 
   // Create all bins (even empty ones) for consistent visualization
   const bins: DateHistogramBin[] = [];
@@ -627,7 +627,7 @@ export async function fetchDateHistogramData(
 
     // Step 3: Fetch binned data using DATE_TRUNC
     const sql = buildDateHistogramSQL(tableName, column, interval, filters);
-    const binResults = await bridge.query<DateBinResult>(sql);
+    const binResults = await bridge.query<DateBinResult>(sql, undefined, { priority: 'low' });
 
     // Step 4: Convert results to DateHistogramBin format
     const bins: DateHistogramBin[] = [];

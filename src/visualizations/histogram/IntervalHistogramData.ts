@@ -336,7 +336,7 @@ export async function fetchIntervalColumnStats(
       FROM ${tbl}
       ${whereSQL}
     `;
-    results = await bridge.query<IntervalStatsResult>(sql);
+    results = await bridge.query<IntervalStatsResult>(sql, undefined, { priority: 'low' });
   } catch {
     // APPROX_QUANTILE not supported for INTERVAL — retry without median
     const sql = `
@@ -349,7 +349,7 @@ export async function fetchIntervalColumnStats(
       FROM ${tbl}
       ${whereSQL}
     `;
-    results = await bridge.query<IntervalStatsResult>(sql);
+    results = await bridge.query<IntervalStatsResult>(sql, undefined, { priority: 'low' });
   }
 
   if (results.length === 0) {
@@ -422,7 +422,7 @@ export async function fetchIntervalNumericBins(
   const binWidth = (maxSec - minSec) / numBins;
 
   const sql = buildIntervalHistogramSQL(tableName, column, numBins, minSec, maxSec, filters);
-  const binResults = await bridge.query<IntervalBinResult>(sql);
+  const binResults = await bridge.query<IntervalBinResult>(sql, undefined, { priority: 'low' });
 
   // Create all bins (even empty ones)
   const bins: IntervalHistogramBin[] = [];

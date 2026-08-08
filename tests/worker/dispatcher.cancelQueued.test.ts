@@ -5,6 +5,11 @@
  * is dequeued without ever executing, a running query is interrupted via
  * `connection.cancelSent()`, a running init is not cancellable, and anything
  * else reports no-matching-inflight.
+ *
+ * The dequeue scan must cover EVERY tier — high, normal and low. A tier the
+ * scan does not know about falls through to `no-matching-inflight` and never
+ * calls the entry's `done()`, leaking the promise `handleMessage` returned
+ * for it. The low-tier case is covered in `dispatcher.queue.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -105,7 +110,7 @@ describe('worker dispatcher — cancel routing', () => {
       respond2,
     );
     expect(__getRunningForTests()).toEqual({ id: 'q1', type: 'query' });
-    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1 });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1, low: 0 });
 
     const { respond: cancelRespond, replies: cancelReplies } = captureRespond();
     await handleMessage(
@@ -136,7 +141,7 @@ describe('worker dispatcher — cancel routing', () => {
     // The removed entry's handleMessage promise must still resolve.
     await p2;
 
-    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0 });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0, low: 0 });
     expect(replies2).toHaveLength(1); // no second reply after the dequeue
 
     deferreds['SELECT 1'].resolve([]);

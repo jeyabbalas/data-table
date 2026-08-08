@@ -56,11 +56,25 @@ export interface QueryOptions {
    */
   cache?: boolean;
   /**
-   * Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
-   * stats/histogram queries) in the worker's serial dispatch queue —
-   * intended for viewport row fetches. Default `'normal'`.
+   * Worker queue priority. The worker's serial dispatch queue drains
+   * strictly `'high'` → `'normal'` → `'low'`. Default `'normal'`.
+   *
+   * - `'high'` — viewport row fetches. Jumps every queued `'normal'` and
+   *   `'low'` task so scrolling never waits on background work.
+   * - `'normal'` — everything interactive-but-not-scroll: filter counts,
+   *   exports, loads, ad-hoc queries.
+   * - `'low'` — background or decorative work that must never delay a
+   *   viewport row: header histograms / value-counts, column-stats
+   *   scans, and any host-app query whose result the user is not
+   *   currently waiting on. Pick this whenever the query is a full-table
+   *   scan issued on the host app's own initiative rather than in direct
+   *   response to a user action.
+   *
+   * Starvation of `'low'` is by design and safe only because low-tier
+   * work is bounded — issue it for what is on screen, not for the whole
+   * table.
    */
-  priority?: 'high' | 'normal';
+  priority?: 'high' | 'normal' | 'low';
 }
 
 /**
@@ -329,10 +343,11 @@ export class WorkerBridge {
    * Execute a SQL query.
    *
    * SELECT results are served from and stored into the bridge's LRU+TTL
-   * cache unless `options.cache === false`. `options.priority: 'high'`
-   * makes the worker run this query ahead of queued normal-priority work
-   * (viewport row fetches use this so they are not stuck behind
-   * stats/histogram fan-outs).
+   * cache unless `options.cache === false`. `options.priority` picks a
+   * tier in the worker's serial queue, which drains `'high'` →
+   * `'normal'` → `'low'`: viewport row fetches use `'high'` so they are
+   * never stuck behind a stats/histogram fan-out, and those fan-outs use
+   * `'low'` so they yield to anything interactive.
    *
    * @param sql SQL text to execute.
    * @param signal Optional abort signal; aborting rejects with
@@ -345,6 +360,10 @@ export class WorkerBridge {
    *   cache: false,
    *   priority: 'high',
    * });
+   *
+   * @example
+   * // Background column-summary scan: yields to rows and to filters.
+   * const summary = await bridge.query(sql, undefined, { priority: 'low' });
    */
   async query<T = Record<string, unknown>>(
     sql: string,

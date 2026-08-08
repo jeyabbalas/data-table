@@ -61,7 +61,7 @@ export async function fetchIntervalStats(
         FROM ${table}
         ${whereSQL}
       `;
-      results = await bridge.query<IntervalStatsResult>(sql);
+      results = await bridge.query<IntervalStatsResult>(sql, undefined, { priority: 'low' });
     } catch {
       // APPROX_QUANTILE not supported for INTERVAL — retry without median
       const sql = `
@@ -75,7 +75,7 @@ export async function fetchIntervalStats(
         FROM ${table}
         ${whereSQL}
       `;
-      results = await bridge.query<IntervalStatsResult>(sql);
+      results = await bridge.query<IntervalStatsResult>(sql, undefined, { priority: 'low' });
     }
 
     if (results.length === 0) {

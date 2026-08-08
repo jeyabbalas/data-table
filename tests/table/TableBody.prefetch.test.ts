@@ -4,8 +4,9 @@
  * Direction-aware prefetch: when the pipeline is fully idle (no missing
  * visible blocks, nothing in flight), TableBody speculatively fetches
  * the single next block in the last scroll direction at 'normal' worker
- * priority — visible fetches always jump ahead of it in the worker's
- * priority queue. Prefetched rows land in the cache only; the DOM is
+ * priority — the middle of the worker's three tiers, so visible 'high'
+ * fetches always jump ahead of it while it still outranks 'low' viz and
+ * column-stats scans. Prefetched rows land in the cache only; the DOM is
  * untouched until the viewport actually reaches them.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

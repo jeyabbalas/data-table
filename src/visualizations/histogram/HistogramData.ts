@@ -199,7 +199,7 @@ export async function fetchColumnStats(
     ${whereSQL}
   `;
 
-  const results = await bridge.query<StatsResult>(sql);
+  const results = await bridge.query<StatsResult>(sql, undefined, { priority: 'low' });
 
   if (results.length === 0) {
     return {
@@ -253,7 +253,7 @@ export async function fetchDiscreteValues(
     ORDER BY ${col}
   `;
 
-  return bridge.query<DiscreteResult>(sql);
+  return bridge.query<DiscreteResult>(sql, undefined, { priority: 'low' });
 }
 
 /**
@@ -325,7 +325,7 @@ export async function fetchHistogramBins(
   bridge: WorkerBridge,
 ): Promise<HistogramBin[]> {
   const sql = buildHistogramSQL(tableName, column, numBins, min, max, filters);
-  const binResults = await bridge.query<BinResult>(sql);
+  const binResults = await bridge.query<BinResult>(sql, undefined, { priority: 'low' });
 
   const binWidth = (max - min) / numBins;
   const bins: HistogramBin[] = [];

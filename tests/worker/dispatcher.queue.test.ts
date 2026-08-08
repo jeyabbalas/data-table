@@ -1,10 +1,15 @@
 /**
  * Phase 2: worker-side serial queue.
  *
- * The dispatcher enqueues every non-cancel message into a two-priority FIFO
- * (high before normal) and runs exactly one task at a time. Dequeue is
- * synchronous, and when the running task settles its `finally` pumps the
- * next entry before the settled message's `handleMessage` awaiter resumes.
+ * The dispatcher enqueues every non-cancel message into a three-priority
+ * FIFO drained strictly high → normal → low, and runs exactly one task at a
+ * time. Dequeue is synchronous, and when the running task settles its
+ * `finally` pumps the next entry before the settled message's
+ * `handleMessage` awaiter resumes.
+ *
+ * Only a `query` can leave the `normal` tier, and only via an explicit
+ * `priority`: `load` / `export` / `init` carry no priority field, so they
+ * must never be demoted behind a viz fan-out.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -111,7 +116,7 @@ describe('worker dispatcher — serial queue', () => {
     // q1 was dequeued and started synchronously; q2 waits in the normal queue.
     expect(duckdbMock.executeQueryCancellable).toHaveBeenCalledTimes(1);
     expect(__getRunningForTests()).toEqual({ id: 'q1', type: 'query' });
-    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1 });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1, low: 0 });
 
     deferreds['SELECT 1'].resolve([]);
     await p1;
@@ -160,7 +165,7 @@ describe('worker dispatcher — serial queue', () => {
     );
 
     expect(__getRunningForTests()).toEqual({ id: 'q1', type: 'query' });
-    expect(__getQueueDepthsForTests()).toEqual({ high: 1, normal: 1 });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 1, normal: 1, low: 0 });
 
     deferreds['SELECT 1'].resolve([]);
     await p1;
@@ -180,5 +185,189 @@ describe('worker dispatcher — serial queue', () => {
 
     const resultIds = replies.filter((r) => r.type === 'result').map((r) => r.id);
     expect(resultIds).toEqual(['q1', 'q3', 'q2']);
+  });
+
+  it('pump order: a queued low-priority query runs only after high AND normal drain', async () => {
+    const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
+    };
+    const deferreds: Record<string, Deferred<unknown[]>> = {
+      BLOCK: deferred<unknown[]>(),
+      LOW: deferred<unknown[]>(),
+      NORMAL: deferred<unknown[]>(),
+      HIGH: deferred<unknown[]>(),
+    };
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
+
+    const { respond, replies } = captureRespond();
+
+    // `block` occupies the running slot so the other three queue up. They
+    // arrive low-first on purpose: tier must beat arrival order.
+    const pBlock = handleMessage(
+      { id: 'block', type: 'query', payload: { sql: 'BLOCK' } } as WorkerMessage,
+      respond,
+    );
+    const pLow = handleMessage(
+      { id: 'low', type: 'query', payload: { sql: 'LOW', priority: 'low' } } as WorkerMessage,
+      respond,
+    );
+    const pNormal = handleMessage(
+      { id: 'normal', type: 'query', payload: { sql: 'NORMAL' } } as WorkerMessage,
+      respond,
+    );
+    const pHigh = handleMessage(
+      { id: 'high', type: 'query', payload: { sql: 'HIGH', priority: 'high' } } as WorkerMessage,
+      respond,
+    );
+
+    // All three tiers report independently.
+    expect(__getQueueDepthsForTests()).toEqual({ high: 1, normal: 1, low: 1 });
+    expect(__getRunningForTests()).toEqual({ id: 'block', type: 'query' });
+
+    deferreds.BLOCK.resolve([]);
+    await pBlock;
+    expect(__getRunningForTests()).toEqual({ id: 'high', type: 'query' });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1, low: 1 });
+
+    deferreds.HIGH.resolve([]);
+    await pHigh;
+    expect(__getRunningForTests()).toEqual({ id: 'normal', type: 'query' });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0, low: 1 });
+
+    // Low goes last even though it was enqueued first.
+    deferreds.NORMAL.resolve([]);
+    await pNormal;
+    expect(__getRunningForTests()).toEqual({ id: 'low', type: 'query' });
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0, low: 0 });
+
+    deferreds.LOW.resolve([]);
+    await pLow;
+    expect(__getRunningForTests()).toBeNull();
+
+    const resultIds = replies.filter((r) => r.type === 'result').map((r) => r.id);
+    expect(resultIds).toEqual(['block', 'high', 'normal', 'low']);
+  });
+
+  it('routing: a priority-less load stays in the normal tier, ahead of a queued low query', async () => {
+    const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
+    };
+    const csvMock = (await import('@/worker/loaders/csv')) as unknown as {
+      loadCSV: ReturnType<typeof vi.fn>;
+    };
+    const deferreds: Record<string, Deferred<unknown[]>> = {
+      BLOCK: deferred<unknown[]>(),
+      LOW: deferred<unknown[]>(),
+    };
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
+    const loadDeferred = deferred<{
+      tableName: string;
+      rowCount: number;
+      columns: string[];
+      schema: unknown[];
+    }>();
+    csvMock.loadCSV.mockImplementation(() => loadDeferred.promise);
+
+    const { respond, replies } = captureRespond();
+
+    const pBlock = handleMessage(
+      { id: 'block', type: 'query', payload: { sql: 'BLOCK' } } as WorkerMessage,
+      respond,
+    );
+    const pLow = handleMessage(
+      { id: 'low', type: 'query', payload: { sql: 'LOW', priority: 'low' } } as WorkerMessage,
+      respond,
+    );
+    const pLoad = handleMessage(
+      {
+        id: 'load',
+        type: 'load',
+        payload: { data: 'a,b\n1,2', format: 'csv', tableName: 't' },
+      } as WorkerMessage,
+      respond,
+    );
+
+    // The load carries no `priority` field — it must land in `normal`, not
+    // be swept into `low` alongside background viz scans.
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 1, low: 1 });
+
+    deferreds.BLOCK.resolve([]);
+    await pBlock;
+    expect(__getRunningForTests()).toEqual({ id: 'load', type: 'load' });
+
+    loadDeferred.resolve({ tableName: 't', rowCount: 1, columns: ['a', 'b'], schema: [] });
+    await pLoad;
+    expect(__getRunningForTests()).toEqual({ id: 'low', type: 'query' });
+
+    deferreds.LOW.resolve([]);
+    await pLow;
+
+    const resultIds = replies.filter((r) => r.type === 'result').map((r) => r.id);
+    expect(resultIds).toEqual(['block', 'load', 'low']);
+  });
+
+  it('cancel of a QUEUED low-priority query dequeues it and settles its handleMessage promise', async () => {
+    const duckdbMock = (await import('@/worker/duckdb')) as unknown as {
+      executeQueryCancellable: ReturnType<typeof vi.fn>;
+    };
+    const deferreds: Record<string, Deferred<unknown[]>> = {
+      BLOCK: deferred<unknown[]>(),
+      LOW: deferred<unknown[]>(),
+    };
+    duckdbMock.executeQueryCancellable.mockImplementation((sql: string) => deferreds[sql].promise);
+
+    const { respond, replies } = captureRespond();
+
+    const pBlock = handleMessage(
+      { id: 'block', type: 'query', payload: { sql: 'BLOCK' } } as WorkerMessage,
+      respond,
+    );
+    const pLow = handleMessage(
+      { id: 'low', type: 'query', payload: { sql: 'LOW', priority: 'low' } } as WorkerMessage,
+      respond,
+    );
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0, low: 1 });
+
+    // Observed via a flag, not an await: the promise must settle from the
+    // cancel path alone. Awaiting it directly would hang (not fail) if the
+    // low tier were invisible to `handleCancel`.
+    let lowSettled = false;
+    void pLow.then(() => {
+      lowSettled = true;
+    });
+
+    const { respond: cancelRespond, replies: cancelReplies } = captureRespond();
+    await handleMessage(
+      { id: 'c1', type: 'cancel', payload: { targetId: 'low' } } as WorkerMessage,
+      cancelRespond,
+    );
+
+    expect(cancelReplies).toEqual([
+      { id: 'c1', type: 'result', payload: { cancelled: true, reason: 'dequeued' } },
+    ]);
+    expect(__getQueueDepthsForTests()).toEqual({ high: 0, normal: 0, low: 0 });
+
+    // The dequeued message got its own QUERY_CANCELLED reply...
+    expect(replies).toContainEqual(
+      expect.objectContaining({
+        id: 'low',
+        type: 'error',
+        payload: expect.objectContaining({ code: 'QUERY_CANCELLED' }),
+      }),
+    );
+
+    // ...DuckDB never saw it...
+    expect(duckdbMock.executeQueryCancellable).not.toHaveBeenCalledWith('LOW');
+
+    // ...and `done()` ran, so the promise `handleMessage` returned for it is
+    // settled rather than leaked for the lifetime of the worker.
+    await Promise.resolve();
+    expect(lowSettled).toBe(true);
+    await pLow;
+
+    // The running task is untouched by the cancel and still drains normally.
+    deferreds.BLOCK.resolve([]);
+    await pBlock;
+    expect(__getRunningForTests()).toBeNull();
   });
 });

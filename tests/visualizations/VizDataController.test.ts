@@ -452,7 +452,7 @@ describe('snapshots', () => {
     expect(latest.fetchCount).toBe(1);
   });
 
-  it('keeps live instances when the headers were not rebuilt', async () => {
+  it('keeps live instances when the header DOM did not change', async () => {
     const h = makeHarness(['a']);
     h.controller.sync([column('a')], 1);
     h.io().emit({ a: 'create' });
@@ -461,9 +461,27 @@ describe('snapshots', () => {
 
     // The derived-column VIEW switch: `state.tableName` changes but
     // `TableContainer.render()` never runs, so the canvas is still mounted.
-    h.controller.sync([column('a')], 2, { headersRebuilt: false });
+    // The controller detects that from container identity — no caller flag.
+    h.controller.sync([column('a')], 2);
     expect(first.destroyed).toBe(false);
     expect(StubViz.created).toHaveLength(1);
+  });
+
+  it('refetches a surviving instance whose data invalidateAll marked stale', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    // The facade's derived-VIEW path: drop the snapshots (they describe the
+    // old relation), then re-sync. The instance survives; its data must not.
+    h.controller.invalidateAll();
+    h.controller.sync([column('a')], 2);
+    await drain();
+
+    expect(StubViz.created).toHaveLength(1);
+    expect(StubViz.created[0]!.updateCount).toBeGreaterThanOrEqual(1);
+    expect(h.controller.getEntry('a')?.status).toBe('fresh');
   });
 
   it('destroys and forgets a column that disappears from the schema', async () => {
@@ -523,6 +541,41 @@ describe('filter staleness', () => {
     const latest = StubViz.created[StubViz.created.length - 1]!;
     expect(latest.seeded).toBeNull();
     expect(latest.fetchCount).toBe(1);
+    expect(h.controller.getEntry('a')?.status).toBe('fresh');
+  });
+
+  it('defers offscreen stats panels and refreshes them on scroll-in', async () => {
+    const h = makeHarness(['a', 'b']);
+    h.controller.sync([column('a'), column('b')], 1);
+    h.io().emit({ a: 'create', b: 'outside' });
+    await drain();
+
+    const refreshed: string[] = [];
+    await h.controller.panelScheduler.refreshOnFilters(
+      request(['a', 'b', 'no-viz'], async (name) => {
+        refreshed.push(name);
+      }),
+    );
+    // 'a' is on screen; 'no-viz' has no visibility signal of its own so it
+    // always refreshes; 'b' waits.
+    expect(refreshed.sort()).toEqual(['a', 'no-viz']);
+
+    h.io().emit({ b: 'create' });
+    await drain();
+    expect(refreshed).toContain('b');
+  });
+
+  it('the panel scheduler does not disturb the viz filter epoch', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    // Two coordinators broadcast per user-visible filter change. If both went
+    // through the same entry point the epoch would advance twice and the
+    // first cycle's own fetches would be discarded as stale.
+    await h.controller.refreshOnFilters(request(['a'], async () => {}));
+    await h.controller.panelScheduler.refreshOnFilters(request(['a'], async () => {}));
     expect(h.controller.getEntry('a')?.status).toBe('fresh');
   });
 

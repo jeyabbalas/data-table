@@ -82,6 +82,12 @@ export interface VizColumnEntry {
   snapshot: unknown | null;
   /** Whether the column is inside the create band as of the last IO signal. */
   visible: boolean;
+  /**
+   * The `.dt-col-viz` element {@link VizColumnEntry.viz} was created into.
+   * Compared against the live lookup on every sync to detect a header
+   * rebuild — see {@link VizDataController.sync}.
+   */
+  container: HTMLElement | null;
 }
 
 /**
@@ -162,20 +168,6 @@ export interface VizSyncOptions {
    * phase removed.
    */
   eager?: boolean;
-  /**
-   * Whether the header row was rebuilt since the previous sync. `true` (the
-   * default) is the common case: every schema / `visibleColumns` write goes
-   * through `TableContainer.render()`, which destroys every `ColumnHeader`
-   * and wipes `headerRow.innerHTML`, so no live instance's canvas is still in
-   * the document.
-   *
-   * Pass `false` for the derived-column VIEW switch — `state.tableName`
-   * re-renders only when `gridSemanticsActive` flips, so that path reaches
-   * the facade's attach without a rebuild and the instances are still valid.
-   * Follow it with {@link VizDataController.invalidateAll}: the instances are
-   * fine, their data is not.
-   */
-  headersRebuilt?: boolean;
 }
 
 interface Deferred<T> {
@@ -232,6 +224,13 @@ export class VizDataController implements FilterFanOutScheduler {
   private wave: Wave | null = null;
   private destroyed = false;
 
+  /** Lazily-built companion scheduler for `StatsPanelCoordinator`. */
+  private panelSchedulerRef: FilterFanOutScheduler | null = null;
+  /** The stats-panel coordinator's per-column update, captured per broadcast. */
+  private panelRefresh: ((columnName: string) => Promise<void>) | null = null;
+  /** Panels deferred because their header was offscreen when filters changed. */
+  private readonly stalePanels = new Set<string>();
+
   constructor(options: VizDataControllerOptions) {
     this.options = options;
     this.concurrency = Math.max(1, options.concurrency ?? DEFAULT_VIZ_FETCH_CONCURRENCY);
@@ -278,12 +277,17 @@ export class VizDataController implements FilterFanOutScheduler {
    * rebuild does not flash an empty chart for a frame while the observer
    * catches up); new columns start `empty` and wait for a visibility signal.
    *
+   * Whether the headers were rebuilt is **detected, not declared**: each live
+   * instance's creation-time container is compared against the host's live
+   * lookup. A flag would be a guess, because `state.tableName` re-renders
+   * only when `gridSemanticsActive` flips — so "tableName changed" does not
+   * reliably mean "the headers survived", nor the reverse.
+   *
    * @param columns - viz-applicable columns, in display order.
    * @param generation - opaque token echoed back to `onWaveSettled`.
    */
   sync(columns: ColumnSchema[], generation: number, opts: VizSyncOptions = {}): void {
     if (this.destroyed) return;
-    const headersRebuilt = opts.headersRebuilt !== false;
 
     const wanted = new Set(columns.map((c) => c.name));
     for (const [name, entry] of [...this.entries]) {
@@ -302,6 +306,7 @@ export class VizDataController implements FilterFanOutScheduler {
           viz: null,
           snapshot: null,
           visible: false,
+          container: null,
         });
         continue;
       }
@@ -313,12 +318,14 @@ export class VizDataController implements FilterFanOutScheduler {
         existing.snapshot = null;
       }
       existing.column = column;
-      // The header row that hosted this instance has been discarded, taking
-      // its canvas with it. Snapshot and tear the instance down properly —
-      // just dropping the reference would strand its ResizeObserver, its
-      // theme MutationObserver and its WindowListenerManager registration,
-      // which at 1,000 columns is a leak per column per render.
-      if (headersRebuilt) this.destroyInstance(column.name, existing);
+      // If the header row was rebuilt, this instance's canvas went with it.
+      // Snapshot and tear it down properly — dropping the reference alone
+      // would strand its ResizeObserver, its theme MutationObserver and its
+      // WindowListenerManager registration, which at 1,000 columns is a leak
+      // per column per render.
+      if (existing.viz && existing.container !== this.options.host.getVizContainer(column.name)) {
+        this.destroyInstance(column.name, existing);
+      }
     }
 
     // Anything queued referred to the previous header generation.
@@ -350,6 +357,14 @@ export class VizDataController implements FilterFanOutScheduler {
       if (!entry?.visible) continue;
       this.createAndTrack(column.name, entry);
     }
+
+    // An instance that survived the pass but whose data went stale (the
+    // derived-column VIEW switch is the live case) still needs a refetch —
+    // the queue that would have carried it was just cleared.
+    for (const [name, entry] of this.entries) {
+      if (entry.viz && entry.status === 'stale') this.enqueue(name);
+    }
+    this.pump();
 
     this.io!.disconnect();
     for (const column of columns) {
@@ -413,6 +428,40 @@ export class VizDataController implements FilterFanOutScheduler {
       entry.status = entry.viz ? 'fresh' : entry.status;
       entry.filterEpoch = epoch;
     });
+  }
+
+  /**
+   * A {@link FilterFanOutScheduler} for registrations the controller does not
+   * own — custom {@link BaseStatsPanel}s, which live in a header the
+   * controller *does* have a visibility signal for.
+   *
+   * Separate from {@link refreshOnFilters} because the two coordinators
+   * broadcast independently: sharing one entry point would bump the filter
+   * epoch twice per user-visible filter change and discard the first cycle's
+   * own fetches as stale.
+   *
+   * Panels for offscreen columns are deferred, not dropped — the column name
+   * is remembered and the panel refreshes when its header scrolls in.
+   */
+  get panelScheduler(): FilterFanOutScheduler {
+    this.panelSchedulerRef ??= {
+      refreshOnFilters: (request) => this.refreshPanels(request),
+    };
+    return this.panelSchedulerRef;
+  }
+
+  private async refreshPanels(request: FilterFanOutRequest): Promise<void> {
+    if (this.destroyed) return;
+    this.panelRefresh = request.refresh;
+    const now: string[] = [];
+    for (const name of request.columns) {
+      const entry = this.entries.get(name);
+      // Untracked columns have no visibility signal of their own — a panel on
+      // a column with no visualization must always refresh.
+      if (!entry || entry.visible) now.push(name);
+      else this.stalePanels.add(name);
+    }
+    await this.runBounded(now, (name) => request.refresh(name));
   }
 
   /**
@@ -495,6 +544,7 @@ export class VizDataController implements FilterFanOutScheduler {
 
       record.visible = true;
       if (!record.viz || record.status === 'stale') this.enqueue(name);
+      if (this.stalePanels.delete(name)) void this.panelRefresh?.(name);
     }
     this.pump();
     // Every observed target reports in the first callback after `observe()`,
@@ -613,7 +663,7 @@ export class VizDataController implements FilterFanOutScheduler {
         ? entry.snapshot
         : null;
 
-    let viz: BaseVisualization | null = null;
+    let viz: BaseVisualization | null;
     try {
       viz = this.options.host.createViz(entry.column, container, seed);
     } catch (error) {
@@ -622,6 +672,7 @@ export class VizDataController implements FilterFanOutScheduler {
     }
     if (!viz) return null;
     entry.viz = viz;
+    entry.container = container;
     if (seed !== null) {
       entry.status = 'fresh';
       entry.filterEpoch = this.filterEpoch;
@@ -641,6 +692,7 @@ export class VizDataController implements FilterFanOutScheduler {
     }
     this.options.host.onVizDestroyed?.(name, viz);
     entry.viz = null;
+    entry.container = null;
     try {
       viz.destroy();
     } catch (error) {

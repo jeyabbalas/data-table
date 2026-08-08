@@ -18,7 +18,7 @@
 
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { loadCsv, openDemo, settle } from './helpers/demo';
+import { loadCsv, openDemo, settle, waitForColumnPlots } from './helpers/demo';
 
 const ROWS = 200;
 
@@ -58,6 +58,11 @@ test('bar click: committed detail on the participant, identical line 1 everywher
 }) => {
   await openDemo(page);
   await loadCsv(page, 6);
+  // Charts are lazy now: `loadCsv` returns once rows paint, which can be
+  // before any plot has data. `clickPlot` auto-waits for attachment via
+  // `boundingBox()` but not for data, and a click on a data-less chart
+  // hit-tests to nothing.
+  await waitForColumnPlots(page);
 
   await clickPlot(page, 'cat_col_1');
   await expect(page.locator('.dt-filter-chip')).toHaveCount(1);
@@ -80,6 +85,11 @@ test('drag brush: committed Bin detail, byte-stable when a second filter lands',
 }) => {
   await openDemo(page);
   await loadCsv(page, 6);
+  // Charts are lazy now: `loadCsv` returns once rows paint, which can be
+  // before any plot has data. `clickPlot` auto-waits for attachment via
+  // `boundingBox()` but not for data, and a click on a data-less chart
+  // hit-tests to nothing.
+  await waitForColumnPlots(page);
 
   const canvas = page.locator('.dt-col-header[data-column="num_col_0"] .dt-col-viz canvas').first();
   const box = await canvas.boundingBox();
@@ -123,6 +133,11 @@ test('hover: line 1 stays visible, detail carries a match suffix while filtered'
 }) => {
   await openDemo(page);
   await loadCsv(page, 6);
+  // Charts are lazy now: `loadCsv` returns once rows paint, which can be
+  // before any plot has data. `clickPlot` auto-waits for attachment via
+  // `boundingBox()` but not for data, and a click on a data-less chart
+  // hit-tests to nothing.
+  await waitForColumnPlots(page);
 
   await clickPlot(page, 'cat_col_1');
   await expect(page.locator('.dt-filter-chip')).toHaveCount(1);
@@ -156,6 +171,11 @@ test('hover: line 1 stays visible, detail carries a match suffix while filtered'
 test('chip removal and Clear all restore the affected columns', async ({ page }) => {
   await openDemo(page);
   await loadCsv(page, 6);
+  // Charts are lazy now: `loadCsv` returns once rows paint, which can be
+  // before any plot has data. `clickPlot` auto-waits for attachment via
+  // `boundingBox()` but not for data, and a click on a data-less chart
+  // hit-tests to nothing.
+  await waitForColumnPlots(page);
 
   await clickPlot(page, 'cat_col_1');
   await clickPlot(page, 'cat_col_4');
@@ -193,6 +213,11 @@ test('chip removal and Clear all restore the affected columns', async ({ page })
 test('Escape clears the most recent interaction first (LIFO)', async ({ page }) => {
   await openDemo(page);
   await loadCsv(page, 6);
+  // Charts are lazy now: `loadCsv` returns once rows paint, which can be
+  // before any plot has data. `clickPlot` auto-waits for attachment via
+  // `boundingBox()` but not for data, and a click on a data-less chart
+  // hit-tests to nothing.
+  await waitForColumnPlots(page);
 
   await clickPlot(page, 'cat_col_1');
   await clickPlot(page, 'cat_col_4');

@@ -10,7 +10,14 @@
 
 import { expect, test } from '@playwright/test';
 import type { Browser } from '@playwright/test';
-import { NARROW_COLUMNS, WIDE_COLUMNS, loadCsv, openDemo, settle } from './helpers/demo';
+import {
+  NARROW_COLUMNS,
+  WIDE_COLUMNS,
+  loadCsv,
+  openDemo,
+  settle,
+  waitForColumnPlots,
+} from './helpers/demo';
 
 const ROOT = '.dt-root';
 
@@ -79,6 +86,10 @@ test('adding filters does not add tab stops', async ({ page }) => {
   // share one roving tab stop rather than each contributing a remove button.
   await openDemo(page);
   await loadCsv(page, 6);
+  // `if (await canvas.count() === 0) continue` below does not auto-wait, and
+  // clicking a chart whose data has not landed creates no filter — so the
+  // `created >= 2` assertion would fail for a reason unrelated to tab stops.
+  await waitForColumnPlots(page);
 
   const before = await page.evaluate((s) => window.__dtA11y.partition(s).inside, ROOT);
 

@@ -57,7 +57,7 @@ import { createTableState, resetTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import type { TableEvents } from './core/TableEvents';
-import type { Filter, SortColumn } from './core/types';
+import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
@@ -69,6 +69,7 @@ import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
 import { escapeHtml, formatStatsLine1, formatStatsLine2 } from './statistics/StatsFormatters';
 import { AnnotationPopover } from './table/AnnotationPopover';
+import type { ColumnHeader } from './table/ColumnHeader';
 import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
 import { TableContainer } from './table/TableContainer';
 import type { BaseStatsPanel, StatsPanelOptions } from './visualizations/BaseStatsPanel';
@@ -85,6 +86,7 @@ import { defaultStatsPanelRegistry } from './visualizations/StatsPanelRegistry';
 import { ValueCounts } from './visualizations/valuecounts/ValueCounts';
 import type { VisualizationRegistry } from './visualizations/VisualizationRegistry';
 import { defaultVisualizationRegistry } from './visualizations/VisualizationRegistry';
+import { VizDataController } from './visualizations/VizDataController';
 
 // Emitted once per page lifetime when the library stylesheet is missing —
 // detected via the `--dt-stylesheet-loaded` marker declared on `:root` in
@@ -189,8 +191,35 @@ export interface CreateDataTableOptions {
    */
   derivedColumns?: boolean;
 
-  /** Enable auto-attached column header visualizations (histograms, value counts). Default: `true`. */
-  visualizations?: boolean;
+  /**
+   * Auto-attached column header visualizations (histograms, value counts).
+   *
+   * - `true` / `undefined` / `{}` — **lazy** (the default). A column's chart
+   *   is created and fetched when its header scrolls into view, and its data
+   *   survives the header rebuild that every hide / show / pin / reorder
+   *   causes. On a 1,000-column table this is the difference between ~2,000
+   *   queries at load and a few dozen.
+   * - `false` — off entirely.
+   * - `{ eager: true }` — create and fetch **every** column's chart during
+   *   load, and hold the load promise until they all settle. This restores
+   *   the pre-0.8 contract, for screenshot and PDF pipelines that capture
+   *   immediately after `await createDataTable(...)` and cannot wait for a
+   *   {@link DataTable.whenVizReady} they have no chance to call.
+   *
+   * @example
+   * ```ts
+   * // Default: the grid is interactive as soon as rows paint.
+   * const table = await createDataTable({ container, source });
+   *
+   * // Screenshot pipeline: every chart drawn before the await resolves.
+   * const shot = await createDataTable({
+   *   container,
+   *   source,
+   *   visualizations: { eager: true },
+   * });
+   * ```
+   */
+  visualizations?: boolean | { eager?: boolean };
 
   /**
    * Per-instance visualization registry. Use this to register custom
@@ -423,6 +452,25 @@ export interface DataTable {
 type VisualizationType =
   Histogram | DateHistogram | TimeHistogram | IntervalHistogram | ValueCounts;
 
+/** Normalized form of {@link CreateDataTableOptions.visualizations}. */
+interface VisualizationMode {
+  enabled: boolean;
+  eager: boolean;
+}
+
+/**
+ * Collapse the widened `visualizations` option to two booleans, once, so the
+ * four places that used to re-test `opts.visualizations !== false` cannot
+ * drift apart as the option grows.
+ */
+function normalizeVisualizations(
+  option: CreateDataTableOptions['visualizations'],
+): VisualizationMode {
+  if (option === false) return { enabled: false, eager: false };
+  if (option === true || option === undefined) return { enabled: true, eager: false };
+  return { enabled: true, eager: option.eager === true };
+}
+
 type BrushState = Record<string, unknown>;
 
 interface SelectionStateSnapshot {
@@ -625,7 +673,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   let destroyed = false;
 
   // -------- Visualizations (auto-attach) --------
-  const interactionManager = opts.visualizations === false ? null : new InteractionManager();
+  const vizMode = normalizeVisualizations(opts.visualizations);
+  const interactionManager = vizMode.enabled ? new InteractionManager() : null;
+  // Assigned a few statements below; the coordinators' scheduler hooks close
+  // over this binding rather than the instance, because the controller's host
+  // callbacks need the coordinators and the coordinators need the scheduler.
+  // Nothing can fire in between — both are constructed synchronously here.
+  let vizController: VizDataController | null = null;
   // The crossfilter coordinator is the single source of `filterChange`
   // emissions for the public TableEvents API: it owns the async
   // `state.filteredRows` recompute and fires `onFilterCycleComplete` only
@@ -644,8 +698,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         totalRowCount: state.totalRows.get(),
       });
     },
+    // With visualizations off there is nothing to schedule, and leaving the
+    // hook absent keeps the standalone fan-out path exactly as it was.
+    ...(vizMode.enabled
+      ? {
+          vizScheduler: {
+            refreshOnFilters: (request) =>
+              vizController?.refreshOnFilters(request) ?? Promise.resolve(),
+          },
+        }
+      : {}),
   });
-  let activeVisualizations: BaseVisualization[] = [];
   // Tracks the most recent attachVisualizations pass's initial work
   // (each viz's first fetchData + both coordinators' syncExistingFilters).
   // loadDataImpl awaits this in parallel with whenBodyReady before resolving
@@ -703,57 +766,285 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     return `<span class="${prefix}-stats-line1">${escapeHtml(text)}</span>`;
   };
 
-  if (opts.visualizations !== false) {
+  if (vizMode.enabled) {
     actions.setOnFilterRemove(clearVisualizationState);
   }
+
+  /** Find the live `ColumnHeader` for a column, or `undefined` if none. */
+  const headerFor = (columnName: string): ColumnHeader | undefined =>
+    tableContainer.getColumnHeaders().find((h) => h.getColumn().name === columnName);
+
+  /**
+   * Capture brush/selection before an instance goes away, so it can be put
+   * back on the replacement.
+   *
+   * Per-column rather than the global sweep this used to be: with lazy
+   * creation, instances come and go one at a time as headers scroll, and
+   * there is no longer a moment when "all of them" are about to be destroyed.
+   */
+  const saveInteractionState = (viz: VisualizationType): void => {
+    const column = viz.getColumn();
+    if (
+      viz instanceof Histogram ||
+      viz instanceof DateHistogram ||
+      viz instanceof TimeHistogram ||
+      viz instanceof IntervalHistogram
+    ) {
+      const brush = viz.getBrushState();
+      if (brush) brushStates.set(column.name, brush);
+      const sel = viz.getSelectionState();
+      if (sel.selectedBin !== null || sel.selectedNull) {
+        selectionStates.set(column.name, sel);
+      }
+    } else if (viz instanceof ValueCounts) {
+      const sel = viz.getSelectionState();
+      if (sel.selectedSegments.length > 0 || sel.selectedNull) {
+        selectionStates.set(column.name, {
+          selectedSegments: sel.selectedSegments,
+          selectedNull: sel.selectedNull,
+        });
+      }
+    }
+  };
+
+  /** Put a saved brush/selection back on a freshly-created instance. */
+  const restoreInteractionState = (columnName: string, viz: VisualizationType): void => {
+    const savedBrush = brushStates.get(columnName);
+    const savedSel = selectionStates.get(columnName);
+    if (!savedBrush && !savedSel) return;
+    void viz.waitForData().then(() => {
+      if (viz.isDestroyed()) return;
+      if (
+        savedBrush &&
+        (viz instanceof Histogram ||
+          viz instanceof DateHistogram ||
+          viz instanceof TimeHistogram ||
+          viz instanceof IntervalHistogram)
+      ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        viz.setBrushState(savedBrush as any);
+        interactionManager?.pushBrush(columnName, viz);
+      }
+      if (savedSel) {
+        if (viz instanceof ValueCounts && savedSel.selectedSegments !== undefined) {
+          viz.setSelectionState({
+            selectedSegments: savedSel.selectedSegments,
+            selectedNull: savedSel.selectedNull,
+          });
+          if (savedSel.selectedSegments.length > 0 || savedSel.selectedNull) {
+            interactionManager?.pushSelection(columnName, viz);
+          }
+        } else if (
+          (viz instanceof Histogram ||
+            viz instanceof DateHistogram ||
+            viz instanceof TimeHistogram ||
+            viz instanceof IntervalHistogram) &&
+          savedSel.selectedBin !== undefined
+        ) {
+          viz.setSelectionState({
+            selectedBin: savedSel.selectedBin,
+            selectedNull: savedSel.selectedNull,
+          });
+          if (savedSel.selectedBin !== null || savedSel.selectedNull) {
+            interactionManager?.pushSelection(columnName, viz);
+          }
+        }
+      }
+    });
+  };
+
+  /**
+   * Build one column's visualization, with **fresh** closures.
+   *
+   * Called by the controller whenever a column needs an instance — at attach
+   * time for columns already on screen, and later as headers scroll in. It
+   * cannot reuse a previous pass's closures: those captured a `statsEl`
+   * belonging to a header node `TableContainer.render()` has since discarded,
+   * and would go on writing `onDefaultStatsChange` into a detached element,
+   * silently freezing the column's stats line after every hide/show/pin.
+   */
+  const createVizForColumn = (
+    column: ColumnSchema,
+    vizContainer: HTMLElement,
+    seedSnapshot: unknown | null,
+  ): BaseVisualization | null => {
+    const tableName = state.tableName.get();
+    if (!tableName) return null;
+    const header = headerFor(column.name);
+    if (!header) return null;
+    const statsEl = header.getStatsElement();
+
+    // Resolved on every call rather than captured: stats panels are recreated
+    // on each attach pass (they are deliberately not diffed), while a
+    // visualization can outlive one, so a captured reference would go stale.
+    const currentPanel = (): BaseStatsPanel | null => activeStatsPanels.get(column.name) ?? null;
+
+    // The stats slot is composed of two regions: line 1 (the row-count
+    // line, always present) and the detail region below it. Line 1 comes
+    // from the viz's default stats; the detail region shows the viz's
+    // interaction text (committed selection or transient hover) when one
+    // is active, else the default type-specific line 2. Interaction text
+    // never displaces line 1, and default-stats refreshes are never
+    // dropped while interaction text is showing.
+    let lastStats: ColumnStatsData | null = null;
+    let detailHtml: string | null = null;
+
+    const renderStatsSlot = (): void => {
+      const prefix = opts.classPrefix ?? 'dt';
+      // escapeHtml: messages.* are consumer-overridable functions whose
+      // return value lands in innerHTML.
+      const line1 = lastStats
+        ? `<span class="${prefix}-stats-line1">${escapeHtml(formatStatsLine1(lastStats, messages))}</span>`
+        : tableWideLine1Html();
+      if (detailHtml) {
+        statsEl.innerHTML = `${line1}<br>${detailHtml}`;
+        return;
+      }
+      const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
+      statsEl.innerHTML = line2
+        ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
+        : line1;
+    };
+    // Only write the placeholder fallback when there's no panel taking the slot.
+    if (!currentPanel()) renderStatsSlot();
+
+    let viz: VisualizationType | undefined;
+    const vizOptions = {
+      tableName,
+      bridge,
+      filters: state.filters.get(),
+      messages,
+      initialSnapshot: seedSnapshot ?? undefined,
+      onFilterChange: (filter: Filter | null) => {
+        coordinator.handleFilterChange(column.name, filter);
+      },
+      onDefaultStatsChange: (stats: ColumnStatsData) => {
+        const panel = currentPanel();
+        if (panel) {
+          try {
+            panel.update(stats);
+          } catch (err) {
+            emitStatsPanelError(err, column.name, 'update');
+          }
+          return;
+        }
+        lastStats = stats;
+        renderStatsSlot();
+      },
+      onStatsChange: (stats: string | null) => {
+        const panel = currentPanel();
+        if (panel) {
+          try {
+            panel.setHoverStats(stats);
+          } catch (err) {
+            emitStatsPanelError(err, column.name, 'hover');
+          }
+          return;
+        }
+        detailHtml = stats;
+        renderStatsSlot();
+      },
+      onBrushCommit: (colName: string) => {
+        if (!viz) return;
+        interactionManager?.pushBrush(colName, viz);
+        if (
+          viz instanceof Histogram ||
+          viz instanceof DateHistogram ||
+          viz instanceof TimeHistogram ||
+          viz instanceof IntervalHistogram
+        ) {
+          const bs = viz.getBrushState();
+          if (bs) brushStates.set(colName, bs);
+        }
+      },
+      onBrushClear: (colName: string) => {
+        interactionManager?.removeColumn(colName);
+        brushStates.delete(colName);
+      },
+      onSelectionChange: (colName: string, hasSelection: boolean) => {
+        if (!viz) return;
+        if (hasSelection) {
+          interactionManager?.pushSelection(colName, viz);
+          if (viz instanceof ValueCounts) {
+            const sel = viz.getSelectionState();
+            selectionStates.set(colName, {
+              selectedSegments: sel.selectedSegments,
+              selectedNull: sel.selectedNull,
+            });
+          } else if (
+            viz instanceof Histogram ||
+            viz instanceof DateHistogram ||
+            viz instanceof TimeHistogram ||
+            viz instanceof IntervalHistogram
+          ) {
+            selectionStates.set(colName, viz.getSelectionState());
+          }
+        } else {
+          interactionManager?.removeColumn(colName);
+          selectionStates.delete(colName);
+        }
+      },
+      onError: (err: DataTableError) => {
+        emitter.emit('error', { error: err, source: 'visualization' });
+      },
+    };
+
+    const created = vizRegistry.create(vizContainer, column, vizOptions);
+    if (!created) return null;
+    viz = created as VisualizationType;
+    return created;
+  };
+
+  if (vizMode.enabled) {
+    vizController = new VizDataController({
+      host: {
+        createViz: createVizForColumn,
+        getVizContainer: (columnName) => headerFor(columnName)?.getVizContainer() ?? null,
+        getFilters: () => state.filters.get(),
+        onVizCreated: (columnName, viz) => {
+          coordinator.register(columnName, viz);
+          restoreInteractionState(columnName, viz as VisualizationType);
+        },
+        onVizDestroyed: (columnName, viz) => {
+          saveInteractionState(viz as VisualizationType);
+          interactionManager?.removeColumn(columnName);
+          coordinator.unregister(columnName);
+        },
+        onError: (err) => {
+          const typed =
+            err instanceof DataTableError
+              ? err
+              : new ConfigurationError(err instanceof Error ? err.message : String(err), {
+                  code: 'INVARIANT',
+                  cause: err,
+                });
+          emitter.emit('error', { error: typed, source: 'visualization' });
+        },
+      },
+      // `.dt-header-scroll` is the only root that works: an
+      // IntersectionObserver root must be an ancestor of its targets, and the
+      // body scroller is the header subtree's sibling (M0 spike).
+      getRoot: () => tableContainer.getHeaderScroll(),
+    });
+  }
+
+  /** Bumped per attach pass so a late wave from a superseded pass is ignorable. */
+  let attachGeneration = 0;
+  /** The `tableName` the last attach pass ran against. */
+  let lastAttachTableName: string | null = null;
 
   // Auto-attach/detach visualizations as the schema changes. This replaces
   // the ~200 lines of manual wiring that every consumer used to have to write.
   //
-  // The crossfilter coordinator above is a singleton-per-DataTable so the
-  // public `filterChange` event always emits with a fresh row count, even
-  // before the first data load. Each attach pass only registers/unregisters
-  // viz instances on it. Per-column viz creation is gated by
-  // `opts.visualizations`.
+  // What this pass still owns: the stats-panel lifecycle (deliberately
+  // wipe-and-recreate — the default registry ships none, so it costs nothing
+  // at scale) and the column diff handed to `vizController`. What it no
+  // longer owns is visualization instances: the controller creates them when
+  // their header is visible and keeps their data across the header rebuild
+  // that every `visibleColumns` write causes.
   const attachVisualizations = (): void => {
-    const vizEnabled = opts.visualizations !== false;
     const tableName = state.tableName.get();
     if (!tableName) return;
-
-    // Save brush/selection state so it survives a schema-change reattach.
-    // (No-op when viz is disabled — `activeVisualizations` is always empty.)
-    for (const viz of activeVisualizations) {
-      const column = viz.getColumn();
-      if (
-        viz instanceof Histogram ||
-        viz instanceof DateHistogram ||
-        viz instanceof TimeHistogram ||
-        viz instanceof IntervalHistogram
-      ) {
-        const brush = viz.getBrushState();
-        if (brush) brushStates.set(column.name, brush);
-        const sel = viz.getSelectionState();
-        if (sel.selectedBin !== null || sel.selectedNull) {
-          selectionStates.set(column.name, sel);
-        }
-      } else if (viz instanceof ValueCounts) {
-        const sel = viz.getSelectionState();
-        if (sel.selectedSegments.length > 0 || sel.selectedNull) {
-          selectionStates.set(column.name, {
-            selectedSegments: sel.selectedSegments,
-            selectedNull: sel.selectedNull,
-          });
-        }
-      }
-    }
-
-    // Tear down previous visualizations and their registrations.
-    for (const viz of activeVisualizations) {
-      coordinator.unregister(viz.getColumn().name);
-    }
-    for (const viz of activeVisualizations) viz.destroy();
-    activeVisualizations = [];
-    interactionManager?.clear();
 
     // Tear down previous stats panels (run before the coordinator resets so a
     // panel's destroy hook still sees a valid registration if it queries us).
@@ -769,12 +1060,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Recreate stats panel coordinator. Panels for non-viz columns still need
     // filter-aware updates, so we keep this coordinator independent of the viz one.
     if (statsPanelCoordinator) statsPanelCoordinator.destroy();
-    statsPanelCoordinator = new StatsPanelCoordinator(state);
+    statsPanelCoordinator = new StatsPanelCoordinator(
+      state,
+      undefined,
+      vizController ? { vizScheduler: vizController.panelScheduler } : {},
+    );
 
     // Per-column work (viz instances + custom stats panels) is gated by the
     // `visualizations` opt; the coordinator above is now wired regardless so
     // the public `filterChange` event always carries a fresh row count.
-    if (!vizEnabled) {
+    if (!vizMode.enabled) {
       // No vizs created and no syncExistingFilters call below — reset
       // pendingVizInit so loadDataImpl doesn't await a stale promise from a
       // previous (vizEnabled) attach pass.
@@ -782,12 +1077,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       return;
     }
 
-    // Collect the first-fetch promises from every viz constructor + each
-    // coordinator's filter-sync work. Surfaced via pendingVizInit so the
-    // public load promise can wait on first-paint readiness.
-    const initPromises: Promise<unknown>[] = [];
-
-    // Create a visualization per applicable column.
+    const vizColumns: ColumnSchema[] = [];
     const headers = tableContainer.getColumnHeaders();
     for (const header of headers) {
       const column = header.getColumn();
@@ -854,168 +1144,24 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         continue;
       }
 
-      const vizContainer = header.getVizContainer();
-      // The stats slot is composed of two regions: line 1 (the row-count
-      // line, always present) and the detail region below it. Line 1 comes
-      // from the viz's default stats; the detail region shows the viz's
-      // interaction text (committed selection or transient hover) when one
-      // is active, else the default type-specific line 2. Interaction text
-      // never displaces line 1, and default-stats refreshes are never
-      // dropped while interaction text is showing.
-      let lastStats: ColumnStatsData | null = null;
-      let detailHtml: string | null = null;
-
-      const renderStatsSlot = (): void => {
-        const prefix = opts.classPrefix ?? 'dt';
-        // escapeHtml: messages.* are consumer-overridable functions whose
-        // return value lands in innerHTML.
-        const line1 = lastStats
-          ? `<span class="${prefix}-stats-line1">${escapeHtml(formatStatsLine1(lastStats, messages))}</span>`
-          : tableWideLine1Html();
-        if (detailHtml) {
-          statsEl.innerHTML = `${line1}<br>${detailHtml}`;
-          return;
-        }
-        const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
-        statsEl.innerHTML = line2
-          ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
-          : line1;
-      };
-      // Only write the placeholder fallback when there's no panel taking the slot.
-      if (!panel) renderStatsSlot();
-
-      let viz: VisualizationType | undefined;
-      const vizOptions = {
-        tableName,
-        bridge,
-        filters: state.filters.get(),
-        messages,
-        onFilterChange: (filter: Filter | null) => {
-          coordinator.handleFilterChange(column.name, filter);
-        },
-        onDefaultStatsChange: (stats: ColumnStatsData) => {
-          if (panel) {
-            try {
-              panel.update(stats);
-            } catch (err) {
-              emitStatsPanelError(err, column.name, 'update');
-            }
-            return;
-          }
-          lastStats = stats;
-          renderStatsSlot();
-        },
-        onStatsChange: (stats: string | null) => {
-          if (panel) {
-            try {
-              panel.setHoverStats(stats);
-            } catch (err) {
-              emitStatsPanelError(err, column.name, 'hover');
-            }
-            return;
-          }
-          detailHtml = stats;
-          renderStatsSlot();
-        },
-        onBrushCommit: (colName: string) => {
-          if (!viz) return;
-          interactionManager?.pushBrush(colName, viz);
-          if (
-            viz instanceof Histogram ||
-            viz instanceof DateHistogram ||
-            viz instanceof TimeHistogram ||
-            viz instanceof IntervalHistogram
-          ) {
-            const bs = viz.getBrushState();
-            if (bs) brushStates.set(colName, bs);
-          }
-        },
-        onBrushClear: (colName: string) => {
-          interactionManager?.removeColumn(colName);
-          brushStates.delete(colName);
-        },
-        onSelectionChange: (colName: string, hasSelection: boolean) => {
-          if (!viz) return;
-          if (hasSelection) {
-            interactionManager?.pushSelection(colName, viz);
-            if (viz instanceof ValueCounts) {
-              const sel = viz.getSelectionState();
-              selectionStates.set(colName, {
-                selectedSegments: sel.selectedSegments,
-                selectedNull: sel.selectedNull,
-              });
-            } else if (
-              viz instanceof Histogram ||
-              viz instanceof DateHistogram ||
-              viz instanceof TimeHistogram ||
-              viz instanceof IntervalHistogram
-            ) {
-              selectionStates.set(colName, viz.getSelectionState());
-            }
-          } else {
-            interactionManager?.removeColumn(colName);
-            selectionStates.delete(colName);
-          }
-        },
-        onError: (err: DataTableError) => {
-          emitter.emit('error', { error: err, source: 'visualization' });
-        },
-      };
-
-      const created = vizRegistry.create(vizContainer, column, vizOptions);
-      if (!created) continue;
-      viz = created as VisualizationType;
-      activeVisualizations.push(viz);
-      coordinator.register(column.name, viz);
-      // Track the viz's eager first fetch (kicked off in its constructor)
-      // so loadDataImpl can await it before resolving the public promise.
-      initPromises.push(viz.waitForData());
-
-      // Restore saved interaction state on the next data frame.
-      const savedBrush = brushStates.get(column.name);
-      const savedSel = selectionStates.get(column.name);
-      if (savedBrush || savedSel) {
-        void viz.waitForData().then(() => {
-          if (!viz) return;
-          if (
-            savedBrush &&
-            (viz instanceof Histogram ||
-              viz instanceof DateHistogram ||
-              viz instanceof TimeHistogram ||
-              viz instanceof IntervalHistogram)
-          ) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            viz.setBrushState(savedBrush as any);
-            interactionManager?.pushBrush(column.name, viz);
-          }
-          if (savedSel) {
-            if (viz instanceof ValueCounts && savedSel.selectedSegments !== undefined) {
-              viz.setSelectionState({
-                selectedSegments: savedSel.selectedSegments,
-                selectedNull: savedSel.selectedNull,
-              });
-              if (savedSel.selectedSegments.length > 0 || savedSel.selectedNull) {
-                interactionManager?.pushSelection(column.name, viz);
-              }
-            } else if (
-              (viz instanceof Histogram ||
-                viz instanceof DateHistogram ||
-                viz instanceof TimeHistogram ||
-                viz instanceof IntervalHistogram) &&
-              savedSel.selectedBin !== undefined
-            ) {
-              viz.setSelectionState({
-                selectedBin: savedSel.selectedBin,
-                selectedNull: savedSel.selectedNull,
-              });
-              if (savedSel.selectedBin !== null || savedSel.selectedNull) {
-                interactionManager?.pushSelection(column.name, viz);
-              }
-            }
-          }
-        });
+      vizColumns.push(column);
+      // Seed the slot for a column whose chart has not been created yet. The
+      // controller writes over this the moment the instance exists.
+      if (!panel && !vizController?.hasLiveViz(column.name)) {
+        statsEl.innerHTML = tableWideLine1Html();
       }
     }
+
+    // A derived-column VIEW switch changes `tableName` without necessarily
+    // rebuilding the headers, and every cached chart was computed against the
+    // previous relation. Drop the snapshots *before* the diff so a surviving
+    // or re-created instance fetches rather than seeding from stale data.
+    if (lastAttachTableName !== null && lastAttachTableName !== tableName) {
+      vizController?.invalidateAll();
+    }
+    lastAttachTableName = tableName;
+
+    vizController?.sync(vizColumns, ++attachGeneration, { eager: vizMode.eager });
 
     // Rebroadcast any filters already in state (e.g., restored from session).
     // Both coordinators now return a Promise; we feed those into pendingVizInit
@@ -1024,11 +1170,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // errors already route via options.onError → 'error' event with
     // source: 'visualization'; panel errors via source: 'stats-panel'; the
     // count query in updateFilteredRowCount is best-effort.
-    initPromises.push(coordinator.syncExistingFilters());
-    // Same for stats panels — give them the current filter array up-front so
-    // panels with their own DuckDB queries don't have to wait for the next
-    // user-driven filter change.
-    initPromises.push(statsPanelCoordinator.syncExistingFilters(state.filters.get()));
+    const initPromises: Promise<unknown>[] = [
+      vizController?.whenWaveSettled() ?? Promise.resolve(0),
+      coordinator.syncExistingFilters(),
+      // Same for stats panels — give them the current filter array up-front so
+      // panels with their own DuckDB queries don't have to wait for the next
+      // user-driven filter change.
+      statsPanelCoordinator.syncExistingFilters(state.filters.get()),
+    ];
 
     pendingVizInit = Promise.allSettled(initPromises).then(() => undefined);
   };
@@ -1176,19 +1325,24 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.visibleColumns.subscribe(scheduleAttach));
   unsubscribes.push(state.tableName.subscribe(scheduleAttach));
 
-  // Keep the row-count stats line live for columns without a visualization
-  // (e.g. uuid). Columns *with* a visualization refresh their own stats via
-  // the `onDefaultStatsChange` callback inside `attachVisualizations`. A
-  // column with a custom stats panel — viz-backed or not — is skipped because
-  // the panel owns the slot and receives filter updates from
-  // `StatsPanelCoordinator` directly.
+  // Keep the row-count stats line live for every column whose slot nothing
+  // else owns. A column with a **live** visualization refreshes its own stats
+  // via `onDefaultStatsChange`; a column with a custom stats panel — viz-backed
+  // or not — is skipped because the panel owns the slot and receives filter
+  // updates from `StatsPanelCoordinator` directly.
+  //
+  // The predicate used to be `vizRegistry.isApplicable(column)`, on the
+  // then-true assumption that every applicable column had an instance feeding
+  // it. Once creation is lazy that is false, and an offscreen chart column's
+  // line 1 would be written once at attach and never again — leaving a
+  // permanently stale `"20,000 rows"` under an active filter.
   const refreshNonVizStats = (): void => {
     if (destroyed) return;
     if (!state.tableName.get()) return;
     const headers = tableContainer.getColumnHeaders();
     for (const header of headers) {
       const column = header.getColumn();
-      if (vizRegistry.isApplicable(column)) continue;
+      if (vizController?.hasLiveViz(column.name)) continue;
       // Panel-owned slot? Skip — except when the panel destroyed itself
       // early. A self-destroyed panel leaves the slot frozen with whatever
       // it last wrote; that's worse than reverting to the default fallback,
@@ -1386,8 +1540,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
     unsubscribes.length = 0;
 
-    for (const viz of activeVisualizations) viz.destroy();
-    activeVisualizations = [];
+    // The controller owns every live instance and its observer.
+    vizController?.destroy();
+    vizController = null;
     interactionManager?.destroy();
     coordinator.destroy();
 

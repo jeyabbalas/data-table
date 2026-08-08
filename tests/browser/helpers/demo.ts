@@ -236,6 +236,49 @@ export async function loadCsv(page: Page, columns: number, rows = 200): Promise<
 }
 
 /**
+ * Wait until every named column's header plot exists **and has data**.
+ *
+ * `loadCsv`'s own `settle()` is a DOM-node-count poll: it waits out canvas
+ * *insertion* and knows nothing about whether the visualization behind it has
+ * fetched. Since visualizations became lazy, the load promise no longer waits
+ * for them either, so a spec that clicks a plot immediately after `loadCsv`
+ * is clicking a chart whose `data` is still `null` — which hit-tests to
+ * nothing and creates no filter.
+ *
+ * This is deliberately **not** folded into `loadCsv`. Widening the shared
+ * loader would silently re-serialize every spec on visualization readiness
+ * and hide exactly the regression this exists to make visible; only the specs
+ * that actually interact with a plot should pay for it.
+ *
+ * Readiness is read off the stats slot rather than the canvas: a chart writes
+ * its per-column line 2 in the same turn it renders its first data, and a
+ * canvas's pixels are not inspectable from here.
+ *
+ * @param columns - column names to wait for. Defaults to every rendered
+ *   header. Every named column must be one the registry draws a chart for —
+ *   a column with no registered visualization never grows a canvas and would
+ *   time out.
+ */
+export async function waitForColumnPlots(page: Page, columns?: string[]): Promise<void> {
+  await page.waitForFunction(
+    (names: string[] | null) => {
+      const headers = Array.from(document.querySelectorAll('.dt-col-header[data-column]'));
+      const wanted = names
+        ? headers.filter((h) => names.includes(h.getAttribute('data-column') ?? ''))
+        : headers;
+      if (wanted.length === 0) return false;
+      return wanted.every(
+        (h) =>
+          !!h.querySelector('.dt-col-viz canvas') &&
+          !!h.querySelector('.dt-col-stats .dt-stats-line2'),
+      );
+    },
+    columns ?? null,
+    { timeout: 60_000 },
+  );
+}
+
+/**
  * Mount a table with no data source and wait for its shell to paint.
  *
  * The demo only constructs a `DataTable` once a file is loaded, so this is

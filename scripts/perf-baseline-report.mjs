@@ -29,6 +29,9 @@
  *     instead of quietly lining them up.
  *   - `--check` is for a docs-truth pass (Phase 12); nothing in CI runs it,
  *     because CI never has captures to compare.
+ *   - The emitted tables are not column-padded; `npm run perf:baseline:report`
+ *     chains `prettier --write` so `npm run format:check` stays green. Run
+ *     this script bare and you must format the README yourself.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -194,7 +197,19 @@ function main() {
   const updated = existing.slice(0, start + START.length) + body + existing.slice(end);
 
   if (checkMode) {
-    if (updated === existing) {
+    // Compare with layout collapsed: the committed README has been through
+    // Prettier, which pads table cells *and* stretches the `| --- |`
+    // separator dashes to match. A byte comparison against freshly
+    // generated text would report "stale" on every run and mean nothing, so
+    // normalize away exactly the three things Prettier changes — cell
+    // padding, dash runs, and blank lines — and nothing else.
+    const normalize = (text) =>
+      text
+        .split('\n')
+        .map((line) => line.replace(/\s+/g, ' ').replace(/-{2,}/g, '-').trim())
+        .filter((line) => line.length > 0)
+        .join('\n');
+    if (normalize(updated) === normalize(existing)) {
       console.log(`perf-baseline-report: OK — ${readmeRelPath} matches ${rows.length} captures.`);
       return;
     }

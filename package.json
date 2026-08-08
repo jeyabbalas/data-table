@@ -55,7 +55,7 @@
     "test:perf": "RUN_DUCKDB_PERF=1 RUN_LIFECYCLE_STRESS=1 vitest run --config vitest.perf.config.ts",
     "test:browser:perf": "RUN_BROWSER_PERF=1 playwright test",
     "perf:baseline": "RUN_BASELINE=1 playwright test tests/browser/perf-baseline.spec.ts",
-    "perf:baseline:report": "node scripts/perf-baseline-report.mjs",
+    "perf:baseline:report": "node scripts/perf-baseline-report.mjs && prettier --write plans/scaling/baselines/README.md --log-level warn",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache --cache-strategy content",
     "lint:fix": "eslint . --fix --cache --cache-strategy content",

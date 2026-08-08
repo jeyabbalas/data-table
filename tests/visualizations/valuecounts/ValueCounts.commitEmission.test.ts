@@ -362,6 +362,31 @@ describe('ValueCounts — Other segment detail', () => {
     viz.destroy();
   });
 
+  it('marks the folded value count as an estimate above the approximation threshold', async () => {
+    // Above 100,000 rows `distinctCount` is a HyperLogLog estimate, and the
+    // folded count is derived from it. The stats line one row up already says
+    // `~N unique`; printing this one bare would state the same estimate as a
+    // fact. The segment's *row* count stays exact and unmarked.
+    const approx = (): ValueCountsData =>
+      ({ ...unfilteredWithOther(), distinctCountApprox: true }) as ValueCountsData;
+    vi.mocked(fetchValueCountsData).mockImplementation(() => Promise.resolve(approx()));
+    vi.mocked(fetchAlignedValueCountsData).mockImplementation(() => {
+      const base = approx();
+      return Promise.resolve({
+        ...base,
+        segments: base.segments.map((s, i) => ({ ...s, count: i === 2 ? 3 : 0 })),
+        nullCount: 0,
+        total: 3,
+      } as ValueCountsData);
+    });
+    const viz = makeViz([{ type: 'not-set', column: 'country', values: ['US', 'CA'] }]);
+    await settled(viz);
+    const detail = lastStats();
+    expect(detail).toContain('Other (~5 values)');
+    expect(detail).toContain('3 rows (15.0%)');
+    viz.destroy();
+  });
+
   /**
    * Folding keeps the top MAX_CATEGORIES values as their own segment and rolls
    * the rest into Other, whose total is known but whose membership is not. A

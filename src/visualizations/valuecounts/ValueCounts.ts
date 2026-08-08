@@ -1367,7 +1367,19 @@ export class ValueCounts extends BaseVisualization {
     if (!seg) return '';
     if (seg.isNull) return this.statsMessages.nullBinLabel;
     if (seg.isAllUnique) return this.statsMessages.allUniqueCategory(seg.count);
-    if (seg.isOther) return this.statsMessages.otherCategory(seg.otherCount ?? 0);
+    if (seg.isOther) {
+      // The folded *row* count is exact; the folded *distinct* count is
+      // whatever `distinctCount` was, which is a HyperLogLog estimate above
+      // the threshold. Marked the way the stats line marks its own — leaving
+      // it bare would print an estimate as a fact one line under a `~`.
+      // Reads the same background-first source `seg` came from, so the label
+      // stays stable when another column's filters change.
+      const approx = (this.backgroundData ?? this.data)?.distinctCountApprox === true;
+      const count = seg.otherCount ?? 0;
+      return approx
+        ? this.statsMessages.approxOtherCategory(count)
+        : this.statsMessages.otherCategory(count);
+    }
     const raw = seg.value.length > 30 ? seg.value.substring(0, 27) + '...' : seg.value;
     return escapeHTML(raw);
   }

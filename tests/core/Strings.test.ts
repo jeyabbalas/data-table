@@ -49,6 +49,7 @@ describe('Strings', () => {
       expect(s.selectedLabel).toBe('Selected:');
       expect(s.nullBinLabel).toBe('null');
       expect(s.otherCategory(12)).toBe('Other (12 values)');
+      expect(s.approxOtherCategory(12)).toBe('Other (~12 values)');
       expect(s.allUniqueCategory(1234)).toBe('All unique (1,234)');
       expect(s.selectionRowCount(4000, '40.0%')).toBe('4,000 rows (40.0%)');
       expect(s.selectionRowCount(1, '0.1%')).toBe('1 row (0.1%)');

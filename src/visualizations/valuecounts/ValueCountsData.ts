@@ -17,7 +17,21 @@ import type { DistinctCountOptions } from '../histogram/HistogramData';
 // Re-export SQL utilities for use by other modules
 export { filtersToWhereClause, formatSQLValue } from '../../filters/FilterSQL';
 
-/** Default number of top categories to show */
+/**
+ * Default number of top categories to show — the `LIMIT` on the top-categories
+ * query.
+ *
+ * Deliberately never compared against `distinctCount`: the "Other" segment is
+ * keyed on `nonNullCount − Σ(top counts)`, two exact aggregates, so the
+ * decision is unaffected by `approx_count_distinct`. It has to be. Unlike
+ * `DISCRETE_BIN_THRESHOLD = 5` this number sits outside the range where the
+ * sketch is exact (through cardinality 7) — at a true 10 DuckDB-WASM already
+ * reports 11, measured in
+ * `tests/visualizations/histogram/HistogramData.duckdb.test.ts` — so a
+ * `distinctCount > maxCategories` gate would misfire at exactly the
+ * cardinality it decides, and a miss drops the whole Other segment: the 11th
+ * category's rows disappear from the bar instead of being mis-sized.
+ */
 const DEFAULT_MAX_CATEGORIES = 10;
 
 // =========================================
@@ -34,7 +48,13 @@ export interface CategorySegment {
   count: number;
   /** Is this the "Other" aggregation segment? */
   isOther: boolean;
-  /** For "Other" segment: how many distinct values it represents */
+  /**
+   * For "Other" segment: how many distinct values it represents.
+   *
+   * Derived from {@link ValueCountsData.distinctCount}, so it is an estimate —
+   * floored at 1 — whenever {@link ValueCountsData.distinctCountApprox} is set
+   * on the enclosing result. {@link CategorySegment.count} is exact either way.
+   */
   otherCount?: number;
 }
 
@@ -222,19 +242,22 @@ export async function fetchValueCountsData(
       });
     }
 
-    // Step 4: Calculate "Other" segment if there are more categories
-    if (stats.distinctCount > maxCategories) {
-      const otherCount = stats.nonNullCount - topCategoriesTotal;
-      const otherDistinctCount = stats.distinctCount - topCategories.length;
-
-      if (otherCount > 0) {
-        segments.push({
-          value: 'Other',
-          count: otherCount,
-          isOther: true,
-          otherCount: otherDistinctCount,
-        });
-      }
+    // Step 4: Calculate "Other" segment if the LIMIT truncated the categories.
+    // Keyed on the row remainder alone — both terms are exact aggregates, and
+    // the remainder is > 0 exactly when `LIMIT maxCategories` left categories
+    // behind. See DEFAULT_MAX_CATEGORIES for why a `distinctCount >
+    // maxCategories` gate cannot be trusted to say the same thing.
+    const otherCount = stats.nonNullCount - topCategoriesTotal;
+    if (otherCount > 0) {
+      segments.push({
+        value: 'Other',
+        count: otherCount,
+        isOther: true,
+        // Floored at 1: an under-estimating sketch can subtract to <= 0 (a
+        // reported 10 minus 10 top categories) while the row remainder above
+        // proves at least one more distinct value is in there.
+        otherCount: Math.max(stats.distinctCount - topCategories.length, 1),
+      });
     }
 
     // Step 5: Determine if all values are unique
@@ -367,12 +390,17 @@ export async function fetchAlignedValueCountsData(
 
     // Step 3: Compute foreground "Other" if background has Other
     if (backgroundHasOther) {
-      const otherCount = stats.nonNullCount - topCategoriesTotal;
+      const otherCount = Math.max(stats.nonNullCount - topCategoriesTotal, 0);
       segments.push({
         value: 'Other',
-        count: Math.max(otherCount, 0),
+        count: otherCount,
         isOther: true,
-        otherCount: Math.max(stats.distinctCount - backgroundCategories.length, 0),
+        // Same floor as the unfiltered path, but only while rows remain: an
+        // aligned Other with no foreground rows really does hold 0 values.
+        otherCount: Math.max(
+          stats.distinctCount - backgroundCategories.length,
+          otherCount > 0 ? 1 : 0,
+        ),
       });
     }
 

@@ -455,6 +455,14 @@ export interface Strings {
     nullBinLabel: string;
     /** Display value for the folded "Other" segment (count = folded distinct values). */
     otherCategory: (count: number) => string;
+    /**
+     * The approximate twin of `otherCategory`, used above the
+     * `approx_count_distinct` threshold. Its own string for the same reason
+     * `approxUniqueCount` is: a translation of the exact form would present an
+     * estimate as a fact. The segment's *row* count is exact either way — only
+     * the folded distinct count is estimated.
+     */
+    approxOtherCategory: (count: number) => string;
     /** Display value for the all-unique segment (count = distinct values). */
     allUniqueCategory: (count: number) => string;
     /** Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted. */
@@ -839,6 +847,7 @@ export const defaultStrings: Strings = {
     selectedLabel: 'Selected:',
     nullBinLabel: 'null',
     otherCategory: (count) => `Other (${count.toLocaleString()} values)`,
+    approxOtherCategory: (count) => `Other (~${count.toLocaleString()} values)`,
     allUniqueCategory: (count) => `All unique (${count.toLocaleString()})`,
     selectionRowCount: (count, pct) =>
       `${count.toLocaleString()} ${count === 1 ? 'row' : 'rows'} (${pct})`,

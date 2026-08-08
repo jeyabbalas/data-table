@@ -105,6 +105,13 @@ function walkTsFiles(dir: string, acc: string[] = []): string[] {
 // helpers — verify the helper actually feeds an error-construction path.
 const INDIRECT_CODES: Record<string, string> = {
   PERSISTENCE_QUOTA_EXCEEDED: 'src/persistence/AutoSave.ts',
+  // Phase 1 — the dispatcher's `load` case passes this to `toErrorPayload`
+  // as the *fallbackCode*, so every loader failure that carries no code of
+  // its own reaches consumers as `LOAD_PARSE_FAILED`. It stopped appearing
+  // as a literal `code:` key when the separate type-conversion rewrite (the
+  // only site that constructed it directly) was folded into the ingest
+  // CTAS; the code itself is as reachable as it ever was.
+  LOAD_PARSE_FAILED: 'src/worker/dispatcher.ts',
 };
 
 function extractLiteralCodes(): { codes: Set<string>; locations: Map<string, string[]> } {

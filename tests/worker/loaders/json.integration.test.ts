@@ -60,7 +60,7 @@ describe('JSON loader — fixture integration', () => {
       expect(result.columns).toContain('VendorID');
       expect(result.columns).toContain('total_amount');
       const types = Object.fromEntries(result.schema.map((c) => [c.name, c.type]));
-      // JSON ISO timestamps come back as VARCHAR from DuckDB; enhanceSchemaTypes coerces to TIMESTAMP.
+      // JSON ISO timestamps come back as VARCHAR from DuckDB; the loader's type planner coerces to TIMESTAMP.
       expect(types['tpep_pickup_datetime']).toBe('timestamp');
     }, 30_000);
   });

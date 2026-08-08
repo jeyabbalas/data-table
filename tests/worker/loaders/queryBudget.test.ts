@@ -16,6 +16,10 @@
  * forwards it to a real Node-built DuckDB, so the statements counted are the
  * statements executed.
  */
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -63,15 +67,25 @@ function summarize(statements: string[]): Recording {
 
 describe('load path statement budget', () => {
   let harness: NodeDuckDBHarness;
+  /**
+   * `COPY … TO '<path>'` writes to the **real** filesystem under the Node
+   * target, and `db.dropFile` only unregisters the virtual handle — so a
+   * bare filename would litter the repo root with parquet/JSON (plus
+   * DuckDB's `tmp_`-prefixed staging siblings) on every run. Everything the
+   * writer touches goes in one scratch directory that is removed wholesale.
+   */
+  let scratchDir: string;
   let counter = 0;
   const tn = (suffix: string): string => `budget_${suffix}_${++counter}`;
 
   beforeAll(async () => {
     harness = await createNodeDuckDB();
+    scratchDir = await mkdtemp(join(tmpdir(), 'dt-query-budget-'));
   }, 30_000);
 
   afterAll(async () => {
     await harness?.cleanup();
+    if (scratchDir) await rm(scratchDir, { recursive: true, force: true });
   });
 
   /**
@@ -98,11 +112,11 @@ describe('load path statement budget', () => {
 
   /** Encode a tier through DuckDB's own writer and hand back the bytes. */
   async function encodeTier(spec: TierSpec, format: 'parquet' | 'json'): Promise<ArrayBuffer> {
-    const file = `${tn('src')}.${format}`;
+    const path = join(scratchDir, `${tn('src')}.${format}`);
     const options = format === 'parquet' ? 'FORMAT PARQUET' : 'FORMAT JSON, ARRAY true';
-    await harness.conn.query(`COPY (${tierSelectSQL(spec)}) TO '${file}' (${options})`);
-    const bytes = await harness.db.copyFileToBuffer(file);
-    await harness.db.dropFile(file);
+    await harness.conn.query(`COPY (${tierSelectSQL(spec)}) TO '${path}' (${options})`);
+    const bytes = await harness.db.copyFileToBuffer(path);
+    await harness.db.dropFile(path);
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   }
 
@@ -127,6 +141,19 @@ describe('load path statement budget', () => {
       expect(seen.ctas.length).toBeLessThanOrEqual(DT_BUDGET.LOAD.CTAS_MAX);
       // Detection actually ran — an empty plan would trivially satisfy both.
       expect(seen.probes.length).toBeGreaterThan(0);
+      // …and its casts rode along in the one materialization rather than
+      // costing a second one. The tier's classes 15/16/17 reach the Parquet
+      // loader as VARCHAR by construction, so all three must appear.
+      expect(seen.ctas).toHaveLength(1);
+      expect(seen.ctas[0]).toContain('TRY_CAST');
+      for (const sqlType of ['AS TIMESTAMP)', 'AS DATE)', 'AS TIME)']) {
+        expect(seen.ctas[0]).toContain(sqlType);
+      }
+      // The probe precedes the materialization — that ordering is the whole
+      // mechanism, not an incidental detail.
+      expect(seen.statements.indexOf(seen.probes[0]!)).toBeLessThan(
+        seen.statements.indexOf(seen.ctas[0]!),
+      );
     }, 120_000);
 
     it('loads CSV inside the statement and CTAS budgets', async () => {

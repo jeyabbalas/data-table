@@ -6,7 +6,7 @@ import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
 import {
-  enhanceSchemaTypes,
+  planTypedIngestProjection,
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
@@ -69,27 +69,21 @@ export async function loadParquet(
       ? options.columns.map((c) => quoteIdentifier(c)).join(', ')
       : '*';
 
-    // Inject a synthetic __rowid__ as the first column of a new table.
-    // DuckDB silently aliases a duplicate column name in the projection
-    // (producing __rowid___1) rather than throwing, so preflight with
-    // DESCRIBE to reject sources that already have a __rowid__ column.
-    // The wrapReservedColumnError catch below stays as defense-in-depth.
-    // Skip the probe when an explicit column list was given — we already
-    // rejected __rowid__ there above, and an unrelated __rowid__ in the
-    // Parquet file itself won't reach the projection.
-    if (!options.columns?.length) {
-      const probeResult = await conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`);
-      const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
-      if (probeColumns.includes(ROWID_COLUMN)) {
-        throw makeReservedColumnError();
-      }
-    }
+    // Preflight the reader relation — see the matching note in csv.ts. One
+    // DESCRIBE serves as both the reserved-name guard and the type planner's
+    // column list, and the planned casts ride along in the ingest CTAS.
+    // It describes `columnSelect` rather than `*`, so an explicit column
+    // list is guarded exactly as precisely as the default projection: an
+    // unrelated __rowid__ in the Parquet file that the caller did not ask
+    // for never reaches the projection and is correctly ignored.
+    const relation = `read_parquet('${fileName}')`;
+    const projection = await planTypedIngestProjection(conn, relation, columnSelect);
 
     const tbl = quoteIdentifier(tableName);
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
     // the rationale (single typed-array shape on read, symmetry across
     // loaders). The reserved-name guard above is case-sensitive.
-    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${projection} FROM ${relation}`;
     try {
       await conn.query(createSql);
     } catch (err) {
@@ -100,12 +94,9 @@ export async function loadParquet(
     const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
-    // Get full schema info from DESCRIBE
+    // Get full schema info from DESCRIBE — already the post-conversion shape.
     const describeResult = await conn.query(`DESCRIBE ${tbl}`);
-    let describeRows = describeResult.toArray().map((row) => row.toJSON());
-
-    // Enhance schema by detecting and converting string columns to appropriate types
-    describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
+    const describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => {

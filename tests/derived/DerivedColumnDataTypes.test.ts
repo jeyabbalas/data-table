@@ -292,7 +292,7 @@ describe('VIEW SQL structure', () => {
     expect(view).toContain('h1."scores"');
     // Phase 1: join on the explicit __rowid__ column synthesized at load,
     // not the implicit DuckDB `rowid` pseudo-column (which is reassigned on
-    // table rewrites such as enhanceSchemaTypes' retype step).
+    // table rewrites such as a loader retype step).
     expect(view).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
     expect(view).not.toMatch(/ON\s+t\.rowid\s*=/);
   });

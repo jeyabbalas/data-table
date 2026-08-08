@@ -188,8 +188,8 @@ export const DETECT_CONFIDENCE = 0.95;
 /**
  * Which VARCHAR columns should be rewritten to which temporal type.
  *
- * Produced by {@link planTypeConversions}, consumed by the conversion
- * rewrite. The three lists are disjoint.
+ * Produced by {@link planTypeConversions}, consumed by
+ * {@link planTypedIngestProjection}. The three lists are disjoint.
  */
 export interface TypeConversionPlan {
   timestamp: string[];
@@ -386,115 +386,50 @@ function buildTypedProjection(allColumns: string[], plan: TypeConversionPlan): s
 }
 
 /**
- * Rewrite `tableName` once so every column in `plan` carries its detected
- * temporal type.
+ * Preflight a source relation and return the projection that materializes
+ * it with every detected temporal column already typed.
  *
- * This used to be three functions run back to back, each doing a full
- * `CREATE TABLE … AS SELECT … ORDER BY "__rowid__"` + `DROP` + `RENAME` —
- * so a source that tripped all three classes was copied and sorted three
- * times, at ~2x transient memory each, and none of it interruptible. One
- * projection carrying all three cast classes does the same work in one
- * pass.
+ * This is what collapses the load path to **one** full-table
+ * materialization. The shape it replaces was: materialize the source as
+ * VARCHAR, `DESCRIBE` it, probe it, then copy and sort the whole table
+ * again to apply the casts. Detection does not need the data materialized —
+ * a bounded head sample of any FROM-able relation answers the same
+ * question — so the casts can ride along in the ingest `CREATE TABLE AS
+ * SELECT` and the second copy disappears.
  *
- * `ORDER BY "__rowid__"` stays: DuckDB guarantees no scan order on
- * `CREATE TABLE AS SELECT`, and row identity is what the whole rendering
- * layer indexes by.
+ * The single `DESCRIBE` here serves two purposes that used to cost two
+ * queries: it is the reserved-name preflight (DuckDB silently aliases a
+ * duplicate `__rowid__` in a projection rather than throwing, so the guard
+ * has to be explicit), and it is the planner's column-and-type list.
  *
  * @param conn - DuckDB connection
- * @param tableName - Name of the table to rewrite in place
- * @param plan - Columns to convert, by target type
- * @param allColumns - All column names in original order
+ * @param relation - FROM-able source: `read_csv_auto('f.csv')`,
+ *   `read_json_auto(…)`, `read_parquet(…)`, or a quoted table name
+ * @param columnSelect - Projection to describe, defaulting to `*`. Parquet
+ *   passes an explicit column list when the caller asked for one.
+ * @returns The `SELECT` list to materialize, in source column order
+ * @throws The canonical `LOAD_RESERVED_COLUMN_NAME` error when the source
+ *   already has a `__rowid__` column
  */
-export async function applyTypeConversions(
+export async function planTypedIngestProjection(
   conn: AsyncDuckDBConnection,
-  tableName: string,
-  plan: TypeConversionPlan,
-  allColumns: string[],
-): Promise<void> {
-  if (plan.timestamp.length === 0 && plan.date.length === 0 && plan.time.length === 0) return;
+  relation: string,
+  columnSelect = '*',
+): Promise<string> {
+  const described = await conn.query(`DESCRIBE SELECT ${columnSelect} FROM ${relation}`);
+  const rows = described.toArray().map((row) => row.toJSON() as Record<string, unknown>);
 
-  const tempTable = `__temp_${tableName}_${Date.now()}`;
-  const quotedTemp = quoteIdentifier(tempTable);
-  const quotedTable = quoteIdentifier(tableName);
-  const orderBy = allColumns.includes(ROWID_COLUMN)
-    ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}`
-    : '';
-
-  try {
-    await conn.query(
-      `CREATE TABLE ${quotedTemp} AS SELECT ${buildTypedProjection(allColumns, plan)} ` +
-        `FROM ${quotedTable}${orderBy}`,
-    );
-    await conn.query(`DROP TABLE ${quotedTable}`);
-    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch (cause) {
-    try {
-      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
-    } catch {
-      // Ignore cleanup errors
-    }
-    // One `stage` for one rewrite. The three it replaced reported
-    // 'timestamp' / 'date' / 'time'; nothing consumes those values (the one
-    // test that mentions them builds the payload as a literal), and a
-    // combined rewrite genuinely cannot attribute a failure to one class.
-    throw Object.assign(
-      new Error(`Failed to convert column types in table ${tableName}`, { cause }),
-      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'types' } },
-    );
+  const columns = rows.map((row) => String(row['column_name']));
+  if (columns.includes(ROWID_COLUMN)) {
+    throw makeReservedColumnError();
   }
-}
 
-/**
- * Enhance schema by detecting and converting string columns to appropriate types
- *
- * Supports:
- * - ISO timestamp detection in VARCHAR columns (YYYY-MM-DDTHH:MM:SS)
- * - ISO date detection in VARCHAR columns (YYYY-MM-DD)
- * - 24-hour time detection in VARCHAR columns (HH:MM:SS)
- *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to enhance
- * @param describeRows - Current schema from DESCRIBE query
- * @returns Updated describeRows after type conversion
- */
-export async function enhanceSchemaTypes(
-  conn: AsyncDuckDBConnection,
-  tableName: string,
-  describeRows: Record<string, unknown>[],
-): Promise<Record<string, unknown>[]> {
-  // All column names in original order — the conversion rewrites project
-  // them back in exactly this order, so one read up front is enough.
-  const allColumns = describeRows.map((row) => String(row['column_name']));
-
-  const stringColumns = describeRows
+  const stringColumns = rows
     .filter((row) => String(row['column_type']).toUpperCase() === 'VARCHAR')
     .map((row) => String(row['column_name']));
 
-  if (stringColumns.length === 0) {
-    return describeRows;
-  }
-
-  // Plan every conversion from a single head sample. The old shape probed,
-  // rewrote, re-`DESCRIBE`d, probed again, … three times over; because each
-  // rewrite preserves both the names and the order of the columns it does
-  // not convert, the intermediate `DESCRIBE`s were re-reading a list that
-  // could not have changed.
-  const rowidFilter = allColumns.includes(ROWID_COLUMN)
-    ? `${quoteIdentifier(ROWID_COLUMN)} < ${DETECT_SAMPLE_ROWS}`
-    : undefined;
-  const plan = await planTypeConversions(
-    conn,
-    quoteIdentifier(tableName),
-    stringColumns,
-    rowidFilter,
-  );
-
-  if (plan.timestamp.length === 0 && plan.date.length === 0 && plan.time.length === 0) {
-    return describeRows;
-  }
-
-  await applyTypeConversions(conn, tableName, plan, allColumns);
-
-  const finalDescribeResult = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
-  return finalDescribeResult.toArray().map((row) => row.toJSON());
+  // No `where` — the sample CTE's own LIMIT bounds a relation that has no
+  // `__rowid__` to prune on yet.
+  const plan = await planTypeConversions(conn, relation, stringColumns);
+  return buildTypedProjection(columns, plan);
 }

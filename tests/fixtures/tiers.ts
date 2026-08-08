@@ -5,20 +5,23 @@
  * `cols` columns named `col_0 … col_<cols-1>`, generated over
  * `FROM range(0, rows) t(i)` so the source row index `i` is 0-based. The
  * parquet loader injects `CAST(row_number() OVER () - 1 AS BIGINT) AS
- * __rowid__` (`src/worker/loaders/parquet.ts:92`), and every triggered
- * type-conversion rewrite carries `ORDER BY "__rowid__"`
- * (`src/worker/loaders/common.ts:321,378,431`), so after a
+ * __rowid__` in the one `CREATE TABLE … AS SELECT` that materializes the
+ * source (`src/worker/loaders/parquet.ts`), so after a
  * generate → parquet → `loadData` round trip `__rowid__ === i` holds — the
  * *row oracle*. `cellOracle(i, c, seed)` is the *column oracle*: the
  * canonical value of any cell, as a pure function of its coordinates.
  *
+ * Phase 1 is what makes that a one-statement claim. Before it, the loader
+ * rewrote the whole table once per triggered type class, and each rewrite
+ * carried an explicit `ORDER BY "__rowid__"` precisely because a
+ * `CREATE TABLE AS SELECT` guarantees no scan order. There are no rewrites
+ * now, so row identity rests on `row_number()` and the ingest scan alone.
+ *
  * Class 15/16/17 emit **strings** shaped to satisfy the loader's
- * timestamp / date / time matchers (`common.ts:63-129`, 0.95 match ratio
- * over `SELECT DISTINCT … LIMIT 100`), so a parquet load runs all three
- * detection passes and all three full-table rewrites — the exact load-path
- * hazard Phase 1 fixes. Classes 18/19 are already native TIMESTAMP /
- * BOOLEAN, so they cost no probes but are still physically rewritten by
- * every triggered pass.
+ * timestamp / date / time matchers (`common.ts`, 0.95 match ratio over a
+ * bounded head sample), so a parquet load still exercises all three
+ * detection classes — they are now planned in one probe and cast inside the
+ * ingest CTAS. Classes 18/19 are already native TIMESTAMP / BOOLEAN.
  *
  * | Class | DuckDB type (generated) | After a parquet load |
  * | ----- | ----------------------- | -------------------- |
@@ -122,8 +125,9 @@ export function classDuckDBType(c: number): string {
 
 /**
  * DuckDB `DESCRIBE` type for column `c` **after** a parquet round trip
- * through the real loader, i.e. once `enhanceSchemaTypes` has converted
- * classes 15/16/17. Asserting this is what proves detection actually ran.
+ * through the real loader, i.e. once `planTypedIngestProjection` has folded
+ * the casts for classes 15/16/17 into the ingest CTAS. Asserting this is what
+ * proves detection actually ran.
  */
 export function classLoadedDuckDBType(c: number): string {
   const k = columnClass(c);

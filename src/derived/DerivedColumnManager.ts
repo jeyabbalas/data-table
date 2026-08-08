@@ -938,8 +938,8 @@ export class DerivedColumnManager {
       baseSelectParts.push(`${alias}.${quoteIdentifier(info.def.name)}`);
       // Join on the explicit `__rowid__` column synthesized at load time.
       // DuckDB's implicit `rowid` pseudo-column is reassigned whenever a
-      // table is rewritten (e.g. by enhanceSchemaTypes type-enhancement),
-      // so joining on it is not stable; `__rowid__` survives rewrites.
+      // table is rewritten, so joining on it is not stable; `__rowid__` is a
+      // real column and survives any rewrite.
       joinParts.push(
         `LEFT JOIN ${quoteIdentifier(helperTable)} ${alias} ON t.__rowid__ = ${alias}.__rowid__`,
       );

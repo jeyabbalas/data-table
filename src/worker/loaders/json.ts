@@ -6,10 +6,9 @@ import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
 import {
-  enhanceSchemaTypes,
+  planTypedIngestProjection,
   quoteIdentifier,
   wrapReservedColumnError,
-  makeReservedColumnError,
   type LoaderContext,
 } from './common';
 import type { LoadResult, JSONLoadOptions } from './types';
@@ -196,25 +195,24 @@ export async function loadJSON(
       jsonOptions.push(`maximum_depth = ${n}`);
     }
 
-    // Inject a synthetic __rowid__ as the first column of a new table.
-    // DuckDB silently aliases a duplicate column name in the projection
-    // (producing __rowid___1) rather than throwing, so preflight with
-    // DESCRIBE to reject sources that already have a __rowid__ column.
-    // The wrapReservedColumnError catch below stays as defense-in-depth.
+    // Preflight the reader relation — see the matching note in csv.ts. One
+    // DESCRIBE serves as both the reserved-name guard and the type planner's
+    // column list, and the planned casts ride along in the ingest CTAS.
+    //
+    // Array-form JSON pays more for this than CSV does: `LIMIT` does not let
+    // DuckDB stop reading an array document early — it still scans the whole
+    // document for record boundaries, measured at ~0.6 ms/MB versus
+    // ~2.9 ms/MB for a full parse. That is still far cheaper than the
+    // full-table copy-and-sort it replaces.
     const optionsStr = `, ${jsonOptions.join(', ')}`;
-    const probeResult = await conn.query(
-      `DESCRIBE SELECT * FROM read_json_auto('${fileName}'${optionsStr})`,
-    );
-    const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
-    if (probeColumns.includes(ROWID_COLUMN)) {
-      throw makeReservedColumnError();
-    }
+    const relation = `read_json_auto('${fileName}'${optionsStr})`;
+    const projection = await planTypedIngestProjection(conn, relation);
 
     const tbl = quoteIdentifier(tableName);
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
     // the rationale (single typed-array shape on read, symmetry across
     // loaders). The reserved-name guard above is case-sensitive.
-    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_json_auto('${fileName}'${optionsStr})`;
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${projection} FROM ${relation}`;
     try {
       await conn.query(createSql);
     } catch (err) {
@@ -225,13 +223,9 @@ export async function loadJSON(
     const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
-    // Get full schema info from DESCRIBE
+    // Get full schema info from DESCRIBE — already the post-conversion shape.
     const describeResult = await conn.query(`DESCRIBE ${tbl}`);
-    let describeRows = describeResult.toArray().map((row) => row.toJSON());
-
-    // Enhance schema by detecting and converting string columns to appropriate types
-    // This detects ISO timestamps in VARCHAR columns and converts them to TIMESTAMP
-    describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
+    const describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => {

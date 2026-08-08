@@ -108,7 +108,7 @@ describe('CSV loader — fixture integration', () => {
       const data = await readBinaryFixture('csv', 'nyc_taxi');
       const result = await loadCSV(data, { tableName: tableName('nyc_ts') }, ctx());
       const types = Object.fromEntries(result.schema.map((c) => [c.name, c.type]));
-      // CSV stores datetimes as strings; enhanceSchemaTypes coerces them.
+      // CSV stores datetimes as strings; the loader's type planner coerces them.
       expect(types['tpep_pickup_datetime']).toBe('timestamp');
       expect(types['tpep_dropoff_datetime']).toBe('timestamp');
     }, 30_000);

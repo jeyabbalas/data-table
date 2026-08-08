@@ -6,10 +6,9 @@ import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
 import {
-  enhanceSchemaTypes,
+  planTypedIngestProjection,
   quoteIdentifier,
   wrapReservedColumnError,
-  makeReservedColumnError,
   type LoaderContext,
 } from './common';
 import type { LoadResult, CSVLoadOptions } from './types';
@@ -102,20 +101,18 @@ export async function loadCSV(
       csvOptions.push(`skip = ${n}`);
     }
 
-    // Inject a synthetic __rowid__ as the first column of a new table.
-    // DuckDB silently aliases a duplicate column name in the projection
-    // (producing __rowid___1) rather than throwing, so preflight with
-    // DESCRIBE to reject sources that already have a __rowid__ column.
-    // The wrapReservedColumnError catch below stays as defense-in-depth
-    // in case future DuckDB versions throw instead of aliasing.
+    // Preflight the reader relation: one DESCRIBE both rejects a source that
+    // already has a __rowid__ column (DuckDB silently aliases a duplicate
+    // name in the projection, producing __rowid___1, rather than throwing)
+    // and gives the type planner its column list. Detection then runs off a
+    // bounded head sample of the same relation, so the casts it plans can
+    // ride along in the ingest CTAS below instead of costing a second
+    // full-table copy. The wrapReservedColumnError catch stays as
+    // defense-in-depth in case future DuckDB versions throw instead of
+    // aliasing.
     const optionsStr = csvOptions.length > 0 ? `, ${csvOptions.join(', ')}` : '';
-    const probeResult = await conn.query(
-      `DESCRIBE SELECT * FROM read_csv_auto('${fileName}'${optionsStr})`,
-    );
-    const probeColumns = probeResult.toArray().map((row) => String(row.toJSON().column_name));
-    if (probeColumns.includes(ROWID_COLUMN)) {
-      throw makeReservedColumnError();
-    }
+    const relation = `read_csv_auto('${fileName}'${optionsStr})`;
+    const projection = await planTypedIngestProjection(conn, relation);
 
     const tbl = quoteIdentifier(tableName);
     // Always cast __rowid__ to BIGINT, regardless of row count. The original
@@ -125,7 +122,7 @@ export async function loadCSV(
     // (BigInt64Array) for the rowid column. The reserved-name guard above
     // is case-sensitive (DuckDB-correct): "__RowID__" would slip through
     // and would not collide with our injected "__rowid__".
-    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, * FROM read_csv_auto('${fileName}'${optionsStr})`;
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${projection} FROM ${relation}`;
     try {
       await conn.query(createSql);
     } catch (err) {
@@ -136,13 +133,9 @@ export async function loadCSV(
     const countResult = await conn.query(`SELECT COUNT(*) as count FROM ${tbl}`);
     const rowCount = Number(countResult.toArray()[0]?.toJSON().count || 0);
 
-    // Get full schema info from DESCRIBE
+    // Get full schema info from DESCRIBE — already the post-conversion shape.
     const describeResult = await conn.query(`DESCRIBE ${tbl}`);
-    let describeRows = describeResult.toArray().map((row) => row.toJSON());
-
-    // Enhance schema by detecting and converting string columns to appropriate types
-    // This detects ISO timestamps in VARCHAR columns and converts them to TIMESTAMP
-    describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
+    const describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => {

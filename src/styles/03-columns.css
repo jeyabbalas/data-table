@@ -9,12 +9,23 @@
    =========================================== */
 
 .dt-col-header {
+  /* See `.dt-cell` in 05-data-grid.css: the declared width is the occupied
+     width, so header and body agree on column geometry without either of
+     them measuring a box. */
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   position: relative; /* For absolute positioning of resize handle */
   width: var(--dt-col-width);
   flex-shrink: 0;
   padding: 0.5rem 0.75rem; /* Symmetric padding - no extra left padding */
+  /* Every header keeps its right border, including the last one. The old
+     `:last-child { border-right: none }` exception has no body-side mirror
+     any more — a windowed row's last child is a spacer, so the rule stopped
+     matching a data cell there — and keeping it on one side only would put a
+     1px header/body mismatch at the right edge of the content. Both
+     exceptions were deleted together; the cost is one hairline past the last
+     column. */
   border-right: 1px solid var(--dt-border);
   cursor: default; /* No grab cursor - use drag handle instead */
   transition:
@@ -38,10 +49,6 @@
 
 .dt-col-header--restored {
   animation: dt-col-restore-flash 1.5s ease-out;
-}
-
-.dt-col-header:last-child {
-  border-right: none;
 }
 
 .dt-col-header--dragging {

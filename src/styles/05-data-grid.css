@@ -205,6 +205,19 @@
    =========================================== */
 
 .dt-cell {
+  /* The declared width IS the occupied width. Load-bearing beyond taste:
+     the body renders only a window of columns and stands flexbox spacers in
+     for the rest, and a spacer covering M columns is one box where the cells
+     were M. Under content-box the padding and border would sit outside the
+     inline `width`, so the spacer would have to carry M × overhead that no
+     single element has — and the header, which is not windowed, would drift
+     from the body by that amount. Declaring it here makes the overhead 0 in
+     both places instead of a quantity to measure. It also fixes a resize
+     jump: `ColumnResizer` seeds a drag from `header.offsetWidth` (a
+     border-box width) and writes it to `setColumnWidth`, while
+     `ColumnHeader.getWidth()` reads state — the two agree only under
+     border-box. Hosts with a global reset already had this. */
+  box-sizing: border-box;
   padding: 0 0.75rem;
   width: var(--dt-col-width);
   flex-shrink: 0;
@@ -214,10 +227,6 @@
   font-size: var(--dt-font-size);
   color: var(--dt-text);
   border-right: 1px solid var(--dt-border-light);
-}
-
-.dt-cell:last-child {
-  border-right: none;
 }
 
 .dt-cell.dt-col-resetting {

@@ -4,21 +4,21 @@ One row per phase. The executing agent updates its row at session start (`in pro
 session end (`done`), and appends a handoff section below. Keep rows terse; put substance in the
 handoff notes. Do not edit other phases' handoff sections.
 
-| Phase | Doc                                                                          | Status      | Started    | Finished   | Agent notes (one line)                |
-| ----- | ---------------------------------------------------------------------------- | ----------- | ---------- | ---------- | ------------------------------------- |
-| 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines   |
-| 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress |
-| 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | in progress | 2026-08-08 | —          | Lazy, cached, staleness-aware viz     |
-| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                     |
-| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                     |
-| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                     |
-| 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                     |
-| 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                     |
-| 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                     |
-| 9     | [phase-09-persistence-undo.md](./phase-09-persistence-undo.md)               | not started | —          | —          | —                                     |
-| 10    | [phase-10-direct-scan-mode.md](./phase-10-direct-scan-mode.md)               | not started | —          | —          | —                                     |
-| 11    | [phase-11-bulk-transfer.md](./phase-11-bulk-transfer.md)                     | not started | —          | —          | —                                     |
-| 12    | [phase-12-docs-integration.md](./phase-12-docs-integration.md)               | not started | —          | —          | —                                     |
+| Phase | Doc                                                                          | Status      | Started    | Finished   | Agent notes (one line)                   |
+| ----- | ---------------------------------------------------------------------------- | ----------- | ---------- | ---------- | ---------------------------------------- |
+| 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines      |
+| 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress    |
+| 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
+| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                        |
+| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                        |
+| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
+| 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
+| 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                        |
+| 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                        |
+| 9     | [phase-09-persistence-undo.md](./phase-09-persistence-undo.md)               | not started | —          | —          | —                                        |
+| 10    | [phase-10-direct-scan-mode.md](./phase-10-direct-scan-mode.md)               | not started | —          | —          | —                                        |
+| 11    | [phase-11-bulk-transfer.md](./phase-11-bulk-transfer.md)                     | not started | —          | —          | —                                        |
+| 12    | [phase-12-docs-integration.md](./phase-12-docs-integration.md)               | not started | —          | —          | —                                        |
 
 Statuses: `not started` · `in progress` · `done` · `blocked (see notes)`.
 
@@ -750,3 +750,211 @@ Engine settings read through the shipped worker, which is the field validation f
 | `npm run test:browser`                                                  | 38 passed / 12 skipped, including the two new load-path specs                                                                                 |
 | `RUN_BROWSER_PERF=1 … tiers.full.spec.ts -g "WIDE\|DEEP"`               | 4 passed in 14.9 m — WIDE viz=off `loadMs` **3,405**, WIDE viz=on 13,837, DEEP **3,567**, TARGET `copyMs` 608,408                             |
 | `npm run perf:baseline` (WIDE, WIDE-CSV, DEEP) + `perf:baseline:report` | 3 captures written, README regenerated                                                                                                        |
+
+### Phase 2 — Lazy, cached, staleness-aware visualizations
+
+Charts are no longer a function of the column count. A column's chart is created when its header
+scrolls within 200 px of the header viewport and its canvas is reclaimed at 400 px; the data
+outlives the DOM, so scrolling back costs no query; a filter refetches only what is on screen and
+marks the rest stale. `loadData` resolves at first interactive paint and `vizReady` /
+`whenVizReady()` carry "the charts you can see are drawn".
+
+#### Headline — WIDE (1,000 × 60,000), visualizations on
+
+Reference machine (macOS, 10 cores, Chromium, 1,280 px viewport). Before is
+`baseline-wide-on-970698e.json`, after is `baseline-wide-on-51ba4ef.json`.
+
+| Metric                   | viz off (today) | viz on, before | viz on, after |
+| ------------------------ | --------------- | -------------- | ------------- |
+| Queries at load          | 4               | 2,004          | **20**        |
+| Canvases                 | 0               | 1,000          | **8**         |
+| Live `ResizeObserver`s   | 1               | ~1,001         | **9**         |
+| Live `MutationObserver`s | 1               | 1,001          | **2**         |
+| `loadData` resolves      | 3,859 ms        | 18,884 ms      | **3,743 ms**  |
+| One sort                 | 402 ms          | 10,515 ms      | **450 ms**    |
+| One filter               | 424 ms          | 8,275 ms       | **506 ms**    |
+
+WIDE_CI (300 columns) reports the same 20 queries and 8 canvases, which is the claim: cost tracks
+the viewport, not the schema. The same WIDE_CI mount under `{ eager: true }` costs 604 queries and
+300 canvases — the control is measured in the same run as the number it frames
+(`tests/browser/viz-lazy.spec.ts`), not quoted from here.
+
+#### Assumption drift
+
+- **`.dt-body-scroll` cannot be the IntersectionObserver root.** The phase doc offered it as a
+  fallback. An IO root must be an ancestor of its targets and the body scroller is the header
+  subtree's _sibling_, so it is impossible, not merely worse. `.dt-header-scroll` is the only
+  viable root — and it is created once by `TableContainer` and survives every `render()`, which is
+  what lets one observer serve the table's whole life.
+- **The phase doc's `QUERIES_AT_LOAD_MAX = 66` arithmetic was wrong** (it assumed 2 queries per
+  histogram; the real figure is 2 or 3, and 4 for a chart created under an active filter). The cap
+  survives at 66 for a different reason: it covers a viewport ~3× wider than the one measured.
+- **`state.tableName` is not a proxy for "the headers were rebuilt"** in either direction — it
+  re-renders only when `gridSemanticsActive` flips. Header-rebuild detection is per-entry container
+  identity instead, so `VizSyncOptions` has no `headersRebuilt` flag.
+- **A base constructor runs before subclass field initializers.** Kicking the first fetch from
+  `SharedHistogramBase` would have wiped any hydrated `initialData`, so the four concrete
+  histograms each kick their own — which also fixes a latent ordering hazard that predates this
+  phase.
+
+#### Files created
+
+`src/visualizations/VizDataController.ts`, `src/visualizations/ThemeWatcher.ts`,
+`src/core/concurrency.ts` (all internal — none exported from `index` or `advanced`);
+`tests/browser/viz-lazy.spec.ts`, `tests/visualizations/VizDataController.test.ts`,
+`tests/visualizations/ThemeWatcher.test.ts`, `tests/visualizations/palette.cache.test.ts`,
+`tests/DataTable.nonVizStats.coalesce.test.ts`, `tests/DataTable.vizSharedCost.test.ts`,
+`tests/DataTable.staleInteraction.test.ts`, and two `*.approxDistinct.test.ts`.
+
+#### Budgets
+
+All new, under `DT_BUDGET.VIZ`, each with its measurement in place:
+`QUERIES_AT_LOAD_MAX 66`, `CANVAS_COUNT_MAX 40`, `FETCH_CONCURRENCY 4`, `MAX_IN_FLIGHT 16`,
+`NONVIZ_QUERIES_PER_FILTER 3`, `QUERIES_PER_VIZ_PER_FILTER 2`, `QUERIES_PER_VIZ_CREATE 2`,
+`QUERIES_PER_VIZ_CREATE_FILTERED 4`, `INTERSECTION_OBSERVERS_MAX 1`, `MUTATION_OBSERVERS_MAX 4`,
+`APPROX_DISTINCT_ROW_THRESHOLD 100_000`, `LOAD_MS_WIDE_MAX 15_000` (gated).
+
+Two depart from the phase doc's stated values. **`MAX_IN_FLIGHT` is 16, not 4**: the controller
+bounds concurrent _fetches_ at 4 (now its own entry, `FETCH_CONCURRENCY`), and since a histogram
+fetch is 2–3 statements the bridge's high-water mark is a different quantity — measured 5 at load,
+4 on a sweep, 10 during a filter fan-out. **`NONVIZ_QUERIES_PER_FILTER` is 3, not 2**, measured
+against a viz=off control.
+
+`tiers.full.spec.ts`'s WIDE viz=on test moved from recording to asserting.
+
+#### Size
+
+The visualization chunk barely moved (73.57 → 74.65 kB brotli), but **the root entry went
+8.12 → 10.82 kB** — the largest single-phase move it has made. `VizDataController` and its facade
+wiring are statically reachable from `createDataTable`, so `visualizations: false` pays for them
+too. Not obviously reducible: the controller must exist synchronously when `attachVisualizations`
+runs, so moving it behind the dynamic `import()` that already lazies the chart classes would turn a
+synchronous seam asynchronous. Recorded in `.size-limit.cjs` for a later phase that revisits the
+attach seam. Caps raised to 11.4 kB and 78.5 kB.
+
+#### Deviations
+
+- **Queries in flight are bounded by bounding _creation_.** The built-ins fetch in their
+  constructors, so a persistent in-controller pump (not a one-shot `runLimited`) is what bounds
+  them. `src/core/concurrency.ts` is still used by the coordinators.
+- **A stale entry re-creates _without_ its snapshot.** Seeding wrong data and then correcting it
+  would be two steps and one wrong frame; a plain fetch is correct in one.
+- **`panelScheduler` is a second entry point**, not a shared one. Both coordinators broadcasting
+  through `refreshOnFilters` would bump the filter epoch twice per user-visible cycle and discard
+  the first cycle's own fetches as stale.
+- **`refreshNonVizStats` widened and then coalesced.** Its predicate is now "has a live instance"
+  (an offscreen chart column has none, and its row count used to freeze at the attach-time value);
+  the wider sweep runs once per cycle behind a `queueMicrotask` latch.
+
+#### Defects found after the implementation was green
+
+Recording these because all seven were invisible to a green suite, and four of them were found by
+the two verification steps rather than by writing the code.
+
+Manual Chrome pass, at 1,000 columns:
+
+1. **`whenVizReady()` never settled in a hidden document.** A background tab gets no rendering
+   opportunity, so no IntersectionObserver callback is delivered and the wave never closed.
+   Measured: load resolved at 3,637 ms, `dt:load:viz` at 57,151 ms — i.e. when the tab was
+   foregrounded 53 s later, and never at all if nobody looks. Now closes immediately with 0, which
+   is what four of the five documents already promised; the `whenVizReady` JSDoc was the odd one
+   out and is corrected.
+2. **A brush outlived the filter it created.** Drag-brush, remove the filter via its chip, hide any
+   column: the rebuild restores the brush, and the slot reads "60,000 rows" over "24,271 rows
+   (40.5 %)". Root cause is older than this phase — `StateActions.notifyRemovedFilters`
+   (`core/Actions.ts:236`) **is never called**, so `setOnFilterRemove` fires only for
+   derived-column removals — but before charts were re-created constantly the stale map entry was
+   unreachable. Guarded on the restore side.
+
+Code review over the diff:
+
+3. `settleFetch` marked an entry `'fresh'` when its instance had been reclaimed mid-fetch, seeding
+   a superseded snapshot into the next chart, which then issued no query and never self-corrected.
+4. A sync with nothing to observe hung the wave forever — reachable through the public
+   `visualizationRegistry` option with a registry matching no column type.
+5. `invalidateAll` refetched against the _previous_ relation (`updateFilters` replaces
+   `options.filters`, never `options.tableName`) on instances the following `sync()` destroys.
+6. `stalePanels` / `panelRefresh` survived a sync, dispatching into a destroyed coordinator.
+7. A throwing custom `refresh` abandoned the columns queued behind it and surfaced an unhandled
+   rejection.
+
+#### For the next phases
+
+- **Phase 3–4 (column windowing).** Headers still exist for all 1,000 columns — `domNodes` is
+  unchanged at ~52,000 and `sortColumns` still has 1,005 subscribers. When the header row becomes a
+  window, `VizDataController.sync` needs the _windowed_ column list, and its container-identity
+  rebuild detection (`VizDataController.ts`, `sync`) already handles headers coming and going. The
+  one observer re-points via `disconnect()` + `observe()` on each sync, which the observer census
+  in `tests/browser/helpers/metrics.ts` now counts correctly.
+- **Phase 5 (projection clipping).** `waitForTierSettled` gained an `inFlight === 0` term; any new
+  async paint path must be visible to the bridge counter or the settle will race it.
+- **Phase 6 (interaction sweep).** Escape now walks only the charts on screen — see the changeset.
+  If the interaction stack should survive a canvas being reclaimed, that is Phase 6's call;
+  `saveInteractionState` / `restoreInteractionState` in `src/DataTable.ts` are the seam.
+- **Anyone touching filters.** `StateActions.notifyRemovedFilters` is dead code and
+  `setOnFilterRemove` therefore never fires for ordinary filter removals. Wiring it is a behaviour
+  change for a public callback and wants its own changeset; until then, no consumer of
+  `setOnFilterRemove` can assume it sees user-driven removals.
+- **Phase 11 (streaming exports).** Unchanged: `exportToBuffer` still has no `ROW_GROUP_SIZE`
+  option, so WIDE is still truncated to 60,000 rows.
+
+#### Manual verification (Claude in Chrome)
+
+`http://localhost:5173/data-table/?gen=wide&viz=on&rows=60000`, 1,000 × 60,000, Chromium 1512 × 736. Zero console errors across the session.
+
+```json
+{
+  "tier": "wide",
+  "rows": 60000,
+  "cols": 1000,
+  "mode": "load",
+  "viz": true,
+  "state": "ready",
+  "bootMs": 529.5,
+  "genMs": 14285.7,
+  "loadMs": 3309,
+  "firstPaintMs": 3308.9,
+  "vizReadyMs": 4032.4,
+  "queryCount": 24,
+  "cacheHits": 0,
+  "maxInFlight": 10,
+  "domNodes": 55085,
+  "heapMB": 41.8,
+  "error": null
+}
+```
+
+- **Step 3** — `loadMs 3309 < vizReadyMs 4032` (the load-gate change, in the demo); 24 queries
+  against a 66 budget; 10 canvases against 40.
+- **Step 4** — no stuck placeholders and the row oracle clean at 50 %, 97 % and the very bottom
+  (row 59,999); canvas count flat at 10, so vertical scrolling creates nothing.
+- **Step 5** — the chart set follows the viewport across the sweep: col_0–9 → col_246–257 →
+  col_494–505 → col_742–753 → col_990–999, canvases 10–12 throughout, ~24 queries per jump
+  (12 new charts × 2). Header sequence invariant held at every stop.
+- **Step 6** — one sort: 498 ms, **1 query**, no chart refetch.
+- **Step 7** — a brush on col_0 filtered 60,000 → 24,000 for **exactly 22 queries** = the budgeted
+  `2 + 2 × 10 visible charts`. Then a jump to an unvisited region: 12 charts appeared at 4.1
+  queries each, every one already filter-aware (`24,000 / 60,000 rows`) with no fan-out to the
+  other 988 columns.
+- **Step 8** — resize + pin + hide + reorder together: 7 queries, all grid re-projection.
+- **Step 9** — `exportToBuffer` of 1,000 rows × 1,000 cols: 3.87 MB.
+- **Step 10** — theme flip applied in 0 ms; charts repainted on the dark palette.
+
+Screenshots (session-local, `/var/folders/.../claude-chrome-screenshots-rsdhx4/`):
+`screenshot-1786216161903-5.jpg` first paint — histograms on visible columns only;
+`screenshot-1786216218436-6.jpg` col_992–999 after the sweep — charts streamed in at the far end;
+`screenshot-1786216335619-7.jpg` col_615–622 filtered — foreground/background split in a region
+the initial wave never reached; `screenshot-1786216440173-8.jpg` dark theme.
+
+#### Gates
+
+| Gate                                                               | Result                                                                                      |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `npm run lint` · `format:check` · `typecheck`                      | clean                                                                                       |
+| `npm run test:coverage`                                            | 237 files, **4,429 passed / 10 skipped**; all coverage gates met                            |
+| `npm run build && npm run size`                                    | passes; root entry 10.82 kB vs 11.4 kB cap, viz chunk 74.65 kB vs 78.5 kB                   |
+| `npm run docs:api:check`                                           | 0 errors (10 warnings, all "referenced but not documented" for internal types)              |
+| `npm run test:browser`                                             | **47 passed / 13 skipped**, including 9 new `viz-lazy` specs at WIDE_CI                     |
+| `RUN_BROWSER_PERF=1 … viz-lazy.spec.ts tiers.full.spec.ts`         | WIDE viz=on 20 queries / 8 canvases / `loadMs` 3,546; GRID, DEEP, TARGET all pass unchanged |
+| `npm run perf:baseline` (WIDE both modes) + `perf:baseline:report` | 2 captures written at `51ba4ef`, README regenerated                                         |
+| `/code-review` at high effort over `9acecc2..HEAD`                 | 11 confirmed findings; 5 correctness fixes + 6 accuracy corrections landed in `c11e931`     |

@@ -49,6 +49,7 @@ import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnReorder } from './ColumnReorder';
+import { pinnedOffsets, resolvePinnedCount } from './ColumnWindow';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
@@ -1185,10 +1186,14 @@ export class TableContainer {
   private updateColumnWidths(): void {
     const columnWidths = this.state.columnWidths.get();
 
-    // Update header widths
+    // Update header widths. Rounded exactly as the body's prefix sums round
+    // them: a fractional width is reachable (`setColumnWidth` does not round,
+    // and a drag under page zoom passes a fractional `clientX`), and a residue
+    // that multiplies by M in the header and by 1 in the body's spacer is what
+    // pulls the two apart at 1,000 columns.
     for (const header of this.columnHeaders) {
       const col = header.getColumn();
-      const width = columnWidths.get(col.name) ?? 150;
+      const width = Math.round(columnWidths.get(col.name) ?? 150);
       header.getElement().style.width = `${width}px`;
     }
   }
@@ -1208,25 +1213,22 @@ export class TableContainer {
     const baseZ =
       Number(getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
 
-    // Compute cumulative left offsets for pinned columns
-    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
-    let cumulativeLeft = 0;
-
-    for (let i = 0; i < pinnedColumns.length; i++) {
-      const colName = pinnedColumns[i]!;
-      pinnedOffsets.set(colName, {
-        left: cumulativeLeft,
-        zIndex: baseZ + (pinnedColumns.length - i),
-      });
-      const width = columnWidths.get(colName) ?? 150;
-      cumulativeLeft += width;
+    // Cumulative left offsets over the leading run of `visibleColumns`, which
+    // is where the pinned group actually lives — not over `pinnedColumns`,
+    // which still lists columns `hideColumn` has removed from view. The same
+    // helper the body uses, so the two cannot disagree.
+    const { pinnedCount } = resolvePinnedCount(visibleColumns, pinnedColumns);
+    const offsets = pinnedOffsets(visibleColumns, columnWidths, pinnedCount, baseZ);
+    let pinnedWidth = 0;
+    for (let i = 0; i < pinnedCount; i++) {
+      pinnedWidth += Math.round(columnWidths.get(visibleColumns[i]!) ?? 150);
     }
 
     // Apply to header elements
     for (const header of this.columnHeaders) {
       const colName = header.getColumn().name;
       const el = header.getElement();
-      const offset = pinnedOffsets.get(colName);
+      const offset = offsets.get(colName);
 
       if (offset) {
         el.style.position = 'sticky';
@@ -1241,38 +1243,35 @@ export class TableContainer {
       }
     }
 
-    // Apply to body cells
-    const bodyContainer = this.bodyContainer;
-    const rows = bodyContainer.querySelectorAll(`.${prefix}-row`);
-    for (const row of rows) {
-      const cells = row.children;
-      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i]!;
-        const cell = cells[i] as HTMLElement;
-        const offset = pinnedOffsets.get(colName);
+    // Apply to body cells. Keyed by each cell's own `data-column`: a body row
+    // holds a pinned prefix, two presentational spacers and a slice of the
+    // columns, so pairing `cells[i]` with `visibleColumns[i]` would pin the
+    // wrong elements. Window-scoping is free — only rendered cells exist.
+    const cells = this.bodyContainer.querySelectorAll<HTMLElement>(`.${prefix}-cell[data-column]`);
+    for (const cell of cells) {
+      const offset = offsets.get(cell.getAttribute('data-column')!);
 
-        if (offset) {
-          cell.style.position = 'sticky';
-          cell.style.left = `${offset.left}px`;
-          cell.style.zIndex = String(offset.zIndex);
-          cell.classList.add(`${prefix}-cell--pinned`);
-        } else {
-          cell.style.position = '';
-          cell.style.left = '';
-          cell.style.zIndex = '';
-          cell.classList.remove(`${prefix}-cell--pinned`);
-        }
+      if (offset) {
+        cell.style.position = 'sticky';
+        cell.style.left = `${offset.left}px`;
+        cell.style.zIndex = String(offset.zIndex);
+        cell.classList.add(`${prefix}-cell--pinned`);
+      } else {
+        cell.style.position = '';
+        cell.style.left = '';
+        cell.style.zIndex = '';
+        cell.classList.remove(`${prefix}-cell--pinned`);
       }
     }
 
     // Manage the continuous demarcation line overlay
-    if (pinnedColumns.length > 0) {
+    if (pinnedCount > 0) {
       if (!this.pinnedDemarcation) {
         this.pinnedDemarcation = document.createElement('div');
         this.pinnedDemarcation.className = `${prefix}-pinned-demarcation`;
         this.element.appendChild(this.pinnedDemarcation);
       }
-      this.pinnedDemarcation.style.left = `${cumulativeLeft}px`;
+      this.pinnedDemarcation.style.left = `${pinnedWidth}px`;
       this.pinnedDemarcation.style.display = '';
     } else if (this.pinnedDemarcation) {
       this.pinnedDemarcation.style.display = 'none';
@@ -1385,9 +1384,10 @@ export class TableContainer {
             });
             this.columnHeaders.push(columnHeader);
 
-            // Apply dynamic width from state (default to 150px)
+            // Apply dynamic width from state (default to 150px), rounded to
+            // match the body's prefix sums — see `updateColumnWidths`.
             const headerEl = columnHeader.getElement();
-            const width = columnWidths.get(colName) ?? 150;
+            const width = Math.round(columnWidths.get(colName) ?? 150);
             headerEl.style.width = `${width}px`;
 
             headerRowEl.appendChild(headerEl);
@@ -1470,7 +1470,7 @@ export class TableContainer {
         {
           let totalWidth = 0;
           for (const colName of visibleColumns) {
-            totalWidth += columnWidths.get(colName) ?? 150;
+            totalWidth += Math.round(columnWidths.get(colName) ?? 150);
           }
           this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
         }

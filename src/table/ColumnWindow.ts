@@ -128,6 +128,77 @@ export function pinnedPrefixLength(
   return clampUnpinnedIndex(0, columns, pinnedColumns);
 }
 
+/**
+ * How many leading columns must be force-rendered because they are pinned.
+ *
+ * `toggleColumnPin` moves pinned columns to the front, so the pinned group is
+ * normally the leading run of `visibleColumns` and `P` is that run's length.
+ * When it is not — see {@link ColumnWindow.pinnedPrefixViolated} for the
+ * public-API sequence that gets there — fall back to "through the last pinned
+ * column", which is still correct and merely renders more than it has to.
+ *
+ * Exported because the body, the header's sticky offsets and the keyboard
+ * navigator all have to agree on `P`; a second definition is how they drift.
+ */
+export function resolvePinnedCount(
+  visibleColumns: readonly string[],
+  pinnedColumns: readonly string[],
+): { pinnedCount: number; violated: boolean } {
+  if (pinnedColumns.length === 0) return { pinnedCount: 0, violated: false };
+  const prefixLength = pinnedPrefixLength(visibleColumns, pinnedColumns);
+
+  const pinned = new Set(pinnedColumns);
+  let lastPinnedIndex = -1;
+  for (let i = visibleColumns.length - 1; i >= 0; i--) {
+    if (pinned.has(visibleColumns[i]!)) {
+      lastPinnedIndex = i;
+      break;
+    }
+  }
+  // No pinned column is visible at all — every one of them is hidden.
+  if (lastPinnedIndex < 0) return { pinnedCount: 0, violated: false };
+  if (lastPinnedIndex + 1 === prefixLength) return { pinnedCount: prefixLength, violated: false };
+  return { pinnedCount: lastPinnedIndex + 1, violated: true };
+}
+
+/** Sticky placement for one pinned column. */
+export interface PinnedOffset {
+  /** `left` in px — Σ occupied widths of the pinned columns before it. */
+  left: number;
+  /** `z-index`, descending left to right so an earlier column paints on top. */
+  zIndex: number;
+}
+
+/**
+ * Sticky `left` / `z-index` for every pinned column, keyed by column name.
+ *
+ * Computed over `visibleColumns[0, pinnedCount)` — **not** by walking
+ * `pinnedColumns`. The difference is a real bug: `hideColumn` never removes a
+ * column from `pinnedColumns`, so a pinned-then-hidden column used to consume
+ * a slot in the cumulative sum and push every later pinned column's `left`,
+ * and the demarcation line, one column too far right. Header and body both did
+ * it, so they agreed with each other and disagreed with the flow — which is
+ * why it went unnoticed.
+ *
+ * Widths are rounded the same way the prefix sums round them, so a fractional
+ * column width cannot make a sticky offset disagree with the cell it pins.
+ */
+export function pinnedOffsets(
+  visibleColumns: readonly string[],
+  columnWidths: ReadonlyMap<string, number>,
+  pinnedCount: number,
+  baseZ: number,
+): Map<string, PinnedOffset> {
+  const offsets = new Map<string, PinnedOffset>();
+  let left = 0;
+  for (let i = 0; i < pinnedCount && i < visibleColumns.length; i++) {
+    const name = visibleColumns[i]!;
+    offsets.set(name, { left, zIndex: baseZ + (pinnedCount - i) });
+    left += Math.round(columnWidths.get(name) ?? DEFAULT_COLUMN_WIDTH);
+  }
+  return offsets;
+}
+
 /** First index `i` in `[0, n]` with `prefix[i] >= target`. */
 function lowerBound(prefix: Float64Array, n: number, target: number): number {
   let lo = 0;
@@ -274,7 +345,7 @@ export class ColumnWindowModel {
     this.sync(visibleColumns, columnWidths, boxOverheadPx);
     const n = this.columnCount;
 
-    const { pinnedCount, violated } = resolvePinnedPrefix(visibleColumns, pinnedColumns);
+    const { pinnedCount, violated } = resolvePinnedCount(visibleColumns, pinnedColumns);
 
     if (n === 0) {
       return {
@@ -332,34 +403,4 @@ export class ColumnWindowModel {
       pinnedPrefixViolated: violated,
     };
   }
-}
-
-/**
- * How many leading columns must be force-rendered because they are pinned.
- *
- * `toggleColumnPin` moves pinned columns to the front, so the pinned group is
- * normally the leading run of `visibleColumns` and `P` is that run's length.
- * When it is not — see {@link ColumnWindow.pinnedPrefixViolated} for the
- * public-API sequence that gets there — fall back to "through the last pinned
- * column", which is still correct and merely renders more than it has to.
- */
-function resolvePinnedPrefix(
-  visibleColumns: readonly string[],
-  pinnedColumns: readonly string[],
-): { pinnedCount: number; violated: boolean } {
-  const prefixLength = pinnedPrefixLength(visibleColumns, pinnedColumns);
-  if (pinnedColumns.length === 0) return { pinnedCount: 0, violated: false };
-
-  const pinned = new Set(pinnedColumns);
-  let lastPinnedIndex = -1;
-  for (let i = visibleColumns.length - 1; i >= 0; i--) {
-    if (pinned.has(visibleColumns[i]!)) {
-      lastPinnedIndex = i;
-      break;
-    }
-  }
-  // No pinned column is visible at all — every one of them is hidden.
-  if (lastPinnedIndex < 0) return { pinnedCount: 0, violated: false };
-  if (lastPinnedIndex + 1 === prefixLength) return { pinnedCount: prefixLength, violated: false };
-  return { pinnedCount: lastPinnedIndex + 1, violated: true };
 }

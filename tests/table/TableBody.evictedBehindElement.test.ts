@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { rowsFor } from '../helpers/rowFetchBridge';
-import { bodyCells, isPlaceholder, rowElements } from '../helpers/tableBodyDom';
+import { SPACERS_PER_ROW, bodyCells, isPlaceholder, rowElements } from '../helpers/tableBodyDom';
 import { HARNESS_COLUMNS, MockResizeObserver, setupTableBody } from '../helpers/tableBodyHarness';
 
 beforeEach(() => {
@@ -42,7 +42,7 @@ describe('TableBody — evicted cache entry behind a live element demotes to pla
     const victim = 3;
     const before = rowElements(body).get(victim)!;
     expect(isPlaceholder(before)).toBe(false);
-    expect(before.children.length).toBe(HARNESS_COLUMNS.length);
+    expect(before.children.length).toBe(HARNESS_COLUMNS.length + SPACERS_PER_ROW);
     expect(bodyCells(before)).toHaveLength(HARNESS_COLUMNS.length);
 
     // Simulate the eviction/invalidation race: the cache entry disappears
@@ -63,7 +63,7 @@ describe('TableBody — evicted cache entry behind a live element demotes to pla
     // Neighbours with intact cache entries are untouched.
     const neighbour = rowElements(body).get(victim + 1)!;
     expect(isPlaceholder(neighbour)).toBe(false);
-    expect(neighbour.children.length).toBe(HARNESS_COLUMNS.length);
+    expect(neighbour.children.length).toBe(HARNESS_COLUMNS.length + SPACERS_PER_ROW);
     expect(bodyCells(neighbour)).toHaveLength(HARNESS_COLUMNS.length);
 
     // DOM order/coverage invariant still holds with the demoted row.

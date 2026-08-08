@@ -27,12 +27,22 @@
  * their `TableBody` inline and must not be made to import mounting machinery
  * to get a cell accessor.
  */
-import type { ColumnSchema } from '@/core/types';
 import type { TableState } from '@/core/State';
+import type { ColumnWindow } from '@/table/ColumnWindow';
 import type { RowData, TableBody } from '@/table/TableBody';
 
 /** Default class prefix — every suite in the repo uses it. */
 const PREFIX = 'dt';
+
+/**
+ * Presentational children every **data** row carries besides its cells: the
+ * left and right column spacers.
+ *
+ * Written as `cells + SPACERS_PER_ROW` at the exact-count assertions rather
+ * than folded into a helper, so those assertions stay exact and a dropped
+ * spacer still fails them. Placeholder rows have no spacers.
+ */
+export const SPACERS_PER_ROW = 2;
 
 /**
  * The private surface these helpers reach through. One cast, one place to
@@ -42,18 +52,17 @@ interface TableBodyInternals {
   state: TableState;
   rowElementMap: Map<number, HTMLElement>;
   rowPool: HTMLElement[];
-  getOrCreateRow(columnCount: number): HTMLElement;
-  updateRowContent(
-    rowEl: HTMLElement,
-    index: number,
-    data: RowData,
-    columns: string[],
-    schemaMap: Map<string, ColumnSchema>,
-  ): void;
+  columnWindow: ColumnWindow;
+  beginRenderPass(): RenderPass;
+  getOrCreateRow(win: ColumnWindow): HTMLElement;
+  updateRowContent(rowEl: HTMLElement, index: number, data: RowData, pass: RenderPass): void;
   returnRowToPool(rowEl: HTMLElement): void;
   createPlaceholderRow(index: number): HTMLElement;
   renderVisibleRows(): void;
 }
+
+/** `TableBody`'s private per-pass bundle. Opaque here — only passed through. */
+type RenderPass = { win: ColumnWindow };
 
 function internals(body: TableBody): TableBodyInternals {
   return body as unknown as TableBodyInternals;
@@ -127,7 +136,12 @@ export function spacerWidths(rowEl: HTMLElement): { left: number; right: number 
   const read = (side: 'left' | 'right'): number => {
     const el = rowEl.querySelector<HTMLElement>(`[data-col-spacer="${side}"]`);
     if (!el) return 0;
-    return parseFloat(el.style.flexBasis || el.style.width || '0') || 0;
+    const declared = el.style.flexBasis || el.style.width;
+    if (declared) return parseFloat(declared) || 0;
+    // jsdom's CSSOM does not always expand the `flex` shorthand into
+    // `flexBasis`, so fall back to the shorthand's own text.
+    const shorthand = /(-?[\d.]+)px\s*$/.exec(el.style.flex);
+    return shorthand ? parseFloat(shorthand[1]!) : 0;
   };
   return { left: read('left'), right: read('right') };
 }
@@ -141,19 +155,48 @@ export function spacers(rowEl: HTMLElement): HTMLElement[] {
 // Driving the private render path
 // =========================================
 
-/** A fresh (or pooled) data row, shaped for the body's current column window. */
+/**
+ * A fresh (or pooled) data row, shaped for the body's current column window.
+ *
+ * Publishes the window it built for, exactly as a render pass would, so a
+ * later focus-ring lookup resolves against the structure that is actually in
+ * the DOM.
+ */
 export function newRow(body: TableBody): HTMLElement {
   const i = internals(body);
-  return i.getOrCreateRow(i.state.visibleColumns.get().length);
+  const pass = i.beginRenderPass();
+  i.columnWindow = pass.win;
+  return i.getOrCreateRow(pass.win);
+}
+
+/**
+ * A row shaped for a synthetic window of exactly `cellCount` cells.
+ *
+ * For the pool-mechanics tests, which deliberately ask for a cell count that
+ * is *not* `visibleColumns.length` — the whole point being the reshape. Does
+ * not publish the window: the structure it builds is not the one the body
+ * would render.
+ */
+export function newRowSized(body: TableBody, cellCount: number): HTMLElement {
+  return internals(body).getOrCreateRow({
+    start: 0,
+    end: cellCount,
+    pinnedCount: 0,
+    leftSpacerPx: 0,
+    rightSpacerPx: 0,
+    pinnedWidthPx: 0,
+    totalWidthPx: 0,
+    pinnedPrefixViolated: false,
+  });
 }
 
 /**
  * Render `data` into `rowEl` as row `index`, through the body's own private
  * path and against the body's own live state.
  *
- * Columns and the schema map are derived from state rather than passed in,
- * because that is what every call site was reconstructing by hand and what
- * `renderVisibleRows` does for real.
+ * The render pass — columns, schema map, window, pinned offsets — is built by
+ * the body itself rather than reconstructed here, because that is what every
+ * call site was doing by hand and what `renderVisibleRows` does for real.
  */
 export function renderRow(
   body: TableBody,
@@ -162,9 +205,9 @@ export function renderRow(
   data: RowData,
 ): HTMLElement {
   const i = internals(body);
-  const schemaMap = new Map<string, ColumnSchema>();
-  for (const col of i.state.schema.get()) schemaMap.set(col.name, col);
-  i.updateRowContent(rowEl, index, data, i.state.visibleColumns.get(), schemaMap);
+  const pass = i.beginRenderPass();
+  i.columnWindow = pass.win;
+  i.updateRowContent(rowEl, index, data, pass);
   return rowEl;
 }
 

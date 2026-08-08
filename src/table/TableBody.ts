@@ -16,8 +16,34 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
+import {
+  BOX_OVERHEAD_PX,
+  ColumnWindowModel,
+  DEFAULT_COLUMN_WIDTH,
+  pinnedOffsets,
+  type ColumnWindow,
+  type PinnedOffset,
+} from './ColumnWindow';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
+
+/**
+ * Everything one render pass needs, computed once at the top of the pass and
+ * threaded down instead of re-derived per row or per cell.
+ *
+ * The window in particular is read from here and never from
+ * `this.columnWindow` inside the loop: the field is assigned from this same
+ * object before the loop starts, so a pass can never straddle two windows.
+ */
+interface RenderPass {
+  columns: readonly string[];
+  schemaMap: Map<string, ColumnSchema>;
+  columnWidths: ReadonlyMap<string, number>;
+  win: ColumnWindow;
+  pinned: Map<string, PinnedOffset>;
+  /** `annotations.count() > 0` — see {@link TableBody.ANNOTATED_ATTR}. */
+  annotationsActive: boolean;
+}
 
 /**
  * Options for configuring the TableBody
@@ -223,6 +249,43 @@ export class TableBody {
   // Last observed visibleColumns, so a write can be classified as a reorder
   // (same set, new order — re-render) or a real change (re-fetch).
   private lastVisibleColumns: string[] = [];
+
+  // ---- Column window ------------------------------------------------------
+  //
+  // Prefix sums + the window arithmetic. The model is pure; everything DOM
+  // about the window lives here.
+  private readonly columnWindowModel = new ColumnWindowModel();
+  // The window the currently rendered rows were built for. Assigned once per
+  // pass, from the same local the pass threads down.
+  private columnWindow: ColumnWindow = {
+    start: 0,
+    end: 0,
+    pinnedCount: 0,
+    leftSpacerPx: 0,
+    rightSpacerPx: 0,
+    pinnedWidthPx: 0,
+    totalWidthPx: 0,
+    pinnedPrefixViolated: false,
+  };
+  // column name -> index into visibleColumns. Replaces the per-lookup
+  // `visibleColumns.indexOf` calls, which were O(N) on the focus path.
+  private visibleIndexMap = new Map<string, number>();
+  private visibleIndexSource: readonly string[] | null = null;
+
+  /**
+   * Marks a row that was painted while the annotation store held something.
+   *
+   * The per-cell annotation pass runs ~14 `classList.remove` per cell and is
+   * pure overhead for the overwhelmingly common case of no annotations at all.
+   * Skipping it needs one guard beyond "the store is empty": a row painted
+   * while annotations existed still carries their classes, and pooling does
+   * not scrub them, so it has to get one more stripping pass after the store
+   * empties — including if it spends that transition sitting in the pool.
+   * This attribute is that memory.
+   */
+  private static readonly ANNOTATED_ATTR = 'data-ann-painted';
+  /** `data-window="P:W"` — a **structure** signature, never a position one. */
+  private static readonly WINDOW_ATTR = 'data-window';
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
@@ -1113,8 +1176,6 @@ export class TableBody {
     if (this.destroyed) return;
 
     const viewport = this.virtualScroller.getViewportContainer();
-    const schema = this.state.schema.get();
-    const visibleColumns = this.state.visibleColumns.get();
     const selectedRows = this.state.selectedRows.get();
     const hoveredRow = this.state.hoveredRow.get();
     const focusedCell = this.state.focusedCell.get();
@@ -1122,11 +1183,12 @@ export class TableBody {
     const newStart = this.currentRange.start;
     const newEnd = this.currentRange.end;
 
-    // Build schema map for quick lookup
-    const schemaMap = new Map<string, ColumnSchema>();
-    for (const col of schema) {
-      schemaMap.set(col.name, col);
-    }
+    // The window is computed ONCE, here, and published to `this.columnWindow`
+    // from the same local the pass carries down. Nothing inside the loop reads
+    // the field — that ordering rule is what makes it impossible for a pass to
+    // straddle two windows.
+    const pass = this.beginRenderPass();
+    this.columnWindow = pass.win;
 
     // 1. Remove rows no longer visible (return to pool)
     for (const [index, element] of this.rowElementMap) {
@@ -1146,8 +1208,8 @@ export class TableBody {
       if (!rowEl) {
         // Need a new row - get from pool or create
         if (rowData) {
-          rowEl = this.getOrCreateRow(visibleColumns.length);
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          rowEl = this.getOrCreateRow(pass.win);
+          this.updateRowContent(rowEl, i, rowData, pass);
           this.attachRowEventListeners(rowEl, i);
         } else {
           // Data not yet loaded - create placeholder
@@ -1156,30 +1218,30 @@ export class TableBody {
         this.rowElementMap.set(i, rowEl);
         this.insertRowInOrder(viewport, rowEl, i);
       } else if (rowData) {
-        // The map can hold either a data row (visibleColumns.length cells,
+        // The map can hold either a data row (a full windowed structure,
         // listeners attached) or a placeholder (1 cell, no listeners,
-        // `data-placeholder` marker). updateRowContent's loop is bounded by
-        // min(columns, cells), so calling it on a placeholder would leave
-        // columns 1..N-1 unrendered AND the row inert — the partial-render
+        // `data-placeholder` marker). `updateRowContent` writes cells by
+        // position within the structure, so calling it on a placeholder would
+        // leave most columns unrendered AND the row inert — the partial-render
         // bug. The marker is the durable signal — unlike the historical
         // cell-count comparison it stays unambiguous for single-column
-        // tables, which are now replaced from the pool like everything else
-        // instead of being promoted in place. The count check remains as a
-        // second trigger so a data row with a stale cell shape is also
-        // rebuilt rather than partially updated.
-        if (this.isPlaceholderRow(rowEl) || rowEl.children.length !== visibleColumns.length) {
+        // tables, which are replaced from the pool like everything else
+        // instead of being promoted in place. `rowMatchesWindow` is the second
+        // trigger, so a data row built for a different window shape is rebuilt
+        // rather than partially updated.
+        if (this.isPlaceholderRow(rowEl) || !this.rowMatchesWindow(rowEl, pass.win)) {
           // Bypasses `returnRowToPool` entirely, so the focus rescue has to be
           // spelled out here as well.
           this.moveFocusToGridBeforeRemoval(rowEl);
           rowEl.remove();
-          rowEl = this.getOrCreateRow(visibleColumns.length);
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          rowEl = this.getOrCreateRow(pass.win);
+          this.updateRowContent(rowEl, i, rowData, pass);
           this.attachRowEventListeners(rowEl, i);
           this.rowElementMap.set(i, rowEl);
           this.insertRowInOrder(viewport, rowEl, i);
         } else {
           // Row exists, update content if needed (e.g., after sort)
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          this.updateRowContent(rowEl, i, rowData, pass);
         }
       } else if (!this.isPlaceholderRow(rowEl)) {
         // Data row whose cache entry is gone (evicted or invalidated while
@@ -1209,46 +1271,101 @@ export class TableBody {
         } else {
           rowEl.classList.remove(hoverClass);
         }
-
-        // Apply the cursor ring. Cells stay `tabindex="-1"` permanently —
-        // the cursor is published via `aria-activedescendant` on `.dt-grid`,
-        // not by moving DOM focus, because a recycled row would take real
-        // focus with it into the pool.
-        const focusClass = `${this.classPrefix}-cell--focused`;
-        const focusColIdx =
-          focusedCell && focusedCell.row === i ? visibleColumns.indexOf(focusedCell.column) : -1;
-        for (let c = 0; c < rowEl.children.length; c++) {
-          (rowEl.children[c] as HTMLElement).classList.toggle(focusClass, c === focusColIdx);
-        }
       }
     }
 
-    // Keep previousFocusedCell in sync so updateFocusStyles() knows
-    // which DOM element currently has the focus class after a rebuild.
-    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
+    // The cursor ring is two targeted toggles, not a loop over every cell of
+    // every row. Cells stay `tabindex="-1"` permanently — the cursor is
+    // published via `aria-activedescendant` on `.dt-grid`, not by moving DOM
+    // focus, because a recycled row would take real focus with it into the
+    // pool. `applyFocusRing` also re-syncs `previousFocusedCell`, so a later
+    // `updateFocusStyles` still knows which element carries the class.
+    this.applyFocusRing(focusedCell);
 
-    // Calculate total width from actual column widths
-    const columnWidths = this.state.columnWidths.get();
-    let totalWidth = 0;
-    for (const colName of visibleColumns) {
-      const width = columnWidths.get(colName) ?? 150;
-      totalWidth += width;
-    }
-
-    // Set width for horizontal scrolling
-    // Uses a width spacer element in normal flow to force correct scrollWidth
-    this.virtualScroller.setContentWidth(totalWidth);
-
-    // Also set header row width to match for scroll synchronization
-    const scrollContainer = this.virtualScroller.getScrollContainer();
-    const headerRow = scrollContainer
-      .closest(`.${this.classPrefix}-root`)
-      ?.querySelector(`.${this.classPrefix}-header-row`) as HTMLElement;
-    if (headerRow) {
-      headerRow.style.minWidth = `${totalWidth}px`;
-    }
+    // Scroll geometry, from the same rounded widths the window arithmetic is
+    // built on — so the body, the header's `minWidth` and `setContentWidth`
+    // cannot disagree about where the content ends.
+    this.applyContentWidth(pass.win.totalWidthPx);
 
     this.onRowsRendered?.();
+  }
+
+  /**
+   * Gather everything a render pass needs, once.
+   *
+   * Replaces three per-row costs: the `getComputedStyle` read, the pinned
+   * offset map, and the schema map. `--dt-z-pinned-col` is an inherited custom
+   * property, so reading it off `.dt-root` is both correct and invariant
+   * across rows.
+   */
+  private beginRenderPass(): RenderPass {
+    const columns = this.state.visibleColumns.get();
+    const columnWidths = this.state.columnWidths.get();
+
+    const schemaMap = new Map<string, ColumnSchema>();
+    for (const col of this.state.schema.get()) schemaMap.set(col.name, col);
+
+    this.syncVisibleIndexMap(columns);
+    const win = this.computeColumnWindow(columns, columnWidths);
+
+    const root =
+      this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
+    const baseZ = Number(getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
+
+    return {
+      columns,
+      schemaMap,
+      columnWidths,
+      win,
+      pinned: pinnedOffsets(columns, columnWidths, win.pinnedCount, baseZ),
+      annotationsActive: (this.annotations?.count() ?? 0) > 0,
+    };
+  }
+
+  /**
+   * The window to render.
+   *
+   * Currently the **full** window — every visible column, both spacers at
+   * zero — so this commit changes the shape of a row and nothing a user can
+   * see. Narrowing it to the horizontally visible span is the next commit;
+   * this is the one line that changes.
+   */
+  private computeColumnWindow(
+    columns: readonly string[],
+    columnWidths: ReadonlyMap<string, number>,
+  ): ColumnWindow {
+    return this.columnWindowModel.compute({
+      visibleColumns: columns,
+      columnWidths,
+      pinnedColumns: this.state.pinnedColumns.get(),
+      scrollLeft: 0,
+      viewportWidth: Number.POSITIVE_INFINITY,
+      boxOverheadPx: BOX_OVERHEAD_PX,
+    });
+  }
+
+  /** Rebuild `name -> visibleColumns index` when the array identity changes. */
+  private syncVisibleIndexMap(columns: readonly string[]): void {
+    if (this.visibleIndexSource === columns) return;
+    this.visibleIndexMap.clear();
+    for (let i = 0; i < columns.length; i++) this.visibleIndexMap.set(columns[i]!, i);
+    this.visibleIndexSource = columns;
+  }
+
+  /**
+   * Publish the horizontal content extent to the scroller and the header.
+   *
+   * One function rather than two duplicated blocks: `setContentWidth`'s
+   * argument and `headerRow.style.minWidth` have to be the same number, and
+   * two copies of the same summation is exactly how they would drift.
+   */
+  private applyContentWidth(totalWidthPx: number): void {
+    this.virtualScroller.setContentWidth(totalWidthPx);
+    const headerRow = this.virtualScroller
+      .getScrollContainer()
+      .closest(`.${this.classPrefix}-root`)
+      ?.querySelector<HTMLElement>(`.${this.classPrefix}-header-row`);
+    if (headerRow) headerRow.style.minWidth = `${totalWidthPx}px`;
   }
 
   /**
@@ -1275,52 +1392,205 @@ export class TableBody {
   }
 
   /**
-   * Get a row element from the pool or create a new one
+   * A row element shaped for `win`, from the pool or freshly built.
+   *
+   * **The structural invariant, for any prior tenancy of a pooled element:**
+   * children are exactly `[P cells][left spacer][W cells][right spacer]` —
+   * `P + W + 2` of them, with the spacers at indices `P` and `P + W + 1`.
+   * Every read of a row's DOM assumes it, so this is the one place that
+   * establishes it.
    */
-  private getOrCreateRow(columnCount: number): HTMLElement {
-    let rowEl = this.rowPool.pop();
+  private getOrCreateRow(win: ColumnWindow): HTMLElement {
+    const pinnedCount = win.pinnedCount;
+    const windowSize = win.end - win.start;
+    const rowEl = this.rowPool.pop();
 
-    if (rowEl) {
-      // Reuse pooled row - ensure it has the right number of cells
-      const currentCells = rowEl.children.length;
-      if (currentCells < columnCount) {
-        // Add missing cells
-        for (let i = currentCells; i < columnCount; i++) {
-          rowEl.appendChild(this.createCell());
-        }
-      } else if (currentCells > columnCount) {
-        // Remove extra cells. The row itself survives, so `returnRowToPool`
-        // never sees these cells — the focus rescue belongs here.
-        while (rowEl.children.length > columnCount) {
-          const surplus = rowEl.lastChild!;
-          this.moveFocusToGridBeforeRemoval(surplus);
-          rowEl.removeChild(surplus);
-        }
-      }
-
-      // Clear any stale classes and ARIA attributes
-      rowEl.classList.remove(
-        `${this.classPrefix}-row--selected`,
-        `${this.classPrefix}-row--hover`,
-        `${this.classPrefix}-row--loading`,
-      );
-      this.setRowSelected(rowEl, false);
-      rowEl.removeAttribute('aria-rowindex');
-    } else {
-      // Create new row
-      rowEl = document.createElement('div');
-      rowEl.className = `${this.classPrefix}-row`;
-      rowEl.setAttribute('role', 'row');
-      rowEl.setAttribute('aria-selected', 'false');
-      rowEl.style.height = `${this.rowHeight}px`;
-
-      // Create cells
-      for (let i = 0; i < columnCount; i++) {
-        rowEl.appendChild(this.createCell());
-      }
+    if (!rowEl) {
+      const created = document.createElement('div');
+      created.className = `${this.classPrefix}-row`;
+      created.setAttribute('role', 'row');
+      created.setAttribute('aria-selected', 'false');
+      created.style.height = `${this.rowHeight}px`;
+      for (let i = 0; i < pinnedCount; i++) created.appendChild(this.createCell());
+      created.appendChild(this.createSpacer('left'));
+      for (let i = 0; i < windowSize; i++) created.appendChild(this.createCell());
+      created.appendChild(this.createSpacer('right'));
+      this.stampWindow(created, pinnedCount, windowSize);
+      return created;
     }
 
+    this.reshapeRow(rowEl, pinnedCount, windowSize);
+
+    // Clear any stale classes and ARIA attributes
+    rowEl.classList.remove(
+      `${this.classPrefix}-row--selected`,
+      `${this.classPrefix}-row--hover`,
+      `${this.classPrefix}-row--loading`,
+    );
+    this.setRowSelected(rowEl, false);
+    rowEl.removeAttribute('aria-rowindex');
     return rowEl;
+  }
+
+  /**
+   * Bring a pooled row's structure to `P` pinned cells and `W` window cells.
+   *
+   * The old shape grew and shrank at the end of the row, which would append
+   * past the right spacer and consume it on a shrink. It also cannot be a
+   * plain child-count check: pinning a column while the window narrows by one
+   * leaves `children.length` identical with the left spacer one position off.
+   * So the row carries its own `P:W` signature, and a mismatch detaches both
+   * spacers, resizes the cell run, and re-inserts them.
+   *
+   * Moving a cell between positions is safe because `updateRowContent`
+   * unconditionally rewrites every attribute of every cell it touches.
+   */
+  private reshapeRow(rowEl: HTMLElement, pinnedCount: number, windowSize: number): void {
+    const stamp = this.parseWindowStamp(rowEl);
+    const wantedChildren = pinnedCount + windowSize + 2;
+    if (
+      stamp !== null &&
+      stamp.pinnedCount === pinnedCount &&
+      stamp.windowSize === windowSize &&
+      rowEl.children.length === wantedChildren
+    ) {
+      return;
+    }
+
+    const leftSpacer =
+      rowEl.querySelector<HTMLElement>('[data-col-spacer="left"]') ?? this.createSpacer('left');
+    const rightSpacer =
+      rowEl.querySelector<HTMLElement>('[data-col-spacer="right"]') ?? this.createSpacer('right');
+    leftSpacer.remove();
+    rightSpacer.remove();
+
+    // Whatever is left is the cell run; size it to P + W.
+    const wantedCells = pinnedCount + windowSize;
+    while (rowEl.children.length < wantedCells) rowEl.appendChild(this.createCell());
+    while (rowEl.children.length > wantedCells) {
+      // The row itself survives, so `returnRowToPool` never sees these cells —
+      // the focus rescue belongs here.
+      const surplus = rowEl.lastChild!;
+      this.moveFocusToGridBeforeRemoval(surplus);
+      rowEl.removeChild(surplus);
+    }
+
+    rowEl.insertBefore(leftSpacer, rowEl.children[pinnedCount] ?? null);
+    rowEl.appendChild(rightSpacer);
+    this.stampWindow(rowEl, pinnedCount, windowSize);
+  }
+
+  /**
+   * Whether `rowEl` already has the structure `win` needs.
+   *
+   * Compares the parsed `P` and `end − start` — **never** the raw window
+   * position. A window that moves at constant size is every horizontal scroll
+   * step, and keying the replace decision on position would rebuild every
+   * visible row on every scroll frame, which is precisely the cost this whole
+   * change exists to remove.
+   */
+  private rowMatchesWindow(rowEl: HTMLElement, win: ColumnWindow): boolean {
+    const stamp = this.parseWindowStamp(rowEl);
+    if (stamp === null) return false;
+    const windowSize = win.end - win.start;
+    return (
+      stamp.pinnedCount === win.pinnedCount &&
+      stamp.windowSize === windowSize &&
+      rowEl.children.length === win.pinnedCount + windowSize + 2
+    );
+  }
+
+  private stampWindow(rowEl: HTMLElement, pinnedCount: number, windowSize: number): void {
+    rowEl.setAttribute(TableBody.WINDOW_ATTR, `${pinnedCount}:${windowSize}`);
+  }
+
+  private parseWindowStamp(rowEl: HTMLElement): { pinnedCount: number; windowSize: number } | null {
+    const raw = rowEl.getAttribute(TableBody.WINDOW_ATTR);
+    if (raw === null) return null;
+    const colon = raw.indexOf(':');
+    if (colon < 0) return null;
+    const pinnedCount = Number(raw.slice(0, colon));
+    const windowSize = Number(raw.slice(colon + 1));
+    if (!Number.isInteger(pinnedCount) || !Number.isInteger(windowSize)) return null;
+    return { pinnedCount, windowSize };
+  }
+
+  /**
+   * A column spacer: the width of the columns a row does not render.
+   *
+   * `aria-hidden` is what actually keeps it out of the accessibility tree, so
+   * `role="row"` still satisfies `aria-required-children`. `role="presentation"`
+   * is inert alongside it — an `aria-hidden` node is not exposed at all — but
+   * it is harmless, it is what the design calls for, and it says out loud to
+   * anything walking the DOM that this element is not a cell.
+   */
+  private createSpacer(side: 'left' | 'right'): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.classPrefix}-col-spacer`;
+    el.setAttribute('role', 'presentation');
+    el.setAttribute('aria-hidden', 'true');
+    el.setAttribute('data-col-spacer', side);
+    el.style.flex = '0 0 0px';
+    return el;
+  }
+
+  /** Every rendered data cell of a row, spacers excluded. */
+  private bodyCellsOf(rowEl: HTMLElement): HTMLElement[] {
+    const cells: HTMLElement[] = [];
+    for (const child of Array.from(rowEl.children)) {
+      if (child.classList.contains(`${this.classPrefix}-cell`)) cells.push(child as HTMLElement);
+    }
+    return cells;
+  }
+
+  /**
+   * Where the cell for absolute visible-column index `absIdx` sits among a
+   * row's children, under the currently rendered window.
+   *
+   * `[P cells][left spacer][W cells][right spacer]`, so a pinned column keeps
+   * its own index and a windowed one is offset past the pinned run and the
+   * left spacer.
+   */
+  private childIndexOf(absIdx: number): number {
+    const win = this.columnWindow;
+    return absIdx < win.pinnedCount ? absIdx : absIdx - win.start + win.pinnedCount + 1;
+  }
+
+  /**
+   * The rendered cell at `(row, column)`, or `null` when it is not mounted.
+   *
+   * The `data-column` check is not belt-and-braces: a row built for an older
+   * window would resolve `childIndexOf` to some other column's cell, and
+   * silently ringing the wrong cell is worse than not ringing one.
+   */
+  private cellElement(row: number, column: string): HTMLElement | null {
+    const rowEl = this.rowElementMap.get(row);
+    if (!rowEl || this.isPlaceholderRow(rowEl)) return null;
+    const absIdx = this.visibleIndexMap.get(column);
+    if (absIdx === undefined) return null;
+    const child = rowEl.children[this.childIndexOf(absIdx)];
+    if (!(child instanceof HTMLElement)) return null;
+    return child.getAttribute('data-column') === column ? child : null;
+  }
+
+  /**
+   * Move the cursor ring from wherever it was to wherever it now belongs.
+   *
+   * Two element lookups, not a walk over every cell of every rendered row.
+   * An unmounted target is a no-op on both sides: a cursor can legitimately
+   * point at a row virtualization has recycled, and from the next commit at a
+   * column the horizontal window has scrolled out.
+   */
+  private applyFocusRing(focusedCell: { row: number; column: string } | null): void {
+    const focusClass = `${this.classPrefix}-cell--focused`;
+    const previous = this.previousFocusedCell;
+    if (previous) {
+      this.cellElement(previous.row, previous.column)?.classList.remove(focusClass);
+    }
+    if (focusedCell) {
+      this.cellElement(focusedCell.row, focusedCell.column)?.classList.add(focusClass);
+    }
+    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
   }
 
   /**
@@ -1410,8 +1680,7 @@ export class TableBody {
     rowEl: HTMLElement,
     index: number,
     data: RowData,
-    columns: string[],
-    schemaMap: Map<string, ColumnSchema>,
+    pass: RenderPass,
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
     // +2, not +1: under `role="grid"` the column-header row is row 1, so body
@@ -1447,83 +1716,119 @@ export class TableBody {
     // annotations; cell / column annotations stay local.
     this.applyRowAnnotationClasses(rowEl, rowId);
 
-    const columnWidths = this.state.columnWidths.get();
-    const pinnedColumns = this.state.pinnedColumns.get();
+    // A row painted while the store held something has to be stripped once
+    // after it empties, even if it spent that transition in the pool. See
+    // ANNOTATED_ATTR.
+    const annotationPass = pass.annotationsActive || rowEl.hasAttribute(TableBody.ANNOTATED_ATTR);
+    if (pass.annotationsActive) rowEl.setAttribute(TableBody.ANNOTATED_ATTR, '1');
+    else rowEl.removeAttribute(TableBody.ANNOTATED_ATTR);
 
-    const root =
-      this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
-    const baseZ = Number(getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
+    const { win } = pass;
+    const children = rowEl.children;
+    const windowSize = win.end - win.start;
 
-    // Compute pinned offsets
-    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
-    let cumulativeLeft = 0;
-    for (let i = 0; i < pinnedColumns.length; i++) {
-      const pCol = pinnedColumns[i]!;
-      pinnedOffsets.set(pCol, {
-        left: cumulativeLeft,
-        zIndex: baseZ + (pinnedColumns.length - i),
-      });
-      cumulativeLeft += columnWidths.get(pCol) ?? 150;
+    // The pinned prefix, always rendered wherever the window sits, then the
+    // window itself, offset past that prefix and the left spacer.
+    //
+    // The missing-child guards are defensive only: `renderVisibleRows`
+    // establishes the structure through `getOrCreateRow` and re-checks it with
+    // `rowMatchesWindow` before reaching here. A direct caller can still hand
+    // over a shorter element, and that should render what fits rather than
+    // throw partway.
+    for (let abs = 0; abs < win.pinnedCount; abs++) {
+      const child = children[abs];
+      if (!child) break;
+      this.paintCell(child as HTMLElement, abs, index, data, rowId, pass, annotationPass);
+    }
+    for (let abs = win.start; abs < win.end; abs++) {
+      const child = children[abs - win.start + win.pinnedCount + 1];
+      if (!child) break;
+      this.paintCell(child as HTMLElement, abs, index, data, rowId, pass, annotationPass);
     }
 
-    const cells = rowEl.children;
-    for (let i = 0; i < columns.length && i < cells.length; i++) {
-      const colName = columns[i]!;
-      const colSchema = schemaMap.get(colName);
-      const value = data[colName];
-      const cellEl = cells[i] as HTMLElement;
+    // Spacers last, so a structural mistake above shows up as a missing cell
+    // rather than as a silently mis-sized gap. Never rounded here: the prefix
+    // sums already rounded every width they added, so these are exact.
+    const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;
+    if (leftSpacer) leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+    const rightSpacer = children[win.pinnedCount + windowSize + 1] as HTMLElement | undefined;
+    if (rightSpacer) rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
+  }
 
-      // Stable id so `aria-activedescendant` on `.dt-grid` can name this
-      // cell. Keyed by absolute row index + visible column index, and
-      // rewritten on every reuse, so a pooled element never carries a
-      // stale id.
-      if (this.instanceId) {
-        cellEl.id = this.buildCellId(index, i);
-      }
+  /**
+   * Write one cell: identity, ARIA, geometry, pinning, and content.
+   *
+   * `absIdx` is the position in the **full** `visibleColumns` array, never the
+   * child index — cell ids are keyed absolute so `TableContainer`'s
+   * `visibleColumns.indexOf`-derived `aria-activedescendant` target keeps
+   * resolving with no container-side change.
+   */
+  private paintCell(
+    cellEl: HTMLElement,
+    absIdx: number,
+    rowIndex: number,
+    data: RowData,
+    rowId: number | null,
+    pass: RenderPass,
+    annotationPass: boolean,
+  ): void {
+    const colName = pass.columns[absIdx];
+    if (colName === undefined) return;
+    const colSchema = pass.schemaMap.get(colName);
 
-      // ARIA: 1-based column index in full schema
-      const ariaColIdx = this.colIndexMap.get(colName);
-      if (ariaColIdx !== undefined) {
-        cellEl.setAttribute('aria-colindex', String(ariaColIdx));
-      }
+    // Stable id so `aria-activedescendant` on `.dt-grid` can name this
+    // cell. Keyed by absolute row index + absolute visible column index, and
+    // rewritten on every reuse, so a pooled element never carries a stale id.
+    if (this.instanceId) {
+      cellEl.id = this.buildCellId(rowIndex, absIdx);
+    }
 
-      // `data-column` gives the delegated pointer/focus handler a cheap
-      // way to resolve a cell back to its column name without iterating
-      // sibling indices.
-      cellEl.setAttribute('data-column', colName);
+    // ARIA: 1-based column index in full schema. Absolute, with gaps where
+    // columns are absent — which is exactly what the ARIA grid pattern
+    // prescribes for a partially rendered row.
+    const ariaColIdx = this.colIndexMap.get(colName);
+    if (ariaColIdx !== undefined) {
+      cellEl.setAttribute('aria-colindex', String(ariaColIdx));
+    }
 
-      // Apply dynamic width
-      const width = columnWidths.get(colName) ?? 150;
-      cellEl.style.width = `${width}px`;
+    // `data-column` gives the delegated pointer/focus handler a cheap
+    // way to resolve a cell back to its column name without iterating
+    // sibling indices.
+    cellEl.setAttribute('data-column', colName);
 
-      // Apply pinned cell styles
-      const offset = pinnedOffsets.get(colName);
-      if (offset) {
-        cellEl.style.position = 'sticky';
-        cellEl.style.left = `${offset.left}px`;
-        cellEl.style.zIndex = String(offset.zIndex);
-        cellEl.classList.add(`${this.classPrefix}-cell--pinned`);
-      } else {
-        cellEl.style.position = '';
-        cellEl.style.left = '';
-        cellEl.style.zIndex = '';
-        cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
-      }
+    // Apply dynamic width, rounded the same way the prefix sums round it so a
+    // cell and the spacer standing in for its neighbours cannot disagree.
+    cellEl.style.width = `${Math.round(pass.columnWidths.get(colName) ?? DEFAULT_COLUMN_WIDTH)}px`;
 
-      // Apply derived cell styling (after pinned logic so both classes can coexist)
-      if (colSchema?.isDerived) {
-        cellEl.classList.add(`${this.classPrefix}-cell--derived`);
-      } else {
-        cellEl.classList.remove(`${this.classPrefix}-cell--derived`);
-      }
+    // Apply pinned cell styles
+    const offset = pass.pinned.get(colName);
+    if (offset) {
+      cellEl.style.position = 'sticky';
+      cellEl.style.left = `${offset.left}px`;
+      cellEl.style.zIndex = String(offset.zIndex);
+      cellEl.classList.add(`${this.classPrefix}-cell--pinned`);
+    } else {
+      cellEl.style.position = '';
+      cellEl.style.left = '';
+      cellEl.style.zIndex = '';
+      cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
+    }
 
-      // CellRenderer is intentionally left untouched: it always writes the
-      // formatted value into `cellEl.title`. If the cell has annotations
-      // (any scope) we CLEAR the title — the AnnotationPopover is the
-      // sole tooltip for annotated cells, so the native title would be a
-      // duplicate. When all annotations are later removed, a subsequent
-      // render restores the formatted title without any tracking state.
-      this.cellRenderer.render(cellEl, value, colSchema);
+    // Apply derived cell styling (after pinned logic so both classes can coexist)
+    if (colSchema?.isDerived) {
+      cellEl.classList.add(`${this.classPrefix}-cell--derived`);
+    } else {
+      cellEl.classList.remove(`${this.classPrefix}-cell--derived`);
+    }
+
+    // CellRenderer is intentionally left untouched: it always writes the
+    // formatted value into `cellEl.title`. If the cell has annotations
+    // (any scope) we CLEAR the title — the AnnotationPopover is the
+    // sole tooltip for annotated cells, so the native title would be a
+    // duplicate. When all annotations are later removed, a subsequent
+    // render restores the formatted title without any tracking state.
+    this.cellRenderer.render(cellEl, data[colName], colSchema);
+    if (annotationPass) {
       this.applyCellAnnotationClasses(cellEl, rowId, colName);
     }
   }
@@ -1677,10 +1982,10 @@ export class TableBody {
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;
-    const visibleColumns = this.state.visibleColumns.get();
     const schema = this.state.schema.get();
     const schemaMap = new Map<string, ColumnSchema>();
     for (const col of schema) schemaMap.set(col.name, col);
+    const active = this.annotations.count() > 0;
     for (const [index, rowEl] of this.rowElementMap) {
       const rowData = this.rowDataCache.get(index);
       if (!rowData) continue;
@@ -1692,13 +1997,22 @@ export class TableBody {
             ? rawRowId
             : null;
       this.applyRowAnnotationClasses(rowEl, rowId);
-      const cells = rowEl.children;
-      for (let c = 0; c < visibleColumns.length && c < cells.length; c++) {
-        const cellEl = cells[c] as HTMLElement;
-        const colName = visibleColumns[c]!;
+      // Every cell resolved by its own `data-column`, never by pairing
+      // `visibleColumns[c]` with `children[c]`: a windowed row's children are
+      // a pinned prefix, two spacers and a slice, so the positional pairing
+      // would re-render each cell with a neighbouring column's value.
+      //
+      // This is the full strip pass the per-cell early return relies on — it
+      // runs unconditionally on every store change, including the transition
+      // to empty, which is the transition the early return cannot see.
+      for (const cellEl of this.bodyCellsOf(rowEl)) {
+        const colName = cellEl.getAttribute('data-column');
+        if (colName === null) continue;
         this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
         this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
+      if (active) rowEl.setAttribute(TableBody.ANNOTATED_ATTR, '1');
+      else rowEl.removeAttribute(TableBody.ANNOTATED_ATTR);
     }
     // Popover auto-dismisses: its anchor may have lost its `dt-cell--annotated`
     // class, and re-reading via getByCell would be stale.
@@ -1757,17 +2071,19 @@ export class TableBody {
     rowEl.addEventListener('click', (event) => {
       this.handleRowClick(index, event);
 
-      // Set focused cell from clicked cell
+      // Set focused cell from clicked cell. Resolved by the cell's own
+      // `data-column`, not by its position among the row's children — those
+      // now include two spacers and cover only the rendered window. A click
+      // that lands on a spacer resolves to no `.dt-cell` at all and is
+      // correctly ignored by the guard below.
       if (this.actions && !this.destroyed) {
-        const cellEl = (event.target as HTMLElement).closest(`.${this.classPrefix}-cell`);
+        const cellEl = (event.target as HTMLElement).closest<HTMLElement>(
+          `.${this.classPrefix}-cell`,
+        );
         if (cellEl && rowEl.contains(cellEl)) {
-          const cellIndex = Array.from(rowEl.children).indexOf(cellEl);
-          const visibleColumns = this.state.visibleColumns.get();
-          if (cellIndex >= 0 && cellIndex < visibleColumns.length) {
-            this.actions.setFocusedCell({
-              row: index,
-              column: visibleColumns[cellIndex]!,
-            });
+          const column = cellEl.getAttribute('data-column');
+          if (column !== null) {
+            this.actions.setFocusedCell({ row: index, column });
           }
         }
       }
@@ -1977,68 +2293,47 @@ export class TableBody {
    * and adds it to the newly focused cell (if visible).
    */
   private updateFocusStyles(): void {
-    const focusedCell = this.state.focusedCell.get();
-    const focusClass = `${this.classPrefix}-cell--focused`;
-    const visibleColumns = this.state.visibleColumns.get();
-
-    // Remove from previous
-    if (this.previousFocusedCell) {
-      const prevRowEl = this.rowElementMap.get(this.previousFocusedCell.row);
-      if (prevRowEl) {
-        const prevColIdx = visibleColumns.indexOf(this.previousFocusedCell.column);
-        if (prevColIdx >= 0 && prevColIdx < prevRowEl.children.length) {
-          (prevRowEl.children[prevColIdx] as HTMLElement).classList.remove(focusClass);
-        }
-      }
-    }
-
-    // Add to current
-    if (focusedCell) {
-      const rowEl = this.rowElementMap.get(focusedCell.row);
-      if (rowEl) {
-        const colIdx = visibleColumns.indexOf(focusedCell.column);
-        if (colIdx >= 0 && colIdx < rowEl.children.length) {
-          (rowEl.children[colIdx] as HTMLElement).classList.add(focusClass);
-        }
-      }
-    }
-
-    this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
+    this.syncVisibleIndexMap(this.state.visibleColumns.get());
+    this.applyFocusRing(this.state.focusedCell.get());
   }
 
   /**
-   * Update cell widths when column widths change
+   * Update cell widths when column widths change.
+   *
+   * Runs 60×/s during a resize drag, so it stays incremental: rendered cells
+   * are re-sized by their own `data-column` (spacers skipped, and only the
+   * rendered window exists to visit), both spacers are re-derived from the
+   * refreshed prefix sums, and the content extent is republished from the same
+   * numbers. The window itself is not recomputed here — a width change can
+   * move its boundaries, and that lands with the scroll wiring.
    */
   private updateCellWidths(): void {
-    const visibleColumns = this.state.visibleColumns.get();
+    const columns = this.state.visibleColumns.get();
     const columnWidths = this.state.columnWidths.get();
+    this.syncVisibleIndexMap(columns);
+    const win = this.computeColumnWindow(columns, columnWidths);
+    this.columnWindow = win;
+    const windowSize = win.end - win.start;
 
-    // Update cell widths for all visible rows
     for (const [, rowEl] of this.rowElementMap) {
-      const cells = rowEl.children;
-      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i]!;
-        const width = columnWidths.get(colName) ?? 150;
-        (cells[i] as HTMLElement).style.width = `${width}px`;
+      if (this.isPlaceholderRow(rowEl)) continue;
+      for (const cellEl of this.bodyCellsOf(rowEl)) {
+        const colName = cellEl.getAttribute('data-column');
+        if (colName === null) continue;
+        cellEl.style.width = `${Math.round(columnWidths.get(colName) ?? DEFAULT_COLUMN_WIDTH)}px`;
+      }
+      const children = rowEl.children;
+      const leftSpacer = children[win.pinnedCount] as HTMLElement | undefined;
+      if (leftSpacer?.hasAttribute('data-col-spacer')) {
+        leftSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+      }
+      const rightSpacer = children[win.pinnedCount + windowSize + 1] as HTMLElement | undefined;
+      if (rightSpacer?.hasAttribute('data-col-spacer')) {
+        rightSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
       }
     }
 
-    // Update total content width
-    let totalWidth = 0;
-    for (const colName of visibleColumns) {
-      const width = columnWidths.get(colName) ?? 150;
-      totalWidth += width;
-    }
-    this.virtualScroller.setContentWidth(totalWidth);
-
-    // Update header row width
-    const scrollContainer = this.virtualScroller.getScrollContainer();
-    const headerRow = scrollContainer
-      .closest(`.${this.classPrefix}-root`)
-      ?.querySelector(`.${this.classPrefix}-header-row`) as HTMLElement;
-    if (headerRow) {
-      headerRow.style.minWidth = `${totalWidth}px`;
-    }
+    this.applyContentWidth(win.totalWidthPx);
   }
 
   // =========================================
@@ -2146,6 +2441,9 @@ export class TableBody {
     this.rowDataCache.clear();
     this.rowElementMap.clear();
     this.rowPool = [];
+    this.columnWindowModel.reset();
+    this.visibleIndexMap.clear();
+    this.visibleIndexSource = null;
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,
     // so a cell holding real focus (from a click) has to be rescued first —

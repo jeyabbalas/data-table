@@ -229,6 +229,17 @@
   border-right: 1px solid var(--dt-border-light);
 }
 
+/* Stands in for the columns a row does not render, so scroll geometry and
+   header alignment are the same as if every cell were present. Width comes
+   from an inline `flex` basis written per render pass; there is nothing to
+   paint and nothing to hit. `aria-hidden` keeps it out of the accessibility
+   tree, which is what lets `role="row"` still satisfy
+   `aria-required-children`. */
+.dt-col-spacer {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .dt-cell.dt-col-resetting {
   transition: width 0.2s ease-out;
 }

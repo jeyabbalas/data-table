@@ -33,6 +33,7 @@ import type { ColumnSchema, Filter } from '@/core/types';
 
 import { makeRowFetchBridge, parseRowWindow } from '../helpers/rowFetchBridge';
 import {
+  SPACERS_PER_ROW,
   bodyCells,
   cellFor,
   isPlaceholder,
@@ -129,7 +130,8 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     expect(rowElementMap.size).toBe(4);
     // Each row at this point is a full data row (2 visible cols).
     for (const [, rowEl] of rowElementMap) {
-      expect(rowEl.children.length).toBe(2);
+      // Two cells plus the two column spacers every data row carries.
+      expect(rowEl.children.length).toBe(2 + SPACERS_PER_ROW);
       expect(bodyCells(rowEl)).toHaveLength(2);
     }
 
@@ -198,7 +200,7 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     // 7. The fix: every row in rowElementMap now has visibleColumns.length
     //    cells. No 1-cell placeholders remain.
     for (const [idx, rowEl] of rowElementMap) {
-      expect(rowEl.children.length, `row ${idx} cell count`).toBe(2);
+      expect(rowEl.children.length, `row ${idx} child count`).toBe(2 + SPACERS_PER_ROW);
       expect(bodyCells(rowEl), `row ${idx} cell count`).toHaveLength(2);
       // The ordering the old `children[0]` / `children[1]` lookups asserted
       // implicitly, said out loud once.
@@ -266,7 +268,9 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     const rowElementMap = rowElements(body);
     const visibleColumnCount = state.visibleColumns.get().length;
     for (const [idx, rowEl] of rowElementMap) {
-      expect(rowEl.children.length, `row ${idx} cell count`).toBe(visibleColumnCount);
+      expect(rowEl.children.length, `row ${idx} child count`).toBe(
+        visibleColumnCount + SPACERS_PER_ROW,
+      );
       expect(bodyCells(rowEl), `row ${idx} cell count`).toHaveLength(visibleColumnCount);
     }
 
@@ -350,7 +354,7 @@ describe('TableBody — placeholder→data row promotion (rowElementMap shape)',
     // the placeholder branch) and verify the hover signal flows.
     const promoted = rowElementMap.get(8);
     expect(promoted).toBeDefined();
-    expect(promoted!.children.length).toBe(2);
+    expect(promoted!.children.length).toBe(2 + SPACERS_PER_ROW);
     expect(bodyCells(promoted!)).toHaveLength(2);
 
     promoted!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));

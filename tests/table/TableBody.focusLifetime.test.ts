@@ -26,7 +26,13 @@ import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 
-import { bodyCells, rowElements, rowPool } from '../helpers/tableBodyDom';
+import {
+  SPACERS_PER_ROW,
+  bodyCells,
+  newRowSized,
+  rowElements,
+  rowPool,
+} from '../helpers/tableBodyDom';
 
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}
@@ -53,12 +59,11 @@ afterEach(() => {
  * The private surface this suite drives directly. Row-DOM reads and the
  * `rowElementMap` / `rowPool` reaches go through `tests/helpers/tableBodyDom`
  * instead; what is left here is the render-loop state these tests poke.
- * `getOrCreateRow` stays because site 4 deliberately calls it off-window (see
- * there).
+ * Site 4 reaches `getOrCreateRow` too, but through `newRowSized`, which is
+ * where the synthetic-window knowledge belongs.
  */
 interface Internals {
   currentRange: { start: number; end: number; offsetY: number };
-  getOrCreateRow(columnCount: number): HTMLElement;
   renderVisibleRows(): void;
 }
 
@@ -191,21 +196,20 @@ describe('TableBody — focus never outlives the element holding it', () => {
     const harness = setup();
     await harness.body.initialize();
 
-    // Raw private calls on purpose: `newRow` always shapes a row for the body's
+    // Synthetic windows on purpose: `newRow` always shapes a row for the body's
     // current column window (2 cells here), and the whole point of this test is
-    // the mismatch — build a 2-cell row, then ask for a 1-cell one so
-    // getOrCreateRow's surplus-removal branch runs. The helper cannot express a
-    // count that is deliberately not `visibleColumns.length`.
-    const pooled = harness.internal.getOrCreateRow(2);
+    // the mismatch — build a 2-cell row, then ask for a 1-cell one so the
+    // reshape's surplus-removal branch runs.
+    const pooled = newRowSized(harness.body, 2);
     harness.container.appendChild(pooled);
     const surplus = bodyCells(pooled)[1]!;
     surplus.focus();
     expect(document.activeElement).toBe(surplus);
 
     rowPool(harness.body).push(pooled);
-    harness.internal.getOrCreateRow(1);
+    newRowSized(harness.body, 1);
 
-    expect(pooled.children.length).toBe(1);
+    expect(pooled.children.length).toBe(1 + SPACERS_PER_ROW);
     expect(bodyCells(pooled)).toHaveLength(1);
     expect(document.activeElement).toBe(harness.gridElement);
 

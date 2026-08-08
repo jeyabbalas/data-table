@@ -8,6 +8,7 @@ import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
 import {
+  SPACERS_PER_ROW,
   bodyCells,
   isPlaceholder,
   newRow,
@@ -148,7 +149,8 @@ describe('TableBody', () => {
       const rowEl = newRow(tableBody);
 
       expect(rowEl.getAttribute('role')).toBe('row');
-      expect(rowEl.children.length).toBe(3);
+      // Three cells plus the two column spacers every data row carries.
+      expect(rowEl.children.length).toBe(3 + SPACERS_PER_ROW);
       expect(bodyCells(rowEl)).toHaveLength(3);
       for (const cell of bodyCells(rowEl)) {
         // `gridcell`, not `cell` — `cell` is only valid inside role="table",
@@ -209,16 +211,20 @@ describe('TableBody', () => {
       expect(placeholder.children.length).toBe(1);
       expect(bodyCells(placeholder)).toHaveLength(1);
 
-      // A single-column grid promotes a placeholder in place (cell counts
-      // match), so the marker has to come off there or the row stays busy
-      // forever. Driven through the body's own path: the placeholder's single
-      // cell bounds `updateRowContent`'s column loop, so this is that same
-      // in-place promotion, and the markers come off ahead of the loop either
-      // way.
+      // `renderVisibleRows` always replaces a placeholder from the pool rather
+      // than promoting it in place — `data-placeholder` is the discriminator,
+      // so the cell count no longer decides. That makes the marker stripping
+      // in `updateRowContent` belt-and-braces, and this is what asserts the
+      // braces still hold: whatever the element's history, once it has been
+      // written as a data row it must not still read as busy to a screen
+      // reader. The column identity is deliberately not asserted — a
+      // placeholder has no window structure to write cells into, and the real
+      // promotion path never asks it to.
       renderRow(tableBody, placeholder, 7, { id: 1 });
       expect(placeholder.hasAttribute('aria-busy')).toBe(false);
       expect(isPlaceholder(placeholder)).toBe(false);
-      expect(renderedColumns(placeholder)).toEqual(['id']);
+      expect(placeholder.getAttribute('data-row-index')).toBe('7');
+      expect(placeholder.getAttribute('aria-rowindex')).toBe('9');
 
       tableBody.destroy();
     });

@@ -297,6 +297,21 @@ test('baseline — WIDE_CI (300 × 20,000), viz off', async ({ page }) => {
   expect(row.loadMs).toBeGreaterThan(0);
 });
 
+/**
+ * Phase 1 — the text-format load path, which had no capture at all.
+ *
+ * Every other tier reaches the loader as Parquet, where DuckDB's reader
+ * hands back native DATE/TIME/TIMESTAMP columns and projection pushdown
+ * makes a re-read cheap. CSV is the opposite on both counts: the sniffer
+ * types some columns natively so the probe set differs, and every statement
+ * issued against the reader relation re-parses the source head. A load-path
+ * phase that recorded only Parquet would be measuring the easy case.
+ */
+test('baseline — WIDE-CSV (1,000 × 5,000 as text), viz off', async ({ page }) => {
+  const row = await capture(page, 'wide-csv', { tier: 'wide-csv', viz: false });
+  expect(row.loadMs).toBeGreaterThan(0);
+});
+
 test('baseline — WIDE (1,000 columns), viz off', async ({ page }) => {
   const row = await capture(page, 'wide', wideMountOptions(false));
   expect(row.canvasCount).toBe(0);

@@ -338,6 +338,12 @@ test('WIDE — 1,000 columns, visualizations off', async ({ page }) => {
   // control for the `viz=on` test below.
   expect(run.shape.canvases).toBe(0);
 
+  // Phase 1's load-path budget. Gated with the rest of this file, so a
+  // wall-clock assertion is legitimate here in a way it never is in CI —
+  // see `DT_BUDGET.LOAD.WIDE_LOAD_MS` for what the cap does and does not
+  // claim to catch.
+  expect(run.loadMs, '1,000-column load').toBeLessThan(DT_BUDGET.LOAD.WIDE_LOAD_MS);
+
   expect(consoleErrors).toEqual([]);
 });
 
@@ -404,6 +410,11 @@ test('DEEP — 20 columns × 5,000,000 rows', async ({ page }) => {
   // is reachable and correct" is a real question here, not a formality.
   expect(run.bottom.count).toBeLessThan(200);
   expect(run.bottom.min).toBeGreaterThan(TIERS.deep.rows - 200);
+
+  // Phase 1's load-path budget at depth. Detection now reads a bounded head
+  // sample, so five million rows should cost the probe nothing that twenty
+  // thousand did not.
+  expect(run.loadMs, '5,000,000-row load').toBeLessThan(DT_BUDGET.LOAD.DEEP_LOAD_MS);
 
   expect(consoleErrors).toEqual([]);
 });

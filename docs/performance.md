@@ -123,6 +123,40 @@ column-oriented and vectorized), but not CPU-parallel in the default
 setup. The `coi` bundle is the big lever if you're consistently seeing
 10M+ row queries.
 
+### The load path
+
+One `loadData()` call costs **one** full-table materialization and a small,
+fixed number of statements — measured at six for a 2,000 × 100 source and
+twelve at 1,000 columns, whatever the format. Two things about that shape
+are worth knowing when you are sizing a load:
+
+**Detection reads a head sample, not the table.** Which text columns hold
+dates, times, or timestamps is decided from the first 4,096 rows, so
+detection costs the same on five million rows as on five thousand. The
+trade-off is explicit: a column that only starts looking like a timestamp
+after row 4,096 stays `VARCHAR`. There is no per-column override — if you
+know the types, load Parquet, where they are already in the file.
+
+**The source is transferred, not copied.** An `ArrayBuffer` you pass to
+`loadData()` is handed to the worker and **detached** — its `byteLength`
+becomes `0` and you cannot read it again. This is what keeps a 200 MB source
+from peaking at 400 MB across the two threads. If you need to keep your own
+copy, pass `buffer.slice(0)`.
+
+```ts
+const bytes = await file.arrayBuffer();
+await table.loadData(bytes);
+bytes.byteLength; // 0 — the worker owns it now
+
+await table.loadData(other.slice(0)); // keeps `other` usable
+```
+
+DuckDB is given a **2.5 GB memory limit** at startup. Left unset it would
+inherit the WASM heap ceiling, where the first allocation it cannot satisfy
+aborts the worker outright; the limit turns that into an ordinary
+out-of-memory rejection you can catch on `loadError`, with the previous
+table still queryable.
+
 ### Query cache
 
 `WorkerBridge` has an LRU query cache, default size 100 entries. Cached
@@ -509,7 +543,7 @@ remove the container if you need to.
 
 ## Known slow paths (as of v0.2.0)
 
-- **Initial schema detection on very wide tables.** Tables with hundreds of columns spend measurable time in `DESCRIBE` queries during load.
+- **Type detection past 64 text columns.** Detection reads a bounded head sample and classifies in batches of 64 columns per statement, so cost grows with the number of `VARCHAR` columns rather than with rows. Past 64 the sample is materialized once and probed from there — see [The load path](#the-load-path) for what that costs and why.
 - **First-run WASM compilation.** A cold browser takes a few seconds to compile DuckDB's WASM. Subsequent loads hit the HTTP cache.
 - **Filter changes that shrink the dataset to near-zero.** Some visualizations (e.g., date histogram) recalculate bins, which has a fixed cost that dominates when the result set is tiny. Usually < 300 ms total; on 10M-row datasets it can approach 1 s.
 - **Sub-second `INTERVAL` bin assignment.** The histogram `min` value goes through `MIN(col)::VARCHAR + parseIntervalToSeconds` on the JS side while the bin SQL extracts seconds via `EXTRACT(...)`. The two paths can disagree at the 4th decimal for sub-second intervals; the resulting drift is locked behind `tests/visualizations/histogram/IntervalHistogram.duckdb.test.ts`. A future fix would compute `min_seconds` server-side so both paths agree by construction.

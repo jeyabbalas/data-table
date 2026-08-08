@@ -95,6 +95,32 @@ export const DT_BUDGET = {
      * fail the suite rather than be absorbed.
      */
     CTAS_MAX: 1,
+    /**
+     * Wall clock for one WIDE load — 1,000 columns × 60,000 rows, Parquet,
+     * visualizations off (`tiers.full.spec.ts`).
+     *
+     * Measured **8,336 ms** before this phase (`baselines/baseline-wide-off-970698e.json`,
+     * macOS, 10 cores, Chromium) and **3,912 ms** after. Cap at 30,000 —
+     * ~7.7× the measured number, which sounds absurd until you remember
+     * where it can run: this is a `RUN_BROWSER_PERF` assertion, and the
+     * whole reason wall clock is gated (README §8.3) is that a shared
+     * runner can be several times slower without anything being wrong.
+     * What a cap this size still catches is the thing worth catching — a
+     * load that has gone structurally quadratic, or fallen back to a
+     * per-column probe loop, is 10× out and not 2×.
+     */
+    WIDE_LOAD_MS: 30_000,
+    /**
+     * Wall clock for one DEEP load — 20 columns × 5,000,000 rows, Parquet,
+     * visualizations off.
+     *
+     * Measured **11,192 ms** before this phase
+     * (`baselines/baseline-deep-off-970698e.json`), same machine. Cap at
+     * 60,000 for the reason above; the deep tier is 100× the rows of WIDE
+     * on a single-threaded engine, so it has less structural headroom and
+     * more absolute variance.
+     */
+    DEEP_LOAD_MS: 60_000,
   },
   /** Phase 2 — lazy visualizations: viz query counts, `maxInFlight`. */
   VIZ: {},

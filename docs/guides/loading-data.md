@@ -39,10 +39,15 @@ string as raw data.
 ### `File`
 
 Comes from an `<input type="file">`, a drag-and-drop event, or the File
-System Access API. The library reads the file:
+System Access API. The library reads it with `file.arrayBuffer()` whatever
+the format and hands the bytes straight to the worker — text sources are
+never decoded into a JavaScript string on the way, which is a copy saved on
+each side of the worker boundary.
 
-- **Parquet** — `file.arrayBuffer()` (binary)
-- **CSV / JSON** — `file.text()`
+UTF-8 is assumed, matching what `file.text()` would have decoded. A UTF-8
+byte-order mark is stripped; a UTF-16 one is decoded. Bytes that are not
+valid UTF-8 now reach DuckDB intact and fail the load rather than loading as
+replacement characters — convert the file if its encoding is something else.
 
 ### URL (`string` starting with `http`)
 
@@ -53,6 +58,19 @@ appropriate CORS headers. A non-2xx response throws `LoadError` with
 ### `ArrayBuffer`
 
 Treated as binary (Parquet) unless you set `sourceFormat` explicitly.
+
+The buffer is **transferred** to the worker rather than copied, so it is
+detached when the load starts: `byteLength` becomes `0` and you cannot read
+it again. That is what stops a large source from existing twice at once.
+Pass `buffer.slice(0)` if you need to keep your own copy.
+
+```ts
+const bytes = await file.arrayBuffer();
+await table.loadData(bytes);
+bytes.byteLength; // 0
+
+await table.loadData(other.slice(0)); // `other` stays usable
+```
 
 ### `Blob`
 
@@ -88,6 +106,29 @@ await table.loadData(blob, { sourceFormat: 'json' });
   `sourceFormat`
 - File named `.txt` containing JSON → set `sourceFormat: 'json'`
 - `ArrayBuffer` containing CSV text (unusual) → set `sourceFormat: 'csv'`
+
+## Type detection
+
+Text columns that hold ISO timestamps, ISO dates, or 24-hour times are
+converted to `TIMESTAMP` / `DATE` / `TIME` during the load, so they sort,
+filter, and chart as temporal values rather than as strings.
+
+The decision is made from the **first 4,096 rows** of the source, and a
+column is converted when at least 95 % of the distinct values sampled from
+that window match. Bounding the sample is what keeps detection from costing
+anything on a deep table — five million rows are probed as cheaply as five
+thousand — but it has one consequence worth stating plainly:
+
+> A column whose values only start looking temporal _after_ row 4,096 stays
+> `VARCHAR`. So does one whose leading rows are unrepresentative — a low
+> cardinality column whose distribution changes later in the file is exactly
+> the case to watch.
+
+Conversion uses `TRY_CAST`, so values that do not parse — including anything
+past the sampled window — become `NULL` rather than failing the load.
+
+There is no per-column override. If you know the types, load Parquet: its
+columns carry their own types and are used as-is.
 
 ## Progress reporting
 
@@ -129,12 +170,26 @@ table.on('loadError', ({ error }) => {
 });
 ```
 
-Stages progress roughly `reading → parsing → indexing → analyzing`, but not
-every source emits every stage (a small CSV may skip straight to `analyzing`).
+Stages arrive in this order, which follows the work rather than the names:
 
-`ProgressInfo` carries enough data to format your own strings:
-`loaded` / `total` (bytes when known), `percent` (0–1 or `undefined`),
-`stage`, and an optional `estimatedRemaining` in milliseconds.
+| Stage       | Where       | `loaded` / `total`        | What is happening                                                         |
+| ----------- | ----------- | ------------------------- | ------------------------------------------------------------------------- |
+| `reading`   | main thread | bytes read / source size  | Reading the file, or streaming the URL response                           |
+| `parsing`   | worker      | —                         | DuckDB is reading the source to resolve its schema                        |
+| `analyzing` | worker      | probe chunks done / total | Deciding which text columns hold dates, times, or timestamps              |
+| `indexing`  | worker      | —                         | Materializing the typed table, then reading back its row count and schema |
+
+`percent` is `0`–`100`, never decreases, and the load ends with exactly one
+report at `100` — so `percent === 100` is a usable terminal signal. Only
+`reading` reports `cancelable: true`; once the worker starts, no DuckDB
+statement in the load can be interrupted.
+
+A source may skip `analyzing`'s intermediate steps — a table with no text
+columns has nothing to probe — but every load emits each stage at least
+once.
+
+`ProgressInfo` also carries an optional `estimatedRemaining` in
+milliseconds.
 
 ## Replacing the dataset
 
@@ -249,7 +304,9 @@ for a runnable demo.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
 - **Peak memory during a large swap.** `loadData()` drops the previous DuckDB base table after the new one is live (or replaces it atomically when the `tableName` matches), so the catalog stays clean across reloads. While the new load is in flight, both buffers coexist briefly — for very large dataset swaps where peak main-thread memory matters, `destroy()` + recreate releases the previous buffers earlier.
-- **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
+- **An `ArrayBuffer` source is detached.** It is transferred to the worker, not copied. Pass `buffer.slice(0)` to keep a usable copy.
+- **Byte progress is only reported for `reading`.** The worker's stages report where they are, not how many bytes they have consumed — DuckDB does not expose that. For a URL, byte progress needs a `Content-Length`; without one, `loaded` still counts real bytes but `percent` stays at the start of the band until the read finishes.
+- **Text detection reads the first 4,096 rows.** See [Type detection](#type-detection).
 
 ## Related
 

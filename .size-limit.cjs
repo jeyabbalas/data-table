@@ -20,7 +20,7 @@
  * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
- *   root entry · ESM                7.65 kB   →   8.1 kB cap (5.9 %)
+ *   root entry · ESM                8.14 kB   →   8.6 kB cap (5.7 %)
  *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
  *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
  *   lazy ExportDialog chunk        69.91 kB   →  74 kB   cap (5.8 %)
@@ -33,6 +33,16 @@
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
+ *
+ * Root-entry history. 7.65 → 8.14 kB is the Phase 1 load path: the
+ * `reading`-stage byte reporting and streaming URL read in `DataLoader`, the
+ * BOM guard, the transfer list on `WorkerBridge`'s load message, and the
+ * `loadProgress` clamp in `DataTable`. Note where those bytes did *not* come
+ * from — the loaders, the type planner, and the dispatcher are in the worker
+ * chunk, which no entry here measures, so the type-detection rewrite that is
+ * most of the phase cost nothing at this gate. Cap raised 8.1 → 8.6 kB to
+ * restore the ~5 % headroom the file's convention asks for; the previous cap
+ * had 38 B left.
  *
  * Stylesheet history. The line above previously read 16.94 kB; that figure was
  * never measured — the real size at that commit was 17.11 kB, so the gate had
@@ -60,7 +70,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '8.1 kB',
+    limit: '8.6 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',

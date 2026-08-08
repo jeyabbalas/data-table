@@ -1,0 +1,28 @@
+{
+  "tier": "deep",
+  "vizMode": "off",
+  "gitSha": "5285b63",
+  "date": "2026-08-08",
+  "machine": {
+    "platform": "darwin",
+    "cpus": 10,
+    "node": "v22.23.2"
+  },
+  "genMs": 21848,
+  "exportMs": null,
+  "loadMs": 4243,
+  "workerMs": 4236.9,
+  "firstPaintMs": 4237.1,
+  "vizReadyMs": 4236.9,
+  "queryCount": 4,
+  "cacheHits": 0,
+  "domNodes": 1072,
+  "canvasCount": 0,
+  "liveResizeObservers": 1,
+  "liveMutationObservers": 1,
+  "sortSignalSubscribers": 25,
+  "heapMB": 16.3,
+  "oneSortMs": 120.5,
+  "oneFilterMs": 28.7,
+  "scrollStormFrameP95": 9.3
+}

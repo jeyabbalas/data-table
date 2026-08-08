@@ -1,0 +1,28 @@
+{
+  "tier": "wide-csv",
+  "vizMode": "off",
+  "gitSha": "5285b63",
+  "date": "2026-08-08",
+  "machine": {
+    "platform": "darwin",
+    "cpus": 10,
+    "node": "v22.23.2"
+  },
+  "genMs": 0,
+  "exportMs": null,
+  "loadMs": 5021,
+  "workerMs": 5020.8,
+  "firstPaintMs": 5021,
+  "vizReadyMs": 5020.9,
+  "queryCount": 4,
+  "cacheHits": 0,
+  "domNodes": 51052,
+  "canvasCount": 0,
+  "liveResizeObservers": 1,
+  "liveMutationObservers": 1,
+  "sortSignalSubscribers": 1005,
+  "heapMB": 110.6,
+  "oneSortMs": 345.1,
+  "oneFilterMs": 321.3,
+  "scrollStormFrameP95": 41.4
+}

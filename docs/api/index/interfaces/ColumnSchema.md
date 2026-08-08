@@ -6,7 +6,7 @@
 
 # Interface: ColumnSchema
 
-Defined in: [core/types.ts:25](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L25)
+Defined in: [core/types.ts:25](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L25)
 
 Column metadata exposed on `state.schema.get()` and threaded through every
 subsystem (filter UI, derived columns, export, visualizations). One entry
@@ -20,7 +20,7 @@ per column in the active table; ordering matches the underlying DuckDB
 
 > `optional` **expression?**: `string`
 
-Defined in: [core/types.ts:31](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L31)
+Defined in: [core/types.ts:31](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L31)
 
 ***
 
@@ -28,7 +28,7 @@ Defined in: [core/types.ts:31](https://github.com/jeyabbalas/data-table/blob/202
 
 > `optional` **isDerived?**: `boolean`
 
-Defined in: [core/types.ts:30](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L30)
+Defined in: [core/types.ts:30](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L30)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: [core/types.ts:30](https://github.com/jeyabbalas/data-table/blob/202
 
 > **name**: `string`
 
-Defined in: [core/types.ts:26](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L26)
+Defined in: [core/types.ts:26](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L26)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [core/types.ts:26](https://github.com/jeyabbalas/data-table/blob/202
 
 > **nullable**: `boolean`
 
-Defined in: [core/types.ts:28](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L28)
+Defined in: [core/types.ts:28](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L28)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [core/types.ts:28](https://github.com/jeyabbalas/data-table/blob/202
 
 > **originalType**: `string`
 
-Defined in: [core/types.ts:29](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L29)
+Defined in: [core/types.ts:29](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L29)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [core/types.ts:29](https://github.com/jeyabbalas/data-table/blob/202
 
 > `optional` **system?**: `boolean`
 
-Defined in: [core/types.ts:39](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L39)
+Defined in: [core/types.ts:39](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L39)
 
 true for library-synthesized columns (e.g. `__rowid__`). System columns are
 excluded from the default rendered grid and from default exports, but remain
@@ -74,4 +74,4 @@ in the current session snapshot (schema is re-derived on restore).
 
 > **type**: [`DataType`](../type-aliases/DataType.md)
 
-Defined in: [core/types.ts:27](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/types.ts#L27)
+Defined in: [core/types.ts:27](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L27)

@@ -8,7 +8,7 @@
 
 > **exportFromState**(`state`, `bridge`, `options?`, `signal?`): `Promise`\<`string`\>
 
-Defined in: [export/CSVExport.ts:211](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/CSVExport.ts#L211)
+Defined in: [export/CSVExport.ts:211](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/CSVExport.ts#L211)
 
 Convenience wrapper that reads Signals from a TableState and delegates
 to `exportToCSV`.

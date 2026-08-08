@@ -6,7 +6,7 @@
 
 # Class: DefaultExpressionEditor
 
-Defined in: [derived/DefaultExpressionEditor.ts:24](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L24)
+Defined in: [derived/DefaultExpressionEditor.ts:24](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L24)
 
 Plain-textarea fallback that satisfies [ExpressionEditor](../../index/interfaces/ExpressionEditor.md) when no
 custom factory is supplied. Renders a monospace textarea, an error slot,
@@ -29,7 +29,7 @@ call), English defaults apply.
 
 > **new DefaultExpressionEditor**(`container`, `context`, `classPrefix?`, `messages?`): `DefaultExpressionEditor`
 
-Defined in: [derived/DefaultExpressionEditor.ts:32](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L32)
+Defined in: [derived/DefaultExpressionEditor.ts:32](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L32)
 
 #### Parameters
 
@@ -59,7 +59,7 @@ Defined in: [derived/DefaultExpressionEditor.ts:32](https://github.com/jeyabbala
 
 > `readonly` **element**: `HTMLElement`
 
-Defined in: [derived/DefaultExpressionEditor.ts:25](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L25)
+Defined in: [derived/DefaultExpressionEditor.ts:25](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L25)
 
 The root DOM element to mount in the panel/modal
 
@@ -73,7 +73,7 @@ The root DOM element to mount in the panel/modal
 
 > **destroy**(): `void`
 
-Defined in: [derived/DefaultExpressionEditor.ts:97](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L97)
+Defined in: [derived/DefaultExpressionEditor.ts:97](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L97)
 
 Clean up resources
 
@@ -91,7 +91,7 @@ Clean up resources
 
 > **focus**(): `void`
 
-Defined in: [derived/DefaultExpressionEditor.ts:77](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L77)
+Defined in: [derived/DefaultExpressionEditor.ts:77](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L77)
 
 Focus the editor
 
@@ -109,7 +109,7 @@ Focus the editor
 
 > **getValue**(): `string`
 
-Defined in: [derived/DefaultExpressionEditor.ts:69](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L69)
+Defined in: [derived/DefaultExpressionEditor.ts:69](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L69)
 
 Get current editor content
 
@@ -127,7 +127,7 @@ Get current editor content
 
 > **setError**(`error`): `void`
 
-Defined in: [derived/DefaultExpressionEditor.ts:81](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L81)
+Defined in: [derived/DefaultExpressionEditor.ts:81](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L81)
 
 Display an error message inline (null clears the error)
 
@@ -151,7 +151,7 @@ Display an error message inline (null clears the error)
 
 > **setValue**(`value`): `void`
 
-Defined in: [derived/DefaultExpressionEditor.ts:73](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L73)
+Defined in: [derived/DefaultExpressionEditor.ts:73](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L73)
 
 Set editor content (for editing existing columns)
 
@@ -175,7 +175,7 @@ Set editor content (for editing existing columns)
 
 > **updateCompletionContext**(`context`): `void`
 
-Defined in: [derived/DefaultExpressionEditor.ts:93](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/derived/DefaultExpressionEditor.ts#L93)
+Defined in: [derived/DefaultExpressionEditor.ts:93](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/derived/DefaultExpressionEditor.ts#L93)
 
 Update completion context when schema changes
 

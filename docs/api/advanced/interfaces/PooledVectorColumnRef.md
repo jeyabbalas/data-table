@@ -6,7 +6,7 @@
 
 # Interface: PooledVectorColumnRef
 
-Defined in: [persistence/types.ts:92](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/persistence/types.ts#L92)
+Defined in: [persistence/types.ts:92](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/persistence/types.ts#L92)
 
 A vector column stored by pool reference instead of inline values.
 
@@ -21,7 +21,7 @@ once per snapshot.
 
 > **\_poolRef**: `string`
 
-Defined in: [persistence/types.ts:97](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/persistence/types.ts#L97)
+Defined in: [persistence/types.ts:97](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/persistence/types.ts#L97)
 
 Key into SessionSnapshot.vectorValuePool
 
@@ -31,7 +31,7 @@ Key into SessionSnapshot.vectorValuePool
 
 > **kind**: `"vector"`
 
-Defined in: [persistence/types.ts:93](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/persistence/types.ts#L93)
+Defined in: [persistence/types.ts:93](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/persistence/types.ts#L93)
 
 ***
 
@@ -39,7 +39,7 @@ Defined in: [persistence/types.ts:93](https://github.com/jeyabbalas/data-table/b
 
 > **name**: `string`
 
-Defined in: [persistence/types.ts:94](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/persistence/types.ts#L94)
+Defined in: [persistence/types.ts:94](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/persistence/types.ts#L94)
 
 ***
 
@@ -47,4 +47,4 @@ Defined in: [persistence/types.ts:94](https://github.com/jeyabbalas/data-table/b
 
 > **vectorType**: [`VectorDataType`](../../index/type-aliases/VectorDataType.md)
 
-Defined in: [persistence/types.ts:95](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/persistence/types.ts#L95)
+Defined in: [persistence/types.ts:95](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/persistence/types.ts#L95)

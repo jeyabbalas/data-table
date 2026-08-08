@@ -8,7 +8,7 @@
 
 > **ColorScheme** = `"light"` \| `"dark"` \| `"auto"`
 
-Defined in: [DataTable.ts:110](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/DataTable.ts#L110)
+Defined in: [DataTable.ts:110](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/DataTable.ts#L110)
 
 Programmatic light/dark theme selector for a [DataTable](../interfaces/DataTable.md) instance.
 

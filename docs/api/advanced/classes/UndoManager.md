@@ -6,7 +6,7 @@
 
 # Class: UndoManager
 
-Defined in: [core/UndoManager.ts:285](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L285)
+Defined in: [core/UndoManager.ts:285](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L285)
 
 Manages undo/redo history as two stacks of StateSnapshot objects.
 
@@ -35,7 +35,7 @@ if (previous) applySnapshot(table.state, previous);
 
 > **new UndoManager**(`maxDepth?`): `UndoManager`
 
-Defined in: [core/UndoManager.ts:295](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L295)
+Defined in: [core/UndoManager.ts:295](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L295)
 
 #### Parameters
 
@@ -53,7 +53,7 @@ Defined in: [core/UndoManager.ts:295](https://github.com/jeyabbalas/data-table/b
 
 > `readonly` **canRedoSignal**: `Signal`\<`boolean`\>
 
-Defined in: [core/UndoManager.ts:293](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L293)
+Defined in: [core/UndoManager.ts:293](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L293)
 
 Reactive signal: true when redo is available
 
@@ -63,7 +63,7 @@ Reactive signal: true when redo is available
 
 > `readonly` **canUndoSignal**: `Signal`\<`boolean`\>
 
-Defined in: [core/UndoManager.ts:291](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L291)
+Defined in: [core/UndoManager.ts:291](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L291)
 
 Reactive signal: true when undo is available
 
@@ -75,7 +75,7 @@ Reactive signal: true when undo is available
 
 > **get** **canRedo**(): `boolean`
 
-Defined in: [core/UndoManager.ts:307](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L307)
+Defined in: [core/UndoManager.ts:307](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L307)
 
 Whether the redo stack has entries
 
@@ -91,7 +91,7 @@ Whether the redo stack has entries
 
 > **get** **canUndo**(): `boolean`
 
-Defined in: [core/UndoManager.ts:302](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L302)
+Defined in: [core/UndoManager.ts:302](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L302)
 
 Whether the undo stack has entries
 
@@ -107,7 +107,7 @@ Whether the undo stack has entries
 
 > **get** **redoDepth**(): `number`
 
-Defined in: [core/UndoManager.ts:317](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L317)
+Defined in: [core/UndoManager.ts:317](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L317)
 
 Current depth of the redo stack
 
@@ -123,7 +123,7 @@ Current depth of the redo stack
 
 > **get** **undoDepth**(): `number`
 
-Defined in: [core/UndoManager.ts:312](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L312)
+Defined in: [core/UndoManager.ts:312](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L312)
 
 Current depth of the undo stack
 
@@ -137,7 +137,7 @@ Current depth of the undo stack
 
 > **clear**(): `void`
 
-Defined in: [core/UndoManager.ts:360](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L360)
+Defined in: [core/UndoManager.ts:360](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L360)
 
 Clear both stacks (e.g., when loading new data)
 
@@ -151,7 +151,7 @@ Clear both stacks (e.g., when loading new data)
 
 > **getStacks**(): `object`
 
-Defined in: [core/UndoManager.ts:367](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L367)
+Defined in: [core/UndoManager.ts:367](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L367)
 
 Return shallow copies of both stacks (for serialization).
 
@@ -173,7 +173,7 @@ Return shallow copies of both stacks (for serialization).
 
 > **loadStacks**(`undoStack`, `redoStack`): `void`
 
-Defined in: [core/UndoManager.ts:375](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L375)
+Defined in: [core/UndoManager.ts:375](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L375)
 
 Replace both stacks with deserialized data. Enforces maxDepth.
 
@@ -197,7 +197,7 @@ Replace both stacks with deserialized data. Enforces maxDepth.
 
 > **push**(`snapshot`): `void`
 
-Defined in: [core/UndoManager.ts:326](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L326)
+Defined in: [core/UndoManager.ts:326](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L326)
 
 Push a snapshot onto the undo stack (state BEFORE a mutation).
 Clears the redo stack (new action invalidates redo history).
@@ -219,7 +219,7 @@ Enforces maxDepth by removing the oldest entry if needed.
 
 > **redo**(`currentSnapshot`): [`StateSnapshot`](../interfaces/StateSnapshot.md) \| `null`
 
-Defined in: [core/UndoManager.ts:351](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L351)
+Defined in: [core/UndoManager.ts:351](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L351)
 
 Redo: pops from redo stack, pushes currentSnapshot to undo stack.
 Returns the snapshot to restore, or null if nothing to redo.
@@ -240,7 +240,7 @@ Returns the snapshot to restore, or null if nothing to redo.
 
 > **undo**(`currentSnapshot`): [`StateSnapshot`](../interfaces/StateSnapshot.md) \| `null`
 
-Defined in: [core/UndoManager.ts:339](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/core/UndoManager.ts#L339)
+Defined in: [core/UndoManager.ts:339](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/UndoManager.ts#L339)
 
 Undo: pops from undo stack, pushes currentSnapshot to redo stack.
 Returns the snapshot to restore, or null if nothing to undo.

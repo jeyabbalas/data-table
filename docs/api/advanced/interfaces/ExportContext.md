@@ -6,7 +6,7 @@
 
 # Interface: ExportContext
 
-Defined in: [export/ExportQuery.ts:13](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L13)
+Defined in: [export/ExportQuery.ts:13](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L13)
 
 Bundles all state dependencies as plain values (not Signals)
 
@@ -16,7 +16,7 @@ Bundles all state dependencies as plain values (not Signals)
 
 > **bridge**: [`WorkerBridge`](../../index/classes/WorkerBridge.md)
 
-Defined in: [export/ExportQuery.ts:14](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L14)
+Defined in: [export/ExportQuery.ts:14](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L14)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [export/ExportQuery.ts:14](https://github.com/jeyabbalas/data-table/
 
 > **columnOrder**: `string`[]
 
-Defined in: [export/ExportQuery.ts:18](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L18)
+Defined in: [export/ExportQuery.ts:18](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L18)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [export/ExportQuery.ts:18](https://github.com/jeyabbalas/data-table/
 
 > **filters**: [`Filter`](../../index/type-aliases/Filter.md)[]
 
-Defined in: [export/ExportQuery.ts:15](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L15)
+Defined in: [export/ExportQuery.ts:15](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L15)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [export/ExportQuery.ts:15](https://github.com/jeyabbalas/data-table/
 
 > **schema**: [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)[]
 
-Defined in: [export/ExportQuery.ts:19](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L19)
+Defined in: [export/ExportQuery.ts:19](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L19)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [export/ExportQuery.ts:19](https://github.com/jeyabbalas/data-table/
 
 > **selectedRows**: `Set`\<`number`\>
 
-Defined in: [export/ExportQuery.ts:17](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L17)
+Defined in: [export/ExportQuery.ts:17](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L17)
 
 ***
 
@@ -56,4 +56,4 @@ Defined in: [export/ExportQuery.ts:17](https://github.com/jeyabbalas/data-table/
 
 > **sortColumns**: [`SortColumn`](../../index/interfaces/SortColumn.md)[]
 
-Defined in: [export/ExportQuery.ts:16](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/export/ExportQuery.ts#L16)
+Defined in: [export/ExportQuery.ts:16](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/export/ExportQuery.ts#L16)

@@ -8,7 +8,7 @@
 
 > **statsKindForDataType**(`dataType`): `"time"` \| `"interval"` \| `"numeric"` \| `"categorical"` \| `"temporal"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:121](https://github.com/jeyabbalas/data-table/blob/202bb18cfb6d02428199c4d678c7470f96aafbb7/src/statistics/ColumnStatsTypes.ts#L121)
+Defined in: [statistics/ColumnStatsTypes.ts:121](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/statistics/ColumnStatsTypes.ts#L121)
 
 Map from DataType to the appropriate stats kind.
 

@@ -167,11 +167,10 @@ describe('TableBody — focus never outlives the element holding it', () => {
 
   it('site 3: the cell-count-mismatch replacement hands focus to the grid', async () => {
     const harness = setup();
-    const { rowEl } = await focusACell(harness, 0);
+    const { rowEl, cell } = await focusACell(harness, 0);
 
-    // Shape the row like a placeholder (fewer cells than columns) so
-    // renderVisibleRows takes the replace-from-pool branch, which detaches the
-    // row without going through returnRowToPool.
+    // Shape the row so it no longer matches the window (fewer cells than the
+    // window says) and renderVisibleRows takes the detach-and-reshape branch.
     //
     // The target is a *cell*, not whatever happens to be last: `lastElementChild`
     // is the right column spacer on a windowed row, and removing that would take
@@ -182,17 +181,25 @@ describe('TableBody — focus never outlives the element holding it', () => {
 
     harness.internal.renderVisibleRows();
 
-    expect(rowElements(harness.body).get(0)).not.toBe(rowEl);
+    // The element is *recycled*, not replaced: it goes to the pool, comes
+    // straight back out, and is reshaped in place. That is the point of the
+    // branch — but it still spends a moment detached, and the cell holding
+    // real focus goes with it, which is what the rescue is for.
+    expect(rowElements(harness.body).get(0)).toBe(rowEl);
+    expect(rowEl.isConnected).toBe(true);
+    expect(bodyCells(rowEl)).toHaveLength(harness.state.visibleColumns.get().length);
+    expect(cell.isConnected).toBe(true);
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();
   });
 
   it('site 4: dropping surplus cells off a reused row hands focus to the grid', async () => {
-    // Defensive path: rows in the pool are detached clones today, so a surplus
-    // cell cannot hold focus in practice. Exercised with an attached row in
-    // the pool so the guard itself is covered — a future change that pools
-    // live rows must not silently reopen the hole.
+    // Defensive path: every caller detaches a row before pooling it and
+    // rescues focus on the way, so a surplus cell cannot hold focus in
+    // practice. Exercised with an attached row in the pool so the guard itself
+    // is covered — a future path that pools a live row must not silently
+    // reopen the hole.
     const harness = setup();
     await harness.body.initialize();
 

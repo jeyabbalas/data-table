@@ -242,6 +242,16 @@ export class TableBody {
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
   private rowElementMap = new Map<number, HTMLElement>();
+  /**
+   * Listener lifetime for each live row, keyed by the element itself.
+   *
+   * A row's `mouseenter` / `mouseleave` / `click` handlers close over its row
+   * index, so reusing an element for a different row means replacing them —
+   * and they are anonymous, so `removeEventListener` cannot reach them. One
+   * `AbortController` per row detaches all three at once. Weak so a row that
+   * falls out of both the map and the pool takes its entry with it.
+   */
+  private rowListeners = new WeakMap<HTMLElement, AbortController>();
   private previousHoveredRow: number | null = null;
   /**
    * The element currently carrying the cursor ring.
@@ -1289,10 +1299,15 @@ export class TableBody {
         // trigger, so a data row built for a different window shape is rebuilt
         // rather than partially updated.
         if (this.isPlaceholderRow(rowEl) || !this.rowMatchesWindow(rowEl, pass.win)) {
-          // Bypasses `returnRowToPool` entirely, so the focus rescue has to be
-          // spelled out here as well.
+          // Detach, pool, take one back. Almost always the *same* element,
+          // reshaped in place by `getOrCreateRow` — which matters because a
+          // window that changes size does so for every mounted row at once,
+          // and dropping each one on the floor would allocate a full row per
+          // row per reshape. `returnRowToPool` declines placeholders, so those
+          // are still replaced rather than recycled.
           this.moveFocusToGridBeforeRemoval(rowEl);
           rowEl.remove();
+          this.returnRowToPool(rowEl);
           rowEl = this.getOrCreateRow(pass.win);
           this.updateRowContent(rowEl, i, rowData, pass);
           this.attachRowEventListeners(rowEl, i);
@@ -1739,7 +1754,21 @@ export class TableBody {
   }
 
   /**
-   * Return a row element to the pool for reuse
+   * Return a row element to the pool for reuse.
+   *
+   * The element itself, scrubbed in place. This used to pool
+   * `rowEl.cloneNode(true)` — the only way to shed anonymous listeners before
+   * `AbortController` — which deep-copied every cell, every text node and
+   * every attribute of a row that was about to be overwritten wholesale, then
+   * threw the original away. At a 24-column window that is ~50 nodes copied
+   * per recycled row on every scroll frame, to produce an element
+   * indistinguishable from the one discarded. Aborting the row's listener
+   * lifetime does the same job in O(1) and keeps element identity stable,
+   * which is what lets the cursor ring be tracked by element at all.
+   *
+   * Callers detach the row first: every one of them does `remove()` before
+   * pooling, and an attached element in the pool would be re-inserted
+   * somewhere else on reuse.
    */
   private returnRowToPool(rowEl: HTMLElement): void {
     // Skip placeholder rows (marked `data-placeholder`, one cell carrying
@@ -1753,25 +1782,32 @@ export class TableBody {
       return;
     }
 
-    // Clone the element to remove all event listeners
-    // When reused, new listeners will be attached via attachRowEventListeners
-    const cleanEl = rowEl.cloneNode(true) as HTMLElement;
+    // Drop the handlers bound to the row index this element used to show.
+    this.rowListeners.get(rowEl)?.abort();
+    this.rowListeners.delete(rowEl);
+
+    // The ring is scrubbed below, so the remembered element must go too —
+    // otherwise `applyFocusRing` would keep pointing at a cell that no longer
+    // carries the class. Cells are direct children, so this is exact.
+    if (this.focusedCellEl?.parentElement === rowEl) this.focusedCellEl = null;
 
     // Clear stale state and ARIA attributes
-    cleanEl.classList.remove(
+    rowEl.classList.remove(
       `${this.classPrefix}-row--selected`,
       `${this.classPrefix}-row--hover`,
       `${this.classPrefix}-row--loading`,
     );
-    cleanEl.removeAttribute('aria-rowindex');
-    cleanEl.setAttribute('aria-selected', 'false');
+    rowEl.removeAttribute('aria-rowindex');
+    rowEl.setAttribute('aria-selected', 'false');
 
     // Clear the cursor ring and the per-(row, column) cell ids. A pooled row
     // that kept its ids would duplicate them the moment it is reused for a
     // different row — `getElementById` would then resolve
-    // `aria-activedescendant` to the wrong cell.
+    // `aria-activedescendant` to the wrong cell. The two spacers are walked
+    // along with the cells: they carry neither, so both calls are no-ops on
+    // them and skipping them would cost more than it saves.
     const focusClass = `${this.classPrefix}-cell--focused`;
-    for (const child of cleanEl.children) {
+    for (const child of rowEl.children) {
       const cell = child as HTMLElement;
       cell.classList.remove(focusClass);
       cell.removeAttribute('id');
@@ -1779,7 +1815,7 @@ export class TableBody {
 
     // Limit pool size to prevent memory bloat
     if (this.rowPool.length < 100) {
-      this.rowPool.push(cleanEl);
+      this.rowPool.push(rowEl);
     }
   }
 
@@ -2160,44 +2196,68 @@ export class TableBody {
   }
 
   /**
-   * Attach event listeners to a row element
+   * Attach event listeners to a row element, under a fresh lifetime.
+   *
+   * All three handlers close over `index`, so a pooled element reused for a
+   * different row must not keep the old ones. They hang off one
+   * `AbortController` per row; `returnRowToPool` aborts it.
    */
   private attachRowEventListeners(rowEl: HTMLElement, index: number): void {
+    // Defensive: every path here comes through `getOrCreateRow`, and every
+    // element that gets there was aborted on its way into the pool. A second
+    // live set on one element would double every hover and every click.
+    this.rowListeners.get(rowEl)?.abort();
+    const controller = new AbortController();
+    this.rowListeners.set(rowEl, controller);
+    const { signal } = controller;
+
     // Mouse enter (hover)
-    rowEl.addEventListener('mouseenter', () => {
-      if (this.actions && !this.destroyed) {
-        this.actions.setHoveredRow(index);
-      }
-    });
+    rowEl.addEventListener(
+      'mouseenter',
+      () => {
+        if (this.actions && !this.destroyed) {
+          this.actions.setHoveredRow(index);
+        }
+      },
+      { signal },
+    );
 
     // Mouse leave (un-hover)
-    rowEl.addEventListener('mouseleave', () => {
-      if (this.actions && !this.destroyed) {
-        this.actions.setHoveredRow(null);
-      }
-    });
+    rowEl.addEventListener(
+      'mouseleave',
+      () => {
+        if (this.actions && !this.destroyed) {
+          this.actions.setHoveredRow(null);
+        }
+      },
+      { signal },
+    );
 
     // Click (selection + focus)
-    rowEl.addEventListener('click', (event) => {
-      this.handleRowClick(index, event);
+    rowEl.addEventListener(
+      'click',
+      (event) => {
+        this.handleRowClick(index, event);
 
-      // Set focused cell from clicked cell. Resolved by the cell's own
-      // `data-column`, not by its position among the row's children — those
-      // now include two spacers and cover only the rendered window. A click
-      // that lands on a spacer resolves to no `.dt-cell` at all and is
-      // correctly ignored by the guard below.
-      if (this.actions && !this.destroyed) {
-        const cellEl = (event.target as HTMLElement).closest<HTMLElement>(
-          `.${this.classPrefix}-cell`,
-        );
-        if (cellEl && rowEl.contains(cellEl)) {
-          const column = cellEl.getAttribute('data-column');
-          if (column !== null) {
-            this.actions.setFocusedCell({ row: index, column });
+        // Set focused cell from clicked cell. Resolved by the cell's own
+        // `data-column`, not by its position among the row's children — those
+        // now include two spacers and cover only the rendered window. A click
+        // that lands on a spacer resolves to no `.dt-cell` at all and is
+        // correctly ignored by the guard below.
+        if (this.actions && !this.destroyed) {
+          const cellEl = (event.target as HTMLElement).closest<HTMLElement>(
+            `.${this.classPrefix}-cell`,
+          );
+          if (cellEl && rowEl.contains(cellEl)) {
+            const column = cellEl.getAttribute('data-column');
+            if (column !== null) {
+              this.actions.setFocusedCell({ row: index, column });
+            }
           }
         }
-      }
-    });
+      },
+      { signal },
+    );
   }
 
   /**

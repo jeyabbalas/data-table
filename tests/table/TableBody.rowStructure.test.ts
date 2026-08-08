@@ -270,6 +270,8 @@ describe('TableBody — row structure', () => {
 
     poolRow(body, rowEl);
     const pooled = rowPool(body)[0]!;
+    // The element itself, scrubbed in place — not a copy of it.
+    expect(pooled).toBe(rowEl);
     for (const cell of bodyCells(pooled)) {
       expect(cell.id).toBe('');
       expect(cell.classList.contains('dt-cell--focused')).toBe(false);

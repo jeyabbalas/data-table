@@ -48,6 +48,7 @@ const METRICS = [
   'tier',
   'rows',
   'cols',
+  'bootMs',
   'genMs',
   'exportMs',
   'loadMs',
@@ -70,6 +71,8 @@ interface PerfSnapshot {
   mode: 'load' | 'sql';
   viz: boolean;
   state: PerfState;
+  /** `createDataTable` — worker spawn + DuckDB WASM boot. */
+  bootMs: number | null;
   genMs: number | null;
   exportMs: number | null;
   loadMs: number | null;
@@ -302,6 +305,7 @@ export async function installPerfHarness(
   panel.set('cols', spec.cols);
 
   let table: DataTable | null = null;
+  let bootMs: number | null = null;
   let genMs: number | null = null;
   let exportMs: number | null = null;
   let loadMs: number | null = null;
@@ -317,6 +321,7 @@ export async function installPerfHarness(
       mode,
       viz,
       state: (panel.root.dataset['state'] ?? 'idle') as PerfState,
+      bootMs,
       genMs,
       exportMs,
       loadMs,
@@ -334,6 +339,7 @@ export async function installPerfHarness(
 
   const render = (): PerfSnapshot => {
     const snap = snapshot();
+    panel.set('bootMs', snap.bootMs);
     panel.set('genMs', snap.genMs);
     panel.set('exportMs', snap.exportMs);
     panel.set('loadMs', snap.loadMs);
@@ -360,6 +366,11 @@ export async function installPerfHarness(
 
   try {
     setState('generating');
+    // Timed separately from `genMs`: spawning the worker and instantiating
+    // DuckDB WASM is ~1 s that has nothing to do with the tier's size, and
+    // folding it into generation would make every baseline's genMs a
+    // measure of two unrelated things.
+    const bootStart = performance.now();
     table = await createDataTable({
       container,
       // A restored session would quietly make this a different experiment,
@@ -371,6 +382,7 @@ export async function installPerfHarness(
       expressionFilter: false,
     });
     window.__dtPerf.table = table;
+    bootMs = performance.now() - bootStart;
 
     if (mode === 'sql') {
       probe = await generateTargetFile(table, spec);

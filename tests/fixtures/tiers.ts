@@ -69,16 +69,27 @@ export const CLASS_CYCLE = 20;
 
 /**
  * Classes whose rendered DOM text is a byte-exact function of
- * `cellOracle` — integers, single letters, booleans. The injected
- * `dtCellOracle` returns `null` (meaning "skip this cell") for every other
- * class, because their rendering runs through locale- and
- * formatter-dependent paths (`src/table/Cell.ts:114-197`).
+ * `cellOracle`. The injected `dtCellOracle` returns `null` — "skip this
+ * cell" — for everything else.
  *
- * Widen this only after verifying byte-exactness against a real mount; the
- * included set is recorded in `plans/scaling/STATUS.md` so later phases
- * know what the column oracle can assert.
+ * **Every class except 15 and 18**, established by census against a real
+ * 300-column mount (`tiers.smoke.spec.ts` logs it, and asserts every class
+ * listed here still matches). Integers, doubles, letters, dates, times and
+ * booleans all round-trip exactly through `CellRenderer.formatValue`
+ * (`src/table/Cell.ts:114-197`), including its locale grouping and its
+ * scientific-notation thresholds, which `dtCellOracle` mirrors.
+ *
+ * 15 and 18 are the two TIMESTAMP classes. `formatTimestampCore`
+ * (`Cell.ts:306-315`) trims trailing zeros with
+ * `/(\.\d*)0+$/` → `'$1'`, whose greedy `\d*` leaves `…:16.00` rather than
+ * `…:16` for a whole-second timestamp. That is a pre-existing rendering
+ * quirk, not something Phase 0 may fix (its scope is measurement only), so
+ * the two classes stay out of the text oracle and the quirk is recorded in
+ * `plans/scaling/STATUS.md` for a later phase to decide on.
  */
-export const TEXT_COMPARABLE_CLASSES: readonly number[] = [0, 10, 11, 12, 13, 14, 19];
+export const TEXT_COMPARABLE_CLASSES: readonly number[] = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19,
+];
 
 /** How many leading TARGET columns carry the oracle-checkable class cycle. */
 export const TARGET_PROBE_COLUMNS = 16;
@@ -200,9 +211,11 @@ export const ORACLE_FN_SOURCE: string = [
   // The one true implementation, renamed so the wrapper can call it.
   cellOracle.toString().replace(/^\s*function\s*[\w$]*/, 'function dtCellValue'),
   `var DT_TEXT_CLASSES = ${JSON.stringify(TEXT_COMPARABLE_CLASSES)};`,
-  'function dtCellOracle(i, c, seed) {',
+  // `force` bypasses the text-comparable gate so a spec can census which
+  // classes *would* render byte-exact — the evidence for widening the set.
+  'function dtCellOracle(i, c, seed, force) {',
   '  var k = c % 20;',
-  '  if (DT_TEXT_CLASSES.indexOf(k) === -1) return null;',
+  '  if (!force && DT_TEXT_CLASSES.indexOf(k) === -1) return null;',
   '  var v = dtCellValue(i, c, seed);',
   "  if (v === null) return 'null';",
   "  if (typeof v === 'boolean') return v ? 'true' : 'false';",

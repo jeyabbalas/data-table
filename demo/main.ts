@@ -614,6 +614,23 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
   loadUrlBtn.disabled = false;
   updateInfo('Load a file or URL to get started.');
 
+  // Dev-only scale harness (`plans/scaling/` Phase 0). Placed before
+  // `sessionStore.open()` so `?gen=` skips IndexedDB, `?url=` handling and
+  // session auto-restore entirely — a restored session would quietly make
+  // the measurement a different experiment. `import.meta.env.DEV` inlines
+  // to `false` in `npm run build:demo`, so Rollup drops the import and
+  // everything under it from `demo-dist/`.
+  const perfParams = new URLSearchParams(location.search);
+  if (import.meta.env.DEV && perfParams.has('gen')) {
+    const { installPerfHarness } = await import('./perf');
+    // Assigning the module-level `table` is what makes the demo's own
+    // Export / Undo / Redo buttons (wired at module scope, against `table`)
+    // drive the harness's instance instead of staying bound to `null`.
+    table = await installPerfHarness(tableContainerEl, perfParams);
+    if (table) wireTableEvents(table);
+    return; // perf mode owns the page
+  }
+
   await sessionStore.open();
 
   // Shared `?url=` deep links take precedence over the localStorage

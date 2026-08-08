@@ -7,7 +7,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | Phase | Doc                                                                          | Status      | Started    | Finished   | Agent notes (one line)              |
 | ----- | ---------------------------------------------------------------------------- | ----------- | ---------- | ---------- | ----------------------------------- |
 | 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines |
-| 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | not started | —          | —          | —                                   |
+| 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress |
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | not started | —          | —          | —                                   |
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                   |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                   |
@@ -352,3 +352,252 @@ everything past them is run-length filler and is not oracle-checkable. `demo/per
 (`src/worker/dispatcher.ts:358-360`). That single gap is what makes WIDE unbuildable at its
 defined depth (deviation 1). Giving export a row-group / options seam would let the harness drop
 `WIDE_MOUNT_ROWS` back to 100,000 — please retest and raise it when you do.
+
+---
+
+### Phase 1 — Load path: single-pass typed materialization, real progress, zero-copy ingest
+
+The load path now issues a bounded number of statements, materializes the table **once**, reports
+progress that corresponds to work actually happening, and hands the source bytes to the worker
+instead of copying them. Behavior that users can observe changed in three places — a
+caller-supplied `ArrayBuffer` is detached, invalid UTF-8 fails the load instead of loading as
+mojibake, and type detection reads a head sample rather than the whole table — all three are in
+the changeset.
+
+#### Headline numbers
+
+Statements and materializations at the budget tier (2,000 × 100, all three formats, counted
+through a `LoaderContext` proxy in `tests/worker/loaders/queryBudget.test.ts`):
+
+| Metric                          | Before                                                    | After                                                 |
+| ------------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
+| Statements per load             | ~100 (detection alone was `3 × VARCHAR` = **90** here)    | **6** — and **12** at 1,000 columns                   |
+| Full-table `CREATE TABLE AS`    | up to **4** (ingest + one rewrite per triggered class)    | **1**                                                 |
+| Detection cost vs. row count    | three whole-table `SELECT DISTINCT` scans per column      | independent of rows (4,096-row head sample)           |
+
+Wall clock and peak heap, `perf-baseline.spec.ts`, macOS / 10 cores / Chromium, visualizations
+off. Before = `970698e`, after = `5285b63`:
+
+| Tier                            | `loadMs` before → after | `heapMB` before → after |
+| ------------------------------- | ------------------------ | ----------------------- |
+| WIDE (1,000 × 60,000, Parquet)  | 8,336 → **4,065**        | 227.9 → **31.6**        |
+| DEEP (20 × 5,000,000, Parquet)  | 11,192 → **4,243**       | 347.1 → **16.3**        |
+| WIDE-CSV (1,000 × 5,000, text)  | — → **5,021**            | — → **110.6**           |
+| WIDE_CI (300 × 20,000)          | 1,448 → **1,198**        | 19.6 → (not re-captured) |
+
+**WIDE-CSV has no "before".** The capture did not exist before this phase — every other tier
+reaches the loader as Parquet, so the suite was measuring only the format where the reader hands
+back native temporal types and projection pushdown makes a re-read cheap. Its first capture is
+this phase's; the next phase to touch the load path has a comparison point.
+
+#### Materialization strategy that shipped, per format
+
+All three formats take the same shape, which is the M0 spike's verdict acted on: **probe the
+reader relation, then materialize once with the casts folded in.**
+
+```
+DESCRIBE SELECT <cols> FROM read_xxx('<file>')      -- reserved-name guard + column/type list
+[CREATE OR REPLACE TEMP TABLE __dt_probe_sample_N   -- only past PROBE_SAMPLE_THRESHOLD
+   AS SELECT <varchars> FROM <relation> LIMIT 4096]
+WITH s AS MATERIALIZED (… LIMIT 4096) SELECT … UNION ALL …   -- ceil(V / 64) of these
+[DROP TABLE IF EXISTS __dt_probe_sample_N]
+CREATE OR REPLACE TABLE <t> AS SELECT row_number() …, TRY_CAST(…) …, … FROM <relation>
+SELECT COUNT(*) FROM <t>
+DESCRIBE <t>
+```
+
+Spike verdict, all confirmed against `@duckdb/duckdb-wasm@1.33.1-dev57.0` (engine `v1.5.4`,
+threads = 1):
+
+- `WITH s AS MATERIALIZED (… LIMIT 4096)` is supported against both a table and a `read_xxx()`
+  relation. **No fallback path was needed** — the per-column fallback in `collectProbeSamples`
+  exists only for a malformed *column*, not for a missing feature.
+- **The head limit is load-bearing, not an optimization.** 200k × 50 VARCHAR: per-column probes
+  354.7 ms per pass (≈1,064 ms for the three production passes), batched with the head limit
+  31.4 ms, batched **without** it 568.7 ms — worse than the per-column baseline, because
+  `MATERIALIZED` forces the whole projection to materialize.
+- Batched probe output is **byte-identical** to the per-column probes it replaces on 47/47 VARCHAR
+  columns of the datetime-stress fixture, across csv/json/parquet, at chunk 64 and chunk 8.
+- The one real divergence class is a **false positive**: a low-cardinality column whose
+  distribution changes past row 4,096 (`'2020-01-01'` for the head, garbage after) classifies as
+  DATE on the head sample and stays VARCHAR on a whole-table scan. Head-limiting cannot produce
+  false negatives on high-cardinality columns — the pre-existing whole-table probe was already
+  head-biased, since `DISTINCT … LIMIT 100` without `ORDER BY` returns the earliest hash groups.
+  Documented in `docs/guides/loading-data.md` §Type detection and in the changeset.
+
+#### Deviations from the phase doc
+
+1. **An extra commit between M3 and M4: `ec4b4ba` "Probe wide sources through a bounded sample
+   table".** The doc left "which chunk size the relation path should use" open, to be folded in
+   with its measurement. The measurement says the question has no answer: on CSV every probe
+   statement re-parses the source head (~1,275 ms/statement + ~440 ms on a 1,000 × 5,000, 37 MB
+   fixture), so 5 chunks cost 6,881 ms against a single 300-branch statement's 1,719 ms; on
+   Parquet pushdown makes the source read ~140 ms regardless of chunking, so `UNION ALL` width
+   dominates and the sweep is a clean U with its minimum exactly at 64 (317 ms at 64, 592 ms at
+   300). No single chunk size is right for both. Past `PROBE_SAMPLE_THRESHOLD` (= 64) the probe
+   now materializes a 4,096-row sample of the VARCHAR columns and chunks against that — one source
+   read, then a table where chunk count is free: 1,516 ms on CSV (4.5×) and 325 ms on Parquet
+   (within 2 % of the chunk-64 optimum). Below the threshold both shapes pay exactly one source
+   read, so narrow sources — the overwhelming majority — are untouched.
+
+2. **Progress bands as in §4.5's table, but the stages do not run in the order their names
+   suggest.** `reading` 0–15 (main thread) → `parsing` 15–55 → `analyzing` 55–80 → `indexing`
+   80–95 → exactly one `100`. `parsing` is the schema preflight (DuckDB reading the source),
+   `analyzing` is the type probe, and `indexing` is the ingest CTAS plus the row count and schema
+   read. That is execution order; the table in the phase doc reads as if `parsing` were the
+   ingest. `analyzing` is the only band with real granularity — it advances per probe chunk.
+
+3. **`.text()` never honoured a charset**, contrary to the assumption behind the doc's BOM guard.
+   Both `Blob.text()` and `Response.text()` are defined as *UTF-8 decode* and ignore
+   `Content-Type: …; charset=`. So the byte path loses no charset handling, and the UTF-16 guard
+   that shipped is strictly better than what it replaced (a BOM'd UTF-16 document previously
+   reached DuckDB as UTF-8-decoded garbage either way). What the byte path *does* change: invalid
+   UTF-8 now reaches DuckDB intact and fails the load rather than being replaced with U+FFFD.
+   Validating up front would mean a full scan of exactly the bytes this change exists to stop
+   copying, so the error is the contract.
+
+4. **M5's premise was wrong and the changeset does not repeat it.** CRLF NDJSON was **not**
+   broken before the bounded sniff: a trailing `\r` is JSON whitespace, so `JSON.parse('{"a":1}\r')`
+   succeeds and the old `split('\n')` worked by accident. Verified independently. The real win is
+   not decoding and splitting the whole document to read line one; the `\r` trim that shipped is
+   belt-and-braces, not a fix.
+
+#### `preserve_insertion_order` — left at its default, with the evidence
+
+Not set. Measured, not assumed:
+
+- 200,000 rows through both the CSV and the Parquet loader, with the setting `false`: **zero**
+  rows where `col_0 <> __rowid__` (`col_0` is `CAST(i AS INTEGER)`, i.e. the source row index).
+  Same with it `true`. It changes nothing here because DuckDB-WASM runs single-threaded and the
+  buffering it skips exists only to re-order parallel scan output.
+- So the upside today is zero, and the downside is real: `__rowid__` comes from
+  `row_number() OVER ()` over the scan, so the moment a threaded (`coi`) build is selected, row
+  identity would silently depend on scan order — and no single-threaded test could catch it.
+- The contract now has a live guard: `tests/worker/duckdbConfig.test.ts` "assigns `__rowid__` in
+  source order", plus the row oracle in `tiers.smoke.spec.ts` and the Chrome session's step-4 spot
+  checks (below), all clean.
+
+#### `memory_limit` — 2.5 GB, and how it was validated
+
+`src/worker/duckdb.ts:27` `DUCKDB_MEMORY_LIMIT = '2.5GB'`, applied at `:85` immediately after
+`db.connect()`, inside a try/catch that warns and continues — configuration must never be why a
+table fails to open. `getConfiguredMemoryLimit()` (`:38`) exposes what was accepted; **Phase 10's
+estimator should read that rather than hard-code a number.**
+
+- Default (unset) is **3.1 GiB**, derived from the WASM heap; the first allocation DuckDB cannot
+  satisfy is therefore also the browser's, and a WASM allocation failure aborts the worker with
+  nothing to catch. A limit below the ceiling turns that into an ordinary `Out of Memory Error`
+  that reaches `loadError` with the previous table still queryable. That conversion is the whole
+  point — the number itself is a budget, not a guardrail.
+- **The setting is advisory and unvalidated.** `'100TB'` is accepted and reads back 90.9 TiB.
+  `'2.5GB'` reads back as 2.3 GiB (GB decimal, GiB binary). It is GLOBAL — a connection opened
+  after the SET sees it. `max_memory` is an alias.
+- Validated at the size that mattered: **WIDE still builds at 60,000 rows × 1,000 columns**
+  (`RUN_BROWSER_PERF=1` run of `tiers.full.spec.ts`), loads in 3.9–4.1 s, both oracles clean. The
+  phase doc's fallback to 3.0 GB was not needed.
+
+#### Budgets added
+
+`tests/budgets.ts`, `DT_BUDGET.LOAD`:
+
+| Constant        | Value    | Basis                                                                   |
+| --------------- | -------- | ----------------------------------------------------------------------- |
+| `QUERIES_MAX`   | `15`     | measured 6 at 2,000 × 100 (all formats), 12 at 1,000 columns            |
+| `CTAS_MAX`      | `1`      | measured 1; **no headroom on purpose** — a second copy is the regression |
+| `WIDE_LOAD_MS`  | `30_000` | measured 4,065 ms; ~7× headroom, `RUN_BROWSER_PERF`-gated only          |
+| `DEEP_LOAD_MS`  | `60_000` | measured 4,243 ms; ~14× headroom, same gate                             |
+
+The wall-clock caps are that loose deliberately: gated wall clock can still run on a shared
+machine, and what is worth catching there is a load gone structurally quadratic (10× out), not a
+slow afternoon (2× out). `queryBudget.test.ts` classifies the bounded detection sample apart from
+the full-table copies `CTAS_MAX` counts — it is textually a CTAS but bounded by construction.
+
+#### `.size-limit.cjs` — root entry 8.1 → 8.6 kB
+
+Measured **8.14 kB** brotli (was 7.65 kB); the old cap had 38 B of headroom left. Raised to 8.6 kB
+to restore the file's ~5 % convention. Worth knowing for later phases: **all** of that growth is
+main-thread — the byte reporting and streaming URL read in `DataLoader`, the BOM guard, the
+transfer list, the progress clamp. The loaders, the type planner and the dispatcher live in the
+worker chunk, which no size-limit entry measures, so worker-side work is free at this gate.
+
+#### `LoaderContext` — the shape later phases build on
+
+`src/worker/loaders/common.ts:19`:
+
+```ts
+export interface LoaderContext {
+  db?: AsyncDuckDB;
+  conn?: AsyncDuckDBConnection;
+  reportProgress?: ProgressCallback; // new in Phase 1
+}
+```
+
+`reportProgress` is new, and `src/worker/dispatcher.ts:275` is **the first `LoaderContext`
+production has ever constructed** — before this phase the seam existed for tests only. Phases 7
+and 10 that plan to thread state through it are extending a live object, not introducing one.
+
+#### Deleted symbols — read this if your phase doc names them
+
+- **`enhanceSchemaTypes` and `applyTypeConversions` no longer exist.** Both were deleted in M3
+  (`3c7173c`) when the conversion rewrites were folded into the ingest CTAS.
+  **`phase-10-direct-scan-mode.md:61` and `:188` reference `enhanceSchemaTypes` by name.** The
+  replacement is `planTypedIngestProjection(conn, relation, columnSelect?, onChunk?)`
+  (`common.ts:604`), which returns a `SELECT` list rather than mutating a table — which is
+  strictly better for Phase 10's purpose, since a view cannot be rewritten but a projection can be
+  embedded in one. `phase-01-load-path.md:43,75,259` also name it, historically.
+
+#### New line anchors
+
+| File                            | Anchor                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `src/worker/loaders/common.ts`  | `LoaderContext` `:19` · bands `:46-59` · `createLoadProgress` `:79` · `DETECT_SAMPLE_ROWS` `:246` · `PROBE_CHUNK_COLUMNS` `:258` · `PROBE_SAMPLE_THRESHOLD` `:298` · `ProbeChunkCallback` `:327` · `planTypeConversions` `:453` · `planTypeConversionsViaSample` `:512` · `planTypedIngestProjection` `:604` |
+| `src/worker/dispatcher.ts`      | `case 'load'` `:258` · the `LoaderContext` it builds `:275`                              |
+| `src/data/WorkerBridge.ts`      | transfer list `:410` · `sendMessage` `:521` · `dispatch` `:568` · `postMessage(msg, transfer)` `:614` |
+| `src/data/DataLoader.ts`        | `READING_BAND_END` `:49` · `emitReading` `:56` · `readResponseBytes` `:86` · `toArrayBuffer` `:126` · `prepareTextBytes` `:159` · `load(source, options, onProgress?)` `:190` |
+| `src/DataTable.ts`              | monotonic clamp + `emit('loadProgress')` `:1262-1265`                                    |
+| `src/worker/duckdb.ts`          | `DUCKDB_MEMORY_LIMIT` `:27` · `getConfiguredMemoryLimit` `:38` · the `SET` `:85` · the insertion-order note `:97` |
+
+#### Files created
+
+| File                                        | What                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| `tests/worker/loaders/typePlanner.test.ts`  | batched-vs-per-column parity, chunk boundaries, per-column fallback       |
+| `tests/worker/loaders/queryBudget.test.ts`  | statement and CTAS counting through a `LoaderContext` proxy               |
+| `tests/worker/loaders/loadProgress.test.ts` | honest-sequence invariants for all three loaders                          |
+| `tests/worker/duckdbConfig.test.ts`         | memory-limit value, and the `__rowid__`-in-source-order contract          |
+| `tests/data/WorkerBridge.transfer.test.ts`  | the load message's transfer list                                          |
+| `tests/DataTable.loadProgress.test.ts`      | the reconnected chain end to end, in jsdom                                |
+| `tests/browser/load-transfer.spec.ts`       | real detachment against a real `Worker` (runs in default `test:browser`)  |
+| `tests/browser/load-progress.spec.ts`       | `loadProgress` through the real IPC round trip (same)                     |
+
+#### Traps found along the way
+
+- **`db.dropFile()` does not delete anything on the Node target.** `COPY (…) TO '<name>'` under
+  duckdb-node writes to the **real** filesystem relative to the process CWD, and `dropFile` only
+  unregisters the virtual handle — so a test that exports a fixture litters the repo root with
+  `.parquet` / `.json` files *and* DuckDB's `tmp_`-prefixed staging siblings, on every run.
+  `queryBudget.test.ts` and `loadProgress.test.ts` write into an `os.tmpdir()` scratch directory
+  removed in `afterAll`. **`tests/helpers/nodeBridge.ts:67` still has the bare-filename pattern**
+  — pre-existing, not fixed here, worth picking up by whichever phase next touches that helper.
+- **`db.registerFileBuffer` detaches the `ArrayBuffer` it is handed**, independently of
+  `postMessage`. A caller that registers a buffer and then reads it is already broken today.
+- **`instanceof ArrayBuffer` is realm-sensitive under vitest's jsdom environment.**
+  `new TextEncoder().encode(x).buffer` is a Node-realm buffer and fails `instanceof` against the
+  jsdom global, so `WorkerBridge.loadData`'s transfer check silently declines to transfer it. A
+  browser has one realm; the failure mode is a copy, never a correctness bug. Noted in
+  `WorkerBridge.transfer.test.ts`.
+- **`UNION ALL` silently implicit-casts mixed branch types** — an INTEGER branch and a VARCHAR
+  branch coerce to VARCHAR without error, so DuckDB will not catch a planner bug that included a
+  non-VARCHAR column. The `DESCRIBE`-derived column list on the JS side is the real guard.
+
+#### For Phase 10 (direct-scan mode) specifically
+
+The measurement that motivated deviation 1 is also a warning about direct scan's premise. At
+`wide-csv` shape (1,000 × 5,000, 300 VARCHAR), the **old** ingest-then-rewrite baseline beats
+every direct-relation strategy end to end — 1,801 ms vs the best relation shape's 2,986 ms on CSV,
+and a dead heat on Parquet (670 vs 671 ms). The rewrite that direct scan exists to eliminate is
+only **181 ms of that 1,801 ms (10 %)** on CSV and 166 of 670 (25 %) on Parquet, because 5M cells
+is a cheap in-memory copy; meanwhile folding the `TRY_CAST`s into the ingest CTAS is *free*
+(typed CTAS 1,458–1,562 ms vs plain ingest 1,461 ms). **Direct scan's case at TARGET scale has to
+rest on the 2× transient memory of the rewrite, not on wall clock** — at this tier it is a
+wall-clock regression, and the entry ticket on CSV (one extra source parse) costs 8× the prize.

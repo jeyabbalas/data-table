@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DataLoader } from '@/data/DataLoader';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { LoadError } from '@/core/errors';
+import type { ProgressInfo } from '@/core/Progress';
 
 describe('DataLoader', () => {
   // Create a mock bridge for testing format detection methods
@@ -380,6 +381,43 @@ describe('DataLoader', () => {
       expect(new Uint8Array(payloadOf(bridge) as ArrayBuffer)).toEqual(
         new Uint8Array([0x61, 0x0a, 0xe9]),
       );
+    });
+
+    it('reports byte progress while streaming a URL, without one event per chunk', async () => {
+      const chunk = new Uint8Array(256 * 1024).fill(0x61); // 'a'
+      const chunks = 24;
+      const total = chunk.byteLength * chunks;
+      globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (let i = 0; i < chunks; i++) controller.enqueue(chunk.slice());
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { 'content-length': String(total) } },
+        ),
+      );
+      const bridge = makeBridge();
+      const seen: ProgressInfo[] = [];
+
+      await new DataLoader(bridge).load('https://example.com/data.csv', {}, (info) =>
+        seen.push(info),
+      );
+
+      const reading = seen.filter((r) => r.stage === 'reading');
+      // `Response.arrayBuffer()` reports nothing until it finishes, which is
+      // exactly when a progress bar stops being useful.
+      expect(reading.length).toBeGreaterThan(2);
+      // …but a real download is thousands of chunks, and the band is 15
+      // integer percents wide. Reporting each chunk would be pure churn.
+      expect(reading.length).toBeLessThan(chunks);
+      expect(reading.map((r) => r.loaded)).toEqual(
+        [...reading.map((r) => r.loaded)].sort((a, b) => a! - b!),
+      );
+      expect(reading.at(-1)).toMatchObject({ loaded: total, total, percent: 15 });
+      expect(payloadOf(bridge)).toBeInstanceOf(ArrayBuffer);
+      expect((payloadOf(bridge) as ArrayBuffer).byteLength).toBe(total);
     });
 
     it('passes a caller-supplied ArrayBuffer straight through', async () => {

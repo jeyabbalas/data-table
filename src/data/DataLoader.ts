@@ -53,27 +53,39 @@ const READING_BAND_END = 15;
  * is known up front (`File.size`, `Content-Length`, `ArrayBuffer.byteLength`)
  * and the running count once the source has been read.
  */
+function readingPercent(loaded: number, total: number | undefined): number {
+  // A `Content-Length` under `Content-Encoding: gzip` counts compressed
+  // bytes while the stream delivers decompressed ones, so `loaded` can pass
+  // `total`. Clamping is cheaper and more robust than trying to detect it.
+  if (total === undefined || total <= 0) return 0;
+  return Math.min(READING_BAND_END, Math.round((READING_BAND_END * loaded) / total));
+}
+
 function emitReading(
   onProgress: ProgressCallback | undefined,
   loaded: number,
   total: number | undefined,
 ): void {
   if (!onProgress) return;
-  // A `Content-Length` under `Content-Encoding: gzip` counts compressed
-  // bytes while the stream delivers decompressed ones, so `loaded` can pass
-  // `total`. Clamping is cheaper and more robust than trying to detect it.
-  const percent =
-    total !== undefined && total > 0
-      ? Math.min(READING_BAND_END, Math.round((READING_BAND_END * loaded) / total))
-      : 0;
   onProgress({
     stage: 'reading',
-    percent,
+    percent: readingPercent(loaded, total),
     loaded,
     ...(total === undefined ? {} : { total }),
     cancelable: true,
   });
 }
+
+/**
+ * Bytes that must arrive before an unmeasurable stream reports again.
+ *
+ * A response body arrives in chunks of tens of kilobytes, so a 200 MB
+ * download is thousands of reads. Reporting each one would put thousands of
+ * `loadProgress` events on the event bus to move a bar sixteen pixels. Where
+ * `Content-Length` is known the integer percent does the throttling; where it
+ * is not, this does.
+ */
+const READING_REPORT_BYTES = 1024 * 1024;
 
 /**
  * Read a response body, reporting bytes as they arrive.
@@ -101,12 +113,19 @@ async function readResponseBytes(
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let loaded = 0;
+  let reportedPercent = readingPercent(0, total);
+  let reportedBytes = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
     loaded += value.byteLength;
-    emitReading(onProgress, loaded, total);
+    const percent = readingPercent(loaded, total);
+    if (percent > reportedPercent || loaded - reportedBytes >= READING_REPORT_BYTES) {
+      reportedPercent = percent;
+      reportedBytes = loaded;
+      emitReading(onProgress, loaded, total);
+    }
   }
   // Close the band on the count actually received, which is authoritative
   // where `Content-Length` was not.

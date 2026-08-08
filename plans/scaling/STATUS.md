@@ -9,7 +9,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines      |
 | 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress    |
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
-| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                        |
+| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | in progress | 2026-08-08 | —          | Body renders the column window only      |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                        |
 | 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |

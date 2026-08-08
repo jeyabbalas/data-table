@@ -64,6 +64,30 @@ export type TableEvents = {
     schema: readonly ColumnSchema[];
   };
 
+  /**
+   * Fired once per load, when the visualizations whose headers were visible
+   * at load time have finished fetching.
+   *
+   * Since 0.8 `loadComplete` fires at first *interactive* paint — grid
+   * painted, filter counts correct — and no longer waits for column charts.
+   * This is the event that means "the charts you can see are drawn". It
+   * lands **after** `loadComplete` by default and **before** it under
+   * `visualizations: { eager: true }`.
+   *
+   * `vizCount` is how many charts that wave fetched, which is the visible
+   * set plus overscan — not the column count. It is `0` when nothing was
+   * visible (a table mounted in a hidden tab panel, say) and when
+   * `visualizations: false`.
+   *
+   * @example
+   * ```ts
+   * table.on('vizReady', ({ vizCount }) => {
+   *   console.log(`${vizCount} column charts drawn`);
+   * });
+   * ```
+   */
+  vizReady: { tableName: string; vizCount: number };
+
   /** Fired if a load fails. The `error` is always a typed DataTableError (subclass of Error). */
   loadError: { error: Error };
 

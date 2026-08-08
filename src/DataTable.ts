@@ -389,11 +389,46 @@ export interface DataTable {
   /**
    * Load a new data source into the table. Re-uses the existing worker.
    * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
+   *
+   * @remarks Resolves at first **interactive** paint — schema known, first
+   * row block rendered, filter counts correct — not when every column chart
+   * has drawn. See {@link whenVizReady}.
    */
   loadData(
     source: File | string | ArrayBuffer | Blob,
     opts?: LoadDataOptions & { sourceFormat?: DataFormat },
   ): Promise<void>;
+
+  /**
+   * Resolves when the current load's visible column charts have finished
+   * fetching — the promise form of the `vizReady` event.
+   *
+   * `loadData` (and `await createDataTable({ source })`) resolves at first
+   * interactive paint and does not wait for charts. Await this when you need
+   * them drawn: a screenshot, a PDF, a visual-regression snapshot.
+   *
+   * Resolves immediately before the first load, and is replaced on each
+   * subsequent `loadData` — call it after starting the load you care about.
+   * With `visualizations: false` or `{ eager: true }` it has already
+   * resolved by the time `loadData` does.
+   *
+   * @remarks **It can stay pending while the document is hidden.** Chart
+   * creation is driven by an `IntersectionObserver`, and a browser gives a
+   * background or minimized window no rendering opportunity, so no
+   * intersection is ever computed and no chart is ever created. That is the
+   * platform's behavior, not a stall; the promise settles when the tab
+   * becomes visible. Use `{ eager: true }` if you must have charts in a
+   * hidden document.
+   *
+   * @example
+   * ```ts
+   * const table = await createDataTable({ container, source });
+   * // The grid is already interactive here.
+   * await table.whenVizReady();
+   * await page.screenshot();
+   * ```
+   */
+  whenVizReady(): Promise<void>;
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<K extends keyof TableEvents>(event: K, handler: (payload: TableEvents[K]) => void): () => void;
@@ -716,6 +751,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // Wrapped in Promise.allSettled so individual failures (already routed
   // through options.onError → 'error' event) don't reject the public promise.
   let pendingVizInit: Promise<void> = Promise.resolve();
+  /** Charts the most recent attach wave fetched — the `vizReady` payload. */
+  let pendingVizCount = 0;
   const brushStates = new Map<string, BrushState>();
   const selectionStates = new Map<string, SelectionStateSnapshot>();
   const vizRegistry: VisualizationRegistry =
@@ -1074,6 +1111,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // pendingVizInit so loadDataImpl doesn't await a stale promise from a
       // previous (vizEnabled) attach pass.
       pendingVizInit = Promise.resolve();
+      pendingVizCount = 0;
       return;
     }
 
@@ -1171,7 +1209,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // source: 'visualization'; panel errors via source: 'stats-panel'; the
     // count query in updateFilteredRowCount is best-effort.
     const initPromises: Promise<unknown>[] = [
-      vizController?.whenWaveSettled() ?? Promise.resolve(0),
+      (vizController?.whenWaveSettled() ?? Promise.resolve(0)).then((count) => {
+        pendingVizCount = count;
+      }),
       coordinator.syncExistingFilters(),
       // Same for stats panels — give them the current filter array up-front so
       // panels with their own DuckDB queries don't have to wait for the next
@@ -1358,6 +1398,45 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.filters.subscribe(refreshNonVizStats));
   unsubscribes.push(state.filteredRows.subscribe(refreshNonVizStats));
 
+  // -------- vizReady --------
+  // Charts are lazy, so "the visible ones have data" is no longer something
+  // the load promise can express. It gets its own promise and event.
+  //
+  // The generation counter exists because `clearLoadMarks()` runs at the top
+  // of every load: a wave belonging to load N that settles after load N+1
+  // has already marked `start` would write `dt:load:vizReady` against the
+  // wrong origin, producing a `dt:load:viz` measure that spans two loads.
+  let loadGeneration = 0;
+  let vizReadyPromise: Promise<void> = Promise.resolve();
+  let resolveVizReady: (() => void) | null = null;
+
+  /** Arm a fresh `whenVizReady()` promise for the load about to start. */
+  const beginVizReady = (): number => {
+    // A previous load's awaiters must not be stranded by the new promise
+    // replacing theirs.
+    resolveVizReady?.();
+    vizReadyPromise = new Promise<void>((resolve) => {
+      resolveVizReady = resolve;
+    });
+    return ++loadGeneration;
+  };
+
+  /** Settle it — from the wave, or from the failure path. */
+  const settleVizReady = (generation: number, emit: boolean): void => {
+    if (generation !== loadGeneration) return;
+    const resolve = resolveVizReady;
+    resolveVizReady = null;
+    if (!resolve) return;
+    if (emit && !destroyed) {
+      markLoad('vizReady');
+      emitter.emit('vizReady', {
+        tableName: state.tableName.get() ?? '',
+        vizCount: pendingVizCount,
+      });
+    }
+    resolve();
+  };
+
   // -------- Public loadData --------
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
@@ -1369,6 +1448,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // load, not the previous one's `dt:load:start`.
     clearLoadMarks();
     markLoad('start');
+    const generation = beginVizReady();
     emitter.emit('loadStart', { source: sourceLabel });
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
@@ -1430,13 +1510,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // surface a destroy error so consumers know the load was aborted.
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      // Wait in parallel for the body's first SELECT and the per-column
-      // visualization/stats-panel initial fetches + filter-sync queries.
-      // Both promises swallow internally (whenBodyReady catches body-init
-      // errors; pendingVizInit wraps in allSettled and errors route through
-      // the `error` event), so Promise.all here can never short-circuit.
-      // Awaiting in parallel saves wall time over chaining since these
-      // workloads are independent at the worker boundary.
+      // The load promise resolves at **first interactive paint**: the body's
+      // first SELECT has painted, and `filteredRows` is correct for any
+      // filters restored from the session (one COUNT). It no longer waits
+      // for per-column charts — that is `whenVizReady()` / the `vizReady`
+      // event, and the migration note in the changeset.
+      //
+      // `syncExistingFilters` is deliberately routed around the visibility
+      // scheduler (see `StatsPanelCoordinator.syncExistingFilters`): gating
+      // the load on it is only sound while it is a single count query that
+      // cannot depend on the observer wave.
       //
       // State setters inside `actions.loadData` fan out synchronously, so by
       // this point every triggered `TableContainer.render()` and
@@ -1444,12 +1527,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // last (surviving) body and `pendingVizInit` references the latest
       // attach pass's collected work.
       //
-      // `Promise.all` collapses both timings into one, so each mark hangs
-      // off its own promise; the locals keep `no-floating-promises` happy
-      // while preserving the parallelism.
+      // Both branches swallow internally (whenBodyReady catches body-init
+      // errors; pendingVizInit wraps in allSettled and errors route through
+      // the `error` event), so `Promise.all` here can never short-circuit.
       const painted = tableContainer.whenBodyReady().then(() => markLoad('firstPaint'));
-      const vizzed = pendingVizInit.then(() => markLoad('vizReady'));
-      await Promise.all([painted, vizzed]);
+      const counted = coordinator.syncExistingFilters();
+      // Hung off the wave, not awaited — except in the two configurations
+      // where the wave is already over by construction. Keeping
+      // `dt:load:vizReady` inside the gate for those preserves the
+      // `complete >= vizReady` ordering the mark suite pins, and it is the
+      // honest semantics: with no charts to wait for, they are ready.
+      const vizzed = pendingVizInit.then(() => settleVizReady(generation, true));
+      const gate: Promise<unknown>[] = [painted, counted];
+      if (!vizMode.enabled || vizMode.eager) gate.push(vizzed);
+      await Promise.all(gate);
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
@@ -1491,6 +1582,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
               code: 'PARSE_FAILED',
               cause: error,
             });
+      // A failed load has no visible wave to wait for. Settle `whenVizReady`
+      // without emitting `vizReady` — silently, so an awaiter does not hang,
+      // and quietly, because nothing became ready.
+      settleVizReady(generation, false);
       // Skip event emission on a dead emitter — destroy() has already cleared
       // the listener map and consumers no longer expect notifications.
       if (!destroyed) {
@@ -1539,6 +1634,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       }
     }
     unsubscribes.length = 0;
+
+    // Never strand a `whenVizReady()` awaiter on a table being torn down.
+    resolveVizReady?.();
+    resolveVizReady = null;
 
     // The controller owns every live instance and its observer.
     vizController?.destroy();
@@ -1649,6 +1748,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         );
       }
       return loadDataImpl(source, loadOpts);
+    },
+    whenVizReady() {
+      throwIfDestroyed('whenVizReady');
+      return vizReadyPromise;
     },
     on(event, handler) {
       throwIfDestroyed('on');

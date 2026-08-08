@@ -1,20 +1,26 @@
 /**
  * @vitest-environment jsdom
  *
- * `await createDataTable({ source })` must resolve only AFTER:
- *   1. The surviving `TableBody`'s first SELECT settles (covered by
- *      `tests/DataTable.firstpaint.race.test.ts`); AND
- *   2. Each per-column visualization's eager first `fetchData()` settles; AND
- *   3. `CrossfilterCoordinator.syncExistingFilters()` and
- *      `StatsPanelCoordinator.syncExistingFilters()` settle (the work they
- *      kicked off when filters were already in state at attach time).
+ * The load contract around visualizations, in both of its configurations.
  *
- * Before this contract fix, viz fetches were fire-and-forget inside
- * `attachVisualizations` — a consumer chaining `addFilter()` immediately
- * after `await createDataTable(...)` could race those initial fetches.
+ * **Lazy (the default, since 0.8).** `await createDataTable({ source })`
+ * resolves at first *interactive* paint: the surviving `TableBody`'s first
+ * SELECT has settled (covered by `tests/DataTable.firstpaint.race.test.ts`)
+ * and `CrossfilterCoordinator.syncExistingFilters()` has settled, so
+ * `filteredRows` is correct for restored filters. It does **not** wait for
+ * column charts. Those get `whenVizReady()` and the `vizReady` event.
  *
- * These tests pin the new contract using a stub `VisualizationRegistry`
- * whose stub viz holds its `fetchData` on a controllable deferred. Mirrors
+ * **`{ eager: true }`.** The pre-0.8 semantics, kept for screenshot and PDF
+ * pipelines: every chart is created and fetched during load and the promise
+ * waits for all of them.
+ *
+ * What has not changed, and is still pinned here: a consumer chaining
+ * `addFilter()` immediately after the await must not race an initial fetch
+ * (test 2), a custom viz that never reassigns `dataPromise` must not hang
+ * anything (test 4), and a rejecting `fetchData` must not either (test 5).
+ *
+ * These tests use a stub `VisualizationRegistry` whose stub viz holds its
+ * `fetchData` on a controllable deferred. Mirrors
  * `tests/DataTable.firstpaint.race.test.ts` for helpers and the
  * `tests/DataTable.statsPanel.test.ts` `StubViz` / registry pattern.
  */
@@ -221,10 +227,51 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('createDataTable awaits viz first fetch', () => {
-  it('promise stays pending until viz.waitForData() resolves', async () => {
+describe('lazy default: the load promise does not wait for charts', () => {
+  it('resolves while a held viz fetch is still pending; whenVizReady() waits', async () => {
     const bridge = makePopulatedBridge();
     // Body fetch resolves immediately; the viz's fetchData holds.
+    HoldableViz.fetchDeferred = deferred<void>();
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const file = new File(['a\n1\n2\n3'], 'x.csv', { type: 'text/csv' });
+
+    const table = await createDataTable({
+      container,
+      source: file,
+      bridge,
+      visualizationRegistry: makeStubVizRegistry(HoldableViz),
+      persistence: { sessionStore: makeSessionStore() },
+      ...baseOpts,
+    });
+
+    // The chart's fetch was started and is still held — and the table is
+    // already usable. That is the whole point of the change.
+    expect(HoldableViz.fetchCallCount).toBeGreaterThan(0);
+
+    let vizState: 'pending' | 'resolved' = 'pending';
+    const vizReadyEvents: Array<{ tableName: string; vizCount: number }> = [];
+    table.on('vizReady', (p) => vizReadyEvents.push(p));
+    void table.whenVizReady().then(() => {
+      vizState = 'resolved';
+    });
+
+    await drainMicrotasks();
+    expect(vizState).toBe('pending');
+    expect(vizReadyEvents).toHaveLength(0);
+
+    HoldableViz.fetchDeferred.resolve();
+    await table.whenVizReady();
+    expect(vizState).toBe('resolved');
+    expect(vizReadyEvents).toHaveLength(1);
+    expect(vizReadyEvents[0]!.vizCount).toBeGreaterThan(0);
+
+    await table.destroy();
+  });
+
+  it('eager: true restores wait-for-all gating', async () => {
+    const bridge = makePopulatedBridge();
     HoldableViz.fetchDeferred = deferred<void>();
 
     const container = document.createElement('div');
@@ -237,6 +284,7 @@ describe('createDataTable awaits viz first fetch', () => {
       container,
       source: file,
       bridge,
+      visualizations: { eager: true },
       visualizationRegistry: makeStubVizRegistry(HoldableViz),
       persistence: { sessionStore: makeSessionStore() },
       ...baseOpts,
@@ -252,22 +300,53 @@ describe('createDataTable awaits viz first fetch', () => {
       },
     );
 
-    // After microtask drain, body has rendered (its query resolved), and the
-    // viz constructor has fired its fetchData (which is awaiting the held
-    // deferred). The public promise must still be pending — gated by
-    // pendingVizInit.
     await drainMicrotasks();
     expect(state).toBe('pending');
     expect(HoldableViz.fetchCallCount).toBeGreaterThan(0);
 
-    // Releasing the viz fetch unblocks the public promise.
     HoldableViz.fetchDeferred.resolve();
     await tablePromise;
     expect(state).toBe('resolved');
+    // Already settled by the time the load promise did — no extra await.
+    await table!.whenVizReady();
 
     await table!.destroy();
   });
 
+  it('fires vizReady exactly once per load, and re-arms on the next one', async () => {
+    const bridge = makePopulatedBridge();
+    HoldableViz.fetchDeferred = null;
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const file = new File(['a\n1\n2\n3'], 'x.csv', { type: 'text/csv' });
+
+    const table = await createDataTable({
+      container,
+      source: file,
+      bridge,
+      visualizationRegistry: makeStubVizRegistry(HoldableViz),
+      persistence: { sessionStore: makeSessionStore() },
+      ...baseOpts,
+    });
+
+    const events: Array<{ tableName: string; vizCount: number }> = [];
+    table.on('vizReady', (p) => events.push(p));
+    await table.whenVizReady();
+    await drainMicrotasks();
+    const afterFirst = events.length;
+    expect(afterFirst).toBeLessThanOrEqual(1);
+
+    await table.loadData(new File(['a\n4\n5'], 'y.csv', { type: 'text/csv' }));
+    await table.whenVizReady();
+    await drainMicrotasks();
+    expect(events.length).toBe(afterFirst + 1);
+
+    await table.destroy();
+  });
+});
+
+describe('createDataTable awaits viz first fetch', () => {
   it('addFilter immediately after await sees a fully-initialized viz (no race)', async () => {
     const bridge = makePopulatedBridge();
     // Viz fetches resolve normally — no hold.
@@ -313,18 +392,23 @@ describe('createDataTable awaits viz first fetch', () => {
     await table.destroy();
   });
 
-  it('destroy() mid-vizinit rejects loadData with DestroyedError, no hang', async () => {
+  it('destroy() mid-vizinit rejects loadData with DestroyedError under eager, no hang', async () => {
     const bridge = makePopulatedBridge();
     HoldableViz.fetchDeferred = deferred<void>();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
 
+    // `eager: true` is what keeps this a *load* concern: under the lazy
+    // default the load promise no longer waits for the chart at all, so
+    // destroying mid-fetch cannot make it reject — the case that replaces
+    // this one is the `whenVizReady()` half, below.
     // Construct without `source` so loadDataImpl fires only on the explicit
     // table.loadData below.
     const table = await createDataTable({
       container,
       bridge,
+      visualizations: { eager: true },
       visualizationRegistry: makeStubVizRegistry(HoldableViz),
       persistence: { sessionStore: makeSessionStore() },
       ...baseOpts,
@@ -346,6 +430,40 @@ describe('createDataTable awaits viz first fetch', () => {
     HoldableViz.fetchDeferred.resolve();
 
     await expect(loadPromise).rejects.toBeInstanceOf(DestroyedError);
+  });
+
+  it('destroy() while whenVizReady() is pending settles it rather than hanging', async () => {
+    const bridge = makePopulatedBridge();
+    HoldableViz.fetchDeferred = deferred<void>();
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const file = new File(['a\n1\n2\n3'], 'x.csv', { type: 'text/csv' });
+
+    const table = await createDataTable({
+      container,
+      source: file,
+      bridge,
+      visualizationRegistry: makeStubVizRegistry(HoldableViz),
+      persistence: { sessionStore: makeSessionStore() },
+      ...baseOpts,
+    });
+
+    const pending = table.whenVizReady();
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await drainMicrotasks();
+    expect(settled).toBe(false);
+
+    await table.destroy();
+    await pending;
+    expect(settled).toBe(true);
+
+    // The late fetch resolving after teardown must change nothing.
+    HoldableViz.fetchDeferred.resolve();
+    await drainMicrotasks();
   });
 
   it('custom viz with no dataPromise reassign resolves immediately (hoist contract)', async () => {

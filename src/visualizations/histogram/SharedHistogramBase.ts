@@ -124,6 +124,19 @@ export interface BaseHistogramData {
   isSingleValue: boolean;
 }
 
+/**
+ * The portion of a histogram data snapshot that every histogram shares.
+ * Subclasses widen it with their own cached unfiltered `initialData`.
+ *
+ * Not exported from the package entries — snapshots are opaque to
+ * consumers, who only ever move them between two instances of the same
+ * class via `exportDataSnapshot()` / `importDataSnapshot()`.
+ */
+export interface SharedHistogramSnapshot<TData extends BaseHistogramData> {
+  data: TData | null;
+  backgroundData: TData | null;
+}
+
 // =========================================
 // SharedHistogramBase Class
 // =========================================
@@ -181,9 +194,36 @@ export abstract class SharedHistogramBase<
 
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
+    // The eager first load is kicked off by each concrete subclass's own
+    // constructor (`this.dataPromise = this.hydrateOrFetch()`), not here.
+    // A base constructor runs *before* the subclass's field initializers, so
+    // anything hydration wrote into `initialData` would be reset to `null`
+    // an instant later.
+  }
 
-    // Fetch data immediately and store the promise
-    this.dataPromise = this.fetchData();
+  // =========================================
+  // Data snapshots (see BaseVisualization)
+  // =========================================
+
+  /**
+   * The foreground/background pair every histogram renders from. Each
+   * concrete subclass extends this with its own cached unfiltered
+   * `initialData` — omit that and a chart re-created under an active filter
+   * refetches the unfiltered pass, which is exactly the query this seam
+   * exists to avoid.
+   */
+  override exportDataSnapshot(): SharedHistogramSnapshot<TData> | null {
+    if (!this.data && !this.backgroundData) return null;
+    return { data: this.data, backgroundData: this.backgroundData };
+  }
+
+  override importDataSnapshot(snapshot: unknown): boolean {
+    const snap = snapshot as SharedHistogramSnapshot<TData> | null;
+    if (!snap || typeof snap !== 'object') return false;
+    if (!('data' in snap) || !('backgroundData' in snap)) return false;
+    this.data = snap.data ?? null;
+    this.backgroundData = snap.backgroundData ?? null;
+    return true;
   }
 
   // =========================================

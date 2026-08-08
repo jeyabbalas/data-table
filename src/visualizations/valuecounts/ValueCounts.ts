@@ -138,6 +138,23 @@ interface RenderSegment {
   otherCount?: number | undefined;
 }
 
+/**
+ * {@link ValueCounts}'s data snapshot — see
+ * `BaseVisualization.exportDataSnapshot`. Not exported from the package
+ * entries; snapshots are opaque and only ever move between two instances of
+ * this class for the same column.
+ */
+export interface ValueCountsSnapshot {
+  data: ValueCountsData | null;
+  backgroundData: ValueCountsData | null;
+  initialData: ValueCountsData | null;
+  initialCategoryOrder: string[] | null;
+  initialHasOther: boolean;
+  initialSegmentCounts: Map<string, number> | null;
+  topCategoryValues: string[];
+  foldedCountOverrides: Map<string, number> | null;
+}
+
 // =========================================
 // ValueCounts Class
 // =========================================
@@ -202,8 +219,66 @@ export class ValueCounts extends BaseVisualization {
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
 
-    // Fetch data immediately and store the promise
-    this.dataPromise = this.fetchData();
+    // Hydrate from a snapshot when one was handed in, else fetch eagerly.
+    this.dataPromise = this.hydrateOrFetch();
+  }
+
+  // =========================================
+  // Data snapshots
+  // =========================================
+
+  /**
+   * Value counts caches more than the foreground/background pair: the
+   * unfiltered category **order**, its counts, whether an "Other" bucket
+   * existed, and the top-N values the "Other" click turns into an exclusion
+   * filter. All of it is derived from the unfiltered scan, so all of it has
+   * to travel — otherwise a re-created chart under an active filter both
+   * re-scans and re-orders its segments under the user.
+   */
+  override exportDataSnapshot(): ValueCountsSnapshot | null {
+    if (!this.data && !this.backgroundData && !this.initialData) return null;
+    return {
+      data: this.data,
+      backgroundData: this.backgroundData,
+      initialData: this.initialData,
+      initialCategoryOrder: this.initialCategoryOrder,
+      initialHasOther: this.initialHasOther,
+      initialSegmentCounts: this.initialSegmentCounts
+        ? new Map(this.initialSegmentCounts)
+        : null,
+      topCategoryValues: [...this.topCategoryValues],
+      foldedCountOverrides: this.foldedCountOverrides
+        ? new Map(this.foldedCountOverrides)
+        : null,
+    };
+  }
+
+  override importDataSnapshot(snapshot: unknown): boolean {
+    const snap = snapshot as ValueCountsSnapshot | null;
+    if (!snap || typeof snap !== 'object') return false;
+    if (!('data' in snap) || !('initialCategoryOrder' in snap)) return false;
+
+    this.data = snap.data ?? null;
+    this.backgroundData = snap.backgroundData ?? null;
+    this.initialData = snap.initialData ?? null;
+    this.initialCategoryOrder = snap.initialCategoryOrder ?? null;
+    this.initialHasOther = snap.initialHasOther ?? false;
+    this.initialSegmentCounts = snap.initialSegmentCounts
+      ? new Map(snap.initialSegmentCounts)
+      : null;
+    this.topCategoryValues = snap.topCategoryValues ? [...snap.topCategoryValues] : [];
+    this.foldedCountOverrides = snap.foldedCountOverrides
+      ? new Map(snap.foldedCountOverrides)
+      : null;
+
+    // Leave the instance in exactly the state a landed fetch would — same
+    // order as the tail of `fetchData`, including the deferred filter sync
+    // that has to run *after* `buildRenderSegments()` inside `render()`.
+    this.emitDefaultStats();
+    this.pendingFilterSync = this.options.filters.length > 0;
+    this.render();
+    this.emitCommittedStats();
+    return true;
   }
 
   // =========================================

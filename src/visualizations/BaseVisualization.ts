@@ -110,6 +110,19 @@ export interface VisualizationOptions {
   messages?: Strings;
   /** Maximum number of histogram bins (default: 15) */
   maxBins?: number;
+  /**
+   * Data captured from a previous instance of the same column via
+   * {@link BaseVisualization.exportDataSnapshot}. When present, the built-in
+   * visualizations hydrate from it in their constructor instead of issuing
+   * their initial fetch — that is what makes a column hide/show/reorder cost
+   * **zero** DuckDB queries even though the header DOM (and therefore the
+   * instance) is rebuilt.
+   *
+   * Ignored by any subclass that does not implement
+   * {@link BaseVisualization.importDataSnapshot}; such a subclass simply
+   * fetches as before.
+   */
+  initialSnapshot?: unknown;
   /** Callback when brush is committed (column name passed) */
   onBrushCommit?: (columnName: string) => void;
   /** Callback when brush is cleared (column name passed) */
@@ -457,6 +470,83 @@ export abstract class BaseVisualization {
    */
   public waitForData(): Promise<void> {
     return this.dataPromise;
+  }
+
+  /**
+   * Capture this visualization's fetched data so it can outlive the
+   * instance. Returned values are treated as opaque by the caller and are
+   * only ever handed back to {@link importDataSnapshot} on a **new instance
+   * of the same class, for the same column**.
+   *
+   * The default returns `null` — "I have nothing worth keeping", which makes
+   * a re-created instance fetch as before. All five built-ins override it.
+   *
+   * Column header DOM is rebuilt wholesale on every hide / show / pin /
+   * reorder, so a visualization instance cannot survive one. This pair is
+   * what lets its *data* survive instead.
+   *
+   * @example
+   * ```ts
+   * const snapshot = viz.exportDataSnapshot();
+   * viz.destroy();
+   * // …header rebuilt…
+   * const next = new Histogram(freshContainer, column, { ...options, initialSnapshot: snapshot });
+   * // `next` renders immediately and issues no query.
+   * ```
+   */
+  public exportDataSnapshot(): unknown | null {
+    return null;
+  }
+
+  /**
+   * Adopt a snapshot produced by {@link exportDataSnapshot} and reflect it —
+   * an implementation is expected to leave the instance fully rendered, as
+   * though its fetch had just landed.
+   *
+   * @param snapshot - opaque value previously returned by
+   *   {@link exportDataSnapshot} on an instance of the same class.
+   * @returns `true` when the snapshot was recognized and adopted. `false`
+   *   (the default) means "not supported / not usable", and the caller
+   *   falls back to a normal fetch — so an unrecognized or corrupt snapshot
+   *   degrades to today's behavior rather than to an empty chart.
+   *
+   * @example
+   * ```ts
+   * class SparkLine extends BaseVisualization {
+   *   private points: number[] = [];
+   *   override exportDataSnapshot() { return this.points.length ? { points: this.points } : null; }
+   *   override importDataSnapshot(s: unknown) {
+   *     const snap = s as { points?: number[] } | null;
+   *     if (!snap?.points) return false;
+   *     this.points = snap.points;
+   *     this.render();
+   *     return true;
+   *   }
+   * }
+   * ```
+   */
+  public importDataSnapshot(snapshot: unknown): boolean {
+    void snapshot;
+    return false;
+  }
+
+  /**
+   * The eager-first-load idiom, factored so every built-in shares it: hydrate
+   * from `options.initialSnapshot` when one was supplied and accepted,
+   * otherwise fetch.
+   *
+   * Subclasses call this from **their own** constructor body
+   * (`this.dataPromise = this.hydrateOrFetch()`), never from an intermediate
+   * base's — a base-class constructor runs before the subclass's field
+   * initializers, so anything it wrote into a subclass field would be
+   * overwritten by `= null` a moment later.
+   */
+  protected hydrateOrFetch(): Promise<void> {
+    const snapshot = this.options.initialSnapshot;
+    if (snapshot !== undefined && snapshot !== null && this.importDataSnapshot(snapshot)) {
+      return Promise.resolve();
+    }
+    return this.fetchData();
   }
 
   /**

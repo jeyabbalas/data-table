@@ -41,7 +41,19 @@ import {
   fetchDiscreteBins,
 } from './HistogramData';
 import type { HistogramData } from './HistogramData';
-import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
+import {
+  SharedHistogramBase,
+  FONTS,
+  PADDING,
+  LAYOUT,
+  type SharedHistogramSnapshot,
+} from './SharedHistogramBase';
+
+/** {@link Histogram}'s data snapshot — see `BaseVisualization.exportDataSnapshot`. */
+export interface NumericHistogramSnapshot extends SharedHistogramSnapshot<HistogramData> {
+  /** The cached unfiltered pass `ensureInitialData` would otherwise re-issue. */
+  initialData: HistogramData | null;
+}
 
 // =========================================
 // Utility Functions (numeric-specific)
@@ -107,6 +119,40 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
 
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
+    // Kicked off here rather than in `SharedHistogramBase` so it runs after
+    // this class's field initializers — see `hydrateOrFetch`.
+    this.dataPromise = this.hydrateOrFetch();
+  }
+
+  // =========================================
+  // Data snapshots
+  // =========================================
+
+  /**
+   * Adds the cached unfiltered `initialData` to the shared foreground /
+   * background pair. Without it, an instance re-created while a filter is
+   * active would call `ensureInitialData` and pay the unfiltered scan again.
+   */
+  override exportDataSnapshot(): NumericHistogramSnapshot | null {
+    const base = super.exportDataSnapshot();
+    if (!base && !this.initialData) return null;
+    return {
+      data: base?.data ?? null,
+      backgroundData: base?.backgroundData ?? null,
+      initialData: this.initialData,
+    };
+  }
+
+  override importDataSnapshot(snapshot: unknown): boolean {
+    if (!super.importDataSnapshot(snapshot)) return false;
+    this.initialData = (snapshot as NumericHistogramSnapshot).initialData ?? null;
+    // Leave the instance in exactly the state a landed fetch would — same
+    // order as the tail of `fetchData`.
+    this.emitDefaultStats();
+    if (this.options.filters.length > 0) this.syncVisualStateFromFilter();
+    this.emitCommittedStats();
+    this.render();
+    return true;
   }
 
   // =========================================

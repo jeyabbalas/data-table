@@ -22,7 +22,19 @@ import {
   parseIntervalToSeconds,
 } from './IntervalHistogramData';
 import type { IntervalHistogramData } from './IntervalHistogramData';
-import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
+import {
+  SharedHistogramBase,
+  FONTS,
+  PADDING,
+  LAYOUT,
+  type SharedHistogramSnapshot,
+} from './SharedHistogramBase';
+
+/** {@link IntervalHistogram}'s data snapshot — see `BaseVisualization.exportDataSnapshot`. */
+export interface IntervalHistogramSnapshot extends SharedHistogramSnapshot<IntervalHistogramData> {
+  /** The cached unfiltered pass `ensureInitialData` would otherwise re-issue. */
+  initialData: IntervalHistogramData | null;
+}
 
 // =========================================
 // IntervalHistogram Class
@@ -43,6 +55,35 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
+    // Kicked off here rather than in `SharedHistogramBase` so it runs after
+    // this class's field initializers — see `hydrateOrFetch`.
+    this.dataPromise = this.hydrateOrFetch();
+  }
+
+  // =========================================
+  // Data snapshots
+  // =========================================
+
+  /** Adds the cached unfiltered `initialData` to the shared pair. */
+  override exportDataSnapshot(): IntervalHistogramSnapshot | null {
+    const base = super.exportDataSnapshot();
+    if (!base && !this.initialData) return null;
+    return {
+      data: base?.data ?? null,
+      backgroundData: base?.backgroundData ?? null,
+      initialData: this.initialData,
+    };
+  }
+
+  override importDataSnapshot(snapshot: unknown): boolean {
+    if (!super.importDataSnapshot(snapshot)) return false;
+    this.initialData = (snapshot as IntervalHistogramSnapshot).initialData ?? null;
+    // Leave the instance in exactly the state a landed fetch would.
+    this.emitDefaultStats();
+    if (this.options.filters.length > 0) this.syncVisualStateFromFilter();
+    this.emitCommittedStats();
+    this.render();
+    return true;
   }
 
   // =========================================

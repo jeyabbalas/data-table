@@ -4,21 +4,21 @@ One row per phase. The executing agent updates its row at session start (`in pro
 session end (`done`), and appends a handoff section below. Keep rows terse; put substance in the
 handoff notes. Do not edit other phases' handoff sections.
 
-| Phase | Doc                                                                          | Status      | Started    | Finished   | Agent notes (one line)              |
-| ----- | ---------------------------------------------------------------------------- | ----------- | ---------- | ---------- | ----------------------------------- |
-| 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines |
+| Phase | Doc                                                                          | Status      | Started    | Finished   | Agent notes (one line)                |
+| ----- | ---------------------------------------------------------------------------- | ----------- | ---------- | ---------- | ------------------------------------- |
+| 0     | [phase-00-harness.md](./phase-00-harness.md)                                 | done        | 2026-08-08 | 2026-08-08 | Harness, instrumentation, baselines   |
 | 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress |
-| 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | not started | —          | —          | —                                   |
-| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                   |
-| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                   |
-| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                   |
-| 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                   |
-| 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                   |
-| 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                   |
-| 9     | [phase-09-persistence-undo.md](./phase-09-persistence-undo.md)               | not started | —          | —          | —                                   |
-| 10    | [phase-10-direct-scan-mode.md](./phase-10-direct-scan-mode.md)               | not started | —          | —          | —                                   |
-| 11    | [phase-11-bulk-transfer.md](./phase-11-bulk-transfer.md)                     | not started | —          | —          | —                                   |
-| 12    | [phase-12-docs-integration.md](./phase-12-docs-integration.md)               | not started | —          | —          | —                                   |
+| 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | not started | —          | —          | —                                     |
+| 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | not started | —          | —          | —                                     |
+| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                     |
+| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                     |
+| 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                     |
+| 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                     |
+| 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                     |
+| 9     | [phase-09-persistence-undo.md](./phase-09-persistence-undo.md)               | not started | —          | —          | —                                     |
+| 10    | [phase-10-direct-scan-mode.md](./phase-10-direct-scan-mode.md)               | not started | —          | —          | —                                     |
+| 11    | [phase-11-bulk-transfer.md](./phase-11-bulk-transfer.md)                     | not started | —          | —          | —                                     |
+| 12    | [phase-12-docs-integration.md](./phase-12-docs-integration.md)               | not started | —          | —          | —                                     |
 
 Statuses: `not started` · `in progress` · `done` · `blocked (see notes)`.
 
@@ -369,21 +369,25 @@ the changeset.
 Statements and materializations at the budget tier (2,000 × 100, all three formats, counted
 through a `LoaderContext` proxy in `tests/worker/loaders/queryBudget.test.ts`):
 
-| Metric                          | Before                                                    | After                                                 |
-| ------------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
-| Statements per load             | ~100 (detection alone was `3 × VARCHAR` = **90** here)    | **6** — and **12** at 1,000 columns                   |
-| Full-table `CREATE TABLE AS`    | up to **4** (ingest + one rewrite per triggered class)    | **1**                                                 |
-| Detection cost vs. row count    | three whole-table `SELECT DISTINCT` scans per column      | independent of rows (4,096-row head sample)           |
+| Metric                       | Before                                                 | After                                       |
+| ---------------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| Statements per load          | ~100 (detection alone was `3 × VARCHAR` = **90** here) | **6** — and **12** at 1,000 columns         |
+| Full-table `CREATE TABLE AS` | up to **4** (ingest + one rewrite per triggered class) | **1**                                       |
+| Detection cost vs. row count | three whole-table `SELECT DISTINCT` scans per column   | independent of rows (4,096-row head sample) |
 
 Wall clock and peak heap, `perf-baseline.spec.ts`, macOS / 10 cores / Chromium, visualizations
 off. Before = `970698e`, after = `5285b63`:
 
-| Tier                            | `loadMs` before → after | `heapMB` before → after |
-| ------------------------------- | ------------------------ | ----------------------- |
-| WIDE (1,000 × 60,000, Parquet)  | 8,336 → **4,065**        | 227.9 → **31.6**        |
-| DEEP (20 × 5,000,000, Parquet)  | 11,192 → **4,243**       | 347.1 → **16.3**        |
-| WIDE-CSV (1,000 × 5,000, text)  | — → **5,021**            | — → **110.6**           |
-| WIDE_CI (300 × 20,000)          | 1,448 → **1,198**        | 19.6 → (not re-captured) |
+| Tier                           | `loadMs` before → after | `heapMB` before → after  |
+| ------------------------------ | ----------------------- | ------------------------ |
+| WIDE (1,000 × 60,000, Parquet) | 8,336 → **4,065**       | 227.9 → **31.6**         |
+| DEEP (20 × 5,000,000, Parquet) | 11,192 → **4,243**      | 347.1 → **16.3**         |
+| WIDE-CSV (1,000 × 5,000, text) | — → **5,021**           | — → **110.6**            |
+| WIDE_CI (300 × 20,000)         | 1,448 → **1,198**\*     | 19.6 → (not re-captured) |
+
+\* WIDE_CI was not re-captured through `perf-baseline.spec.ts`. 1,198 ms is the figure
+`tiers.smoke.spec.ts` logs on every default `npm run test:browser` run — same readout, same
+machine, but a different harness than the row above it.
 
 **WIDE-CSV has no "before".** The capture did not exist before this phase — every other tier
 reaches the loader as Parquet, so the suite was measuring only the format where the reader hands
@@ -411,7 +415,7 @@ threads = 1):
 
 - `WITH s AS MATERIALIZED (… LIMIT 4096)` is supported against both a table and a `read_xxx()`
   relation. **No fallback path was needed** — the per-column fallback in `collectProbeSamples`
-  exists only for a malformed *column*, not for a missing feature.
+  exists only for a malformed _column_, not for a missing feature.
 - **The head limit is load-bearing, not an optimization.** 200k × 50 VARCHAR: per-column probes
   354.7 ms per pass (≈1,064 ms for the three production passes), batched with the head limit
   31.4 ms, batched **without** it 568.7 ms — worse than the per-column baseline, because
@@ -448,10 +452,10 @@ threads = 1):
    ingest. `analyzing` is the only band with real granularity — it advances per probe chunk.
 
 3. **`.text()` never honoured a charset**, contrary to the assumption behind the doc's BOM guard.
-   Both `Blob.text()` and `Response.text()` are defined as *UTF-8 decode* and ignore
+   Both `Blob.text()` and `Response.text()` are defined as _UTF-8 decode_ and ignore
    `Content-Type: …; charset=`. So the byte path loses no charset handling, and the UTF-16 guard
    that shipped is strictly better than what it replaced (a BOM'd UTF-16 document previously
-   reached DuckDB as UTF-8-decoded garbage either way). What the byte path *does* change: invalid
+   reached DuckDB as UTF-8-decoded garbage either way). What the byte path _does_ change: invalid
    UTF-8 now reaches DuckDB intact and fails the load rather than being replaced with U+FFFD.
    Validating up front would mean a full scan of exactly the bytes this change exists to stop
    copying, so the error is the contract.
@@ -495,17 +499,27 @@ estimator should read that rather than hard-code a number.**
 - Validated at the size that mattered: **WIDE still builds at 60,000 rows × 1,000 columns**
   (`RUN_BROWSER_PERF=1` run of `tiers.full.spec.ts`), loads in 3.9–4.1 s, both oracles clean. The
   phase doc's fallback to 3.0 GB was not needed.
+- Confirmed in a real browser during the Chrome session, through the shipped worker:
+
+  ```
+  SELECT current_setting('threads'), current_setting('memory_limit'),
+         current_setting('preserve_insertion_order'), version()
+  → { threads: 1, memory_limit: "2.3 GiB", preserve_insertion_order: true, version: "v1.5.4" }
+  ```
+
+  `threads: 1` matters beyond this phase: it is the browser-side confirmation that the
+  insertion-order reasoning below is about production, not just the Node harness.
 
 #### Budgets added
 
 `tests/budgets.ts`, `DT_BUDGET.LOAD`:
 
-| Constant        | Value    | Basis                                                                   |
-| --------------- | -------- | ----------------------------------------------------------------------- |
-| `QUERIES_MAX`   | `15`     | measured 6 at 2,000 × 100 (all formats), 12 at 1,000 columns            |
-| `CTAS_MAX`      | `1`      | measured 1; **no headroom on purpose** — a second copy is the regression |
-| `WIDE_LOAD_MS`  | `30_000` | measured 4,065 ms; ~7× headroom, `RUN_BROWSER_PERF`-gated only          |
-| `DEEP_LOAD_MS`  | `60_000` | measured 4,243 ms; ~14× headroom, same gate                             |
+| Constant       | Value    | Basis                                                                    |
+| -------------- | -------- | ------------------------------------------------------------------------ |
+| `QUERIES_MAX`  | `15`     | measured 6 at 2,000 × 100 (all formats), 12 at 1,000 columns             |
+| `CTAS_MAX`     | `1`      | measured 1; **no headroom on purpose** — a second copy is the regression |
+| `WIDE_LOAD_MS` | `30_000` | measured 4,065 ms; ~7× headroom, `RUN_BROWSER_PERF`-gated only           |
+| `DEEP_LOAD_MS` | `60_000` | measured 4,243 ms; ~14× headroom, same gate                              |
 
 The wall-clock caps are that loose deliberately: gated wall clock can still run on a shared
 machine, and what is worth catching there is a load gone structurally quadratic (10× out), not a
@@ -548,34 +562,34 @@ and 10 that plan to thread state through it are extending a live object, not int
 
 #### New line anchors
 
-| File                            | Anchor                                                                                  |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `src/worker/loaders/common.ts`  | `LoaderContext` `:19` · bands `:46-59` · `createLoadProgress` `:79` · `DETECT_SAMPLE_ROWS` `:246` · `PROBE_CHUNK_COLUMNS` `:258` · `PROBE_SAMPLE_THRESHOLD` `:298` · `ProbeChunkCallback` `:327` · `planTypeConversions` `:453` · `planTypeConversionsViaSample` `:512` · `planTypedIngestProjection` `:604` |
-| `src/worker/dispatcher.ts`      | `case 'load'` `:258` · the `LoaderContext` it builds `:275`                              |
-| `src/data/WorkerBridge.ts`      | transfer list `:410` · `sendMessage` `:521` · `dispatch` `:568` · `postMessage(msg, transfer)` `:614` |
-| `src/data/DataLoader.ts`        | `READING_BAND_END` `:49` · `emitReading` `:56` · `readResponseBytes` `:86` · `toArrayBuffer` `:126` · `prepareTextBytes` `:159` · `load(source, options, onProgress?)` `:190` |
-| `src/DataTable.ts`              | monotonic clamp + `emit('loadProgress')` `:1262-1265`                                    |
-| `src/worker/duckdb.ts`          | `DUCKDB_MEMORY_LIMIT` `:27` · `getConfiguredMemoryLimit` `:38` · the `SET` `:85` · the insertion-order note `:97` |
+| File                           | Anchor                                                                                                                                                                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/worker/loaders/common.ts` | `LoaderContext` `:19` · bands `:46-59` · `createLoadProgress` `:79` · `DETECT_SAMPLE_ROWS` `:246` · `PROBE_CHUNK_COLUMNS` `:258` · `PROBE_SAMPLE_THRESHOLD` `:298` · `ProbeChunkCallback` `:327` · `planTypeConversions` `:453` · `planTypeConversionsViaSample` `:512` · `planTypedIngestProjection` `:604` |
+| `src/worker/dispatcher.ts`     | `case 'load'` `:258` · the `LoaderContext` it builds `:275`                                                                                                                                                                                                                                                  |
+| `src/data/WorkerBridge.ts`     | transfer list `:410` · `sendMessage` `:521` · `dispatch` `:568` · `postMessage(msg, transfer)` `:614`                                                                                                                                                                                                        |
+| `src/data/DataLoader.ts`       | `READING_BAND_END` `:49` · `emitReading` `:56` · `readResponseBytes` `:86` · `toArrayBuffer` `:126` · `prepareTextBytes` `:159` · `load(source, options, onProgress?)` `:190`                                                                                                                                |
+| `src/DataTable.ts`             | monotonic clamp + `emit('loadProgress')` `:1262-1265`                                                                                                                                                                                                                                                        |
+| `src/worker/duckdb.ts`         | `DUCKDB_MEMORY_LIMIT` `:27` · `getConfiguredMemoryLimit` `:38` · the `SET` `:85` · the insertion-order note `:97`                                                                                                                                                                                            |
 
 #### Files created
 
 | File                                        | What                                                                     |
 | ------------------------------------------- | ------------------------------------------------------------------------ |
-| `tests/worker/loaders/typePlanner.test.ts`  | batched-vs-per-column parity, chunk boundaries, per-column fallback       |
-| `tests/worker/loaders/queryBudget.test.ts`  | statement and CTAS counting through a `LoaderContext` proxy               |
-| `tests/worker/loaders/loadProgress.test.ts` | honest-sequence invariants for all three loaders                          |
-| `tests/worker/duckdbConfig.test.ts`         | memory-limit value, and the `__rowid__`-in-source-order contract          |
-| `tests/data/WorkerBridge.transfer.test.ts`  | the load message's transfer list                                          |
-| `tests/DataTable.loadProgress.test.ts`      | the reconnected chain end to end, in jsdom                                |
-| `tests/browser/load-transfer.spec.ts`       | real detachment against a real `Worker` (runs in default `test:browser`)  |
-| `tests/browser/load-progress.spec.ts`       | `loadProgress` through the real IPC round trip (same)                     |
+| `tests/worker/loaders/typePlanner.test.ts`  | batched-vs-per-column parity, chunk boundaries, per-column fallback      |
+| `tests/worker/loaders/queryBudget.test.ts`  | statement and CTAS counting through a `LoaderContext` proxy              |
+| `tests/worker/loaders/loadProgress.test.ts` | honest-sequence invariants for all three loaders                         |
+| `tests/worker/duckdbConfig.test.ts`         | memory-limit value, and the `__rowid__`-in-source-order contract         |
+| `tests/data/WorkerBridge.transfer.test.ts`  | the load message's transfer list                                         |
+| `tests/DataTable.loadProgress.test.ts`      | the reconnected chain end to end, in jsdom                               |
+| `tests/browser/load-transfer.spec.ts`       | real detachment against a real `Worker` (runs in default `test:browser`) |
+| `tests/browser/load-progress.spec.ts`       | `loadProgress` through the real IPC round trip (same)                    |
 
 #### Traps found along the way
 
 - **`db.dropFile()` does not delete anything on the Node target.** `COPY (…) TO '<name>'` under
   duckdb-node writes to the **real** filesystem relative to the process CWD, and `dropFile` only
   unregisters the virtual handle — so a test that exports a fixture litters the repo root with
-  `.parquet` / `.json` files *and* DuckDB's `tmp_`-prefixed staging siblings, on every run.
+  `.parquet` / `.json` files _and_ DuckDB's `tmp_`-prefixed staging siblings, on every run.
   `queryBudget.test.ts` and `loadProgress.test.ts` write into an `os.tmpdir()` scratch directory
   removed in `afterAll`. **`tests/helpers/nodeBridge.ts:67` still has the bare-filename pattern**
   — pre-existing, not fixed here, worth picking up by whichever phase next touches that helper.
@@ -597,7 +611,142 @@ The measurement that motivated deviation 1 is also a warning about direct scan's
 every direct-relation strategy end to end — 1,801 ms vs the best relation shape's 2,986 ms on CSV,
 and a dead heat on Parquet (670 vs 671 ms). The rewrite that direct scan exists to eliminate is
 only **181 ms of that 1,801 ms (10 %)** on CSV and 166 of 670 (25 %) on Parquet, because 5M cells
-is a cheap in-memory copy; meanwhile folding the `TRY_CAST`s into the ingest CTAS is *free*
+is a cheap in-memory copy; meanwhile folding the `TRY_CAST`s into the ingest CTAS is _free_
 (typed CTAS 1,458–1,562 ms vs plain ingest 1,461 ms). **Direct scan's case at TARGET scale has to
 rest on the 2× transient memory of the rewrite, not on wall clock** — at this tier it is a
 wall-clock regression, and the entry ticket on CSV (one extra source parse) costs 8× the prize.
+
+#### Manual verification (Claude in Chrome)
+
+Dev server on 5173 (Playwright owns 5199), two tiers, both `viz=off`, per
+`plans/scaling/templates/verification-chrome.md`. Server stopped and the port confirmed free at
+the end. Zero console errors and zero library warnings across the whole session — the only
+console output on either tier was four `DEBUG` lines from a browser extension
+(`chrome-extension://ljflmlehinmoeknoonhibbjpldiijjmm`), which is the established noise set.
+
+**Environment caveat, stated up front because it bounds what was verifiable.** The tab reported
+`document.visibilityState === 'hidden'` for the entire session — the Chrome window was never
+frontmost — which is the trap Phase 0 recorded. Chrome pauses `requestAnimationFrame` in a hidden
+tab, so the virtual scroller commits nothing: `scrollTop` moves, the scroll handler runs, and the
+DOM never updates. A real `resize_window` forces one layout pass and _does_ commit, which is how
+the 50 % sample below was obtained; a synthetic `resize` event does not. Steps 5 (horizontal
+sweep) and 8 (column operations) depend on the same commit path and could not be driven. Their
+coverage stands automated instead, and it is stronger than a spot check: `tiers.full.spec.ts`
+sweeps all 1,000 columns at five scroll stops and asserts the column oracle at each, and both it
+and `tiers.smoke.spec.ts` run a scroll storm with the row oracle. All of that passed in this
+phase's gated run.
+
+**Tab 1 — `?gen=wide&viz=off&rows=60000`** (the `rows` override is mandatory; `?gen=wide` defaults
+to 100,000 and `exportToBuffer` has no `ROW_GROUP_SIZE` option).
+
+Ready in 32 s. Load snapshot: `loadMs` **3,542** — 2.35× the 8,336 ms Phase 0 baseline and well
+inside `WIDE_LOAD_MS` (30,000). `rows: 60000`, `cols: 1000`, `queryCount: 3` at mount.
+
+Step 4 — deep vertical scroll, the load-bearing check. At 50 % depth the rendered window was rows
+**29,989–30,010**, 0 stuck placeholders, and for three sampled rows:
+
+- `data-row-id === data-row-index` for all three
+- `col_0` (`CAST(i AS INTEGER)`, the source row index) equalled the row index
+- `col_1`, `col_12`, `col_16`, `col_17` matched `cellOracle(idx, c, seed=2)` **exactly** —
+  e.g. row 29,989: `296.78`, `Z`, `2022-03-18`, `08:20:08`
+- `col_15` is not text-comparable by construction (`TEXT_COMPARABLE_CLASSES`), so the oracle
+  returns `null` for it and it is not asserted
+
+**Zero oracle violations, zero density-valve warnings.** Deeper positions could not be committed
+for the reason above.
+
+Step 6 — sort by `col_1` through `actions.setSort`: **2 queries**, values ordered
+(`0, 0.03, 0.04, 0.05, 0.06`), invert and `clearSort` both clean, `sortColumns` back to `[]`.
+Step 9 — `exportToBuffer(… LIMIT 1000, 'parquet')` returned **4,057,476 bytes**, inside the
+10⁵–10⁷ range. Step 10 — theme flip to dark applied `data-dt-color-scheme="dark"` in ~0.7 s and
+reverted cleanly.
+
+Final `window.__dtPerf.refresh()`:
+
+```json
+{
+  "tier": "wide",
+  "rows": 60000,
+  "cols": 1000,
+  "viz": false,
+  "state": "ready",
+  "bootMs": 3255.7,
+  "genMs": 39215.5,
+  "loadMs": 3541.9,
+  "firstPaintMs": 3540.4,
+  "vizReadyMs": 3539.6,
+  "queryCount": 7,
+  "cacheHits": 0,
+  "maxInFlight": 1,
+  "domNodes": 57058,
+  "heapMB": 35.8,
+  "error": null
+}
+```
+
+Screenshots: `/var/folders/8l/pbcwnq316rz5v5pnyv_sydmn2fsdlk/T/claude-chrome-screenshots-rsdhx4/screenshot-1786206371188-3.jpg`
+(first paint) and `…/screenshot-1786206778656-4.jpg` (end of session).
+
+**Tab 2 — `?gen=wide-csv&viz=off`** (1,000 × 5,000 as in-page CSV — the text-format path).
+
+Panel reached `ready`; the harness reported `loadMs` **26,515**, which is _not_ comparable to the
+5,021 ms baseline and should not be read as one. It is a cold first load in a throttled hidden
+tab, on top of the demo harness building a 35 MB CSV string on the main thread. Re-loading the
+same 35 MB, 1,000-column CSV in the same page immediately afterwards measured **4,959 ms**,
+matching the baseline capture to within 1 %. Recorded here rather than quietly dropped, because a
+`loadMs` from this harness under these conditions is a number someone could later mistake for a
+regression.
+
+That second load also produced the clearest end-to-end evidence of the progress work:
+
+```
+reading:15   @+0ms      parsing:15   @+22ms
+analyzing:63 @+2168ms   analyzing:72 @+2199ms   analyzing:80 @+2210ms
+indexing:80  @+2212ms   indexing:100 @+3444ms
+```
+
+Three `analyzing` reports is exactly `ceil(150 / PROBE_CHUNK_COLUMNS)` — DuckDB's CSV sniffer
+types half the temporal classes natively, leaving 150 VARCHAR columns of the 1,000, which is past
+`PROBE_SAMPLE_THRESHOLD` and so runs through the bounded sample table. The 2.2 s before the first
+`analyzing` report is the `DESCRIBE` plus the one source parse the sample costs; the 1.2 s after
+`indexing:80` is the ingest CTAS.
+
+Progress honesty (step 2), a 2,000-row CSV with a timestamp column loaded through a live
+`table.on('loadProgress', …)`:
+
+```json
+{
+  "n": 5,
+  "monotone": true,
+  "lastPercent": 100,
+  "hundreds": 1,
+  "readingLoaded": 65793,
+  "csvBytes": 65793,
+  "stages": ["reading:15(c)", "parsing:15", "analyzing:80", "indexing:80", "indexing:100"]
+}
+```
+
+`n > 4`, non-decreasing, exactly one terminal `100`, `reading` carries the source's exact byte
+count, and `(c)` — `cancelable: true` — appears on `reading` alone.
+
+Transfer check (step 3): `loadData(buf)` with a 5,788-byte `ArrayBuffer` → `buf.byteLength === 0`
+afterwards and the table holding all 500 rows. The buffer was detached **because** the worker took
+it, not instead of reading it.
+
+Engine settings read through the shipped worker, which is the field validation for M7:
+
+```json
+{ "threads": 1, "memory_limit": "2.3 GiB", "preserve_insertion_order": true, "version": "v1.5.4" }
+```
+
+#### Gates
+
+| Gate                                                                    | Result                                                                                                                                        |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint` · `format:check` · `typecheck`                           | clean                                                                                                                                         |
+| `npm run test:coverage`                                                 | 226 files, **4,272 passed / 10 skipped**; 86.5 % statements, 75.9 % branches, 89.5 % functions, 88.6 % lines — all above the configured gates |
+| `npm run build && npm run size`                                         | passes after the root-entry cap change (8.14 kB vs 8.6 kB)                                                                                    |
+| `npm run docs:api:check`                                                | 0 errors (1 pre-existing `CrossfilterCoordinatorOptions` warning)                                                                             |
+| `npm run test:browser`                                                  | 38 passed / 12 skipped, including the two new load-path specs                                                                                 |
+| `RUN_BROWSER_PERF=1 … tiers.full.spec.ts -g "WIDE\|DEEP"`               | 4 passed in 14.9 m — WIDE viz=off `loadMs` **3,405**, WIDE viz=on 13,837, DEEP **3,567**, TARGET `copyMs` 608,408                             |
+| `npm run perf:baseline` (WIDE, WIDE-CSV, DEEP) + `perf:baseline:report` | 3 captures written, README regenerated                                                                                                        |

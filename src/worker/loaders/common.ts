@@ -6,6 +6,7 @@
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { ROWID_COLUMN } from '../../core/types';
 
 /**
  * Optional explicit DuckDB context for loader entry points (`loadCSV`,
@@ -25,6 +26,14 @@ export interface LoaderContext {
  */
 export function quoteIdentifier(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Quote a SQL string literal, escaping embedded single quotes by doubling
+ * them. Used to carry a column *name* through a probe result set as data.
+ */
+function quoteLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 /**
@@ -129,152 +138,216 @@ function isTimeFormat(value: string): boolean {
 }
 
 /**
- * Detect which string columns contain ISO timestamp values
+ * Leading source rows the type probe reads.
  *
- * Samples values from each string column and checks if they match
- * the ISO timestamp pattern with high confidence.
+ * Detection used to sample `SELECT DISTINCT … LIMIT 100` over the **whole**
+ * table, once per column per pass — a full-scan hash aggregate per
+ * categorical column, three times. Bounding the sample to a head window
+ * makes probe cost independent of row count, which is what lets a 5M-row
+ * load stop paying for detection.
  *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to analyze
- * @param stringColumns - List of VARCHAR column names to check
- * @param sampleSize - Number of distinct values to sample (default: 100)
- * @param confidenceThreshold - Minimum match ratio to consider as timestamp (default: 0.95)
- * @returns List of column names that contain timestamp values
+ * 4,096 is large enough that a column whose leading rows are unusually
+ * uniform still contributes ~40× the {@link DETECT_SAMPLE_VALUES} distinct
+ * values the classifier looks at, and small enough that the read is a
+ * zonemap-pruned head scan rather than a table scan. The tradeoff is
+ * explicit: a column that is ISO-timestamp-shaped only *after* row 4,096
+ * now stays VARCHAR. `options.format`-style escape hatches do not exist for
+ * type detection, so this is documented in `docs/guides/loading-data.md`.
  */
-export async function detectTimestampColumns(
-  conn: AsyncDuckDBConnection,
-  tableName: string,
-  stringColumns: string[],
-  sampleSize = 100,
-  confidenceThreshold = 0.95,
-): Promise<string[]> {
-  const timestampColumns: string[] = [];
+export const DETECT_SAMPLE_ROWS = 4096;
 
-  for (const column of stringColumns) {
-    try {
-      // Sample distinct non-null values
-      const quotedCol = quoteIdentifier(column);
-      const sampleQuery = `
-        SELECT DISTINCT ${quotedCol} as value
-        FROM ${quoteIdentifier(tableName)}
-        WHERE ${quotedCol} IS NOT NULL
-        LIMIT ${sampleSize}
-      `;
-      const samples = await conn.query(sampleQuery);
-      const rows = samples.toArray();
+/**
+ * Columns probed per batched statement.
+ *
+ * The probe is one `UNION ALL` branch per column over a shared materialized
+ * CTE, so a chunk reads the sample once no matter how many branches follow.
+ * Chunking at all exists to keep a single statement's parse tree bounded on
+ * very wide sources (the WIDE tier has 1,000 columns, 300 of them VARCHAR);
+ * 64 keeps the SQL text well under any practical parser limit while still
+ * collapsing a 300-column probe from 900 statements to 5.
+ */
+export const PROBE_CHUNK_COLUMNS = 64;
 
-      if (rows.length === 0) continue;
+/**
+ * Distinct non-NULL values examined per column.
+ *
+ * Unchanged from the three per-pass defaults this replaces — the
+ * classification input is the same 100 distinct values it always was.
+ */
+export const DETECT_SAMPLE_VALUES = 100;
 
-      const values = rows.map((row) => String(row.toJSON().value));
+/**
+ * Match ratio a column's sample must reach to be classified.
+ *
+ * Was three independent `confidenceThreshold = 0.95` default parameters on
+ * three near-identical detect functions; now one constant, so the threshold
+ * cannot drift per type class.
+ */
+export const DETECT_CONFIDENCE = 0.95;
 
-      // Count how many values match the ISO timestamp pattern
-      const matches = values.filter((v) => isISOTimestamp(v));
-
-      // If confidence threshold is met, mark as timestamp column
-      if (matches.length / values.length >= confidenceThreshold) {
-        timestampColumns.push(column);
-      }
-    } catch {
-      // If sampling fails for a column, skip it
-      continue;
-    }
-  }
-
-  return timestampColumns;
+/**
+ * Which VARCHAR columns should be rewritten to which temporal type.
+ *
+ * Produced by {@link planTypeConversions}, consumed by the conversion
+ * rewrite. The three lists are disjoint.
+ */
+export interface TypeConversionPlan {
+  timestamp: string[];
+  date: string[];
+  time: string[];
 }
 
 /**
- * Detect which string columns contain ISO date values (YYYY-MM-DD)
+ * SQL for one batched probe: a materialized head sample of `columns`,
+ * followed by one `UNION ALL` branch per column emitting
+ * `(column_name, distinct_value)` pairs.
  *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to analyze
- * @param stringColumns - List of VARCHAR column names to check
- * @param sampleSize - Number of distinct values to sample (default: 100)
- * @param confidenceThreshold - Minimum match ratio to consider as date (default: 0.95)
- * @returns List of column names that contain date values
+ * `AS MATERIALIZED` is the load-bearing part. Without it DuckDB is free to
+ * inline the CTE into each of the ~64 branches, which against a
+ * `read_csv_auto(…)` relation would re-parse the source head 64 times per
+ * chunk. With it the sample is read once and every branch scans the same
+ * materialized result.
+ *
+ * `CAST(… AS VARCHAR)` makes the `UNION ALL` well-typed regardless of what
+ * the caller passed — production callers only ever probe columns `DESCRIBE`
+ * reported as `VARCHAR`, where the cast is identity, but the planner is
+ * relation-generic and a mixed list must not produce a binder error.
  */
-export async function detectDateColumns(
-  conn: AsyncDuckDBConnection,
-  tableName: string,
-  stringColumns: string[],
-  sampleSize = 100,
-  confidenceThreshold = 0.95,
-): Promise<string[]> {
-  const dateColumns: string[] = [];
+function buildBatchedProbeSQL(relation: string, columns: string[], where?: string): string {
+  const projection = columns.map(quoteIdentifier).join(', ');
+  const predicate = where ? ` WHERE ${where}` : '';
+  const branches = columns.map((column) => {
+    const col = quoteIdentifier(column);
+    return (
+      `SELECT ${quoteLiteral(column)} AS c, v FROM ` +
+      `(SELECT DISTINCT CAST(${col} AS VARCHAR) AS v FROM s ` +
+      `WHERE ${col} IS NOT NULL LIMIT ${DETECT_SAMPLE_VALUES})`
+    );
+  });
+  return (
+    `WITH s AS MATERIALIZED (SELECT ${projection} FROM ${relation}${predicate} ` +
+    `LIMIT ${DETECT_SAMPLE_ROWS}) ` +
+    branches.join(' UNION ALL ')
+  );
+}
 
-  for (const column of stringColumns) {
-    try {
-      const quotedCol = quoteIdentifier(column);
-      const sampleQuery = `
-        SELECT DISTINCT ${quotedCol} as value
-        FROM ${quoteIdentifier(tableName)}
-        WHERE ${quotedCol} IS NOT NULL
-        LIMIT ${sampleSize}
-      `;
-      const samples = await conn.query(sampleQuery);
-      const rows = samples.toArray();
-
-      if (rows.length === 0) continue;
-
-      const values = rows.map((row) => String(row.toJSON().value));
-      const matches = values.filter((v) => isISODate(v));
-
-      if (matches.length / values.length >= confidenceThreshold) {
-        dateColumns.push(column);
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return dateColumns;
+/** SQL for the single-column fallback probe. See {@link planTypeConversions}. */
+function buildSingleProbeSQL(relation: string, column: string, where?: string): string {
+  const col = quoteIdentifier(column);
+  const predicate = where ? ` WHERE ${where}` : '';
+  return (
+    `SELECT DISTINCT CAST(${col} AS VARCHAR) AS v FROM ` +
+    `(SELECT ${col} FROM ${relation}${predicate} LIMIT ${DETECT_SAMPLE_ROWS}) ` +
+    `WHERE ${col} IS NOT NULL LIMIT ${DETECT_SAMPLE_VALUES}`
+  );
 }
 
 /**
- * Detect which string columns contain 24-hour time values (HH:MM:SS)
+ * Collect a head sample of distinct values for every column in `columns`.
  *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to analyze
- * @param stringColumns - List of VARCHAR column names to check
- * @param sampleSize - Number of distinct values to sample (default: 100)
- * @param confidenceThreshold - Minimum match ratio to consider as time (default: 0.95)
- * @returns List of column names that contain time values
+ * Columns with no non-NULL value in the sampled window simply get no entry,
+ * which is how an all-NULL column ends up unclassified.
  */
-export async function detectTimeColumns(
+async function collectProbeSamples(
   conn: AsyncDuckDBConnection,
-  tableName: string,
-  stringColumns: string[],
-  sampleSize = 100,
-  confidenceThreshold = 0.95,
-): Promise<string[]> {
-  const timeColumns: string[] = [];
+  relation: string,
+  columns: string[],
+  where?: string,
+): Promise<Map<string, string[]>> {
+  const samples = new Map<string, string[]>();
 
-  for (const column of stringColumns) {
+  for (let start = 0; start < columns.length; start += PROBE_CHUNK_COLUMNS) {
+    const chunk = columns.slice(start, start + PROBE_CHUNK_COLUMNS);
     try {
-      const quotedCol = quoteIdentifier(column);
-      const sampleQuery = `
-        SELECT DISTINCT ${quotedCol} as value
-        FROM ${quoteIdentifier(tableName)}
-        WHERE ${quotedCol} IS NOT NULL
-        LIMIT ${sampleSize}
-      `;
-      const samples = await conn.query(sampleQuery);
-      const rows = samples.toArray();
-
-      if (rows.length === 0) continue;
-
-      const values = rows.map((row) => String(row.toJSON().value));
-      const matches = values.filter((v) => isTimeFormat(v));
-
-      if (matches.length / values.length >= confidenceThreshold) {
-        timeColumns.push(column);
+      const result = await conn.query(buildBatchedProbeSQL(relation, chunk, where));
+      for (const row of result.toArray()) {
+        const { c, v } = row.toJSON() as { c: unknown; v: unknown };
+        const column = String(c);
+        const bucket = samples.get(column);
+        if (bucket) bucket.push(String(v));
+        else samples.set(column, [String(v)]);
       }
     } catch {
-      continue;
+      // One malformed column must not cost the whole chunk its detection.
+      // The per-column loop reproduces the old `catch { continue }`
+      // tolerance exactly: a column that cannot be probed is skipped and
+      // stays VARCHAR, and its neighbours are still classified.
+      for (const column of chunk) {
+        try {
+          const result = await conn.query(buildSingleProbeSQL(relation, column, where));
+          const values = result.toArray().map((row) => String(row.toJSON().v));
+          if (values.length > 0) samples.set(column, values);
+        } catch {
+          continue;
+        }
+      }
     }
   }
 
-  return timeColumns;
+  return samples;
+}
+
+/**
+ * Decide which VARCHAR columns of a relation hold ISO timestamps, ISO
+ * dates, or 24-hour times.
+ *
+ * Replaces three near-identical detect passes, each of which ran one
+ * whole-table `SELECT DISTINCT … LIMIT 100` **per column**. One head sample
+ * now feeds all three classifiers, so a source with `V` VARCHAR columns
+ * costs `ceil(V / PROBE_CHUNK_COLUMNS)` statements instead of `3V`, and the
+ * cost no longer depends on row count at all.
+ *
+ * Classification itself is unchanged and stays in JS: the same
+ * {@link isISOTimestamp} / {@link isISODate} / {@link isTimeFormat}
+ * matchers at the same {@link DETECT_CONFIDENCE} ratio, in the same
+ * timestamp → date → time priority order. The three patterns are mutually
+ * exclusive, so the priority is belt-and-braces rather than a tiebreak —
+ * but it is what keeps behavior identical if a matcher is ever widened.
+ *
+ * @param conn - DuckDB connection
+ * @param relation - Any FROM-able SQL relation: a quoted table name, or a
+ *   `read_csv_auto(…)` / `read_json_auto(…)` / `read_parquet(…)` call. This
+ *   is the seam Phase 10's direct-scan mode retargets — detection does not
+ *   need the data materialized.
+ * @param stringColumns - VARCHAR column names to classify, in source order
+ * @param where - Optional predicate applied inside the sample CTE. Callers
+ *   probing a materialized table pass `"__rowid__" < DETECT_SAMPLE_ROWS`,
+ *   which DuckDB prunes by zonemap; callers probing a `read_xxx(…)`
+ *   relation omit it and rely on the CTE's `LIMIT`.
+ * @returns Disjoint column-name lists, each in `stringColumns` order
+ */
+export async function planTypeConversions(
+  conn: AsyncDuckDBConnection,
+  relation: string,
+  stringColumns: string[],
+  where?: string,
+): Promise<TypeConversionPlan> {
+  const plan: TypeConversionPlan = { timestamp: [], date: [], time: [] };
+  if (stringColumns.length === 0) return plan;
+
+  const samples = await collectProbeSamples(conn, relation, stringColumns, where);
+
+  const classifiers: [keyof TypeConversionPlan, (value: string) => boolean][] = [
+    ['timestamp', isISOTimestamp],
+    ['date', isISODate],
+    ['time', isTimeFormat],
+  ];
+
+  const unclassified = new Set(stringColumns);
+  for (const [type, matches] of classifiers) {
+    for (const column of stringColumns) {
+      if (!unclassified.has(column)) continue;
+      const values = samples.get(column);
+      if (!values || values.length === 0) continue;
+      const hits = values.filter(matches).length;
+      if (hits / values.length >= DETECT_CONFIDENCE) {
+        plan[type].push(column);
+        unclassified.delete(column);
+      }
+    }
+  }
+
+  return plan;
 }
 
 /**
@@ -468,10 +541,10 @@ export async function enhanceSchemaTypes(
   tableName: string,
   describeRows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
-  // Get all column names in original order (important for preserving order during conversion)
-  let allColumns = describeRows.map((row) => String(row['column_name']));
+  // All column names in original order — the conversion rewrites project
+  // them back in exactly this order, so one read up front is enough.
+  const allColumns = describeRows.map((row) => String(row['column_name']));
 
-  // Find all VARCHAR columns
   const stringColumns = describeRows
     .filter((row) => String(row['column_type']).toUpperCase() === 'VARCHAR')
     .map((row) => String(row['column_name']));
@@ -480,56 +553,29 @@ export async function enhanceSchemaTypes(
     return describeRows;
   }
 
-  let remainingStringColumns = [...stringColumns];
-  let needsRefresh = false;
+  // Plan every conversion from a single head sample. The old shape probed,
+  // rewrote, re-`DESCRIBE`d, probed again, … three times over; because each
+  // rewrite preserves both the names and the order of the columns it does
+  // not convert, the intermediate `DESCRIBE`s were re-reading a list that
+  // could not have changed.
+  const rowidFilter = allColumns.includes(ROWID_COLUMN)
+    ? `${quoteIdentifier(ROWID_COLUMN)} < ${DETECT_SAMPLE_ROWS}`
+    : undefined;
+  const plan = await planTypeConversions(
+    conn,
+    quoteIdentifier(tableName),
+    stringColumns,
+    rowidFilter,
+  );
 
-  // 1. Detect and convert timestamps (most specific pattern first)
-  const timestampColumns = await detectTimestampColumns(conn, tableName, remainingStringColumns);
-
-  if (timestampColumns.length > 0) {
-    await convertColumnsToTimestamp(conn, tableName, timestampColumns, allColumns);
-    remainingStringColumns = remainingStringColumns.filter((c) => !timestampColumns.includes(c));
-    needsRefresh = true;
+  if (plan.timestamp.length === 0 && plan.date.length === 0 && plan.time.length === 0) {
+    return describeRows;
   }
 
-  // 2. Detect and convert dates (from remaining VARCHAR columns)
-  if (remainingStringColumns.length > 0) {
-    // Refresh allColumns if we modified the table
-    if (needsRefresh) {
-      const newDescribe = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
-      allColumns = newDescribe.toArray().map((row) => String(row.toJSON().column_name));
-    }
+  await convertColumnsToTimestamp(conn, tableName, plan.timestamp, allColumns);
+  await convertColumnsToDate(conn, tableName, plan.date, allColumns);
+  await convertColumnsToTime(conn, tableName, plan.time, allColumns);
 
-    const dateColumns = await detectDateColumns(conn, tableName, remainingStringColumns);
-
-    if (dateColumns.length > 0) {
-      await convertColumnsToDate(conn, tableName, dateColumns, allColumns);
-      remainingStringColumns = remainingStringColumns.filter((c) => !dateColumns.includes(c));
-      needsRefresh = true;
-    }
-  }
-
-  // 3. Detect and convert times (from remaining VARCHAR columns)
-  if (remainingStringColumns.length > 0) {
-    // Refresh allColumns if we modified the table
-    if (needsRefresh) {
-      const newDescribe = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
-      allColumns = newDescribe.toArray().map((row) => String(row.toJSON().column_name));
-    }
-
-    const timeColumns = await detectTimeColumns(conn, tableName, remainingStringColumns);
-
-    if (timeColumns.length > 0) {
-      await convertColumnsToTime(conn, tableName, timeColumns, allColumns);
-      needsRefresh = true;
-    }
-  }
-
-  // Re-fetch final schema if any conversions happened
-  if (needsRefresh) {
-    const finalDescribeResult = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
-    return finalDescribeResult.toArray().map((row) => row.toJSON());
-  }
-
-  return describeRows;
+  const finalDescribeResult = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
+  return finalDescribeResult.toArray().map((row) => row.toJSON());
 }

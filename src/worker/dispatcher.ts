@@ -304,6 +304,10 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
+            // `DataLoader` normalizes every source to bytes before it gets
+            // here, so the string branch is only reachable through a direct
+            // `WorkerBridge.loadData(string, { format: 'parquet' })` — kept
+            // for that path, not for the facade.
             const buffer = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
             result = await loadParquet(buffer, { tableName });
             respond(id, 'progress', {

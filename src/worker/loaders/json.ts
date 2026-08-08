@@ -144,16 +144,16 @@ export async function loadJSON(
   }
   await conn.query(`SET TimeZone = '${timezone}'`);
 
-  // Convert ArrayBuffer to string if needed
-  const jsonString = data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data;
-
-  // Detect format if not specified
-  // Sniff the original source, not `jsonString` — the sniff reads a bounded
-  // byte prefix and must not depend on the full decode above.
+  // Detect format if not specified. The sniff reads a bounded byte prefix,
+  // so it never decodes the document.
   const format = options.format || (isNDJSON(data) ? 'ndjson' : 'array');
 
-  // Convert to Uint8Array for DuckDB's file system
-  const content = new TextEncoder().encode(jsonString);
+  // Bytes for DuckDB's file system. An ArrayBuffer source is already what
+  // `registerFileBuffer` wants — wrapping it in a view copies nothing. It
+  // used to be decoded to a string and re-encoded here, which cost two full
+  // passes and two transient copies of the whole document for no gain.
+  const content =
+    data instanceof ArrayBuffer ? new Uint8Array(data) : new TextEncoder().encode(data);
 
   // Register file with DuckDB's virtual filesystem
   const fileName = `${tableName}.json`;

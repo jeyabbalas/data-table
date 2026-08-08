@@ -37,6 +37,50 @@ export interface DataLoaderOptions {
  */
 const URL_LIKE_RE = /^([a-z][a-z0-9+.-]*:|\/\/|\/|\.\.?\/)/i;
 
+/** Exact-fit `ArrayBuffer` for a view, without copying when it already is one. */
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = view;
+  return byteOffset === 0 && byteLength === buffer.byteLength
+    ? (buffer as ArrayBuffer)
+    : (buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer);
+}
+
+/**
+ * Prepare text-source bytes for the byte path, or bail out to a string.
+ *
+ * Text sources used to be read with `.text()` and shipped to the worker as a
+ * JS string, which `postMessage` copies and the worker then re-encodes.
+ * Bytes can be transferred instead, so the source arrives with no copy at
+ * all. `Blob.text()` and `Response.text()` are both defined as *UTF-8 decode*
+ * — neither honours a `charset` parameter — so the only two things they did
+ * that the raw bytes do not are handled here:
+ *
+ * - **The UTF-8 BOM**, which UTF-8 decode strips. `read_csv_auto` tolerates a
+ *   leading BOM but `read_json_auto` does not, so it is dropped here rather
+ *   than left to the reader. This is the one case that still copies, and only
+ *   past the first three bytes.
+ * - **Invalid sequences**, which UTF-8 decode replaced with U+FFFD. Raw bytes
+ *   reach DuckDB intact, so a mis-encoded source (latin-1 text served as
+ *   UTF-8) now fails the load loudly instead of silently loading mojibake.
+ *   Validating up front would mean a full scan of exactly the bytes this
+ *   change exists to stop copying, so the error is the contract.
+ *
+ * UTF-16 is handled beyond what `.text()` managed: a BOM'd UTF-16 document
+ * used to reach DuckDB as UTF-8-decoded garbage either way, and decoding it
+ * properly here costs one branch on two bytes.
+ *
+ * @returns The buffer to transfer, or a decoded string for UTF-16 sources
+ */
+function prepareTextBytes(buffer: ArrayBuffer): ArrayBuffer | string {
+  const head = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 3));
+  if (head[0] === 0xff && head[1] === 0xfe) return new TextDecoder('utf-16le').decode(buffer);
+  if (head[0] === 0xfe && head[1] === 0xff) return new TextDecoder('utf-16be').decode(buffer);
+  if (head[0] === 0xef && head[1] === 0xbb && head[2] === 0xbf) {
+    return buffer.slice(3) as ArrayBuffer;
+  }
+  return buffer;
+}
+
 export class DataLoader {
   constructor(private bridge: WorkerBridge) {}
 
@@ -45,6 +89,13 @@ export class DataLoader {
    *
    * All metadata (row count, schema) is retrieved in the worker to avoid
    * blocking the main thread with sequential queries.
+   *
+   * Every source is normalized to bytes and **transferred** to the worker
+   * rather than copied. A caller-supplied `ArrayBuffer` is therefore detached
+   * once the load starts and is unusable afterwards — pass `buffer.slice(0)`
+   * to keep your own copy. Sources this method reads itself (a `File`, a
+   * fetched URL, an inline string) produce a buffer nobody else holds, so
+   * detaching it is unobservable.
    */
   async load(
     source: File | string | ArrayBuffer,
@@ -56,7 +107,8 @@ export class DataLoader {
     if (source instanceof File) {
       // File upload
       format = options.format || this.detectFormatFromFile(source);
-      data = format === 'parquet' ? await source.arrayBuffer() : await source.text();
+      const bytes = await source.arrayBuffer();
+      data = format === 'parquet' ? bytes : prepareTextBytes(bytes);
     } else if (typeof source === 'string') {
       const kind = this.classifyStringSource(source);
       if (kind === 'url') {
@@ -73,7 +125,8 @@ export class DataLoader {
             },
           });
         }
-        data = format === 'parquet' ? await response.arrayBuffer() : await response.text();
+        const bytes = await response.arrayBuffer();
+        data = format === 'parquet' ? bytes : prepareTextBytes(bytes);
       } else if (kind === 'ambiguous') {
         const preview = source.length > 60 ? `${source.slice(0, 60)}…` : source;
         throw new LoadError(
@@ -88,9 +141,12 @@ export class DataLoader {
           },
         );
       } else {
-        // inline raw data (multi-line CSV, JSON, etc.)
+        // Inline raw data (multi-line CSV, JSON, etc.). Encoded here rather
+        // than in the worker so the bytes can be transferred: a string
+        // payload is copied by `postMessage` and then encoded on arrival,
+        // which is two passes over the same content.
         format = options.format || this.detectFormatFromContent(source);
-        data = source;
+        data = toArrayBuffer(new TextEncoder().encode(source));
       }
     } else {
       // ArrayBuffer (binary inline data, typically Parquet)

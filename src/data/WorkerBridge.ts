@@ -385,6 +385,9 @@ export class WorkerBridge {
    *
    * Returns table name, row count, columns, and full schema info.
    * All metadata queries happen in the worker to avoid blocking the main thread.
+   *
+   * An `ArrayBuffer` source is **transferred**, not copied: it is detached on
+   * return and the caller must not read it again.
    */
   async loadData(
     source: ArrayBuffer | string,
@@ -399,7 +402,13 @@ export class WorkerBridge {
       format: options.format,
       tableName: options.tableName,
     };
-    const result = (await this.sendMessage('load', payload, onProgress, signal)) as {
+    // Transfer the source instead of cloning it. `postMessage` otherwise
+    // makes a full structured-clone copy of every byte, so a 200 MB Parquet
+    // file peaks at 400 MB across the two threads before the worker has read
+    // a row of it. The cost is that `source` is detached here and unusable
+    // afterwards; `DataLoader.load` documents that for public callers.
+    const transfer = source instanceof ArrayBuffer ? [source] : undefined;
+    const result = (await this.sendMessage('load', payload, onProgress, signal, transfer)) as {
       tableName: string;
       rowCount: number;
       columns: string[];
@@ -514,16 +523,17 @@ export class WorkerBridge {
     payload: unknown,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,
+    transfer?: Transferable[],
   ): Promise<unknown> {
     // An already-aborted send rejects before `postMessage` — it never
     // reaches the worker, so counting it would inflate `sent`.
-    if (signal?.aborted) return this.dispatch(type, payload, onProgress, signal);
+    if (signal?.aborted) return this.dispatch(type, payload, onProgress, signal, transfer);
 
     const stats = this.stats;
     if (type === 'query' || type === 'load' || type === 'export') stats.sent[type]++;
     if (++stats.inFlight > stats.maxInFlight) stats.maxInFlight = stats.inFlight;
 
-    return this.dispatch(type, payload, onProgress, signal).finally(() => {
+    return this.dispatch(type, payload, onProgress, signal, transfer).finally(() => {
       this.stats.inFlight--;
     });
   }
@@ -560,6 +570,7 @@ export class WorkerBridge {
     payload: unknown,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,
+    transfer?: Transferable[],
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = this.generateId();
@@ -598,7 +609,9 @@ export class WorkerBridge {
       });
 
       const message: WorkerMessage = { id, type, payload };
-      this.worker!.postMessage(message);
+      // An empty list is the same as omitting it, so the two-argument form
+      // is unconditional and every caller keeps one code path.
+      this.worker!.postMessage(message, transfer ?? []);
     });
   }
 

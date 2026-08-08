@@ -43,6 +43,12 @@ export interface MockWorkerHandle {
   worker: Worker;
   /** Every message the bridge has posted, in order. */
   posted: WorkerMessage[];
+  /**
+   * The transfer list passed alongside each entry of {@link posted}, same
+   * index. A real `Worker` detaches everything named here; the mock only
+   * records it, so tests that need actual detachment run in the browser.
+   */
+  postedTransfers: readonly unknown[][];
   /** Push a synthetic reply from the worker side. */
   sendFromWorker: (response: WorkerResponse) => void;
   /** Helper: build and send a `result` response keyed off a posted message. */
@@ -63,6 +69,7 @@ export function createMockWorker(options: MockWorkerOptions = {}): MockWorkerHan
   const inert = options.inert === true;
 
   const posted: WorkerMessage[] = [];
+  const postedTransfers: readonly unknown[][] = [];
   const messageListeners = new Set<(ev: MessageEvent<WorkerResponse>) => void>();
   const errorListeners = new Set<(ev: ErrorEvent) => void>();
 
@@ -117,10 +124,11 @@ export function createMockWorker(options: MockWorkerOptions = {}): MockWorkerHan
   };
 
   const worker: Worker = {
-    postMessage(msg: unknown) {
+    postMessage(msg: unknown, transfer?: unknown) {
       if (terminated) return;
       const message = msg as WorkerMessage;
       posted.push(message);
+      (postedTransfers as unknown[][]).push(Array.isArray(transfer) ? [...transfer] : []);
       if (inert) return;
 
       if (options.onMessage) {
@@ -180,6 +188,7 @@ export function createMockWorker(options: MockWorkerOptions = {}): MockWorkerHan
   return {
     worker,
     posted,
+    postedTransfers,
     sendFromWorker: dispatchMessage,
     reply(matcher, payload) {
       const found = posted.find(matcher);

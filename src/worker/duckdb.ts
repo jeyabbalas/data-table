@@ -8,6 +8,38 @@ let db: duckdb.AsyncDuckDB | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
 
 /**
+ * Ceiling DuckDB is told to keep its own allocations under.
+ *
+ * Unset, DuckDB-WASM derives a limit from the WASM heap — measured **3.1
+ * GiB** on `1.33.1-dev57.0` — which means the first allocation it cannot
+ * satisfy is also the browser's. A WASM allocation failure aborts the worker
+ * with no catchable error and no way back; a DuckDB `Out of Memory Error` is
+ * an ordinary rejection that reaches `loadError` and leaves the previous
+ * table queryable. Setting a limit below the hard ceiling is what converts
+ * the first failure mode into the second.
+ *
+ * 2.5 GB leaves ~600 MB for everything in the worker that DuckDB does not
+ * account for: the transferred source bytes, Arrow result buffers, and the
+ * JS heap. The setting is advisory — DuckDB does not validate it against
+ * what the platform can actually provide, and reads it back rounded (`'2.5GB'`
+ * reports as 2.3 GiB) — so this is a budget, not a guarantee.
+ */
+export const DUCKDB_MEMORY_LIMIT = '2.5GB';
+
+let configuredMemoryLimit: string | null = null;
+
+/**
+ * The memory limit this connection accepted, or `null` if the `SET` failed
+ * or initialization has not run.
+ *
+ * Read by callers that need to size work against the budget rather than
+ * guess at it — Phase 10's direct-scan estimator is the intended consumer.
+ */
+export function getConfiguredMemoryLimit(): string | null {
+  return configuredMemoryLimit;
+}
+
+/**
  * Initialize DuckDB WASM
  * Loads the appropriate WASM bundle and creates a database connection.
  *
@@ -45,6 +77,32 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
 
   // Create a connection
   conn = await db.connect();
+
+  // Configuration must never be the reason a table fails to open: a DuckDB
+  // build that rejects the setting still works, it just keeps its default
+  // ceiling. Warn where a developer will see it and carry on.
+  try {
+    await conn.query(`SET memory_limit = '${DUCKDB_MEMORY_LIMIT}'`);
+    configuredMemoryLimit = DUCKDB_MEMORY_LIMIT;
+  } catch (err) {
+    configuredMemoryLimit = null;
+    console.warn(
+      `[data-table] Could not set DuckDB memory_limit to ${DUCKDB_MEMORY_LIMIT}; ` +
+        `continuing with the engine default. Large loads may abort the worker ` +
+        `instead of failing with an out-of-memory error.`,
+      err,
+    );
+  }
+
+  // `preserve_insertion_order` is deliberately left at its default (`true`).
+  // Turning it off is the standard DuckDB memory-saving knob, and it was
+  // measured here: at 200,000 rows through both the CSV and Parquet loaders
+  // it changed nothing, because DuckDB-WASM runs single-threaded and the
+  // buffering it would skip only exists to re-order parallel scan output.
+  // The upside is zero today; the downside is that `__rowid__` is assigned
+  // by `row_number() OVER ()` over the scan, so the moment a threaded build
+  // is selected the row identity contract would silently depend on scan
+  // order. See `plans/scaling/STATUS.md` for the measurement.
 }
 
 /**
@@ -271,4 +329,5 @@ export async function closeDuckDB(): Promise<void> {
     await db.terminate();
     db = null;
   }
+  configuredMemoryLimit = null;
 }

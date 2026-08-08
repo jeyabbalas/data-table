@@ -61,7 +61,36 @@ export const DT_BUDGET = {
   READOUT_TOLERANCE: 0.2,
 
   /** Phase 1 — load path: rewrites, type probes, ingest copies, progress. */
-  LOAD: {},
+  LOAD: {
+    /**
+     * Statements one loader issues for one load, end to end.
+     *
+     * Measured at the budget tier (2,000 × 100, `queryBudget.test.ts`, which
+     * drives all three loaders through a counting `LoaderContext` proxy):
+     * **10** for Parquet, **6** for CSV and JSON — the last two are lower
+     * because DuckDB's own sniffers already type the temporal columns, so
+     * the plan comes back empty and no rewrite runs. At 1,000 columns
+     * Parquet measures **14**, five of which are probe chunks.
+     *
+     * Cap at 15 so an added `SET` or schema read does not trip it while a
+     * reintroduced per-column probe loop would: the shape this replaces
+     * issued `3 × VARCHAR columns` statements for detection alone — 90 at
+     * this tier, 900 at 1,000 columns.
+     */
+    QUERIES_MAX: 15,
+    /**
+     * Full-table `CREATE TABLE … AS SELECT`s per load.
+     *
+     * Each is a complete copy plus a sort at ~2× transient memory, and none
+     * is interruptible by `cancelSent()` — this is the count that decides
+     * whether a large load survives the WASM heap.
+     *
+     * Measured: **2** — the ingest CTAS, plus one combined type-conversion
+     * rewrite. Was up to **4** (ingest plus one rewrite per triggered type
+     * class), which the WIDE tier trips by construction.
+     */
+    CTAS_MAX: 2,
+  },
   /** Phase 2 — lazy visualizations: viz query counts, `maxInFlight`. */
   VIZ: {},
   /** Phases 3–5 — column windowing and projection clipping. */

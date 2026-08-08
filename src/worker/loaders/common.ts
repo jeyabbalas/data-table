@@ -351,163 +351,80 @@ export async function planTypeConversions(
 }
 
 /**
- * Convert string columns to TIMESTAMP type using DuckDB
+ * SQL type each planned class rewrites to.
  *
- * Recreates the table with a SELECT statement that CASTs timestamp columns
- * while preserving the original column order. This approach is necessary
- * because ALTER TABLE ADD COLUMN always appends columns at the end.
- *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to modify
- * @param columns - List of column names to convert to TIMESTAMP
- * @param allColumns - All column names in original order
+ * `TRY_CAST` rather than `CAST` throughout: detection is a 0.95-confidence
+ * decision over a bounded sample, so up to 5 % of a converted column's
+ * values — and anything past the sampled window — may not parse. A hard
+ * cast would fail the whole load; `TRY_CAST` yields NULL for those cells,
+ * which is the behavior every prior release shipped.
  */
-export async function convertColumnsToTimestamp(
-  conn: AsyncDuckDBConnection,
-  tableName: string,
-  columns: string[],
-  allColumns: string[],
-): Promise<void> {
-  if (columns.length === 0) return;
+const CONVERSION_SQL_TYPE: Record<keyof TypeConversionPlan, string> = {
+  timestamp: 'TIMESTAMP',
+  date: 'DATE',
+  time: 'TIME',
+};
 
-  const columnsToConvert = new Set(columns);
-
-  // Build SELECT with CAST for timestamp columns, preserving original order
-  const selectClauses = allColumns.map((col) => {
-    const quotedCol = quoteIdentifier(col);
-    if (columnsToConvert.has(col)) {
-      // Convert VARCHAR to TIMESTAMP, using TRY_CAST to handle invalid values gracefully
-      return `TRY_CAST(${quotedCol} AS TIMESTAMP) AS ${quotedCol}`;
-    }
-    // Keep other columns unchanged
-    return quotedCol;
-  });
-
-  const tempTable = `__temp_${tableName}_${Date.now()}`;
-  const quotedTemp = quoteIdentifier(tempTable);
-  const quotedTable = quoteIdentifier(tableName);
-
-  try {
-    // Create new table with correct types and preserved column order.
-    // ORDER BY __rowid__ keeps row identity aligned after recreation — DuckDB
-    // does not guarantee scan order on CREATE TABLE AS SELECT without it.
-    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
-    await conn.query(`
-      CREATE TABLE ${quotedTemp} AS
-      SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}${orderBy}
-    `);
-
-    // Drop original table
-    await conn.query(`DROP TABLE ${quotedTable}`);
-
-    // Rename temp table to original name
-    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch (cause) {
-    // If conversion fails, try to clean up temp table
-    try {
-      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
-    } catch {
-      // Ignore cleanup errors
-    }
-    throw Object.assign(
-      new Error(`Failed to convert columns to timestamp in table ${tableName}`, { cause }),
-      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'timestamp' } },
-    );
+/**
+ * Projection that applies `plan` to `allColumns`, preserving source order.
+ *
+ * Column order matters and cannot be recovered afterwards: `ALTER TABLE ADD
+ * COLUMN` always appends, so a retype has to be a full projection.
+ */
+function buildTypedProjection(allColumns: string[], plan: TypeConversionPlan): string {
+  const casts = new Map<string, string>();
+  for (const type of ['timestamp', 'date', 'time'] as const) {
+    for (const column of plan[type]) casts.set(column, CONVERSION_SQL_TYPE[type]);
   }
+  return allColumns
+    .map((column) => {
+      const quoted = quoteIdentifier(column);
+      const sqlType = casts.get(column);
+      return sqlType ? `TRY_CAST(${quoted} AS ${sqlType}) AS ${quoted}` : quoted;
+    })
+    .join(', ');
 }
 
 /**
- * Convert string columns to DATE type using DuckDB
+ * Rewrite `tableName` once so every column in `plan` carries its detected
+ * temporal type.
+ *
+ * This used to be three functions run back to back, each doing a full
+ * `CREATE TABLE … AS SELECT … ORDER BY "__rowid__"` + `DROP` + `RENAME` —
+ * so a source that tripped all three classes was copied and sorted three
+ * times, at ~2x transient memory each, and none of it interruptible. One
+ * projection carrying all three cast classes does the same work in one
+ * pass.
+ *
+ * `ORDER BY "__rowid__"` stays: DuckDB guarantees no scan order on
+ * `CREATE TABLE AS SELECT`, and row identity is what the whole rendering
+ * layer indexes by.
  *
  * @param conn - DuckDB connection
- * @param tableName - Name of the table to modify
- * @param columns - List of column names to convert to DATE
+ * @param tableName - Name of the table to rewrite in place
+ * @param plan - Columns to convert, by target type
  * @param allColumns - All column names in original order
  */
-export async function convertColumnsToDate(
+export async function applyTypeConversions(
   conn: AsyncDuckDBConnection,
   tableName: string,
-  columns: string[],
+  plan: TypeConversionPlan,
   allColumns: string[],
 ): Promise<void> {
-  if (columns.length === 0) return;
-
-  const columnsToConvert = new Set(columns);
-
-  const selectClauses = allColumns.map((col) => {
-    const quotedCol = quoteIdentifier(col);
-    if (columnsToConvert.has(col)) {
-      return `TRY_CAST(${quotedCol} AS DATE) AS ${quotedCol}`;
-    }
-    return quotedCol;
-  });
+  if (plan.timestamp.length === 0 && plan.date.length === 0 && plan.time.length === 0) return;
 
   const tempTable = `__temp_${tableName}_${Date.now()}`;
   const quotedTemp = quoteIdentifier(tempTable);
   const quotedTable = quoteIdentifier(tableName);
+  const orderBy = allColumns.includes(ROWID_COLUMN)
+    ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}`
+    : '';
 
   try {
-    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
-    await conn.query(`
-      CREATE TABLE ${quotedTemp} AS
-      SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}${orderBy}
-    `);
-
-    await conn.query(`DROP TABLE ${quotedTable}`);
-    await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
-  } catch (cause) {
-    try {
-      await conn.query(`DROP TABLE IF EXISTS ${quotedTemp}`);
-    } catch {
-      // Ignore cleanup errors
-    }
-    throw Object.assign(
-      new Error(`Failed to convert columns to date in table ${tableName}`, { cause }),
-      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'date' } },
+    await conn.query(
+      `CREATE TABLE ${quotedTemp} AS SELECT ${buildTypedProjection(allColumns, plan)} ` +
+        `FROM ${quotedTable}${orderBy}`,
     );
-  }
-}
-
-/**
- * Convert string columns to TIME type using DuckDB
- *
- * @param conn - DuckDB connection
- * @param tableName - Name of the table to modify
- * @param columns - List of column names to convert to TIME
- * @param allColumns - All column names in original order
- */
-export async function convertColumnsToTime(
-  conn: AsyncDuckDBConnection,
-  tableName: string,
-  columns: string[],
-  allColumns: string[],
-): Promise<void> {
-  if (columns.length === 0) return;
-
-  const columnsToConvert = new Set(columns);
-
-  const selectClauses = allColumns.map((col) => {
-    const quotedCol = quoteIdentifier(col);
-    if (columnsToConvert.has(col)) {
-      return `TRY_CAST(${quotedCol} AS TIME) AS ${quotedCol}`;
-    }
-    return quotedCol;
-  });
-
-  const tempTable = `__temp_${tableName}_${Date.now()}`;
-  const quotedTemp = quoteIdentifier(tempTable);
-  const quotedTable = quoteIdentifier(tableName);
-
-  try {
-    const orderBy = allColumns.includes('__rowid__') ? ' ORDER BY "__rowid__"' : '';
-    await conn.query(`
-      CREATE TABLE ${quotedTemp} AS
-      SELECT ${selectClauses.join(', ')}
-      FROM ${quotedTable}${orderBy}
-    `);
-
     await conn.query(`DROP TABLE ${quotedTable}`);
     await conn.query(`ALTER TABLE ${quotedTemp} RENAME TO ${quotedTable}`);
   } catch (cause) {
@@ -516,9 +433,13 @@ export async function convertColumnsToTime(
     } catch {
       // Ignore cleanup errors
     }
+    // One `stage` for one rewrite. The three it replaced reported
+    // 'timestamp' / 'date' / 'time'; nothing consumes those values (the one
+    // test that mentions them builds the payload as a literal), and a
+    // combined rewrite genuinely cannot attribute a failure to one class.
     throw Object.assign(
-      new Error(`Failed to convert columns to time in table ${tableName}`, { cause }),
-      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'time' } },
+      new Error(`Failed to convert column types in table ${tableName}`, { cause }),
+      { code: 'LOAD_PARSE_FAILED', details: { tableName, stage: 'types' } },
     );
   }
 }
@@ -572,9 +493,7 @@ export async function enhanceSchemaTypes(
     return describeRows;
   }
 
-  await convertColumnsToTimestamp(conn, tableName, plan.timestamp, allColumns);
-  await convertColumnsToDate(conn, tableName, plan.date, allColumns);
-  await convertColumnsToTime(conn, tableName, plan.time, allColumns);
+  await applyTypeConversions(conn, tableName, plan, allColumns);
 
   const finalDescribeResult = await conn.query(`DESCRIBE ${quoteIdentifier(tableName)}`);
   return finalDescribeResult.toArray().map((row) => row.toJSON());

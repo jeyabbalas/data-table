@@ -50,6 +50,7 @@ import {
   WorkerInitError,
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
+import { clearLoadMarks, markLoad } from './core/loadMarks';
 import type { TableState } from './core/State';
 import { createTableState, resetTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
@@ -1209,6 +1210,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   ): Promise<void> {
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
+    // Stale entries first: a reload's `dt:load:total` must span *this*
+    // load, not the previous one's `dt:load:start`.
+    clearLoadMarks();
+    markLoad('start');
     emitter.emit('loadStart', { source: sourceLabel });
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
@@ -1246,6 +1251,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         annotationStore,
       };
       await actions.loadData(normalized, mergedOpts);
+      // Not a pure worker boundary: `StateActions.loadData` calls
+      // `bridge.loadData` once, then also runs IndexedDB session restore
+      // and the derived-column VIEW rebuild before returning. With
+      // `persistence: false` that tail is a no-op; for a real app
+      // `dt:load:worker` includes it. Splitting it finer is Phase 1's job.
+      markLoad('workerDone');
       if (destroyed) {
         // Tearing down — skip the loadComplete emit on a dead emitter and
         // surface a destroy error so consumers know the load was aborted.
@@ -1264,10 +1275,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // `attachVisualizations()` has run; `currentBodyInit` references the
       // last (surviving) body and `pendingVizInit` references the latest
       // attach pass's collected work.
-      await Promise.all([tableContainer.whenBodyReady(), pendingVizInit]);
+      //
+      // `Promise.all` collapses both timings into one, so each mark hangs
+      // off its own promise; the locals keep `no-floating-promises` happy
+      // while preserving the parallelism.
+      const painted = tableContainer.whenBodyReady().then(() => markLoad('firstPaint'));
+      const vizzed = pendingVizInit.then(() => markLoad('vizReady'));
+      await Promise.all([painted, vizzed]);
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      markLoad('complete');
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),

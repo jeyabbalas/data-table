@@ -23,7 +23,12 @@ import { join } from 'node:path';
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { PROBE_CHUNK_COLUMNS, quoteIdentifier } from '@/worker/loaders/common';
+import {
+  DETECT_SAMPLE_ROWS,
+  PROBE_CHUNK_COLUMNS,
+  PROBE_SAMPLE_THRESHOLD,
+  quoteIdentifier,
+} from '@/worker/loaders/common';
 import { loadCSV } from '@/worker/loaders/csv';
 import { loadJSON } from '@/worker/loaders/json';
 import { loadParquet } from '@/worker/loaders/parquet';
@@ -51,17 +56,38 @@ const CTAS_RE = /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE\b[\s
 /** A batched type probe — the `AS MATERIALIZED` head sample. */
 const PROBE_RE = /\bAS\s+MATERIALIZED\b/i;
 
+/**
+ * The bounded detection sample (`PROBE_SAMPLE_THRESHOLD`) — a temp table of
+ * at most `DETECT_SAMPLE_ROWS` rows over the VARCHAR columns only, dropped as
+ * soon as the probe finishes.
+ *
+ * It is textually a `CREATE … TABLE … AS SELECT` and so matches `CTAS_RE`,
+ * but it is deliberately **not** what `CTAS_MAX` counts. That budget exists
+ * to bound full-table copies — the unbounded, uninterruptible, ~2×-transient-
+ * memory ones that decide whether a large load survives the WASM heap. A
+ * 4,096-row sample is bounded by construction and cannot scale with the
+ * source, so it is classified separately rather than budgeted away.
+ */
+const SAMPLE_RE = new RegExp(
+  String.raw`\bTEMP(?:ORARY)?\s+TABLE\b[\s\S]*\bLIMIT\s+${DETECT_SAMPLE_ROWS}\b`,
+  'i',
+);
+
 interface Recording {
   statements: string[];
+  /** Full-table materializations — what `CTAS_MAX` budgets. */
   ctas: string[];
   probes: string[];
+  /** Bounded detection samples. See {@link SAMPLE_RE}. */
+  samples: string[];
 }
 
 function summarize(statements: string[]): Recording {
   return {
     statements,
-    ctas: statements.filter((sql) => CTAS_RE.test(sql)),
+    ctas: statements.filter((sql) => CTAS_RE.test(sql) && !SAMPLE_RE.test(sql)),
     probes: statements.filter((sql) => PROBE_RE.test(sql)),
+    samples: statements.filter((sql) => SAMPLE_RE.test(sql)),
   };
 }
 
@@ -199,6 +225,11 @@ describe('load path statement budget', () => {
         await loadParquet(data, { tableName: table }, { db: harness.db, conn });
       });
       expect(seen.probes).toHaveLength(Math.ceil(varchars / PROBE_CHUNK_COLUMNS));
+      // …and at this width the probe reads the reader relation directly:
+      // one chunk pays one source read either way, so the sample table would
+      // be pure overhead and must not appear.
+      expect(varchars).toBeLessThanOrEqual(PROBE_SAMPLE_THRESHOLD);
+      expect(seen.samples).toEqual([]);
     }, 120_000);
   });
 
@@ -232,9 +263,18 @@ describe('load path statement budget', () => {
       expect(wide.probes.length).toBeLessThanOrEqual(
         Math.ceil(WIDE_TIER.cols / PROBE_CHUNK_COLUMNS),
       );
-      // Growth is in the probe count only, and it is sub-linear in columns.
+      // Past PROBE_SAMPLE_THRESHOLD the probe runs against a bounded sample
+      // instead of the reader relation: a fixed two statements (create, drop),
+      // not a term that grows with columns.
+      expect(narrow.samples).toEqual([]);
+      expect(wide.samples).toHaveLength(1);
+      const sampleStatements = 2;
+      // Growth is in the probe count plus that fixed pair — sub-linear in
+      // columns either way.
       const extraProbes = wide.probes.length - narrow.probes.length;
-      expect(wide.statements.length - narrow.statements.length).toBe(extraProbes);
+      expect(wide.statements.length - narrow.statements.length).toBe(
+        extraProbes + sampleStatements,
+      );
     }, 180_000);
   });
 });

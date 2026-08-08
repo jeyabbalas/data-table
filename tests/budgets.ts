@@ -70,7 +70,8 @@ export const DT_BUDGET = {
      * **6** for every format — `SET TimeZone`, one preflight `DESCRIBE` of
      * the reader relation, one batched type probe, the ingest CTAS, the row
      * count, and the final `DESCRIBE`. At 1,000 columns Parquet measures
-     * **10**, the four extra statements being probe chunks.
+     * **12**: four extra probe chunks, plus the create/drop pair for the
+     * bounded detection sample that kicks in past `PROBE_SAMPLE_THRESHOLD`.
      *
      * Cap at 15 so an added `SET` or schema read does not trip it while a
      * reintroduced per-column probe loop would: the shape this replaces

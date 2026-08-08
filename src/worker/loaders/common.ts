@@ -177,6 +177,38 @@ export const PROBE_CHUNK_COLUMNS = 64;
 export const DETECT_SAMPLE_VALUES = 100;
 
 /**
+ * VARCHAR-column count above which detection materializes a bounded sample
+ * of the source before probing it, instead of probing the reader relation
+ * directly.
+ *
+ * Every probe statement issued against a `read_csv_auto(…)` relation re-parses
+ * the source head. Measured on a 1,000-column × 5,000-row CSV (37 MB, 300
+ * VARCHAR columns, DuckDB-WASM 1.33.1-dev57.0, macOS, threads=1) the probe
+ * costs **~1,275 ms per statement plus ~440 ms**, so chunking that Parquet
+ * likes is exactly what CSV punishes: 5 chunks measured **6,881 ms** against
+ * one 300-branch statement's 1,719 ms. Against Parquet the picture inverts —
+ * projection pushdown makes the source read ~140 ms regardless of chunking,
+ * leaving `UNION ALL` width to dominate, and the chunk sweep is a clean U with
+ * its minimum exactly at {@link PROBE_CHUNK_COLUMNS} (317 ms at 64 vs 592 ms
+ * at 300). No single chunk size is right for both formats.
+ *
+ * A bounded sample table dissolves the conflict: it pins the source to one
+ * read and then probes a 4,096-row materialization where chunk count is
+ * genuinely free. Measured end to end for the probe, same fixture — CSV
+ * **1,516 ms** (4.5× faster than chunking the relation, and still faster than
+ * the best single-statement shape), Parquet **325 ms** (within 2 % of the
+ * chunk-64 optimum, 1.8× faster than one statement). The `DROP` costs ~1 ms
+ * and the `CREATE` is the one source read the probe had to pay anyway.
+ *
+ * The threshold is {@link PROBE_CHUNK_COLUMNS} because that is where the
+ * crossover sits: at one chunk the two shapes each pay exactly one source
+ * read, so the sample's extra table probe is pure overhead; at two or more the
+ * sample is strictly ahead. Narrow sources — the overwhelming majority — keep
+ * the two-statement path they have today.
+ */
+export const PROBE_SAMPLE_THRESHOLD = PROBE_CHUNK_COLUMNS;
+
+/**
  * Match ratio a column's sample must reach to be classified.
  *
  * Was three independent `confidenceThreshold = 0.95` default parameters on
@@ -351,6 +383,59 @@ export async function planTypeConversions(
 }
 
 /**
+ * Distinguishes concurrent sample tables. A load path is serial today, but a
+ * name collision would silently probe the wrong sample, and `CREATE OR
+ * REPLACE` would hide it — so the name is never reused within a session.
+ */
+let probeSampleSeq = 0;
+
+/**
+ * Probe `relation` through a bounded, single-read sample table.
+ *
+ * Three statements — `CREATE OR REPLACE TEMP TABLE … LIMIT`, the chunked
+ * probes, `DROP` — replacing `ceil(V / PROBE_CHUNK_COLUMNS)` full re-reads of
+ * the source. See {@link PROBE_SAMPLE_THRESHOLD} for the measurement that
+ * decides when this is worth its two extra statements.
+ *
+ * Only the VARCHAR columns are materialized, which is both the whole input the
+ * classifier needs and, on Parquet, a projection the reader can push down.
+ * The sample takes the same head window the direct probe's CTE would have —
+ * `LIMIT DETECT_SAMPLE_ROWS` with no ordering, exactly as before — so the two
+ * paths classify identically.
+ *
+ * The sample is an optimization and never a correctness requirement: if it
+ * cannot be built, detection falls back to probing the relation itself.
+ */
+async function planTypeConversionsViaSample(
+  conn: AsyncDuckDBConnection,
+  relation: string,
+  stringColumns: string[],
+): Promise<TypeConversionPlan> {
+  const sample = quoteIdentifier(`__dt_probe_sample_${++probeSampleSeq}`);
+  const projection = stringColumns.map(quoteIdentifier).join(', ');
+
+  try {
+    await conn.query(
+      `CREATE OR REPLACE TEMP TABLE ${sample} AS ` +
+        `SELECT ${projection} FROM ${relation} LIMIT ${DETECT_SAMPLE_ROWS}`,
+    );
+  } catch {
+    return planTypeConversions(conn, relation, stringColumns);
+  }
+
+  try {
+    return await planTypeConversions(conn, sample, stringColumns);
+  } finally {
+    try {
+      await conn.query(`DROP TABLE IF EXISTS ${sample}`);
+    } catch {
+      // A temp table that outlives its probe dies with the connection.
+      // Never fail a load over cleanup.
+    }
+  }
+}
+
+/**
  * SQL type each planned class rewrites to.
  *
  * `TRY_CAST` rather than `CAST` throughout: detection is a 0.95-confidence
@@ -428,8 +513,11 @@ export async function planTypedIngestProjection(
     .filter((row) => String(row['column_type']).toUpperCase() === 'VARCHAR')
     .map((row) => String(row['column_name']));
 
-  // No `where` — the sample CTE's own LIMIT bounds a relation that has no
-  // `__rowid__` to prune on yet.
-  const plan = await planTypeConversions(conn, relation, stringColumns);
+  // No `where` in either branch — the head window is bounded by a LIMIT on a
+  // relation that has no `__rowid__` to prune on yet.
+  const plan =
+    stringColumns.length > PROBE_SAMPLE_THRESHOLD
+      ? await planTypeConversionsViaSample(conn, relation, stringColumns)
+      : await planTypeConversions(conn, relation, stringColumns);
   return buildTypedProjection(columns, plan);
 }

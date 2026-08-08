@@ -25,6 +25,7 @@ import {
   QueryError,
   SQLValidationError,
 } from './errors';
+import type { ProgressCallback } from './Progress';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import { resetTableState, initializeColumnsFromSchema } from './State';
@@ -512,10 +513,16 @@ export class StateActions {
    *
    * @param source - File, URL string, or raw data (ArrayBuffer for Parquet; string for CSV/JSON)
    * @param options - Loading options (tableName, format)
+   * @param onProgress - Optional stage reporter, forwarded to the loader.
+   *   Deliberately a parameter rather than a field on `LoadDataOptions`:
+   *   that type is public API and describes *what* to load, while this is
+   *   the caller's own callback for one call. `DataTable` supplies it and
+   *   re-emits each report as `loadProgress`.
    */
   async loadData(
     source: File | string | ArrayBuffer,
     options: LoadDataOptions = {},
+    onProgress?: ProgressCallback,
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
     // Reset state for new data
@@ -523,7 +530,7 @@ export class StateActions {
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
-    const result = await this.loader.load(source, options);
+    const result = await this.loader.load(source, options, onProgress);
     this.throwIfDestroyed('loadData');
 
     // Clean up any previous derived column manager

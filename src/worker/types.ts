@@ -3,6 +3,7 @@
  */
 
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+import type { ProgressStage } from '../core/Progress';
 
 // Message types from main thread to worker
 export type WorkerMessageType = 'init' | 'query' | 'load' | 'export' | 'cancel';
@@ -65,7 +66,12 @@ export interface ErrorPayload {
 }
 
 export interface ProgressPayload {
-  stage: 'reading' | 'parsing' | 'indexing' | 'analyzing';
+  /**
+   * Imported rather than re-declared: this payload is delivered verbatim to
+   * `ProgressCallback`, so a locally-written union could drift from
+   * `ProgressInfo`'s and the mismatch would only surface at a cast.
+   */
+  stage: ProgressStage;
   percent: number;
   loaded?: number;
   total?: number;

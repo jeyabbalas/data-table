@@ -257,6 +257,7 @@ describe('DataLoader', () => {
       expect(bridge.loadData).toHaveBeenCalledWith(
         expect.any(ArrayBuffer),
         expect.objectContaining({ format: 'csv' }),
+        undefined,
       );
       const sent = (bridge.loadData as unknown as { mock: { calls: [ArrayBuffer][] } }).mock
         .calls[0]![0];

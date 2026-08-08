@@ -15,6 +15,7 @@ import {
   getDatabase,
   isInitialized,
 } from './duckdb';
+import type { LoaderContext } from './loaders/common';
 import { loadCSV } from './loaders/csv';
 import { loadJSON } from './loaders/json';
 import { loadParquet } from './loaders/parquet';
@@ -265,56 +266,30 @@ async function runTask(entry: QueueEntry): Promise<void> {
 
         const { data, format, tableName } = payload as LoadPayload;
 
-        respond(id, 'progress', {
-          stage: 'reading',
-          percent: 0,
-          cancelable: true,
-        });
+        // The loaders report their own stages. What used to be here was three
+        // fixed percentages posted around an opaque `await` — the bar jumped
+        // to 25 and sat there for the whole load — and `parsing` claimed to
+        // be cancelable, which no running DuckDB statement is. This context
+        // is the first one production ever constructs; before Phase 1 the
+        // `LoaderContext` seam existed for tests only.
+        const context: LoaderContext = {
+          reportProgress: (info) => respond(id, 'progress', info),
+        };
 
         try {
           let result;
 
           if (format === 'csv') {
-            respond(id, 'progress', {
-              stage: 'parsing',
-              percent: 25,
-              cancelable: true,
-            });
-            result = await loadCSV(data, { tableName });
-            respond(id, 'progress', {
-              stage: 'indexing',
-              percent: 90,
-              cancelable: false,
-            });
+            result = await loadCSV(data, { tableName }, context);
           } else if (format === 'json') {
-            respond(id, 'progress', {
-              stage: 'parsing',
-              percent: 25,
-              cancelable: true,
-            });
-            result = await loadJSON(data, { tableName });
-            respond(id, 'progress', {
-              stage: 'indexing',
-              percent: 90,
-              cancelable: false,
-            });
+            result = await loadJSON(data, { tableName }, context);
           } else if (format === 'parquet') {
-            respond(id, 'progress', {
-              stage: 'parsing',
-              percent: 25,
-              cancelable: true,
-            });
             // `DataLoader` normalizes every source to bytes before it gets
             // here, so the string branch is only reachable through a direct
             // `WorkerBridge.loadData(string, { format: 'parquet' })` — kept
             // for that path, not for the facade.
             const buffer = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
-            result = await loadParquet(buffer, { tableName });
-            respond(id, 'progress', {
-              stage: 'indexing',
-              percent: 90,
-              cancelable: false,
-            });
+            result = await loadParquet(buffer, { tableName }, context);
           } else {
             respond(id, 'error', {
               message: `Format '${format}' not yet supported`,

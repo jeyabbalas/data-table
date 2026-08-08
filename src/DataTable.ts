@@ -51,6 +51,7 @@ import {
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
 import { clearLoadMarks, markLoad } from './core/loadMarks';
+import type { ProgressInfo } from './core/Progress';
 import type { TableState } from './core/State';
 import { createTableState, resetTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
@@ -1250,7 +1251,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
       };
-      await actions.loadData(normalized, mergedOpts);
+      // `loadProgress` has been declared, typed, documented and bound by a
+      // shipped example since before Phase 1 — and emitted by nothing. This
+      // is the reconnection. The clamp exists because the sequence is
+      // assembled from two threads: the main thread reports `reading` while
+      // the worker's earlier reports may still be in the message queue, and
+      // a bar that goes backwards reads as a bug in the app rather than in
+      // the reporting.
+      let lastPercent = -1;
+      const reportProgress = (info: ProgressInfo): void => {
+        if (destroyed || info.percent < lastPercent) return;
+        lastPercent = info.percent;
+        emitter.emit('loadProgress', info);
+      };
+      await actions.loadData(normalized, mergedOpts, reportProgress);
       // Not a pure worker boundary: `StateActions.loadData` calls
       // `bridge.loadData` once, then also runs IndexedDB session restore
       // and the derived-column VIEW rebuild before returning. With

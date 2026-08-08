@@ -6,6 +6,7 @@ import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
 import {
+  createLoadProgress,
   planTypedIngestProjection,
   quoteIdentifier,
   wrapReservedColumnError,
@@ -159,6 +160,9 @@ export async function loadJSON(
   const fileName = `${tableName}.json`;
   await db.registerFileBuffer(fileName, content);
 
+  const progress = createLoadProgress(context?.reportProgress);
+  progress.parsing();
+
   try {
     // Build read_json options
     const jsonOptions: string[] = [];
@@ -206,7 +210,8 @@ export async function loadJSON(
     // full-table copy-and-sort it replaces.
     const optionsStr = `, ${jsonOptions.join(', ')}`;
     const relation = `read_json_auto('${fileName}'${optionsStr})`;
-    const projection = await planTypedIngestProjection(conn, relation);
+    const projection = await planTypedIngestProjection(conn, relation, '*', progress.analyzing);
+    progress.indexing();
 
     const tbl = quoteIdentifier(tableName);
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
@@ -240,6 +245,7 @@ export async function loadJSON(
       return entry;
     });
 
+    progress.complete();
     return { tableName, rowCount, columns, schema };
   } finally {
     // Clean up virtual file

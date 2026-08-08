@@ -3,6 +3,7 @@
  */
 
 import { LoadError } from '../core/errors';
+import type { ProgressCallback } from '../core/Progress';
 import type { ColumnSchema } from '../core/types';
 import type { WorkerBridge } from './WorkerBridge';
 
@@ -36,6 +37,90 @@ export interface DataLoaderOptions {
  * ambiguous and is rejected loudly — see {@link DataLoader.classifyStringSource}.
  */
 const URL_LIKE_RE = /^([a-z][a-z0-9+.-]*:|\/\/|\/|\.\.?\/)/i;
+
+/**
+ * Percent the main thread's `reading` stage spans.
+ *
+ * Getting the bytes is the only part of a load that happens before the
+ * worker is involved, and the only part that is genuinely cancelable — no
+ * DuckDB statement is running yet. The worker picks up from here; its bands
+ * live in `worker/loaders/common.ts`.
+ */
+const READING_BAND_END = 15;
+
+/**
+ * Report `reading` progress. `total` is the source's real byte size where it
+ * is known up front (`File.size`, `Content-Length`, `ArrayBuffer.byteLength`)
+ * and the running count once the source has been read.
+ */
+function emitReading(
+  onProgress: ProgressCallback | undefined,
+  loaded: number,
+  total: number | undefined,
+): void {
+  if (!onProgress) return;
+  // A `Content-Length` under `Content-Encoding: gzip` counts compressed
+  // bytes while the stream delivers decompressed ones, so `loaded` can pass
+  // `total`. Clamping is cheaper and more robust than trying to detect it.
+  const percent =
+    total !== undefined && total > 0
+      ? Math.min(READING_BAND_END, Math.round((READING_BAND_END * loaded) / total))
+      : 0;
+  onProgress({
+    stage: 'reading',
+    percent,
+    loaded,
+    ...(total === undefined ? {} : { total }),
+    cancelable: true,
+  });
+}
+
+/**
+ * Read a response body, reporting bytes as they arrive.
+ *
+ * Streaming is what makes the `reading` band worth having: a large download
+ * is where a progress bar earns its keep, and `Response.arrayBuffer()`
+ * reports nothing until it is finished. Without a subscriber there is
+ * nothing to report to, so the plain path is taken instead.
+ */
+async function readResponseBytes(
+  response: Response,
+  onProgress: ProgressCallback | undefined,
+): Promise<ArrayBuffer> {
+  const declared = Number(response.headers.get('content-length'));
+  const total = Number.isFinite(declared) && declared > 0 ? declared : undefined;
+  emitReading(onProgress, 0, total);
+
+  const body = response.body;
+  if (!onProgress || !body) {
+    const bytes = await response.arrayBuffer();
+    emitReading(onProgress, bytes.byteLength, bytes.byteLength);
+    return bytes;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    emitReading(onProgress, loaded, total);
+  }
+  // Close the band on the count actually received, which is authoritative
+  // where `Content-Length` was not.
+  emitReading(onProgress, loaded, loaded);
+
+  if (chunks.length === 1) return toArrayBuffer(chunks[0]!);
+  const joined = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return joined.buffer as ArrayBuffer;
+}
 
 /** Exact-fit `ArrayBuffer` for a view, without copying when it already is one. */
 function toArrayBuffer(view: Uint8Array): ArrayBuffer {
@@ -96,10 +181,16 @@ export class DataLoader {
    * to keep your own copy. Sources this method reads itself (a `File`, a
    * fetched URL, an inline string) produce a buffer nobody else holds, so
    * detaching it is unobservable.
+   *
+   * @param onProgress - Receives the `reading` stage from here and every
+   *   later stage forwarded from the worker. Passing it also switches a URL
+   *   source to a streaming read, since there is otherwise nothing to report
+   *   byte counts to.
    */
   async load(
     source: File | string | ArrayBuffer,
     options: DataLoaderOptions = {},
+    onProgress?: ProgressCallback,
   ): Promise<LoadResult> {
     let data: ArrayBuffer | string;
     let format: DataFormat;
@@ -107,7 +198,9 @@ export class DataLoader {
     if (source instanceof File) {
       // File upload
       format = options.format || this.detectFormatFromFile(source);
+      emitReading(onProgress, 0, source.size);
       const bytes = await source.arrayBuffer();
+      emitReading(onProgress, bytes.byteLength, bytes.byteLength);
       data = format === 'parquet' ? bytes : prepareTextBytes(bytes);
     } else if (typeof source === 'string') {
       const kind = this.classifyStringSource(source);
@@ -125,7 +218,7 @@ export class DataLoader {
             },
           });
         }
-        const bytes = await response.arrayBuffer();
+        const bytes = await readResponseBytes(response, onProgress);
         data = format === 'parquet' ? bytes : prepareTextBytes(bytes);
       } else if (kind === 'ambiguous') {
         const preview = source.length > 60 ? `${source.slice(0, 60)}…` : source;
@@ -147,19 +240,24 @@ export class DataLoader {
         // which is two passes over the same content.
         format = options.format || this.detectFormatFromContent(source);
         data = toArrayBuffer(new TextEncoder().encode(source));
+        // No latency to narrate for an in-memory source — one report, with
+        // the real byte count, so the band still closes.
+        emitReading(onProgress, data.byteLength, data.byteLength);
       }
     } else {
       // ArrayBuffer (binary inline data, typically Parquet)
       format = options.format || this.detectFormatFromContent(source);
       data = source;
+      emitReading(onProgress, data.byteLength, data.byteLength);
     }
 
     // Load data and get metadata in a single worker call
     // No more blocking queries on the main thread!
-    const result = await this.bridge.loadData(data, {
-      format,
-      tableName: options.tableName,
-    });
+    const result = await this.bridge.loadData(
+      data,
+      { format, tableName: options.tableName },
+      onProgress,
+    );
 
     return {
       tableName: result.tableName,

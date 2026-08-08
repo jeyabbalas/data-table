@@ -6,6 +6,7 @@
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import type { ProgressCallback } from '../../core/Progress';
 import { ROWID_COLUMN } from '../../core/types';
 
 /**
@@ -18,6 +19,94 @@ import { ROWID_COLUMN } from '../../core/types';
 export interface LoaderContext {
   db?: AsyncDuckDB;
   conn?: AsyncDuckDBConnection;
+  /**
+   * Where a loader reports its stage progress. The dispatcher forwards each
+   * call to the main thread as a `progress` response; tests read the calls
+   * directly. Omitted by callers that do not care, which is why every loader
+   * routes through {@link createLoadProgress} rather than calling this.
+   */
+  reportProgress?: ProgressCallback;
+}
+
+/**
+ * Percent range each worker-side stage occupies.
+ *
+ * The main thread owns 0–{@link WORKER_PROGRESS_START} (`reading`: fetching
+ * or reading the source bytes), so the worker's first report is not zero.
+ * The bands are shared by all three loaders so a progress bar behaves the
+ * same whatever the source format.
+ *
+ * Ordering follows what the loader actually does, which is not the order the
+ * stage names suggest: DuckDB reads the source head for the schema preflight
+ * (`parsing`), classifies the VARCHAR columns from a bounded sample
+ * (`analyzing`), and only then materializes the typed table (`indexing`).
+ * `analyzing` is the one band with real granularity — it advances per probe
+ * chunk — which is why it is not the narrowest.
+ */
+export const WORKER_PROGRESS_START = 15;
+export const LOAD_PROGRESS_BANDS = {
+  /** Source registered; DuckDB is reading it to resolve the schema. */
+  parsing: [WORKER_PROGRESS_START, 55],
+  /** Type detection over the head sample, `done` / `total` probe chunks. */
+  analyzing: [55, 80],
+  /** The one full-table materialization, plus the row count and schema read. */
+  indexing: [80, 95],
+} as const;
+
+/**
+ * Stage reporter shared by the three loaders.
+ *
+ * Two guarantees callers depend on and should not have to re-implement:
+ * percentages never go backwards, and `complete()` emits exactly one
+ * `percent: 100` however many times it is called.
+ *
+ * Every worker stage reports `cancelable: false`. That is not pessimism —
+ * `cancelSent()` cannot interrupt a running DuckDB statement, and the ingest
+ * CTAS is the longest one in the load. The old fixed `parsing` report
+ * claimed `cancelable: true` and was simply wrong.
+ */
+export interface LoadProgressReporter {
+  /** The source is registered and DuckDB is about to read it. */
+  parsing(): void;
+  /** Type detection, probe chunk `done` of `total`. */
+  analyzing(done: number, total: number): void;
+  /** Materializing the typed table. */
+  indexing(): void;
+  /** The table is live and its schema read. Terminal. */
+  complete(): void;
+}
+
+export function createLoadProgress(report?: ProgressCallback): LoadProgressReporter {
+  let last = 0;
+  let finished = false;
+
+  const emit = (
+    stage: keyof typeof LOAD_PROGRESS_BANDS,
+    percent: number,
+    counts?: { loaded: number; total: number },
+  ): void => {
+    if (finished || !report) return;
+    // 100 is reserved for `complete()` so a consumer can treat it as the
+    // terminal signal.
+    last = Math.max(last, Math.min(99, Math.round(percent)));
+    report({ stage, percent: last, ...counts, cancelable: false });
+  };
+
+  return {
+    parsing: () => emit('parsing', LOAD_PROGRESS_BANDS.parsing[0]),
+    analyzing: (chunk, total) => {
+      const [start, end] = LOAD_PROGRESS_BANDS.analyzing;
+      const fraction = total > 0 ? Math.min(1, chunk / total) : 1;
+      emit('analyzing', start + (end - start) * fraction, { loaded: chunk, total });
+    },
+    indexing: () => emit('indexing', LOAD_PROGRESS_BANDS.indexing[0]),
+    complete: () => {
+      if (finished || !report) return;
+      finished = true;
+      last = 100;
+      report({ stage: 'indexing', percent: 100, cancelable: false });
+    },
+  };
 }
 
 /**
@@ -230,6 +319,14 @@ export interface TypeConversionPlan {
 }
 
 /**
+ * Called after each batched probe statement completes, with the number of
+ * chunks finished and the total. The only sub-step of a load that is
+ * genuinely divisible, which makes it the only place stage progress can be
+ * more than a band edge.
+ */
+export type ProbeChunkCallback = (done: number, total: number) => void;
+
+/**
  * SQL for one batched probe: a materialized head sample of `columns`,
  * followed by one `UNION ALL` branch per column emitting
  * `(column_name, distinct_value)` pairs.
@@ -285,8 +382,11 @@ async function collectProbeSamples(
   relation: string,
   columns: string[],
   where?: string,
+  onChunk?: ProbeChunkCallback,
 ): Promise<Map<string, string[]>> {
   const samples = new Map<string, string[]>();
+  const chunks = Math.ceil(columns.length / PROBE_CHUNK_COLUMNS);
+  let completed = 0;
 
   for (let start = 0; start < columns.length; start += PROBE_CHUNK_COLUMNS) {
     const chunk = columns.slice(start, start + PROBE_CHUNK_COLUMNS);
@@ -314,6 +414,7 @@ async function collectProbeSamples(
         }
       }
     }
+    onChunk?.(++completed, chunks);
   }
 
   return samples;
@@ -346,6 +447,7 @@ async function collectProbeSamples(
  *   probing a materialized table pass `"__rowid__" < DETECT_SAMPLE_ROWS`,
  *   which DuckDB prunes by zonemap; callers probing a `read_xxx(…)`
  *   relation omit it and rely on the CTE's `LIMIT`.
+ * @param onChunk - Optional per-statement progress hook
  * @returns Disjoint column-name lists, each in `stringColumns` order
  */
 export async function planTypeConversions(
@@ -353,11 +455,12 @@ export async function planTypeConversions(
   relation: string,
   stringColumns: string[],
   where?: string,
+  onChunk?: ProbeChunkCallback,
 ): Promise<TypeConversionPlan> {
   const plan: TypeConversionPlan = { timestamp: [], date: [], time: [] };
   if (stringColumns.length === 0) return plan;
 
-  const samples = await collectProbeSamples(conn, relation, stringColumns, where);
+  const samples = await collectProbeSamples(conn, relation, stringColumns, where, onChunk);
 
   const classifiers: [keyof TypeConversionPlan, (value: string) => boolean][] = [
     ['timestamp', isISOTimestamp],
@@ -410,6 +513,7 @@ async function planTypeConversionsViaSample(
   conn: AsyncDuckDBConnection,
   relation: string,
   stringColumns: string[],
+  onChunk?: ProbeChunkCallback,
 ): Promise<TypeConversionPlan> {
   const sample = quoteIdentifier(`__dt_probe_sample_${++probeSampleSeq}`);
   const projection = stringColumns.map(quoteIdentifier).join(', ');
@@ -420,11 +524,11 @@ async function planTypeConversionsViaSample(
         `SELECT ${projection} FROM ${relation} LIMIT ${DETECT_SAMPLE_ROWS}`,
     );
   } catch {
-    return planTypeConversions(conn, relation, stringColumns);
+    return planTypeConversions(conn, relation, stringColumns, undefined, onChunk);
   }
 
   try {
-    return await planTypeConversions(conn, sample, stringColumns);
+    return await planTypeConversions(conn, sample, stringColumns, undefined, onChunk);
   } finally {
     try {
       await conn.query(`DROP TABLE IF EXISTS ${sample}`);
@@ -492,6 +596,7 @@ function buildTypedProjection(allColumns: string[], plan: TypeConversionPlan): s
  *   `read_json_auto(…)`, `read_parquet(…)`, or a quoted table name
  * @param columnSelect - Projection to describe, defaulting to `*`. Parquet
  *   passes an explicit column list when the caller asked for one.
+ * @param onChunk - Optional per-probe-statement progress hook
  * @returns The `SELECT` list to materialize, in source column order
  * @throws The canonical `LOAD_RESERVED_COLUMN_NAME` error when the source
  *   already has a `__rowid__` column
@@ -500,6 +605,7 @@ export async function planTypedIngestProjection(
   conn: AsyncDuckDBConnection,
   relation: string,
   columnSelect = '*',
+  onChunk?: ProbeChunkCallback,
 ): Promise<string> {
   const described = await conn.query(`DESCRIBE SELECT ${columnSelect} FROM ${relation}`);
   const rows = described.toArray().map((row) => row.toJSON() as Record<string, unknown>);
@@ -517,7 +623,10 @@ export async function planTypedIngestProjection(
   // relation that has no `__rowid__` to prune on yet.
   const plan =
     stringColumns.length > PROBE_SAMPLE_THRESHOLD
-      ? await planTypeConversionsViaSample(conn, relation, stringColumns)
-      : await planTypeConversions(conn, relation, stringColumns);
+      ? await planTypeConversionsViaSample(conn, relation, stringColumns, onChunk)
+      : await planTypeConversions(conn, relation, stringColumns, undefined, onChunk);
+  // A source with no VARCHAR column probes nothing, so the caller would
+  // otherwise never see the analyzing band close.
+  if (stringColumns.length === 0) onChunk?.(1, 1);
   return buildTypedProjection(columns, plan);
 }

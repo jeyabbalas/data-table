@@ -51,7 +51,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      // Viewport pinned explicitly, at the value `devices['Desktop Chrome']`
+      // already defaults to. It changes nothing today and it is not
+      // decoration: from Phase 3 the body renders a column *window*, so the
+      // rendered cell count — and every DOM-node budget derived from it — is
+      // a function of viewport width. A Playwright default that moved in a
+      // future release would move those counts with it, silently.
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } },
     },
   ],
   webServer: {

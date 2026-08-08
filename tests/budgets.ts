@@ -33,16 +33,19 @@ export const DT_BUDGET = {
      * Measured pre-optimization: **15,051** nodes (Chromium, macOS,
      * `tiers.smoke.spec.ts`, which logs the live figure on every run).
      * That is ~50 nodes per column at 300 columns — an eager header plus a
-     * cell in each rendered row. Cap set at 18,000 (~20 % headroom) so
-     * ordinary rendering changes do not trip it while a lost row
-     * virtualization would.
+     * cell in each rendered row. Cap was 18,000 (~20 % headroom).
      *
-     * Note the plan's §4.6 estimate was ~120K; the real number is ~8×
-     * smaller because row virtualization already bounds the body. The
-     * column axis is what is unbounded, and Phases 3–4 window it — they
-     * tighten this number.
+     * **Phase 3 (body column windowing): 15,051 → 11,136**, and the cap with
+     * it, 18,000 → 13,500 at the same ~20 % headroom. The body now renders a
+     * window of ~17–28 columns per row instead of all 300 (see
+     * `COLVIRT.WINDOW_COLUMNS_MAX`), which is ~3,900 nodes. What is left is
+     * dominated by the 300 eagerly built column headers; Phase 4 windows
+     * those and tightens this number again.
+     *
+     * Note the plan's §4.6 estimate was ~120K; the real pre-phase number was
+     * ~8× smaller because row virtualization already bounded the body.
      */
-    DOM_NODES_MAX: 18_000,
+    DOM_NODES_MAX: 13_500,
     /**
      * Row- and column-oracle breaches tolerated: none. A single one means
      * a rendered cell disagreed with `cellOracle`, which is a correctness
@@ -275,8 +278,53 @@ export const DT_BUDGET = {
      */
     LOAD_MS_WIDE_MAX: 15_000,
   },
-  /** Phases 3–5 — column windowing and projection clipping. */
-  COLVIRT: {},
+  /**
+   * Phases 3–5 — column windowing and projection clipping.
+   *
+   * Every number here is measured at the **pinned** Playwright viewport,
+   * 1,280 × 720 (`playwright.config.ts`, which is also `devices['Desktop
+   * Chrome']`'s own default — pinning it changes nothing and removes one way
+   * for these counts to drift). That matters more than usual: a column window
+   * is a function of viewport width, so an unpinned viewport makes every
+   * entry below unreproducible.
+   */
+  COLVIRT: {
+    /**
+     * Cells one body row may render.
+     *
+     * Measured **17** at rest and **28** mid-sweep (`column-window.spec.ts`,
+     * which logs the live figures). The shape is `visible + overscan`:
+     * ~7 columns fit the ~1,050 px body viewport, `MIN_OVERSCAN_COLUMNS` adds
+     * ten per side, and at `scrollLeft = 0` the left side clamps away. It is
+     * **identical at 60 and 300 columns**, which is the whole claim of the
+     * phase and is asserted directly rather than left to this cap.
+     *
+     * Cap at 48 — ~1.7× the measured maximum, which absorbs a wider body
+     * viewport or a raised overscan while still failing loudly for any tier
+     * of 48+ columns that stopped windowing. Before the phase a row rendered
+     * one cell per visible column: 300 at WIDE_CI, 1,000 at WIDE.
+     */
+    WINDOW_COLUMNS_MAX: 48,
+    /**
+     * `.dt-cell` elements under `.dt-body`, all rendered rows together.
+     *
+     * Measured **420** (300 columns × 2,000 rows, mid-sweep: 15 rendered rows
+     * × 28 cells). Cap at 900 — ~2.1×, covering a taller viewport as well as
+     * a wider one. The pre-phase shape at the same tier is 15 × 300 = 4,500,
+     * so a lost column window fails this by 5× and not by 10 %.
+     */
+    BODY_CELLS_MAX: 900,
+    /**
+     * px a rendered body cell's left edge may differ from its header's.
+     *
+     * The C2 alignment spike measured **0.000 px** for every rendered column
+     * at every sweep stop, which is what `box-sizing: border-box` plus
+     * integer-quantized widths buys. 1 px is the threshold the phase doc
+     * asked for and absorbs subpixel layout rounding; a spacer one column
+     * short would be 150 px out, not 1.
+     */
+    HEADER_BODY_ALIGN_PX: 1,
+  },
   /** Phase 6 — resize / pin / keynav query and frame budgets. */
   INTERACTION: {},
   /** Phase 7 — deep sorted/filtered scrolling via the rank index. */

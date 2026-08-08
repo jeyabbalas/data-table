@@ -121,6 +121,47 @@ test('the column and row oracles detect exactly the corruption they are given', 
   }, TIER_HOST_ID);
   expect(await runColumnProbePass(page)).toBe(0);
 
+  // --- body column window ------------------------------------------------
+  // Repointing one body cell at a column outside the rendered run breaks the
+  // "cells are `visibleColumns[0,P) + [start,start+W)`" invariant. It is
+  // caught as `window` and not as `cell` because the window check runs first
+  // and returns: a row whose structure is wrong says nothing reliable about
+  // whether its *contents* match the oracle, so reporting the structure is
+  // both the earlier and the more useful verdict.
+  const windowed = await corruptAndProbe(page, (hostId) => {
+    const cells = document.querySelectorAll(`#${hostId} .dt-body .dt-row .dt-cell[data-column]`);
+    const el = cells[1] as HTMLElement;
+    el.dataset['dtOriginal'] = el.getAttribute('data-column')!;
+    el.setAttribute('data-column', 'col_999');
+  });
+  expect(windowed?.kind).toBe('window');
+  expect(windowed?.detail).toContain('col_999');
+
+  await page.evaluate((hostId) => {
+    const el = document.querySelector(`#${hostId} .dt-body .dt-cell[data-column="col_999"]`)!;
+    el.setAttribute('data-column', (el as HTMLElement).dataset['dtOriginal']!);
+  }, TIER_HOST_ID);
+  expect(await runColumnProbePass(page)).toBe(0);
+
+  // …and the structural half: a row that lost a cell no longer matches its
+  // own `data-window` stamp. That is what a half-finished reshape looks like,
+  // and it is the shape every read of a row's DOM depends on.
+  const structure = await corruptAndProbe(page, (hostId) => {
+    const row = document.querySelector(`#${hostId} .dt-body .dt-row[data-row-id]`) as HTMLElement;
+    const victim = row.querySelectorAll('.dt-cell[data-column]')[2] as HTMLElement;
+    row.dataset['dtOriginalHtml'] = row.innerHTML;
+    victim.remove();
+  });
+  expect(structure?.kind).toBe('window');
+  expect(structure?.detail).toContain('data-window');
+
+  await page.evaluate((hostId) => {
+    const row = document.querySelector(`#${hostId} .dt-body .dt-row[data-row-id]`) as HTMLElement;
+    row.innerHTML = row.dataset['dtOriginalHtml']!;
+    delete row.dataset['dtOriginalHtml'];
+  }, TIER_HOST_ID);
+  expect(await runColumnProbePass(page)).toBe(0);
+
   // --- row oracle --------------------------------------------------------
   const rowid = await corruptAndProbe(page, (hostId) => {
     const row = document.querySelector(`#${hostId} .dt-body .dt-row[data-row-id]`)!;

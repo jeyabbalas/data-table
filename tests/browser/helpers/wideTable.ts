@@ -112,7 +112,7 @@ export function wideMountOptions(viz: boolean): MountTierOptions {
 export interface ColViolation {
   /** `performance.now()` at observation time. */
   t: number;
-  kind: 'sequence' | 'colindex' | 'cell' | 'rowid';
+  kind: 'sequence' | 'colindex' | 'cell' | 'rowid' | 'window';
   /** Human-readable detail — what was expected vs. what was rendered. */
   detail: string;
 }
@@ -150,6 +150,61 @@ export interface VisibleColumn {
   /** Fully inside the horizontal viewport (±0.5 px slop). */
   fullyVisible: boolean;
   pinned: boolean;
+}
+
+/**
+ * What the **body** renders, as read back by {@link readBodyWindow}.
+ *
+ * A separate reader from {@link readVisibleGrid} because that one reads
+ * `.dt-col-header` elements, and from Phase 3 the header row and the body no
+ * longer render the same set of columns: the body windows, the header does
+ * not (until Phase 4). Asserting the body's window against a header-derived
+ * number would silently pass whatever the body did.
+ */
+export interface BodyWindow {
+  /** `data-row-index` of the row that was read; `-1` when none was painted. */
+  rowIndex: number;
+  /** `data-window="P:W"` parsed — the row's own claim about its structure. */
+  pinnedCount: number;
+  windowSize: number;
+  /** Every rendered cell's `data-column`, in DOM order. Pinned run first. */
+  columns: string[];
+  /** Declared spacer widths, in px, read off the inline `flex`. */
+  leftSpacerPx: number;
+  rightSpacerPx: number;
+  /** Σ declared `style.width` of the sampled row's cells. */
+  renderedWidthPx: number;
+  /**
+   * The content extent the body published, in px — `.dt-header-row`'s
+   * `min-width`, which `applyContentWidth` writes from the same prefix sums it
+   * gives `VirtualScroller.setContentWidth`. `leftSpacerPx + renderedWidthPx +
+   * rightSpacerPx` must equal it exactly, at every offset.
+   */
+  contentWidthPx: number;
+  /** `children.length` of the row — cells plus the two spacers. */
+  childCount: number;
+  /** `.dt-cell` elements under `.dt-body` across every rendered row. */
+  totalCells: number;
+  /** Painted data rows (placeholders excluded). */
+  rowCount: number;
+  /** Rows whose `data-window` stamp differs from the sampled row's. */
+  mismatchedRows: number;
+  /** `.dt-body-scroll.scrollWidth` — the horizontal extent, at this offset. */
+  scrollWidth: number;
+  /** `.dt-body-scroll.scrollLeft` / `.clientWidth`, for the caller's arithmetic. */
+  scrollLeft: number;
+  clientWidth: number;
+}
+
+/** One column's header/body horizontal agreement, from {@link readAlignment}. */
+export interface ColumnAlignment {
+  column: string;
+  headerX: number;
+  cellX: number;
+  /** `|headerX − cellX|`. The spike measured 0.000 for every column. */
+  delta: number;
+  /** `|headerWidth − cellWidth|`. */
+  widthDelta: number;
 }
 
 export interface MountTierOptions {
@@ -486,7 +541,94 @@ export async function installColumnInvariantProbe(
           previous = index;
         }
 
-        // (c) The row oracle, header/body agreement, and the cell oracle.
+        const rows = Array.from(
+          host!.querySelectorAll('.dt-body .dt-row[data-row-id]:not([data-placeholder])'),
+        ) as HTMLElement[];
+        if (rows.length === 0) return;
+
+        // (c) The body's column window is internally consistent.
+        //
+        // Frame-independent on purpose, and that is the whole design of this
+        // check. "The rendered columns are the ones under the viewport" is
+        // NOT frame-independent — a render one frame behind the scroll offset
+        // is legitimate, and asserting it here would log violations during
+        // ordinary scrolling. What must hold in every frame is the row's
+        // internal structure: `[P pinned][left spacer][W cells][right
+        // spacer]`, the pinned prefix being the head of `visibleColumns`, the
+        // window being a contiguous run of it, and every rendered row
+        // agreeing — one render pass builds them all for one window, so a row
+        // that disagrees was left behind by a pass that did not finish.
+        //
+        // The first row is checked in full and the rest by their stamp, which
+        // is O(rows) rather than O(cells) — this runs on every rAF.
+        const windowStamp = rows[0]!.getAttribute('data-window');
+        for (const row of exhaustive ? rows : rows.slice(0, 1)) {
+          const stamp = row.getAttribute('data-window');
+          if (stamp === null) {
+            push('window', `row ${row.getAttribute('data-row-index')}: no data-window stamp`);
+            return;
+          }
+          const parts = stamp.split(':');
+          // `Number(undefined)` is NaN, so a malformed stamp fails here
+          // rather than producing two plausible-looking numbers.
+          const p = Number(parts[0]);
+          const w = Number(parts[1]);
+          if (!Number.isInteger(p) || !Number.isInteger(w)) {
+            push('window', `row ${row.getAttribute('data-row-index')}: data-window "${stamp}"`);
+            return;
+          }
+          if (row.children.length !== p + w + 2) {
+            push(
+              'window',
+              `row ${row.getAttribute('data-row-index')}: data-window "${stamp}" ` +
+                `wants ${p + w + 2} children, has ${row.children.length}`,
+            );
+            return;
+          }
+          for (const [at, side] of [
+            [p, 'left'],
+            [p + w + 1, 'right'],
+          ] as const) {
+            if (row.children[at]?.getAttribute('data-col-spacer') !== side) {
+              push(
+                'window',
+                `row ${row.getAttribute('data-row-index')}: no ${side} spacer at ${at}`,
+              );
+              return;
+            }
+          }
+          if (w === 0) continue;
+          const cols = (Array.from(row.querySelectorAll('.dt-cell[data-column]')) as HTMLElement[])
+            .map((cell) => cell.getAttribute('data-column'))
+            .join(',');
+          // The window starts wherever its first cell says it does; the
+          // structure above already fixed that cell at child index `P + 1`.
+          const first = row.children[p + 1]?.getAttribute('data-column') ?? '';
+          const from = visible.indexOf(first);
+          const wanted = visible
+            .slice(0, p)
+            .concat(from < 0 ? [] : visible.slice(from, from + w))
+            .join(',');
+          if (from < p || cols !== wanted) {
+            push(
+              'window',
+              `row ${row.getAttribute('data-row-index')}: rendered [${cols.slice(0, 60)}…] ` +
+                `is not visibleColumns[0,${p}) + [${from},${from + w}) (×${visible.length})`,
+            );
+            return;
+          }
+        }
+        const strayRow = rows.find((row) => row.getAttribute('data-window') !== windowStamp);
+        if (strayRow) {
+          push(
+            'window',
+            `row ${strayRow.getAttribute('data-row-index')}: data-window ` +
+              `"${strayRow.getAttribute('data-window')}" vs "${windowStamp}" on the rest`,
+          );
+          return;
+        }
+
+        // (d) The row oracle, header/body agreement, and the cell oracle.
         //
         // Sampling mode looks at one random row and one random cell per
         // pass: at frame rate over a scroll storm that still covers
@@ -494,10 +636,6 @@ export async function installColumnInvariantProbe(
         // rendering it is measuring. `exhaustive` checks every rendered
         // cell instead — for the negative controls, which need a
         // deliberately corrupted cell to be found with certainty.
-        const rows = Array.from(
-          host!.querySelectorAll('.dt-body .dt-row[data-row-id]:not([data-placeholder])'),
-        ) as HTMLElement[];
-        if (rows.length === 0) return;
         const pickRow = exhaustive ? rows : [rows[Math.floor(Math.random() * rows.length)]!];
 
         for (const row of pickRow) {
@@ -650,20 +788,164 @@ export async function readVisibleGrid(
 }
 
 /**
+ * Read the **body**'s rendered column window in one round trip.
+ *
+ * Samples the first painted data row for the per-row facts and counts the
+ * rest, because every row in a render pass is built for the same window —
+ * `mismatchedRows` is what turns that "because" into an assertion.
+ *
+ * Spacer widths come off the inline `flex` shorthand rather than
+ * `getBoundingClientRect`: the declared value is what the body computed from
+ * its prefix sums, and it is that number a spec wants to check against the
+ * columns it stands in for. The rendered width can differ under flex
+ * pressure without the arithmetic being wrong.
+ */
+export async function readBodyWindow(page: Page, opts: HostOptions = {}): Promise<BodyWindow> {
+  return page.evaluate(
+    (hostSelector) => {
+      const scrollEl = document.querySelector(`${hostSelector} .dt-body-scroll`) as HTMLElement;
+      const headerRow = document.querySelector<HTMLElement>(`${hostSelector} .dt-header-row`);
+      const empty: BodyWindow = {
+        rowIndex: -1,
+        pinnedCount: 0,
+        windowSize: 0,
+        columns: [],
+        leftSpacerPx: 0,
+        rightSpacerPx: 0,
+        renderedWidthPx: 0,
+        contentWidthPx: parseFloat(headerRow?.style.minWidth ?? '') || 0,
+        childCount: 0,
+        totalCells: document.querySelectorAll(`${hostSelector} .dt-body .dt-cell`).length,
+        rowCount: 0,
+        mismatchedRows: 0,
+        scrollWidth: scrollEl?.scrollWidth ?? 0,
+        scrollLeft: scrollEl?.scrollLeft ?? 0,
+        clientWidth: scrollEl?.clientWidth ?? 0,
+      };
+
+      const rows = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          `${hostSelector} .dt-body .dt-row[data-row-id]:not([data-placeholder])`,
+        ),
+      );
+      const row = rows[0];
+      if (!row) return empty;
+
+      const stamp = row.getAttribute('data-window') ?? '';
+      const [pinnedRaw, sizeRaw] = stamp.split(':');
+      const spacerPx = (side: 'left' | 'right'): number => {
+        const el = row.querySelector<HTMLElement>(`[data-col-spacer="${side}"]`);
+        if (!el) return Number.NaN;
+        // `flex: 0 0 <n>px` — parse the basis off the shorthand's own text.
+        const match = /(-?[\d.]+)px\s*$/.exec(el.style.flex);
+        return match ? parseFloat(match[1]!) : Number.NaN;
+      };
+
+      const cells = Array.from(row.querySelectorAll<HTMLElement>('.dt-cell[data-column]'));
+      return {
+        ...empty,
+        rowIndex: Number(row.getAttribute('data-row-index')),
+        pinnedCount: Number(pinnedRaw),
+        windowSize: Number(sizeRaw),
+        columns: cells.map((cell) => cell.getAttribute('data-column')!),
+        leftSpacerPx: spacerPx('left'),
+        rightSpacerPx: spacerPx('right'),
+        renderedWidthPx: cells.reduce((sum, cell) => sum + (parseFloat(cell.style.width) || 0), 0),
+        childCount: row.children.length,
+        rowCount: rows.length,
+        mismatchedRows: rows.filter((r) => r.getAttribute('data-window') !== stamp).length,
+      };
+    },
+    opts.host ?? `#${TIER_HOST_ID}`,
+  );
+}
+
+/**
+ * Pair every rendered body cell with its header and measure the horizontal
+ * disagreement between them.
+ *
+ * This is C2's alignment spike, made permanent. The spike's whole question
+ * was whether a spacer standing in for N skipped columns puts the remaining
+ * cells exactly where their headers are — it measured 0.000 px across the
+ * board, and this is the assertion that keeps it there. Paired by
+ * `data-column`, never by position: that pairing is precisely what windowing
+ * breaks.
+ *
+ * Only columns the body actually renders appear; the header row is still
+ * built in full, and a header with no cell has nothing to disagree with.
+ */
+export async function readAlignment(
+  page: Page,
+  opts: HostOptions = {},
+): Promise<ColumnAlignment[]> {
+  return page.evaluate(
+    (hostSelector) => {
+      const headers = new Map<string, DOMRect>();
+      for (const header of document.querySelectorAll<HTMLElement>(
+        `${hostSelector} .dt-col-header[data-column]`,
+      )) {
+        headers.set(header.getAttribute('data-column')!, header.getBoundingClientRect());
+      }
+      const row = document.querySelector<HTMLElement>(
+        `${hostSelector} .dt-body .dt-row[data-row-id]:not([data-placeholder])`,
+      );
+      const out: ColumnAlignment[] = [];
+      if (!row) return out;
+      for (const cell of row.querySelectorAll<HTMLElement>('.dt-cell[data-column]')) {
+        const column = cell.getAttribute('data-column')!;
+        const headerRect = headers.get(column);
+        if (!headerRect) continue;
+        const cellRect = cell.getBoundingClientRect();
+        out.push({
+          column,
+          headerX: headerRect.left,
+          cellX: cellRect.left,
+          delta: Math.abs(headerRect.left - cellRect.left),
+          widthDelta: Math.abs(headerRect.width - cellRect.width),
+        });
+      }
+      return out;
+    },
+    opts.host ?? `#${TIER_HOST_ID}`,
+  );
+}
+
+/** One settled stop of {@link sweepHorizontal}. */
+export interface SweepStop {
+  /** The requested fraction of maximum scrollLeft. */
+  at: number;
+  scrollLeft: number;
+  /** Header geometry — the header row is not windowed until Phase 4. */
+  columns: VisibleColumn[];
+  /** What the body rendered at this offset. */
+  body: BodyWindow;
+  /** Header/body agreement for every column the body rendered. */
+  alignment: ColumnAlignment[];
+}
+
+/**
  * Drive `.dt-body-scroll.scrollLeft` to each position and settle between
  * them, returning the grid snapshot at every stop.
  *
  * `positions` are fractions of the maximum scrollLeft, so a spec reads
  * `[0, 0.25, 0.5, 0.75, 1]` rather than pixel counts that change with the
  * column width default.
+ *
+ * The body window, the extent and the alignment are read **here** rather
+ * than by `installColumnInvariantProbe`, and the reason is worth stating: the
+ * probe runs on every rAF and every mutation, where a render that is one
+ * frame behind the scroll offset is legitimate and transient. "The columns
+ * under the viewport are the ones rendered" is only true at rest. Facts that
+ * need the DOM to have caught up belong at a settled stop; the probe keeps
+ * only the invariants that hold mid-flight.
  */
 export async function sweepHorizontal(
   page: Page,
   positions: number[],
   opts: HostOptions = {},
-): Promise<Array<{ at: number; scrollLeft: number; columns: VisibleColumn[] }>> {
+): Promise<SweepStop[]> {
   const host = opts.host ?? `#${TIER_HOST_ID}`;
-  const out: Array<{ at: number; scrollLeft: number; columns: VisibleColumn[] }> = [];
+  const out: SweepStop[] = [];
   for (const at of positions) {
     const scrollLeft = await page.evaluate(
       ({ hostSelector, fraction }) => {
@@ -674,7 +956,13 @@ export async function sweepHorizontal(
       { hostSelector: host, fraction: at },
     );
     await waitForTierSettled(page, { host });
-    out.push({ at, scrollLeft, columns: await readVisibleGrid(page, { host }) });
+    out.push({
+      at,
+      scrollLeft,
+      columns: await readVisibleGrid(page, { host }),
+      body: await readBodyWindow(page, { host }),
+      alignment: await readAlignment(page, { host }),
+    });
   }
   return out;
 }

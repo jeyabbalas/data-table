@@ -16,7 +16,8 @@
  * is exactly what let the original violation sit unnoticed.
  *
  * Each scenario covers a different UI state — empty, filters applied, sort
- * active, modals open, popovers shown, dark mode, RTL, multi-table.
+ * active, modals open, popovers shown, dark mode, RTL, multi-table, and a
+ * horizontally windowed body.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axe from 'axe-core';
@@ -32,6 +33,10 @@ import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
 import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+
+import { rowsFor } from '../helpers/rowFetchBridge';
+import { spacerWidths } from '../helpers/tableBodyDom';
+import { wideHarnessSchema } from '../helpers/tableBodyHarness';
 
 class MockResizeObserver implements ResizeObserver {
   constructor(_: ResizeObserverCallback) {}
@@ -92,6 +97,101 @@ function buildTable(host: HTMLElement): {
   const actions = new StateActions(state, mockBridge);
   const tc = new TableContainer(host, state, actions, mockBridge);
   return { state, actions, tc };
+}
+
+// ------------------------------------------------------------------
+// A body that is actually painted, over a windowed column axis.
+//
+// Every `buildTable` scenario scans a headers-only shell: `mockBridge.query`
+// resolves nothing and jsdom reports a 0x0 scroll container, so the
+// VirtualScroller's range is empty and not one body row exists. That left the
+// whole of `TableBody`'s row DOM invisible to axe — including the two
+// constructs column windowing introduced, which have no counterpart anywhere
+// else in the widget: `role="presentation"` spacer children of a `role="row"`,
+// and body cells whose `aria-colindex` is absolute over `columnOrder` and
+// therefore both gapped and not starting at 1.
+// ------------------------------------------------------------------
+
+/** 60 columns of the default 150 px — the tier `ColumnWindow` is cut for. */
+const WIDE_COLUMN_COUNT = 60;
+const WIDE_VIEWPORT_WIDTH = 600;
+/** 320 px at the default 32 px rows = 10 visible rows, plus the buffer. */
+const WIDE_VIEWPORT_HEIGHT = 320;
+
+const wideSchema: ColumnSchema[] = wideHarnessSchema(WIDE_COLUMN_COUNT);
+const wideColumns = wideSchema.map((column) => column.name);
+
+const wideBridge = {
+  initialize: vi.fn(),
+  // Synthesizes exactly the window the SELECT asked for, whichever SQL shape
+  // TableBody emitted — anything shorter trips the rowid fast path's density
+  // valve and the body falls back to placeholders, which carry no spacers.
+  query: vi.fn(async (sql: string) => rowsFor(sql, wideColumns)),
+  terminate: vi.fn(),
+  clearQueryCache: vi.fn(),
+} as unknown as WorkerBridge;
+
+/**
+ * A mounted `TableContainer` over {@link WIDE_COLUMN_COUNT} columns with rows
+ * painted and the column window cut to {@link WIDE_VIEWPORT_WIDTH}.
+ *
+ * Both stubs are load-bearing and neither is sufficient alone: a zero
+ * `clientHeight` leaves the row range empty, and a zero `clientWidth` collapses
+ * the column window onto its ten-column floor at offset 0 with no left spacer
+ * to ever grow. The second `render()` is what rebuilds the body against the
+ * stubbed box — the constructor already built one against jsdom's zeros, and
+ * `TableBody` reads the viewport at construction time.
+ */
+async function buildWideTable(host: HTMLElement): Promise<TableContainer> {
+  const state = createTableState();
+  state.schema.set(wideSchema);
+  initializeColumnsFromSchema(state, wideSchema);
+  state.totalRows.set(200);
+  state.tableName.set('wide_table');
+  const actions = new StateActions(state, wideBridge);
+  const tc = new TableContainer(host, state, actions, wideBridge);
+
+  const scroll = tc.getElement().querySelector<HTMLElement>('.dt-body-scroll');
+  expect(scroll).not.toBeNull();
+  Object.defineProperty(scroll, 'clientHeight', {
+    value: WIDE_VIEWPORT_HEIGHT,
+    configurable: true,
+  });
+  Object.defineProperty(scroll, 'clientWidth', { value: WIDE_VIEWPORT_WIDTH, configurable: true });
+
+  tc.render();
+  await tc.whenBodyReady();
+  return tc;
+}
+
+/**
+ * The first painted data row, refusing to hand one back unless it is genuinely
+ * windowed.
+ *
+ * A scan of a body that quietly rendered all 60 columns — a stub that did not
+ * take, a window that fell back to the whole axis, a placeholder pass — passes
+ * axe while proving nothing, and would do so silently forever. This is what
+ * makes that impossible.
+ */
+function windowedRow(tc: TableContainer): HTMLElement {
+  const row = tc
+    .getElement()
+    .querySelector<HTMLElement>('.dt-row[data-row-index]:not([data-placeholder])');
+  expect(row).not.toBeNull();
+  expect(row!.querySelector('[data-col-spacer="left"]')).not.toBeNull();
+  expect(row!.querySelector('[data-col-spacer="right"]')).not.toBeNull();
+
+  const rendered = row!.querySelectorAll('.dt-cell').length;
+  expect(rendered).toBeGreaterThan(0);
+  expect(rendered).toBeLessThan(WIDE_COLUMN_COUNT);
+  return row!;
+}
+
+/** The `aria-colindex` of a row's first rendered cell, as a number. */
+function firstColIndex(row: HTMLElement): number {
+  const cell = row.querySelector<HTMLElement>('.dt-cell');
+  expect(cell).not.toBeNull();
+  return Number(cell!.getAttribute('aria-colindex'));
 }
 
 describe('a11y: axe-core grid scan', () => {
@@ -204,6 +304,48 @@ describe('a11y: axe-core grid scan', () => {
   it('reports zero blocking violations on the rendered grid with dir="rtl"', async () => {
     const { tc } = buildTable(container);
     tc.getElement().setAttribute('dir', 'rtl');
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations on a windowed body at scroll offset 0', async () => {
+    // The first scenario in this file with any body row in it at all: 15 rows
+    // of 14 cells each, against an `aria-colcount` of 60. At rest the window
+    // starts at column 0, so the left spacer is empty and the first
+    // `aria-colindex` is 1 — what is new here is the right spacer, a
+    // `role="presentation"` element sitting as a direct child of a
+    // `role="row"` inside a `role="rowgroup"`, and the truncated colindex run
+    // that stops long before `aria-colcount`.
+    const tc = await buildWideTable(container);
+    const row = windowedRow(tc);
+    expect(firstColIndex(row)).toBe(1);
+    expect(spacerWidths(row).right).toBeGreaterThan(0);
+
+    await scan(tc.getElement());
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations on a windowed body scrolled off column 0', async () => {
+    // The state the pattern is actually novel in: both spacers non-empty and
+    // every rendered cell carrying an `aria-colindex` well above 1, so the row
+    // neither starts at the first column nor ends at the last. At this offset
+    // the window is `[10, 34)` — 24 cells reporting colindex 11…34, between a
+    // 1,500 px and a 3,900 px spacer. ARIA prescribes exactly this for a
+    // partially rendered row, and it is the one arrangement an
+    // `aria-required-children` / colindex check could plausibly object to.
+    const tc = await buildWideTable(container);
+    const scroll = tc.getElement().querySelector<HTMLElement>('.dt-body-scroll');
+    scroll!.scrollLeft = 3000;
+    // Synchronous: jsdom dispatches no `scroll` for a programmatic write, and
+    // this is what the body's own rAF-throttled listener amounts to anyway.
+    tc.getTableBody()?.refreshColumnWindow();
+
+    const row = windowedRow(tc);
+    expect(firstColIndex(row)).toBeGreaterThan(1);
+    const spacers = spacerWidths(row);
+    expect(spacers.left).toBeGreaterThan(0);
+    expect(spacers.right).toBeGreaterThan(0);
+
     await scan(tc.getElement());
     tc.destroy();
   });

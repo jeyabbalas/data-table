@@ -181,6 +181,7 @@ export type {
   StatsPanelErrorPhase,
 } from './visualizations/BaseStatsPanel';
 export { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
+export type { StatsPanelCoordinatorOptions } from './visualizations/StatsPanelCoordinator';
 
 export {
   Histogram,
@@ -203,7 +204,27 @@ export type {
 export { ValueCounts } from './visualizations/valuecounts';
 export type { CategorySegment, ValueCountsData } from './visualizations/valuecounts';
 
+// Declared return types of the per-class `exportDataSnapshot()` overrides.
+// Exported from the defining modules rather than the barrels because that is
+// where they are declared and each belongs to exactly one class. A consumer
+// that parks snapshots across a header rebuild needs to name what it is
+// holding; the intake side (`VisualizationOptions.initialSnapshot`,
+// `importDataSnapshot()`) still takes `unknown`, so nothing is forced to.
+export type { NumericHistogramSnapshot } from './visualizations/histogram/Histogram';
+export type { DateHistogramSnapshot } from './visualizations/histogram/DateHistogram';
+export type { TimeHistogramSnapshot } from './visualizations/histogram/TimeHistogram';
+export type { IntervalHistogramSnapshot } from './visualizations/histogram/IntervalHistogram';
+export type { ValueCountsSnapshot } from './visualizations/valuecounts/ValueCounts';
+
 export { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
+// The fan-out seam both coordinators accept via their options bag. Exported as
+// types only: the library's own implementation (`VizDataController`) stays
+// internal, but the interface is one method, so a standalone composition can
+// supply its own — deferring offscreen columns is the whole point of it.
+export type {
+  FilterFanOutRequest,
+  FilterFanOutScheduler,
+} from './visualizations/CrossfilterCoordinator';
 export { InteractionManager } from './visualizations/InteractionManager';
 export type {
   InteractiveVisualization,

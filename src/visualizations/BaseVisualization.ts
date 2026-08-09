@@ -127,9 +127,15 @@ export interface VisualizationOptions {
    */
   useApproxDistinct?: boolean;
   /**
-   * Shared per-table {@link ThemeWatcher}. When supplied, this instance
-   * registers with it instead of installing its own `MutationObserver` on
-   * `.dt-root` — one observer per table rather than one per column.
+   * @internal Facade-only wiring. `ThemeWatcher` is constructed in exactly one
+   * place — `createDataTable()` — and is exported from no entry point, so an
+   * `/advanced` consumer cannot name the type or obtain an instance to pass
+   * here. Publishing the class purely to make this field nameable would widen
+   * the surface for a knob nobody outside `DataTable.ts` can turn.
+   *
+   * Shared per-table `ThemeWatcher`. When supplied, this instance registers
+   * with it instead of installing its own `MutationObserver` on `.dt-root` —
+   * one observer per table rather than one per column.
    *
    * Omit it (standalone `/advanced` composition) and the private observer is
    * used exactly as before.

@@ -8,16 +8,22 @@
 
 > **clampUnpinnedIndex**(`index`, `columns`, `pinnedColumns`): `number`
 
-Defined in: [table/ColumnReorder.ts:60](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/table/ColumnReorder.ts#L60)
+Defined in: [table/ColumnReorder.ts:66](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/ColumnReorder.ts#L66)
 
 Clamp an insertion index so an unpinned column cannot land inside the
 pinned block.
 
 Pinned columns are assumed to occupy the leading positions of the presented
-order — `TableContainer.updatePinnedColumnStyles` and
-`TableBody.updateRowContent` both compute sticky `left` offsets by walking
-`pinnedColumns` in order, so dropping an unpinned column at index 0 of a
-table with two pinned columns desyncs every offset after it.
+order. `TableContainer.updatePinnedColumnStyles` and `TableBody`'s render
+pass both take their sticky `left` offsets from `pinnedOffsets`, which
+accumulates widths across `visibleColumns[0, pinnedCount)` — the span
+`resolvePinnedCount` reports — and not across `pinnedColumns`. Drop an
+unpinned column at index 0 of a table with two pinned ones and that span
+falls back to "through the last pinned column"
+(`ColumnWindow.pinnedPrefixViolated`): the intruder is filtered back out of
+the offsets, but its width still lands in the running sum, so every pinned
+column after it freezes that much further right — and the body force-renders
+one extra column outside its window on top.
 
 ## Parameters
 

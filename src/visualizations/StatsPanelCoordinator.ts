@@ -43,9 +43,17 @@ import type { FilterFanOutRequest, FilterFanOutScheduler } from './CrossfilterCo
  */
 const DEFAULT_PANEL_CONCURRENCY = 4;
 
-/** Optional hooks for the panel coordinator. */
+/**
+ * Optional hooks for the panel coordinator, supplied as the constructor's
+ * trailing argument. Separate from `CrossfilterCoordinatorOptions` because
+ * panels have no row-count cycle to hook.
+ */
 export interface StatsPanelCoordinatorOptions {
-  /** See {@link FilterFanOutScheduler}. Absent = today's fan-out over every registered panel. */
+  /**
+   * See {@link FilterFanOutScheduler}. Absent = today's fan-out over every
+   * registered panel. Note this governs {@link StatsPanelCoordinator} filter
+   * *changes* only — `syncExistingFilters` always bypasses it.
+   */
   vizScheduler?: FilterFanOutScheduler;
 }
 

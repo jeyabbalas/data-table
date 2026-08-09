@@ -6,7 +6,7 @@
 
 # Interface: FilterPresetPanelOptions
 
-Defined in: [filters/FilterPresetPanel.ts:16](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/filters/FilterPresetPanel.ts#L16)
+Defined in: [filters/FilterPresetPanel.ts:16](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/filters/FilterPresetPanel.ts#L16)
 
 Construction options for [FilterPresetPanel](../classes/FilterPresetPanel.md).
 
@@ -16,7 +16,7 @@ Construction options for [FilterPresetPanel](../classes/FilterPresetPanel.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPresetPanel.ts:17](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/filters/FilterPresetPanel.ts#L17)
+Defined in: [filters/FilterPresetPanel.ts:17](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/filters/FilterPresetPanel.ts#L17)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [filters/FilterPresetPanel.ts:17](https://github.com/jeyabbalas/data
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/FilterPresetPanel.ts:19](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/filters/FilterPresetPanel.ts#L19)
+Defined in: [filters/FilterPresetPanel.ts:19](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/filters/FilterPresetPanel.ts#L19)
 
 Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
@@ -34,6 +34,6 @@ Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPresetPanel.ts:21](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/filters/FilterPresetPanel.ts#L21)
+Defined in: [filters/FilterPresetPanel.ts:21](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/filters/FilterPresetPanel.ts#L21)
 
 Resolved i18n strings. Defaults to English.

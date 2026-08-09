@@ -35,7 +35,7 @@ import {
 } from './TimeHistogramData';
 import type { TimeHistogramData } from './TimeHistogramData';
 
-/** {@link TimeHistogram}'s data snapshot — see `BaseVisualization.exportDataSnapshot`. */
+/** {@link TimeHistogram}'s data snapshot — see {@link BaseVisualization.exportDataSnapshot}. */
 export interface TimeHistogramSnapshot extends SharedHistogramSnapshot<TimeHistogramData> {
   /** The cached unfiltered pass `ensureInitialData` would otherwise re-issue. */
   initialData: TimeHistogramData | null;

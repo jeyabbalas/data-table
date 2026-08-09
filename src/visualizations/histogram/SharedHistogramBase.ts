@@ -139,9 +139,12 @@ export interface BaseHistogramData {
  * The portion of a histogram data snapshot that every histogram shares.
  * Subclasses widen it with their own cached unfiltered `initialData`.
  *
- * Not exported from the package entries — snapshots are opaque to
- * consumers, who only ever move them between two instances of the same
- * class via `exportDataSnapshot()` / `importDataSnapshot()`.
+ * Not exported from the package entries itself — the four concrete
+ * `*HistogramSnapshot` types are, and typedoc folds these members into each
+ * of them, so there is nothing here a consumer cannot already see. Snapshots
+ * stay opaque in the direction that matters: they only ever move between two
+ * instances of the *same* class via `exportDataSnapshot()` /
+ * `importDataSnapshot()`, both of which trade in `unknown`.
  */
 export interface SharedHistogramSnapshot<TData extends BaseHistogramData> {
   data: TData | null;

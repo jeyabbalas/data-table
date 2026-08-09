@@ -8,7 +8,7 @@
 
 > `const` **defaultStatsPanelRegistry**: [`StatsPanelRegistry`](../classes/StatsPanelRegistry.md)
 
-Defined in: [visualizations/StatsPanelRegistry.ts:187](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/visualizations/StatsPanelRegistry.ts#L187)
+Defined in: [visualizations/StatsPanelRegistry.ts:187](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/StatsPanelRegistry.ts#L187)
 
 Shared module-scoped registry. Used as the fallback when
 `createDataTable()` is called without a `statsPanelRegistry` option.

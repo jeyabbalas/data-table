@@ -6,7 +6,7 @@
 
 # Interface: ColumnReorderOptions
 
-Defined in: [table/ColumnReorder.ts:16](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/table/ColumnReorder.ts#L16)
+Defined in: [table/ColumnReorder.ts:16](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/ColumnReorder.ts#L16)
 
 Options for configuring the ColumnReorder
 
@@ -16,7 +16,7 @@ Options for configuring the ColumnReorder
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/ColumnReorder.ts:18](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/table/ColumnReorder.ts#L18)
+Defined in: [table/ColumnReorder.ts:18](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/ColumnReorder.ts#L18)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +26,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **dragThreshold?**: `number`
 
-Defined in: [table/ColumnReorder.ts:20](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/table/ColumnReorder.ts#L20)
+Defined in: [table/ColumnReorder.ts:20](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/ColumnReorder.ts#L20)
 
 Movement threshold in pixels to start drag (default: 5)
 
@@ -36,7 +36,7 @@ Movement threshold in pixels to start drag (default: 5)
 
 > `optional` **getPinnedColumns?**: () => readonly `string`[]
 
-Defined in: [table/ColumnReorder.ts:26](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/table/ColumnReorder.ts#L26)
+Defined in: [table/ColumnReorder.ts:26](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/ColumnReorder.ts#L26)
 
 Late-bound accessor for the currently pinned columns. Used to keep a drop
 out of the pinned block (see [clampUnpinnedIndex](../functions/clampUnpinnedIndex.md)); when omitted,

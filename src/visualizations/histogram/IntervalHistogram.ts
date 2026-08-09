@@ -30,7 +30,7 @@ import {
   type SharedHistogramSnapshot,
 } from './SharedHistogramBase';
 
-/** {@link IntervalHistogram}'s data snapshot — see `BaseVisualization.exportDataSnapshot`. */
+/** {@link IntervalHistogram}'s data snapshot — see {@link BaseVisualization.exportDataSnapshot}. */
 export interface IntervalHistogramSnapshot extends SharedHistogramSnapshot<IntervalHistogramData> {
   /** The cached unfiltered pass `ensureInitialData` would otherwise re-issue. */
   initialData: IntervalHistogramData | null;

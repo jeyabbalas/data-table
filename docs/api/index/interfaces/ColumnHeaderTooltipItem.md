@@ -6,7 +6,7 @@
 
 # Interface: ColumnHeaderTooltipItem
 
-Defined in: [core/types.ts:84](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L84)
+Defined in: [core/types.ts:84](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/types.ts#L84)
 
 A label/value entry inside a column-header tooltip.
 
@@ -20,7 +20,7 @@ A label/value entry inside a column-header tooltip.
 
 > **label**: `string`
 
-Defined in: [core/types.ts:85](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L85)
+Defined in: [core/types.ts:85](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/types.ts#L85)
 
 ***
 
@@ -28,4 +28,4 @@ Defined in: [core/types.ts:85](https://github.com/jeyabbalas/data-table/blob/ef3
 
 > **value**: `string` \| `string`[]
 
-Defined in: [core/types.ts:86](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L86)
+Defined in: [core/types.ts:86](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/types.ts#L86)

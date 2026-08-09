@@ -36,7 +36,7 @@ import {
   type SharedHistogramSnapshot,
 } from './SharedHistogramBase';
 
-/** {@link DateHistogram}'s data snapshot — see `BaseVisualization.exportDataSnapshot`. */
+/** {@link DateHistogram}'s data snapshot — see {@link BaseVisualization.exportDataSnapshot}. */
 export interface DateHistogramSnapshot extends SharedHistogramSnapshot<DateHistogramData> {
   /** The cached unfiltered pass `ensureInitialData` would otherwise re-issue. */
   initialData: DateHistogramData | null;

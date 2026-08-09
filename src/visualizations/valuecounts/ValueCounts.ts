@@ -152,9 +152,11 @@ interface RenderSegment {
 
 /**
  * {@link ValueCounts}'s data snapshot — see
- * `BaseVisualization.exportDataSnapshot`. Not exported from the package
- * entries; snapshots are opaque and only ever move between two instances of
- * this class for the same column.
+ * {@link BaseVisualization.exportDataSnapshot}. Exported from `/advanced` so a
+ * consumer parking snapshots across a header rebuild can name what it holds.
+ * Snapshots stay opaque in the direction that matters: `exportDataSnapshot()`
+ * and `importDataSnapshot()` both trade in `unknown`, and one only ever moves
+ * between two instances of this class for the same column.
  */
 export interface ValueCountsSnapshot {
   data: ValueCountsData | null;

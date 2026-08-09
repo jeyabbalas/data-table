@@ -8,7 +8,7 @@
 
 > **isAnnotationIdShape**(`s`): `s is string`
 
-Defined in: [annotations/AnnotationId.ts:100](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/annotations/AnnotationId.ts#L100)
+Defined in: [annotations/AnnotationId.ts:100](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/annotations/AnnotationId.ts#L100)
 
 Cheap shape check — matches the `ann_` prefix + 26 Crockford chars output
 of [generateAnnotationId](generateAnnotationId.md). Used for diagnostics; the store accepts

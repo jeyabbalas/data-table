@@ -8,7 +8,7 @@
 
 > **RowId** = `bigint`
 
-Defined in: [core/types.ts:47](https://github.com/jeyabbalas/data-table/blob/ef3610328726322e284745dad11202d058a5f69f/src/core/types.ts#L47)
+Defined in: [core/types.ts:47](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/types.ts#L47)
 
 Stable row identity produced at load time by the loaders and stored in the
 reserved `__rowid__` column. 0-indexed, monotonic, BIGINT-backed, stable

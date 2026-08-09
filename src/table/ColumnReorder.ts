@@ -41,10 +41,16 @@ export type ReorderCallback = (newOrder: string[], movedColumn: string) => void;
  * pinned block.
  *
  * Pinned columns are assumed to occupy the leading positions of the presented
- * order — `TableContainer.updatePinnedColumnStyles` and
- * `TableBody.updateRowContent` both compute sticky `left` offsets by walking
- * `pinnedColumns` in order, so dropping an unpinned column at index 0 of a
- * table with two pinned columns desyncs every offset after it.
+ * order. `TableContainer.updatePinnedColumnStyles` and `TableBody`'s render
+ * pass both take their sticky `left` offsets from `pinnedOffsets`, which
+ * accumulates widths across `visibleColumns[0, pinnedCount)` — the span
+ * `resolvePinnedCount` reports — and not across `pinnedColumns`. Drop an
+ * unpinned column at index 0 of a table with two pinned ones and that span
+ * falls back to "through the last pinned column"
+ * (`ColumnWindow.pinnedPrefixViolated`): the intruder is filtered back out of
+ * the offsets, but its width still lands in the running sum, so every pinned
+ * column after it freezes that much further right — and the body force-renders
+ * one extra column outside its window on top.
  *
  * @param index - Desired insertion index into `columns`.
  * @param columns - The presented order the column will be spliced into, with

@@ -8,8 +8,11 @@
  * 10 visible rows; with the scroller's 5 buffer rows a mid-table range
  * spans 20 indices.
  *
- * Callers must stub `ResizeObserver` themselves (`vi.stubGlobal`) before
- * constructing — VirtualScroller requires it under JSDOM.
+ * Callers must stub `ResizeObserver` themselves (`vi.stubGlobal` with
+ * {@link MockResizeObserver}) before constructing. It is `TableBody`'s
+ * constructor that needs one, not the scroller: the column window is a
+ * function of the scroll container's `clientWidth`, so the body observes that
+ * element's box — and JSDOM defines no `ResizeObserver` to construct.
  */
 import { vi } from 'vitest';
 

@@ -1831,12 +1831,16 @@ export class TableBody {
    */
   private returnRowToPool(rowEl: HTMLElement): void {
     // Skip placeholder rows (marked `data-placeholder`, one cell carrying
-    // dt-cell--placeholder). Pooling them lets `getOrCreateRow` later append
-    // blank cells alongside the placeholder cell — the appended cells are
-    // fine, but the original placeholder cell keeps its dt-cell--placeholder
-    // class and would render its column's data in tertiary text colour. GC
-    // overhead is trivial: placeholders are cheap to recreate when the data
-    // hasn't arrived yet.
+    // dt-cell--placeholder). A placeholder carries no `data-window` stamp, so
+    // pooling one sends `getOrCreateRow` into `reshapeRow`'s mismatch path:
+    // both spacers get created and the cell run is *grown* from whatever the
+    // element already holds — pooling recycles a row's own cells, it neither
+    // clones nor rebuilds them — so the single placeholder cell survives as the
+    // first cell of the `P + W` run. The cells appended after it are fine; the
+    // survivor keeps its dt-cell--placeholder class, which neither `paintCell`
+    // nor `CellRenderer.render` strips, and would render the run's leading
+    // column in tertiary text colour. GC overhead is trivial: placeholders are
+    // cheap to recreate when the data hasn't arrived yet.
     if (this.isPlaceholderRow(rowEl)) {
       return;
     }
@@ -2107,11 +2111,18 @@ export class TableBody {
    * cells keep the formatted title so hovering still reveals the
    * underlying value.
    *
-   * Render-budget note: this runs once per visible cell on every render
-   * (~5000 calls/render at 100 cols × 50 rows). It calls `getByRow`,
-   * `getByColumn`, and `getByCell` — all O(1) on the AnnotationStore
-   * indexes. If those lookups ever change complexity, scroll perf will
-   * regress quietly; benchmarks live in
+   * Render-budget note: this runs once per *rendered* cell of every pass with
+   * annotations to paint (`paintCell` gates it on `annotationPass`), so the
+   * count is `(pinnedCount + windowSize) × visible rows` — bounded by the
+   * window, not by the column count. At a 1,200 px viewport over default
+   * 150 px columns, 8 columns are visible and `MIN_OVERSCAN_COLUMNS = 10`
+   * binds on each side (1,500 px per side beats the 1,200 px that
+   * `OVERSCAN_VIEWPORTS = 1` asks for), so the window is 8 + 10 + 10 = 28 and
+   * 50 rows cost 1,400 calls — the same 1,400 at 1,000 columns as at 100,
+   * where the pre-windowing body paid 5,000 for the 100-column case alone. It
+   * calls `getByRow`, `getByColumn`, and `getByCell` — all O(1) on the
+   * AnnotationStore indexes. If those lookups ever change complexity, scroll
+   * perf will regress quietly; benchmarks live in
    * `tests/annotations/AnnotationStore.scale.test.ts`.
    */
   private applyCellAnnotationClasses(
@@ -2699,8 +2710,17 @@ export class TableBody {
       return;
     }
 
-    // `renderVisibleRows` recomputes the window itself and publishes it, so
-    // this is deliberately not `this.columnWindow = win` first — one writer.
+    // Deliberately not `this.columnWindow = win` first: the field means "the
+    // window the mounted rows were built for" — `childIndexOf` and
+    // `getColumnWindow` read it as exactly that — and `renderVisibleRows`
+    // recomputes it and publishes it from the local its pass threads down. An
+    // assignment here would describe rows nothing has reshaped yet, and be
+    // overwritten a moment later anyway.
+    //
+    // Not "one writer": `updateCellWidths` is the second. It publishes only on
+    // the branch where `start`/`end`/`pinnedCount` already compared equal, so
+    // it refreshes the spacer and extent fields of a window whose structure the
+    // mounted rows already have — it can never move what is mounted.
     this.renderVisibleRows();
   }
 

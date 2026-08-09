@@ -232,9 +232,16 @@ export class VirtualScroller {
   /**
    * Create the width spacer element
    *
-   * This element is in normal document flow (not absolutely positioned)
-   * and forces the scroll container to have the correct horizontal scroll width.
-   * Without this, the absolutely positioned viewport doesn't contribute to scrollWidth.
+   * A normal-flow sibling of the absolutely positioned viewport, sized by
+   * {@link VirtualScroller.setContentWidth}, which writes the same number as
+   * `minWidth` onto the content and viewport containers. It puts a *floor*
+   * under the scroll container's horizontal extent rather than being that
+   * extent: `.dt-body` carries `min-width: fit-content` (`02-shell.css`), so
+   * the flex rows' own overflow reaches the scroller too, and `scrollWidth` is
+   * the larger of the two. Measured on a live 50-column mount, zeroing this
+   * width left `scrollWidth` at 7,500 px, and zeroing it together with both
+   * `minWidth` writes still left 7,500 — the rows are the term that binds
+   * today, not this element.
    */
   private createWidthSpacer(): HTMLElement {
     const el = document.createElement('div');

@@ -11,6 +11,7 @@ import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema, Filter } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { headerCells, headerColumns, headerFor } from '../helpers/headerDom';
 import { newRow, poolRow, rowElements } from '../helpers/tableBodyDom';
 
 // Mock ResizeObserver
@@ -212,12 +213,12 @@ describe('Accessibility: ARIA attributes', () => {
       state.visibleColumns.set(['id', 'score', 'created']);
 
       const tc = new TableContainer(container, state, actions, mockBridge);
-      const headers = tc.getElement().querySelectorAll('[role="columnheader"]');
+      const root = tc.getElement();
 
-      expect(headers.length).toBe(3);
-      expect(headers[0].getAttribute('aria-colindex')).toBe('1'); // id is 1st in schema
-      expect(headers[1].getAttribute('aria-colindex')).toBe('3'); // score is 3rd in schema
-      expect(headers[2].getAttribute('aria-colindex')).toBe('5'); // created is 5th in schema
+      expect(headerColumns(root)).toEqual(['id', 'score', 'created']);
+      expect(headerFor(root, 'id')!.getAttribute('aria-colindex')).toBe('1'); // 1st in schema
+      expect(headerFor(root, 'score')!.getAttribute('aria-colindex')).toBe('3'); // 3rd in schema
+      expect(headerFor(root, 'created')!.getAttribute('aria-colindex')).toBe('5'); // 5th in schema
 
       tc.destroy();
     });
@@ -234,7 +235,7 @@ describe('Accessibility: ARIA attributes', () => {
       // ARIA forbids as a MUST, not a SHOULD.
       actions.setColumnOrder(['created', 'name', 'score', 'active', 'id']);
 
-      const headers = [...tc.getElement().querySelectorAll('.dt-col-header')];
+      const headers = headerCells(tc.getElement());
       const colIndices = headers.map((h) => Number(h.getAttribute('aria-colindex')));
 
       for (let i = 1; i < colIndices.length; i++) {
@@ -245,7 +246,7 @@ describe('Accessibility: ARIA attributes', () => {
       // own position in the presented order, which is what `columnOrder` is.
       const order = state.columnOrder.get();
       expect(colIndices).toEqual(
-        headers.map((h) => order.indexOf(h.getAttribute('data-column')!) + 1),
+        headerColumns(tc.getElement()).map((name) => order.indexOf(name) + 1),
       );
 
       tc.destroy();
@@ -261,12 +262,13 @@ describe('Accessibility: ARIA attributes', () => {
 
       actions.hideColumn('name');
 
-      const headers = [...tc.getElement().querySelectorAll('.dt-col-header')];
-      expect(headers.map((h) => h.getAttribute('data-column'))).toEqual(['id', 'score', 'active']);
+      const root = tc.getElement();
+      expect(headerColumns(root)).toEqual(['id', 'score', 'active']);
       // 1, 2, 3 would claim these are all the columns there are. The gap at 2
       // is exactly how ARIA says "a column is present but not rendered", and
       // it stays consistent with the aria-colcount of 4.
-      expect(headers.map((h) => h.getAttribute('aria-colindex'))).toEqual(['1', '3', '4']);
+      const colIndices = headerCells(root).map((h) => h.getAttribute('aria-colindex'));
+      expect(colIndices).toEqual(['1', '3', '4']);
       expect(tc.getGridElement().getAttribute('aria-colcount')).toBe('4');
 
       tc.destroy();
@@ -504,15 +506,16 @@ describe('Accessibility: ARIA attributes', () => {
       let emptyRowsAtFirstRender = -1;
       const unsub = state.schema.subscribe(() => {
         const headerRow = tc.getHeaderRow();
-        headersAtFirstRender = headerRow.querySelectorAll('.dt-col-header').length;
-        // Header-scoped, deliberately: this counts childless `[role="row"]`
-        // elements inside the *header* row, whose children are columnheaders,
-        // not body cells. Body rows are the ones that gain spacer children, so
-        // `childElementCount` stays the right question here — do not restate
-        // it in `bodyCells` terms.
-        emptyRowsAtFirstRender = [...headerRow.querySelectorAll('[role="row"]')].filter(
-          (row) => row.childElementCount === 0,
-        ).length;
+        headersAtFirstRender = headerCells(headerRow).length;
+        // Header-scoped, deliberately: this counts `[role="row"]` elements
+        // inside the *header* row that own no columnheader — the critical
+        // `aria-required-children` violation, stated as the violation itself.
+        // `childElementCount === 0` was the same question only while the row's
+        // children were all headers; the moment the header row gains spacers
+        // of its own, a row holding nothing but two spacers stops being
+        // "childless" and the check silently stops seeing the bug.
+        const rows = [...headerRow.querySelectorAll<HTMLElement>('[role="row"]')];
+        emptyRowsAtFirstRender = rows.filter((row) => headerCells(row).length === 0).length;
       });
 
       initializeColumnsFromSchema(state, testSchema);
@@ -560,12 +563,15 @@ describe('Accessibility: ARIA attributes', () => {
         instanceId: 'shared',
       });
 
-      const idsA = a.getColumnHeaders().map((h) => h.getElement().id);
-      const idsB = b.getColumnHeaders().map((h) => h.getElement().id);
+      // Read off the DOM, because the DOM is where the ambiguity would be: an
+      // `aria-activedescendant` IDREF is resolved document-wide, so what
+      // matters is that no two *rendered* header cells share an id.
+      const idsA = headerCells(a.getElement()).map((el) => el.id);
+      const idsB = headerCells(b.getElement()).map((el) => el.id);
       expect(idsA.length).toBe(testSchema.length);
       expect(idsA.some((id) => idsB.includes(id))).toBe(false);
       // The caller's value stays legible in the id — only a suffix is added.
-      expect(idsA[0]).toContain('shared');
+      expect(idsA.every((id) => id.includes('shared'))).toBe(true);
 
       a.destroy();
       b.destroy();
@@ -775,10 +781,10 @@ describe('Accessibility: ARIA attributes', () => {
       );
 
       // The mode really did open — otherwise this asserts nothing at all.
-      const inLayoutMode = tc
-        .getColumnHeaders()
-        .filter((h) => h.getElement().classList.contains('dt-col-header--layout'));
-      expect(inLayoutMode.map((h) => h.getColumn().name)).toEqual(['name']);
+      const inLayoutMode = headerCells(tc.getElement()).filter((el) =>
+        el.classList.contains('dt-col-header--layout'),
+      );
+      expect(inLayoutMode.map((el) => el.getAttribute('data-column'))).toEqual(['name']);
 
       expect(tabStops(grid)).toEqual(before);
 
@@ -787,12 +793,14 @@ describe('Accessibility: ARIA attributes', () => {
 
     it('gives every header cell a stable id and takes its buttons out of the tab order', () => {
       const tc = loaded();
-      const headers = tc.getColumnHeaders();
+      // The census the tab-stop assertions above are measured against, so it
+      // has to be the rendered cells rather than the header instances: a
+      // header that exists but is not mounted costs the user no Tab press.
+      const headers = headerCells(tc.getElement());
       expect(headers.length).toBeGreaterThan(0);
 
       const ids = new Set<string>();
-      for (const header of headers) {
-        const el = header.getElement();
+      for (const el of headers) {
         expect(el.id).not.toBe('');
         expect(ids.has(el.id)).toBe(false);
         ids.add(el.id);
@@ -812,9 +820,9 @@ describe('Accessibility: ARIA attributes', () => {
 
       actions.setFocusedCell({ row: -1, column: 'name' });
 
-      const header = tc.getColumnHeaders().find((h) => h.getColumn().name === 'name')!;
-      expect(grid.getAttribute('aria-activedescendant')).toBe(header.getElement().id);
-      expect(header.getElement().classList.contains('dt-col-header--focused')).toBe(true);
+      const header = headerFor(tc.getElement(), 'name')!;
+      expect(grid.getAttribute('aria-activedescendant')).toBe(header.id);
+      expect(header.classList.contains('dt-col-header--focused')).toBe(true);
 
       actions.clearFocusedCell();
       expect(grid.hasAttribute('aria-activedescendant')).toBe(false);

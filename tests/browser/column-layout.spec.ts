@@ -12,19 +12,10 @@
 
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { WIDE_COLUMNS, loadCsv, openDemo, settle } from './helpers/demo';
+import { WIDE_COLUMNS, headerColumns, loadCsv, openDemo, settle } from './helpers/demo';
 
 const ROOT = '.dt-root';
 const LAYOUT_CLASS = 'dt-col-header--layout';
-
-/** Column names in presented order, read off the DOM. */
-function columnOrder(page: Page): Promise<string[]> {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll('.dt-col-header')).map(
-      (h) => h.getAttribute('data-column') ?? '',
-    ),
-  );
-}
 
 /** Rendered width of a column header, in pixels. */
 function widthOf(page: Page, column: string): Promise<number> {
@@ -65,7 +56,7 @@ test('Shift+F2 resizes and reorders a column, and Escape puts both back', async 
   await openDemo(page);
   await loadCsv(page, WIDE_COLUMNS);
 
-  const orderBefore = await columnOrder(page);
+  const orderBefore = await headerColumns(page);
   const column = await enterLayoutMode(page);
   expect(column).toBe(orderBefore[0]);
 
@@ -85,7 +76,7 @@ test('Shift+F2 resizes and reorders a column, and Escape puts both back', async 
   await page.keyboard.press('Shift+ArrowRight');
   await settle(page);
 
-  const orderDuring = await columnOrder(page);
+  const orderDuring = await headerColumns(page);
   expect(orderDuring.indexOf(column)).toBe(2);
   expect(await announcement(page)).toContain('moved to column 3');
 
@@ -93,7 +84,7 @@ test('Shift+F2 resizes and reorders a column, and Escape puts both back', async 
   await page.keyboard.press('Escape');
   await settle(page);
 
-  expect(await columnOrder(page)).toEqual(orderBefore);
+  expect(await headerColumns(page)).toEqual(orderBefore);
   await expect.poll(() => widthOf(page, column)).toBe(widthBefore);
   expect(await announcement(page)).toContain('cancelled');
   await expect(page.locator(`.${LAYOUT_CLASS}`)).toHaveCount(0);
@@ -104,7 +95,7 @@ test('one Ctrl+Z undoes a whole committed gesture', async ({ page }) => {
   await openDemo(page);
   await loadCsv(page, WIDE_COLUMNS);
 
-  const orderBefore = await columnOrder(page);
+  const orderBefore = await headerColumns(page);
   const column = await enterLayoutMode(page);
   const widthBefore = await widthOf(page, column);
 
@@ -115,13 +106,13 @@ test('one Ctrl+Z undoes a whole committed gesture', async ({ page }) => {
   await page.keyboard.press('Enter');
   await settle(page);
 
-  expect(await columnOrder(page)).not.toEqual(orderBefore);
+  expect(await headerColumns(page)).not.toEqual(orderBefore);
   await expect.poll(() => widthOf(page, column)).toBe(widthBefore + 64);
 
   await page.keyboard.press('Control+z');
   await settle(page);
 
-  expect(await columnOrder(page)).toEqual(orderBefore);
+  expect(await headerColumns(page)).toEqual(orderBefore);
   await expect.poll(() => widthOf(page, column)).toBe(widthBefore);
 });
 
@@ -159,7 +150,7 @@ test('a pinned column refuses to move, and the gesture stays open', async ({ pag
   await page.locator('button[aria-label^="Pin "]').first().click();
   await settle(page);
 
-  const orderBefore = await columnOrder(page);
+  const orderBefore = await headerColumns(page);
   const column = await enterLayoutMode(page);
   expect(
     await page.evaluate((c) => {
@@ -171,7 +162,7 @@ test('a pinned column refuses to move, and the gesture stays open', async ({ pag
   await page.keyboard.press('Shift+ArrowRight');
   await settle(page);
 
-  expect(await columnOrder(page)).toEqual(orderBefore);
+  expect(await headerColumns(page)).toEqual(orderBefore);
   expect(await announcement(page)).toContain('pinned');
   // Refusing a move must not drop the user out of the mode — resize still works.
   await expect(page.locator(`.${LAYOUT_CLASS}`)).toHaveCount(1);

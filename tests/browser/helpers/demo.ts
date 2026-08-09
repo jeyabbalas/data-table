@@ -236,6 +236,30 @@ export async function loadCsv(page: Page, columns: number, rows = 200): Promise<
 }
 
 /**
+ * The demo table's rendered column headers, by `data-column`, in DOM order.
+ *
+ * Selected by `role`, matching `loadCsv`'s own readiness poll above and the
+ * jsdom-side `tests/helpers/headerDom.ts`. Once the header row windows it
+ * becomes `[left spacer][pinned headers][windowed headers][right spacer]`,
+ * where the spacers are `role="presentation"` / `aria-hidden="true"` — so a
+ * `.dt-col-header` sweep would keep returning the header list while a role
+ * query keeps returning the headers. The two are the same list today, which
+ * is what makes this migration assert-for-assert identical.
+ *
+ * What it is **not** is "the presented column order": that is `columnOrder`
+ * in state, and this is the slice of it the DOM currently holds. Callers here
+ * compare one reading against another (before / during / after a gesture),
+ * which stays a fair comparison either way.
+ */
+export function headerColumns(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll('.dt-root [role="columnheader"]')).map(
+      (h) => h.getAttribute('data-column') ?? '',
+    ),
+  );
+}
+
+/**
  * Wait until every named column's header plot exists **and has data**.
  *
  * `loadCsv`'s own `settle()` is a DOM-node-count poll: it waits out canvas

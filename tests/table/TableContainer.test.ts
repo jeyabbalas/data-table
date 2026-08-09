@@ -9,6 +9,8 @@ import { StateActions } from '@/core/Actions';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
+import { headerCells, headerColumns, headerRowEl, headerSpacers } from '../helpers/headerDom';
+
 const mockBridge = {
   initialize: vi.fn(),
   query: vi.fn(),
@@ -243,10 +245,11 @@ describe('TableContainer', () => {
       const tableContainer = new TableContainer(container, state);
       tableContainer.render();
 
-      const headers = tableContainer.getElement().querySelectorAll<HTMLElement>('.dt-col-header');
-      expect(headers).toHaveLength(2);
-      expect(headers[0]!.style.width).toBe('150px');
-      expect(headers[1]!.style.width).toBe('151px');
+      // Read as a sequence rather than per column: the shell path stamps no
+      // `data-column` on its placeholder headers (only `ColumnHeader` does),
+      // so DOM order against `a`, `b` is the only handle there is here.
+      const headers = headerCells(tableContainer.getElement());
+      expect(headers.map((h) => h.style.width)).toEqual(['150px', '151px']);
 
       tableContainer.destroy();
     });
@@ -293,6 +296,34 @@ describe('TableContainer', () => {
       const tableContainer = new TableContainer(container, state);
 
       expect(tableContainer.getHeaderRow().className).toBe('dt-header');
+
+      tableContainer.destroy();
+    });
+
+    it('builds the header row as one columnheader per visible column, no spacers', () => {
+      state.tableName.set('t');
+      initializeColumnsFromSchema(state, [
+        { name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 'b', type: 'string', nullable: true, originalType: 'VARCHAR' },
+      ]);
+      const actions = new StateActions(state, mockBridge);
+      const tableContainer = new TableContainer(container, state, actions, mockBridge);
+
+      // The shape every role-based reader in `tests/helpers/headerDom.ts` has
+      // to agree with *today*, which is what makes those readers a faithful
+      // stand-in for the positional reads they replaced rather than merely a
+      // tidier spelling of them. When the row windows it becomes
+      // `[left spacer][pinned headers][windowed headers][right spacer]` and
+      // only the two spacer expectations here change.
+      const row = headerRowEl(tableContainer.getElement())!;
+      expect(row).not.toBeNull();
+      // Every child is a header and every header is a child, by identity —
+      // nothing else sits in the row yet.
+      const cells = headerCells(row);
+      expect(cells).toHaveLength(row.childElementCount);
+      expect(cells.every((cell, i) => cell === row.children[i])).toBe(true);
+      expect(headerColumns(row)).toEqual(['a', 'b']);
+      expect(headerSpacers(tableContainer.getElement())).toEqual({ left: null, right: null });
 
       tableContainer.destroy();
     });

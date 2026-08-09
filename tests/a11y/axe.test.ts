@@ -34,6 +34,7 @@ import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
+import { headerFor } from '../helpers/headerDom';
 import { rowsFor } from '../helpers/rowFetchBridge';
 import { spacerWidths } from '../helpers/tableBodyDom';
 import { wideHarnessSchema } from '../helpers/tableBodyHarness';
@@ -240,11 +241,16 @@ describe('a11y: axe-core grid scan', () => {
     // So aria-activedescendant still has to resolve while the mode is open,
     // and the affordance must not have promoted the resize separator into a
     // widget that then owes ARIA its value attributes.
-    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: state.visibleColumns.get()[0]! });
+    const column = state.visibleColumns.get()[0]!;
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column });
     tc.getElement().dispatchEvent(
       new KeyboardEvent('keydown', { key: 'F2', shiftKey: true, bubbles: true }),
     );
-    expect(tc.getElement().querySelector('.dt-col-header--layout')).toBeTruthy();
+    // Named, not "some header somewhere": the scan below is only meaningful if
+    // the mode opened on the header the cursor is actually on.
+    expect(headerFor(tc.getElement(), column)!.classList.contains('dt-col-header--layout')).toBe(
+      true,
+    );
     await scan(tc.getElement());
     tc.destroy();
   });
@@ -252,11 +258,14 @@ describe('a11y: axe-core grid scan', () => {
   it('reports zero blocking violations in column layout mode (dark mode)', async () => {
     const { state, actions, tc } = buildTable(container);
     tc.getElement().setAttribute('data-dt-color-scheme', 'dark');
-    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: state.visibleColumns.get()[0]! });
+    const column = state.visibleColumns.get()[0]!;
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column });
     tc.getElement().dispatchEvent(
       new KeyboardEvent('keydown', { key: 'F2', shiftKey: true, bubbles: true }),
     );
-    expect(tc.getElement().querySelector('.dt-col-header--layout')).toBeTruthy();
+    expect(headerFor(tc.getElement(), column)!.classList.contains('dt-col-header--layout')).toBe(
+      true,
+    );
     await scan(tc.getElement());
     tc.destroy();
   });

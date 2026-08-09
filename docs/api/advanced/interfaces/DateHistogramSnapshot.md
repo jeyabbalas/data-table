@@ -6,7 +6,7 @@
 
 # Interface: DateHistogramSnapshot
 
-Defined in: [visualizations/histogram/DateHistogram.ts:40](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/histogram/DateHistogram.ts#L40)
+Defined in: [visualizations/histogram/DateHistogram.ts:40](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/histogram/DateHistogram.ts#L40)
 
 [DateHistogram](../classes/DateHistogram.md)'s data snapshot — see [BaseVisualization.exportDataSnapshot](../classes/BaseVisualization.md#exportdatasnapshot).
 
@@ -20,7 +20,7 @@ Defined in: [visualizations/histogram/DateHistogram.ts:40](https://github.com/je
 
 > **backgroundData**: [`DateHistogramData`](DateHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/histogram/SharedHistogramBase.ts#L151)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/histogram/SharedHistogramBase.ts#L151)
 
 #### Inherited from
 
@@ -32,7 +32,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github
 
 > **data**: [`DateHistogramData`](DateHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/histogram/SharedHistogramBase.ts#L150)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/histogram/SharedHistogramBase.ts#L150)
 
 #### Inherited from
 
@@ -44,6 +44,6 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github
 
 > **initialData**: [`DateHistogramData`](DateHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/DateHistogram.ts:42](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/histogram/DateHistogram.ts#L42)
+Defined in: [visualizations/histogram/DateHistogram.ts:42](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/histogram/DateHistogram.ts#L42)
 
 The cached unfiltered pass `ensureInitialData` would otherwise re-issue.

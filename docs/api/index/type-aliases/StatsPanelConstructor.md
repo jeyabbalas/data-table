@@ -8,7 +8,7 @@
 
 > **StatsPanelConstructor** = (`container`, `column`, `options`) => [`BaseStatsPanel`](../../advanced/classes/BaseStatsPanel.md)
 
-Defined in: [visualizations/StatsPanelRegistry.ts:57](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/StatsPanelRegistry.ts#L57)
+Defined in: [visualizations/StatsPanelRegistry.ts:57](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/StatsPanelRegistry.ts#L57)
 
 Constructor signature for stats panel classes. Mirrors
 [VisualizationConstructor](VisualizationConstructor.md).

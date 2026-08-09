@@ -111,10 +111,22 @@ test('creates charts for the visible columns only', async ({ page }) => {
     })}`,
   );
 
-  // Every column has a header; almost none has a chart. That gap is the phase.
-  expect(census.headers).toBe(CI_TIER.cols);
+  // Two nested reductions, and each phase opened one. The header row is
+  // windowed, so a few dozen of the 300 columns have a header at all; inside
+  // that window only the columns actually on screen own a chart. Measured
+  // 17 headers and 8 canvases at rest. This test asserted `headers === 300`
+  // until the header row was windowed, which is the difference between the
+  // two phases stated as one line.
+  expect(census.headers, 'mounted headers').toBeGreaterThan(0);
+  expect(census.headers, 'mounted headers').toBeLessThan(CI_TIER.cols);
   expect(run.canvases, 'canvases after the initial wave').toBeGreaterThan(0);
   expect(run.canvases).toBeLessThanOrEqual(DT_BUDGET.VIZ.CANVAS_COUNT_MAX);
+  // A chart lives inside its header, so it cannot outlive one. Cheap, but it
+  // is the assertion that catches a chart stranded on a detached container —
+  // the leak the mount hook exists to make impossible.
+  expect(run.canvases, 'charts never outnumber the headers holding them').toBeLessThanOrEqual(
+    census.headers,
+  );
   expect(census.withCanvas, 'headers owning a chart').toBe(run.canvases);
 
   expect(run.queries, 'queries from load start to vizReady').toBeLessThanOrEqual(
@@ -146,9 +158,10 @@ test('the load promise resolves before the charts are drawn', async ({ page }) =
   expect(measures.viz!).toBeGreaterThan(measures.total!);
 });
 
-test('eager restores the old contract: everything built, load waits for it', async ({ page }) => {
+test('eager builds a chart for every mounted header, and load waits for them', async ({ page }) => {
   await installObserverCensus(page);
   const run = await mountAndSettle(page, { tier: 'wide-ci', viz: true, eager: true });
+  const census = await headerCensus(page);
   const measures = await loadMeasures(page);
   const observers = await readObserverCensus(page);
 
@@ -156,18 +169,38 @@ test('eager restores the old contract: everything built, load waits for it', asy
     `[viz-lazy] wide-ci eager ${JSON.stringify({
       queries: run.queries,
       canvases: run.canvases,
+      headers: census.headers,
       measures,
     })}`,
   );
 
-  // The control for every "after" number above: this is what the library did
-  // for every table before this phase, and still does on request.
-  expect(run.canvases, 'eager builds every applicable column').toBeGreaterThan(
-    DT_BUDGET.VIZ.CANVAS_COUNT_MAX,
+  // What `eager` means once the header row is windowed. It used to mean "one
+  // chart per column" — 300 here, 1,000 at WIDE — and a header row that no
+  // longer holds every column cannot honour that literally. It still honours
+  // it where it can be honoured: **no mounted header is left without a
+  // chart**, on screen or not, which is the visibility-independence the
+  // option is asked for. The lazy run leaves 9 of the same 17 empty.
+  //
+  // Every class the tier generates is chartable (integers, doubles, letters,
+  // dates, times, timestamps, booleans), so "every mounted header" and "every
+  // applicable mounted header" are the same set here — if a future class is
+  // not applicable this fails, and says so.
+  expect(census.headers, 'mounted headers').toBeGreaterThan(0);
+  expect(census.withCanvas, 'eager leaves no mounted header without a chart').toBe(census.headers);
+  expect(run.canvases).toBe(census.withCanvas);
+  // Two aggregate queries per chart is the floor; the fixed load traffic is
+  // on top. Measured 38 = 4 + 17 × 2.
+  expect(run.queries, 'two aggregates per eager chart, at least').toBeGreaterThanOrEqual(
+    run.canvases * DT_BUDGET.VIZ.QUERIES_PER_VIZ_CREATE,
   );
-  expect(run.queries).toBeGreaterThan(DT_BUDGET.VIZ.QUERIES_AT_LOAD_MAX);
-  // …and the load promise waits for them, so `dt:load:viz` lands *inside*
-  // `dt:load:total` rather than after it.
+  // Eager is bounded by the window too, and that is new: it used to cost 604
+  // queries at WIDE_CI and 2,004 at WIDE, which is what made it the control
+  // case for {@link DT_BUDGET.VIZ.QUERIES_AT_LOAD_MAX} rather than a subject
+  // of it.
+  expect(run.queries).toBeLessThanOrEqual(DT_BUDGET.VIZ.QUERIES_AT_LOAD_MAX);
+  // …and the load promise still waits for them, so `dt:load:viz` lands
+  // *inside* `dt:load:total` rather than after it. This is the half of the
+  // old contract windowing does not touch, and the reason the option exists.
   expect(measures.viz!).toBeLessThanOrEqual(measures.total!);
   // One shared theme observer either way — that saving is not lazy-only.
   expect(observers.mutation).toBeLessThanOrEqual(DT_BUDGET.VIZ.MUTATION_OBSERVERS_MAX);

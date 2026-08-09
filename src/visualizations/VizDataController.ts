@@ -14,12 +14,19 @@
  *
  * - **Creation is visibility-gated.** One `IntersectionObserver` rooted at the
  *   header's horizontal scroll container decides which columns get an
- *   instance. Headers still exist for every column (that is Phase 4's job),
- *   but canvases do not.
- * - **Data outlives the DOM.** `TableContainer.render()` wipes the whole
- *   header row, so an instance cannot survive a hide / show / pin / reorder.
- *   Its *data* can: the controller snapshots on destroy and seeds the
+ *   instance.
+ * - **Data outlives the DOM.** An instance cannot survive the loss of its
+ *   header. Its *data* can: the controller snapshots on destroy and seeds the
  *   replacement, so a column move issues zero queries.
+ *
+ * The header row is windowed too, which is why the controller cannot get its
+ * whole picture from {@link VizDataController.sync}: a column outside the
+ * window has no container to observe when a sync runs. Headers announce
+ * themselves through {@link VizDataController.observeColumn} and
+ * {@link VizDataController.unobserveColumn} as they mount and unmount, while
+ * `sync()` keeps receiving the *full* viz-applicable column list — handing it
+ * the mounted subset would destroy every chart outside the window and re-arm
+ * the wave on each pass.
  * - **Offscreen columns go stale, not refetched.** A filter change refreshes
  *   only the columns with a live instance; everything else is marked and
  *   fetched if and when it scrolls into view.
@@ -230,6 +237,20 @@ export class VizDataController implements FilterFanOutScheduler {
    */
   private fallbackVisible = false;
 
+  /**
+   * The `eager` flag the last {@link sync} ran with.
+   *
+   * Remembered rather than passed per call because {@link observeColumn} has
+   * to take the same branch that sync took. The header row is windowed, so
+   * most columns mount long after the sync that registered them — and handing
+   * their containers to the observer is not merely "less eager", it is
+   * actively wrong: the column window overscans by a whole viewport, so the
+   * observer's first callback would report a freshly mounted header as
+   * outside the 400 px keep band and reclaim the canvas `visualizations:
+   * { eager: true }` exists to guarantee.
+   */
+  private eagerMode = false;
+
   /** Bumped on every filter broadcast; stamped onto entries on success. */
   private filterEpoch = 0;
 
@@ -308,6 +329,7 @@ export class VizDataController implements FilterFanOutScheduler {
    */
   sync(columns: ColumnSchema[], generation: number, opts: VizSyncOptions = {}): void {
     if (this.destroyed) return;
+    this.eagerMode = opts.eager === true;
 
     const wanted = new Set(columns.map((c) => c.name));
     for (const [name, entry] of [...this.entries]) {
@@ -431,6 +453,91 @@ export class VizDataController implements FilterFanOutScheduler {
     // callback still waits for it — that window is one frame wide, and the
     // callback arrives when the user returns.
     if (documentHidden()) this.closeWave();
+  }
+
+  /**
+   * Start observing a column whose header has just been mounted.
+   *
+   * {@link sync} observes the container of every viz-applicable column, but
+   * the header row is windowed: a column outside the window has no container
+   * to observe when the sync runs, so nothing would ever report that its
+   * header arrived — the chart would stay unbuilt for the table's lifetime.
+   * The mount hook says so instead, and the container is re-resolved here
+   * because it did not exist a moment ago.
+   *
+   * Columns the controller does not track are ignored: a column with no
+   * applicable visualization is never in `entries`, and neither is one
+   * mounted before the first {@link sync}, which sweeps the mounted set
+   * itself.
+   */
+  observeColumn(columnName: string): void {
+    if (this.destroyed) return;
+    const entry = this.entries.get(columnName);
+    if (!entry) return;
+    const container = this.options.host.getVizContainer(columnName);
+    if (!container) return;
+
+    const previous = this.io;
+    if (this.eagerMode || this.fallbackVisible || !this.ensureObserver()) {
+      // No visibility signal is coming, or none is wanted. The mount is then
+      // the signal — the same branch `sync()` takes, for the same three
+      // reasons.
+      entry.visible = true;
+      this.createAndTrack(columnName, entry);
+      return;
+    }
+
+    if (this.io !== previous) {
+      // `ensureObserver` rebuilt on a changed root, which disconnects every
+      // target the previous one held. Observing only the column that happened
+      // to mount would leave every other one dark until the next `sync()` —
+      // silently, since nothing reports an observer that is simply not
+      // watching. Re-arm the whole tracked set instead. Unreachable while
+      // `.dt-header-scroll` is built once and never replaced; `getRoot`'s own
+      // contract says it may not stay that way.
+      for (const name of this.entries.keys()) {
+        const el = this.options.host.getVizContainer(name);
+        if (el) this.io!.observe(el);
+      }
+    }
+
+    this.io!.observe(container);
+
+    // Observer callbacks are at least a frame late. A column the observer
+    // still considers visible has only lost its header — the column window
+    // overscans by a whole viewport, so a header is unmounted long after the
+    // 400 px keep band let its chart go, and the two disagree only when the
+    // header row was rebuilt under it (hide/show/pin/reorder) or scrolled
+    // faster than the observer reports. Rebuild it here rather than a frame
+    // later: seeded from the snapshot it costs zero queries, and waiting is
+    // what made every canvas blink on operations users perform constantly.
+    if (entry.visible) this.createAndTrack(columnName, entry);
+  }
+
+  /**
+   * Stop observing a column whose header is being unmounted, and reclaim its
+   * canvas.
+   *
+   * An instance cannot outlive its header: the canvas, its `ResizeObserver`,
+   * its theme registration and its `WindowListenerManager` entry all hang off
+   * DOM that is about to be discarded. `destroyInstance` snapshots the data
+   * on the way out, so the column redraws with no query when it comes back.
+   *
+   * `entry.visible` is deliberately left alone. It records what the observer
+   * last said, not whether a header happens to be mounted, and it is what
+   * both {@link observeColumn} and {@link sync} read to decide whether a
+   * chart may be rebuilt synchronously instead of a frame later. Clearing it
+   * here would make every header-row rebuild flash empty charts.
+   */
+  unobserveColumn(columnName: string): void {
+    if (this.destroyed) return;
+    const entry = this.entries.get(columnName);
+    if (!entry) return;
+    // Read the container before `destroyInstance` nulls it; fall back to the
+    // host for an entry that had no live instance to record one.
+    const container = entry.container ?? this.options.host.getVizContainer(columnName);
+    if (container) this.io?.unobserve(container);
+    this.destroyInstance(columnName, entry);
   }
 
   /**

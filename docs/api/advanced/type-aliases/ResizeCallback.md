@@ -8,7 +8,7 @@
 
 > **ResizeCallback** = (`dimensions`) => `void`
 
-Defined in: [table/TableContainer.ts:146](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableContainer.ts#L146)
+Defined in: [table/TableContainer.ts:185](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableContainer.ts#L185)
 
 Resize callback type
 

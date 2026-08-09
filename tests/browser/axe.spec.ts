@@ -46,6 +46,35 @@ async function scan(page: Page): Promise<AxeSummary> {
   };
 }
 
+/**
+ * Wait out the column-move replay before scanning.
+ *
+ * Moving a column replays the move as a 300 ms `transform` transition on every
+ * header that shifted (`TableContainer.ts:2239`). Scan while that is in flight
+ * and axe reports `color-contrast` as **incomplete** — "background color could
+ * not be determined because it is overlapped by another element" — which is
+ * exactly true of two headers sliding past each other, and which this file
+ * treats as a failure. Measured mid-flight: the header at index 0 sitting at
+ * `translateX(149.85px)` of a 150 px move, with the layout column at
+ * `translateX(-149.85px)` over the top of it.
+ *
+ * Waits for the transition rather than sleeping past it. The two frames come
+ * first because the replay arms inside `requestAnimationFrame` and starts the
+ * transition on the frame after that — a transform-is-clear check run
+ * immediately would pass before the move had begun, which is the same race
+ * wearing a different hat.
+ */
+async function settleColumnMove(page: Page): Promise<void> {
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll('.dt-col-header')).every(
+      (el) => getComputedStyle(el).transform === 'none',
+    ),
+  );
+}
+
 const describeFindings = (findings: { id: string; targets: string[] }[]): string =>
   findings.map((f) => `  ${f.id}\n${f.targets.map((t) => `      ${t}`).join('\n')}`).join('\n');
 
@@ -129,6 +158,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('.dt-col-header--layout')).toHaveCount(1);
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Shift+ArrowRight');
+    await settleColumnMove(page);
 
     assertClean(await scan(page), `column layout mode, ${theme}`);
   });

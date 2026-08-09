@@ -8,7 +8,7 @@
 
 > **derivedColumnsEqual**(`a`, `b`): `boolean`
 
-Defined in: [core/UndoManager.ts:147](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/UndoManager.ts#L147)
+Defined in: [core/UndoManager.ts:147](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/UndoManager.ts#L147)
 
 Shallow equality check for derived column lists.
 Compares by name, kind, expression (for expression cols), and

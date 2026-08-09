@@ -6,7 +6,7 @@
 
 # Class: ValueCounts
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:182](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L182)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:182](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L182)
 
 Stacked bar visualization rendered into the column header for categorical
 columns (`string` / `boolean` / `uuid`). Each segment represents a distinct
@@ -23,7 +23,7 @@ tails fold into an "other" segment.
 
 > **new ValueCounts**(`container`, `column`, `options`): `ValueCounts`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:233](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L233)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:233](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L233)
 
 #### Parameters
 
@@ -53,7 +53,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:233](https://github.com/j
 
 > `protected` **canvas**: `HTMLCanvasElement`
 
-Defined in: [visualizations/BaseVisualization.ts:192](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L192)
+Defined in: [visualizations/BaseVisualization.ts:192](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L192)
 
 #### Inherited from
 
@@ -65,7 +65,7 @@ Defined in: [visualizations/BaseVisualization.ts:192](https://github.com/jeyabba
 
 > `protected` **column**: [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:229](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L229)
+Defined in: [visualizations/BaseVisualization.ts:229](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L229)
 
 #### Inherited from
 
@@ -77,7 +77,7 @@ Defined in: [visualizations/BaseVisualization.ts:229](https://github.com/jeyabba
 
 > `protected` **container**: `HTMLElement`
 
-Defined in: [visualizations/BaseVisualization.ts:228](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L228)
+Defined in: [visualizations/BaseVisualization.ts:228](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L228)
 
 #### Inherited from
 
@@ -89,7 +89,7 @@ Defined in: [visualizations/BaseVisualization.ts:228](https://github.com/jeyabba
 
 > `protected` **ctx**: `CanvasRenderingContext2D`
 
-Defined in: [visualizations/BaseVisualization.ts:193](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L193)
+Defined in: [visualizations/BaseVisualization.ts:193](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L193)
 
 #### Inherited from
 
@@ -101,7 +101,7 @@ Defined in: [visualizations/BaseVisualization.ts:193](https://github.com/jeyabba
 
 > `protected` **dataPromise**: `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:211](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L211)
+Defined in: [visualizations/BaseVisualization.ts:211](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L211)
 
 #### Inherited from
 
@@ -113,7 +113,7 @@ Defined in: [visualizations/BaseVisualization.ts:211](https://github.com/jeyabba
 
 > `protected` **destroyed**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:197](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L197)
+Defined in: [visualizations/BaseVisualization.ts:197](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L197)
 
 #### Inherited from
 
@@ -125,7 +125,7 @@ Defined in: [visualizations/BaseVisualization.ts:197](https://github.com/jeyabba
 
 > `protected` **dpr**: `number`
 
-Defined in: [visualizations/BaseVisualization.ts:196](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L196)
+Defined in: [visualizations/BaseVisualization.ts:196](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L196)
 
 #### Inherited from
 
@@ -137,7 +137,7 @@ Defined in: [visualizations/BaseVisualization.ts:196](https://github.com/jeyabba
 
 > `protected` **height**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:195](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L195)
+Defined in: [visualizations/BaseVisualization.ts:195](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L195)
 
 #### Inherited from
 
@@ -149,7 +149,7 @@ Defined in: [visualizations/BaseVisualization.ts:195](https://github.com/jeyabba
 
 > `protected` **isFilterUpdate**: `boolean` = `false`
 
-Defined in: [visualizations/BaseVisualization.ts:198](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L198)
+Defined in: [visualizations/BaseVisualization.ts:198](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L198)
 
 #### Inherited from
 
@@ -161,7 +161,7 @@ Defined in: [visualizations/BaseVisualization.ts:198](https://github.com/jeyabba
 
 > `protected` **options**: [`VisualizationOptions`](../interfaces/VisualizationOptions.md)
 
-Defined in: [visualizations/BaseVisualization.ts:230](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L230)
+Defined in: [visualizations/BaseVisualization.ts:230](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L230)
 
 #### Inherited from
 
@@ -173,7 +173,7 @@ Defined in: [visualizations/BaseVisualization.ts:230](https://github.com/jeyabba
 
 > `protected` **width**: `number` = `0`
 
-Defined in: [visualizations/BaseVisualization.ts:194](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L194)
+Defined in: [visualizations/BaseVisualization.ts:194](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L194)
 
 #### Inherited from
 
@@ -187,7 +187,7 @@ Defined in: [visualizations/BaseVisualization.ts:194](https://github.com/jeyabba
 
 > **get** `protected` **statsMessages**(): `object`
 
-Defined in: [visualizations/BaseVisualization.ts:214](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L214)
+Defined in: [visualizations/BaseVisualization.ts:214](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L214)
 
 Resolved i18n statistics strings; English defaults when no `messages` supplied.
 
@@ -546,7 +546,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 > `protected` **clear**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:490](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L490)
+Defined in: [visualizations/BaseVisualization.ts:490](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L490)
 
 Clear the entire canvas
 
@@ -564,7 +564,7 @@ Clear the entire canvas
 
 > **clearBrush**(): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1917](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1917)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1917](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1917)
 
 Clear brush - no-op for value counts
 Provided for interface compatibility
@@ -579,7 +579,7 @@ Provided for interface compatibility
 
 > **clearSelection**(): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1885](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1885)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1885](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1885)
 
 Clear segment selection (public method for external LIFO handling)
 
@@ -593,7 +593,7 @@ Clear segment selection (public method for external LIFO handling)
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:648](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L648)
+Defined in: [visualizations/BaseVisualization.ts:648](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L648)
 
 Destroy the visualization and clean up all resources.
 Must be called when the visualization is no longer needed.
@@ -612,7 +612,7 @@ Must be called when the visualization is no longer needed.
 
 > **dispatchWindowKeyDown**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:478](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L478)
+Defined in: [visualizations/BaseVisualization.ts:478](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L478)
 
 Called by WindowListenerManager to dispatch window keydown events.
 
@@ -636,7 +636,7 @@ Called by WindowListenerManager to dispatch window keydown events.
 
 > **dispatchWindowMouseUp**(`e`): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:467](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L467)
+Defined in: [visualizations/BaseVisualization.ts:467](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L467)
 
 Called by WindowListenerManager to dispatch window mouseup events.
 Translates coordinates relative to this instance's canvas.
@@ -661,7 +661,7 @@ Translates coordinates relative to this instance's canvas.
 
 > **exportDataSnapshot**(): [`ValueCountsSnapshot`](../interfaces/ValueCountsSnapshot.md) \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:252](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L252)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:252](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L252)
 
 Value counts caches more than the foreground/background pair: the
 unfiltered category **order**, its counts, whether an "Other" bucket
@@ -684,7 +684,7 @@ re-scans and re-orders its segments under the user.
 
 > **fetchData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:314](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L314)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:314](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L314)
 
 Fetch value counts data from DuckDB.
 
@@ -706,7 +706,7 @@ B) Any filter active: ghost = initialData, foreground = allFilters aligned to in
 
 > `protected` **formatNumber**(`value`): `string`
 
-Defined in: [visualizations/BaseVisualization.ts:497](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L497)
+Defined in: [visualizations/BaseVisualization.ts:497](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L497)
 
 Format a number with locale-specific formatting
 
@@ -730,7 +730,7 @@ Format a number with locale-specific formatting
 
 > **getBrushState**(): `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1901](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1901)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1901](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1901)
 
 Get brush state - value counts doesn't support brush
 Provided for interface compatibility
@@ -745,7 +745,7 @@ Provided for interface compatibility
 
 > **getColumn**(): [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseVisualization.ts:504](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L504)
+Defined in: [visualizations/BaseVisualization.ts:504](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L504)
 
 Get the column this visualization represents
 
@@ -763,7 +763,7 @@ Get the column this visualization represents
 
 > **getSelectionState**(): `object`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1835](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1835)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1835](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1835)
 
 Get the current selection state for persistence
 Returns array of selected segment indices
@@ -786,7 +786,7 @@ Returns array of selected segment indices
 
 > `protected` **handleClick**(`x`, `y`, `event?`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1457](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1457)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1457](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1457)
 
 Handle click - select segment(s) and create filter
 Supports multi-select with Ctrl/Cmd+click for regular categories
@@ -819,7 +819,7 @@ Supports multi-select with Ctrl/Cmd+click for regular categories
 
 > `protected` **handleKeyDown**(`_key`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1823](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1823)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1823](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1823)
 
 Handle keyboard events - ESC handled globally
 
@@ -843,7 +843,7 @@ Handle keyboard events - ESC handled globally
 
 > `protected` **handleMouseDown**(`_x`, `_y`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1809](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1809)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1809](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1809)
 
 Handle mouse down - no brush for value counts
 
@@ -871,7 +871,7 @@ Handle mouse down - no brush for value counts
 
 > `protected` **handleMouseLeave**(): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1792](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1792)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1792](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1792)
 
 Handle mouse leave - clear hover states
 
@@ -889,7 +889,7 @@ Handle mouse leave - clear hover states
 
 > `protected` **handleMouseMove**(`x`, `y`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1322](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1322)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1322](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1322)
 
 Handle mouse movement - detect which segment is under cursor and update stats
 
@@ -917,7 +917,7 @@ Handle mouse movement - detect which segment is under cursor and update stats
 
 > `protected` **handleMouseUp**(`_x`, `_y`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1816](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1816)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1816](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1816)
 
 Handle mouse up - no brush for value counts
 
@@ -945,7 +945,7 @@ Handle mouse up - no brush for value counts
 
 > `protected` **hydrateOrFetch**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:597](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L597)
+Defined in: [visualizations/BaseVisualization.ts:597](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L597)
 
 The eager-first-load idiom, factored so every built-in shares it: hydrate
 from `options.initialSnapshot` when one was supplied and accepted,
@@ -971,7 +971,7 @@ overwritten by `= null` a moment later.
 
 > **importDataSnapshot**(`snapshot`): `boolean`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:266](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L266)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:266](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L266)
 
 Adopt a snapshot produced by [exportDataSnapshot](BaseVisualization.md#exportdatasnapshot) and reflect it —
 an implementation is expected to leave the instance fully rendered, as
@@ -1021,7 +1021,7 @@ class SparkLine extends BaseVisualization {
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [visualizations/BaseVisualization.ts:511](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L511)
+Defined in: [visualizations/BaseVisualization.ts:511](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L511)
 
 Check if the visualization has been destroyed
 
@@ -1039,7 +1039,7 @@ Check if the visualization has been destroyed
 
 > **render**(): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:468](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L468)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:468](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L468)
 
 Main render function - orchestrates all drawing
 
@@ -1057,7 +1057,7 @@ Main render function - orchestrates all drawing
 
 > **setBrushState**(`_state`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1909](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1909)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1909](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1909)
 
 Set brush state - no-op for value counts
 Provided for interface compatibility
@@ -1078,7 +1078,7 @@ Provided for interface compatibility
 
 > **setSelectionState**(`state`): `void`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:1854](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/valuecounts/ValueCounts.ts#L1854)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:1854](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/valuecounts/ValueCounts.ts#L1854)
 
 Restore selection state from saved state
 Call after data is loaded (fetchData completed)
@@ -1099,7 +1099,7 @@ Call after data is loaded (fetchData completed)
 
 > **updateFilters**(`filters`): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:610](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L610)
+Defined in: [visualizations/BaseVisualization.ts:610](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L610)
 
 Update filters on a live visualization and re-fetch data.
 Used by CrossfilterCoordinator to push new filter arrays
@@ -1125,7 +1125,7 @@ without recreating the visualization.
 
 > `protected` **updateSize**(): `void`
 
-Defined in: [visualizations/BaseVisualization.ts:385](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L385)
+Defined in: [visualizations/BaseVisualization.ts:385](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L385)
 
 Update canvas dimensions to match container.
 Accounts for device pixel ratio for crisp rendering.
@@ -1144,7 +1144,7 @@ Accounts for device pixel ratio for crisp rendering.
 
 > **waitForData**(): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseVisualization.ts:524](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/visualizations/BaseVisualization.ts#L524)
+Defined in: [visualizations/BaseVisualization.ts:524](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/BaseVisualization.ts#L524)
 
 Resolves once the visualization's initial `fetchData()` settles. The
 facade awaits this during `loadData` so a consumer chaining `addFilter`

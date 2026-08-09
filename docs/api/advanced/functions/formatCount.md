@@ -8,7 +8,7 @@
 
 > **formatCount**(`count`): `string`
 
-Defined in: [statistics/StatsFormatters.ts:62](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/statistics/StatsFormatters.ts#L62)
+Defined in: [statistics/StatsFormatters.ts:62](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/statistics/StatsFormatters.ts#L62)
 
 Format an integer count for display (rows, nulls, distinct values).
 Uses locale formatting with thousands separators.

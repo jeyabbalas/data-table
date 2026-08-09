@@ -25,6 +25,7 @@ import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
+import type { ColumnHeader } from '@/table/ColumnHeader';
 import { ColumnHeaderTooltipPopover } from '@/table/ColumnHeaderTooltipPopover';
 import { MIN_OVERSCAN_COLUMNS } from '@/table/ColumnWindow';
 import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
@@ -535,5 +536,253 @@ describe('windowed header row — widths', () => {
     expect(headerFor(h.root(), 'col_30')!.style.width).toBe('275px');
 
     h.container.destroy();
+  });
+});
+
+/**
+ * The two `@internal` mount hooks.
+ *
+ * They exist because a windowed row has no moment at which every column's
+ * header exists, so "decorate each header once" — the visualization canvas, a
+ * custom stats panel — cannot be a sweep over `getColumnHeaders()` any more.
+ * `createDataTable` drives all of it from these two callbacks, which makes
+ * their firing discipline load-bearing: an announcement too many builds a
+ * second chart into a slot that already has one, an announcement too few
+ * leaves a column blank for the table's lifetime, and an announcement at the
+ * wrong instant hands the listener a header it can no longer read.
+ *
+ * The two callbacks are deliberately asymmetric about the DOM. A header is
+ * announced for mounting while it is still **detached** — the caller places
+ * the element after `mountColumnHeader` returns, and a full render fills a
+ * detached row before swapping it in, so no ordering inside the mount could
+ * make it otherwise. It is announced for unmounting while it is still
+ * **connected**, because that is the listener's last chance to read anything
+ * off it. Both halves are pinned below.
+ */
+describe('windowed header row — mount hooks', () => {
+  const namesOf = (headers: ColumnHeader[]): string[] =>
+    headers.map((header) => header.getColumn().name);
+  const sorted = (names: string[]): string[] => [...names].sort();
+
+  it('announces every mounted header exactly once, built and wired', () => {
+    // What each announcement carried, keyed by the header it announced. The
+    // hook's contract is that its argument is usable *at the call*, and what
+    // `createDataTable` reads off it there is the element and the two slots.
+    const announced = new Map<
+      ColumnHeader,
+      { column: string; el: HTMLElement; stats: HTMLElement; viz: HTMLElement }
+    >();
+    const connectedAtMount: string[] = [];
+    let calls = 0;
+    const h = mount({
+      onHeaderMount: (header: ColumnHeader) => {
+        calls++;
+        if (header.getElement().isConnected) connectedAtMount.push(header.getColumn().name);
+        announced.set(header, {
+          column: header.getColumn().name,
+          el: header.getElement(),
+          stats: header.getStatsElement(),
+          viz: header.getVizContainer(),
+        });
+      },
+    });
+
+    // One call per header instance ever built. A header announced twice is a
+    // second stats panel constructed into a slot that already owns one, with
+    // the first leaked — it is never `destroy()`ed, because only the header
+    // that displaced it could have said so.
+    expect(calls).toBe(announced.size);
+
+    // Not one header was in the document at its own mount, and no listener may
+    // assume one will be: the caller places the element after
+    // `mountColumnHeader` returns, and `render()` fills a detached row before
+    // swapping it in, so no ordering inside the mount could promise it. This is
+    // the contract a chart is written against — `BaseVisualization` measures
+    // 0×0 here and corrects itself on the `ResizeObserver` callback it gets
+    // once the element is connected. Anything that instead needed layout at
+    // this instant would be silently wrong at every scroll offset.
+    expect(connectedAtMount).toEqual([]);
+
+    const row = headerRowEl(h.root())!;
+    const mounted = h.container.getColumnHeaders();
+    expect(mounted.length).toBeGreaterThan(0);
+    expect(namesOf(mounted)).toEqual(headerColumns(h.root()));
+
+    for (const header of mounted) {
+      const call = announced.get(header);
+      expect(call, `no mount announcement for ${header.getColumn().name}`).toBeDefined();
+      // What is promised instead: the header is resolvable by name and by
+      // element the moment the hook runs, and the element it hands over is the
+      // one the render goes on to place — not a fragment discarded and rebuilt
+      // afterwards, which would leave every chart drawing into a canvas that
+      // nothing on screen contains.
+      expect(call!.el).toBe(header.getElement());
+      expect(row.contains(call!.el)).toBe(true);
+      // Both slots resolved inside the call: `createDataTable` writes the
+      // stats line and hands the viz container to the controller there.
+      expect(call!.el.contains(call!.stats)).toBe(true);
+      expect(call!.el.contains(call!.viz)).toBe(true);
+    }
+
+    h.container.destroy();
+  });
+
+  it('announces the columns a shift brings in and takes out, and nothing that stayed', () => {
+    const mounted: ColumnHeader[] = [];
+    const unmounted: ColumnHeader[] = [];
+    const h = mount({
+      onHeaderMount: (header: ColumnHeader) => void mounted.push(header),
+      onHeaderUnmount: (header: ColumnHeader) => void unmounted.push(header),
+    });
+
+    const before = headerColumns(h.root());
+    mounted.length = 0;
+    unmounted.length = 0;
+
+    // Fifteen columns right: `[0, 14)` becomes `[5, 29)`, so both ends move
+    // and nine columns are common to the two windows.
+    h.scrollTo(COL_WIDTH * 15);
+    const after = headerColumns(h.root());
+
+    expect(sorted(namesOf(mounted))).toEqual(sorted(after.filter((c) => !before.includes(c))));
+    expect(sorted(namesOf(unmounted))).toEqual(sorted(before.filter((c) => !after.includes(c))));
+    // Neither side is trivially empty — a window that stopped moving would
+    // satisfy the two equalities above with nothing at all.
+    expect(mounted.length).toBeGreaterThan(0);
+    expect(unmounted.length).toBeGreaterThan(0);
+
+    // The survivors are the point. They are the same header elements as
+    // before the scroll, so re-announcing one would have `createDataTable`
+    // tear down and rebuild its chart and its panel on every scroll frame
+    // that moves the window by a column.
+    const stayed = before.filter((c) => after.includes(c));
+    expect(stayed.length).toBeGreaterThan(0);
+    for (const name of stayed) {
+      expect(namesOf(mounted)).not.toContain(name);
+      expect(namesOf(unmounted)).not.toContain(name);
+    }
+
+    h.container.destroy();
+  });
+
+  it('hands the unmount hook a header that is still live and still listed', () => {
+    interface Snapshot {
+      column: string;
+      destroyed: boolean;
+      elementConnected: boolean;
+      statsConnected: boolean;
+      listed: boolean;
+    }
+    const seen: Snapshot[] = [];
+    let live: TableContainer | null = null;
+    const h = mount({
+      onHeaderUnmount: (header: ColumnHeader) => {
+        seen.push({
+          column: header.getColumn().name,
+          destroyed: header.isDestroyed(),
+          elementConnected: header.getElement().isConnected,
+          statsConnected: header.getStatsElement().isConnected,
+          listed: live?.getColumnHeaders().includes(header) ?? false,
+        });
+      },
+    });
+    live = h.container;
+    // Whatever the initial render unmounted was announced before `live` could
+    // be assigned, so those records cannot answer `listed` honestly.
+    seen.length = 0;
+
+    h.scrollTo(COL_WIDTH * 15);
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const snapshot of seen) {
+      // The hook is the last moment the header can be read: `createDataTable`
+      // snapshots the column's chart data off its live canvas here and runs
+      // its stats panel's `destroy()`, and neither survives
+      // `ColumnHeader.destroy()` detaching the element.
+      expect(snapshot).toEqual({
+        column: snapshot.column,
+        destroyed: false,
+        elementConnected: true,
+        statsConnected: true,
+        listed: true,
+      });
+    }
+
+    h.container.destroy();
+  });
+
+  it('pairs every unmount with a mount across a sweep out and back', () => {
+    const live = new Set<ColumnHeader>();
+    const net = new Map<string, number>();
+    const unpaired: string[] = [];
+    const bump = (name: string, by: number): void => void net.set(name, (net.get(name) ?? 0) + by);
+
+    const h = mount({
+      onHeaderMount: (header: ColumnHeader) => {
+        live.add(header);
+        bump(header.getColumn().name, 1);
+      },
+      onHeaderUnmount: (header: ColumnHeader) => {
+        // By identity, not by name: an unmount for a header that was never
+        // announced as mounted is a `destroy()` with nothing on the other
+        // side of it — the listener never attached anything to that header.
+        if (!live.delete(header)) unpaired.push(header.getColumn().name);
+        bump(header.getColumn().name, -1);
+      },
+    });
+
+    for (const left of [1500, 4500, TOTAL_WIDTH - VIEWPORT, 4500, 1500, 0]) h.scrollTo(left);
+
+    expect(unpaired).toEqual([]);
+
+    const mounted = h.container.getColumnHeaders();
+    expect(live.size).toBe(mounted.length);
+    for (const header of mounted) expect(live.has(header)).toBe(true);
+
+    // Per column, mounts minus unmounts is 1 for exactly the columns mounted
+    // now and 0 for every column the sweep merely passed over. A column left
+    // at 2 is a chart and a panel leaked; one at -1 is a header torn down
+    // twice, which runs a panel's `destroy()` on an already-destroyed panel.
+    const expected = new Map(headerColumns(h.root()).map((name) => [name, 1]));
+    expect(new Map([...net].filter(([, count]) => count !== 0))).toEqual(expected);
+
+    h.container.destroy();
+  });
+
+  it('unmounts every still-mounted header on destroy', () => {
+    const unmounted: ColumnHeader[] = [];
+    const h = mount({ onHeaderUnmount: (header: ColumnHeader) => void unmounted.push(header) });
+    h.scrollTo(4500);
+
+    const mounted = h.container.getColumnHeaders();
+    expect(mounted.length).toBeGreaterThan(0);
+    unmounted.length = 0;
+
+    h.container.destroy();
+
+    // Teardown is the one moment the whole window unmounts at once, and it is
+    // the moment a bare `destroy()` loop over the headers would silently skip
+    // — leaving `createDataTable` holding a stats panel per mounted column
+    // that never receives the `destroy()` its author was promised.
+    expect(sorted(namesOf(unmounted))).toEqual(sorted(namesOf(mounted)));
+    expect(new Set(unmounted).size).toBe(unmounted.length);
+    for (const header of mounted) expect(unmounted).toContain(header);
+  });
+
+  it('renders and scrolls the same with no hooks supplied', () => {
+    // Both options are optional, and the paths that construct a container
+    // without them are ordinary: `TableContainer` used directly through
+    // `/advanced`, and `createDataTable` before its first header exists.
+    const hooked = mount({ onHeaderMount: () => {}, onHeaderUnmount: () => {} });
+    const bare = mount();
+
+    for (const left of [COL_WIDTH * 15, TOTAL_WIDTH - VIEWPORT, 0]) {
+      hooked.scrollTo(left);
+      expect(() => bare.scrollTo(left)).not.toThrow();
+      expect(headerColumns(bare.root())).toEqual(headerColumns(hooked.root()));
+    }
+
+    expect(() => bare.container.destroy()).not.toThrow();
+    hooked.container.destroy();
   });
 });

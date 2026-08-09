@@ -6,7 +6,7 @@
 
 # Class: TableBody
 
-Defined in: [table/TableBody.ts:174](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L174)
+Defined in: [table/TableBody.ts:186](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L186)
 
 TableBody renders data rows using virtual scrolling.
 
@@ -26,7 +26,7 @@ body.destroy();
 
 > **new TableBody**(`container`, `state`, `bridge`, `actions?`, `options?`): `TableBody`
 
-Defined in: [table/TableBody.ts:368](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L368)
+Defined in: [table/TableBody.ts:390](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L390)
 
 #### Parameters
 
@@ -60,7 +60,7 @@ Defined in: [table/TableBody.ts:368](https://github.com/jeyabbalas/data-table/bl
 
 > **destroy**(): `void`
 
-Defined in: [table/TableBody.ts:2835](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2835)
+Defined in: [table/TableBody.ts:2883](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2883)
 
 Destroy the table body and clean up resources
 
@@ -74,7 +74,7 @@ Destroy the table body and clean up resources
 
 > **getColumnSpan**(`column`): \{ `left`: `number`; `width`: `number`; \} \| `null`
 
-Defined in: [table/TableBody.ts:2761](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2761)
+Defined in: [table/TableBody.ts:2809](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2809)
 
 Where `column` sits on the horizontal content axis, in px, or `null` when
 it is not a visible column.
@@ -108,7 +108,7 @@ if (span) bodyScroll.scrollLeft = span.left - body.getPinnedWidthPx();
 
 > **getColumnWindow**(): [`ColumnWindow`](../interfaces/ColumnWindow.md)
 
-Defined in: [table/TableBody.ts:2741](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2741)
+Defined in: [table/TableBody.ts:2789](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2789)
 
 The column window the rendered rows were built for.
 
@@ -134,7 +134,7 @@ const rendered = win.pinnedCount + (win.end - win.start);
 
 > **getPinnedWidthPx**(): `number`
 
-Defined in: [table/TableBody.ts:2781](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2781)
+Defined in: [table/TableBody.ts:2829](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2829)
 
 Total width of the leading pinned run — where unpinned content starts, and
 the width of the sticky band covering it.
@@ -153,7 +153,7 @@ Summed over `visibleColumns[0, pinnedCount)` rather than over
 
 > **getVirtualScroller**(): [`VirtualScroller`](VirtualScroller.md)
 
-Defined in: [table/TableBody.ts:2662](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2662)
+Defined in: [table/TableBody.ts:2710](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2710)
 
 Get the virtual scroller instance
 
@@ -167,7 +167,7 @@ Get the virtual scroller instance
 
 > **getVisibleRange**(): [`VisibleRange`](../interfaces/VisibleRange.md)
 
-Defined in: [table/TableBody.ts:2669](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2669)
+Defined in: [table/TableBody.ts:2717](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2717)
 
 Get current visible range
 
@@ -181,7 +181,7 @@ Get current visible range
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [table/TableBody.ts:442](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L442)
+Defined in: [table/TableBody.ts:485](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L485)
 
 Initialize the table body
 
@@ -198,7 +198,7 @@ initial render.
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/TableBody.ts:2806](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2806)
+Defined in: [table/TableBody.ts:2854](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2854)
 
 Check if the table body has been destroyed
 
@@ -212,7 +212,7 @@ Check if the table body has been destroyed
 
 > **refresh**(): `void`
 
-Defined in: [table/TableBody.ts:2791](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2791)
+Defined in: [table/TableBody.ts:2839](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2839)
 
 Force a refresh of the table body
 
@@ -226,7 +226,7 @@ Force a refresh of the table body
 
 > **refreshColumnWindow**(): `void`
 
-Defined in: [table/TableBody.ts:2694](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2694)
+Defined in: [table/TableBody.ts:2742](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2742)
 
 Recompute the column window and re-render the body if it moved.
 
@@ -259,7 +259,7 @@ body.refreshColumnWindow(); // cells for the new offset exist now
 
 > **scrollToRow**(`index`, `align?`): `void`
 
-Defined in: [table/TableBody.ts:2799](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/table/TableBody.ts#L2799)
+Defined in: [table/TableBody.ts:2847](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/TableBody.ts#L2847)
 
 Scroll to a specific row
 

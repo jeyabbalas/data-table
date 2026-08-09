@@ -194,9 +194,15 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
 
   for (const stop of stops) {
     // Headers, not body cells: `readVisibleGrid` reads `.dt-col-header`, and
-    // the header row is still built in full. Phase 4 narrows *this* number;
-    // the probe installed above is what holds it honest when it does.
-    expect(stop.columns, `at scrollLeft ${stop.scrollLeft}`).toHaveLength(TIER.cols);
+    // the header row is now windowed on the same model as the body — pinned
+    // prefix, a run of columns near the viewport, two spacers. So this counts
+    // the window, not the table, and the two things that have to hold at
+    // every offset are that the window is a proper subset and that it still
+    // covers what the user is looking at. The gated perf specs put a number
+    // on the first; the census above is what keeps the second from
+    // degenerating into "renders something".
+    expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeGreaterThan(0);
+    expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeLessThan(TIER.cols);
     expect(stop.columns.some((col) => col.fullyVisible)).toBe(true);
   }
   expect(stops[0]!.scrollLeft).toBe(0);

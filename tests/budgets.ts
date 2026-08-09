@@ -161,16 +161,24 @@ export const DT_BUDGET = {
      * Cap at 66 — the phase doc's figure, and it survives measurement for a
      * different reason than the doc gave: 66 covers a viewport roughly three
      * times wider than the one measured (~30 charts), which is the widest
-     * realistic case. Eager at WIDE_CI is 604 and at WIDE 2,004, so the cap
-     * discriminates by more than 9×.
+     * realistic case.
+     *
+     * Eager used to be the control case for this cap, at 604 queries at
+     * WIDE_CI and 2,004 at WIDE. It is no longer: once the header row is
+     * windowed, eager builds a chart per *mounted header* rather than per
+     * column, and WIDE_CI eager measures **38** — inside this cap. The cap
+     * now guards the lazy path against a regression to per-column fetching,
+     * and `viz-lazy.spec.ts` asserts eager fits under it too.
      */
     QUERIES_AT_LOAD_MAX: 66,
     /**
      * `.dt-root canvas` elements once the initial wave has settled.
      *
-     * Measured **8** at both tiers; **0** with visualizations off; **300**
-     * (every applicable column) under `eager: true` at WIDE_CI and 1,000 at
-     * WIDE. Cap at 40 for the same viewport-width reason as above.
+     * Measured **8** at both tiers; **0** with visualizations off; **17**
+     * under `eager: true` at WIDE_CI — one per mounted header, where before
+     * the header row was windowed it was one per applicable column, 300 here
+     * and 1,000 at WIDE. Cap at 40 for the same viewport-width reason as
+     * above.
      *
      * This is the assertion that a scrolled-away column has *no* canvas, not
      * merely an idle one — canvas memory is the second half of what made

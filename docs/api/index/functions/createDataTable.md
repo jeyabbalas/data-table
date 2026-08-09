@@ -8,7 +8,7 @@
 
 > **createDataTable**(`opts`): `Promise`\<[`DataTable`](../interfaces/DataTable.md)\>
 
-Defined in: [DataTable.ts:544](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/DataTable.ts#L544)
+Defined in: [DataTable.ts:544](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/DataTable.ts#L544)
 
 Create a fully-wired data table mounted in `container`.
 

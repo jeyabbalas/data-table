@@ -6,7 +6,7 @@
 
 # Class: AnnotationError
 
-Defined in: [core/errors.ts:222](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/errors.ts#L222)
+Defined in: [core/errors.ts:222](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/errors.ts#L222)
 
 Annotation CRUD, JSON I/O, or session-restore error.
 
@@ -37,7 +37,7 @@ catch (err) {
 
 > **new AnnotationError**(`message`, `options?`): `AnnotationError`
 
-Defined in: [core/errors.ts:223](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/errors.ts#L223)
+Defined in: [core/errors.ts:223](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/errors.ts#L223)
 
 #### Parameters
 
@@ -63,7 +63,7 @@ Defined in: [core/errors.ts:223](https://github.com/jeyabbalas/data-table/blob/0
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -75,7 +75,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/0f
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -87,7 +87,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/0f
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/core/errors.ts#L66)
 
 #### Returns
 

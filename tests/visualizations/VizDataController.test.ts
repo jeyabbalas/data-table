@@ -201,6 +201,17 @@ function column(name: string, type: ColumnSchema['type'] = 'integer'): ColumnSch
   return { name, type, nullable: false, originalType: 'INTEGER' };
 }
 
+/** One column's header, with the `.dt-col-viz` slot the controller writes into. */
+function makeHeader(name: string): HTMLElement {
+  const header = document.createElement('div');
+  header.className = 'dt-col-header';
+  header.setAttribute('data-column', name);
+  const viz = document.createElement('div');
+  viz.className = 'dt-col-viz';
+  header.appendChild(viz);
+  return header;
+}
+
 /**
  * Build the header DOM the controller queries against.
  *
@@ -209,20 +220,18 @@ function column(name: string, type: ColumnSchema['type'] = 'integer'): ColumnSch
  * (`headerRow.innerHTML = ''`). {@link Harness.rebuildHeaders} models exactly
  * that — a fresh scroll container per render would be a different (and
  * wrong) test, because the observer roots at the container.
+ *
+ * That is not the only way the row changes. It is also **windowed**: headers
+ * mount and unmount one at a time as the user scrolls sideways, which
+ * {@link Harness.mountHeader} / {@link Harness.unmountHeader} model instead.
+ * Both happen on a live table — a render wipes the whole row, a scroll moves
+ * one header — so both are kept.
  */
 function mountHeaders(names: string[], into?: HTMLElement): HTMLElement {
   const root = into ?? document.createElement('div');
   root.className = 'dt-header-scroll';
   root.innerHTML = '';
-  for (const name of names) {
-    const header = document.createElement('div');
-    header.className = 'dt-col-header';
-    header.setAttribute('data-column', name);
-    const viz = document.createElement('div');
-    viz.className = 'dt-col-viz';
-    header.appendChild(viz);
-    root.appendChild(header);
-  }
+  for (const name of names) root.appendChild(makeHeader(name));
   if (!into) document.body.appendChild(root);
   return root;
 }
@@ -237,6 +246,21 @@ interface Harness {
   io(): FakeIntersectionObserver;
   /** Rebuild the header DOM, as `TableContainer.render()` does. */
   rebuildHeaders(names: string[]): void;
+  /**
+   * Mount one column's header into the existing row, as the windowed header
+   * row does when the column scrolls into the window.
+   *
+   * The two spacers the real row keeps on either side of the window are not
+   * modelled: they carry no `data-column`, so nothing the controller or the
+   * observer looks up can see them.
+   */
+  mountHeader(name: string): void;
+  /**
+   * Unmount one column's header. `TableContainer` fires `onHeaderUnmount`
+   * *before* the element leaves the document, so a test that models the hook
+   * calls `unobserveColumn` first and this second.
+   */
+  unmountHeader(name: string): void;
   /** Flip what the host's `getRoot()` answers — a root that resolves late. */
   setRootAvailable(available: boolean): void;
 }
@@ -286,6 +310,12 @@ function makeHarness(
     io: () => FakeIntersectionObserver.instances[FakeIntersectionObserver.instances.length - 1]!,
     rebuildHeaders(next: string[]) {
       mountHeaders(next, root);
+    },
+    mountHeader(name: string) {
+      root.appendChild(makeHeader(name));
+    },
+    unmountHeader(name: string) {
+      root.querySelector(`[data-column="${name}"]`)?.remove();
     },
     setRootAvailable(available: boolean) {
       rootAvailable = available;
@@ -930,6 +960,245 @@ describe('eager mode', () => {
     expect(StubViz.created).toHaveLength(2);
     expect(FakeIntersectionObserver.instances).toHaveLength(0);
     await expect(h.controller.whenWaveSettled()).resolves.toBe(2);
+  });
+});
+
+describe('a windowed header row (observeColumn / unobserveColumn)', () => {
+  /**
+   * `TableContainer` mounts only the pinned prefix plus the columns near the
+   * horizontal viewport, between two spacers, so most headers arrive long
+   * after the `sync()` that registered their column — and `sync()` observes
+   * only the containers that exist at the instant it runs. The mount and
+   * unmount hooks are what close that gap; these tests drive them by hand,
+   * because the hooks themselves are `TableContainer`'s to fire.
+   */
+
+  it('never builds a chart for a header that mounted after its sync and said nothing', async () => {
+    const h = makeHarness([]);
+    h.controller.sync([column('a')], 1);
+    h.mountHeader('a');
+
+    // `emitAllOutside` walks the observer's own target set, which is the
+    // entire vocabulary a real callback has: a target that was never passed
+    // to `observe()` cannot appear in one. So there is no future callback
+    // that mentions 'a', and its chart stays unbuilt for the life of the
+    // table — which is the bug `observeColumn` exists to close.
+    h.io().emitAllOutside();
+    await drain();
+
+    expect(h.io().observed.size).toBe(0);
+    expect(StubViz.created).toHaveLength(0);
+    expect(h.controller.hasLiveViz('a')).toBe(false);
+  });
+
+  it('observes a header that mounted after its sync, and builds its chart on the next callback', async () => {
+    const h = makeHarness([]);
+    h.controller.sync([column('a')], 1);
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+
+    // The container is re-resolved inside the call: it did not exist when the
+    // sync ran, so nothing the controller already holds could name it.
+    expect([...h.io().observed]).toEqual([h.host.getVizContainer('a')]);
+    // A mount is a request for a visibility signal, not a claim of one.
+    expect(StubViz.created).toHaveLength(0);
+
+    h.io().emit({ a: 'create' });
+    await drain();
+    expect(StubViz.created.map((v) => v.columnName)).toEqual(['a']);
+    expect(h.controller.getEntry('a')?.status).toBe('fresh');
+  });
+
+  it('ignores a mount for a column it does not track', () => {
+    // A column with no applicable visualization is never in `entries`, but its
+    // header mounts like any other and the hook fires for it just the same.
+    const h = makeHarness(['a', 'no-viz']);
+    h.controller.sync([column('a')], 1);
+    expect(h.io().observed.size).toBe(1);
+
+    expect(() => h.controller.observeColumn('no-viz')).not.toThrow();
+    expect(h.io().observed.size).toBe(1);
+    expect(h.controller.getColumnNames()).toEqual(['a']);
+    expect(StubViz.created).toHaveLength(0);
+  });
+
+  it('ignores a mount whose container does not resolve', () => {
+    const h = makeHarness([]);
+    h.controller.sync([column('a')], 1);
+
+    // The hook fired but the `.dt-col-viz` slot is not there — a mount racing
+    // a container teardown, and the shape `getVizContainer` reports for any
+    // column whose header has already gone again.
+    h.controller.observeColumn('a');
+
+    expect(h.io().observed.size).toBe(0);
+    expect(StubViz.created).toHaveLength(0);
+    expect(h.controller.getEntry('a')?.viz).toBeNull();
+    // In particular no observer was rebuilt on the way to giving up.
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+  });
+
+  it('reclaims the canvas on unmount and redraws from the snapshot with no query', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+    const first = StubViz.created[0]!;
+    const firstContainer = h.host.getVizContainer('a')!;
+    expect(first.fetchCount).toBe(1);
+
+    h.controller.unobserveColumn('a');
+    h.unmountHeader('a');
+
+    // The instance cannot outlive its header — the canvas, its ResizeObserver
+    // and its window listeners all hang off DOM that is about to go. Holding
+    // the observer's reference to the detached target would be a retained
+    // header per column scrolled past, until the next sync's `disconnect()`.
+    expect(h.io().observed.has(firstContainer)).toBe(false);
+    expect(first.destroyed).toBe(true);
+    expect(h.controller.getEntry('a')?.viz).toBeNull();
+    expect(h.controller.getEntry('a')?.snapshot).toEqual({ of: 'a' });
+
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+    await drain();
+
+    // Scrolling a column out of the header window and back is among the
+    // cheapest things a user can do, and at 1,000 columns it happens
+    // constantly. It must not cost a query.
+    expect(StubViz.created).toHaveLength(2);
+    expect(StubViz.created[1]!.seeded).toEqual({ of: 'a' });
+    expect(StubViz.created[1]!.fetchCount).toBe(0);
+    expect(h.io().observed.has(h.host.getVizContainer('a')!)).toBe(true);
+  });
+
+  it('keeps the observer verdict across an unmount, so the returning header comes back drawn', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    h.controller.unobserveColumn('a');
+    h.unmountHeader('a');
+
+    // `visible` records what the observer last said about where the column
+    // is, not whether a header happens to be mounted. The window overscans by
+    // a whole viewport, so a header unmounts long after the 400 px keep band
+    // would have let its chart go.
+    expect(h.controller.getEntry('a')?.visible).toBe(true);
+
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+
+    // Synchronously, with no observer callback delivered between the unmount
+    // and here. Callbacks are at least a frame late; waiting for one is what
+    // makes a canvas visibly blink on every hide/show/pin/reorder.
+    expect(StubViz.created).toHaveLength(2);
+    expect(h.controller.hasLiveViz('a')).toBe(true);
+  });
+
+  it('unobserves a column that never had an instance, and tolerates one with no header', async () => {
+    const h = makeHarness(['a', 'b']);
+    h.controller.sync([column('a'), column('b')], 1);
+    h.io().emit({ a: 'create', b: 'outside' });
+    await drain();
+    const bContainer = h.host.getVizContainer('b')!;
+    expect(h.io().observed.has(bContainer)).toBe(true);
+
+    // 'b' is observed but was never built, so the entry recorded no container
+    // of its own: the host's live lookup is the only way to name the target
+    // to release. Getting this wrong leaks the far commoner case — a column
+    // scrolled through the window without ever entering the create band.
+    h.controller.unobserveColumn('b');
+    h.unmountHeader('b');
+    expect(h.io().observed.has(bContainer)).toBe(false);
+    expect(h.controller.getEntry('b')?.viz).toBeNull();
+    expect(h.controller.getEntry('b')?.snapshot).toBeNull();
+
+    // Called again with the header already gone, and for a column that was
+    // never tracked: both are ordinary during a teardown.
+    expect(() => h.controller.unobserveColumn('b')).not.toThrow();
+    expect(() => h.controller.unobserveColumn('no-viz')).not.toThrow();
+    expect(h.errors).toEqual([]);
+  });
+
+  it('creates on mount, with no observer at all, while the last sync was eager', () => {
+    const h = makeHarness([]);
+    h.controller.sync([column('a')], 1, { eager: true });
+    // Eager or not, a column outside the header window has nothing to create
+    // into — which is why the flag has to survive the sync that carried it.
+    expect(StubViz.created).toHaveLength(0);
+
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+
+    expect(StubViz.created.map((v) => v.columnName)).toEqual(['a']);
+    expect(h.controller.getEntry('a')?.visible).toBe(true);
+    // No observer, and that is the part the remembered flag actually buys.
+    // The chart would be built either way — the eager sweep marks every
+    // column visible, container or not, and `observeColumn` re-creates a
+    // visible column regardless of which branch it takes. What differs is
+    // that a column handed to an observer gets reported on: the header window
+    // overscans by a whole viewport, so a mounted header can sit well outside
+    // the 400 px keep band, and the first callback would then reclaim the
+    // canvas — see 'does not create in the hysteresis band…', where an
+    // 'outside' report destroys a live instance. Silently unwinding
+    // `visualizations: { eager: true }` for every column the user scrolls to
+    // is the failure this guards.
+    expect(FakeIntersectionObserver.instances).toHaveLength(0);
+  });
+
+  it('goes back to observing once a later sync is not eager', async () => {
+    const h = makeHarness([]);
+    h.controller.sync([column('a')], 1, { eager: true });
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+    expect(StubViz.created).toHaveLength(1);
+
+    h.controller.sync([column('a'), column('b')], 2);
+    h.mountHeader('b');
+    h.controller.observeColumn('b');
+
+    // The mount no longer decides: it hands the column to the observer and
+    // waits, exactly as a column present at sync time would have.
+    expect(StubViz.created).toHaveLength(1);
+    expect(h.io().observed.has(h.host.getVizContainer('b')!)).toBe(true);
+
+    h.io().emit({ b: 'create' });
+    await drain();
+    expect(StubViz.created.map((v) => v.columnName)).toEqual(['a', 'b']);
+  });
+
+  it('creates on mount when the environment has no IntersectionObserver', () => {
+    const h = makeHarness([], { useIO: false });
+    h.controller.sync([column('a')], 1);
+    expect(StubViz.created).toHaveLength(0);
+
+    h.mountHeader('a');
+    h.controller.observeColumn('a');
+
+    // jsdom, and browsers predating the API: nothing will ever report on this
+    // container, so the mount is the only visibility signal there is.
+    expect(StubViz.created.map((v) => v.columnName)).toEqual(['a']);
+    expect(h.controller.hasLiveViz('a')).toBe(true);
+  });
+
+  it('goes inert after destroy()', async () => {
+    const h = makeHarness(['a']);
+    h.controller.sync([column('a')], 1);
+    h.io().emit({ a: 'create' });
+    await drain();
+
+    h.controller.destroy();
+
+    // `TableContainer` tears its header row down after the controller is
+    // gone, so both hooks fire once more per mounted column — against a
+    // controller that has already released its observer.
+    expect(() => h.controller.observeColumn('a')).not.toThrow();
+    expect(() => h.controller.unobserveColumn('a')).not.toThrow();
+    expect(StubViz.created).toHaveLength(1);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    expect(h.io().observed.size).toBe(0);
   });
 });
 

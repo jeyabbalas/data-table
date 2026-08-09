@@ -149,6 +149,34 @@ export interface TableContainerOptions {
    * `TableBody`. Default: true. See {@link TableBodyOptions.prefetch}.
    */
   prefetch?: boolean | undefined;
+  /**
+   * Called once a `ColumnHeader` has been constructed and registered.
+   *
+   * The header row is windowed, so this fires as columns scroll in — not once
+   * per table. Anything that decorates a header from outside (the
+   * visualization canvas, a custom stats panel) has to be driven from here
+   * rather than from a sweep over `getColumnHeaders()`, which names only what
+   * is mounted at the instant it is called.
+   *
+   * The header is resolvable by name and its elements are usable, but it is
+   * **not** necessarily connected to the document yet: the caller places it
+   * afterwards, and a full render fills a detached row before swapping it in.
+   * A listener that needs geometry must therefore measure on its own
+   * `ResizeObserver` rather than at this callback — which is what the
+   * visualizations already do, and why they come up correctly sized.
+   *
+   * @internal
+   */
+  onHeaderMount?: ((header: ColumnHeader) => void) | undefined;
+  /**
+   * Called before a `ColumnHeader` is torn down, while it is still live and
+   * still in the DOM — late enough that nothing else has touched it, early
+   * enough that a listener can read state off it (a chart's data snapshot,
+   * for instance) before it is gone.
+   *
+   * @internal
+   */
+  onHeaderUnmount?: ((header: ColumnHeader) => void) | undefined;
 }
 
 /**
@@ -341,6 +369,8 @@ export class TableContainer {
       fetchBlockSize: undefined as unknown as number,
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
+      onHeaderMount: undefined as unknown as (header: ColumnHeader) => void,
+      onHeaderUnmount: undefined as unknown as (header: ColumnHeader) => void,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -1107,6 +1137,12 @@ export class TableContainer {
 
     this.headerByColumn.set(colName, header);
     this.columnReorder?.attachHandler(el);
+    // Last, so the hook sees a header that is fully wired and findable by
+    // name — `createDataTable` resolves the visualization container through
+    // exactly that lookup. Placement is still the caller's, and deliberately
+    // stays there: `render()` fills a detached row, so no ordering here could
+    // promise a connected element anyway.
+    this.resolvedOptions.onHeaderMount?.(header);
     return header;
   }
 
@@ -1126,6 +1162,10 @@ export class TableContainer {
    * `destroy()` itself — any popover still anchored inside the header.
    */
   private unmountColumnHeader(header: ColumnHeader): void {
+    // First, while the header is still whole and still resolvable by name:
+    // the visualization it carries snapshots its data off a live canvas.
+    this.resolvedOptions.onHeaderUnmount?.(header);
+
     const el = header.getElement();
     const active = this.activeElementInRoot();
     if (active instanceof HTMLElement && el.contains(active)) {
@@ -2689,8 +2729,22 @@ export class TableContainer {
   }
 
   /**
-   * Get all column header instances.
-   * Useful for accessing visualization containers in each header.
+   * The `ColumnHeader` instances that are **mounted right now**, in DOM order.
+   *
+   * The header row is windowed: it holds the pinned prefix plus the columns
+   * near the horizontal viewport, between two spacers. So this is a snapshot
+   * of the current window, not the table's columns — it changes as the user
+   * scrolls sideways, and a wide table never returns more than a few dozen
+   * entries however many columns it has. Read `state.visibleColumns` for the
+   * column list.
+   *
+   * Suitable for acting on what is on screen (reading a visualization
+   * container, restyling the mounted set). Not suitable as a place to attach
+   * per-column behaviour: a header that scrolls in later will not have been
+   * in any array this method ever returned. Drive that from the container's
+   * `onHeaderMount` / `onHeaderUnmount` options instead.
+   *
+   * The array is a copy; the headers in it are live.
    */
   getColumnHeaders(): ColumnHeader[] {
     return [...this.columnHeaders];

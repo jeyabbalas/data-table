@@ -8,7 +8,7 @@
 
 > **SerializedDerivedColumnDef** = [`ExpressionColumnDef`](../../index/interfaces/ExpressionColumnDef.md) \| [`VectorColumnDef`](../../index/interfaces/VectorColumnDef.md) \| [`PooledVectorColumnRef`](../interfaces/PooledVectorColumnRef.md)
 
-Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/blob/0fffb089390f6336ccfbca8768e01ab6139df260/src/persistence/types.ts#L126)
+Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/persistence/types.ts#L126)
 
 Derived column in serialized form: may be inline (pre-v4) or pooled (v4+).
 Pool references replace inline values to deduplicate vector data across

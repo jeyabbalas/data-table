@@ -11,7 +11,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
 | 3.5   | _(no doc — review-driven)_                                                   | done        | 2026-08-08 | 2026-08-08 | Hardening: 6 defects, comments, anchors  |
-| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                        |
+| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | in progress | 2026-08-08 | —          | Header row windowing + incremental diffs |
 | 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
 | 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                        |

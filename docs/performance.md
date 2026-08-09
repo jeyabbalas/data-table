@@ -78,9 +78,9 @@ proportioned correctly (`setTotalRows`, `VirtualScroller.ts:434-443`). So
 `clientHeight` comes back as the height of the entire spacer, the computed
 visible range covers every row under the cap, and the body treats that
 range like any other: it builds a DOM row — or a placeholder row — for
-each index (`renderVisibleRows`, `src/table/TableBody.ts:1112`) and
+each index (`renderVisibleRows`, `src/table/TableBody.ts:1654`) and
 fetches the lot in 128-row blocks, at most 2 in flight (`ensureFetched`,
-`TableBody.ts:699`).
+`TableBody.ts:1095`).
 
 The height cap saturates the damage rather than removing it: at the
 default 32 px the degenerate "viewport" tops out at ~468,750 rendered rows
@@ -509,13 +509,15 @@ outstanding". Wait on `[data-placeholder], .dt-cell[data-pending]`.
 furthest from the live viewport first, so raising it makes longer
 back-scrolls repaint instantly with zero queries at the cost of memory.
 It never affects correctness — only how often previously seen blocks are
-re-fetched. Read it as a multiplier rather than a hard row cap: because a
+re-fetched. It is budgeted in values rather than row keys: because a
 cached row holds the columns that were fetched for it and not others,
-what is budgeted is `rowCacheRows × the columns the viewport currently
-needs`, counted in values. On a table narrow enough that one fetch covers
-every visible column that is exactly `rowCacheRows` rows, unchanged;
-above it, the same 2048 stops meaning 50× more memory on a 1,000-column
-table than on a 20-column one.
+what is budgeted is `rowCacheRows × the width of one fetch`. A row costs
+exactly one fetch's worth, so the steady state is still `rowCacheRows`
+rows — the same number on a 20-column table and a 1,000-column one, where
+the old row-key rule meant 50× more memory on the second. Only rows that
+accumulated several column bands over a horizontal sweep count for more,
+and eviction reclaims those on the column axis rather than deleting whole
+rows to pay for them.
 
 `prefetch` (default `true`) speculatively fetches one block beyond the
 viewport in the current scroll direction while the pipeline is otherwise

@@ -6,7 +6,7 @@
 
 # Interface: IntervalHistogramSnapshot
 
-Defined in: [visualizations/histogram/IntervalHistogram.ts:34](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/histogram/IntervalHistogram.ts#L34)
+Defined in: [visualizations/histogram/IntervalHistogram.ts:34](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/histogram/IntervalHistogram.ts#L34)
 
 [IntervalHistogram](../classes/IntervalHistogram.md)'s data snapshot — see [BaseVisualization.exportDataSnapshot](../classes/BaseVisualization.md#exportdatasnapshot).
 
@@ -20,7 +20,7 @@ Defined in: [visualizations/histogram/IntervalHistogram.ts:34](https://github.co
 
 > **backgroundData**: [`IntervalHistogramData`](IntervalHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/histogram/SharedHistogramBase.ts#L151)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/histogram/SharedHistogramBase.ts#L151)
 
 #### Inherited from
 
@@ -32,7 +32,7 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:151](https://github
 
 > **data**: [`IntervalHistogramData`](IntervalHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/histogram/SharedHistogramBase.ts#L150)
+Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/histogram/SharedHistogramBase.ts#L150)
 
 #### Inherited from
 
@@ -44,6 +44,6 @@ Defined in: [visualizations/histogram/SharedHistogramBase.ts:150](https://github
 
 > **initialData**: [`IntervalHistogramData`](IntervalHistogramData.md) \| `null`
 
-Defined in: [visualizations/histogram/IntervalHistogram.ts:36](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/histogram/IntervalHistogram.ts#L36)
+Defined in: [visualizations/histogram/IntervalHistogram.ts:36](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/histogram/IntervalHistogram.ts#L36)
 
 The cached unfiltered pass `ensureInitialData` would otherwise re-issue.

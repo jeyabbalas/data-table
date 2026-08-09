@@ -156,7 +156,11 @@ export async function waitForRowsResolved(page: Page): Promise<void> {
       const host = document.querySelector(`#${hostId}`);
       const scrollEl = host?.querySelector('.dt-body-scroll');
       if (!host || !scrollEl) return false;
-      const placeholders = host.querySelectorAll('[data-placeholder]').length;
+      // A whole absent row, or a present row whose column has not arrived —
+      // clipped projections made the second a distinct outstanding state.
+      const placeholders = host.querySelectorAll(
+        '[data-placeholder], .dt-cell[data-pending]',
+      ).length;
       const rows = Array.from(host.querySelectorAll('.dt-body .dt-row[data-row-id]'));
       const key =
         scrollEl.scrollTop.toFixed(2) +

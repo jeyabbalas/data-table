@@ -257,12 +257,33 @@
    fetches project the padded column window rather than every column, so a
    horizontal scroll can put a resolved row's unresolved cells on screen —
    distinct from `.dt-cell--placeholder`, which stands in for a whole absent
-   row. Deliberately quiet: it is empty, it clears in one round trip, and a
-   shimmer over a band of them would draw more attention than the missing
-   values deserve. No new custom property, so `npm run check:css-vars` has
-   nothing to reconcile. */
+   row and carries a text label the tertiary colour above applies to.
+
+   A pending cell has no text, so a colour alone would paint nothing: the bar
+   is what distinguishes "on its way" from an empty or NULL value, which is
+   the one thing a blank box cannot say for itself. `currentColor` at low
+   opacity rather than a token, so it inherits the theme and adds no custom
+   property for `npm run check:css-vars` to reconcile; static rather than a
+   shimmer, because a band of them animating during a sideways scroll would
+   draw far more attention than a value that arrives in one round trip
+   deserves — and because `prefers-reduced-motion` would then have to undo
+   it. Inline-block so it flows in the cell's existing box: `.dt-cell` is not
+   positioned, and adding `position: relative` here would put it in a
+   different stacking context from every other cell. */
 .dt-cell--pending {
   color: var(--dt-text-tertiary);
+}
+
+.dt-cell--pending::after {
+  content: '';
+  display: inline-block;
+  width: 2.5em;
+  max-width: 100%;
+  height: 0.5em;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.22;
 }
 
 .dt-cell--number {

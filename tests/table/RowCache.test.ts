@@ -125,7 +125,7 @@ describe('RowCache', () => {
     const cd = interner.intern(['c', 'd']);
 
     cache.merge(7, rowFor(7, ['a', 'b']), ab);
-    expect(cache.covers(7, cd)).toBe(false);
+    expect(cache.covers(7, cd.names)).toBe(false);
     cache.merge(7, rowFor(7, ['c', 'd']), cd);
 
     expect(cache.get(7)).toEqual({
@@ -135,10 +135,10 @@ describe('RowCache', () => {
       c: 'c@7',
       d: 'd@7',
     });
-    expect(cache.covers(7, ab)).toBe(true);
-    expect(cache.covers(7, cd)).toBe(true);
-    expect(cache.covers(7, interner.intern(['a', 'd']))).toBe(true);
-    expect(cache.covers(7, interner.intern(['a', 'e']))).toBe(false);
+    expect(cache.covers(7, ab.names)).toBe(true);
+    expect(cache.covers(7, cd.names)).toBe(true);
+    expect(cache.covers(7, interner.intern(['a', 'd']).names)).toBe(true);
+    expect(cache.covers(7, interner.intern(['a', 'e']).names)).toBe(false);
     expect(cache.size).toBe(1);
     expect(cache.cellCount).toBe(4);
   });
@@ -152,7 +152,7 @@ describe('RowCache', () => {
     cache.merge(3, rowFor(3, ['a', 'b', 'c']), ab);
 
     expect(cache.coverageOf(3)!.names.has('c')).toBe(false);
-    expect(cache.covers(3, cache.coverageInterner.intern(['c']))).toBe(false);
+    expect(cache.covers(3, cache.coverageInterner.intern(['c']).names)).toBe(false);
     expect(cache.cellCount).toBe(2);
   });
 
@@ -186,7 +186,7 @@ describe('RowCache', () => {
     expect(cache.has(4)).toBe(false);
     expect(cache.get(4)).toBeUndefined();
     expect(cache.coverageOf(4)).toBeUndefined();
-    expect(cache.covers(4, ab)).toBe(false);
+    expect(cache.covers(4, ab.names)).toBe(false);
     expect(cache.size).toBe(1);
     expect(cache.cellCount).toBe(2);
 
@@ -194,6 +194,49 @@ describe('RowCache', () => {
     cache.delete(4);
     cache.delete(999);
     expect(cache.cellCount).toBe(2);
+  });
+
+  it('prunes a row to a band, dropping the values as well as the coverage', () => {
+    const cache = new RowCache();
+    const interner = cache.coverageInterner;
+    const abc = interner.intern(['a', 'b', 'c']);
+    cache.merge(3, rowFor(3, ['a', 'b', 'c']), abc);
+    expect(cache.cellCount).toBe(3);
+
+    cache.prune(3, interner.intern(['b', 'c', 'z']));
+    expect([...cache.coverageOf(3)!.names].sort()).toEqual(['b', 'c']);
+    expect(cache.cellCount).toBe(2);
+    // The value went with the coverage — a pruned column that kept its value
+    // would paint as data the moment the window came back over it, without a
+    // fetch having confirmed it is still current.
+    expect(cache.get(3)).not.toHaveProperty('a');
+    expect(cache.get(3)!['b']).toBe('b@3');
+    // Outside coverage by construction, so untouched.
+    expect(cache.get(3)!['__rowid__']).toBe(3);
+
+    // A row already inside `keep` keeps its coverage object identity.
+    const before = cache.coverageOf(3)!;
+    cache.prune(3, interner.intern(['a', 'b', 'c', 'd']));
+    expect(cache.coverageOf(3)).toBe(before);
+    expect(cache.cellCount).toBe(2);
+  });
+
+  it('drops a row pruned to nothing rather than keeping an empty husk', () => {
+    const cache = new RowCache();
+    const interner = cache.coverageInterner;
+    cache.merge(9, rowFor(9, ['a', 'b']), interner.intern(['a', 'b']));
+
+    cache.prune(9, interner.intern(['y', 'z']));
+    // Not `has(9) && cellCount === 0`: eviction ranks blocks by cell count, so
+    // a zero-cell row could never be reclaimed and the map would grow for the
+    // session.
+    expect(cache.has(9)).toBe(false);
+    expect(cache.size).toBe(0);
+    expect(cache.cellCount).toBe(0);
+
+    // Pruning an absent row is a no-op.
+    cache.prune(9, interner.intern(['a']));
+    expect(cache.cellCount).toBe(0);
   });
 
   it('clears everything but keeps the interner and its ids', () => {
@@ -242,7 +285,7 @@ describe('RowCache', () => {
     expect(second.coverageInterner).toBe(interner);
     const ab = interner.intern(['a', 'b']);
     first.merge(0, rowFor(0, ['a', 'b']), ab);
-    expect(first.covers(0, second.coverageInterner.intern(['b', 'a']))).toBe(true);
+    expect(first.covers(0, second.coverageInterner.intern(['b', 'a']).names)).toBe(true);
   });
 });
 
@@ -297,6 +340,25 @@ describe('RowCache — randomized interleavings against a model', () => {
             everMerged: new Set([...columns, extra]),
           });
         }
+      } else if (roll < 0.88) {
+        // Column-axis eviction, interleaved with the rest so `cellCount` and
+        // the coverage bookkeeping are checked across every ordering of
+        // merge / prune / delete rather than only after a clean merge.
+        const index = pick(ROWS);
+        const keep = interner.intern(someColumns());
+        cache.prune(index, keep);
+
+        const entry = model.get(index);
+        if (entry) {
+          for (const column of [...entry.coverage]) {
+            if (!keep.names.has(column)) {
+              entry.coverage.delete(column);
+              delete entry.row[column];
+            }
+          }
+          // A row left covering nothing is dropped, not kept as a husk.
+          if (entry.coverage.size === 0) model.delete(index);
+        }
       } else if (roll < 0.95) {
         const index = pick(ROWS);
         cache.delete(index);
@@ -324,7 +386,7 @@ describe('RowCache — randomized interleavings against a model', () => {
           expect(cache.get(index)).toBeUndefined();
           expect(cache.coverageOf(index)).toBeUndefined();
           // An absent row covers nothing, including the empty need.
-          expect(cache.covers(index, interner.intern([]))).toBe(false);
+          expect(cache.covers(index, interner.intern([]).names)).toBe(false);
           continue;
         }
         expect(cache.has(index)).toBe(true);
@@ -338,7 +400,7 @@ describe('RowCache — randomized interleavings against a model', () => {
         for (let probe = 0; probe < 3; probe++) {
           const need = someColumns();
           const wanted = need.every((column) => entry.coverage.has(column));
-          expect(cache.covers(index, interner.intern(need))).toBe(wanted);
+          expect(cache.covers(index, interner.intern(need).names)).toBe(wanted);
         }
       }
     }

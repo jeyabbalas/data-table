@@ -273,19 +273,19 @@ frame before first layout — where the pixel term collapses to nothing.
 The two spacers are `div.dt-col-spacer` with `role="presentation"`,
 `aria-hidden="true"`, `data-col-spacer="left" | "right"` and an inline
 `flex: 0 0 Npx`
-([`src/table/TableBody.ts:1711-1719`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:2101-2109`](../../src/table/TableBody.ts)).
 They stand in for the total width of the columns not rendered, which is
 what keeps the horizontal scroll extent and every rendered cell's
 x-position identical to the un-windowed layout.
 
 Each row stamps its own structure as `data-window="P:W"`
-([`src/table/TableBody.ts:338-339`](../../src/table/TableBody.ts)) — a
+([`src/table/TableBody.ts:457,2077-2083`](../../src/table/TableBody.ts)) — a
 _structure_ signature, never a position one. A window that slides at
 constant size leaves every mounted row's shape valid, so those rows are
 repainted in place; only a change in `P` or `W` reshapes a row. The cell
 for absolute visible-column index `absIdx` sits at
 `absIdx < P ? absIdx : absIdx - start + P + 1`
-([`src/table/TableBody.ts:1738-1741`](../../src/table/TableBody.ts)),
+([`src/table/TableBody.ts:2128-2131`](../../src/table/TableBody.ts)),
 which is how a row's DOM is read and written without scanning it.
 
 The arithmetic lives in
@@ -317,14 +317,14 @@ exactly, never round the spacer itself.
 
 Recompute is driven by a passive, rAF-throttled `scroll` listener on the
 body scroll container
-([`src/table/TableBody.ts:812-822`](../../src/table/TableBody.ts)): a
+([`src/table/TableBody.ts:947-957`](../../src/table/TableBody.ts)): a
 second listener on the same element rather than a hook into the
 scroller's own, because `VirtualScroller.onScroll` fires only when the
 _row_ range moves, which a purely horizontal scroll never does. It
 returns after one property read when only `scrollTop` moved, so vertical
 scrolling stays free, and it re-renders only when
 `(start, end, pinnedCount)` actually changed. `refreshColumnWindow()`
-([`src/table/TableBody.ts:2694-2725`](../../src/table/TableBody.ts)) is
+([`src/table/TableBody.ts:3141-3178`](../../src/table/TableBody.ts)) is
 the synchronous form, called after every programmatic `scrollLeft` write
 — keyboard navigation, the filter-change scroll pin, the scroll restore
 after a re-render — because the browser does not dispatch `scroll` until
@@ -542,7 +542,7 @@ Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:1093-1215`](../../src/table/TableBody.ts))
+([`src/table/TableBody.ts:1095-1222`](../../src/table/TableBody.ts))
 keeps at most 2 block fetches in flight — the worker executes serially,
 so that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
@@ -559,7 +559,7 @@ column span beyond the window's trailing edge on a horizontal one.
 
 A block projects the **padded column window**, not every visible column
 ([`fetchColumnsFor`/`buildFetchSet`,
-`src/table/TableBody.ts:1015-1091`](../../src/table/TableBody.ts)): the
+`src/table/TableBody.ts:1043-1092`](../../src/table/TableBody.ts)): the
 pinned prefix, plus the rendered window extended by one full span on each
 side and quantized outward to multiples of `COL_QUANTUM` (16). The pad
 is what makes ordinary sideways scrolling free — a move of one viewport
@@ -568,19 +568,22 @@ keeps a one-column drift from minting a new coverage set. On a table
 narrow enough that the window is the whole column list the two are the
 same query and every claim above degenerates to what it was before
 Phase 5. On a 1,000-column table the `SELECT` list is ~100 columns
-instead of 1,001, and since serialization out of Arrow is 63–77 % of a
+instead of 1,001, and since serialization out of Arrow is 64–77 % of a
 block's latency at every width, the payload is the term that matters.
 
-Fetched rows land in a cache budgeted at `rowCacheRows` × the columns
-the viewport currently needs, counted in **values** rather than rows
-(default 2048, rounded up to whole blocks with a floor of 4 blocks).
-Below one window of columns the budget is exactly `rowCacheRows` rows,
-term for term; above it, rows that accumulated several windows' worth of
-columns over a horizontal sweep count for what they hold. Over budget,
-whole blocks are evicted farthest-from-the-viewport-first, exempting
-blocks that intersect the live viewport and the block just written
+Fetched rows land in a cache budgeted at `rowCacheRows` × the width of
+one fetch, counted in **values** rather than rows (default 2048, rounded
+up to whole blocks with a floor of 4 blocks). A row costs exactly one
+fetch's worth, so the steady state is still `rowCacheRows` rows at any
+table width; only rows that accumulated several bands over a horizontal
+sweep count for more. The multiplicand must be the fetch band and not the
+render window, which is about a third of it — budgeting the window
+against a cell count denominated in bands silently held a third of the
+configured rows. Over budget, whole blocks are evicted
+farthest-from-the-viewport-first, exempting blocks that intersect the
+live viewport and the block just written
 ([`evictDistantBlocks`,
-`src/table/TableBody.ts:1416-1464`](../../src/table/TableBody.ts)).
+`src/table/TableBody.ts:1452-1500`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -589,7 +592,7 @@ its own TTL/LRU would be a second staleness domain.
 The SQL itself has two shapes. With no filters and no user sort, a block
 is fetched by a range predicate on the dense synthetic row id —
 `WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
-([`src/table/TableBody.ts:1203-1209`](../../src/table/TableBody.ts)) —
+([`src/table/TableBody.ts:1567-1573`](../../src/table/TableBody.ts)) —
 which DuckDB prunes via zonemaps, so a block fetch costs about the same
 at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
 loader materializes `__rowid__` densely, and a runtime density valve
@@ -598,7 +601,7 @@ instance to OFFSET pagination with a single `console.warn` — slow but
 correct, never wrong rows. Sorted or filtered fetches keep
 `ORDER BY … LIMIT n OFFSET k`, always appending `"__rowid__" ASC` as a
 tiebreaker
-([`src/table/TableBody.ts:1233-1241`](../../src/table/TableBody.ts)) —
+([`src/table/TableBody.ts:1596-1602`](../../src/table/TableBody.ts)) —
 DuckDB's `ORDER BY` is non-deterministic for ties, and two block queries
 that permute ties differently would duplicate some rows across block
 boundaries and drop others.
@@ -628,7 +631,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1291`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1654`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was

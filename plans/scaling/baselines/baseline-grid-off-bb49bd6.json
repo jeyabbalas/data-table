@@ -1,0 +1,30 @@
+{
+  "tier": "grid",
+  "vizMode": "off",
+  "gitSha": "bb49bd6",
+  "date": "2026-08-09",
+  "machine": {
+    "platform": "darwin",
+    "cpus": 10,
+    "node": "v22.23.2"
+  },
+  "genMs": 24078,
+  "exportMs": null,
+  "loadMs": 3769,
+  "workerMs": 3765.7,
+  "firstPaintMs": 3766.4,
+  "vizReadyMs": 3765.8,
+  "queryCount": 3,
+  "cacheHits": 0,
+  "domNodes": 970,
+  "canvasCount": 0,
+  "liveResizeObservers": 2,
+  "liveMutationObservers": 1,
+  "sortSignalSubscribers": 5,
+  "heapMB": 18.4,
+  "oneSortMs": 53.9,
+  "oneFilterMs": 30.2,
+  "scrollStormFrameP95": 10.4,
+  "blockFetchMs": 9.9,
+  "blockPayloadValues": 6272
+}

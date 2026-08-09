@@ -6,7 +6,7 @@
 
 # Interface: BrushCapable
 
-Defined in: [visualizations/InteractionManager.ts:27](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/InteractionManager.ts#L27)
+Defined in: [visualizations/InteractionManager.ts:27](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/InteractionManager.ts#L27)
 
 Capability marker — visualizations that expose `clearBrush()` for
 brush-style range selection. Combined with [SelectionCapable](SelectionCapable.md) into
@@ -19,7 +19,7 @@ capabilities should reference this from their `implements` clause.
 
 > **clearBrush**(): `void`
 
-Defined in: [visualizations/InteractionManager.ts:28](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/InteractionManager.ts#L28)
+Defined in: [visualizations/InteractionManager.ts:28](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/visualizations/InteractionManager.ts#L28)
 
 #### Returns
 

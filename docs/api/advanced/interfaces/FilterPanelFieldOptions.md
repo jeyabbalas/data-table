@@ -6,7 +6,7 @@
 
 # Interface: FilterPanelFieldOptions
 
-Defined in: [filters/FilterPanelField.ts:20](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanelField.ts#L20)
+Defined in: [filters/FilterPanelField.ts:20](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/filters/FilterPanelField.ts#L20)
 
 Options for FilterPanelField
 
@@ -16,7 +16,7 @@ Options for FilterPanelField
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPanelField.ts:22](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanelField.ts#L22)
+Defined in: [filters/FilterPanelField.ts:22](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/filters/FilterPanelField.ts#L22)
 
 CSS class prefix (default: 'dt')
 
@@ -26,6 +26,6 @@ CSS class prefix (default: 'dt')
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPanelField.ts:24](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanelField.ts#L24)
+Defined in: [filters/FilterPanelField.ts:24](https://github.com/jeyabbalas/data-table/blob/22d54ac8218eb0fa7175bf162920780da4351b59/src/filters/FilterPanelField.ts#L24)
 
 Resolved i18n strings. Defaults to English.

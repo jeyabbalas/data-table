@@ -57,11 +57,18 @@ const SIZE_SAMPLE_ROWS = 32;
 /**
  * Roughly how much memory a cached result occupies, in bytes.
  *
- * `JSON.stringify` over the first {@link SIZE_SAMPLE_ROWS} rows, doubled for
- * UTF-16, scaled by `rows / sampled`, plus 64 B per row for the object
- * header and property table. Sampled rather than measured because the whole
- * point of a cache is to be cheaper than the query it replaces, and
- * stringifying a 100,000-row result to decide whether to keep it would not be.
+ * `JSON.stringify` over {@link SIZE_SAMPLE_ROWS} rows, doubled for UTF-16,
+ * scaled by `rows / sampled`, plus 64 B per row for the object header and
+ * property table. Sampled rather than measured because the whole point of a
+ * cache is to be cheaper than the query it replaces, and stringifying a
+ * 100,000-row result to decide whether to keep it would not be.
+ *
+ * **Strided, not the head.** Row size is not stationary along a result: sort a
+ * VARCHAR column and the long values are all at one end; a text column that
+ * fills up over time puts them at the other. A head sample of such a result
+ * underestimates without bound — measured 44× on a result whose first 32 rows
+ * are short — and the bound it feeds is then decorative. A stride costs
+ * exactly the same 32 stringifies.
  *
  * `try` / `catch` around the stringify is load-bearing: a `BigInt` throws
  * (`convertBigInts` normally converts them in the worker, but nothing here
@@ -74,8 +81,9 @@ function estimateBytes(rows: unknown[]): number {
   const sampled = Math.min(SIZE_SAMPLE_ROWS, rows.length);
   try {
     let jsonChars = 0;
+    const stride = rows.length / sampled;
     for (let i = 0; i < sampled; i++) {
-      jsonChars += JSON.stringify(rows[i]).length;
+      jsonChars += JSON.stringify(rows[Math.floor(i * stride)]).length;
     }
     return Math.round((jsonChars * 2 * rows.length) / sampled) + rows.length * 64;
   } catch {

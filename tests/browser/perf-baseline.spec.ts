@@ -181,8 +181,16 @@ async function timeInteraction(page: Page, action: 'sort' | 'filter'): Promise<n
       await new Promise<void>((resolve) => {
         const settled = (): boolean => {
           const stats = table.bridge.__getStatsForTests();
-          const placeholders = document.querySelectorAll(`#${hostId} [data-placeholder]`).length;
-          return stats.sent.query > before && stats.inFlight === 0 && placeholders === 0;
+          // Both markers: a whole absent row, and a present row whose
+          // column has not arrived. After a sort or filter the cache is
+          // cleared wholesale so every row is a placeholder and the second
+          // term is redundant — but a settle condition that is only correct
+          // because of what the caller happens to do is one bad refactor
+          // from silently under-measuring.
+          const outstanding = document.querySelectorAll(
+            `#${hostId} [data-placeholder], #${hostId} .dt-cell[data-pending]`,
+          ).length;
+          return stats.sent.query > before && stats.inFlight === 0 && outstanding === 0;
         };
         const tick = (): void => {
           if (settled()) resolve();

@@ -17,18 +17,29 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
- * inlined the shared ModalHost code into each modal consumer and shifted some
- * helper code into VisualizationRegistry):
- *   root entry · ESM               11.12 kB   →  11.4 kB cap (2.5 %)
+ * Current baseline (brotli, re-measured at Phase 5 — column-clipped row
+ * fetches — under Vite 8.0.13 / rolldown 1.0.1):
+ *   root entry · ESM               11.11 kB   →  11.4 kB cap (2.6 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
- *   stylesheet                     19.65 kB   →  20.7 kB cap (5.3 %)
- *   lazy ExportDialog chunk        78.99 kB   →  83.1 kB cap (5.2 %)
+ *   stylesheet                     20.11 kB   →  20.7 kB cap (2.9 %)
+ *   lazy ExportDialog chunk        80.98 kB   →  83.1 kB cap (2.6 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal          3.6 kB   →   3.8 kB cap (5.6 %)
  *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
  *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *
+ * Phase 5 spent two of these without raising a cap, which is the intended
+ * use of the headroom rather than a thing to absorb silently. The
+ * **stylesheet** went 19.65 → 20.11 kB for one rule and its `::after`: the
+ * bar that marks a cell whose column has not arrived. It has to draw
+ * *something* — a colour on a permanently empty box paints nothing, and a
+ * blank cell is indistinguishable from a NULL. The **grid chunk** went
+ * 79.52 → 80.98 kB for the coverage-tracking row cache, the fetch-set
+ * arithmetic and the per-cell pending markers, which every table pays for
+ * whether or not it is wide enough to benefit. Headroom on both is now
+ * ~2.6 %, below the 5 % convention; the next phase to touch either should
+ * raise the cap rather than shave the feature.
  *
  * The root entry's 2.5 % is the tightest headroom in this table and is
  * deliberately not "restored" to 5 %: the note further down argues 2.6 kB of

@@ -162,12 +162,13 @@ export interface TableBodyOptions {
    * is the reuse role the SQL-keyed QueryCache used to (poorly) play for
    * scroll traffic.
    *
-   * Eviction budgets **cells**, not row keys: `rowCacheRows × the current
-   * render need`, compared against `RowCache.cellCount`. On a table narrow
-   * enough that one fetch covers every visible column the two are the same
-   * rule term for term; on a wide one it is what keeps the option from
-   * meaning 50× more memory than it does on a narrow one. See
-   * `evictDistantBlocks`.
+   * Eviction budgets **cells**, not row keys: `rowCacheRows × the width of
+   * one fetch`, compared against `RowCache.cellCount`. A row costs exactly
+   * one fetch's worth, so the steady state is still `rowCacheRows` rows at
+   * any table width — which is what keeps the option from meaning 50× more
+   * memory on a wide table than on a narrow one. Rows that accumulated
+   * several bands over a horizontal sweep are reclaimed on the column axis
+   * (`RowCache.prune`) rather than deleted. See `evictDistantBlocks`.
    */
   rowCacheRows?: number | undefined;
   /**
@@ -320,7 +321,6 @@ export class TableBody {
     {
       blockStart: number;
       controller: AbortController;
-      epoch: number;
       coverage: CoverageSet;
       qStart: number;
       qEnd: number;
@@ -674,7 +674,10 @@ export class TableBody {
     // fetches — and the only place it earned its keep was a `TableBody` driven
     // directly, which is a supported `/advanced` entry point. The container
     // reconciles its header row and keeps this body now, so what a reorder
-    // costs is what this branch decides: measured **0** queries at 300 columns.
+    // costs is what this branch decides. That used to be zero. It is now at
+    // most the visible blocks: a permutation invalidates nothing, but it can
+    // rotate a column into the rendered window that the clipped fetches never
+    // covered, and topping that up is a real fetch — see the branch below.
     const unsubVisibleCols = this.state.visibleColumns.subscribe((columns) => {
       if (this.destroyed) return;
       const orderOnly = sameColumnSet(this.lastVisibleColumns, columns);
@@ -988,7 +991,7 @@ export class TableBody {
    * horizontal move leaves every row present and every one of them missing
    * the columns that just came on screen, and `covers` reports exactly that.
    */
-  private missingBlocks(range: VisibleRange, need: CoverageSet): number[] {
+  private missingBlocks(range: VisibleRange, need: ReadonlySet<string>): number[] {
     const blocks: number[] = [];
     for (let i = Math.max(0, range.start); i < range.end; i++) {
       if (!this.rowDataCache.covers(i, need)) {
@@ -1105,7 +1108,13 @@ export class TableBody {
       this.syncVisibleIndexMap(columns);
       win = this.computeColumnWindow(columns, this.state.columnWidths.get());
     }
-    const need = this.rowDataCache.coverageInterner.intern(this.renderNeedColumns(win));
+    // A plain set, deliberately not interned. The need is the *unquantized*
+    // window, so interning it mints one coverage set per distinct scroll
+    // position and one `subsumes` memo entry per (band, position) pair —
+    // measured 1,149 interned sets after a single scrollbar drag at 1,000
+    // columns. `RowCache.covers` compares names directly instead, which is
+    // ~30 `Set.has` calls per row and was never the cost the memo imagined.
+    const need = new Set(this.renderNeedColumns(win));
     const fetchSet = this.fetchColumnsFor(win);
 
     const needed = this.missingBlocks(this.currentRange, need);
@@ -1164,7 +1173,6 @@ export class TableBody {
       this.inFlightBlocks.set(key, {
         blockStart,
         controller,
-        epoch: this.epoch,
         coverage: fetchSet.coverage,
         qStart: fetchSet.qStart,
         qEnd: fetchSet.qEnd,
@@ -1224,7 +1232,7 @@ export class TableBody {
           ? this.blockStartOf(this.currentRange.end - 1) + this.fetchBlockSize
           : this.blockStartOf(this.currentRange.start) - this.fetchBlockSize;
       if (candidate < 0 || candidate >= this.virtualScroller.getTotalRows()) return null;
-      if (this.rowDataCache.covers(candidate, fetchSet.coverage)) return null;
+      if (this.rowDataCache.covers(candidate, fetchSet.coverage.names)) return null;
       return { blockStart: candidate, fetch: fetchSet };
     }
 
@@ -1232,12 +1240,22 @@ export class TableBody {
     const step = COL_QUANTUM * this.lastHorizontalDirection;
     const qStart = Math.max(0, Math.min(n, fetchSet.qStart + step));
     const qEnd = Math.max(0, Math.min(n, fetchSet.qEnd + step));
-    // The window is already against an edge — nothing further that way.
+    // The window is already against an edge — nothing further that way. Both
+    // bounds, because only one of them clamps at an edge: stepping right at
+    // the far right pins `qEnd` at `n` while `qStart` keeps moving, which
+    // collapses the band toward empty rather than leaving it unchanged.
     if (qStart === fetchSet.qStart && qEnd === fetchSet.qEnd) return null;
     const stepped = this.buildFetchSet(win.pinnedCount, qStart, qEnd);
+    // A collapsed band projects nothing but `__rowid__`, which would land a
+    // row covering no columns — a data row of all-pending cells where a
+    // placeholder belongs. Unreachable today (the caller only speculates when
+    // the visible blocks are already covered, and a collapsed band is a subset
+    // of what they hold, so the `covers` test below returns first) and cheap
+    // enough to assert rather than rely on that.
+    if (stepped.coverage.names.size === 0) return null;
     if (stepped.coverage === fetchSet.coverage) return null;
     const candidate = this.blockStartOf(Math.max(0, this.currentRange.start));
-    if (this.rowDataCache.covers(candidate, stepped.coverage)) return null;
+    if (this.rowDataCache.covers(candidate, stepped.coverage.names)) return null;
     return { blockStart: candidate, fetch: stepped };
   }
 
@@ -1388,9 +1406,9 @@ export class TableBody {
    * Evict whole cached blocks furthest from the live viewport until the
    * cache is back under budget.
    *
-   * **The budget is cells, not rows: `rowCacheRows × the current render
-   * need`.** `rowCacheRows` still means "rows" to a caller, and on a table
-   * narrow enough that one fetch covers every visible column this is
+   * **The budget is cells, not rows: `rowCacheRows × the width of the
+   * current fetch.`** `rowCacheRows` still means "rows" to a caller, and on a
+   * table narrow enough that one fetch covers every visible column this is
    * *exactly* the old rule — coverage ≡ the visible set, so `cellCount` is
    * `rows × N`, the budget is `rowCacheRows × N`, and the comparison reduces
    * term for term. What changes is the wide case, where the option used to
@@ -1398,6 +1416,15 @@ export class TableBody {
    * 40K on a 20-column one. Counting cells makes it mean roughly the same
    * memory at both, and makes a row that accumulated two windows' worth of
    * columns over a horizontal sweep cost what it actually costs.
+   *
+   * The multiplicand is the **fetch** width, not the render need, and the two
+   * are not interchangeable: what lands in `cellCount` is what a fetch
+   * projected — the window padded a span each side and quantized — roughly
+   * three times the window it was issued for. Budgeting the render need
+   * against a cell count denominated in fetch bands silently held
+   * `rowCacheRows / 3` rows, and did so in exactly the band the docs promise
+   * is unchanged: at 40 columns in a 1,200 px viewport one fetch covers all
+   * 40, yet the render window is 18, so `rowCacheRows: 64` kept 32 rows.
    *
    * Distance is measured from `this.currentRange` — never from a fetch's
    * own bounds, which is how the old per-row eviction managed to evict
@@ -1410,14 +1437,26 @@ export class TableBody {
    * `currentRange`, and the just-written block. Without the latter, a
    * prefetched block landing into an at-cap cache is itself the most
    * distant block — evicting it re-triggers the same prefetch from the
-   * `finally` reconcile, forever. The cost is a transient overage of at
-   * most the visible blocks plus one, well inside the 4-block sizing floor.
+   * `finally` reconcile, forever.
+   *
+   * That exemption is why there is a **second pass on the column axis**. The
+   * viewport's own block is permanently exempt, and a horizontal sweep pours
+   * the entire column axis into it — 128 rows × 1,000 columns against a
+   * 2,048 × ~100 budget. Row eviction alone cannot reach it, so it deletes
+   * every *other* block on every write, still misses the budget, and takes
+   * the vertical scroll-back cache down with it. When the row pass runs out
+   * of candidates and the cache is still over, `RowCache.prune` shrinks what
+   * is left back to the band a fresh fetch would have landed. Nothing visible
+   * changes: the fetch band contains the render window by construction, so no
+   * rendered cell can become pending.
    */
   private evictDistantBlocks(justWrittenBlockStart: number): void {
-    // `max(1, …)` so a degenerate empty window cannot make the budget zero
-    // and evict everything on every write.
-    const budget =
-      this.rowCacheRows * Math.max(1, this.renderNeedColumns(this.columnWindow).length);
+    // The same set the prune pass below keeps to, and the same one every
+    // cached row was landed under — see the docblock on why this must be the
+    // fetch band and not the render window. `max(1, …)` so a degenerate empty
+    // window cannot make the budget zero and evict everything on every write.
+    const keep = this.fetchColumnsFor(this.columnWindow).coverage;
+    const budget = this.rowCacheRows * Math.max(1, keep.names.size);
     if (this.rowDataCache.cellCount <= budget) return;
 
     // Group cached indices by block, carrying each block's cell contribution
@@ -1451,6 +1490,16 @@ export class TableBody {
         this.rowDataCache.delete(i);
       }
       total -= blockCells.get(blockStart) ?? 0;
+    }
+    if (total <= budget) return;
+
+    // Every candidate is gone and the cache is still over: what remains is the
+    // exempt blocks, holding columns a horizontal sweep accumulated. Reclaim
+    // on the column axis (see the docblock). `Map` iteration is defined under
+    // deletion of the entry being visited, which `prune` does for a row it
+    // empties.
+    for (const index of this.rowDataCache.keys()) {
+      this.rowDataCache.prune(index, keep);
     }
   }
 

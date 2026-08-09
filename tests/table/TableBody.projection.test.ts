@@ -23,7 +23,7 @@ import type { RowCache } from '@/table/RowCache';
 
 import { DT_BUDGET } from '../budgets';
 import { projectedColumns, rowsFor } from '../helpers/rowFetchBridge';
-import { bodyCells, rowCache } from '../helpers/tableBodyDom';
+import { bodyCells, fetchBandSize, rowCache } from '../helpers/tableBodyDom';
 import {
   MockResizeObserver,
   setupTableBody,
@@ -35,6 +35,8 @@ import {
 const COLUMNS = 300;
 const COL_WIDTH = 150;
 const VIEWPORT = 600;
+/** `COL_QUANTUM` in `src/table/TableBody.ts`, which is module-private. */
+const COL_QUANTUM_FOR_TEST = 16;
 
 /**
  * Resolve every captured query with exactly the rows its SQL asks for.
@@ -356,6 +358,110 @@ describe('TableBody — clipped row-fetch projections', () => {
       expect(cache.size).toBeLessThanOrEqual(CACHE_ROWS + BLOCK);
       expect(cache.cellCount).toBe(cache.size * 2);
     });
+  });
+
+  describe('`rowCacheRows` means rows', () => {
+    /**
+     * `rowCacheRows` × the width of one fetch — the budget `evictDistantBlocks`
+     * compares `cellCount` against. Read through {@link fetchBandSize} rather
+     * than re-derived, so this does not re-implement `buildFetchSet`'s
+     * quantization to check `buildFetchSet`'s quantization.
+     */
+    function liveBudget(harness: TableBodyHarness, rowCacheRows: number): number {
+      return rowCacheRows * Math.max(1, fetchBandSize(harness.body));
+    }
+
+    /**
+     * A purely vertical scroll on a clipped table, where the docs promise the
+     * option is "unchanged". It was not: the budget multiplied the *render
+     * need* (14 columns at this configuration) while every row cost the
+     * *padded fetch* (32), so the cache held `rowCacheRows × 14/32` rows —
+     * 384 of a configured 1,024 — and re-queried 2.7× sooner than documented.
+     * The column window never moves here, which is what makes it a defect in
+     * the arithmetic rather than the sweep behaviour below.
+     */
+    it('keeps `rowCacheRows` rows on a scroll that never moves the window', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      const CACHE_ROWS = 1024;
+      harness = await mount({
+        totalRows: 20_000,
+        body: { fetchBlockSize: 128, rowCacheRows: CACHE_ROWS, prefetch: false },
+      });
+      const before = harness.body.getColumnWindow();
+
+      for (let row = 0; row <= 3_000; row += 60) {
+        harness.scrollToRow(row);
+        await settle(harness);
+      }
+
+      expect(harness.body.getColumnWindow()).toEqual(before);
+      const cache = rowCache(harness.body) as RowCache;
+      expect(cache.size).toBeGreaterThanOrEqual(CACHE_ROWS);
+      expect(cache.cellCount).toBeLessThanOrEqual(liveBudget(harness, CACHE_ROWS));
+    });
+
+    /**
+     * The case row eviction structurally cannot handle: the viewport never
+     * moves vertically, so the one block it spans is exempt from eviction on
+     * every pass, while a sideways sweep merges the whole column axis into it.
+     * At 600 columns that block alone reaches 128 × 600 = 76,800 cells, more
+     * than a budget can allow, and deleting *other* blocks cannot help — so
+     * the old code deleted them all anyway, on every write, and stayed over.
+     * Measured: a sweep took the cache from 640 warmed rows to 128 at 600
+     * columns and to 128 at 1,000. `RowCache.prune` reclaims on the column
+     * axis instead, and the warmed rows survive.
+     */
+    it('does not spend the vertical cache on a horizontal sweep', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      const WIDE = 600;
+      harness = await mount({ schema: wideHarnessSchema(WIDE) });
+      const cache = rowCache(harness.body) as RowCache;
+
+      for (const row of [0, 130, 260, 390, 520, 0]) {
+        harness.scrollToRow(row);
+        await settle(harness);
+      }
+      const warmed = cache.size;
+      expect(warmed).toBeGreaterThanOrEqual(5 * 128);
+
+      for (let column = 0; column <= WIDE - 20; column += 16) {
+        harness.scrollToColumnPx(column * COL_WIDTH);
+        await settle(harness);
+      }
+
+      expect(cache.size).toBe(warmed);
+      expect(cache.cellCount).toBeLessThanOrEqual(liveBudget(harness, 2048));
+      // Pruning is invisible: the fetch band contains the render window by
+      // construction, so nothing on screen went pending.
+      expect(harness.container.querySelectorAll('[data-pending]')).toHaveLength(0);
+    });
+
+    it('bounds the coverage interner rather than growing for the session', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      harness = await mount();
+      const interner = (rowCache(harness.body) as RowCache).coverageInterner;
+
+      // A full sweep at one column per step — the pattern that used to mint a
+      // coverage set per scroll position, because the render *need* was
+      // interned from the unquantized window.
+      for (let column = 0; column < COLUMNS; column++) {
+        harness.scrollToColumnPx(column * COL_WIDTH);
+        await settle(harness);
+      }
+
+      // The claim is about the *shape* of the growth, not a magic number:
+      // sets are minted per quantized band and per union of two, so the count
+      // tracks `columns / quantum` (19 here) and not the 300 distinct scroll
+      // positions the sweep visited. Measured 42; before, the same sweep
+      // interned one set per position, and one drag at 1,000 columns produced
+      // 1,149 with no ceiling at all.
+      const bands = Math.ceil(COLUMNS / COL_QUANTUM_FOR_TEST);
+      console.log(
+        `[projection] ${COLUMNS} scroll positions interned ` +
+          `${interner.internedCount} coverage sets (${bands} quantized bands)`,
+      );
+      expect(interner.internedCount).toBeLessThanOrEqual(3 * bands);
+    }, 60_000);
   });
 
   describe('interleaved diagonal scrolling with aborted fetches', () => {

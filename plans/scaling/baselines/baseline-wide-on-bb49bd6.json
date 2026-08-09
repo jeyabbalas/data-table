@@ -1,0 +1,31 @@
+{
+  "tier": "wide",
+  "vizMode": "on",
+  "gitSha": "bb49bd6",
+  "date": "2026-08-09",
+  "machine": {
+    "platform": "darwin",
+    "cpus": 10,
+    "node": "v22.23.2"
+  },
+  "genMs": 16194,
+  "exportMs": null,
+  "loadMs": 3457,
+  "workerMs": 3450.3,
+  "firstPaintMs": 3451,
+  "vizReadyMs": 3615.8,
+  "queryCount": 19,
+  "cacheHits": 0,
+  "domNodes": 994,
+  "canvasCount": 8,
+  "liveResizeObservers": 10,
+  "liveMutationObservers": 2,
+  "sortSignalSubscribers": 5,
+  "heapMB": 19.6,
+  "oneSortMs": 16.7,
+  "oneFilterMs": 112,
+  "scrollStormFrameP95": 10.3,
+  "blockFetchMs": 9,
+  "blockPayloadValues": 6272,
+  "notes": "Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS."
+}

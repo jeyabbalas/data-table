@@ -243,6 +243,32 @@ describe('QueryCache', () => {
       expect(cache.approxBytes).toBe(before);
     });
 
+    it('samples across the result, so a head-skewed one is not underestimated', () => {
+      // Row size is not stationary: sort a VARCHAR column and every long value
+      // lands at one end. A head sample of `SIZE_SAMPLE_ROWS` rows called this
+      // 968 KB (44× under) and the bound it feeds was decorative — eleven of
+      // them fit a 1 MiB budget while genuinely retaining ~41 MiB.
+      const skewed = (): Record<string, unknown>[] => [
+        ...Array.from({ length: 32 }, () => ({ v: 'xxxx' })),
+        ...Array.from({ length: 968 }, () => ({ v: 'y'.repeat(2_000) })),
+      ];
+      const MAX = 1024 * 1024;
+      const cache = new QueryCache({ maxEntries: 100, maxBytes: MAX });
+
+      let retained = 0;
+      for (let i = 0; i < 11; i++) {
+        const rows = skewed();
+        cache.set(`q${i}`, rows);
+        if (cache.has(`q${i}`)) retained += JSON.stringify(rows).length * 2;
+      }
+
+      expect(cache.approxBytes).toBeLessThanOrEqual(MAX);
+      // The estimate is a sample, so it is allowed to be wrong — by a factor,
+      // not by an order of magnitude. A strided sample of this result is
+      // within ~3%; the head sample was 44× out.
+      expect(retained).toBeLessThanOrEqual(2 * MAX);
+    });
+
     it('falls back to a shape estimate for results JSON cannot serialize', () => {
       const cache = new QueryCache();
       // `JSON.stringify` throws on BigInt. The worker normally converts these

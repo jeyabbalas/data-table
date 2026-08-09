@@ -67,6 +67,7 @@ interface TableBodyInternals {
   returnRowToPool(rowEl: HTMLElement): void;
   createPlaceholderRow(index: number): HTMLElement;
   renderVisibleRows(): void;
+  fetchColumnsFor(win: ColumnWindow): { coverage: CoverageSet };
 }
 
 /** `TableBody`'s private per-pass bundle. Opaque here — only passed through. */
@@ -258,6 +259,19 @@ export function seedRow(
 /** The body's row cache, for suites asserting what survived an eviction. */
 export function rowCache(body: TableBody): RowCache {
   return internals(body).rowDataCache;
+}
+
+/**
+ * The columns the body's *next* fetch would project — the padded, quantized
+ * band, `__rowid__` excluded.
+ *
+ * The eviction budget is `rowCacheRows × this`, and a suite that re-derived
+ * the band from the window would be re-implementing `buildFetchSet`'s
+ * quantization to check `buildFetchSet`'s quantization.
+ */
+export function fetchBandSize(body: TableBody): number {
+  const it = internals(body);
+  return it.fetchColumnsFor(it.columnWindow).coverage.names.size;
 }
 
 /** {@link newRow} + {@link renderRow} — the shape most call sites want. */

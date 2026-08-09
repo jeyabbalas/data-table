@@ -142,6 +142,58 @@ export function parseRowWindow(sql: string): { offset: number; limit: number } {
 }
 
 /**
+ * Split a SQL projection list on top-level commas — commas inside `(…)` are
+ * part of a function call, not item separators.
+ */
+function splitProjection(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) {
+      parts.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts;
+}
+
+/** `"a""b"` → `a"b`; anything unquoted comes back untouched. */
+function unquoteIdentifier(token: string): string {
+  const trimmed = token.trim();
+  if (!trimmed.startsWith('"') || !trimmed.endsWith('"') || trimmed.length < 2) return trimmed;
+  return trimmed.slice(1, -1).replace(/""/g, '"');
+}
+
+/**
+ * The column names a `SELECT` list projects, in order — the key to testing
+ * column-clipped row fetches at all.
+ *
+ * Understands both forms `buildRowQuery` emits: a bare quoted identifier, and
+ * the INTERVAL cast `CAST("x" AS VARCHAR) AS "x"`, whose *alias* is the name
+ * the returned row is keyed by.
+ *
+ * Returns `null` when the SQL has no parseable `SELECT … FROM` — a caller
+ * feeding this an aggregate or a non-row query gets a fallback rather than a
+ * throw, because the generic bridge doubles in `axe.test.ts` and
+ * `TableContainer.renderTiers.test.ts` answer *every* query through
+ * {@link rowsFor}.
+ */
+export function projectedColumns(sql: string): string[] | null {
+  const match = sql.match(/\bSELECT\s+([\s\S]*?)\s+FROM\s/i);
+  if (!match) return null;
+  return splitProjection(match[1]!).map((part) => {
+    const trimmed = part.trim();
+    const alias = trimmed.match(/\sAS\s+("(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*)\s*$/i);
+    return unquoteIdentifier(alias ? alias[1]! : trimmed);
+  });
+}
+
+/**
  * Deterministic synthesized row for absolute index `i`: `__rowid__ ≡ i`,
  * numeric-looking columns get `i`, everything else `\`${column}-${i}\``.
  */
@@ -159,8 +211,17 @@ export function rowAt(i: number, columns: readonly string[]): Record<string, unk
  * `__rowid__ ≡ index`. Resolving with anything shorter than the requested
  * window trips the rowid fast path's density safety valve by design; use
  * this everywhere the valve is not the thing under test.
+ *
+ * **Only the columns the SQL actually projects.** This used to synthesize
+ * every column the caller named, which made under-projection invisible: a
+ * body that clipped its `SELECT` to the wrong window still got complete rows
+ * back and rendered perfectly. Reading the projection instead means a jsdom
+ * test sees exactly what the browser would. `columns` survives as the
+ * fallback for SQL with no parseable `SELECT` list, and for callers building
+ * rows by hand there is still {@link rowAt}.
  */
-export function rowsFor(sql: string, columns: readonly string[]): Record<string, unknown>[] {
+export function rowsFor(sql: string, columns: readonly string[] = []): Record<string, unknown>[] {
   const { offset, limit } = parseRowWindow(sql);
-  return Array.from({ length: limit }, (_, k) => rowAt(offset + k, columns));
+  const projected = projectedColumns(sql) ?? columns;
+  return Array.from({ length: limit }, (_, k) => rowAt(offset + k, projected));
 }

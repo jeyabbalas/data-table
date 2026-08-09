@@ -282,6 +282,16 @@ export class RowCache {
     return this.rows.keys();
   }
 
+  /** `[index, row]` pairs, in insertion order. */
+  entries(): IterableIterator<[number, CachedRow]> {
+    return this.rows.entries();
+  }
+
+  /** Iterating yields `[index, row]`, exactly as iterating a `Map` does. */
+  [Symbol.iterator](): IterableIterator<[number, CachedRow]> {
+    return this.entries();
+  }
+
   /** Rows held, however partially. */
   get size(): number {
     return this.rows.size;

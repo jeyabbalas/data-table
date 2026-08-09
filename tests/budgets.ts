@@ -437,6 +437,55 @@ export const DT_BUDGET = {
      * 38× below the per-header shape it exists to catch.
      */
     SORT_SIGNAL_SUBSCRIBERS_MAX: 8,
+    /**
+     * Columns one block-fetch `SELECT` list may project, `__rowid__` included.
+     *
+     * Phase 5 clips the projection to the rendered column window padded by one
+     * full window span per side and quantized outward to multiples of 16, so
+     * the worst case is `3 × span + 30` columns plus the pinned prefix plus
+     * `__rowid__`.
+     *
+     * Measured: **33** at rest and **81** at the widest sweep stop at the
+     * jsdom wide config (300 columns in a 600 px viewport,
+     * `TableBody.projection.test.ts`, which logs the live figure); **113** at
+     * the pinned 1,280 × 720 browser viewport at WIDE and at WIDE_CI alike
+     * (`projection.spec.ts`, same). That the browser figure is *identical at
+     * 300 and at 1,000 columns* is the claim of the phase — before it, the
+     * same fetch projected 301 and 1,001.
+     *
+     * Cap at 128, ~1.13× the measured maximum: enough for a pinned column or
+     * two on top of the widest window, and far below any tier's column count,
+     * so a projection that stopped clipping fails by 8× at WIDE rather than
+     * by a few per cent. The suites additionally assert the list is
+     * **strictly shorter** than the visible column count at wide configs,
+     * which is the assertion that cannot be satisfied by a cap alone.
+     */
+    PROJECTED_COLS_MAX: 128,
+    /**
+     * Values in one block payload — `rows × properties` as it crosses the
+     * worker boundary and lands in the row cache.
+     *
+     * `PROJECTED_COLS_MAX × 128`, the default `fetchBlockSize`. Measured at
+     * the jsdom wide config: **4,224** (33 columns × 128 rows) at rest, where
+     * the unclipped shape was 38,528 (301 × 128) and would be 128,128 at
+     * WIDE. The Node spike (`tests/performance/projection.duckdb.test.ts`)
+     * measures what that costs: 128,128 values drain in ~75 ms against ~7.5 ms
+     * for 14,464.
+     */
+    BLOCK_VALUES_MAX: 128 * 128,
+    /**
+     * High-priority row fetches one horizontal column-window move may issue.
+     *
+     * A window move is a cache miss on the column axis: every visible row is
+     * present and short of the new need, so the reconciler re-issues the
+     * blocks the viewport spans — one, or two when the viewport straddles a
+     * block boundary — and nothing else. Measured **1** at the jsdom harness
+     * (a 20-row range inside one 128-row block) and **2** in Chromium at
+     * WIDE. Cap at 4: visible blocks plus headroom, and low enough that a
+     * regression to per-column or per-frame fetching — which would be tens
+     * per sweep step — fails it outright.
+     */
+    QUERIES_PER_WINDOW_MOVE_MAX: 4,
   },
   /**
    * Phase 6 — resize / pin / keynav query and frame budgets, and the one

@@ -29,6 +29,7 @@
  */
 import type { TableState } from '@/core/State';
 import type { ColumnWindow } from '@/table/ColumnWindow';
+import type { CoverageSet, RowCache } from '@/table/RowCache';
 import type { RowData, TableBody } from '@/table/TableBody';
 
 /** Default class prefix — every suite in the repo uses it. */
@@ -53,9 +54,16 @@ interface TableBodyInternals {
   rowElementMap: Map<number, HTMLElement>;
   rowPool: HTMLElement[];
   columnWindow: ColumnWindow;
+  rowDataCache: RowCache;
   beginRenderPass(): RenderPass;
   getOrCreateRow(win: ColumnWindow): HTMLElement;
-  updateRowContent(rowEl: HTMLElement, index: number, data: RowData, pass: RenderPass): void;
+  updateRowContent(
+    rowEl: HTMLElement,
+    index: number,
+    data: RowData,
+    coverage: CoverageSet | undefined,
+    pass: RenderPass,
+  ): void;
   returnRowToPool(rowEl: HTMLElement): void;
   createPlaceholderRow(index: number): HTMLElement;
   renderVisibleRows(): void;
@@ -203,17 +211,63 @@ export function renderRow(
   rowEl: HTMLElement,
   index: number,
   data: RowData,
+  columns?: readonly string[],
 ): HTMLElement {
   const i = internals(body);
   const pass = i.beginRenderPass();
   i.columnWindow = pass.win;
-  i.updateRowContent(rowEl, index, data, pass);
+  i.updateRowContent(rowEl, index, data, coverageOf(body, data, columns), pass);
   return rowEl;
 }
 
+/**
+ * The coverage a hand-built row asserts.
+ *
+ * Defaults to "every column this payload carries", which is what a caller
+ * handing over a complete row means — row fetches project a clipped column
+ * window now, so a row without coverage would render entirely pending. Pass
+ * `columns` to model a *partial* fetch and prove the pending markers.
+ */
+export function coverageOf(
+  body: TableBody,
+  data: RowData,
+  columns?: readonly string[],
+): CoverageSet {
+  const names = columns ?? Object.keys(data);
+  return internals(body).rowDataCache.coverageInterner.intern(
+    names.filter((name) => name !== '__rowid__'),
+  );
+}
+
+/**
+ * Put `data` in the body's row cache as row `index`, covering `columns`
+ * (default: every column the payload carries).
+ *
+ * The replacement for `rowDataCache.set(index, data)`: the store tracks which
+ * columns of a row have landed, and a seeded row has to say which those are.
+ */
+export function seedRow(
+  body: TableBody,
+  index: number,
+  data: RowData,
+  columns?: readonly string[],
+): void {
+  internals(body).rowDataCache.merge(index, data, coverageOf(body, data, columns));
+}
+
+/** The body's row cache, for suites asserting what survived an eviction. */
+export function rowCache(body: TableBody): RowCache {
+  return internals(body).rowDataCache;
+}
+
 /** {@link newRow} + {@link renderRow} — the shape most call sites want. */
-export function buildRow(body: TableBody, index: number, data: RowData): HTMLElement {
-  return renderRow(body, newRow(body), index, data);
+export function buildRow(
+  body: TableBody,
+  index: number,
+  data: RowData,
+  columns?: readonly string[],
+): HTMLElement {
+  return renderRow(body, newRow(body), index, data, columns);
 }
 
 /** Return `rowEl` to the body's pool through its own private path. */

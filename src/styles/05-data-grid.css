@@ -253,6 +253,18 @@
   color: var(--dt-text-tertiary);
 }
 
+/* A cell whose *column* has not been fetched yet, in a row that has. Row
+   fetches project the padded column window rather than every column, so a
+   horizontal scroll can put a resolved row's unresolved cells on screen —
+   distinct from `.dt-cell--placeholder`, which stands in for a whole absent
+   row. Deliberately quiet: it is empty, it clears in one round trip, and a
+   shimmer over a band of them would draw more attention than the missing
+   values deserve. No new custom property, so `npm run check:css-vars` has
+   nothing to reconcile. */
+.dt-cell--pending {
+  color: var(--dt-text-tertiary);
+}
+
 .dt-cell--number {
   text-align: right;
   font-variant-numeric: tabular-nums;

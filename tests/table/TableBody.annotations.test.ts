@@ -18,6 +18,7 @@ import {
   renderRow,
   renderedColumns,
   rowElements,
+  seedRow,
 } from '../helpers/tableBodyDom';
 
 // =========================================
@@ -508,17 +509,13 @@ describe('TableBody — annotation overlay', () => {
       annotationPopover: popover,
     });
 
-    // Seed the row-data cache + rowElementMap as if rendered.
-    const internal = body as unknown as {
-      rowDataCache: Map<number, Record<string, unknown>>;
-    };
     // Need to subscribe to state first (happens on initialize). Simulate.
     await body.initialize();
     const beforeQueries = queries.length;
 
     const rowEl = buildRow(body, 0, rows[0]);
     expect(renderedColumns(rowEl)).toEqual(['id', 'name', 'price']);
-    internal.rowDataCache.set(0, rows[0]);
+    seedRow(body, 0, rows[0]);
     rowElements(body).set(0, rowEl);
 
     // Add a cell annotation — change handler should re-apply classes.
@@ -543,15 +540,12 @@ describe('TableBody — annotation overlay', () => {
       annotationPopover: popover,
     });
 
-    const internal = body as unknown as {
-      rowDataCache: Map<number, Record<string, unknown>>;
-    };
     await body.initialize();
 
     // Render row 0 and capture the formatted title before any annotation exists.
     const rowEl = buildRow(body, 0, rows[0]);
     expect(renderedColumns(rowEl)).toEqual(['id', 'name', 'price']);
-    internal.rowDataCache.set(0, rows[0]);
+    seedRow(body, 0, rows[0]);
     rowElements(body).set(0, rowEl);
     const priceCell = cellFor(rowEl, 'price')!;
     const formattedTitle = priceCell.title;
@@ -1028,10 +1022,7 @@ describe('TableBody — annotation overlay', () => {
 
       // Seed the body's internal row map so reapply has a row to walk.
       rowElements(body).set(3, rowEl);
-      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(
-        3,
-        rows[3],
-      );
+      seedRow(body, 3, rows[3]);
 
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(true);
 
@@ -1059,10 +1050,7 @@ describe('TableBody — annotation overlay', () => {
       // Render row 6 and seed the body's caches so the change handler can find it.
       const rowEl = buildRow(body, 6, rows[6]);
       rowElements(body).set(6, rowEl);
-      (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(
-        6,
-        rows[6],
-      );
+      seedRow(body, 6, rows[6]);
 
       // Default — error wins.
       expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);

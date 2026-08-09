@@ -29,7 +29,38 @@ import {
   type PinnedOffset,
 } from './ColumnWindow';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
+import { CoverageInterner, RowCache, type CoverageSet } from './RowCache';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
+
+/**
+ * Column granularity of a fetch set, in columns.
+ *
+ * The padded window is rounded **outward** to a multiple of this before it
+ * becomes a `SELECT` list, for exactly the reason row fetches are quantized to
+ * 128-row blocks: a user wobbling ±1 column must not produce a new projection,
+ * a new dedupe key and a new coverage set on every frame. 16 is ~1–2 screens
+ * of columns' worth of slack at the default 150 px width, and small enough
+ * that the padded window it rounds up (~84 columns at the widest measured
+ * render window) grows by at most 12.5 %.
+ */
+const COL_QUANTUM = 16;
+
+/**
+ * The columns one block fetch projects, and where they came from.
+ *
+ * `qStart` / `qEnd` are the quantized window bounds over `visibleColumns`,
+ * carried alongside the interned coverage because the abort scan needs to ask
+ * "does this flight still overlap the window I want?" — a set-intersection
+ * question the coverage id alone cannot answer.
+ */
+interface FetchColumnSet {
+  /** Names to project, in `visibleColumns` order, `__rowid__` excluded. */
+  columns: string[];
+  /** Interned identity of {@link FetchColumnSet.columns}. */
+  coverage: CoverageSet;
+  qStart: number;
+  qEnd: number;
+}
 
 /**
  * Everything one render pass needs, computed once at the top of the pass and
@@ -47,6 +78,20 @@ interface RenderPass {
   pinned: Map<string, PinnedOffset>;
   /** `annotations.count() > 0` — see {@link TableBody.ANNOTATED_ATTR}. */
   annotationsActive: boolean;
+}
+
+/**
+ * Whether a cell for `colName` has a value behind it under `coverage`.
+ *
+ * `__rowid__` is always true: `buildRowQuery` prepends it to every projection
+ * by construction, and coverage sets deliberately exclude it (see
+ * `RowCache`'s header) so the cell-count budget degenerates exactly on a
+ * narrow table. Without this clause a `__rowid__` column made visible through
+ * `showColumn` would render permanently pending.
+ */
+function coversColumn(coverage: CoverageSet | undefined, colName: string): boolean {
+  if (colName === ROWID_COLUMN) return true;
+  return coverage !== undefined && coverage.names.has(colName);
 }
 
 /**
@@ -185,7 +230,12 @@ function isFetchCancellation(error: unknown): boolean {
  */
 export class TableBody {
   private virtualScroller: VirtualScroller;
-  private rowDataCache = new Map<number, RowData>();
+  /**
+   * The row store. Named for the `Map<number, RowData>` it replaced, and
+   * Map-shaped where it can be, because ten fetch-pipeline suites assert
+   * against it directly — see {@link RowCache}.
+   */
+  private rowDataCache = new RowCache(new CoverageInterner());
   private currentRange: VisibleRange = { start: 0, end: 0, offsetY: 0 };
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
@@ -193,6 +243,13 @@ export class TableBody {
   private scrollAnimationId: number | null = null;
 
   // ---- Fetch state machine ----------------------------------------------
+  //
+  // Two axes, not one. A row index is cached or it is not; *and* a cached row
+  // holds some set of columns, which need not be the set the current window
+  // renders. "Cached" below always means "present AND covering the render
+  // need" (`RowCache.covers`) — a row present but short of the need is a
+  // legitimate miss that re-fetches, and paints as a data row with per-cell
+  // pending markers rather than as a whole-row placeholder.
   //
   //   IDLE         inFlightBlocks empty; every index of currentRange cached
   //                (or the range is empty)
@@ -210,6 +267,11 @@ export class TableBody {
   //   block aborted: rejection swallowed; deregistered in `finally`; the
   //     reconciler may legitimately re-issue the same block later as a
   //     fresh query.
+  //   column window moves (a horizontal scroll, a resize, a width change):
+  //     re-render — cells outside the landed coverage paint as pending —
+  //     then reconcile on the *same* machinery. A horizontal move is a
+  //     cache miss like any other; nothing about it is a special case
+  //     below the fetch-set computation.
   //   invalidation mid-fetch: epoch++ → abort all → clear caches → re-read
   //     the live range → placeholders → reconcile. (The filter-change
   //     scroll animation is unchanged: cache-only renders during the 300 ms
@@ -237,14 +299,42 @@ export class TableBody {
   // Mirrors `CrossfilterCoordinator.filterSequence` and
   // `BaseVisualization.fetchSequence`.
   private epoch = 0;
-  // In-flight visible-block fetches keyed by block start index. Capped at
-  // MAX_INFLIGHT_BLOCK_FETCHES; an in-flight block is never re-issued, and
-  // aborting deletes the entry immediately so the reconciler can top up in
-  // the same pass.
-  private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
-  // The single speculative block fetch beyond the viewport, or null.
-  private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  // In-flight visible-block fetches keyed by `${blockStart}:${coverage.id}`.
+  // Capped at MAX_INFLIGHT_BLOCK_FETCHES; a (block, column-set) pair is never
+  // re-issued, and aborting deletes the entry immediately so the reconciler
+  // can top up in the same pass.
+  //
+  // Keyed by the *interned coverage id* rather than by `"qStart:qEnd"`: a
+  // `visibleColumns` reorder leaves the indices identical while the names
+  // behind them change, so an index-derived key would dedupe two genuinely
+  // different projections onto one entry.
+  private inFlightBlocks = new Map<
+    string,
+    {
+      blockStart: number;
+      controller: AbortController;
+      epoch: number;
+      coverage: CoverageSet;
+      qStart: number;
+      qEnd: number;
+    }
+  >();
+  // The single speculative block fetch beyond the viewport, or null. `axis`
+  // and `direction` are what it was issued *for*, so a change of either
+  // abandons it rather than leaving a fetch pointed the wrong way.
+  private prefetch: {
+    blockStart: number;
+    controller: AbortController;
+    axis: 'vertical' | 'horizontal';
+    direction: 1 | -1;
+  } | null = null;
   private lastScrollDirection: 1 | -1 = 1;
+  // Which axis moved most recently, and which way the column window went.
+  // The single speculative slot follows the axis the user is actually on:
+  // speculating one row block ahead while they sweep sideways fetches
+  // something they are not moving toward.
+  private lastMoveAxis: 'vertical' | 'horizontal' = 'vertical';
+  private lastHorizontalDirection: 1 | -1 = 1;
   // Runtime safety valve for the __rowid__ range fast path: flipped (once,
   // with a console.warn) if a fast-path result ever violates the dense-rowid
   // premise; every subsequent fetch then uses OFFSET pagination. The flag's
@@ -877,13 +967,17 @@ export class TableBody {
   }
 
   /**
-   * Starts of the blocks intersecting `range` in which at least one row
-   * index is missing from `rowDataCache`, ordered viewport-top-first.
+   * Starts of the blocks intersecting `range` holding at least one row that
+   * is absent **or** short of `need`, ordered viewport-top-first.
+   *
+   * The second clause is what makes one reconciler serve both axes: a
+   * horizontal move leaves every row present and every one of them missing
+   * the columns that just came on screen, and `covers` reports exactly that.
    */
-  private missingBlocks(range: VisibleRange): number[] {
+  private missingBlocks(range: VisibleRange, need: CoverageSet): number[] {
     const blocks: number[] = [];
     for (let i = Math.max(0, range.start); i < range.end; i++) {
-      if (!this.rowDataCache.has(i)) {
+      if (!this.rowDataCache.covers(i, need)) {
         const blockStart = this.blockStartOf(i);
         blocks.push(blockStart);
         // One miss marks the whole block — skip to the next one.
@@ -891,6 +985,84 @@ export class TableBody {
       }
     }
     return blocks;
+  }
+
+  /**
+   * The columns a render pass at `win` needs values for:
+   * `visibleColumns[0, pinnedCount) ∪ visibleColumns[start, end)`.
+   *
+   * `win.pinnedCount`, not `state.pinnedColumns`, so the
+   * {@link ColumnWindow.pinnedPrefixViolated} case — where the rendered
+   * pinned prefix is the permissive "through the last pinned column" — asks
+   * for exactly what it renders. The two ranges are disjoint by
+   * construction (`start >= pinnedCount`), so the concatenation is already in
+   * `visibleColumns` order.
+   */
+  private renderNeedColumns(win: ColumnWindow): string[] {
+    const columns = this.state.visibleColumns.get();
+    const need: string[] = [];
+    for (let i = 0; i < win.pinnedCount && i < columns.length; i++) {
+      const name = columns[i]!;
+      if (name !== ROWID_COLUMN) need.push(name);
+    }
+    for (let i = Math.max(win.start, win.pinnedCount); i < win.end; i++) {
+      const name = columns[i];
+      if (name !== undefined && name !== ROWID_COLUMN) need.push(name);
+    }
+    return need;
+  }
+
+  /**
+   * The projection one block fetch should carry at `win`: the render need,
+   * padded by one full window span on each side and quantized outward to
+   * {@link COL_QUANTUM}.
+   *
+   * One span per side (~3× the rendered band) is generous on purpose — a
+   * fetch is a round trip and horizontal jitter must not thrash it — and the
+   * spike behind this phase measured a padded 113-column projection at ~11 ms
+   * against ~97 ms for the unclipped 1,001, so the padding is close to free.
+   * Quantizing outward is what keeps the dedupe key and the coverage set
+   * stable while the user wobbles inside one quantum.
+   */
+  private fetchColumnsFor(win: ColumnWindow): FetchColumnSet {
+    const columns = this.state.visibleColumns.get();
+    const n = columns.length;
+    const span = Math.max(1, win.end - win.start);
+    // `Math.floor` on a negative start rounds further negative, which is the
+    // outward direction; the clamp afterwards is what keeps it in range.
+    const qStart = Math.max(0, Math.floor((win.start - span) / COL_QUANTUM) * COL_QUANTUM);
+    const qEnd = Math.min(n, Math.ceil((win.end + span) / COL_QUANTUM) * COL_QUANTUM);
+    return this.buildFetchSet(win.pinnedCount, qStart, qEnd);
+  }
+
+  /**
+   * `visibleColumns[0, pinnedCount) ∪ visibleColumns[qStart, qEnd)`, deduped,
+   * in `visibleColumns` order, interned.
+   *
+   * Both inputs are ascending index ranges and the pinned one is a prefix, so
+   * walking them in order already yields ascending output; the `Set` is there
+   * for the overlap when `qStart < pinnedCount`, not for sorting.
+   */
+  private buildFetchSet(pinnedCount: number, qStart: number, qEnd: number): FetchColumnSet {
+    const columns = this.state.visibleColumns.get();
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (index: number): void => {
+      const name = columns[index];
+      // `__rowid__` is prepended by `buildRowQuery` unconditionally, so it is
+      // outside both the fetch set and coverage — see `RowCache`'s header.
+      if (name === undefined || name === ROWID_COLUMN || seen.has(name)) return;
+      seen.add(name);
+      out.push(name);
+    };
+    for (let i = 0; i < pinnedCount && i < columns.length; i++) push(i);
+    for (let i = Math.max(0, qStart); i < qEnd; i++) push(i);
+    return {
+      columns: out,
+      coverage: this.rowDataCache.coverageInterner.intern(out),
+      qStart,
+      qEnd,
+    };
   }
 
   /**
@@ -907,51 +1079,87 @@ export class TableBody {
   private async ensureFetched(): Promise<void> {
     if (this.destroyed) return;
     if (!this.state.tableName.get()) return;
-    if (this.state.visibleColumns.get().length === 0) return;
+    const columns = this.state.visibleColumns.get();
+    if (columns.length === 0) return;
 
-    const needed = this.missingBlocks(this.currentRange);
+    // The window the mounted rows were built for. Every entry point renders
+    // before it reconciles, so this is the live one — except for a caller
+    // that reaches the fetch path before any render at all, where it is still
+    // the zero window and would clip the projection to nothing.
+    let win = this.columnWindow;
+    if (win.end === win.start && win.pinnedCount === 0) {
+      this.syncVisibleIndexMap(columns);
+      win = this.computeColumnWindow(columns, this.state.columnWidths.get());
+    }
+    const need = this.rowDataCache.coverageInterner.intern(this.renderNeedColumns(win));
+    const fetchSet = this.fetchColumnsFor(win);
+
+    const needed = this.missingBlocks(this.currentRange, need);
 
     // Abort in-flight blocks that no longer intersect the current range
-    // padded by one block on each side. Deleting the entry here (not in the
-    // fetch's own `finally`) frees the slot for the same-pass top-up below.
+    // padded by one block on each side, **or** whose column range the window
+    // has left entirely — a horizontal flight the user scrolled away from.
+    // Partial column overlap is left alone: it lands and merges, and half a
+    // needed band is worth more than a re-issued whole one. Deleting the
+    // entry here (not in the fetch's own `finally`) frees the slot for the
+    // same-pass top-up below.
     const padStart = this.currentRange.start - this.fetchBlockSize;
     const padEnd = this.currentRange.end + this.fetchBlockSize;
-    for (const [blockStart, entry] of this.inFlightBlocks) {
-      const blockEnd = blockStart + this.fetchBlockSize;
-      if (blockEnd <= padStart || blockStart >= padEnd) {
+    for (const [key, entry] of this.inFlightBlocks) {
+      const blockEnd = entry.blockStart + this.fetchBlockSize;
+      const rowsAbandoned = blockEnd <= padStart || entry.blockStart >= padEnd;
+      const columnsAbandoned = entry.qEnd <= fetchSet.qStart || entry.qStart >= fetchSet.qEnd;
+      if (rowsAbandoned || columnsAbandoned) {
         entry.controller.abort();
-        this.inFlightBlocks.delete(blockStart);
+        this.inFlightBlocks.delete(key);
       }
     }
 
     // Abort the prefetch when its block became a visible need (the top-up
-    // below re-issues it at high priority) or when it now points the wrong
-    // way. Nulled synchronously so the prefetch check further down sees a
-    // deterministic state in this same pass.
+    // below re-issues it at high priority), when the user changed axis, or
+    // when it now points the wrong way along its own axis. Nulled
+    // synchronously so the prefetch check further down sees a deterministic
+    // state in this same pass.
     if (this.prefetch) {
-      const prefetchNowNeeded = needed.includes(this.prefetch.blockStart);
-      const wrongDirection =
-        this.lastScrollDirection === 1
-          ? this.prefetch.blockStart < this.blockStartOf(Math.max(0, this.currentRange.start))
-          : this.prefetch.blockStart > this.blockStartOf(Math.max(0, this.currentRange.end - 1));
-      if (prefetchNowNeeded || wrongDirection) {
-        this.prefetch.controller.abort();
+      const p = this.prefetch;
+      let abandon = needed.includes(p.blockStart) || p.axis !== this.lastMoveAxis;
+      if (!abandon && p.axis === 'vertical') {
+        abandon =
+          this.lastScrollDirection === 1
+            ? p.blockStart < this.blockStartOf(Math.max(0, this.currentRange.start))
+            : p.blockStart > this.blockStartOf(Math.max(0, this.currentRange.end - 1));
+      } else if (!abandon) {
+        abandon = p.direction !== this.lastHorizontalDirection;
+      }
+      if (abandon) {
+        p.controller.abort();
         this.prefetch = null;
       }
     }
 
-    // Top up visible-block fetches. An in-flight block is never re-issued.
+    // Top up visible-block fetches. A (block, column-set) pair already in
+    // flight is never re-issued; the same block for a *different* column set
+    // legitimately is, which is how a horizontal move tops up rows it already
+    // holds.
     const started: Promise<void>[] = [];
     for (const blockStart of needed) {
       if (this.inFlightBlocks.size >= TableBody.MAX_INFLIGHT_BLOCK_FETCHES) break;
-      if (this.inFlightBlocks.has(blockStart)) continue;
+      const key = `${blockStart}:${fetchSet.coverage.id}`;
+      if (this.inFlightBlocks.has(key)) continue;
       const controller = new AbortController();
-      this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch });
-      started.push(this.fetchBlock(blockStart, this.epoch, controller, false));
+      this.inFlightBlocks.set(key, {
+        blockStart,
+        controller,
+        epoch: this.epoch,
+        coverage: fetchSet.coverage,
+        qStart: fetchSet.qStart,
+        qEnd: fetchSet.qEnd,
+      });
+      started.push(this.fetchBlock(blockStart, this.epoch, controller, false, fetchSet));
     }
 
-    // Prefetch: one block beyond the viewport in the last scroll direction,
-    // only when nothing visible is missing or in flight.
+    // Prefetch: exactly one speculative fetch, aimed along whichever axis
+    // moved last, only when nothing visible is missing or in flight.
     if (
       this.prefetchEnabled &&
       needed.length === 0 &&
@@ -959,24 +1167,64 @@ export class TableBody {
       this.prefetch === null &&
       this.currentRange.end > this.currentRange.start
     ) {
-      const candidate =
-        this.lastScrollDirection === 1
-          ? this.blockStartOf(this.currentRange.end - 1) + this.fetchBlockSize
-          : this.blockStartOf(this.currentRange.start) - this.fetchBlockSize;
-      if (
-        candidate >= 0 &&
-        candidate < this.virtualScroller.getTotalRows() &&
-        !this.rowDataCache.has(candidate)
-      ) {
+      const speculation = this.nextSpeculation(win, fetchSet);
+      if (speculation) {
         const controller = new AbortController();
-        this.prefetch = { blockStart: candidate, controller };
-        started.push(this.fetchBlock(candidate, this.epoch, controller, true));
+        this.prefetch = {
+          blockStart: speculation.blockStart,
+          controller,
+          axis: this.lastMoveAxis,
+          direction:
+            this.lastMoveAxis === 'vertical'
+              ? this.lastScrollDirection
+              : this.lastHorizontalDirection,
+        };
+        started.push(
+          this.fetchBlock(speculation.blockStart, this.epoch, controller, true, speculation.fetch),
+        );
       }
     }
 
     if (started.length > 0) {
       await Promise.allSettled(started);
     }
+  }
+
+  /**
+   * The one speculative fetch worth making right now, or `null`.
+   *
+   * Axis-aware, because the two axes speculate about different things. After
+   * a vertical move the guess is the next row block at the columns already in
+   * hand; after a horizontal move it is the *visible* rows at the next
+   * quantum of columns in the direction of travel — guessing a row block
+   * ahead while the user sweeps sideways fetches something they are moving
+   * away from, and the reverse is just as true.
+   */
+  private nextSpeculation(
+    win: ColumnWindow,
+    fetchSet: FetchColumnSet,
+  ): { blockStart: number; fetch: FetchColumnSet } | null {
+    if (this.lastMoveAxis === 'vertical') {
+      const candidate =
+        this.lastScrollDirection === 1
+          ? this.blockStartOf(this.currentRange.end - 1) + this.fetchBlockSize
+          : this.blockStartOf(this.currentRange.start) - this.fetchBlockSize;
+      if (candidate < 0 || candidate >= this.virtualScroller.getTotalRows()) return null;
+      if (this.rowDataCache.covers(candidate, fetchSet.coverage)) return null;
+      return { blockStart: candidate, fetch: fetchSet };
+    }
+
+    const n = this.state.visibleColumns.get().length;
+    const step = COL_QUANTUM * this.lastHorizontalDirection;
+    const qStart = Math.max(0, Math.min(n, fetchSet.qStart + step));
+    const qEnd = Math.max(0, Math.min(n, fetchSet.qEnd + step));
+    // The window is already against an edge — nothing further that way.
+    if (qStart === fetchSet.qStart && qEnd === fetchSet.qEnd) return null;
+    const stepped = this.buildFetchSet(win.pinnedCount, qStart, qEnd);
+    if (stepped.coverage === fetchSet.coverage) return null;
+    const candidate = this.blockStartOf(Math.max(0, this.currentRange.start));
+    if (this.rowDataCache.covers(candidate, stepped.coverage)) return null;
+    return { blockStart: candidate, fetch: stepped };
   }
 
   /**
@@ -1003,12 +1251,12 @@ export class TableBody {
     epochAtStart: number,
     controller: AbortController,
     isPrefetch: boolean,
+    fetchSet: FetchColumnSet,
   ): Promise<void> {
     try {
       const tableName = this.state.tableName.get();
       if (!tableName) return;
-      const visibleColumns = this.state.visibleColumns.get();
-      if (visibleColumns.length === 0) return;
+      if (this.state.visibleColumns.get().length === 0) return;
 
       const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
       if (limit <= 0) return;
@@ -1016,9 +1264,13 @@ export class TableBody {
       const sortColumns = this.state.sortColumns.get();
       const filters = this.state.filters.get();
       const usedFastPath = this.useRowidFastPath(sortColumns, filters);
+      // The padded column window, not every visible column: at 1,000 columns
+      // that is a ~113-column SELECT rather than a 1,001-column one, and the
+      // drain of the difference is the bulk of a block fetch's cost — see
+      // `tests/performance/projection.duckdb.test.ts`.
       const sql = this.buildRowQuery(
         tableName,
-        visibleColumns,
+        fetchSet.columns,
         sortColumns,
         filters,
         blockStart,
@@ -1073,14 +1325,14 @@ export class TableBody {
           // still in flight, and the reconciler would double-issue the
           // block. With `await`, the retry's own finally deregisters first
           // and this one's identity guard turns into a no-op.
-          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch);
+          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch, fetchSet);
         }
         for (const row of rows) {
-          this.rowDataCache.set(Number(row[ROWID_COLUMN]), row);
+          this.rowDataCache.merge(Number(row[ROWID_COLUMN]), row, fetchSet.coverage);
         }
       } else {
         rows.forEach((row, i) => {
-          this.rowDataCache.set(blockStart + i, row);
+          this.rowDataCache.merge(blockStart + i, row, fetchSet.coverage);
         });
       }
 
@@ -1104,8 +1356,11 @@ export class TableBody {
         if (this.prefetch?.controller === controller) {
           this.prefetch = null;
         }
-      } else if (this.inFlightBlocks.get(blockStart)?.controller === controller) {
-        this.inFlightBlocks.delete(blockStart);
+      } else {
+        const key = `${blockStart}:${fetchSet.coverage.id}`;
+        if (this.inFlightBlocks.get(key)?.controller === controller) {
+          this.inFlightBlocks.delete(key);
+        }
       }
       // Reconcile against the LIVE viewport — the replacement for the old
       // stored-pendingFetch replay, which could resurrect a stale range.
@@ -1117,7 +1372,18 @@ export class TableBody {
 
   /**
    * Evict whole cached blocks furthest from the live viewport until the
-   * cache is back under `rowCacheRows`.
+   * cache is back under budget.
+   *
+   * **The budget is cells, not rows: `rowCacheRows × the current render
+   * need`.** `rowCacheRows` still means "rows" to a caller, and on a table
+   * narrow enough that one fetch covers every visible column this is
+   * *exactly* the old rule — coverage ≡ the visible set, so `cellCount` is
+   * `rows × N`, the budget is `rowCacheRows × N`, and the comparison reduces
+   * term for term. What changes is the wide case, where the option used to
+   * mean 2,048 × 1,000 ≈ 2M values on a 1,000-column table and 2,048 × 20 ≈
+   * 40K on a 20-column one. Counting cells makes it mean roughly the same
+   * memory at both, and makes a row that accumulated two windows' worth of
+   * columns over a horizontal sweep cost what it actually costs.
    *
    * Distance is measured from `this.currentRange` — never from a fetch's
    * own bounds, which is how the old per-row eviction managed to evict
@@ -1134,17 +1400,23 @@ export class TableBody {
    * most the visible blocks plus one, well inside the 4-block sizing floor.
    */
   private evictDistantBlocks(justWrittenBlockStart: number): void {
-    if (this.rowDataCache.size <= this.rowCacheRows) return;
+    // `max(1, …)` so a degenerate empty window cannot make the budget zero
+    // and evict everything on every write.
+    const budget =
+      this.rowCacheRows * Math.max(1, this.renderNeedColumns(this.columnWindow).length);
+    if (this.rowDataCache.cellCount <= budget) return;
 
-    // Group cached indices by block.
-    const blockRowCounts = new Map<number, number>();
+    // Group cached indices by block, carrying each block's cell contribution
+    // so the loop below can subtract it without re-walking the rows.
+    const blockCells = new Map<number, number>();
     for (const index of this.rowDataCache.keys()) {
       const blockStart = this.blockStartOf(index);
-      blockRowCounts.set(blockStart, (blockRowCounts.get(blockStart) ?? 0) + 1);
+      const cells = this.rowDataCache.coverageOf(index)?.names.size ?? 0;
+      blockCells.set(blockStart, (blockCells.get(blockStart) ?? 0) + cells);
     }
 
     const candidates: number[] = [];
-    for (const blockStart of blockRowCounts.keys()) {
+    for (const blockStart of blockCells.keys()) {
       const blockEnd = blockStart + this.fetchBlockSize;
       const visible = blockEnd > this.currentRange.start && blockStart < this.currentRange.end;
       if (visible || blockStart === justWrittenBlockStart) continue;
@@ -1157,14 +1429,14 @@ export class TableBody {
       );
     candidates.sort((a, b) => distanceOf(b) - distanceOf(a));
 
-    let total = this.rowDataCache.size;
+    let total = this.rowDataCache.cellCount;
     for (const blockStart of candidates) {
-      if (total <= this.rowCacheRows) break;
+      if (total <= budget) break;
       const blockEnd = blockStart + this.fetchBlockSize;
       for (let i = blockStart; i < blockEnd; i++) {
         this.rowDataCache.delete(i);
       }
-      total -= blockRowCounts.get(blockStart) ?? 0;
+      total -= blockCells.get(blockStart) ?? 0;
     }
   }
 
@@ -1349,12 +1621,18 @@ export class TableBody {
     for (let i = newStart; i < newEnd; i++) {
       let rowEl = this.rowElementMap.get(i);
       const rowData = this.rowDataCache.get(i);
+      // Whichever columns of this row have landed. A row present but short of
+      // the window renders as a data row with pending cells — never as a
+      // whole-row placeholder, which would throw away the values it does
+      // hold, and never as data, which would paint `null` for a column that
+      // simply has not been fetched.
+      const coverage = this.rowDataCache.coverageOf(i);
 
       if (!rowEl) {
         // Need a new row - get from pool or create
         if (rowData) {
           rowEl = this.getOrCreateRow(pass.win);
-          this.updateRowContent(rowEl, i, rowData, pass);
+          this.updateRowContent(rowEl, i, rowData, coverage, pass);
           this.attachRowEventListeners(rowEl, i);
         } else {
           // Data not yet loaded - create placeholder
@@ -1385,13 +1663,13 @@ export class TableBody {
           rowEl.remove();
           this.returnRowToPool(rowEl);
           rowEl = this.getOrCreateRow(pass.win);
-          this.updateRowContent(rowEl, i, rowData, pass);
+          this.updateRowContent(rowEl, i, rowData, coverage, pass);
           this.attachRowEventListeners(rowEl, i);
           this.rowElementMap.set(i, rowEl);
           this.insertRowInOrder(viewport, rowEl, i);
         } else {
           // Row exists, update content if needed (e.g., after sort)
-          this.updateRowContent(rowEl, i, rowData, pass);
+          this.updateRowContent(rowEl, i, rowData, coverage, pass);
         }
       } else if (!this.isPlaceholderRow(rowEl)) {
         // Data row whose cache entry is gone (evicted or invalidated while
@@ -1939,6 +2217,7 @@ export class TableBody {
     rowEl: HTMLElement,
     index: number,
     data: RowData,
+    coverage: CoverageSet | undefined,
     pass: RenderPass,
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
@@ -1997,12 +2276,12 @@ export class TableBody {
     for (let abs = 0; abs < win.pinnedCount; abs++) {
       const child = children[abs];
       if (!child) break;
-      this.paintCell(child as HTMLElement, abs, index, data, rowId, pass, annotationPass);
+      this.paintCell(child as HTMLElement, abs, index, data, coverage, rowId, pass, annotationPass);
     }
     for (let abs = win.start; abs < win.end; abs++) {
       const child = children[abs - win.start + win.pinnedCount + 1];
       if (!child) break;
-      this.paintCell(child as HTMLElement, abs, index, data, rowId, pass, annotationPass);
+      this.paintCell(child as HTMLElement, abs, index, data, coverage, rowId, pass, annotationPass);
     }
 
     // Spacers last, so a structural mistake above shows up as a missing cell
@@ -2038,6 +2317,7 @@ export class TableBody {
     absIdx: number,
     rowIndex: number,
     data: RowData,
+    coverage: CoverageSet | undefined,
     rowId: number | null,
     pass: RenderPass,
     annotationPass: boolean,
@@ -2092,16 +2372,56 @@ export class TableBody {
       cellEl.classList.remove(`${this.classPrefix}-cell--derived`);
     }
 
-    // CellRenderer is intentionally left untouched: it always writes the
-    // formatted value into `cellEl.title`. If the cell has annotations
-    // (any scope) we CLEAR the title — the AnnotationPopover is the
-    // sole tooltip for annotated cells, so the native title would be a
-    // duplicate. When all annotations are later removed, a subsequent
-    // render restores the formatted title without any tracking state.
-    this.cellRenderer.render(cellEl, data[colName], colSchema);
+    // A column the landed fetch did not project has no value — and
+    // `CellRenderer.render` treats `undefined` exactly like `null`, so
+    // handing it one would paint the literal text `null` with
+    // `dt-cell--null` for a column that is merely still on its way. That is
+    // the whole reason coverage is threaded down here.
+    if (coversColumn(coverage, colName)) {
+      this.clearPendingCell(cellEl);
+      // CellRenderer is intentionally left untouched: it always writes the
+      // formatted value into `cellEl.title`. If the cell has annotations
+      // (any scope) we CLEAR the title — the AnnotationPopover is the
+      // sole tooltip for annotated cells, so the native title would be a
+      // duplicate. When all annotations are later removed, a subsequent
+      // render restores the formatted title without any tracking state.
+      this.cellRenderer.render(cellEl, data[colName], colSchema);
+    } else {
+      this.markPendingCell(cellEl);
+    }
     if (annotationPass) {
       this.applyCellAnnotationClasses(cellEl, rowId, colName);
     }
+  }
+
+  /**
+   * Mark a cell whose column has not been fetched yet.
+   *
+   * Blank rather than `null`, `aria-busy` rather than silent, and — the part
+   * that is not cosmetic — it strips the value classes a previous paint left
+   * behind. Cells are pooled and repainted in place, so without the removals
+   * a cell scrolled from a resolved column onto an unresolved one would keep
+   * the old column's `dt-cell--null` italics or `dt-cell--number` alignment
+   * under empty text.
+   */
+  private markPendingCell(cellEl: HTMLElement): void {
+    cellEl.textContent = '';
+    cellEl.title = '';
+    cellEl.classList.remove(`${this.classPrefix}-cell--null`, `${this.classPrefix}-cell--number`);
+    cellEl.classList.add(`${this.classPrefix}-cell--pending`);
+    cellEl.setAttribute('data-pending', '1');
+    cellEl.setAttribute('aria-busy', 'true');
+  }
+
+  /** Undo {@link TableBody.markPendingCell} the moment coverage arrives. */
+  private clearPendingCell(cellEl: HTMLElement): void {
+    // Guarded: this runs for every rendered cell of every pass, and the
+    // overwhelmingly common case is a cell that was never pending. Three DOM
+    // writes skipped is worth one `hasAttribute`.
+    if (!cellEl.hasAttribute('data-pending')) return;
+    cellEl.classList.remove(`${this.classPrefix}-cell--pending`);
+    cellEl.removeAttribute('data-pending');
+    cellEl.removeAttribute('aria-busy');
   }
 
   /**
@@ -2267,6 +2587,7 @@ export class TableBody {
     for (const [index, rowEl] of this.rowElementMap) {
       const rowData = this.rowDataCache.get(index);
       if (!rowData) continue;
+      const coverage = this.rowDataCache.coverageOf(index);
       const rawRowId = rowData[ROWID_COLUMN];
       const rowId =
         typeof rawRowId === 'bigint'
@@ -2286,7 +2607,13 @@ export class TableBody {
       for (const cellEl of this.bodyCellsOf(rowEl)) {
         const colName = cellEl.getAttribute('data-column');
         if (colName === null) continue;
-        this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
+        // The same coverage guard `paintCell` applies. Without it, an
+        // annotation change would re-render every mounted cell from
+        // `rowData`, and the uncovered ones would come back as the literal
+        // text `null` — the store mutating is not new data arriving.
+        if (coversColumn(coverage, colName)) {
+          this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
+        }
         this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
       if (active) rowEl.setAttribute(TableBody.ANNOTATED_ATTR, '1');

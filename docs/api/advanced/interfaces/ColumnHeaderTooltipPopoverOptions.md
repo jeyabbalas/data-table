@@ -6,7 +6,7 @@
 
 # Interface: ColumnHeaderTooltipPopoverOptions
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:41](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnHeaderTooltipPopover.ts#L41)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:41](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnHeaderTooltipPopover.ts#L41)
 
 Options accepted by [ColumnHeaderTooltipPopover](../classes/ColumnHeaderTooltipPopover.md).
 
@@ -16,7 +16,7 @@ Options accepted by [ColumnHeaderTooltipPopover](../classes/ColumnHeaderTooltipP
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:43](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnHeaderTooltipPopover.ts#L43)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:43](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnHeaderTooltipPopover.ts#L43)
 
 CSS class prefix (default: `'dt'`).
 
@@ -26,6 +26,6 @@ CSS class prefix (default: `'dt'`).
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [table/ColumnHeaderTooltipPopover.ts:45](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnHeaderTooltipPopover.ts#L45)
+Defined in: [table/ColumnHeaderTooltipPopover.ts:45](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnHeaderTooltipPopover.ts#L45)
 
 Where to mount the popover element. Defaults to `document.body`.

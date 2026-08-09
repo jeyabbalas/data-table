@@ -6,7 +6,7 @@
 
 # Interface: FilterFanOutRequest
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:39](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/CrossfilterCoordinator.ts#L39)
+Defined in: [visualizations/CrossfilterCoordinator.ts:39](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/visualizations/CrossfilterCoordinator.ts#L39)
 
 Request handed to a [FilterFanOutScheduler](FilterFanOutScheduler.md) in place of a coordinator's
 own per-registration fan-out.
@@ -17,7 +17,7 @@ own per-registration fan-out.
 
 > **columns**: `string`[]
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:45](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/CrossfilterCoordinator.ts#L45)
+Defined in: [visualizations/CrossfilterCoordinator.ts:45](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/visualizations/CrossfilterCoordinator.ts#L45)
 
 Column names with a live (non-destroyed) registration, in registration order.
 
@@ -27,7 +27,7 @@ Column names with a live (non-destroyed) registration, in registration order.
 
 > **filters**: [`Filter`](../../index/type-aliases/Filter.md)[]
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:41](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/CrossfilterCoordinator.ts#L41)
+Defined in: [visualizations/CrossfilterCoordinator.ts:41](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/visualizations/CrossfilterCoordinator.ts#L41)
 
 The filter array being broadcast.
 
@@ -37,7 +37,7 @@ The filter array being broadcast.
 
 > **refresh**: (`columnName`) => `Promise`\<`void`\>
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:51](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/CrossfilterCoordinator.ts#L51)
+Defined in: [visualizations/CrossfilterCoordinator.ts:51](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/visualizations/CrossfilterCoordinator.ts#L51)
 
 Perform the coordinator's normal per-column update. Resolves when it
 settles. Calling it for a column that is no longer registered (or whose
@@ -59,6 +59,6 @@ registration has been destroyed) is a no-op.
 
 > **sequence**: `number`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:43](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/visualizations/CrossfilterCoordinator.ts#L43)
+Defined in: [visualizations/CrossfilterCoordinator.ts:43](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/visualizations/CrossfilterCoordinator.ts#L43)
 
 The coordinator's monotonic filter sequence for this cycle.

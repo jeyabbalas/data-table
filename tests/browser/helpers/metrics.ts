@@ -305,10 +305,21 @@ export async function resetBridgeStats(page: Page): Promise<void> {
 /**
  * Subscriber count per `TableState` signal.
  *
- * Every column header subscribes to six signals; at 1,000 columns that is
- * ~7,000 subscriptions, and a destroy path that misses one leaks them by
- * the thousand. Computed signals expose the same `subscriberCount()`, so
- * they are counted too.
+ * Every column header used to subscribe to seven signals of its own; at 1,000
+ * columns that was ~7,000 subscriptions, and a destroy path that missed one
+ * leaked them by the thousand. `TableContainer` subscribes once per signal and
+ * fans out to the mounted headers now, so what this reports is a small
+ * constant — measured 4 / 3 / 2 / 1 / 4 / 1 for sort, rows, pins, filters,
+ * visible columns and tooltips, the same at 8 columns as at 80. It still
+ * catches the leak it was written for, and it now also catches a regression to
+ * per-header subscription, which shows up as a count that tracks the window.
+ *
+ * Counts alone cannot see *churn*: a scroll sweep that returns to where it
+ * started ends with the same headers mounted, so subscribe and unsubscribe net
+ * to zero and the totals match either way. `TableContainer.subscriptions.test.ts`
+ * spies on `subscribe` itself for that.
+ *
+ * Computed signals expose the same `subscriberCount()`, so they are counted too.
  */
 export async function readSubscriberCounts(page: Page): Promise<Record<string, number>> {
   return page.evaluate(() => {

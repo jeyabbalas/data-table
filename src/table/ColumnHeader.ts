@@ -65,6 +65,31 @@ export interface ColumnHeaderOptions {
    * reader. `TableContainer.announce` is the wiring.
    */
   announce?: ((message: string) => void) | undefined;
+  /**
+   * Subscribe to the table's state signals directly (default: `true`).
+   *
+   * A header self-subscribes to seven of them — sort, row count, pins,
+   * filters, visible columns, the annotation store and the tooltip overrides —
+   * which is fine for one header and is seven times the mounted-header count
+   * when something owns many. `TableContainer` therefore mounts its headers
+   * with `false` and fans the same seven out itself, so the subscriber count
+   * is a small constant rather than a multiple of the window, and a scroll
+   * that mounts and unmounts headers produces no subscribe churn at all.
+   *
+   * Current values are still pulled in the constructor either way, so a header
+   * is correct the moment it exists. What `false` turns off is only the
+   * *reaction* to later changes, which the owner then owes it through
+   * {@link ColumnHeader.update}, {@link ColumnHeader.refreshStatsLine},
+   * {@link ColumnHeader.refreshPinState},
+   * {@link ColumnHeader.refreshFilterIndicator},
+   * {@link ColumnHeader.refreshHideButtonState},
+   * {@link ColumnHeader.refreshAnnotations} and
+   * {@link ColumnHeader.refreshTooltip}.
+   *
+   * Defaults to `true` so a header constructed directly through `/advanced` is
+   * self-sufficient, which is what it has always been.
+   */
+  subscribe?: boolean | undefined;
 }
 
 /**
@@ -577,6 +602,21 @@ export class ColumnHeader {
    * Subscribe to state changes for sort and stats updates
    */
   private subscribeToState(): void {
+    // Pull current values first, and unconditionally: a signal fires only on
+    // change, so a header that subscribed and nothing else would render blank
+    // until the first write — and a header mounted with `subscribe: false`
+    // has to be correct on arrival, since that is the whole basis of the
+    // owner-driven arrangement.
+    this.updateStatsLine(this.state.totalRows.get());
+    this.updateFilterIndicator();
+    this.updatePinState();
+    this.updateHideButtonState(this.state.visibleColumns.get());
+
+    // Everything below is what `subscribe: false` turns off. Kept together and
+    // in one branch so the set the owner owes back cannot drift from the set
+    // that is skipped here.
+    if (this.options.subscribe === false) return;
+
     // Subscribe to sort changes
     const unsubSort = this.state.sortColumns.subscribe(() => {
       if (!this.destroyed) {
@@ -609,9 +649,6 @@ export class ColumnHeader {
     });
     this.unsubscribes.push(unsubFilter);
 
-    // Set initial stats value (subscription only fires on changes, not initial value)
-    this.updateStatsLine(this.state.totalRows.get());
-
     // Subscribe to visible columns to disable hide button when only one column visible
     const unsubVisible = this.state.visibleColumns.subscribe((visible) => {
       if (!this.destroyed) {
@@ -619,15 +656,6 @@ export class ColumnHeader {
       }
     });
     this.unsubscribes.push(unsubVisible);
-
-    // Set initial filter indicator state
-    this.updateFilterIndicator();
-
-    // Set initial pin state
-    this.updatePinState();
-
-    // Set initial hide button state
-    this.updateHideButtonState(this.state.visibleColumns.get());
 
     // Annotation store — re-apply classes whenever any mutation lands.
     // Coarse re-read (one getByColumn call per change) is cheaper than
@@ -870,6 +898,58 @@ export class ColumnHeader {
     if (this.destroyed) return;
     this.element.classList.toggle(`${this.classPrefix}-col-header--layout`, active);
     this.resizer.setActive(active);
+  }
+
+  // -----------------------------------------------------------------------
+  // Owner-driven refreshes
+  //
+  // One entry point per signal a header would otherwise subscribe to, for an
+  // owner that mounts it with {@link ColumnHeaderOptions.subscribe} `false`
+  // and fans the signals out itself. Each is exactly what that header's own
+  // subscription callback did, so the two arrangements cannot diverge in
+  // behaviour — only in how many subscribers the signal ends up with.
+  //
+  // All are no-ops after `destroy()`: a fan-out walks a set the owner
+  // maintains, and one that lags a teardown by a tick must not throw.
+  // -----------------------------------------------------------------------
+
+  /** Re-read `totalRows` into the stats line. See {@link update} for sort. */
+  refreshStatsLine(totalRows: number): void {
+    if (this.destroyed) return;
+    this.updateStatsLine(totalRows);
+  }
+
+  /** Re-read `pinnedColumns` into the pin button. */
+  refreshPinState(): void {
+    if (this.destroyed) return;
+    this.updatePinState();
+  }
+
+  /** Re-read `filtersByColumn` into the filter indicator. */
+  refreshFilterIndicator(): void {
+    if (this.destroyed) return;
+    this.updateFilterIndicator();
+  }
+
+  /**
+   * Re-read the visible set into the hide button, which is disabled while it
+   * would take the last visible column away.
+   */
+  refreshHideButtonState(visibleColumns: string[]): void {
+    if (this.destroyed) return;
+    this.updateHideButtonState(visibleColumns);
+  }
+
+  /** Re-apply this column's annotation classes from the shared store. */
+  refreshAnnotations(): void {
+    if (this.destroyed) return;
+    this.applyAnnotationClasses(this.element);
+  }
+
+  /** Re-apply the app-set column-header tooltip override. */
+  refreshTooltip(): void {
+    if (this.destroyed) return;
+    this.applyTooltipReactivity();
   }
 
   /**

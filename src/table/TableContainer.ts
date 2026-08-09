@@ -1146,6 +1146,13 @@ export class TableContainer {
       annotationPopover: this.resolvedOptions.annotationPopover,
       columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
       announce: (message) => this.announce(message),
+      // The container owns the seven signals a header would watch and fans
+      // them out to the mounted set — see `forEachMountedHeader`. Seven
+      // subscriptions per header is seven times the window rather than a
+      // constant, and every scroll frame that moves the window would add and
+      // remove them by the dozen. The header still pulls current values in its
+      // constructor, so it is correct before it is ever appended.
+      subscribe: false,
     });
 
     // Apply dynamic width from state, resolved to match the body's prefix
@@ -1411,6 +1418,18 @@ export class TableContainer {
     for (let i = 0; i < win.pinnedCount && i < visibleColumns.length; i++) push(i);
     for (let i = win.start; i < win.end; i++) push(i);
     this.columnHeaders = mounted;
+  }
+
+  /**
+   * Run `fn` over every mounted header.
+   *
+   * Over `headerByColumn` rather than `columnHeaders`, because the two are in
+   * step only between renders: the array is rebuilt from the window *after*
+   * the reconcile that mounted and unmounted, while the map is written as each
+   * header arrives and leaves. A fan-out is allowed to run at either moment.
+   */
+  private forEachMountedHeader(fn: (header: ColumnHeader) => void): void {
+    for (const header of this.headerByColumn.values()) fn(header);
   }
 
   /** Size the two spacers to the columns they stand in for. */
@@ -1781,15 +1800,35 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubWidths);
 
-    // Subscribe to sort columns for sort indicator updates
-    // (ColumnHeaders subscribe individually, but this ensures render is called)
+    // Sort indicators. One subscription fanned out to the mounted headers,
+    // rather than one subscription per header — see `mountColumnHeader`.
     const unsubSort = this.state.sortColumns.subscribe(() => {
-      if (!this.destroyed) {
-        // Individual column headers will update their own sort indicators
-        // No need to full re-render here
-      }
+      if (!this.destroyed) this.forEachMountedHeader((h) => h.update());
     });
     this.unsubscribes.push(unsubSort);
+
+    // Filter indicators. The container had no reason to watch `filtersByColumn`
+    // before the headers stopped watching it themselves.
+    const unsubHeaderFilters = this.state.filtersByColumn.subscribe(() => {
+      if (!this.destroyed) this.forEachMountedHeader((h) => h.refreshFilterIndicator());
+    });
+    this.unsubscribes.push(unsubHeaderFilters);
+
+    // App-set column-name tooltip overrides.
+    const unsubHeaderTooltips = this.state.columnHeaderTooltips.subscribe(() => {
+      if (!this.destroyed) this.forEachMountedHeader((h) => h.refreshTooltip());
+    });
+    this.unsubscribes.push(unsubHeaderTooltips);
+
+    // Column-scope annotation classes. `TableBody` keeps its own listener for
+    // cell and row scopes; this one is the header row's share of it.
+    const annotations = this.resolvedOptions.annotations;
+    if (annotations) {
+      const unsubHeaderAnnotations = annotations.on('change', () => {
+        if (!this.destroyed) this.forEachMountedHeader((h) => h.refreshAnnotations());
+      });
+      this.unsubscribes.push(unsubHeaderAnnotations);
+    }
 
     // Subscribe to pinned columns for sticky positioning updates
     // This fires before visibleColumns (which triggers render()),
@@ -1807,14 +1846,17 @@ export class TableContainer {
           }
         }
         this.updatePinnedColumnStyles();
+        this.forEachMountedHeader((h) => h.refreshPinState());
       }
     });
     this.unsubscribes.push(unsubPinned);
 
-    // Update aria-rowcount when total rows change
-    const unsubAriaRows = this.state.totalRows.subscribe(() => {
+    // Update aria-rowcount when total rows change, and the row count each
+    // header prints in its stats line with it.
+    const unsubAriaRows = this.state.totalRows.subscribe((count) => {
       if (!this.destroyed) {
         this.updateGridCounts();
+        this.forEachMountedHeader((h) => h.refreshStatsLine(count));
       }
     });
     this.unsubscribes.push(unsubAriaRows);
@@ -2462,6 +2504,13 @@ export class TableContainer {
   private finishRender(visibleColumns: string[], prevVisible: ReadonlySet<string>): void {
     // Apply pinned column styles after headers are created
     this.updatePinnedColumnStyles();
+
+    // The hide button is disabled while it would take the last visible column
+    // away, so it is a function of the set this render was called for. Driven
+    // from here rather than from a `visibleColumns` subscription of its own,
+    // because every write of that signal renders anyway — and running after
+    // the reconcile is what includes the headers this render just mounted.
+    this.forEachMountedHeader((h) => h.refreshHideButtonState(visibleColumns));
 
     // FLIP animation: if we have saved positions from a pin/unpin, animate columns
     if (this.savedColumnPositions) {

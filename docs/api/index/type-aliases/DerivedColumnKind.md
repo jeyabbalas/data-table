@@ -8,6 +8,6 @@
 
 > **DerivedColumnKind** = `"expression"` \| `"vector"`
 
-Defined in: [derived/types.ts:11](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/derived/types.ts#L11)
+Defined in: [derived/types.ts:11](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/derived/types.ts#L11)
 
 Discriminant for derived column kind

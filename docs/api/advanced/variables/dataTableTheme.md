@@ -8,7 +8,7 @@
 
 > `const` **dataTableTheme**: `Extension`
 
-Defined in: [sql-editor/theme.ts:14](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/sql-editor/theme.ts#L14)
+Defined in: [sql-editor/theme.ts:14](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/sql-editor/theme.ts#L14)
 
 CodeMirror editor theme that resolves every color, font, and spacing through
 the library's `--dt-*` CSS custom properties so the editor inherits the

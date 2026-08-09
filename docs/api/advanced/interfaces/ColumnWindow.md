@@ -6,7 +6,7 @@
 
 # Interface: ColumnWindow
 
-Defined in: [table/ColumnWindow.ts:73](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L73)
+Defined in: [table/ColumnWindow.ts:73](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L73)
 
 The set of body columns to render, plus the geometry of everything skipped.
 
@@ -22,7 +22,7 @@ on screen at any scroll offset — followed by the left spacer, then
 
 > **end**: `number`
 
-Defined in: [table/ColumnWindow.ts:77](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L77)
+Defined in: [table/ColumnWindow.ts:77](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L77)
 
 One past the last windowed index. Always `>= start`, `<= visibleColumns.length`.
 
@@ -32,7 +32,7 @@ One past the last windowed index. Always `>= start`, `<= visibleColumns.length`.
 
 > **leftSpacerPx**: `number`
 
-Defined in: [table/ColumnWindow.ts:81](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L81)
+Defined in: [table/ColumnWindow.ts:81](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L81)
 
 Σ occupied widths of `[pinnedCount, start)` — the left spacer.
 
@@ -42,7 +42,7 @@ Defined in: [table/ColumnWindow.ts:81](https://github.com/jeyabbalas/data-table/
 
 > **pinnedCount**: `number`
 
-Defined in: [table/ColumnWindow.ts:79](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L79)
+Defined in: [table/ColumnWindow.ts:79](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L79)
 
 Leading run of pinned columns, force-rendered outside the window.
 
@@ -52,7 +52,7 @@ Leading run of pinned columns, force-rendered outside the window.
 
 > **pinnedPrefixViolated**: `boolean`
 
-Defined in: [table/ColumnWindow.ts:97](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L97)
+Defined in: [table/ColumnWindow.ts:97](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L97)
 
 `true` when the pinned columns were **not** a leading run of
 `visibleColumns` and `pinnedCount` fell back to "through the last pinned
@@ -68,7 +68,7 @@ pinned column behind an unpinned one.
 
 > **pinnedWidthPx**: `number`
 
-Defined in: [table/ColumnWindow.ts:85](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L85)
+Defined in: [table/ColumnWindow.ts:85](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L85)
 
 Σ occupied widths of `[0, pinnedCount)` — where unpinned content starts.
 
@@ -78,7 +78,7 @@ Defined in: [table/ColumnWindow.ts:85](https://github.com/jeyabbalas/data-table/
 
 > **rightSpacerPx**: `number`
 
-Defined in: [table/ColumnWindow.ts:83](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L83)
+Defined in: [table/ColumnWindow.ts:83](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L83)
 
 Σ occupied widths of `[end, N)` — the right spacer.
 
@@ -88,7 +88,7 @@ Defined in: [table/ColumnWindow.ts:83](https://github.com/jeyabbalas/data-table/
 
 > **start**: `number`
 
-Defined in: [table/ColumnWindow.ts:75](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L75)
+Defined in: [table/ColumnWindow.ts:75](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L75)
 
 First windowed index into `visibleColumns`. Always `>= pinnedCount`.
 
@@ -98,6 +98,6 @@ First windowed index into `visibleColumns`. Always `>= pinnedCount`.
 
 > **totalWidthPx**: `number`
 
-Defined in: [table/ColumnWindow.ts:87](https://github.com/jeyabbalas/data-table/blob/d7dc14d5255107ca0d96911117f7760d89b45432/src/table/ColumnWindow.ts#L87)
+Defined in: [table/ColumnWindow.ts:87](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/ColumnWindow.ts#L87)
 
 Σ occupied widths of `[0, N)` — the horizontal scroll extent.

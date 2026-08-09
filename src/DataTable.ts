@@ -327,6 +327,18 @@ export interface CreateDataTableOptions {
    * instantly with zero queries. Raise it to make longer back-scrolls
    * query-free at the cost of memory; it never affects correctness, only
    * how often previously seen blocks are re-fetched.
+   *
+   * **Read it as a multiplier, not a hard row cap.** Row fetches project the
+   * visible column window rather than every column, so a cached row holds
+   * some columns and not others, and the number of *rows* held stopped being
+   * a proxy for memory: the same 2048 that keeps 40K values on a 20-column
+   * table would keep 2M on a 1,000-column one. What is actually budgeted is
+   * `rowCacheRows × the columns the viewport currently needs`, in values.
+   * Below one window of columns — where a fetch covers everything visible —
+   * that is exactly `rowCacheRows` rows, unchanged. Above it, rows that have
+   * accumulated several windows' worth of columns over a horizontal sweep
+   * count for what they hold, so the cache retains fewer of them and roughly
+   * the same memory.
    */
   rowCacheRows?: number;
   /**

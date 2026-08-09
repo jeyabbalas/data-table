@@ -145,6 +145,147 @@ describe('QueryCache', () => {
       expect(cache.size).toBe(0);
       expect(cache.get('q1')).toBeUndefined();
     });
+
+    it('accounts nothing when disabled', () => {
+      const cache = new QueryCache({ maxEntries: 0 });
+      cache.set('q1', [{ v: 1 }]);
+      expect(cache.approxBytes).toBe(0);
+    });
+  });
+
+  /**
+   * The byte bound. `maxEntries` alone cannot tell a 20-column result from a
+   * 1,000-column one, so 100 entries is a few hundred KB on a narrow table
+   * and hundreds of MB on a wide one — which is the shape column-clipped
+   * fetches make reachable rather than hypothetical.
+   */
+  describe('maxBytes', () => {
+    /**
+     * A one-row result whose estimate is `2 × pad + 84` bytes: the row
+     * stringifies to `{"pad":"…"}` (`pad + 10` chars), doubled for UTF-16,
+     * plus 64 B of per-row overhead. Sized explicitly so the eviction
+     * arithmetic below is legible rather than knife-edge.
+     */
+    const sized = (pad: number): { pad: string }[] => [{ pad: 'x'.repeat(pad) }];
+    const SMALL = 400; // 884 bytes
+    const LARGE = 2_000; // 4,084 bytes
+
+    it('tracks an approximate total across set, evict and clear', () => {
+      const cache = new QueryCache();
+      expect(cache.approxBytes).toBe(0);
+
+      cache.set('q1', [{ id: 1, name: 'alpha' }]);
+      const afterFirst = cache.approxBytes;
+      expect(afterFirst).toBeGreaterThan(0);
+
+      cache.set('q2', [{ id: 2, name: 'beta' }]);
+      expect(cache.approxBytes).toBeGreaterThan(afterFirst);
+
+      cache.clear();
+      expect(cache.approxBytes).toBe(0);
+    });
+
+    it('does not double-count an overwritten key', () => {
+      const cache = new QueryCache();
+      cache.set('q1', [{ v: 1 }]);
+      const once = cache.approxBytes;
+      cache.set('q1', [{ v: 1 }]);
+      expect(cache.approxBytes).toBe(once);
+      expect(cache.size).toBe(1);
+    });
+
+    it('evicts least-recently-used first when an insert goes over budget', () => {
+      const cache = new QueryCache({ maxBytes: 3_000 });
+      cache.set('q1', sized(SMALL));
+      cache.set('q2', sized(SMALL));
+      cache.set('q3', sized(SMALL));
+      // Promote q1 so insertion order and recency disagree — the point of LRU.
+      expect(cache.get('q1')).toBeDefined();
+
+      cache.set('q4', sized(SMALL));
+
+      expect(cache.has('q4')).toBe(true);
+      expect(cache.has('q1')).toBe(true); // most recently used, survives
+      expect(cache.has('q2')).toBe(false); // least recently used, goes first
+      expect(cache.has('q3')).toBe(true);
+      expect(cache.approxBytes).toBeLessThanOrEqual(3_000);
+    });
+
+    it('evicts as many entries as one oversized insert requires', () => {
+      // The count bound only ever needed one eviction per insert, because
+      // every entry counts for exactly one. A byte bound needs a loop, and
+      // this is the case that proves it: one insert worth four of the entries
+      // already held.
+      const cache = new QueryCache({ maxBytes: 5_000 });
+      for (let i = 0; i < 5; i++) cache.set(`small${i}`, sized(SMALL));
+      expect(cache.size).toBe(5);
+
+      cache.set('large', sized(LARGE));
+
+      expect(cache.has('large')).toBe(true);
+      expect(cache.size).toBe(2);
+      expect(cache.has('small4')).toBe(true); // the most recent survivor
+      expect(cache.has('small0')).toBe(false);
+      expect(cache.approxBytes).toBeLessThanOrEqual(5_000);
+    });
+
+    it('does not store an entry larger than the whole budget', () => {
+      const cache = new QueryCache({ maxBytes: 2_000 });
+      cache.set('keep', sized(SMALL));
+      const before = cache.approxBytes;
+
+      cache.set('huge', sized(LARGE));
+
+      // Storing it would empty the cache for something that cannot fit, and
+      // then be evicted itself on the next insert.
+      expect(cache.has('huge')).toBe(false);
+      expect(cache.has('keep')).toBe(true);
+      expect(cache.approxBytes).toBe(before);
+    });
+
+    it('falls back to a shape estimate for results JSON cannot serialize', () => {
+      const cache = new QueryCache();
+      // `JSON.stringify` throws on BigInt. The worker normally converts these
+      // away, but nothing in the cache enforces that, and one unserializable
+      // result must not disable the byte bound.
+      cache.set('bigint', [
+        { a: 1n, b: 2n },
+        { a: 3n, b: 4n },
+      ]);
+      expect(cache.size).toBe(1);
+      expect(cache.approxBytes).toBe(2 * 2 * 16);
+    });
+
+    it('gives back an expired entry’s bytes when the expiry is noticed', () => {
+      vi.useFakeTimers();
+      try {
+        const cache = new QueryCache({ ttlMs: 1_000 });
+        cache.set('q1', [{ v: 1 }]);
+        expect(cache.approxBytes).toBeGreaterThan(0);
+
+        vi.advanceTimersByTime(1_500);
+        expect(cache.get('q1')).toBeUndefined();
+        expect(cache.approxBytes).toBe(0);
+
+        cache.set('q2', [{ v: 2 }]);
+        vi.advanceTimersByTime(1_500);
+        expect(cache.has('q2')).toBe(false);
+        expect(cache.approxBytes).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('leaves maxEntries and TTL behaviour alone', () => {
+      // A generous byte budget must not change what the count bound does.
+      const cache = new QueryCache({ maxEntries: 2, maxBytes: 1024 * 1024 });
+      cache.set('q1', [{ v: 1 }]);
+      cache.set('q2', [{ v: 2 }]);
+      cache.set('q3', [{ v: 3 }]);
+      expect(cache.size).toBe(2);
+      expect(cache.has('q1')).toBe(false);
+      expect(cache.has('q3')).toBe(true);
+    });
   });
 });
 

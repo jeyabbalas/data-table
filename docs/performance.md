@@ -307,9 +307,19 @@ default, `await table.whenVizReady()` is the seam.
 
 ### Query cache
 
-`WorkerBridge` has an LRU query cache, default size 100 entries. Cached
-queries return instantly. The cache is invalidated automatically on any
-mutation (filter / sort / derived column) that changes the result set.
+`WorkerBridge` has an LRU query cache, bounded two ways: 100 entries and
+~32 MiB of approximate result size, whichever binds first. Cached queries
+return instantly. The cache is invalidated automatically on any mutation
+(filter / sort / derived column) that changes the result set.
+
+The byte bound exists because the entry count cannot tell a 20-column
+result from a 1,000-column one: 100 entries is a few hundred KB on a
+narrow table and hundreds of MB on a wide one. Over budget, entries are
+dropped least-recently-used first; a single result whose own estimate
+exceeds the budget is not stored at all, rather than emptying the cache
+for something that cannot fit. The estimate is a JSON sample of the first
+rows scaled to the whole result — cheap and approximate on purpose, since
+measuring it exactly would cost more than the cache saves.
 
 **Implication:** filter-change → visualization-refresh loops stay fast
 because the visible charts' repeated "unchanged" queries hit the cache.
@@ -424,9 +434,24 @@ actually bounds the work.
 
 ### Query cache size
 
-Pass `bridgeOptions.cache: { size: 200 }` to increase the cache. Default
-100 is fine for most apps; raise if you have many visualizations driving
-lots of repeated queries.
+Pass `bridgeOptions: { cache: { maxEntries: 200 } }` to increase the
+cache. Default 100 is fine for most apps; raise it if you have many
+visualizations driving lots of repeated queries. Set `maxEntries: 0` to
+disable caching entirely.
+
+`cache.maxBytes` (default 33554432, i.e. 32 MiB) is the second bound, and
+the one that matters on wide tables — see [Query cache](#query-cache) for
+why the entry count alone is not enough. Both apply; whichever binds first
+evicts. Raise it if you cache large results deliberately, lower it on a
+memory-constrained page:
+
+```ts
+const table = await createDataTable({
+  container,
+  source,
+  bridgeOptions: { cache: { maxEntries: 200, maxBytes: 64 * 1024 * 1024 } },
+});
+```
 
 ### Scroll fetch pipeline: `fetchBlockSize`, `rowCacheRows`, `prefetch`
 

@@ -161,6 +161,13 @@ export interface TableBodyOptions {
    * enough for instant scroll-back across ±900 rows with zero queries, which
    * is the reuse role the SQL-keyed QueryCache used to (poorly) play for
    * scroll traffic.
+   *
+   * Eviction budgets **cells**, not row keys: `rowCacheRows × the current
+   * render need`, compared against `RowCache.cellCount`. On a table narrow
+   * enough that one fetch covers every visible column the two are the same
+   * rule term for term; on a wide one it is what keeps the option from
+   * meaning 50× more memory than it does on a narrow one. See
+   * `evictDistantBlocks`.
    */
   rowCacheRows?: number | undefined;
   /**

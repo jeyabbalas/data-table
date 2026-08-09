@@ -523,29 +523,64 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:183-218`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:252-299`](../../src/table/TableBody.ts).
+
+The cache has **two axes**, not one. A row index is present or it is
+not, _and_ a present row holds some set of columns, which need not be
+the set the current column window renders — because a fetch projects the
+window rather than the whole row (below). "Cached" therefore means
+"present **and** covering what the render needs" (`RowCache.covers`,
+[`src/table/RowCache.ts`](../../src/table/RowCache.ts)); a row present
+but short of the need is an ordinary miss that re-fetches, and paints as
+a real data row whose uncovered cells carry `data-pending` /
+`aria-busy="true"` rather than as a whole-row placeholder. Coverage sets
+are interned and shared by every row a fetch lands, and they are sets of
+column _names_, so a `visibleColumns` reorder cannot make a cached row
+appear to hold a column it does not.
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:878-951`](../../src/table/TableBody.ts)) keeps
-at most 2 block fetches in flight — the worker executes serially, so
-that is one running query and one queued — each with its own
+([`src/table/TableBody.ts:1093-1215`](../../src/table/TableBody.ts))
+keeps at most 2 block fetches in flight — the worker executes serially,
+so that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
-by one block on each side are aborted mid-flight, and an epoch counter
-bumped on every filter/sort/data change makes late results from a
+by one block on each side are aborted mid-flight, as are blocks whose
+projection no longer overlaps the columns the window needs, and an epoch
+counter bumped on every filter/sort/data change makes late results from a
 previous state drop instead of landing in the cache. Aborted fetches
 settle silently as cancellations. When nothing visible is missing or in
-flight, one speculative block beyond the viewport in the current scroll
-direction is prefetched (`prefetch`, default true) at `'normal'` worker
-priority, so visible-block fetches (`'high'`) always jump ahead of it.
+flight, one speculative block is prefetched (`prefetch`, default true) at
+`'normal'` worker priority, so visible-block fetches (`'high'`) always
+jump ahead of it; the single speculative slot follows whichever axis
+moved last — one row block beyond the viewport on a vertical move, one
+column span beyond the window's trailing edge on a horizontal one.
 
-Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
-rounded up to whole blocks with a floor of 4 blocks). Over the cap,
+A block projects the **padded column window**, not every visible column
+([`fetchColumnsFor`/`buildFetchSet`,
+`src/table/TableBody.ts:1015-1091`](../../src/table/TableBody.ts)): the
+pinned prefix, plus the rendered window extended by one full span on each
+side and quantized outward to multiples of `COL_QUANTUM` (16). The pad
+is what makes ordinary sideways scrolling free — a move of one viewport
+of columns lands inside coverage already held — and the quantum is what
+keeps a one-column drift from minting a new coverage set. On a table
+narrow enough that the window is the whole column list the two are the
+same query and every claim above degenerates to what it was before
+Phase 5. On a 1,000-column table the `SELECT` list is ~100 columns
+instead of 1,001, and since serialization out of Arrow is 63–77 % of a
+block's latency at every width, the payload is the term that matters.
+
+Fetched rows land in a cache budgeted at `rowCacheRows` × the columns
+the viewport currently needs, counted in **values** rather than rows
+(default 2048, rounded up to whole blocks with a floor of 4 blocks).
+Below one window of columns the budget is exactly `rowCacheRows` rows,
+term for term; above it, rows that accumulated several windows' worth of
+columns over a horizontal sweep count for what they hold. Over budget,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:1107-1140`](../../src/table/TableBody.ts)).
+([`evictDistantBlocks`,
+`src/table/TableBody.ts:1416-1464`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with

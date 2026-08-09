@@ -1539,7 +1539,7 @@ export class TableBody {
     // `ensureFetched` + `fetchBlock`) can permute ties differently and
     // return *different* rows for the same logical positions — duplicating
     // some rows across blocks and dropping others. The cache write at
-    // `rowDataCache.set(blockStart + i, row)` then holds shuffled data and
+    // `rowDataCache.merge(blockStart + i, row, coverage)` then holds shuffled data and
     // the user sees row contents change while scrolling. The
     // empty-sort branch also emits `ORDER BY __rowid__` so filter+scroll
     // (no user sort) is deterministic against any DuckDB parallel-scan

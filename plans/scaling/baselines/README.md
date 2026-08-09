@@ -14,6 +14,15 @@ table; two rows from different machines are not comparable. The
 machine-independent counts (queries, DOM nodes, observers) are the ones
 that graduate into `tests/budgets.ts` when a phase tightens them.
 
+A metric added by a later phase shows `—` for every capture before it —
+"not measured", not "zero". The two block-fetch rows start at `4b9bd9e`
+(Phase 5). Their pre-phase value is not missing so much as implied: a
+block fetch used to project every visible column, so `values per block`
+was exactly `(columns + 1) × 128` — 128,128 at WIDE and 25,728 at GRID,
+against the 6,272 recorded here. `tests/performance/projection.duckdb.test.ts`
+measures the same before/after under control, execution timed apart from
+the Arrow drain.
+
 <!-- dt-baselines:start -->
 
 ### wide-ci — visualizations off
@@ -42,56 +51,62 @@ that graduate into `tests/budgets.ts` when a phase tightens them.
 
 ### wide — visualizations off
 
-| Metric                      | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) | `133b388` (2026-08-09) |
-| --------------------------- | ---------------------: | ---------------------: | ---------------------: | ---------------------: | ---------------------: |
-| Generate (ms)               |                  14538 |                  16961 |                  15096 |                  14414 |                  14399 |
-| Load (ms)                   |                   3866 |                   3859 |                   4065 |                   8336 |                   5101 |
-| └ worker stage (ms)         |                 3845.6 |                 3855.1 |                 4062.8 |                 8334.4 |                   5094 |
-| └ first paint (ms)          |                 3865.2 |                 3855.6 |                 4063.1 |                 8334.7 |                 5095.1 |
-| └ viz ready (ms)            |                 3845.7 |                 3855.3 |                 4062.9 |                 8334.5 |                 5094.3 |
-| Queries sent                |                      4 |                      4 |                      4 |                      4 |                      3 |
-| Cache hits                  |                      0 |                      0 |                      0 |                      0 |                      0 |
-| DOM nodes                   |                  36356 |                  52052 |                  51052 |                  51052 |                    970 |
-| Canvases                    |                      0 |                      0 |                      0 |                      0 |                      0 |
-| Live ResizeObservers        |                      1 |                      1 |                      1 |                      1 |                      2 |
-| Live MutationObservers      |                      1 |                      1 |                      1 |                      1 |                      1 |
-| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |                   1005 |                      5 |
-| JS heap (MB)                |                     28 |                   31.6 |                   31.6 |                  227.9 |                     22 |
-| One sort (ms)               |                  164.3 |                  401.8 |                  460.8 |                  391.9 |                    165 |
-| One filter (ms)             |                  152.1 |                  423.7 |                  396.8 |                  381.1 |                  173.9 |
-| Scroll storm frame p95 (ms) |                    9.8 |                   36.2 |                   37.3 |                     38 |                    9.3 |
+| Metric                           | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `5285b63` (2026-08-08) | `970698e` (2026-08-08) | `133b388` (2026-08-09) | `4b9bd9e` (2026-08-09) |
+| -------------------------------- | ---------------------: | ---------------------: | ---------------------: | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)                    |                  14538 |                  16961 |                  15096 |                  14414 |                  14399 |                  14735 |
+| Load (ms)                        |                   3866 |                   3859 |                   4065 |                   8336 |                   5101 |                   3490 |
+| └ worker stage (ms)              |                 3845.6 |                 3855.1 |                 4062.8 |                 8334.4 |                   5094 |                 3487.6 |
+| └ first paint (ms)               |                 3865.2 |                 3855.6 |                 4063.1 |                 8334.7 |                 5095.1 |                 3488.9 |
+| └ viz ready (ms)                 |                 3845.7 |                 3855.3 |                 4062.9 |                 8334.5 |                 5094.3 |                 3487.8 |
+| Queries sent                     |                      4 |                      4 |                      4 |                      4 |                      3 |                      3 |
+| Cache hits                       |                      0 |                      0 |                      0 |                      0 |                      0 |                      0 |
+| DOM nodes                        |                  36356 |                  52052 |                  51052 |                  51052 |                    970 |                    970 |
+| Canvases                         |                      0 |                      0 |                      0 |                      0 |                      0 |                      0 |
+| Live ResizeObservers             |                      1 |                      1 |                      1 |                      1 |                      2 |                      2 |
+| Live MutationObservers           |                      1 |                      1 |                      1 |                      1 |                      1 |                      1 |
+| sortColumns subscribers          |                   1005 |                   1005 |                   1005 |                   1005 |                      5 |                      5 |
+| JS heap (MB)                     |                     28 |                   31.6 |                   31.6 |                  227.9 |                     22 |                   18.4 |
+| One sort (ms)                    |                  164.3 |                  401.8 |                  460.8 |                  391.9 |                    165 |                   23.8 |
+| One filter (ms)                  |                  152.1 |                  423.7 |                  396.8 |                  381.1 |                  173.9 |                   23.9 |
+| Scroll storm frame p95 (ms)      |                    9.8 |                   36.2 |                   37.3 |                     38 |                    9.3 |                   10.3 |
+| One row-block fetch (ms, median) |                      — |                      — |                      — |                      — |                      — |                    7.4 |
+| └ values per block               |                      — |                      — |                      — |                      — |                      — |                   6272 |
 
 - `202bb18` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `5285b63` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `133b388` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
+- `4b9bd9e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
 ### wide — visualizations on
 
-| Metric                      | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `970698e` (2026-08-08) | `133b388` (2026-08-09) |
-| --------------------------- | ---------------------: | ---------------------: | ---------------------: | ---------------------: |
-| Generate (ms)               |                  14154 |                  14716 |                  14461 |                  16309 |
-| Load (ms)                   |                   3860 |                   3743 |                  18884 |                   3532 |
-| └ worker stage (ms)         |                 3839.5 |                 3741.7 |                 8673.7 |                 3518.5 |
-| └ first paint (ms)          |                 3859.1 |                 3742.1 |                   8674 |                 3519.3 |
-| └ viz ready (ms)            |                 4157.6 |                 4291.7 |                  18884 |                 3914.3 |
-| Queries sent                |                     20 |                     20 |                   2004 |                     19 |
-| Cache hits                  |                      0 |                      0 |                      0 |                      0 |
-| DOM nodes                   |                  36380 |                  52076 |                  55052 |                    994 |
-| Canvases                    |                      8 |                      8 |                   1000 |                      8 |
-| Live ResizeObservers        |                      9 |                      9 |                   1001 |                     10 |
-| Live MutationObservers      |                      2 |                      2 |                   1001 |                      2 |
-| sortColumns subscribers     |                   1005 |                   1005 |                   1005 |                      5 |
-| JS heap (MB)                |                   24.8 |                     28 |                  227.9 |                     22 |
-| One sort (ms)               |                  163.8 |                  450.3 |                10514.6 |                  149.8 |
-| One filter (ms)             |                  230.7 |                  506.2 |                 8274.7 |                  250.5 |
-| Scroll storm frame p95 (ms) |                   10.1 |                   40.5 |                   44.8 |                    9.3 |
+| Metric                           | `202bb18` (2026-08-08) | `51ba4ef` (2026-08-08) | `970698e` (2026-08-08) | `133b388` (2026-08-09) | `4b9bd9e` (2026-08-09) |
+| -------------------------------- | ---------------------: | ---------------------: | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)                    |                  14154 |                  14716 |                  14461 |                  16309 |                  14704 |
+| Load (ms)                        |                   3860 |                   3743 |                  18884 |                   3532 |                   3097 |
+| └ worker stage (ms)              |                 3839.5 |                 3741.7 |                 8673.7 |                 3518.5 |                 3094.8 |
+| └ first paint (ms)               |                 3859.1 |                 3742.1 |                   8674 |                 3519.3 |                 3095.5 |
+| └ viz ready (ms)                 |                 4157.6 |                 4291.7 |                  18884 |                 3914.3 |                 3303.8 |
+| Queries sent                     |                     20 |                     20 |                   2004 |                     19 |                     19 |
+| Cache hits                       |                      0 |                      0 |                      0 |                      0 |                      0 |
+| DOM nodes                        |                  36380 |                  52076 |                  55052 |                    994 |                    994 |
+| Canvases                         |                      8 |                      8 |                   1000 |                      8 |                      8 |
+| Live ResizeObservers             |                      9 |                      9 |                   1001 |                     10 |                     10 |
+| Live MutationObservers           |                      2 |                      2 |                   1001 |                      2 |                      2 |
+| sortColumns subscribers          |                   1005 |                   1005 |                   1005 |                      5 |                      5 |
+| JS heap (MB)                     |                   24.8 |                     28 |                  227.9 |                     22 |                   18.4 |
+| One sort (ms)                    |                  163.8 |                  450.3 |                10514.6 |                  149.8 |                   26.8 |
+| One filter (ms)                  |                  230.7 |                  506.2 |                 8274.7 |                  250.5 |                  112.1 |
+| Scroll storm frame p95 (ms)      |                   10.1 |                   40.5 |                   44.8 |                    9.3 |                   10.3 |
+| One row-block fetch (ms, median) |                      — |                      — |                      — |                      — |                    7.7 |
+| └ values per block               |                      — |                      — |                      — |                      — |                   6272 |
 
 - `202bb18` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `51ba4ef` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `970698e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 - `133b388` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
+- `4b9bd9e` — darwin, 10 cpus, node v22.23.2. Truncated: 60000 of 100000 rows, all 1000 columns. exportToBuffer has no ROW_GROUP_SIZE option, so the full-depth tier buffers as one row group and overruns DuckDB-WASM's heap — see WIDE_MOUNT_ROWS.
 
 ### wide-csv — visualizations off
 
@@ -118,27 +133,30 @@ that graduate into `tests/budgets.ts` when a phase tightens them.
 
 ### grid — visualizations off
 
-| Metric                      | `202bb18` (2026-08-08) | `970698e` (2026-08-08) |
-| --------------------------- | ---------------------: | ---------------------: |
-| Generate (ms)               |                  23672 |                  23954 |
-| Load (ms)                   |                   3769 |                  10943 |
-| └ worker stage (ms)         |                   3760 |                10936.4 |
-| └ first paint (ms)          |                 3764.5 |                10936.6 |
-| └ viz ready (ms)            |                 3760.2 |                10936.4 |
-| Queries sent                |                      4 |                      4 |
-| Cache hits                  |                      0 |                      0 |
-| DOM nodes                   |                   7556 |                  10252 |
-| Canvases                    |                      0 |                      0 |
-| Live ResizeObservers        |                      1 |                      1 |
-| Live MutationObservers      |                      1 |                      1 |
-| sortColumns subscribers     |                    205 |                    205 |
-| JS heap (MB)                |                   19.6 |                   17.4 |
-| One sort (ms)               |                    129 |                  167.1 |
-| One filter (ms)             |                   60.6 |                  102.3 |
-| Scroll storm frame p95 (ms) |                    9.4 |                    9.5 |
+| Metric                           | `202bb18` (2026-08-08) | `970698e` (2026-08-08) | `4b9bd9e` (2026-08-09) |
+| -------------------------------- | ---------------------: | ---------------------: | ---------------------: |
+| Generate (ms)                    |                  23672 |                  23954 |                  24140 |
+| Load (ms)                        |                   3769 |                  10943 |                   3972 |
+| └ worker stage (ms)              |                   3760 |                10936.4 |                   3970 |
+| └ first paint (ms)               |                 3764.5 |                10936.6 |                 3970.7 |
+| └ viz ready (ms)                 |                 3760.2 |                10936.4 |                 3970.1 |
+| Queries sent                     |                      4 |                      4 |                      3 |
+| Cache hits                       |                      0 |                      0 |                      0 |
+| DOM nodes                        |                   7556 |                  10252 |                    970 |
+| Canvases                         |                      0 |                      0 |                      0 |
+| Live ResizeObservers             |                      1 |                      1 |                      2 |
+| Live MutationObservers           |                      1 |                      1 |                      1 |
+| sortColumns subscribers          |                    205 |                    205 |                      5 |
+| JS heap (MB)                     |                   19.6 |                   17.4 |                   18.4 |
+| One sort (ms)                    |                    129 |                  167.1 |                   49.4 |
+| One filter (ms)                  |                   60.6 |                  102.3 |                   25.2 |
+| Scroll storm frame p95 (ms)      |                    9.4 |                    9.5 |                   10.4 |
+| One row-block fetch (ms, median) |                      — |                      — |                      8 |
+| └ values per block               |                      — |                      — |                   6272 |
 
 - `202bb18` — darwin, 10 cpus, node v22.23.2.
 - `970698e` — darwin, 10 cpus, node v22.23.2.
+- `4b9bd9e` — darwin, 10 cpus, node v22.23.2.
 
 ### deep — visualizations off
 

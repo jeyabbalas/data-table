@@ -42,7 +42,9 @@ import {
   canvasCount,
   domNodeCount,
   frameSampler,
+  installBlockFetchTimer,
   installObserverCensus,
+  readBlockFetchStats,
   readObserverCensus,
   readSubscriberCounts,
 } from './helpers/metrics';
@@ -90,6 +92,19 @@ interface Baseline {
   oneSortMs: number | null;
   oneFilterMs: number | null;
   scrollStormFrameP95: number | null;
+  /**
+   * Median round trip of one row-block fetch during the scroll storm, ms.
+   *
+   * Added in Phase 5, which changed what a block fetch *is*: it used to
+   * project every visible column, so the number tracked the schema, and now
+   * it projects the padded column window, so it tracks the viewport. On a
+   * tier narrow enough that a fetch covers everything visible the two are the
+   * same measurement, which is exactly what makes GRID and DEEP the control
+   * rows for WIDE.
+   */
+  blockFetchMs: number | null;
+  /** Median `LIMIT` × projected columns in one block fetch — the payload. */
+  blockPayloadValues: number | null;
   /** Free-text: truncations, fallbacks, anything §4.8 forced. */
   notes?: string;
 }
@@ -252,6 +267,8 @@ async function capture(page: Page, tier: string, opts: MountTierOptions): Promis
     oneSortMs: null,
     oneFilterMs: null,
     scrollStormFrameP95: null,
+    blockFetchMs: null,
+    blockPayloadValues: null,
     // A capture that quietly measured a smaller tier than its filename
     // claims would poison every comparison built on it (README §8.6).
     ...(tier === 'wide' && WIDE_IS_TRUNCATED
@@ -267,6 +284,12 @@ async function capture(page: Page, tier: string, opts: MountTierOptions): Promis
 
   // Scroll pacing before the interactions: sorting rewrites the row order,
   // and a storm over a sorted table measures a different thing.
+  //
+  // The fetch timer goes on here rather than at mount so it records the
+  // storm's blocks alone — the load path's first-paint fetch runs against an
+  // empty cache and a cold worker, and folding it in would describe a
+  // scroll nobody performs.
+  await installBlockFetchTimer(page);
   const frames = await frameSampler(page, async () => {
     for (const fraction of [0.13, 0.5, 0.97, 0.31, 1, 0]) {
       await page.evaluate(
@@ -280,6 +303,16 @@ async function capture(page: Page, tier: string, opts: MountTierOptions): Promis
     }
   });
   row.scrollStormFrameP95 = Math.round(frames.p95DeltaMs * 100) / 100;
+
+  const blocks = await readBlockFetchStats(page);
+  row.blockFetchMs = blocks.medianMs;
+  row.blockPayloadValues = blocks.medianValues;
+  console.log(
+    `[perf-baseline] ${tier} viz=${viz ? 'on' : 'off'}: ${blocks.count} block fetches ` +
+      `(${blocks.aborted} aborted), median ${blocks.medianMs ?? '—'} ms carrying ` +
+      `${blocks.medianValues ?? '—'} values, widest SELECT list ${blocks.maxColumns ?? '—'} ` +
+      `of ${spec.cols + 1}`,
+  );
 
   // Filter first, then undo it, then sort — so both numbers describe the
   // same starting state. Measuring a filter on an already-sorted table
@@ -379,6 +412,8 @@ test('baseline — TARGET (1,000 × 5,000,000), probes only', async ({ page }) =
     oneSortMs: null,
     oneFilterMs: null,
     scrollStormFrameP95: null,
+    blockFetchMs: null,
+    blockPayloadValues: null,
     notes:
       'Probes only — the file is written with COPY … TO parquet and read back through ' +
       'read_parquet. genMs is the COPY; no table is materialized until Phase 10.',

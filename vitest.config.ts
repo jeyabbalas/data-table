@@ -31,10 +31,10 @@ export default defineConfig({
       // branches in src/data/ plus worker glue. Tracked as a post-1.0
       // follow-up.
       thresholds: {
-        statements: 86,
-        branches: 75.5,
-        functions: 89,
-        lines: 88,
+        statements: 86.4,
+        branches: 75.9,
+        functions: 89.5,
+        lines: 88.5,
       },
     },
   },

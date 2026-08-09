@@ -53,11 +53,34 @@ export interface BridgeStatsSnapshot {
   maxInFlight: number;
 }
 
+/** What one row-block fetch costs, over a sampling window. */
+export interface BlockFetchStats {
+  /** Row fetches that completed inside the window. */
+  count: number;
+  /** Row fetches that were aborted mid-flight — excluded from the medians. */
+  aborted: number;
+  /** Median round trip of one block fetch, ms. */
+  medianMs: number | null;
+  /** Median `LIMIT` × projected columns carried back by one block fetch. */
+  medianValues: number | null;
+  /** Widest `SELECT` list seen, `__rowid__` included. */
+  maxColumns: number | null;
+}
+
+/** One timed row fetch, as the page-side wrapper records it. */
+interface BlockFetchSample {
+  ms: number;
+  columns: number;
+  values: number;
+  aborted: boolean;
+}
+
 type MetricsWindow = {
   __t?: { state: Record<string, { subscriberCount?: () => number }>; bridge: unknown };
   __dtListeners?: ListenerCensus;
   __dtObservers?: ObserverCensus;
   __dtFrames?: { deltas: number[]; rafId: number; active: boolean };
+  __dtBlockFetches?: BlockFetchSample[];
 };
 
 /**
@@ -299,6 +322,90 @@ export async function resetBridgeStats(page: Page): Promise<void> {
       (window as unknown as { __dtPerf?: { table?: { bridge: unknown } } }).__dtPerf?.table;
     const bridge = table?.bridge as { __resetStatsForTests?: () => void } | undefined;
     bridge?.__resetStatsForTests?.();
+  });
+}
+
+/**
+ * Wrap `bridge.query` so `window.__dtBlockFetches` carries the wall clock and
+ * the payload size of every **row-block** fetch.
+ *
+ * The bridge's own counters say how many queries were sent, not what any one
+ * of them carried, and from Phase 5 on the payload is the interesting half:
+ * the same scroll costs a 1,001-column `SELECT` list or a ~100-column one
+ * depending on whether the projection is clipped, and the wall clock follows
+ * the values not the rows. Row fetches are the only queries that project
+ * `__rowid__` — header stats, counts and histograms never do — and they pass
+ * `cache: false`, so every sample here is a real worker round trip rather than
+ * an LRU hit.
+ *
+ * Install **after** the mount (the bridge has to exist) and after the initial
+ * settle, so what is timed is steady-state scrolling rather than first paint.
+ * Wraps and delegates, like every other census in this file.
+ */
+export async function installBlockFetchTimer(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as MetricsWindow;
+    const bridge = w.__t?.bridge as Record<string, unknown> | undefined;
+    if (!bridge) throw new Error('installBlockFetchTimer: no bridge — mount a tier first');
+    const log: BlockFetchSample[] = (w.__dtBlockFetches = []);
+    const original = bridge['query'] as (...args: unknown[]) => Promise<unknown>;
+
+    bridge['query'] = function patched(...args: unknown[]): Promise<unknown> {
+      const sql = String(args[0] ?? '');
+      const select = /\bSELECT\s+([\s\S]*?)\s+FROM\s/i.exec(sql);
+      const started = performance.now();
+      const promise = original.apply(bridge, args);
+      if (!select?.[1]?.includes('"__rowid__"')) return promise;
+
+      // `LIMIT n` is the block size; a fetch without one is not a block.
+      const limit = /\bLIMIT\s+(\d+)/i.exec(sql);
+      const columns = select[1].split(',').length;
+      const rows = limit ? Number(limit[1]) : 0;
+      const record = (aborted: boolean): void => {
+        log.push({
+          ms: performance.now() - started,
+          columns,
+          values: columns * rows,
+          aborted,
+        });
+      };
+      return promise.then(
+        (value) => {
+          record(false);
+          return value;
+        },
+        (err: unknown) => {
+          record(true);
+          throw err;
+        },
+      );
+    };
+  });
+}
+
+/**
+ * Summarize what {@link installBlockFetchTimer} has collected.
+ *
+ * Median rather than mean: a scroll storm's fetch times are a fast body plus
+ * a long tail of queue waits, and the mean describes neither. Aborted fetches
+ * are counted but kept out of the medians — an abort measures how quickly the
+ * body changed its mind, not what a block costs.
+ */
+export async function readBlockFetchStats(page: Page): Promise<BlockFetchStats> {
+  return page.evaluate(() => {
+    const samples = (window as unknown as MetricsWindow).__dtBlockFetches ?? [];
+    const done = samples.filter((s) => !s.aborted);
+    const median = (values: number[]): number | null =>
+      values.length === 0 ? null : [...values].sort((a, b) => a - b)[values.length >> 1]!;
+    const ms = median(done.map((s) => s.ms));
+    const values = median(done.map((s) => s.values));
+    return {
+      count: done.length,
+      aborted: samples.length - done.length,
+      medianMs: ms === null ? null : Math.round(ms * 100) / 100,
+      medianValues: values,
+      maxColumns: done.length === 0 ? null : Math.max(...done.map((s) => s.columns)),
+    };
   });
 }
 

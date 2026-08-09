@@ -66,6 +66,8 @@ const METRICS = [
   ['oneSortMs', 'One sort (ms)'],
   ['oneFilterMs', 'One filter (ms)'],
   ['scrollStormFrameP95', 'Scroll storm frame p95 (ms)'],
+  ['blockFetchMs', 'One row-block fetch (ms, median)'],
+  ['blockPayloadValues', '└ values per block'],
 ];
 
 /** Read every capture, newest last. */

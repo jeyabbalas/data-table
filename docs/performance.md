@@ -464,19 +464,67 @@ queries per scroll distance; the default already spans a few viewports of
 rows, so raise it mainly for very tall viewports, and lower it only when
 rows are extremely wide and transfer size matters.
 
+A block fetch projects the **columns you can see**, not every visible
+column: the rendered column window extended by one full span on each side
+and quantized outward to multiples of 16. On a wide table that is the
+difference between a `SELECT` list that tracks the schema and one that
+tracks the viewport — measured against a real DuckDB, 128-row blocks over
+1,000 columns, with `conn.send()` (execution) timed apart from the Arrow
+→ JS drain:
+
+| Per block fetch  | Every column | Padded window | Typical window |
+| ---------------- | -----------: | ------------: | -------------: |
+| Columns          |        1,001 |           113 |             41 |
+| Values per block |      128,128 |        14,464 |          5,248 |
+| Execution        |      22.1 ms |        3.5 ms |         1.5 ms |
+| Drain            |      73.2 ms |        7.8 ms |         2.7 ms |
+| **Total**        |  **95.3 ms** |   **11.3 ms** |     **4.3 ms** |
+
+Below one window of columns — anything up to roughly 100 at default
+widths, which is most tables — a fetch already covers everything visible
+and the clipping is a no-op. Above it, scrolling sideways past the pad
+fetches the columns it exposes, at the same block granularity as
+scrolling down. Nothing about the SQL shape changed: the `__rowid__` fast
+path, the `ORDER BY` tiebreaker, `LIMIT`/`OFFSET` and the INTERVAL casts
+are as they were. There is no option for the pad factor or the quantum.
+
+Note what the table says about **where** the time goes. The drain — Arrow
+→ JS materialization plus the structured clone out of the worker — is
+64–77 % of a block fetch at every projection width, so clipping cut the
+dominant term rather than working around it, and it stays dominant after
+the cut. Moving row blocks across the worker boundary as Arrow IPC
+instead of plain objects is the remaining lever on that term; it is not
+built, and the measurement above is the evidence for weighing it against
+the bundle weight and bridge rewrite it would cost.
+
+A consequence worth knowing if you poll the DOM: a cell whose column has
+not arrived yet renders empty and carries `data-pending` /
+`aria-busy="true"` (`.dt-cell--pending`). It sits in a real data row —
+`data-row-id`, annotations, selection and the cursor all work — so
+whole-row `[data-placeholder]` alone no longer means "nothing is
+outstanding". Wait on `[data-placeholder], .dt-cell[data-pending]`.
+
 `rowCacheRows` (default 2048, rounded up to whole blocks with a floor of
-4 blocks) caps the in-memory row cache. Eviction is whole-block, furthest
-from the live viewport first, so raising it makes longer back-scrolls
-repaint instantly with zero queries at the cost of memory. It never
-affects correctness — only how often previously seen blocks are
-re-fetched.
+4 blocks) sizes the in-memory row cache. Eviction is whole-block,
+furthest from the live viewport first, so raising it makes longer
+back-scrolls repaint instantly with zero queries at the cost of memory.
+It never affects correctness — only how often previously seen blocks are
+re-fetched. Read it as a multiplier rather than a hard row cap: because a
+cached row holds the columns that were fetched for it and not others,
+what is budgeted is `rowCacheRows × the columns the viewport currently
+needs`, counted in values. On a table narrow enough that one fetch covers
+every visible column that is exactly `rowCacheRows` rows, unchanged;
+above it, the same 2048 stops meaning 50× more memory on a 1,000-column
+table than on a 20-column one.
 
 `prefetch` (default `true`) speculatively fetches one block beyond the
 viewport in the current scroll direction while the pipeline is otherwise
-idle. It runs at normal worker priority, so visible-row fetches always
-jump ahead of it, and a direction change abandons it. Disable it to keep
-query volume to the strict minimum — e.g. when the table shares its
-DuckDB worker with heavier analytical queries.
+idle — beyond the last row on a vertical move, beyond the column window's
+trailing edge on a horizontal one. It runs at normal worker priority, so
+visible-row fetches always jump ahead of it, and a direction or axis
+change abandons it. Disable it to keep query volume to the strict
+minimum — e.g. when the table shares its DuckDB worker with heavier
+analytical queries.
 
 ### Combine multi-filter changes into one step
 

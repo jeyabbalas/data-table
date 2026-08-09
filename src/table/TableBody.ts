@@ -674,6 +674,12 @@ export class TableBody {
       this.lastVisibleColumns = [...columns];
       if (orderOnly) {
         this.renderVisibleRows();
+        // Cached values are keyed by column *name*, so a permutation
+        // invalidates nothing — but it does rotate columns into the rendered
+        // window that the clipped fetches never covered, and those are a
+        // genuine miss. No epoch bump: this tops the rows up, it does not
+        // replace them.
+        void this.ensureFetched();
       } else {
         this.invalidateCacheAndRefresh();
       }
@@ -903,6 +909,7 @@ export class TableBody {
     if (this.destroyed) return;
 
     this.lastScrollDirection = range.start >= this.currentRange.start ? 1 : -1;
+    this.lastMoveAxis = 'vertical';
     this.currentRange = range;
     this.renderVisibleRows();
 
@@ -2974,6 +2981,10 @@ export class TableBody {
         win.end !== previous.end ||
         win.pinnedCount !== previous.pinnedCount
       ) {
+        if (win.start !== previous.start) {
+          this.lastHorizontalDirection = win.start > previous.start ? 1 : -1;
+        }
+        this.lastMoveAxis = 'horizontal';
         this.inWidthUpdate = true;
         this.widthUpdatePending = false;
         try {
@@ -2981,6 +2992,10 @@ export class TableBody {
         } finally {
           this.inWidthUpdate = false;
         }
+        // A width change that moves the window exposes columns the clipped
+        // fetches never covered, exactly as a scroll does — widening one
+        // column pushes its neighbours off screen and pulls others on.
+        void this.ensureFetched();
         // No nested write, or the body is gone: this pass was the last one.
         if (!this.widthUpdatePending || this.destroyed) {
           this.widthUpdatePending = false;
@@ -3098,7 +3113,21 @@ export class TableBody {
     // the branch where `start`/`end`/`pinnedCount` already compared equal, so
     // it refreshes the spacer and extent fields of a window whose structure the
     // mounted rows already have — it can never move what is mounted.
+    if (win.start !== current.start) {
+      this.lastHorizontalDirection = win.start > current.start ? 1 : -1;
+    }
+    this.lastMoveAxis = 'horizontal';
     this.renderVisibleRows();
+
+    // **The horizontal fetch trigger, and the only one.** Every path that can
+    // move the column window funnels through here — the rAF scroll handler,
+    // the column-viewport `ResizeObserver`, `TableContainer.refreshColumnWindow`
+    // and so every caller of it (keyboard navigation, the filter-scroll pin,
+    // the post-render scroll restore, `scrollToRightEnd`). The rows on screen
+    // are all present and all short of the columns that just arrived, which
+    // `missingBlocks` reads as the miss it is; nothing below the fetch-set
+    // computation knows this was a horizontal move.
+    void this.ensureFetched();
   }
 
   /**

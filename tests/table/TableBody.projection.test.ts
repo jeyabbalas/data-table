@@ -142,9 +142,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       harness = await mount();
 
       harness.scrollToColumnPx(40 * COL_WIDTH);
-      // The window moved but nothing re-fetches on its own here; a vertical
-      // scroll is what runs the reconciler in this milestone.
-      harness.scrollToRow(400);
       await settle(harness);
 
       const projection = lastProjection(harness);
@@ -172,8 +169,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       let widestAt = 0;
       for (let column = 0; column <= COLUMNS - 4; column += 8) {
         harness.scrollToColumnPx(column * COL_WIDTH);
-        // A vertical nudge is what runs the reconciler in this milestone.
-        harness.scrollToRow(column % 7);
         await settle(harness);
         const projection = lastProjection(harness);
         if (projection.length > widest) {
@@ -200,7 +195,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       harness.state.pinnedColumns.set(['col_0', 'col_1']);
       await settle(harness);
       harness.scrollToColumnPx(200 * COL_WIDTH);
-      harness.scrollToRow(600);
       await settle(harness);
 
       const projection = lastProjection(harness);
@@ -218,8 +212,9 @@ describe('TableBody — clipped row-fetch projections', () => {
       vi.stubGlobal('ResizeObserver', MockResizeObserver);
       harness = await mount();
 
-      // Move the window past the fetched band without letting anything
-      // re-fetch: the rows are all present, and short of what is on screen.
+      // Move the window past the fetched band. The top-up is issued
+      // immediately but its deferred is left parked, so this is the frame the
+      // user actually sees: rows present, columns not yet in hand.
       harness.scrollToColumnPx(40 * COL_WIDTH);
 
       const rowEl = [...harness.container.querySelectorAll('.dt-row')].find(
@@ -255,9 +250,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       const before = cache.coverageOf(0)!;
 
       harness.scrollToColumnPx(40 * COL_WIDTH);
-      // A vertical nudge inside the same block still reconciles: every row is
-      // present and none of them covers the new window.
-      harness.scrollToRow(1);
       await settle(harness);
 
       const after = cache.coverageOf(0)!;
@@ -268,11 +260,11 @@ describe('TableBody — clipped row-fetch projections', () => {
       expect(after.names.size).toBeGreaterThan(before.names.size);
 
       const rowEl = [...harness.container.querySelectorAll('.dt-row')].find(
-        (el) => el.getAttribute('data-row-index') === '1',
+        (el) => el.getAttribute('data-row-index') === '0',
       ) as HTMLElement;
       expect(rowEl.querySelectorAll('[data-pending]')).toHaveLength(0);
       for (const cell of bodyCells(rowEl)) {
-        expect(cell.textContent).toBe(`${cell.getAttribute('data-column')}-1`);
+        expect(cell.textContent).toBe(`${cell.getAttribute('data-column')}-0`);
       }
     });
 
@@ -282,7 +274,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       harness.queries.length = 0;
 
       harness.scrollToColumnPx(40 * COL_WIDTH);
-      harness.scrollToRow(1);
       await settle(harness);
 
       const highPriority = harness.queries.filter((q) => q.options?.priority === 'high');
@@ -298,7 +289,6 @@ describe('TableBody — clipped row-fetch projections', () => {
       const cache = rowCache(harness.body) as RowCache;
 
       harness.scrollToColumnPx(40 * COL_WIDTH);
-      harness.scrollToRow(1);
       await harness.drain();
       const parked = harness.queries[harness.queries.length - 1]!;
       expect(parked.signal?.aborted).toBe(false);
@@ -365,6 +355,125 @@ describe('TableBody — clipped row-fetch projections', () => {
       // just-written block's slack.
       expect(cache.size).toBeLessThanOrEqual(CACHE_ROWS + BLOCK);
       expect(cache.cellCount).toBe(cache.size * 2);
+    });
+  });
+
+  describe('interleaved diagonal scrolling with aborted fetches', () => {
+    /**
+     * Every rendered cell either carries a value that belongs to its own
+     * `(row, column)` or is explicitly marked pending. Anything else — a
+     * neighbour's value, a stale value, the literal text `null` — is the class
+     * of bug clipping introduces and a green rendering suite cannot see.
+     */
+    function oracleViolations(harness: TableBodyHarness): string[] {
+      const problems: string[] = [];
+      for (const rowEl of harness.container.querySelectorAll<HTMLElement>('.dt-row')) {
+        if (rowEl.hasAttribute('data-placeholder')) continue;
+        const index = Number(rowEl.getAttribute('data-row-index'));
+        for (const cell of bodyCells(rowEl)) {
+          const column = cell.getAttribute('data-column');
+          if (column === null) continue;
+          const text = cell.textContent ?? '';
+          if (cell.hasAttribute('data-pending')) {
+            if (text !== '') problems.push(`row ${index} ${column}: pending but shows "${text}"`);
+            if (cell.classList.contains('dt-cell--null')) {
+              problems.push(`row ${index} ${column}: pending but still classed null`);
+            }
+            continue;
+          }
+          const want = `${column}-${index}`;
+          if (text !== want) problems.push(`row ${index} ${column}: "${text}" != "${want}"`);
+        }
+      }
+      return problems;
+    }
+
+    it('never paints a wrong, stale or null-looking value, and always converges', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // `rejectOnAbort: false` is the hostile case: an aborted fetch resolves
+      // anyway and the post-await guards have to drop it.
+      harness = await mount({ totalRows: 4_000, bridge: { rejectOnAbort: false } });
+
+      // mulberry32(0x5EED) — a fixed script, so a failure reproduces.
+      let seed = 0x5eed;
+      const random = (): number => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+
+      for (let step = 0; step < 40; step++) {
+        if (random() < 0.5) {
+          harness.scrollToRow(Math.floor(random() * 3_900));
+        } else {
+          harness.scrollToColumnPx(Math.floor(random() * (COLUMNS - 4)) * COL_WIDTH);
+        }
+        // Answer only some of what is outstanding, so later steps run against
+        // a genuinely half-resolved cache with fetches still in flight.
+        for (const query of harness.queries) {
+          if (answered.has(query) || random() < 0.35) continue;
+          answered.add(query);
+          query.deferred.resolve(rowsFor(query.sql));
+        }
+        await harness.drain(3);
+        expect(oracleViolations(harness)).toEqual([]);
+      }
+
+      await settle(harness);
+      // Converged: nothing pending, nothing a placeholder, nothing wrong.
+      expect(oracleViolations(harness)).toEqual([]);
+      expect(harness.container.querySelectorAll('[data-pending]')).toHaveLength(0);
+      expect(harness.container.querySelectorAll('[data-placeholder]')).toHaveLength(0);
+      expect(harness.body.__verifyDomOrderForTests()).toBe(true);
+      // Aborted fetches settle silently; a real failure would not.
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('re-issues the columns an aborted horizontal fetch never delivered', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      harness = await mount();
+
+      // Two horizontal moves in a row: the first flight is abandoned before
+      // it lands, because the window has left its column range entirely.
+      harness.scrollToColumnPx(60 * COL_WIDTH);
+      await harness.drain();
+      const abandoned = harness.queries[harness.queries.length - 1]!;
+      harness.scrollToColumnPx(250 * COL_WIDTH);
+      await harness.drain();
+      expect(abandoned.signal?.aborted).toBe(true);
+
+      await settle(harness);
+      // The reconciler covered the destination anyway.
+      const cache = rowCache(harness.body) as RowCache;
+      const win = harness.body.getColumnWindow();
+      for (let i = win.start; i < win.end; i++) {
+        expect(cache.coverageOf(harness.body.getVisibleRange().start)!.names.has(`col_${i}`)).toBe(
+          true,
+        );
+      }
+      expect(harness.container.querySelectorAll('[data-pending]')).toHaveLength(0);
+    });
+
+    it('tops up the rotated-in columns after an order-only visibleColumns write', async () => {
+      vi.stubGlobal('ResizeObserver', MockResizeObserver);
+      harness = await mount();
+      const cache = rowCache(harness.body) as RowCache;
+      expect(cache.coverageOf(0)!.names.has('col_290')).toBe(false);
+
+      // A reorder: same set, new order. Nothing cached is invalidated — but
+      // col_290 has just rotated into the rendered window, and it was never
+      // fetched.
+      const columns = [...harness.state.visibleColumns.get()];
+      const moved = columns.splice(290, 1)[0]!;
+      columns.unshift(moved);
+      harness.state.visibleColumns.set(columns);
+      await settle(harness);
+
+      expect(cache.coverageOf(0)!.names.has(moved)).toBe(true);
+      expect(harness.container.querySelectorAll('[data-pending]')).toHaveLength(0);
     });
   });
 });

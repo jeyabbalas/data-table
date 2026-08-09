@@ -447,18 +447,27 @@ export const DT_BUDGET = {
      *
      * Measured: **33** at rest and **81** at the widest sweep stop at the
      * jsdom wide config (300 columns in a 600 px viewport,
-     * `TableBody.projection.test.ts`, which logs the live figure); **113** at
-     * the pinned 1,280 × 720 browser viewport at WIDE and at WIDE_CI alike
-     * (`projection.spec.ts`, same). That the browser figure is *identical at
-     * 300 and at 1,000 columns* is the claim of the phase — before it, the
-     * same fetch projected 301 and 1,001.
+     * `TableBody.projection.test.ts`); **97** across a five-stop sweep at
+     * the pinned 1,280 × 720 browser viewport, and the *same* figure at 300
+     * columns and at 1,000 (`projection.spec.ts`). Both files log the live
+     * number. That equality is the claim of the phase — before it, the same
+     * fetch projected 301 and 1,001.
      *
-     * Cap at 128, ~1.13× the measured maximum: enough for a pinned column or
-     * two on top of the widest window, and far below any tier's column count,
-     * so a projection that stopped clipping fails by 8× at WIDE rather than
-     * by a few per cent. The suites additionally assert the list is
-     * **strictly shorter** than the visible column count at wide configs,
-     * which is the assertion that cannot be satisfied by a cap alone.
+     * Cap at 128, ~1.3× the measured maximum: enough for the widest window a
+     * larger monitor produces, and far below any tier's column count, so a
+     * projection that stopped clipping fails by 10× at WIDE rather than by a
+     * few per cent. The suites additionally assert the list is **strictly
+     * shorter** than the visible column count at wide configs, which is the
+     * assertion a cap alone cannot make.
+     *
+     * **What this bounds is the steady state.** The projection follows the
+     * *render* need, so a state where the body legitimately renders a long
+     * pinned prefix — `ColumnWindow.pinnedPrefixViolated`, reachable for one
+     * frame in the middle of `StateActions.toggleColumnPin`, which writes
+     * `pinnedColumns` before it writes `columnOrder` — fetches that prefix
+     * too: measured 193 columns for one transient fetch while pinning a
+     * column 140 along the axis, against 301 unclipped. Batching those two
+     * writes closes it and belongs to Phase 6's interaction sweep.
      */
     PROJECTED_COLS_MAX: 128,
     /**
@@ -476,14 +485,21 @@ export const DT_BUDGET = {
     /**
      * High-priority row fetches one horizontal column-window move may issue.
      *
-     * A window move is a cache miss on the column axis: every visible row is
-     * present and short of the new need, so the reconciler re-issues the
-     * blocks the viewport spans — one, or two when the viewport straddles a
-     * block boundary — and nothing else. Measured **1** at the jsdom harness
-     * (a 20-row range inside one 128-row block) and **2** in Chromium at
-     * WIDE. Cap at 4: visible blocks plus headroom, and low enough that a
-     * regression to per-column or per-frame fetching — which would be tens
-     * per sweep step — fails it outright.
+     * A window move that leaves the padded band is a cache miss on the column
+     * axis: every visible row is present and short of the new need, so the
+     * reconciler re-issues the blocks the viewport spans — one, or two when
+     * the viewport straddles a block boundary — and nothing else.
+     *
+     * Measured in Chromium (`projection.spec.ts`, which logs both): **0** for
+     * a one-viewport move and **1** for a jump most of the way down a
+     * 300-column axis. Zero is not a broken measurement — the padded window is
+     * ~97 columns against a ~30-column render, so ordinary scrolling is a
+     * cache hit and only a jump past the pad costs a query. That is what the
+     * padding is for. The jsdom harness measures **1** for the same jump.
+     *
+     * Cap at 4: visible blocks plus headroom, and low enough that a regression
+     * to per-column or per-frame fetching — tens per sweep step — fails it
+     * outright.
      */
     QUERIES_PER_WINDOW_MOVE_MAX: 4,
   },

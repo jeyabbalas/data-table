@@ -114,7 +114,16 @@ export function wideMountOptions(viz: boolean): MountTierOptions {
 export interface ColViolation {
   /** `performance.now()` at observation time. */
   t: number;
-  kind: 'sequence' | 'colindex' | 'cell' | 'rowid' | 'window';
+  /**
+   * `pending` is Phase 5's: a cell marked `data-pending` must be *empty*. An
+   * unresolved column showing anything at all is a stale paint — the previous
+   * column's value left behind by a pooled cell — which is exactly the class
+   * of bug column-clipped fetches introduce. It makes the invariant strictly
+   * stronger, not weaker: the `cell` oracle skips pending cells (they are
+   * legitimately blank, and comparing blank to the oracle would log a false
+   * `cell` violation on every horizontal move), and this takes over for them.
+   */
+  kind: 'sequence' | 'colindex' | 'cell' | 'rowid' | 'window' | 'pending';
   /** Human-readable detail — what was expected vs. what was rendered. */
   detail: string;
 }
@@ -437,6 +446,13 @@ export async function mountTierTable(page: Page, opts: MountTierOptions): Promis
  * read a number from the middle of the wave and call it the total. The
  * bridge counter is the only page-observable fact that covers the whole
  * request set, whatever it renders into.
+ *
+ * `[data-pending]` joins `[data-placeholder]` from Phase 5 on. Row fetches
+ * project the padded column window rather than every column, so a horizontal
+ * move leaves *resolved rows* with unresolved cells: no placeholder row, no
+ * scroll movement, and a `data-row-id` on every row. Counting placeholders
+ * alone would call that settled and every column-oracle read after it would
+ * be sampling blank cells.
  */
 export async function waitForTierSettled(
   page: Page,
@@ -458,6 +474,7 @@ export async function waitForTierSettled(
         { __getStatsForTests?: () => { inFlight: number } } | undefined;
       const inFlight = bridge?.__getStatsForTests?.().inFlight ?? 0;
       const placeholders = host.querySelectorAll('[data-placeholder]').length;
+      const pending = host.querySelectorAll('.dt-cell[data-pending]').length;
       const rows = Array.from(host.querySelectorAll('.dt-body .dt-row[data-row-id]'));
       const key =
         scrollEl.scrollTop.toFixed(2) +
@@ -465,6 +482,8 @@ export async function waitForTierSettled(
         scrollEl.scrollLeft.toFixed(2) +
         '#' +
         placeholders +
+        '#' +
+        pending +
         '#' +
         host.querySelectorAll('.dt-col-header[data-column]').length +
         '#' +
@@ -490,7 +509,9 @@ export async function waitForTierSettled(
       const s = (w.__dtTierSettle ??= { last: '', stable: 0 });
       s.stable = key === s.last ? s.stable + 1 : 0;
       s.last = key;
-      return placeholders === 0 && rows.length > 0 && inFlight === 0 && s.stable >= 2;
+      return (
+        placeholders === 0 && pending === 0 && rows.length > 0 && inFlight === 0 && s.stable >= 2
+      );
     },
     opts.host ?? `#${TIER_HOST_ID}`,
     { polling: 150, timeout: opts.timeout ?? 300_000 },
@@ -727,6 +748,19 @@ export async function installColumnInvariantProbe(
               );
               return;
             }
+            // A cell whose column has not been fetched yet is legitimately
+            // blank, so the value oracle cannot speak for it — but it must be
+            // blank, and that is an assertion of its own.
+            if (cell.hasAttribute('data-pending')) {
+              if ((cell.textContent ?? '') !== '') {
+                push(
+                  'pending',
+                  `row ${rowIndex} ${colName}: marked pending but shows "${cell.textContent}"`,
+                );
+                return;
+              }
+              continue;
+            }
             const c = Number(colName.slice(4));
             if (!Number.isFinite(c)) continue;
             const want = oracle(rowIndex, c, seedValue);
@@ -749,7 +783,7 @@ export async function installColumnInvariantProbe(
           childList: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ['data-column', 'aria-colindex'],
+          attributeFilter: ['data-column', 'aria-colindex', 'data-pending'],
         });
       }
       const probe = { observer, rafId: 0, active: !manual };

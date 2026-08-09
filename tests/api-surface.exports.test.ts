@@ -74,6 +74,11 @@ const MUST_NOT_LEAK_AT_ROOT = [
   'TableContainer',
   'ColumnHeader',
   'TableBody',
+  // Not on /advanced either — `RowCache` and `CoverageInterner` are
+  // `TableBody`'s private row store, mirroring the `QueryCache` precedent
+  // above. Listed here so a stray re-export is caught at the root.
+  'RowCache',
+  'CoverageInterner',
   'VirtualScroller',
   'CellRenderer',
   'ColumnReorder',

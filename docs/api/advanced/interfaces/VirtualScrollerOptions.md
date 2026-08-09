@@ -6,7 +6,7 @@
 
 # Interface: VirtualScrollerOptions
 
-Defined in: [table/VirtualScroller.ts:14](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L14)
+Defined in: [table/VirtualScroller.ts:14](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L14)
 
 Options for configuring the VirtualScroller
 
@@ -16,7 +16,7 @@ Options for configuring the VirtualScroller
 
 > `optional` **bufferRows?**: `number`
 
-Defined in: [table/VirtualScroller.ts:18](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L18)
+Defined in: [table/VirtualScroller.ts:18](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L18)
 
 Number of buffer rows above/below viewport (default: 5)
 
@@ -26,7 +26,7 @@ Number of buffer rows above/below viewport (default: 5)
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/VirtualScroller.ts:20](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L20)
+Defined in: [table/VirtualScroller.ts:20](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L20)
 
 CSS class prefix (default: 'dt')
 
@@ -36,7 +36,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **externalScrollContainer?**: `HTMLElement`
 
-Defined in: [table/VirtualScroller.ts:27](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L27)
+Defined in: [table/VirtualScroller.ts:27](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L27)
 
 External scroll container to use for scroll events.
 If provided, VirtualScroller won't create its own scroll container.
@@ -49,7 +49,7 @@ scrollbars appear on a single outer container.
 
 > `optional` **maxVirtualHeight?**: `number`
 
-Defined in: [table/VirtualScroller.ts:35](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L35)
+Defined in: [table/VirtualScroller.ts:35](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L35)
 
 Caps the physical height (in px) written to the scroll spacer
 (default: 15,000,000). Raising it past ~17.8M px breaks Firefox, which
@@ -63,6 +63,6 @@ human scale.
 
 > **rowHeight**: `number`
 
-Defined in: [table/VirtualScroller.ts:16](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/VirtualScroller.ts#L16)
+Defined in: [table/VirtualScroller.ts:16](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/VirtualScroller.ts#L16)
 
 Fixed height per row in pixels

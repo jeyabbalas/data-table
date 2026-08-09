@@ -282,6 +282,41 @@ describe('ModalHost — focus restore', () => {
     // Must not throw.
     expect(() => host.close()).not.toThrow();
   });
+
+  it('leaves focus alone when close overrides restoreFocus', () => {
+    const opener = document.createElement('button');
+    const elsewhere = document.createElement('button');
+    document.body.append(opener, elsewhere);
+    opener.focus();
+
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    // The caller is about to detach `opener`, so the restore would focus a
+    // doomed node — and `focus({ preventScroll: false })` would scroll it
+    // into view on the way. It takes over parking focus itself.
+    elsewhere.focus();
+    host.close({ restoreFocus: false });
+
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it('still restores by default when close is given no overrides', () => {
+    const opener = document.createElement('button');
+    const elsewhere = document.createElement('button');
+    document.body.append(opener, elsewhere);
+    opener.focus();
+
+    const { backdrop, dialog } = makeModalPair();
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    elsewhere.focus();
+    host.close({});
+
+    expect(document.activeElement).toBe(opener);
+  });
 });
 
 describe('ModalHost — outsideClickIgnore (panel mode)', () => {

@@ -6,7 +6,7 @@
 
 # Interface: SetFilter
 
-Defined in: [filters/FilterTypes.ts:41](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterTypes.ts#L41)
+Defined in: [filters/FilterTypes.ts:41](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterTypes.ts#L41)
 
 Set-membership filter (`column IN (values)`). The [includeNull](#includenull) flag
 widens the predicate to include NULL rows.
@@ -17,7 +17,7 @@ widens the predicate to include NULL rows.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:43](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterTypes.ts#L43)
+Defined in: [filters/FilterTypes.ts:43](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterTypes.ts#L43)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:43](https://github.com/jeyabbalas/data-table
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterTypes.ts#L46)
+Defined in: [filters/FilterTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterTypes.ts#L46)
 
 When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
@@ -35,7 +35,7 @@ When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
 > **type**: `"set"`
 
-Defined in: [filters/FilterTypes.ts:42](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterTypes.ts#L42)
+Defined in: [filters/FilterTypes.ts:42](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterTypes.ts#L42)
 
 ***
 
@@ -43,4 +43,4 @@ Defined in: [filters/FilterTypes.ts:42](https://github.com/jeyabbalas/data-table
 
 > **values**: `unknown`[]
 
-Defined in: [filters/FilterTypes.ts:44](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterTypes.ts#L44)
+Defined in: [filters/FilterTypes.ts:44](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterTypes.ts#L44)

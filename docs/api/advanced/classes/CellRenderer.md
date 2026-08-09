@@ -6,7 +6,7 @@
 
 # Class: CellRenderer
 
-Defined in: [table/Cell.ts:66](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/Cell.ts#L66)
+Defined in: [table/Cell.ts:66](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/Cell.ts#L66)
 
 CellRenderer handles formatting and rendering of cell values.
 
@@ -29,7 +29,7 @@ const formatted = renderer.formatValue(1234567, 'integer');
 
 > **new CellRenderer**(`options?`): `CellRenderer`
 
-Defined in: [table/Cell.ts:70](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/Cell.ts#L70)
+Defined in: [table/Cell.ts:70](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/Cell.ts#L70)
 
 #### Parameters
 
@@ -47,7 +47,7 @@ Defined in: [table/Cell.ts:70](https://github.com/jeyabbalas/data-table/blob/ce1
 
 > **formatValue**(`value`, `type?`, `originalType?`): `string`
 
-Defined in: [table/Cell.ts:114](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/Cell.ts#L114)
+Defined in: [table/Cell.ts:114](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/Cell.ts#L114)
 
 Format a value to string based on its data type.
 
@@ -83,7 +83,7 @@ Formatted string representation
 
 > **render**(`cellEl`, `value`, `schema?`): `void`
 
-Defined in: [table/Cell.ts:82](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/Cell.ts#L82)
+Defined in: [table/Cell.ts:82](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/Cell.ts#L82)
 
 Render a value into a cell element with appropriate formatting and styling.
 

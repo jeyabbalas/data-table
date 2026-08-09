@@ -432,6 +432,34 @@ describe('windowed header row — unmount undoes mount', () => {
     h.container.destroy();
   });
 
+  it('keeps focus off <body> when a filter panel loses its column to a scroll', () => {
+    const h = mount();
+    headerFor(h.root(), 'col_2')!.querySelector<HTMLElement>('.dt-col-filter-btn')!.click();
+
+    const panel = h.container.getFilterPanel()!;
+    expect(panel.getIsOpen()).toBe(true);
+    expect(panel.getCurrentColumn()).toBe('col_2');
+
+    // Real DOM focus inside the panel — a keyboard user filling in a field.
+    const field = panel.getElement().querySelector<HTMLElement>('input, button')!;
+    field.focus();
+    expect(panel.getElement().contains(document.activeElement)).toBe(true);
+
+    h.scrollTo(TOTAL_WIDTH - VIEWPORT);
+
+    expect(panel.getIsOpen()).toBe(false);
+    expect(headerFor(h.root(), 'col_2')).toBeNull();
+    // `ModalHost` restores focus to whatever opened the panel — here the
+    // filter button inside the header just detached above. Left to run, that
+    // parks focus on a node no longer in the document; Chrome then resets it
+    // to `<body>`, silently ending keyboard navigation.
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.isConnected).toBe(true);
+    expect(document.activeElement).toBe(h.container.getGridElement());
+
+    h.container.destroy();
+  });
+
   it('dismisses an annotation popover anchored on an unmounting header', () => {
     const annotationPopover = new AnnotationPopover({ classPrefix: 'dt' });
     const h = mount({ annotationPopover });

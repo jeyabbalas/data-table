@@ -6,7 +6,7 @@
 
 # Interface: SerializedStateSnapshot
 
-Defined in: [persistence/types.ts:140](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L140)
+Defined in: [persistence/types.ts:140](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L140)
 
 A serialized StateSnapshot (undo/redo stack entry).
 
@@ -19,7 +19,7 @@ Map → Record, Date → DateWrapper (via SerializedFilter).
 
 > **columnOrder**: `string`[]
 
-Defined in: [persistence/types.ts:144](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L144)
+Defined in: [persistence/types.ts:144](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L144)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [persistence/types.ts:144](https://github.com/jeyabbalas/data-table/
 
 > **columnWidths**: `Record`\<`string`, `number`\>
 
-Defined in: [persistence/types.ts:145](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L145)
+Defined in: [persistence/types.ts:145](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L145)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [persistence/types.ts:145](https://github.com/jeyabbalas/data-table/
 
 > `optional` **derivedColumns?**: [`SerializedDerivedColumnDef`](../type-aliases/SerializedDerivedColumnDef.md)[]
 
-Defined in: [persistence/types.ts:149](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L149)
+Defined in: [persistence/types.ts:149](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L149)
 
 Derived column definitions. May use pool references (v4+) or inline values (pre-v4).
 
@@ -45,7 +45,7 @@ Derived column definitions. May use pool references (v4+) or inline values (pre-
 
 > **filters**: [`SerializedFilter`](../../index/type-aliases/SerializedFilter.md)[]
 
-Defined in: [persistence/types.ts:141](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L141)
+Defined in: [persistence/types.ts:141](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L141)
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: [persistence/types.ts:141](https://github.com/jeyabbalas/data-table/
 
 > **hiddenColumnInfo**: `Record`\<`string`, [`HiddenColumnInfo`](HiddenColumnInfo.md)\>
 
-Defined in: [persistence/types.ts:147](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L147)
+Defined in: [persistence/types.ts:147](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L147)
 
 ***
 
@@ -61,7 +61,7 @@ Defined in: [persistence/types.ts:147](https://github.com/jeyabbalas/data-table/
 
 > **pinnedColumns**: `string`[]
 
-Defined in: [persistence/types.ts:146](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L146)
+Defined in: [persistence/types.ts:146](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L146)
 
 ***
 
@@ -69,7 +69,7 @@ Defined in: [persistence/types.ts:146](https://github.com/jeyabbalas/data-table/
 
 > **sortColumns**: [`SortColumn`](../../index/interfaces/SortColumn.md)[]
 
-Defined in: [persistence/types.ts:142](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L142)
+Defined in: [persistence/types.ts:142](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L142)
 
 ***
 
@@ -77,4 +77,4 @@ Defined in: [persistence/types.ts:142](https://github.com/jeyabbalas/data-table/
 
 > **visibleColumns**: `string`[]
 
-Defined in: [persistence/types.ts:143](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L143)
+Defined in: [persistence/types.ts:143](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/types.ts#L143)

@@ -6,7 +6,7 @@
 
 # Class: FilterPanel
 
-Defined in: [filters/FilterPanel.ts:63](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L63)
+Defined in: [filters/FilterPanel.ts:63](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L63)
 
 Floating panel that hosts the type-aware filter editor for a single
 column. Composed by the facade lazily (one instance per
@@ -19,7 +19,7 @@ bespoke container shell that reuses the built-in filter UX.
 
 > **new FilterPanel**(`state`, `actions`, `options?`): `FilterPanel`
 
-Defined in: [filters/FilterPanel.ts:83](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L83)
+Defined in: [filters/FilterPanel.ts:83](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L83)
 
 #### Parameters
 
@@ -43,9 +43,9 @@ Defined in: [filters/FilterPanel.ts:83](https://github.com/jeyabbalas/data-table
 
 ### close()
 
-> **close**(): `void`
+> **close**(`overrides?`): `void`
 
-Defined in: [filters/FilterPanel.ts:270](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L270)
+Defined in: [filters/FilterPanel.ts:270](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L270)
 
 Close the panel
 
@@ -53,6 +53,14 @@ Note: close() does NOT destroy currentField. This is intentional:
 it preserves user input so re-opening the same column shows previous values.
 The field is destroyed when switching columns (open with different column)
 or when the panel itself is destroyed.
+
+#### Parameters
+
+##### overrides?
+
+###### restoreFocus?
+
+`boolean`
 
 #### Returns
 
@@ -64,7 +72,7 @@ or when the panel itself is destroyed.
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterPanel.ts:317](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L317)
+Defined in: [filters/FilterPanel.ts:317](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L317)
 
 Destroy and clean up
 
@@ -78,7 +86,7 @@ Destroy and clean up
 
 > **getCurrentColumn**(): `string` \| `null`
 
-Defined in: [filters/FilterPanel.ts:310](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L310)
+Defined in: [filters/FilterPanel.ts:310](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L310)
 
 Get the currently focused column (if panel is open)
 
@@ -92,7 +100,7 @@ Get the currently focused column (if panel is open)
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterPanel.ts:296](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L296)
+Defined in: [filters/FilterPanel.ts:296](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L296)
 
 Get the panel's DOM element
 
@@ -106,7 +114,7 @@ Get the panel's DOM element
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/FilterPanel.ts:303](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L303)
+Defined in: [filters/FilterPanel.ts:303](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L303)
 
 Check if the panel is currently open
 
@@ -120,7 +128,7 @@ Check if the panel is currently open
 
 > **open**(`column`, `anchorElement`): `void`
 
-Defined in: [filters/FilterPanel.ts:215](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L215)
+Defined in: [filters/FilterPanel.ts:215](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L215)
 
 Open the panel for the given column
 
@@ -144,7 +152,7 @@ Open the panel for the given column
 
 > **toggle**(`column`, `anchorElement`): `void`
 
-Defined in: [filters/FilterPanel.ts:204](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/filters/FilterPanel.ts#L204)
+Defined in: [filters/FilterPanel.ts:204](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/filters/FilterPanel.ts#L204)
 
 Toggle the panel open/closed for the given column
 

@@ -480,9 +480,9 @@ export class DerivedColumnEditPanel {
     });
   }
 
-  close(): void {
+  close(overrides?: { readonly restoreFocus?: boolean }): void {
     if (!this.isOpen) return;
-    this.modalHost.close();
+    this.modalHost.close(overrides);
   }
 
   private handleHostClose(): void {

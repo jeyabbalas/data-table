@@ -6,7 +6,7 @@
 
 # Class: StatsPanelRegistry
 
-Defined in: [visualizations/StatsPanelRegistry.ts:109](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L109)
+Defined in: [visualizations/StatsPanelRegistry.ts:109](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L109)
 
 Per-instance registry of stats panels. Empty by default — add
 registrations only for the column types you want to override.
@@ -51,7 +51,7 @@ await createDataTable({ container, source, statsPanelRegistry: registry });
 
 > **create**(`container`, `column`, `options`): [`BaseStatsPanel`](../../advanced/classes/BaseStatsPanel.md) \| `null`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:144](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L144)
+Defined in: [visualizations/StatsPanelRegistry.ts:144](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L144)
 
 Create the appropriate stats panel for a column. Iterates the registry
 by descending priority and returns the first match, or null when no
@@ -82,7 +82,7 @@ built-in HTML formatter).
 
 > **getRegisteredTypes**(): `string`[]
 
-Defined in: [visualizations/StatsPanelRegistry.ts:168](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L168)
+Defined in: [visualizations/StatsPanelRegistry.ts:168](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L168)
 
 List all registered panel names.
 
@@ -96,7 +96,7 @@ List all registered panel names.
 
 > **isApplicable**(`column`): `boolean`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:163](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L163)
+Defined in: [visualizations/StatsPanelRegistry.ts:163](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L163)
 
 Check whether any registered panel matches the column's type. Useful
 for callers that want to short-circuit before constructing
@@ -118,7 +118,7 @@ for callers that want to short-circuit before constructing
 
 > **register**(`registration`): `void`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:116](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L116)
+Defined in: [visualizations/StatsPanelRegistry.ts:116](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L116)
 
 Register a stats panel type. Replaces any existing registration with
 the same name.
@@ -139,7 +139,7 @@ the same name.
 
 > **resetToDefaults**(): `void`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:177](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L177)
+Defined in: [visualizations/StatsPanelRegistry.ts:177](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L177)
 
 Empty the registry. Mirror of [VisualizationRegistry.resetToDefaults](VisualizationRegistry.md#resettodefaults)
 — there are no library built-ins for stats panels, so this just clears
@@ -155,7 +155,7 @@ everything that was registered.
 
 > **unregister**(`name`): `boolean`
 
-Defined in: [visualizations/StatsPanelRegistry.ts:129](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelRegistry.ts#L129)
+Defined in: [visualizations/StatsPanelRegistry.ts:129](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/StatsPanelRegistry.ts#L129)
 
 Unregister a stats panel type by name.
 

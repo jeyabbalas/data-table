@@ -6,7 +6,7 @@
 
 # Interface: ColumnReorderOptions
 
-Defined in: [table/ColumnReorder.ts:16](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/ColumnReorder.ts#L16)
+Defined in: [table/ColumnReorder.ts:16](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/ColumnReorder.ts#L16)
 
 Options for configuring the ColumnReorder
 
@@ -16,7 +16,7 @@ Options for configuring the ColumnReorder
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/ColumnReorder.ts:18](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/ColumnReorder.ts#L18)
+Defined in: [table/ColumnReorder.ts:18](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/ColumnReorder.ts#L18)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +26,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **dragThreshold?**: `number`
 
-Defined in: [table/ColumnReorder.ts:20](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/ColumnReorder.ts#L20)
+Defined in: [table/ColumnReorder.ts:20](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/ColumnReorder.ts#L20)
 
 Movement threshold in pixels to start drag (default: 5)
 
@@ -36,7 +36,7 @@ Movement threshold in pixels to start drag (default: 5)
 
 > `optional` **getPinnedColumns?**: () => readonly `string`[]
 
-Defined in: [table/ColumnReorder.ts:26](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/ColumnReorder.ts#L26)
+Defined in: [table/ColumnReorder.ts:26](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/ColumnReorder.ts#L26)
 
 Late-bound accessor for the currently pinned columns. Used to keep a drop
 out of the pinned block (see [clampUnpinnedIndex](../functions/clampUnpinnedIndex.md)); when omitted,
@@ -52,7 +52,7 @@ readonly `string`[]
 
 > `optional` **getVisibleColumns?**: () => readonly `string`[]
 
-Defined in: [table/ColumnReorder.ts:44](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/table/ColumnReorder.ts#L44)
+Defined in: [table/ColumnReorder.ts:44](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/table/ColumnReorder.ts#L44)
 
 Late-bound accessor for the **whole** presented column order.
 

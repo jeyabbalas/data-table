@@ -6,7 +6,7 @@
 
 # Interface: ValueCountsSnapshot
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:161](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L161)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:161](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L161)
 
 [ValueCounts](../classes/ValueCounts.md)'s data snapshot — see
 [BaseVisualization.exportDataSnapshot](../classes/BaseVisualization.md#exportdatasnapshot). Exported from `/advanced` so a
@@ -21,7 +21,7 @@ between two instances of this class for the same column.
 
 > **backgroundData**: [`ValueCountsData`](ValueCountsData.md) \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:163](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L163)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:163](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L163)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:163](https://github.com/j
 
 > **data**: [`ValueCountsData`](ValueCountsData.md) \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:162](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L162)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:162](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L162)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:162](https://github.com/j
 
 > **foldedCountOverrides**: `Map`\<`string`, `number`\> \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:169](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L169)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:169](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L169)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:169](https://github.com/j
 
 > **initialCategoryOrder**: `string`[] \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:165](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L165)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:165](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L165)
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:165](https://github.com/j
 
 > **initialData**: [`ValueCountsData`](ValueCountsData.md) \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:164](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L164)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:164](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L164)
 
 ***
 
@@ -61,7 +61,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:164](https://github.com/j
 
 > **initialHasOther**: `boolean`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:166](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L166)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:166](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L166)
 
 ***
 
@@ -69,7 +69,7 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:166](https://github.com/j
 
 > **initialSegmentCounts**: `Map`\<`string`, `number`\> \| `null`
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:167](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L167)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:167](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L167)
 
 ***
 
@@ -77,4 +77,4 @@ Defined in: [visualizations/valuecounts/ValueCounts.ts:167](https://github.com/j
 
 > **topCategoryValues**: `string`[]
 
-Defined in: [visualizations/valuecounts/ValueCounts.ts:168](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/valuecounts/ValueCounts.ts#L168)
+Defined in: [visualizations/valuecounts/ValueCounts.ts:168](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/valuecounts/ValueCounts.ts#L168)

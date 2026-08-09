@@ -6,7 +6,7 @@
 
 # Interface: AutoSaveOptions
 
-Defined in: [persistence/AutoSave.ts:38](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L38)
+Defined in: [persistence/AutoSave.ts:38](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L38)
 
 Construction options for [AutoSave](../classes/AutoSave.md). Most fields are optional and
 default to sensible values matching the facade's wiring.
@@ -17,7 +17,7 @@ default to sensible values matching the facade's wiring.
 
 > `optional` **annotationStore?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [persistence/AutoSave.ts:42](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L42)
+Defined in: [persistence/AutoSave.ts:42](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L42)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [persistence/AutoSave.ts:42](https://github.com/jeyabbalas/data-tabl
 
 > `optional` **debounceMs?**: `number`
 
-Defined in: [persistence/AutoSave.ts:39](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L39)
+Defined in: [persistence/AutoSave.ts:39](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L39)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [persistence/AutoSave.ts:39](https://github.com/jeyabbalas/data-tabl
 
 > `optional` **onError?**: (`error`) => `void`
 
-Defined in: [persistence/AutoSave.ts:48](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L48)
+Defined in: [persistence/AutoSave.ts:48](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L48)
 
 Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
 transaction aborted). If omitted, save failures are swallowed —
@@ -55,7 +55,7 @@ the facade wires this to emit an `error` event with `source: 'persistence'`.
 
 > `optional` **presetManager?**: [`FilterPresetManager`](../../index/classes/FilterPresetManager.md)
 
-Defined in: [persistence/AutoSave.ts:41](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L41)
+Defined in: [persistence/AutoSave.ts:41](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L41)
 
 ***
 
@@ -63,4 +63,4 @@ Defined in: [persistence/AutoSave.ts:41](https://github.com/jeyabbalas/data-tabl
 
 > `optional` **undoManager?**: [`UndoManager`](../classes/UndoManager.md)
 
-Defined in: [persistence/AutoSave.ts:40](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/AutoSave.ts#L40)
+Defined in: [persistence/AutoSave.ts:40](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/persistence/AutoSave.ts#L40)

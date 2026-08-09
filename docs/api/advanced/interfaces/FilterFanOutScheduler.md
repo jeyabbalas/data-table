@@ -6,7 +6,7 @@
 
 # Interface: FilterFanOutScheduler
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:82](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/CrossfilterCoordinator.ts#L82)
+Defined in: [visualizations/CrossfilterCoordinator.ts:82](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/CrossfilterCoordinator.ts#L82)
 
 Optional hook that takes over a coordinator's per-registration fan-out on
 filter change. When supplied, `refreshOnFilters` is called *instead of*
@@ -42,7 +42,7 @@ const coord = new CrossfilterCoordinator(state, actions, bridge, 4, {
 
 > **refreshOnFilters**(`request`): `Promise`\<`void`\>
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:83](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/CrossfilterCoordinator.ts#L83)
+Defined in: [visualizations/CrossfilterCoordinator.ts:83](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/visualizations/CrossfilterCoordinator.ts#L83)
 
 #### Parameters
 

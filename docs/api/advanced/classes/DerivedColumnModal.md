@@ -6,7 +6,7 @@
 
 # Class: DerivedColumnModal
 
-Defined in: [derived/DerivedColumnModal.ts:48](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L48)
+Defined in: [derived/DerivedColumnModal.ts:48](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L48)
 
 Modal dialog for creating new derived columns (SQL expression or
 pre-computed vector). Composed by the facade; portal-mounted to
@@ -19,7 +19,7 @@ the table's own DOM.
 
 > **new DerivedColumnModal**(`state`, `actions`, `options?`): `DerivedColumnModal`
 
-Defined in: [derived/DerivedColumnModal.ts:85](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L85)
+Defined in: [derived/DerivedColumnModal.ts:85](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L85)
 
 #### Parameters
 
@@ -45,7 +45,7 @@ Defined in: [derived/DerivedColumnModal.ts:85](https://github.com/jeyabbalas/dat
 
 > **close**(): `void`
 
-Defined in: [derived/DerivedColumnModal.ts:816](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L816)
+Defined in: [derived/DerivedColumnModal.ts:816](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L816)
 
 #### Returns
 
@@ -57,7 +57,7 @@ Defined in: [derived/DerivedColumnModal.ts:816](https://github.com/jeyabbalas/da
 
 > **destroy**(): `void`
 
-Defined in: [derived/DerivedColumnModal.ts:874](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L874)
+Defined in: [derived/DerivedColumnModal.ts:874](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L874)
 
 #### Returns
 
@@ -69,7 +69,7 @@ Defined in: [derived/DerivedColumnModal.ts:874](https://github.com/jeyabbalas/da
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [derived/DerivedColumnModal.ts:866](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L866)
+Defined in: [derived/DerivedColumnModal.ts:866](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L866)
 
 #### Returns
 
@@ -81,7 +81,7 @@ Defined in: [derived/DerivedColumnModal.ts:866](https://github.com/jeyabbalas/da
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [derived/DerivedColumnModal.ts:870](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L870)
+Defined in: [derived/DerivedColumnModal.ts:870](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L870)
 
 #### Returns
 
@@ -93,7 +93,7 @@ Defined in: [derived/DerivedColumnModal.ts:870](https://github.com/jeyabbalas/da
 
 > **open**(): `void`
 
-Defined in: [derived/DerivedColumnModal.ts:793](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/DerivedColumnModal.ts#L793)
+Defined in: [derived/DerivedColumnModal.ts:793](https://github.com/jeyabbalas/data-table/blob/e8e34e47ecc8404384b71d0c64a3b46ed801ffc1/src/derived/DerivedColumnModal.ts#L793)
 
 #### Returns
 

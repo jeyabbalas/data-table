@@ -267,10 +267,10 @@ export class FilterPanel {
    * The field is destroyed when switching columns (open with different column)
    * or when the panel itself is destroyed.
    */
-  close(): void {
+  close(overrides?: { readonly restoreFocus?: boolean }): void {
     if (!this.isOpen) return;
     // ModalHost.close() invokes handleHostClose() below for the DOM cleanup.
-    this.modalHost.close();
+    this.modalHost.close(overrides);
   }
 
   private handleHostClose(): void {

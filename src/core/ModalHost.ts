@@ -313,7 +313,18 @@ export class ModalHost {
     notifyGlobalOpen();
   }
 
-  close(): void {
+  /**
+   * Close the modal, optionally overriding the open-time focus-restore choice.
+   *
+   * `overrides.restoreFocus === false` exists for the case where the opener is
+   * itself about to be detached — a windowed column header scrolling out from
+   * under an anchored panel. Restoring focus onto a doomed element leaves
+   * `document.activeElement` on `<body>` once it is removed, and the restore
+   * runs `focus({ preventScroll: false })`, which drags the scroll port back
+   * toward the very column being scrolled away. The caller takes
+   * responsibility for parking focus somewhere durable instead.
+   */
+  close(overrides?: { readonly restoreFocus?: boolean }): void {
     if (!this._isOpen) return;
     const opts = this.opts;
     if (!opts) return;
@@ -354,8 +365,9 @@ export class ModalHost {
     if (opts.mode === 'modal') releaseScrollLock();
 
     // Focus restore.
+    const wantsRestore = overrides?.restoreFocus ?? opts.restoreFocus !== false;
     let restored = false;
-    if (opts.restoreFocus !== false && this.opener) {
+    if (wantsRestore && this.opener) {
       if (document.contains(this.opener)) {
         try {
           this.opener.focus({ preventScroll: false });
@@ -365,7 +377,7 @@ export class ModalHost {
         }
       }
     }
-    if (!restored && opts.restoreFocus !== false) {
+    if (!restored && wantsRestore) {
       // Fallback so focus doesn't stay on a hidden element.
       try {
         document.body.focus?.();

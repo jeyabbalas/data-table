@@ -185,6 +185,22 @@ export interface TableContainerOptions {
 export type ResizeCallback = (dimensions: { width: number; height: number }) => void;
 
 /**
+ * The slice of `FilterPanel` / `DerivedColumnEditPanel` that
+ * {@link TableContainer.closePanelsAnchoredTo} needs.
+ *
+ * Structural rather than a shared base class: the two panels are unrelated
+ * types that happen to agree on this much, and the lazily imported derived
+ * panel must not become a static dependency of the container just to be
+ * dismissed.
+ */
+interface AnchoredPanel {
+  getIsOpen(): boolean;
+  getCurrentColumn(): string | null;
+  getElement(): HTMLElement;
+  close(overrides?: { readonly restoreFocus?: boolean }): void;
+}
+
+/**
  * TableContainer manages the DOM structure and lifecycle for the data table.
  *
  * @example
@@ -1250,12 +1266,20 @@ export class TableContainer {
     }
 
     const el = header.getElement();
+
+    // Panels close *before* the rescue, not after. They are anchored inside
+    // this header but parented to `.dt-root`, so focus sitting in one is not
+    // caught by the `el.contains` test below — and closing them afterwards
+    // let `ModalHost` restore focus onto the trigger button inside `el`,
+    // microseconds before `destroy()` detached it. Hence `restoreFocus:
+    // false` and `panelHeldFocus` folded into the rescue condition.
+    const panelHeldFocus = this.closePanelsAnchoredTo(header.getColumn().name);
+
     const active = this.activeElementInRoot();
-    if (active instanceof HTMLElement && el.contains(active)) {
+    if (panelHeldFocus || (active instanceof HTMLElement && el.contains(active))) {
       if (this.gridSemanticsActive) this.gridElement.focus({ preventScroll: true });
-      else active.blur();
+      else if (active instanceof HTMLElement) active.blur();
     }
-    this.closePanelsAnchoredTo(header.getColumn().name);
     this.columnReorder?.detachHandler(el);
     this.headerByColumn.delete(header.getColumn().name);
     header.destroy();
@@ -1276,17 +1300,29 @@ export class TableContainer {
    * so there is nowhere to reposition to, and a panel that silently follows
    * the user's scroll to a different column would be worse than one that
    * closes.
+   *
+   * Closed with `restoreFocus: false`, and reports whether a panel it closed
+   * held real DOM focus, because `ModalHost` restores focus to the element
+   * that had it when the panel opened — the header's own trigger button,
+   * which the caller is about to detach. Letting that run drops focus to
+   * `<body>` (silently ending keyboard navigation) and, because the restore
+   * is `focus({ preventScroll: false })`, yanks the horizontal scroll port
+   * back toward the column being scrolled away. The caller parks focus on
+   * `.dt-grid` instead.
    */
-  private closePanelsAnchoredTo(columnName: string): void {
-    if (this.filterPanel?.getIsOpen() && this.filterPanel.getCurrentColumn() === columnName) {
-      this.filterPanel.close();
-    }
-    if (
-      this.derivedEditPanel?.getIsOpen() &&
-      this.derivedEditPanel.getCurrentColumn() === columnName
-    ) {
-      this.derivedEditPanel.close();
-    }
+  private closePanelsAnchoredTo(columnName: string): boolean {
+    // Read once, up front: closing a panel hides it, at which point the
+    // browser has already moved focus off whatever was inside it.
+    const active = this.activeElementInRoot();
+    let heldFocus = false;
+    const closeAnchored = (panel: AnchoredPanel | null): void => {
+      if (!panel?.getIsOpen() || panel.getCurrentColumn() !== columnName) return;
+      if (active instanceof HTMLElement && panel.getElement().contains(active)) heldFocus = true;
+      panel.close({ restoreFocus: false });
+    };
+    closeAnchored(this.filterPanel);
+    closeAnchored(this.derivedEditPanel);
+    return heldFocus;
   }
 
   /**

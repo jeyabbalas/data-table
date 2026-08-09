@@ -6,7 +6,7 @@
 
 # Interface: HiddenColumnInfo
 
-Defined in: [core/State.ts:13](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/core/State.ts#L13)
+Defined in: [core/State.ts:13](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/core/State.ts#L13)
 
 Metadata for a hidden column — tracks neighbors at hide time for intelligent restore
 
@@ -16,7 +16,7 @@ Metadata for a hidden column — tracks neighbors at hide time for intelligent r
 
 > **column**: `string`
 
-Defined in: [core/State.ts:14](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/core/State.ts#L14)
+Defined in: [core/State.ts:14](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/core/State.ts#L14)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [core/State.ts:14](https://github.com/jeyabbalas/data-table/blob/133
 
 > **leftNeighbor**: `string` \| `null`
 
-Defined in: [core/State.ts:15](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/core/State.ts#L15)
+Defined in: [core/State.ts:15](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/core/State.ts#L15)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [core/State.ts:15](https://github.com/jeyabbalas/data-table/blob/133
 
 > **rightNeighbor**: `string` \| `null`
 
-Defined in: [core/State.ts:16](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/core/State.ts#L16)
+Defined in: [core/State.ts:16](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/core/State.ts#L16)

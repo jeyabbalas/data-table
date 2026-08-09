@@ -322,14 +322,18 @@ export class TableContainer {
    * the final value of both, and the `visibleColumns` subscriber that follows
    * finds every column already mounted where it belongs.
    *
-   * `visibleColumns` is deliberately *not* part of this. It would only be
-   * usable to skip the cheap tier altogether, and `render()` does not skip —
-   * see its docblock for why.
+   * `visibleColumns` and `columnWidths` are recorded but read **only** on the
+   * no-actions `/advanced` shell path, where the cheap tier cannot rebuild a
+   * placeholder header row and the width fan-out has no `ColumnHeader`s to
+   * walk. On the normal path they are deliberately not part of the signature:
+   * a column-set change is exactly what the cheap tier exists to absorb.
    */
   private headerStructure: {
     schema: readonly ColumnSchema[] | null;
     tableName: string | null;
-  } = { schema: null, tableName: null };
+    visibleColumns: readonly string[] | null;
+    columnWidths: ReadonlyMap<string, number> | null;
+  } = { schema: null, tableName: null, visibleColumns: null, columnWidths: null };
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -567,6 +571,11 @@ export class TableContainer {
         {
           classPrefix: this.resolvedOptions.classPrefix,
           getPinnedColumns: () => this.state.pinnedColumns.get(),
+          // Without this the drop is computed over the *mounted* headers and
+          // published as if it were the whole order — see the option's
+          // docblock. The header row is windowed, so that slice is ~17 of
+          // however many columns there are.
+          getVisibleColumns: () => this.state.visibleColumns.get(),
         },
       );
     }
@@ -853,15 +862,18 @@ export class TableContainer {
     };
 
     this.boundHeaderScrollHandler = () => {
-      // Ahead of the latch: a header-driven scroll writes `bodyScroll`
-      // *inside* the latch, and the `scroll` event that produces arrives in a
-      // later task. Without this, dragging the header's own scrollbar moves
-      // the offset a frame before either axis re-windows.
-      this.scheduleColumnWindowRefresh();
       if (isScrolling || this.suppressReverseScrollSync) return;
       isScrolling = true;
       this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
       isScrolling = false;
+      // *After* the write, not before it. A header-driven scroll produces no
+      // `scroll` event on the body until a later task, so without this,
+      // dragging the header's own scrollbar moves the offset a frame before
+      // either axis re-windows. But the window is a function of
+      // `bodyScroll.scrollLeft` — which, before the line above, is still the
+      // offset already rendered, so a call up here matched
+      // `scheduleColumnWindowRefresh`'s own guard and scheduled nothing at all.
+      this.scheduleColumnWindowRefresh();
     };
 
     this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
@@ -946,6 +958,14 @@ export class TableContainer {
     // own body-cursor focus extension, so the two axes cannot disagree about
     // where a column starts.
     this.tableBody?.refreshColumnWindow();
+    // The cursor's header may have just been unmounted, and
+    // `aria-activedescendant` must not name an element that has left the
+    // document. On the normal path the body's render callback reaches this
+    // anyway — but only when the *body's* window moved, and not at all on the
+    // `/advanced` shell that has actions and grid semantics but no bridge and
+    // so no `TableBody`. There, a scroll used to leave the attribute pointing
+    // at a destroyed header for the rest of the session.
+    this.syncActiveDescendant();
   }
 
   // =========================================
@@ -1173,8 +1193,32 @@ export class TableContainer {
     // exactly that lookup. Placement is still the caller's, and deliberately
     // stays there: `render()` fills a detached row, so no ordering here could
     // promise a connected element anyway.
-    this.resolvedOptions.onHeaderMount?.(header);
+    //
+    // Contained, because the hook runs code this class does not own: a custom
+    // `BaseStatsPanel` constructor, a custom visualization, a consumer's
+    // `messages` getter. Uncontained, a throw here unwound the mount loop with
+    // the window bookkeeping still describing the *previous* window, so
+    // `syncHeaderWindow` then took neither branch and every later scroll was a
+    // no-op — a table with no headers at all until the next structural render.
+    // The header itself is already whole and registered, so the failure is
+    // contained to whatever the hook was attaching.
+    try {
+      this.resolvedOptions.onHeaderMount?.(header);
+    } catch (error) {
+      this.reportHeaderMountError(error, colName);
+    }
     return header;
+  }
+
+  /**
+   * Report a throw out of the mount hook without letting it reach the caller.
+   *
+   * `console.error` and not a silent swallow: this is consumer code failing,
+   * and the symptom — one column with no chart or no stats panel — is
+   * otherwise indistinguishable from a column that legitimately has neither.
+   */
+  private reportHeaderMountError(error: unknown, columnName: string): void {
+    console.error(`[data-table] a header mount hook threw for column "${columnName}"`, error);
   }
 
   /**
@@ -1195,7 +1239,15 @@ export class TableContainer {
   private unmountColumnHeader(header: ColumnHeader): void {
     // First, while the header is still whole and still resolvable by name:
     // the visualization it carries snapshots its data off a live canvas.
-    this.resolvedOptions.onHeaderUnmount?.(header);
+    // Contained for the same reason as the mount hook, and with more at stake:
+    // a throw here would skip the focus rescue and the reorder-handler detach
+    // below it, so an unmount that failed halfway would drop focus to `<body>`
+    // and leak a `mousedown` handler keyed to a destroyed element.
+    try {
+      this.resolvedOptions.onHeaderUnmount?.(header);
+    } catch (error) {
+      this.reportHeaderMountError(error, header.getColumn().name);
+    }
 
     const el = header.getElement();
     const active = this.activeElementInRoot();
@@ -1203,9 +1255,38 @@ export class TableContainer {
       if (this.gridSemanticsActive) this.gridElement.focus({ preventScroll: true });
       else active.blur();
     }
+    this.closePanelsAnchoredTo(header.getColumn().name);
     this.columnReorder?.detachHandler(el);
     this.headerByColumn.delete(header.getColumn().name);
     header.destroy();
+  }
+
+  /**
+   * Close the transient panels anchored inside a header about to be detached.
+   *
+   * `ColumnHeader.destroy()` dismisses the popovers it owns, for exactly this
+   * reason; these two are owned by the container, so they are not covered by
+   * it. Before the header row was windowed they were torn down by `render()`
+   * and nothing else could take their anchor away. Now a horizontal scroll
+   * can: the panel is left open, floating over a column that is no longer
+   * there, holding a reference to a destroyed element that `close()` will
+   * later write classes onto.
+   *
+   * Closed rather than repositioned. The anchor is gone from the document,
+   * so there is nowhere to reposition to, and a panel that silently follows
+   * the user's scroll to a different column would be worse than one that
+   * closes.
+   */
+  private closePanelsAnchoredTo(columnName: string): void {
+    if (this.filterPanel?.getIsOpen() && this.filterPanel.getCurrentColumn() === columnName) {
+      this.filterPanel.close();
+    }
+    if (
+      this.derivedEditPanel?.getIsOpen() &&
+      this.derivedEditPanel.getCurrentColumn() === columnName
+    ) {
+      this.derivedEditPanel.close();
+    }
   }
 
   /**
@@ -1282,6 +1363,21 @@ export class TableContainer {
     this.rebuildMountedHeaderList(visibleColumns, win);
     this.applyHeaderSpacerWidths(win);
     this.applyContentWidth(win.totalWidthPx);
+
+    if (this.headerCellCount(row) === 0) {
+      // The same guard `renderColumnSet` and `renderStructural` apply, on the
+      // path that reaches this state by *scrolling* rather than by a column
+      // write: a window that lands entirely on names with no schema entry
+      // mounts nothing, and leaves a `role="row"` owning only its two
+      // `aria-hidden` spacers — a critical `aria-required-children` violation.
+      // Removing it nulls `headerRowInner`, which makes the next render
+      // structural and rebuilds the row when there is something to put in it.
+      row.remove();
+      this.headerRowInner = null;
+      this.leftHeaderSpacer = null;
+      this.rightHeaderSpacer = null;
+      this.headerWindowColumns = null;
+    }
   }
 
   /**
@@ -1351,6 +1447,24 @@ export class TableContainer {
         colIndex > 0 ? colIndex : undefined,
       );
       header.getElement().style.width = `${resolveColumnWidth(columnWidths.get(name))}px`;
+    }
+  }
+
+  /**
+   * Re-stamp `aria-colindex` on every mounted header from the current map.
+   *
+   * The cell **id** is not rewritten: it is keyed off the position in
+   * `visibleColumns`, which a `columnOrder`-only write does not move, and
+   * `aria-activedescendant` names it — rewriting it here would break the
+   * cursor to fix a numbering that did not involve it.
+   */
+  private restampColIndices(): void {
+    for (const [name, header] of this.headerByColumn) {
+      const colIndex = this.colIndexByName.get(name) ?? 0;
+      header.setCellIdentity(
+        this.buildHeaderCellId(this.visibleIndexByName.get(name) ?? 0),
+        colIndex > 0 ? colIndex : undefined,
+      );
     }
   }
 
@@ -1790,6 +1904,22 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubVisible);
 
+    // `aria-colindex` is numbered from `columnOrder`, and `render()` does not
+    // dispatch on it — a write that permutes the order without changing the
+    // visible *set* reaches neither tier, so `colIndexByName` stayed frozen at
+    // the pre-reorder positions. `TableBody` has always subscribed to this
+    // signal for the same map, so the two rows then disagreed: a header
+    // reporting `aria-colindex="2"` over cells reporting `1`, which is the
+    // exact failure the single shared definition in `buildColumnIndexMap`
+    // exists to prevent. Reachable through undo, whose `applySnapshot` writes
+    // only the signals whose contents actually differ.
+    const unsubColumnOrder = this.state.columnOrder.subscribe(() => {
+      if (this.destroyed) return;
+      this.syncColIndexMap(this.state.columnOrder.get(), this.state.schema.get());
+      this.restampColIndices();
+    });
+    this.unsubscribes.push(unsubColumnOrder);
+
     // Subscribe to column widths for sizing updates
     // NOTE: We call updateColumnWidths() instead of render() to avoid
     // destroying ColumnHeaders mid-drag (which would kill the resize operation)
@@ -2168,9 +2298,30 @@ export class TableContainer {
     const last = this.headerStructure;
     // No header row to reconcile is structural by definition: the first render,
     // and the state a column set emptied to nothing leaves behind.
+    //
+    // The no-actions `/advanced` shell adds two more, and the reason is worth
+    // stating. The cheap tier reconciles through `mountColumnHeader`, which
+    // builds a `ColumnHeader` and returns `null` without `actions`; the shell
+    // draws its own placeholder headers in `renderStructural` instead. So on
+    // that path the cheap tier can only ever unmount — a hide left the previous
+    // placeholders standing, including one for a column no longer visible, over
+    // a row whose `min-width` had already shrunk to exclude it. Width writes
+    // have the same shape: the width fan-out walks `this.columnHeaders`, which
+    // the shell never populates.
+    //
+    // Deliberately narrower than "the shell is always structural". A bare
+    // `totalRows` write followed by `render()` is the case the cheap tier
+    // exists for, and it stays cheap here too — nothing about the header row
+    // depends on the row count.
+    const shellStructural =
+      !this.actions &&
+      (last.visibleColumns !== visibleColumns || last.columnWidths !== columnWidths);
     const structural =
-      last.schema !== schema || last.tableName !== tableName || this.headerRowInner === null;
-    this.headerStructure = { schema, tableName };
+      last.schema !== schema ||
+      last.tableName !== tableName ||
+      this.headerRowInner === null ||
+      shellStructural;
+    this.headerStructure = { schema, tableName, visibleColumns, columnWidths };
 
     // O(1) lookups for the header work below — see the map fields. Both
     // position maps have to be resynced on a column-set change too: a hide

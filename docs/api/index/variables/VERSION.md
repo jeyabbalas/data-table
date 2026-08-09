@@ -8,7 +8,7 @@
 
 > `const` **VERSION**: `string` = `__DT_VERSION__`
 
-Defined in: [index.ts:21](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/index.ts#L21)
+Defined in: [index.ts:21](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/index.ts#L21)
 
 Library semantic-version string. Matches `package.json#version`.
 

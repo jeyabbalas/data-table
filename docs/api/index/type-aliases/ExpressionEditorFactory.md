@@ -8,7 +8,7 @@
 
 > **ExpressionEditorFactory** = (`container`, `context`) => [`ExpressionEditor`](../interfaces/ExpressionEditor.md)
 
-Defined in: [derived/ExpressionEditorTypes.ts:39](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/derived/ExpressionEditorTypes.ts#L39)
+Defined in: [derived/ExpressionEditorTypes.ts:39](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/derived/ExpressionEditorTypes.ts#L39)
 
 Factory function for creating expression editors.
 Downstream apps provide this to use CodeMirror or similar.

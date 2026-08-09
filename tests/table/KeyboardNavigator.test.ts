@@ -1265,3 +1265,130 @@ describe('KeyboardNavigator', () => {
     });
   });
 });
+
+describe('KeyboardNavigator — a header the column window has scrolled away', () => {
+  // The header row renders a window, and the extension that keeps the cursor's
+  // own header mounted is clamped. A pointer scroll moves the window without
+  // moving the cursor, so the cursor can name a column with no element — and
+  // every gesture that needs one used to do nothing, silently, while
+  // `aria-keyshortcuts="Shift+F2"` on every header went on advertising it.
+  //
+  // Modelled as a one-column window over the three-column fixture: `mounted`
+  // is whatever `scrollLeft` says, and the navigator's own
+  // `scrollFocusedCellIntoView` is what has to move it.
+  function setupWindowed() {
+    const state = createTableState();
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.totalRows.set(100);
+    const actions = new StateActions(state, mockBridge);
+
+    const root = document.createElement('div');
+    root.setAttribute('tabindex', '0');
+    document.body.appendChild(root);
+    const grid = document.createElement('div');
+    root.appendChild(grid);
+
+    const bodyScroll = document.createElement('div');
+    // One 150 px column visible at a time.
+    Object.defineProperty(bodyScroll, 'clientWidth', { value: 150, configurable: true });
+
+    const headers = schema.map(
+      (col, i) => new ColumnHeader(col, state, actions, { cellId: `dt-t1-colheader-${i}` }),
+    );
+
+    /** The mounted window: the single column at the current offset. */
+    const mounted = (): ColumnHeader[] => {
+      const index = Math.round(bodyScroll.scrollLeft / 150);
+      const header = headers[index];
+      return header ? [header] : [];
+    };
+    // Only mounted headers are in the DOM, the way the real row works.
+    const syncDom = (): void => {
+      grid.replaceChildren(...mounted().map((h) => h.getElement()));
+    };
+    syncDom();
+
+    const nav = new KeyboardNavigator({
+      rootElement: root,
+      gridElement: grid,
+      bodyScroll,
+      state,
+      actions,
+      getTableBody: () => makeStubBody(),
+      getColumnHeaders: mounted,
+      refreshColumnWindow: syncDom,
+      announce: vi.fn(),
+    });
+
+    return {
+      state,
+      actions,
+      root,
+      bodyScroll,
+      headers,
+      nav,
+      cleanup: (): void => {
+        nav.destroy();
+        for (const h of headers) h.destroy();
+        root.remove();
+      },
+    };
+  }
+
+  it('sorts on Enter after scrolling the cursor column back', () => {
+    const { state, actions, root, bodyScroll, nav, cleanup } = setupWindowed();
+    void nav;
+    // Cursor on 'c', window parked on 'a'. Nothing for the cursor to act on.
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'c' });
+    bodyScroll.scrollLeft = 0;
+
+    keydown(root, { key: 'Enter' });
+
+    expect(state.sortColumns.get().map((s) => s.column)).toEqual(['c']);
+    cleanup();
+  });
+
+  it('opens F2 controls mode after scrolling the cursor column back', () => {
+    const { actions, root, bodyScroll, nav, cleanup } = setupWindowed();
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'c' });
+    bodyScroll.scrollLeft = 0;
+
+    keydown(root, { key: 'F2' });
+
+    // Real DOM focus is inside 'c''s header, which only exists because the
+    // gesture scrolled it back.
+    expect(nav.activeControls()).not.toBeNull();
+    expect(document.activeElement?.closest('[data-column="c"]')).not.toBeNull();
+    cleanup();
+  });
+
+  it('opens a Shift+F2 layout gesture after scrolling the cursor column back', () => {
+    const { actions, root, bodyScroll, headers, cleanup } = setupWindowed();
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'c' });
+    bodyScroll.scrollLeft = 0;
+
+    keydown(root, { key: 'F2', shiftKey: true });
+
+    expect(headers[2]!.getElement().classList.contains('dt-col-header--layout')).toBe(true);
+    cleanup();
+  });
+
+  it('keeps resizing when a scroll takes the gesture out of the window', () => {
+    const { actions, root, bodyScroll, headers, cleanup } = setupWindowed();
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'c' });
+    keydown(root, { key: 'F2', shiftKey: true });
+    const before = headers[2]!.getWidth();
+
+    // A pointer scroll: the window moves, the cursor does not, and the gesture
+    // stays open because it is tracked as state rather than as focus.
+    bodyScroll.scrollLeft = 0;
+
+    keydown(root, { key: 'ArrowRight' });
+
+    // Before the fix this was a silent no-op — no width write, no
+    // announcement, and the key consumed.
+    expect(headers[2]!.getWidth()).toBeGreaterThan(before);
+    cleanup();
+  });
+});

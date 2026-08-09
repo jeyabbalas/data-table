@@ -8,7 +8,7 @@
 
 > **isStylesheetLoaded**(`root?`): `boolean`
 
-Defined in: [core/stylesheet.ts:24](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/core/stylesheet.ts#L24)
+Defined in: [core/stylesheet.ts:24](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/core/stylesheet.ts#L24)
 
 Return `true` if the library stylesheet is loaded in the document.
 

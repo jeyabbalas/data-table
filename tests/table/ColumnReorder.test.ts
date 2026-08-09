@@ -732,6 +732,158 @@ describe('ColumnReorder', () => {
   });
 });
 
+describe('ColumnReorder — a windowed header row', () => {
+  // Since the header row is windowed, the DOM holds a *slice* of the presented
+  // order: a scrolled table at 60 columns mounts roughly 17 of them. Every
+  // number `endDrag` works with — the dragged column's index, the drop index,
+  // the array it splices — used to come off that DOM and be treated as global,
+  // which is only true while every column is mounted.
+  let container: HTMLDivElement;
+  let headerRow: HTMLDivElement;
+  let onReorder: ReturnType<typeof vi.fn>;
+
+  /** The whole table. Only `mounted` of these are in the DOM. */
+  const ALL = Array.from({ length: 60 }, (_, i) => `col_${i}`);
+  const MOUNTED = ALL.slice(20, 44);
+
+  function header(columnName: string, slot: number): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'dt-col-header';
+    el.setAttribute('data-column', columnName);
+    const handle = document.createElement('button');
+    handle.className = 'dt-col-drag-handle';
+    handle.type = 'button';
+    el.appendChild(handle);
+    // Laid out from the left edge of the viewport, the way a scrolled window
+    // actually paints: the first *mounted* header sits at x=0, not the first
+    // column of the table.
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      value: () => ({
+        left: slot * 150,
+        right: (slot + 1) * 150,
+        width: 150,
+        top: 0,
+        bottom: 32,
+        height: 32,
+      }),
+      configurable: true,
+    });
+    return el;
+  }
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    container.className = 'dt-root';
+    document.body.appendChild(container);
+    headerRow = document.createElement('div');
+    headerRow.className = 'dt-header';
+    container.appendChild(headerRow);
+    Object.defineProperty(headerRow, 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 3600, width: 3600, top: 0, bottom: 32, height: 32 }),
+      configurable: true,
+    });
+
+    const inner = document.createElement('div');
+    inner.className = 'dt-header-row';
+    // `[left spacer][mounted headers][right spacer]`, spacers included so the
+    // element walk has to skip them the way the real row does.
+    const left = document.createElement('div');
+    left.className = 'dt-col-spacer';
+    left.setAttribute('data-col-spacer', 'left');
+    inner.appendChild(left);
+    MOUNTED.forEach((name, i) => inner.appendChild(header(name, i)));
+    const right = document.createElement('div');
+    right.className = 'dt-col-spacer';
+    right.setAttribute('data-col-spacer', 'right');
+    inner.appendChild(right);
+    headerRow.appendChild(inner);
+
+    onReorder = vi.fn();
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+  });
+
+  /** Drag `column` from its slot to just past `toSlot`. */
+  function drag(column: string, fromSlot: number, toSlot: number): void {
+    const el = headerRow.querySelector(`[data-column="${column}"]`)!;
+    el.querySelector('.dt-col-drag-handle')!.dispatchEvent(
+      new MouseEvent('mousedown', {
+        clientX: fromSlot * 150 + 75,
+        clientY: 16,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: fromSlot * 150 + 85, clientY: 16, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: toSlot * 150 + 149, clientY: 16, bubbles: true }),
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  }
+
+  it('moves one column and leaves the other 59 where they were', () => {
+    const reorder = new ColumnReorder(headerRow, onReorder, {
+      getVisibleColumns: () => ALL,
+    });
+    reorder.refresh();
+
+    // Drag the first mounted header (col_20) three slots right.
+    drag('col_20', 0, 3);
+
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    const [newOrder, moved] = onReorder.mock.calls[0]!;
+    expect(moved).toBe('col_20');
+
+    // The whole table comes back, not the mounted slice — anything less and
+    // `setColumnOrder`'s missing-column merge re-splices the other 36.
+    expect(newOrder).toHaveLength(ALL.length);
+    expect([...newOrder].sort()).toEqual([...ALL].sort());
+
+    // Exactly one column moved. Everything before the window and everything
+    // after it is untouched, and inside the window only the span between the
+    // two positions shifts by one. The pointer finished past `col_23`'s
+    // midpoint, so the drop lands after it — in front of `col_24`.
+    const expected = ALL.filter((c) => c !== 'col_20');
+    expected.splice(expected.indexOf('col_24'), 0, 'col_20');
+    expect(newOrder).toEqual(expected);
+  });
+
+  it('keeps a drop past the last mounted header inside the window', () => {
+    const reorder = new ColumnReorder(headerRow, onReorder, {
+      getVisibleColumns: () => ALL,
+    });
+    reorder.refresh();
+
+    // Drop beyond the right-hand edge of the mounted run. The intent is "after
+    // the last header I can see", which is col_43 — not "at the end of the
+    // table", which the user cannot see and did not ask for.
+    drag('col_20', 0, MOUNTED.length + 4);
+
+    const [newOrder] = onReorder.mock.calls[0]!;
+    expect(newOrder).toHaveLength(ALL.length);
+    expect(newOrder.indexOf('col_20')).toBe(ALL.indexOf('col_43'));
+    expect(newOrder[newOrder.length - 1]).toBe('col_59');
+  });
+
+  it('falls back to the mounted order when no accessor is supplied', () => {
+    // Standalone `/advanced` use, where the caller owns the header row and
+    // every column in it is mounted. The DOM is the order there, and this is
+    // the behaviour that shipped before the header row was windowed.
+    const reorder = new ColumnReorder(headerRow, onReorder);
+    reorder.refresh();
+
+    drag('col_20', 0, 3);
+
+    const [newOrder] = onReorder.mock.calls[0]!;
+    expect(newOrder).toHaveLength(MOUNTED.length);
+    expect(newOrder[0]).toBe('col_21');
+  });
+});
+
 describe('clampUnpinnedIndex', () => {
   // The presented order a drop is spliced into, with the moved column already
   // removed — the shape endDrag() and the keyboard move both hand in.

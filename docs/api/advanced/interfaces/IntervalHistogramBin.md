@@ -6,7 +6,7 @@
 
 # Interface: IntervalHistogramBin
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/histogram/IntervalHistogramData.ts#L36)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/histogram/IntervalHistogramData.ts#L36)
 
 A single interval histogram bin with seconds-based ranges
 
@@ -16,7 +16,7 @@ A single interval histogram bin with seconds-based ranges
 
 > **binEndSeconds**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/histogram/IntervalHistogramData.ts#L40)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/histogram/IntervalHistogramData.ts#L40)
 
 End of the bin in total seconds (exclusive)
 
@@ -26,7 +26,7 @@ End of the bin in total seconds (exclusive)
 
 > **binStartSeconds**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:38](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/histogram/IntervalHistogramData.ts#L38)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:38](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/histogram/IntervalHistogramData.ts#L38)
 
 Start of the bin in total seconds (inclusive)
 
@@ -36,6 +36,6 @@ Start of the bin in total seconds (inclusive)
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/histogram/IntervalHistogramData.ts#L42)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/histogram/IntervalHistogramData.ts#L42)
 
 Number of values in this bin

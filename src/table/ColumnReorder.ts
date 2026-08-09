@@ -24,6 +24,24 @@ export interface ColumnReorderOptions {
    * no clamping is applied.
    */
   getPinnedColumns?: (() => readonly string[]) | undefined;
+  /**
+   * Late-bound accessor for the **whole** presented column order.
+   *
+   * The header row is windowed, so the elements this class can see are a
+   * slice of that order — roughly 17 of 60, and 17 of 1,000. Without this,
+   * a drop is computed over the slice and handed on as if it were the table:
+   * `TableContainer.applyReorderFromDrag` passes it to `setColumnOrder`,
+   * whose missing-column merge then re-splices every column that was not
+   * mounted. Dragging one column three slots right at 60 columns moved 23 of
+   * them.
+   *
+   * Supplied, the drop is still *measured* in the DOM — pointer geometry has
+   * no other source — and then translated onto this order by naming the
+   * column the dragged one should land in front of. Omitted, the DOM slice is
+   * used as before, which is correct for a standalone `/advanced` header row
+   * that mounts every column.
+   */
+  getVisibleColumns?: (() => readonly string[]) | undefined;
 }
 
 /**
@@ -107,6 +125,7 @@ export class ColumnReorder {
   private readonly classPrefix: string;
   private readonly dragThreshold: number;
   private readonly getPinnedColumns: (() => readonly string[]) | undefined;
+  private readonly getVisibleColumns: (() => readonly string[]) | undefined;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseMove: (e: MouseEvent) => void;
@@ -127,6 +146,7 @@ export class ColumnReorder {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.dragThreshold = options.dragThreshold ?? 5;
     this.getPinnedColumns = options.getPinnedColumns;
+    this.getVisibleColumns = options.getVisibleColumns;
 
     // Bind document-level handlers
     this.boundMouseMove = this.handleMouseMove.bind(this);
@@ -358,21 +378,86 @@ export class ColumnReorder {
         insertIndex--;
       }
 
+      // Everything above is in *mounted* coordinates. Lift it to the whole
+      // presented order before clamping or splicing, because both operate on
+      // the array the callback will publish.
+      const scope = this.resolveDropScope(newOrder, insertIndex, draggedIndex);
+      if (!scope) {
+        this.resetDragState();
+        return;
+      }
+
       // The drop position comes from raw header midpoints, which happily
       // point inside the pinned block. Landing there desyncs every sticky
       // `left` offset, all of which assume the pinned columns lead.
-      insertIndex = clampUnpinnedIndex(insertIndex, newOrder, this.getPinnedColumns?.() ?? []);
+      insertIndex = clampUnpinnedIndex(
+        scope.insertIndex,
+        scope.remaining,
+        this.getPinnedColumns?.() ?? [],
+      );
 
-      if (insertIndex !== draggedIndex) {
+      if (insertIndex !== scope.fromIndex) {
         // Insert at new position
-        newOrder.splice(insertIndex, 0, this.draggedColumn);
+        const finalOrder = [...scope.remaining];
+        finalOrder.splice(insertIndex, 0, this.draggedColumn);
 
         // Notify callback
-        this.onReorder(newOrder, this.draggedColumn);
+        this.onReorder(finalOrder, this.draggedColumn);
       }
     }
 
     this.resetDragState();
+  }
+
+  /**
+   * Lift a drop measured over the mounted headers onto the presented order.
+   *
+   * `mountedRemaining` is the mounted run with the dragged column already
+   * taken out, and `mountedInsert` is where the pointer landed in it. The
+   * translation is by **name, not by index**: the dragged column goes
+   * immediately in front of whichever mounted column would have followed it,
+   * so the columns between the two positions shift by one and nothing outside
+   * the window moves at all.
+   *
+   * A drop past the last mounted header means "after the last one I can see",
+   * not "at the end of the table" — the columns beyond the window are, by
+   * construction, ones the user cannot see and did not aim at.
+   *
+   * Returns `null` when the presented order does not contain the dragged
+   * column, which would make every index below meaningless.
+   */
+  private resolveDropScope(
+    mountedRemaining: string[],
+    mountedInsert: number,
+    mountedFrom: number,
+  ): { remaining: string[]; insertIndex: number; fromIndex: number } | null {
+    const presented = this.getVisibleColumns?.();
+    const dragged = this.draggedColumn!;
+
+    // No accessor: the caller's header row *is* the order. Unchanged
+    // behaviour, and correct whenever every column is mounted.
+    if (!presented) {
+      return { remaining: mountedRemaining, insertIndex: mountedInsert, fromIndex: mountedFrom };
+    }
+
+    const fromIndex = presented.indexOf(dragged);
+    if (fromIndex === -1) return null;
+
+    const remaining = presented.filter((c) => c !== dragged);
+    const successor = mountedRemaining[mountedInsert];
+
+    if (successor !== undefined) {
+      const at = remaining.indexOf(successor);
+      return at === -1 ? null : { remaining, insertIndex: at, fromIndex };
+    }
+
+    // Dropped past the mounted run. Land right after its last surviving
+    // member; with nothing left mounted there is no aim to honour, so leave
+    // the column where it was.
+    const last = mountedRemaining[mountedRemaining.length - 1];
+    if (last === undefined) return { remaining, insertIndex: fromIndex, fromIndex };
+    const at = remaining.indexOf(last);
+    return at === -1 ? null : { remaining, insertIndex: at + 1, fromIndex };
   }
 
   /**

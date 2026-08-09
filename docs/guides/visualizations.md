@@ -122,16 +122,15 @@ shown.
 
 The option is `boolean | { eager?: boolean }`:
 
-| Value                       | Behaviour                                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `true` / `undefined` / `{}` | Lazy — the default described above                                                             |
-| `false`                     | No charts at all; headers still show column stats                                              |
-| `{ eager: true }`           | Every applicable column's chart is created and fetched during load, and the load promise waits |
+| Value                       | Behaviour                                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `true` / `undefined` / `{}` | Lazy — the default described above                                                                    |
+| `false`                     | No charts at all; headers still show column stats                                                     |
+| `{ eager: true }`           | The visibility gate is off: a chart is built as soon as its header exists, and the load promise waits |
 
-`{ eager: true }` is the pre-lazy contract, kept for pipelines that
-capture immediately after the await and have no chance to call
-`whenVizReady()` — screenshots, PDF rendering, print stylesheets, a
-hidden offscreen table:
+`{ eager: true }` is for pipelines that capture immediately after the
+await and have no chance to call `whenVizReady()` — screenshots, PDF
+rendering, print stylesheets, a hidden offscreen table:
 
 ```ts
 const table = await createDataTable({
@@ -139,14 +138,25 @@ const table = await createDataTable({
   source,
   visualizations: { eager: true },
 });
-// Every chart is drawn. `vizReady` already fired, before `loadComplete`.
+// Every chart in the viewport is drawn. `vizReady` already fired,
+// before `loadComplete`.
 ```
 
-It costs what it used to: roughly two full-table scans per applicable
-column, serialized behind the load promise. On a wide table that is the
-difference between a load measured in seconds and one measured in tens
-of seconds — prefer `whenVizReady()` unless you genuinely need charts
-for columns nobody will look at.
+**It is not "every column".** The header row is windowed on the
+horizontal axis, and a chart renders into its header's container — so a
+column with no header has nowhere to draw. An eager load of a
+300-column table builds the ~17 charts that are on screen. There is no
+setting that draws a chart for a column the page is not showing.
+
+What `eager` removes is _timing_ risk, not scrolling: no dependence on
+`IntersectionObserver` firing, so you cannot capture a frame in which
+the visible charts have not been built yet. To capture more of a wide
+table, scroll and await `whenVizReady()` again between shots.
+
+It costs roughly two full-table scans per chart it builds, serialized
+behind the load promise — bounded by the viewport now rather than by
+the column count, which is why it is no longer the difference between a
+load measured in seconds and one measured in tens of seconds.
 
 ### Filter changes: visible now, stale later
 

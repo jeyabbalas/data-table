@@ -326,7 +326,7 @@ export class KeyboardNavigator {
     if (onHeader && focused && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
       e.preventDefault();
       this.claimGridFocus();
-      const header = this.findHeader(focused.column);
+      const header = this.mountedHeader(focused.column);
       if (header) {
         header.activateSort(e.shiftKey || e.metaKey || e.ctrlKey);
       }
@@ -490,7 +490,7 @@ export class KeyboardNavigator {
    * only one column is left.
    */
   private enterControlsMode(column: string): boolean {
-    const header = this.findHeader(column);
+    const header = this.mountedHeader(column);
     const controls = header?.getControls() ?? [];
     const first = controls[0];
     if (!first) return false;
@@ -562,6 +562,32 @@ export class KeyboardNavigator {
     return headers.find((h) => h.getColumn().name === column) ?? null;
   }
 
+  /**
+   * A header for `column`, scrolled back into the column window if it left.
+   *
+   * The header row renders a window — ~17 headers of however many columns
+   * there are — and the extension that keeps the cursor's own header mounted
+   * is clamped to `MIN_OVERSCAN_COLUMNS`. A pointer scroll moves the window
+   * without moving the cursor, so past that clamp every keyboard gesture that
+   * needs an *element* found nothing: `Enter` stopped sorting, `F2` stopped
+   * opening the controls, and an open `Shift+F2` gesture went half-dead —
+   * resize keys doing nothing while the move keys, which go through
+   * `visibleColumns`, kept working. All of it silent, and `aria-keyshortcuts`
+   * on every header advertises `Shift+F2` regardless.
+   *
+   * Scrolling the column back is what the user would do by hand, and
+   * {@link scrollFocusedCellIntoView} refreshes the column window
+   * synchronously, so the element exists before this returns. Still nullable:
+   * there is no body to measure against on the `/advanced` shell, and a
+   * column can be absent from `visibleColumns` outright.
+   */
+  private mountedHeader(column: string): ColumnHeader | null {
+    const found = this.findHeader(column);
+    if (found) return found;
+    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column);
+    return this.findHeader(column);
+  }
+
   // =========================================
   // Column layout mode (Shift+F2)
   // =========================================
@@ -578,7 +604,7 @@ export class KeyboardNavigator {
    *   case the keystroke is left entirely alone.
    */
   private enterLayoutMode(column: string): boolean {
-    const header = this.findHeader(column);
+    const header = this.mountedHeader(column);
     if (!header) return false;
     // Shift+F2 on the column already in the mode toggles it off.
     if (this.layout?.column === column) {
@@ -697,7 +723,7 @@ export class KeyboardNavigator {
         if (e.shiftKey) {
           this.moveLayoutColumnToEdge(toEnd);
         } else {
-          const header = this.findHeader(layout.column);
+          const header = this.mountedHeader(layout.column);
           if (header) {
             const bounds = header.getWidthBounds();
             this.applyLayoutWidth(header, toEnd ? bounds.max : bounds.min);
@@ -711,7 +737,7 @@ export class KeyboardNavigator {
         e.preventDefault();
         this.claimGridFocus();
         this.actions.resetColumnWidth(layout.column);
-        const header = this.findHeader(layout.column);
+        const header = this.mountedHeader(layout.column);
         this.announce(
           this.messages.a11y.columnWidthAnnouncement(layout.column, header?.getWidth() ?? 150),
         );
@@ -744,7 +770,7 @@ export class KeyboardNavigator {
   private resizeLayoutColumn(deltaPx: number): void {
     const layout = this.layout;
     if (!layout) return;
-    const header = this.findHeader(layout.column);
+    const header = this.mountedHeader(layout.column);
     if (!header) return;
     this.applyLayoutWidth(header, header.getWidth() + deltaPx);
   }

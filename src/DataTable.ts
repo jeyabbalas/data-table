@@ -202,18 +202,30 @@ export interface CreateDataTableOptions {
    *   causes. On a 1,000-column table this is the difference between ~2,000
    *   queries at load and a few dozen.
    * - `false` — off entirely.
-   * - `{ eager: true }` — create and fetch **every** column's chart during
-   *   load, and hold the load promise until they all settle. This restores
-   *   the pre-0.8 contract, for screenshot and PDF pipelines that capture
-   *   immediately after `await createDataTable(...)` and cannot wait for a
-   *   {@link DataTable.whenVizReady} they have no chance to call.
+   * - `{ eager: true }` — turn the visibility gate off: a column's chart is
+   *   created and fetched as soon as its header exists, rather than when the
+   *   header nears the viewport, and the load promise holds until all of them
+   *   settle.
+   *
+   *   **This is no longer "every column".** The header row is windowed on the
+   *   horizontal axis, so only the columns around the viewport have a header
+   *   — and a chart needs its header's container to render into. An eager
+   *   load of a 300-column table draws the ~17 charts that are on screen, not
+   *   300. A screenshot pipeline gets every chart *in the shot*, which is the
+   *   part that was ever visible; there is no setting that draws a chart for
+   *   a column the page is not showing, because there is nowhere to draw it.
+   *
+   *   What `eager` still buys is determinism: no dependence on
+   *   `IntersectionObserver` timing, and no chance of capturing a frame in
+   *   which the visible charts have not been built yet.
    *
    * @example
    * ```ts
    * // Default: the grid is interactive as soon as rows paint.
    * const table = await createDataTable({ container, source });
    *
-   * // Screenshot pipeline: every chart drawn before the await resolves.
+   * // Screenshot pipeline: every *visible* chart drawn before the await
+   * // resolves. Scroll and re-await `whenVizReady()` to capture more.
    * const shot = await createDataTable({
    *   container,
    *   source,
@@ -1526,6 +1538,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (panel) {
         if (!panel.isDestroyed()) continue;
         activeStatsPanels.delete(column.name);
+        // Unregister too, not just forget. `onHeaderUnmounted` returns early
+        // when the map has no entry, so it never reaches its own unregister
+        // for a panel pruned here — and the coordinator would go on
+        // broadcasting `updateFilters` into a destroyed panel until the next
+        // attach pass replaced the coordinator wholesale.
+        statsPanelCoordinator?.unregister(column.name);
       }
       header.getStatsElement().innerHTML = tableWideLine1Html();
     }

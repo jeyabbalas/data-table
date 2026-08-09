@@ -267,6 +267,33 @@ describe('windowed header row — identity and ARIA', () => {
     h.container.destroy();
   });
 
+  it('renumbers aria-colindex when only columnOrder moves', () => {
+    // `render()` dispatches on the schema and the table name, and the cheap
+    // tier on the visible set — a write that permutes `columnOrder` alone
+    // reaches neither, so the header's map stayed frozen while `TableBody`,
+    // which has always subscribed to that signal, rebuilt its own. The two
+    // rows then published different `aria-colindex` for the same column,
+    // which is the exact failure one shared definition exists to prevent.
+    const h = mount();
+    const before = headerFor(h.root(), 'col_0')!.getAttribute('aria-colindex');
+    expect(before).toBe('1');
+
+    // A permutation that leaves the visible set — and its array identity as
+    // far as the container is concerned — alone. `col_0` is now second.
+    const order = h.state.columnOrder.get();
+    h.state.columnOrder.set([order[1]!, order[0]!, ...order.slice(2)]);
+
+    expect(headerFor(h.root(), 'col_0')!.getAttribute('aria-colindex')).toBe('2');
+    expect(headerFor(h.root(), 'col_1')!.getAttribute('aria-colindex')).toBe('1');
+
+    // The cell id is keyed off the position in `visibleColumns`, which did not
+    // move, and `aria-activedescendant` names it — so it must NOT be rewritten
+    // here.
+    expect(headerFor(h.root(), 'col_0')!.id.endsWith('-colheader-0')).toBe(true);
+
+    h.container.destroy();
+  });
+
   it('keeps aria-colindex ascending in DOM order across the window', () => {
     const h = mount();
     h.actions.toggleColumnPin('col_40');
@@ -1080,5 +1107,121 @@ describe('windowed header row — mount hooks', () => {
 
     expect(() => bare.container.destroy()).not.toThrow();
     hooked.container.destroy();
+  });
+});
+
+describe('windowed header row — a hook that throws', () => {
+  // The mount hooks run code this class does not own: a custom
+  // `BaseStatsPanel` constructor, a custom visualization, a consumer's
+  // `messages` getter. Uncontained, a throw unwound the mount loop *after*
+  // `shiftHeaderWindow` had already unmounted the outgoing run, leaving the
+  // window bookkeeping describing the previous window — so `syncHeaderWindow`
+  // then matched neither branch and every later scroll was a no-op. The table
+  // showed no headers at all until the next structural render.
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it('keeps the header row alive and scrolling when onHeaderMount throws', () => {
+    let throwing = false;
+    const h = mount({
+      onHeaderMount: () => {
+        if (throwing) throw new Error('consumer panel blew up');
+      },
+    });
+
+    expect(headerCells(h.root()).length).toBeGreaterThan(0);
+
+    // A disjoint jump: every mounted header is unmounted, then the new run is
+    // mounted — and every one of those mounts throws.
+    throwing = true;
+    h.scrollTo(TOTAL_WIDTH - VIEWPORT);
+
+    // The row still holds the window it was asked for.
+    expect(headerCells(h.root()).length).toBeGreaterThan(0);
+    expect(errorSpy).toHaveBeenCalled();
+
+    // And the window still tracks the scroll afterwards, which is the part
+    // that used to be permanently dead.
+    throwing = false;
+    h.scrollTo(0);
+    expect(headerFor(h.root(), 'col_0')).not.toBeNull();
+
+    h.container.destroy();
+  });
+
+  it('still rescues focus and unmounts cleanly when onHeaderUnmount throws', () => {
+    const h = mount({
+      onHeaderUnmount: () => {
+        throw new Error('consumer teardown blew up');
+      },
+    });
+
+    const button = headerFor(h.root(), 'col_0')!.querySelector<HTMLElement>('.dt-col-sort-btn')!;
+    button.focus();
+
+    h.scrollTo(TOTAL_WIDTH - VIEWPORT);
+
+    // The rescue and the reorder-handler detach sit *after* the hook, so an
+    // uncontained throw skipped both — dropping focus to `<body>`.
+    expect(headerFor(h.root(), 'col_0')).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(h.container.getGridElement());
+    expect(errorSpy).toHaveBeenCalled();
+
+    h.container.destroy();
+  });
+});
+
+describe('windowed header row — the bridge-less /advanced shell', () => {
+  // A container with `actions` but no bridge builds the windowed header row
+  // and turns on grid semantics, but has no `TableBody`. The cursor's header
+  // is therefore unmounted by a scroll like any other, while the only thing
+  // that used to re-resolve `aria-activedescendant` was the body's render
+  // callback — which does not exist here.
+  function mountShell() {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const state = createTableState();
+    const actions = new StateActions(state, bridge);
+    const container = new TableContainer(host, state, actions);
+    stubWidth(container.getScrollContainer(), VIEWPORT);
+    stubWidth(container.getHeaderScroll(), VIEWPORT);
+    const schema = schemaOf(COLUMNS);
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.tableName.set('t');
+    return { host, state, actions, container };
+  }
+
+  it('never names a header that has left the document', () => {
+    const { host, actions, container } = mountShell();
+    expect(container.getTableBody()).toBeNull();
+
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'col_0' });
+    const grid = container.getGridElement();
+    const named = grid.getAttribute('aria-activedescendant');
+    expect(named).toBeTruthy();
+    expect(document.getElementById(named!)).not.toBeNull();
+
+    // Scroll the cursor's column well past the anchor budget.
+    container.getScrollContainer().scrollLeft = TOTAL_WIDTH - VIEWPORT;
+    container.refreshColumnWindow();
+
+    expect(headerFor(host, 'col_0')).toBeNull();
+    const after = grid.getAttribute('aria-activedescendant');
+    // Either dropped, or naming something that is actually there. What it must
+    // never be is a stale id — `aria-valid-attr-value` fails on that, and the
+    // cursor points at nothing for the rest of the session.
+    if (after) expect(document.getElementById(after)).not.toBeNull();
+
+    container.destroy();
+    host.remove();
   });
 });

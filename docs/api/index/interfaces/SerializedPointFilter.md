@@ -6,7 +6,7 @@
 
 # Interface: SerializedPointFilter
 
-Defined in: [persistence/types.ts:41](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/persistence/types.ts#L41)
+Defined in: [persistence/types.ts:41](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L41)
 
 JSON-safe form of [PointFilter](PointFilter.md): any `Date` operand becomes a [DateWrapper](DateWrapper.md).
 
@@ -16,7 +16,7 @@ JSON-safe form of [PointFilter](PointFilter.md): any `Date` operand becomes a [D
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:43](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/persistence/types.ts#L43)
+Defined in: [persistence/types.ts:43](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L43)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:43](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"point"`
 
-Defined in: [persistence/types.ts:42](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/persistence/types.ts#L42)
+Defined in: [persistence/types.ts:42](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L42)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [persistence/types.ts:42](https://github.com/jeyabbalas/data-table/b
 
 > **value**: `string` \| `number` \| `boolean` \| [`DateWrapper`](DateWrapper.md) \| `null`
 
-Defined in: [persistence/types.ts:44](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/persistence/types.ts#L44)
+Defined in: [persistence/types.ts:44](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/persistence/types.ts#L44)

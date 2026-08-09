@@ -267,6 +267,48 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    // The cheap render tier reconciles the header row through
+    // `mountColumnHeader`, which builds a `ColumnHeader` and needs `actions`
+    // to do it. The shell has none, so nothing mounts, nothing unmounts, and
+    // a hide used to leave the old placeholders standing forever — including
+    // one for a column that is no longer visible, over a row whose published
+    // `min-width` had already shrunk to exclude it.
+    it('rebuilds the shell placeholders when the visible column set changes', () => {
+      state.tableName.set('t');
+      initializeColumnsFromSchema(state, [
+        { name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 'b', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 'c', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      ]);
+      state.totalRows.set(1);
+      state.columnWidths.set(
+        new Map([
+          ['a', 150],
+          ['b', 150],
+          ['c', 150],
+        ]),
+      );
+
+      const tableContainer = new TableContainer(container, state);
+      tableContainer.render();
+      expect(headerCells(tableContainer.getElement())).toHaveLength(3);
+
+      state.visibleColumns.set(['a', 'c']);
+
+      const headers = headerCells(tableContainer.getElement());
+      expect(headers).toHaveLength(2);
+
+      // And the row's declared extent agrees with what it now holds. The two
+      // are written by different paths, so a stale header row is visible here
+      // as a row 150 px wider than its own `min-width`.
+      const row = tableContainer.getElement().querySelector<HTMLElement>('.dt-header-row')!;
+      const declared = Number.parseFloat(row.style.minWidth);
+      const held = headers.reduce((sum, h) => sum + Number.parseFloat(h.style.width), 0);
+      expect(held).toBe(declared);
+
+      tableContainer.destroy();
+    });
+
     it('should set up resize observer', () => {
       const tableContainer = new TableContainer(container, state);
       const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());

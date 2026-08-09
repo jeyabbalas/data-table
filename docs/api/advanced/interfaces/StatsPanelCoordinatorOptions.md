@@ -6,7 +6,7 @@
 
 # Interface: StatsPanelCoordinatorOptions
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:51](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/StatsPanelCoordinator.ts#L51)
+Defined in: [visualizations/StatsPanelCoordinator.ts:51](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelCoordinator.ts#L51)
 
 Optional hooks for the panel coordinator, supplied as the constructor's
 trailing argument. Separate from `CrossfilterCoordinatorOptions` because
@@ -18,7 +18,7 @@ panels have no row-count cycle to hook.
 
 > `optional` **vizScheduler?**: [`FilterFanOutScheduler`](FilterFanOutScheduler.md)
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:57](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/visualizations/StatsPanelCoordinator.ts#L57)
+Defined in: [visualizations/StatsPanelCoordinator.ts:57](https://github.com/jeyabbalas/data-table/blob/ce18c7a4c9bdee8a7130f27bf4913927802d2bfd/src/visualizations/StatsPanelCoordinator.ts#L57)
 
 See [FilterFanOutScheduler](FilterFanOutScheduler.md). Absent = today's fan-out over every
 registered panel. Note this governs [StatsPanelCoordinator](../classes/StatsPanelCoordinator.md) filter

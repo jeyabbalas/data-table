@@ -50,8 +50,21 @@ class MockResizeObserver implements ResizeObserver {
     return this.observedElements;
   }
 
-  static getLastInstance(): MockResizeObserver | undefined {
-    return MockResizeObserver.instances[MockResizeObserver.instances.length - 1];
+  /**
+   * The instance watching `element`, by what it observes rather than by
+   * construction order.
+   *
+   * `TableContainer` builds more than one: `.dt-root` drives the public
+   * `onResize` callbacks, and `.dt-body-scroll` drives the shared column
+   * window, because that box changes width when a vertical scrollbar appears
+   * without `.dt-root` moving at all. `getLastInstance()` silently answered
+   * with whichever happened to be constructed second, so a test about the
+   * resize callbacks was really firing entries at the column-window observer.
+   * Selecting by target is the assertion the tests actually mean, and it does
+   * not care how many observers exist or in what order.
+   */
+  static getInstanceObserving(element: Element): MockResizeObserver | undefined {
+    return MockResizeObserver.instances.find((i) => i.getObservedElements().has(element));
   }
 
   static clearInstances(): void {
@@ -256,7 +269,7 @@ describe('TableContainer', () => {
 
     it('should set up resize observer', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
 
       expect(mockInstance).toBeDefined();
       expect(mockInstance?.getObservedElements().has(tableContainer.getElement())).toBe(true);
@@ -437,7 +450,7 @@ describe('TableContainer', () => {
   describe('resize observer', () => {
     it('should fire callback on size change', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
       const resizeCallback = vi.fn();
 
       tableContainer.onResize(resizeCallback);
@@ -457,7 +470,7 @@ describe('TableContainer', () => {
 
     it('should provide dimensions via getDimensions', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
 
       // Trigger resize
       mockInstance?.triggerResize([
@@ -474,7 +487,7 @@ describe('TableContainer', () => {
 
     it('should not notify if dimensions have not changed', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
       const resizeCallback = vi.fn();
 
       tableContainer.onResize(resizeCallback);
@@ -505,7 +518,7 @@ describe('TableContainer', () => {
 
     it('should call callback immediately with current dimensions if available', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
 
       // Set initial dimensions
       mockInstance?.triggerResize([
@@ -527,7 +540,7 @@ describe('TableContainer', () => {
 
     it('should allow unsubscribing from resize events', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
       const resizeCallback = vi.fn();
 
       const unsubscribe = tableContainer.onResize(resizeCallback);
@@ -671,11 +684,29 @@ describe('TableContainer', () => {
 
     it('should disconnect resize observer', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
 
       tableContainer.destroy();
 
       expect(mockInstance?.getObservedElements().size).toBe(0);
+    });
+
+    it('should disconnect every resize observer it constructed', () => {
+      // Not a restatement of the test above. The container watches two boxes
+      // — `.dt-root` for the public resize callbacks and `.dt-body-scroll` for
+      // the shared column window — and an observer left connected to a
+      // container that has been torn down fires callbacks against destroyed
+      // state for as long as the page lives. Asserting over every instance
+      // means a third observer added later cannot be forgotten here.
+      const tableContainer = new TableContainer(container, state);
+      const instances = [...MockResizeObserver.instances];
+      expect(instances.length).toBeGreaterThan(1);
+
+      tableContainer.destroy();
+
+      for (const instance of instances) {
+        expect(instance.getObservedElements().size).toBe(0);
+      }
     });
 
     it('should unsubscribe from state', () => {
@@ -705,7 +736,7 @@ describe('TableContainer', () => {
 
     it('should clear resize callbacks', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance();
+      const mockInstance = MockResizeObserver.getInstanceObserving(tableContainer.getElement());
       const resizeCallback = vi.fn();
 
       tableContainer.onResize(resizeCallback);

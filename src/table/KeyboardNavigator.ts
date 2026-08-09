@@ -93,6 +93,18 @@ export interface KeyboardNavigatorOptions {
    * Without it, header-row navigation and F2 controls mode are inert.
    */
   getColumnHeaders?: (() => ColumnHeader[]) | undefined;
+  /**
+   * Re-window every consumer of the shared column window, synchronously.
+   *
+   * Called after this navigator writes `bodyScroll.scrollLeft`, because the
+   * browser does not dispatch `scroll` until the current task ends — so the
+   * cell (and, once the header row is windowed, the header) the cursor just
+   * moved to would not exist for a frame, and `aria-activedescendant` would
+   * drop the cursor. `TableContainer` supplies its own, which reconciles both
+   * axes; without it only the body re-windows, which is all a navigator
+   * composed by hand over a bare `TableBody` has to reconcile.
+   */
+  refreshColumnWindow?: (() => void) | undefined;
   /** Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op. */
   getBridge?: () => WorkerBridge | undefined;
   /**
@@ -121,6 +133,7 @@ export class KeyboardNavigator {
   private readonly actions: StateActions;
   private readonly getTableBody: () => TableBody | null;
   private readonly getColumnHeaders: (() => ColumnHeader[]) | undefined;
+  private readonly refreshColumnWindow: (() => void) | undefined;
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
   private readonly announceMessage: ((message: string) => void) | undefined;
   private readonly messages: Strings;
@@ -150,6 +163,7 @@ export class KeyboardNavigator {
     this.actions = opts.actions;
     this.getTableBody = opts.getTableBody;
     this.getColumnHeaders = opts.getColumnHeaders;
+    this.refreshColumnWindow = opts.refreshColumnWindow;
     this.getBridge = opts.getBridge;
     this.announceMessage = opts.announce;
     this.messages = opts.messages ?? defaultStrings;
@@ -943,12 +957,15 @@ export class KeyboardNavigator {
       return;
     }
 
-    // The body renders only the horizontally visible column window, and the
+    // Both axes render only the horizontally visible column window, and the
     // browser does not dispatch `scroll` until this task ends — so without
-    // this the cell the cursor just moved to would not exist yet, and
-    // `syncActiveDescendant` (which resolves it by id) would drop the cursor
-    // for a frame. Synchronous by design.
-    body.refreshColumnWindow();
+    // this the cell (and the header) the cursor just moved to would not exist
+    // yet, and `syncActiveDescendant` (which resolves it by id) would drop the
+    // cursor for a frame. Synchronous by design. Routed through the container
+    // when there is one so a far jump mounts the target *header* in the same
+    // frame it mounts the cell.
+    if (this.refreshColumnWindow) this.refreshColumnWindow();
+    else body.refreshColumnWindow();
   }
 
   private async copySelectedRows(): Promise<void> {

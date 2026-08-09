@@ -51,10 +51,13 @@ import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnReorder } from './ColumnReorder';
 import {
+  BOX_OVERHEAD_PX,
+  ColumnWindowModel,
   buildColumnIndexMap,
   pinnedOffsets,
   resolveColumnWidth,
   resolvePinnedCount,
+  type ColumnWindowHost,
 } from './ColumnWindow';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
@@ -218,6 +221,28 @@ export class TableContainer {
   private colIndexByName = new Map<string, number>();
   private colIndexSchemaSource: readonly ColumnSchema[] | null = null;
   private colIndexOrderSource: readonly string[] | null = null;
+
+  // ---- Shared column window ------------------------------------------------
+  //
+  // One model, two consumers: the header row and the body render the same
+  // columns at the same offsets, and computing that twice is how they drift.
+  // The container owns the prefix sums, the viewport definition and the
+  // drivers; `TableBody` is handed all three (`ColumnWindowHost`) and keeps
+  // only its own body-cursor focus extension.
+  private readonly columnWindowModel = new ColumnWindowModel();
+  private readonly columnWindowHost: ColumnWindowHost;
+  // The `role="row"` element inside `.dt-header`, or null before the first
+  // build / while there is no data. Held rather than re-queried because it is
+  // where the horizontal content extent is written on every body render pass.
+  private headerRowInner: HTMLElement | null = null;
+  // Watches `.dt-body-scroll`'s box: the window is a function of `clientWidth`
+  // as much as of `scrollLeft`, so a viewport that grows without scrolling has
+  // to recompute. Lives here rather than in `TableBody` because both axes
+  // consume the answer — see `ColumnWindowHost`.
+  private readonly columnResizeObserver: ResizeObserver;
+  private lastColumnClientWidth = -1;
+  private lastColumnScrollLeft = -1;
+  private columnScrollRAF: number | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
@@ -429,6 +454,25 @@ export class TableContainer {
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
 
+    // The shared column window: the model, where it is anchored, where the
+    // content extent is published, and what a move re-renders.
+    this.columnWindowHost = {
+      model: this.columnWindowModel,
+      viewport: () => ({
+        scrollLeft: this.bodyScroll.scrollLeft,
+        // The wider of the two scrollers. They differ by the body's vertical
+        // scrollbar, and taking the narrower one would leave the header's
+        // rightmost column unmounted while its cells were rendered — a
+        // one-column disagreement that grows into a visible gap at the right
+        // edge of any scrolled table.
+        viewportWidth: Math.max(this.headerScroll.clientWidth, this.bodyScroll.clientWidth),
+      }),
+      setContentWidth: (totalWidthPx) => this.applyContentWidth(totalWidthPx),
+      refresh: () => this.refreshColumnWindow(),
+    };
+    this.columnResizeObserver = new ResizeObserver(() => this.handleColumnViewportResize());
+    this.columnResizeObserver.observe(this.bodyScroll);
+
     // Subscribe to state changes
     this.subscribeToState();
 
@@ -459,6 +503,7 @@ export class TableContainer {
         actions: this.actions,
         getTableBody: () => this.tableBody,
         getColumnHeaders: () => this.columnHeaders,
+        refreshColumnWindow: () => this.refreshColumnWindow(),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
@@ -717,6 +762,7 @@ export class TableContainer {
     let isScrolling = false;
 
     this.boundBodyScrollHandler = () => {
+      this.scheduleColumnWindowRefresh();
       if (isScrolling) return;
       isScrolling = true;
       this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
@@ -724,6 +770,11 @@ export class TableContainer {
     };
 
     this.boundHeaderScrollHandler = () => {
+      // Ahead of the latch: a header-driven scroll writes `bodyScroll`
+      // *inside* the latch, and the `scroll` event that produces arrives in a
+      // later task. Without this, dragging the header's own scrollbar moves
+      // the offset a frame before either axis re-windows.
+      this.scheduleColumnWindowRefresh();
       if (isScrolling || this.suppressReverseScrollSync) return;
       isScrolling = true;
       this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
@@ -732,6 +783,97 @@ export class TableContainer {
 
     this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
     this.headerScroll.addEventListener('scroll', this.boundHeaderScrollHandler, { passive: true });
+  }
+
+  // =========================================
+  // Shared column window
+  // =========================================
+
+  /**
+   * Re-window both axes at most once per frame.
+   *
+   * One rAF in flight, every event in between dropped — the policy
+   * `VirtualScroller.handleScroll` uses, because these run off the same
+   * element and the same event storm and a second throttling policy on one
+   * stream is only a second thing to get wrong. The `scrollLeft` comparison is
+   * what makes vertical scrolling free: this fires on every wheel tick, and a
+   * vertical-only scroll leaves `scrollLeft` alone.
+   */
+  private scheduleColumnWindowRefresh(): void {
+    if (this.destroyed) return;
+    if (this.bodyScroll.scrollLeft === this.lastColumnScrollLeft) return;
+    if (this.columnScrollRAF !== null) return;
+
+    this.columnScrollRAF = requestAnimationFrame(() => {
+      this.columnScrollRAF = null;
+      if (this.destroyed) return;
+      this.refreshColumnWindow();
+    });
+  }
+
+  /**
+   * Re-window both axes when the viewport's *width* changes.
+   *
+   * Keyed on `clientWidth` alone: a height change moves the row range, which
+   * is `VirtualScroller`'s business, and recomputing a window that cannot have
+   * moved would put a binary search on every vertical resize frame. Collapse a
+   * sidebar, maximize the window, or reveal a tab panel that was
+   * `display: none` at mount, and without this the extra width is bare
+   * right-spacer until something happens to scroll.
+   */
+  private handleColumnViewportResize(): void {
+    if (this.destroyed) return;
+    const width = this.bodyScroll.clientWidth;
+    if (width === this.lastColumnClientWidth) return;
+    this.lastColumnClientWidth = width;
+    this.refreshColumnWindow();
+  }
+
+  /**
+   * Recompute the shared column window and reconcile every consumer of it.
+   *
+   * Synchronous: when this returns, the DOM matches the current `scrollLeft`.
+   * That is the whole reason it exists as a method rather than as a scroll
+   * handler. The browser does not dispatch `scroll` until after the current
+   * task, so code that *writes* `scrollLeft` — keyboard navigation, the
+   * filter-change scroll pin, the scroll restore after a re-render — would
+   * otherwise leave a frame in which what is on screen belongs to the previous
+   * offset. At 1,000 columns that frame is a blank table.
+   *
+   * Cheap when nothing moved: cached prefix sums, a binary search, and a
+   * comparison per axis — no DOM work at all. Safe to call unconditionally
+   * after any programmatic scroll, which is what every call site does.
+   *
+   * @example
+   * ```typescript
+   * bodyScroll.scrollLeft = targetLeft;
+   * container.refreshColumnWindow(); // both axes match the new offset now
+   * ```
+   */
+  refreshColumnWindow(): void {
+    if (this.destroyed) return;
+    // Record the offset this pass answered for, whatever the answer is: the
+    // scroll handler skips work while `scrollLeft` still matches it.
+    this.lastColumnScrollLeft = this.bodyScroll.scrollLeft;
+    // The body re-derives the window from the *shared* model and applies its
+    // own body-cursor focus extension, so the two axes cannot disagree about
+    // where a column starts.
+    this.tableBody?.refreshColumnWindow();
+  }
+
+  /**
+   * Publish the horizontal content extent onto the header row.
+   *
+   * The number arrives from `TableBody.applyContentWidth`, which passes the
+   * same one it hands `VirtualScroller.setContentWidth` — that is the point:
+   * the scroll extent and the header's `min-width` are the same quantity, and
+   * two summations of it is how they drift. `render()` calls it once more
+   * itself, from the same prefix sums, so a freshly built header row carries
+   * the current extent immediately rather than staying narrower than its own
+   * cells until the body's next render pass.
+   */
+  private applyContentWidth(totalWidthPx: number): void {
+    if (this.headerRowInner) this.headerRowInner.style.minWidth = `${totalWidthPx}px`;
   }
 
   // =========================================
@@ -1163,9 +1305,9 @@ export class TableContainer {
           this.headerScroll.scrollLeft = savedLeft;
           // Inside the `if` on purpose: this loop runs every frame for a
           // second, and in the steady state (nothing moved scrollLeft) it must
-          // cost nothing. When something *did* move it, the body is rendering
-          // the column window for the wrong offset until it is told.
-          this.tableBody?.refreshColumnWindow();
+          // cost nothing. When something *did* move it, both axes are drawn
+          // for the wrong offset until they are told.
+          this.refreshColumnWindow();
         }
         if (performance.now() < deadline) {
           requestAnimationFrame(correct);
@@ -1291,10 +1433,12 @@ export class TableContainer {
     // helper the body uses, so the two cannot disagree.
     const { pinnedCount } = resolvePinnedCount(visibleColumns, pinnedColumns);
     const offsets = pinnedOffsets(visibleColumns, columnWidths, pinnedCount, baseZ, pinnedColumns);
-    let pinnedWidth = 0;
-    for (let i = 0; i < pinnedCount; i++) {
-      pinnedWidth += resolveColumnWidth(columnWidths.get(visibleColumns[i]!));
-    }
+    // From the shared prefix sums rather than a fourth summation of the same
+    // widths. `sync` is a pointer comparison on a hit, which this almost
+    // always is — `render()` has just computed the window from the same two
+    // arrays.
+    this.columnWindowModel.sync(visibleColumns, columnWidths, BOX_OVERHEAD_PX);
+    const pinnedWidth = this.columnWindowModel.spanPx(0, pinnedCount);
 
     // Apply to header elements
     for (const header of this.columnHeaders) {
@@ -1413,6 +1557,7 @@ export class TableContainer {
     // Clear existing column headers
     this.destroyColumnHeaders();
     this.headerRow.innerHTML = '';
+    this.headerRowInner = null;
     this.bodyContainer.innerHTML = '';
 
     if (schema.length === 0 || !tableName) {
@@ -1507,6 +1652,14 @@ export class TableContainer {
       // separate signal writes and the schema write renders first.
       if (headerRowEl.childElementCount > 0) {
         this.headerRow.appendChild(headerRowEl);
+        this.headerRowInner = headerRowEl;
+        // Give the fresh row the content extent straight away. The body
+        // publishes it on every render pass, but its first pass is one fetch
+        // away when there are rows at all and never happens when there are
+        // none — so without this a rebuilt header row sits at its intrinsic
+        // width while its own cells are already laid out past it.
+        this.columnWindowModel.sync(visibleColumns, columnWidths, BOX_OVERHEAD_PX);
+        this.applyContentWidth(this.columnWindowModel.totalWidthPx());
       }
 
       // Refresh column reorder handlers for new headers
@@ -1538,18 +1691,20 @@ export class TableContainer {
           // row holding it. Passed explicitly rather than rediscovered with
           // `closest('.dt-grid')` so the dependency is visible at the wiring.
           gridElement: this.gridElement,
+          // One window, two consumers. The body computes against the model the
+          // header row measures against, from the viewport this container
+          // defines, and re-windowing either axis re-windows both.
+          columnWindowHost: this.columnWindowHost,
         });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
-        // initialize() sets this later via async DuckDB fetch, but scrollToRightEnd()
-        // may fire before that completes.
-        {
-          let totalWidth = 0;
-          for (const colName of visibleColumns) {
-            totalWidth += resolveColumnWidth(columnWidths.get(colName));
-          }
-          this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
-        }
+        // initialize() sets this later via async DuckDB fetch, but
+        // scrollToRightEnd() may fire before that completes. From the shared
+        // prefix sums — this used to be its own summation over the same
+        // widths, which is the duplication that lets a rounding rule change on
+        // one side and not the other.
+        this.columnWindowModel.sync(visibleColumns, columnWidths, BOX_OVERHEAD_PX);
+        this.tableBody.getVirtualScroller().setContentWidth(this.columnWindowModel.totalWidthPx());
 
         // Initialize table body asynchronously, but track the promise so
         // `whenBodyReady()` can resolve only after the surviving body's
@@ -1647,13 +1802,13 @@ export class TableContainer {
         this.bodyScroll.scrollTop = savedBodyScrollTop;
         this.headerScroll.scrollLeft = savedHeaderScrollLeft;
 
-        // `render()` rebuilt the body at scrollLeft 0 and we have just put the
-        // offset back. The rows in the DOM are the window for 0 — every cell
-        // the user was looking at is a spacer — and they stay that way until
-        // a `scroll` event, which restoring the property does not produce
-        // reliably. This is the blank-body flash after any re-render at a
-        // scrolled-right offset.
-        this.tableBody?.refreshColumnWindow();
+        // `render()` rebuilt at scrollLeft 0 and we have just put the offset
+        // back. What is in the DOM is the window for 0 — every cell the user
+        // was looking at is a spacer — and it stays that way until a `scroll`
+        // event, which restoring the property does not produce reliably. This
+        // is the blank-table flash after any re-render at a scrolled-right
+        // offset.
+        this.refreshColumnWindow();
 
         // Restore focus only when this render is what destroyed it: the element
         // focus was on is gone from the table AND focus fell to nothing (body,
@@ -1954,6 +2109,13 @@ export class TableContainer {
         const onEnd = () => {
           this.suppressReverseScrollSync = false;
           this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+          // The `scrollend` path writes `scrollLeft` directly, and a written
+          // offset produces no `scroll` event of its own — so without this the
+          // window stays wherever the animation's last dispatched event left
+          // it. Correct today only by accident: `scrollTo({behavior:'smooth'})`
+          // happens to dispatch a final `scroll` at the destination, which the
+          // 600 ms `setTimeout` fallback path does not guarantee.
+          this.refreshColumnWindow();
         };
         this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
         // Fallback for browsers without scrollend support
@@ -2179,8 +2341,15 @@ export class TableContainer {
       this.pinnedDemarcation = null;
     }
 
-    // Disconnect resize observer
+    // Disconnect resize observers
     this.resizeObserver.disconnect();
+    this.columnResizeObserver.disconnect();
+    if (this.columnScrollRAF !== null) {
+      cancelAnimationFrame(this.columnScrollRAF);
+      this.columnScrollRAF = null;
+    }
+    this.columnWindowModel.reset();
+    this.headerRowInner = null;
 
     // Clear resize callbacks
     this.resizeCallbacks.clear();

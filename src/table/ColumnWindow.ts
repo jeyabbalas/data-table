@@ -97,6 +97,52 @@ export interface ColumnWindow {
   pinnedPrefixViolated: boolean;
 }
 
+/**
+ * The shared column-window plumbing a `TableBody` renders against.
+ *
+ * **One window, two consumers.** The header row and the body render the same
+ * columns at the same offsets; computing that twice is how they drift, and a
+ * header one column ahead of its cells is the exact failure the spacer
+ * arithmetic exists to prevent. `TableContainer` supplies this so both axes
+ * share a single {@link ColumnWindowModel} — one set of prefix sums, one
+ * definition of the viewport, one driver.
+ *
+ * A `TableBody` constructed directly through `/advanced` gets none of this
+ * and builds its own host from its own scroll container, which is exactly
+ * what it did before the hoist. That is the whole reason this is an option
+ * and not a constructor argument.
+ *
+ * @internal
+ */
+export interface ColumnWindowHost {
+  /**
+   * The prefix sums both axes measure against. Shared, not copied: a second
+   * model would have to be re-synced on the same schedule and would answer
+   * differently the moment one of them missed a write.
+   */
+  readonly model: ColumnWindowModel;
+  /**
+   * Where the window is anchored and how wide the band is.
+   *
+   * The container reports `max(headerScroll.clientWidth,
+   * bodyScroll.clientWidth)` — the body's is narrower by the vertical
+   * scrollbar, and taking the smaller one would leave the header's rightmost
+   * column unmounted while its cells were rendered.
+   */
+  viewport(): { scrollLeft: number; viewportWidth: number };
+  /** Publish the horizontal content extent (the header row's `min-width`). */
+  setContentWidth(totalWidthPx: number): void;
+  /**
+   * Re-render every consumer of the shared window, not just the caller.
+   *
+   * Called from whatever noticed the window may have moved — a scroll, a
+   * viewport resize. Under `TableContainer` this reconciles the header row
+   * and then the body; standalone it is the body's own
+   * `refreshColumnWindow`.
+   */
+  refresh(): void;
+}
+
 /** Everything {@link ColumnWindowModel.compute} needs, all of it plain data. */
 export interface ColumnWindowOptions {
   visibleColumns: readonly string[];

@@ -25,6 +25,7 @@ import {
   resolveColumnWidth,
   resolvePinnedCount,
   type ColumnWindow,
+  type ColumnWindowHost,
   type PinnedOffset,
 } from './ColumnWindow';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
@@ -125,6 +126,16 @@ export interface TableBodyOptions {
    * (priority 'high') always jump ahead of them in the worker queue.
    */
   prefetch?: boolean | undefined;
+  /**
+   * Shared column-window plumbing, supplied by `TableContainer` so the header
+   * row and the body render the same window. Omit it — as any direct
+   * `/advanced` construction does — and the body builds its own from its own
+   * scroll container, with its own scroll listener and resize observer,
+   * exactly as it did before the hoist.
+   *
+   * @internal
+   */
+  columnWindowHost?: ColumnWindowHost | undefined;
 }
 
 /**
@@ -277,7 +288,15 @@ export class TableBody {
   //
   // Prefix sums + the window arithmetic. The model is pure; everything DOM
   // about the window lives here.
-  private readonly columnWindowModel = new ColumnWindowModel();
+  //
+  // The model is not necessarily this body's own: under `TableContainer` it is
+  // the one the header row measures against too, so the two axes cannot
+  // disagree about where a column starts. `ownsWindowHost` records which case
+  // this is, because a shared model must not be `reset()` on teardown and a
+  // shared driver must not be double-installed.
+  private readonly windowHost: ColumnWindowHost;
+  private readonly ownsWindowHost: boolean;
+  private readonly columnWindowModel: ColumnWindowModel;
   // The window the currently rendered rows were built for. Assigned once per
   // pass, from the same local the pass threads down.
   private columnWindow: ColumnWindow = {
@@ -301,8 +320,10 @@ export class TableBody {
   private lastScrollLeft = -1;
   private horizontalScrollRAF: number | null = null;
   // Watches the scroll container's box, because the window depends on its
-  // width as much as on the scroll offset. `-1` is "never measured".
-  private readonly columnResizeObserver: ResizeObserver;
+  // width as much as on the scroll offset. `-1` is "never measured". Null when
+  // a host was injected — the host owns the drivers in that case, and a second
+  // observer on the same element would only recompute the same window twice.
+  private readonly columnResizeObserver: ResizeObserver | null;
   private lastClientWidth = -1;
   // Re-entrancy guard for the width path: `updateCellWidths` can re-render,
   // and a render notifies its host, which is free to write column widths.
@@ -397,27 +418,48 @@ export class TableBody {
       externalScrollContainer: options.scrollContainer,
     });
 
-    // Horizontal scroll drives the column window. A second listener on the
-    // same element rather than a hook into the scroller's own: `VirtualScroller`
-    // is deliberately ignorant of columns, and its `onScroll` fires only when
-    // the *row* range moves — which a purely horizontal scroll never does.
-    // Attached here and not in `initialize()` so a body driven directly
-    // through `/advanced`, which may never be initialized, still tracks the
-    // window.
     this.columnScrollSource = this.virtualScroller.getScrollContainer();
-    this.columnScrollSource.addEventListener('scroll', this.handleHorizontalScroll, {
-      passive: true,
-    });
 
-    // The window is a function of `scrollLeft` **and** `clientWidth`, so a
-    // viewport that grows without scrolling has to recompute too. Collapse a
-    // sidebar, maximize the window, or reveal a tab panel that was
-    // `display: none` at mount, and without this the extra width is bare
-    // right-spacer until something happens to scroll — and a cursor moved
-    // into it lands on a cell that does not exist, so `aria-activedescendant`
-    // is dropped and the cursor goes silent.
-    this.columnResizeObserver = new ResizeObserver(this.handleViewportResize);
-    this.columnResizeObserver.observe(this.columnScrollSource);
+    // One window, two consumers — see `ColumnWindowHost`. With a host the
+    // model, the viewport definition and the drivers all belong to
+    // `TableContainer`; without one this body reconstructs exactly what it
+    // owned before the hoist.
+    this.ownsWindowHost = options.columnWindowHost === undefined;
+    this.windowHost = options.columnWindowHost ?? {
+      model: new ColumnWindowModel(),
+      viewport: () => ({
+        scrollLeft: this.columnScrollSource.scrollLeft,
+        viewportWidth: this.columnScrollSource.clientWidth,
+      }),
+      setContentWidth: (totalWidthPx) => this.writeHeaderRowWidth(totalWidthPx),
+      refresh: () => this.refreshColumnWindow(),
+    };
+    this.columnWindowModel = this.windowHost.model;
+
+    if (this.ownsWindowHost) {
+      // Horizontal scroll drives the column window. A second listener on the
+      // same element rather than a hook into the scroller's own:
+      // `VirtualScroller` is deliberately ignorant of columns, and its
+      // `onScroll` fires only when the *row* range moves — which a purely
+      // horizontal scroll never does. Attached here and not in `initialize()`
+      // so a body driven directly through `/advanced`, which may never be
+      // initialized, still tracks the window.
+      this.columnScrollSource.addEventListener('scroll', this.handleHorizontalScroll, {
+        passive: true,
+      });
+
+      // The window is a function of `scrollLeft` **and** `clientWidth`, so a
+      // viewport that grows without scrolling has to recompute too. Collapse a
+      // sidebar, maximize the window, or reveal a tab panel that was
+      // `display: none` at mount, and without this the extra width is bare
+      // right-spacer until something happens to scroll — and a cursor moved
+      // into it lands on a cell that does not exist, so
+      // `aria-activedescendant` is dropped and the cursor goes silent.
+      this.columnResizeObserver = new ResizeObserver(this.handleViewportResize);
+      this.columnResizeObserver.observe(this.columnScrollSource);
+    } else {
+      this.columnResizeObserver = null;
+    }
 
     // Delegated annotation hover/focus listeners on the scroll container.
     // Attached even when no annotations are present (bail-out is cheap) so
@@ -802,7 +844,7 @@ export class TableBody {
     this.horizontalScrollRAF = requestAnimationFrame(() => {
       this.horizontalScrollRAF = null;
       if (this.destroyed) return;
-      this.refreshColumnWindow();
+      this.windowHost.refresh();
     });
   };
 
@@ -820,7 +862,7 @@ export class TableBody {
     const width = this.columnScrollSource.clientWidth;
     if (width === this.lastClientWidth) return;
     this.lastClientWidth = width;
-    this.refreshColumnWindow();
+    this.windowHost.refresh();
   };
 
   // =========================================
@@ -1449,14 +1491,18 @@ export class TableBody {
     columns: readonly string[],
     columnWidths: ReadonlyMap<string, number>,
   ): ColumnWindow {
+    const { scrollLeft, viewportWidth } = this.windowHost.viewport();
     const win = this.columnWindowModel.compute({
       visibleColumns: columns,
       columnWidths,
       pinnedColumns: this.state.pinnedColumns.get(),
-      scrollLeft: this.columnScrollSource.scrollLeft,
-      viewportWidth: this.columnScrollSource.clientWidth,
+      scrollLeft,
+      viewportWidth,
       boxOverheadPx: BOX_OVERHEAD_PX,
     });
+    // The focus extension is the body's alone. The header row runs its own —
+    // it anchors on a *header* cursor, F2 controls focus and the open layout
+    // gesture, none of which widens the band a body row has to render.
     return this.extendWindowToFocus(win);
   }
 
@@ -1525,11 +1571,28 @@ export class TableBody {
    * Publish the horizontal content extent to the scroller and the header.
    *
    * One function rather than two duplicated blocks: `setContentWidth`'s
-   * argument and `headerRow.style.minWidth` have to be the same number, and
+   * argument and the header row's `min-width` have to be the same number, and
    * two copies of the same summation is exactly how they would drift.
+   *
+   * Where the header half of that lands is the host's business. Under
+   * `TableContainer` it writes the element it built and holds a reference to;
+   * standalone it falls back to {@link writeHeaderRowWidth}'s DOM reach, which
+   * is what this method used to do inline.
    */
   private applyContentWidth(totalWidthPx: number): void {
     this.virtualScroller.setContentWidth(totalWidthPx);
+    this.windowHost.setContentWidth(totalWidthPx);
+  }
+
+  /**
+   * Find the header row by walking up to `.dt-root` and back down, and set its
+   * `min-width`.
+   *
+   * The standalone fallback only. A body composed by `TableContainer` never
+   * reaches across the DOM for an element another component owns — it is handed
+   * a writer instead.
+   */
+  private writeHeaderRowWidth(totalWidthPx: number): void {
     const headerRow = this.virtualScroller
       .getScrollContainer()
       .closest(`.${this.classPrefix}-root`)
@@ -2841,8 +2904,10 @@ export class TableBody {
     // (`TableContainer` owns `.dt-body-scroll` and rebuilds the body into it),
     // so an undetached listener would fire against a destroyed instance for as
     // long as the table lives.
+    // Both are null-ops when a host was injected — it owns the drivers, and
+    // it outlives this body across a rebuild.
     this.columnScrollSource.removeEventListener('scroll', this.handleHorizontalScroll);
-    this.columnResizeObserver.disconnect();
+    this.columnResizeObserver?.disconnect();
     if (this.horizontalScrollRAF !== null) {
       cancelAnimationFrame(this.horizontalScrollRAF);
       this.horizontalScrollRAF = null;
@@ -2869,7 +2934,11 @@ export class TableBody {
     this.rowDataCache.clear();
     this.rowElementMap.clear();
     this.rowPool = [];
-    this.columnWindowModel.reset();
+    // Only when this body owns it. A shared model belongs to the container and
+    // still describes the header row standing in the DOM — resetting it here
+    // would drop the prefix sums out from under the header on every body
+    // rebuild, which `render()` does on any structural change.
+    if (this.ownsWindowHost) this.columnWindowModel.reset();
     this.visibleIndexMap.clear();
     this.visibleIndexSource = null;
     this.lastScrollLeft = -1;

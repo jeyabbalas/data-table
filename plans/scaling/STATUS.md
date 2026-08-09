@@ -12,7 +12,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
 | 3.5   | _(no doc — review-driven)_                                                   | done        | 2026-08-08 | 2026-08-08 | Hardening: 6 defects, comments, anchors  |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | done        | 2026-08-08 | 2026-08-09 | Header row windowing + incremental diffs |
-| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
+| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | in progress | 2026-08-09 | —          | Column-clipped row fetch + cache bytes   |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
 | 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                        |
 | 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                        |

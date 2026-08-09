@@ -11,7 +11,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
 | 3.5   | _(no doc — review-driven)_                                                   | done        | 2026-08-08 | 2026-08-08 | Hardening: 6 defects, comments, anchors  |
-| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | in progress | 2026-08-08 | —          | Header row windowing + incremental diffs |
+| 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | done        | 2026-08-08 | 2026-08-09 | Header row windowing + incremental diffs |
 | 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
 | 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                        |
@@ -1608,3 +1608,291 @@ untouched.
 **No manual Chrome pass.** No user-visible behaviour changes except the ValueCounts "Other"
 segment, which the C2 unit tests cover exactly (an under-estimating sketch at 11 real categories,
 the over-estimating mirror, and Σ segment counts = non-null rows).
+
+### Phase 4 — Header column windowing and incremental header updates
+
+Both grid rows are windowed now, from one model. At 300 columns × 20,000 rows the `.dt-root`
+subtree fell 11,136 → 970 at rest (1,511 at the widest point of a horizontal sweep), mounted
+headers 300 → 17, and subscribers on `sortColumns` 305 → 5. At 1,000 columns the same figures are
+36,356 → 970 and 1,005 → 5. The right-hand column is the same at 20, 60, 200, 300 and 1,000
+columns: what the grid costs is a function of the viewport on both axes and of the column count on
+neither.
+
+#### Assumption drift
+
+- The phase doc's `MIN_OVERSCAN_COLUMNS` / `OVERSCAN_VIEWPORTS` anchors in
+  `src/table/ColumnWindow.ts` were re-located at M0; see the M1–M5 commits for the corrected line
+  numbers, and `docs/concepts/architecture.md` §"Column windowing" for anchors re-verified at the
+  end of M9.
+- Phase 3's handoff (`STATUS.md:992`) named the 11,136 residue as "Phase 4's number to tighten
+  again" — done, to 1,800 measured from a 1,511 peak.
+- Phase 3's handoff (`STATUS.md:1228`) flagged `toHaveLength(TIER.cols)` in `tiers.smoke.spec.ts`
+  as Phase 4's to change. Changed. Two _gated_ assertions of the same shape were also stale and had
+  not been run by anyone: `tiers.full.spec.ts` and `viz-lazy.spec.ts` both expected one header per
+  column at WIDE.
+- `STATUS.md:885` ("Headers still exist for all 1,000 columns") and `STATUS.md:1315` ("Phase 4's
+  number to cut is the other 36,000") are both now satisfied — 36,356 → 970. Left in place; they
+  are other phases' sections.
+- Phase 3.5's F7 (`TableContainer` re-summing `totalWidthPx` and the pinned prefix) is resolved by
+  D1's hoist, as its record said it would be if the hoist was not descoped. `scrollToRightEnd`'s
+  missing `refreshColumnWindow()` — Phase 3.5's D8 correction, "correct today by accident" — is
+  fixed here.
+
+#### Files created
+
+- `src/table/ColumnWindow.ts` gained `ColumnWindowHost` (the `@internal` seam the container hands
+  `TableBody`).
+- `tests/table/TableContainer.renderTiers.test.ts`, `.subscriptions.test.ts`, `.headerWindow.test.ts`
+  — new.
+- `tests/DataTable.headerWindow.test.ts` — new.
+- `tests/browser/header-anchors.spec.ts` — new (M5's owed spec, landed late in its own commit
+  `508f139`).
+- `plans/scaling/baselines/baseline-wide-{off,on}-133b388.json` — new captures.
+
+#### Budgets (`tests/budgets.ts`)
+
+| name                                    | value              | measured                                    |
+| --------------------------------------- | ------------------ | ------------------------------------------- |
+| `WIDE_CI.DOM_NODES_MAX`                 | 13,500 → **1,800** | 1,511 peak                                  |
+| `COLVIRT.HEADERS_RENDERED_MAX`          | **48**             | 17 rest / 28 sweep                          |
+| `COLVIRT.DOM_NODES_WIDE_MAX`            | **1,900**          | 1,541 peak, charts on                       |
+| `COLVIRT.RESIZE_OBSERVERS_MAX`          | **4**              | 2, charts off                               |
+| `COLVIRT.MUTATION_OBSERVERS_MAX`        | **2**              | 1, charts off                               |
+| `COLVIRT.SORT_SIGNAL_SUBSCRIBERS_MAX`   | **8**              | 5, every tier                               |
+| `INTERACTION.QUERIES_PER_HIDE_SHOW_MAX` | **4**              | 2; 4 is the in-window-hide-with-charts case |
+
+The DOM caps are set from the sweep **peak**, not the at-rest reading. The first version of that
+assertion silently measured the trough — a batched `sweepHorizontal` returns snapshots but leaves
+the viewport at the last stop, so a caller counting nodes afterwards reads the narrowest offset
+every time. It logged `[950, 950, 950]` for windows of 17, 28 and 17 columns. The reading now lives
+on `SweepStop.domNodes`, taken inside the sweep. Both caps were then mutation-proved by lowering
+them between the trough and the peak.
+
+#### Baselines
+
+WIDE re-captured at `133b388`, both modes. DOM nodes 36,356 → 970 (off) and 36,380 → 994 (on);
+`sortColumns` subscribers 1,005 → 5.
+
+**Two numbers that moved and why.**
+
+- **Live ResizeObservers 1 → 2.** `TableContainer.columnResizeObserver` over `.dt-body-scroll` is
+  new this phase; `TableBody`'s is now `null` when the container hosts the window. O(1), not a
+  leak, and the new capture records it.
+- **WIDE viz=off `queryCount` 4 → 3.** Explained, and intended. Pre-phase, `render()` destroyed and
+  recreated `TableBody` _unconditionally_ (`202bb18:src/table/TableContainer.ts:1444-1453`), so a
+  load that rendered twice built two bodies and issued two opening SELECTs. The cheap tier keeps the
+  body, so the duplicate is gone. Regression-tested by
+  `tests/table/TableContainer.renderTiers.test.ts:290`.
+
+#### Bundle size
+
+The grid chunk went 76.95 → 79.52 kB brotli, past its 78.5 kB cap; raised to 83.1 kB. Root entry
+10.86 → 11.13 kB against an 11.4 kB cap, deliberately left at ~2.5 % headroom rather than "restored"
+to 5 % — the argument that 2.6 kB of chart controller does not belong in an entry
+`visualizations: false` also pays for stays live only while the cap is tight. Measuring the
+pre-phase figure also showed the recorded 74.65 kB baseline was stale by 2.3 kB; corrected in the
+`.size-limit.cjs` docblock.
+
+#### Defects the M10 review found after the suite was green
+
+Three adversarial reviews over the source diff — window arithmetic, lifecycle, accessibility —
+found more than the hardening pass that preceded this phase did. Eight fixes in `e8e34e4`, each
+with a regression test verified to fail against the unfixed code. Listed the way Phases 2 and 3
+listed theirs; the record is the point, not the count.
+
+| #   | Severity | Defect                                                                                                                     |
+| --- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| G1  | High     | A pointer drag-reorder re-spliced every unmounted column: one column moved three slots moved 23 of them                    |
+| G2  | High     | Four keyboard gestures died silently once the cursor's header scrolled out (`Enter`, `F2`, `Shift+F2`, width bounds)       |
+| G3  | High     | A throw out of a mount hook left the table with **no headers at all** and every later scroll a no-op                       |
+| G4  | Medium   | Header and body published different `aria-colindex` after a `columnOrder`-only change (reachable via undo)                 |
+| G5  | Medium   | The no-actions `/advanced` shell went permanently stale on any column-set change                                           |
+| G6  | Medium   | Filter / derived-edit panels were left anchored to destroyed headers                                                       |
+| G7  | Low-Med  | `aria-activedescendant` dangled on the bridge-less shell (no body render callback to re-resolve it)                        |
+| G8  | Low      | The spacer-only-row guard was missing on the scroll path; the header scrollbar's window pre-emption was a guaranteed no-op |
+
+**G1 in detail.** `ColumnReorder` reads its headers from the DOM, which since this phase is the
+mounted window, and handed that slice to `setColumnOrder` as if it were the presented order — whose
+missing-column merge then re-spliced everything unmounted, while the live region announced the one.
+The drop is still _measured_ in the DOM, because pointer geometry has no other source, and is now
+translated onto the real order by naming the column the dragged one should land in front of. The
+keyboard twin was never affected: it goes through `visibleColumns`.
+
+**G2's worst case was the one no reviewer flagged.** `Enter` `preventDefault`ed _before_ failing,
+so it swallowed the key as well as dropping the sort. All four now scroll the cursor's column back
+first, via `scrollFocusedCellIntoView`, which already does that synchronously.
+
+**A documented contract was corrected rather than restored.** `visualizations: { eager: true }`
+promised "every column's chart, for screenshot pipelines". A chart renders into its header's
+container, and a windowed header row means most columns have none, so an eager load of 300 columns
+draws the ~17 on screen. That cannot be given back — there is nowhere to draw a chart for a column
+the page is not showing — so the option's docblock and the guide now state what it does buy, which
+is freedom from `IntersectionObserver` timing.
+
+#### Manual verification (Claude in Chrome)
+
+`wide` tier, `viz=on`, `rows=60000`, Chromium at a 1,280 × 717 viewport, dev server on 5173.
+`document.visibilityState` was `"visible"` as the session's first assertion, and rAF was proved
+live at ~113 fps before anything was measured — the trap that cost Phase 1 its steps 5 and 8 was
+verified absent rather than assumed.
+
+**Load snapshot** (identical across two independent loads):
+
+```json
+{
+  "tier": "wide",
+  "rows": 60000,
+  "cols": 1000,
+  "viz": true,
+  "state": "ready",
+  "bootMs": 488.9,
+  "genMs": 13857,
+  "loadMs": 3112.7,
+  "firstPaintMs": 3112.6,
+  "vizReadyMs": 3493.4,
+  "queryCount": 19,
+  "cacheHits": 0,
+  "maxInFlight": 5,
+  "domNodes": 1054,
+  "heapMB": 36.1,
+  "error": null
+}
+```
+
+**`domNodes` 1,054 with 1,000 columns loaded** is the headline number, against 36,380 before the
+phase and a 1,900 budget. Header row shape read `[H][S][H×17][S]`; left spacer 0 px, right spacer
+147,450 px, row `minWidth` 150,000 px — and 150,000 − 17 × 150 − 0 = 147,450 exactly.
+
+**Step 5, the horizontal sweep** (the phase's headline check). At every stop the mounted
+`data-column` sequence equalled the corresponding contiguous slice of `visibleColumns`, spacer
+arithmetic summed to 150,000 px exactly, `aria-colindex` ascended, and a sampled cell matched
+`__dtPerf.oracle`:
+
+| stop | headers | window          | `aria-colindex` | fill  | spacers L/R      | sampled cell | `.dt-root` nodes |
+| ---- | ------- | --------------- | --------------- | ----- | ---------------- | ------------ | ---------------- |
+| 0 %  | 17      | col_0–col_16    | 2–18            | 30 ms | 0 / 147,450      | col_3 ✓      | 1,134            |
+| 25 % | 27      | col_238–col_264 | 240–266         | 53 ms | 35,700 / 110,250 | col_251 ✓    | 1,730            |
+| 50 % | 28      | col_486–col_513 | 488–515         | 56 ms | 72,900 / 72,900  | col_499 ✓    | 1,789            |
+| 75 % | 27      | col_735–col_761 | 737–763         | 62 ms | 110,250 / 35,700 | col_748 ✓    | 1,730            |
+| 100% | 17      | col_983–col_999 | 985–1001        | 28 ms | 147,450 / 0      | col_996 ✓    | 1,134            |
+
+`aria-colcount` is 1001 and the last mounted `aria-colindex` at the far right is 1001 — the two
+agree at the boundary. Fill times are 28–62 ms against the template's "no blank band > ~1 s".
+
+**The rest of the session.** Sort from a freshly mounted deep header (col_996, which does not exist
+at load): `aria-sort` cycled ascending → descending → none for 2 / 1 / 1 queries, ascending top
+`2020-01-01` and descending top `2029-12-28` — the true min and max. Histogram brush on a
+mid-session-mounted header: 60,000 → 36,000 rows for **22 queries, exactly the `2 + 2 × 10 charts`
+budget**; a categorical filter took it to 18,000 (col_499 is 50 % true); both removed by chip. Hide:
+one column, 4 queries, matching `QUERIES_PER_HIDE_SHOW_MAX`. Pin: `[H][S][H×n][S]` held at every
+sweep stop with col_0 sticky at x = 129 and `aria-colindex` 1. Undo ×3 returned `columnOrder` and
+`visibleColumns` byte-identical to the pre-interaction baseline, redo ×3 restored all three
+operations, **0 placeholders at every step** — no destroyed-`TableBody` tell anywhere in the
+session. Export dialog rendered and closed on Escape; `exportToBuffer` returned 4,057,476 bytes
+(3.87 MB) for 1,000 rows. Theme flip: 66 ms to apply, 110 ms to settle, **9 canvases repainted, not
+1,000**.
+
+**G1 and G2 re-verified live at 1,000 columns**, not just in jsdom. A pointer drag of col_500 past
+col_502 moved exactly one visible column (`visibleColumns` minus the dragged column was unchanged;
+only col_500 and the two it jumped changed index). F2 pressed while the cursor's header was
+unmounted at `scrollLeft = 0` scrolled col_999 back (→ 149,036), remounted it and landed focus on
+its "Pin col_999" button; arrowing reached Hide and Filter, and Escape returned focus to `.dt-grid`
+with `aria-activedescendant` restored to `colheader-999`. The documented degradation past the
+ten-column anchor clamp was observed directly: `aria-activedescendant` dropped to `null`, focus
+parked on `.dt-grid`, never `<body>`.
+
+**Console: zero application errors and zero warnings for the whole session** — load, the five-stop
+sweep, three sorts, two filters, hide, drag-reorder, three undos, three redos, three more undos, the
+keyboard pass, export and both theme flips. The only two messages captured were canaries this
+session emitted itself to prove the monitor was actually live rather than silently broken; a
+`read_console_messages` that returns nothing is not evidence until you have made it return
+something.
+
+Screenshots (session-local, `/var/folders/.../claude-chrome-screenshots-rsdhx4/`):
+`screenshot-1786251460542-11.jpg` first paint at 1,000 columns; `screenshot-1786251510625-12.jpg`
+row 58,188 at 97 % depth; `screenshot-1786251633870-13.jpg` col_994–999 after the sweep — string,
+timestamp, date, time and boolean columns each with their own visualization type, all mounted
+mid-session; `screenshot-1786252685480-14.jpg` dark theme mid-scroll.
+
+**What the manual pass found that the suite could not.** Opening a filter panel, putting real DOM
+focus in one of its fields and then scrolling horizontally left focus on `document.body` — silently
+ending keyboard navigation — and overrode the scroll position on the way, landing a requested
+`scrollLeft = 0` at 72,494. One mechanism produced both: `closePanelsAnchoredTo` ran _after_ the
+focus rescue in `unmountColumnHeader` and _before_ `header.destroy()`, so `ModalHost.close()` still
+found its opener — the header's own filter button — in the document and restored focus to it
+microseconds before that header was detached, using `focus({ preventScroll: false })`, which also
+dragged the scroll port back toward the column being scrolled away. The rescue could not have
+caught it either way: it tests whether focus is inside the _header element_, and a panel is
+parented to `.dt-root`. Fixed in `d51aa45` — panels close first and report whether they held focus,
+feeding the same rescue that parks focus on `.dt-grid`, and they close with `restoreFocus: false`,
+a new close-time override on `ModalHost` that leaves the open-time default untouched. A defect this
+phase introduced: before the header row was windowed, a header could not be destroyed by scrolling,
+so a panel's trigger was always still there to receive focus back.
+
+The header-tooltip variant of that path was **not** exercised: the perf harness registers no
+`columnHeaderTooltips`, so there was no tooltip to dismiss. It shares `closePanelsAnchoredTo` with
+the filter panel and is covered in jsdom by
+`TableContainer.headerWindow.test.ts`'s "dismisses a tooltip popover anchored inside an unmounting
+header".
+
+#### Deviations from the phase doc
+
+1. **M1's header-structure signature moved to M6.** `noUnusedLocals` covers private class members,
+   so "computed and stored but not dispatched on" does not compile.
+2. **M8 executed before M6/M7** (the doc permits it), to shorten the window in which the working
+   tree was functionally broken.
+3. **An unchanged signature runs the cheap tier rather than returning early.** `render()` is public
+   on an `/advanced` class and means "bring the DOM up to date"; the repo's own suite calls it to
+   pick up a `totalRows` write the signature does not cover. A bare early return failed
+   `TableContainer.test.ts > should show column info when data is loaded`.
+4. **M5's keyboard spec landed after M9**, in its own commit, rather than "not last" as the doc
+   asked. Recorded rather than excused.
+5. **The manual pass produced a source commit.** The template treats M11 as verification only. It
+   found a real defect (above), and shipping the phase with a known focus regression to satisfy the
+   milestone shape would have been the wrong trade.
+
+#### Known and deliberately not fixed
+
+- **Custom stats panels thrash on horizontal scroll.** Panels are bound to header mount/unmount
+  with none of the hysteresis charts get (`VIZ_CREATE_MARGIN_PX` 200 / `VIZ_KEEP_MARGIN_PX` 400).
+  Measured: a 40-frame ±1 px wobble produced 40 constructions and 40 DuckDB queries; five sweeps of
+  a 60-column table produced 495 and 495. Unbounded in scroll distance. It affects only consumers
+  who register custom panels — the default registry ships none — and the fix is a design change (a
+  panel visibility band, or a snapshot seam like `exportDataSnapshot()`), not a defect repair.
+  **Phase 6 (interaction sweep) owns it.**
+- **`aria-colindex` can descend after `hideColumn → toggleColumnPin → showColumn`.**
+  `computeRestoreIndex` (`src/core/Actions.ts:~1035`, `showColumn` at `:990-996`) can put a restored
+  column back at an index that breaks the "`visibleColumns` is a subsequence of `columnOrder`"
+  invariant that `buildColumnIndexMap`'s docblock (`src/table/ColumnWindow.ts:271-282`) asserts. The
+  mechanism pre-dates this phase; what is new is that this phase's code states the false premise as
+  its correctness argument. Two reviewers found it independently. Fixing it means changing restore
+  semantics, which is `Actions`' contract, not the header row's.
+
+#### For the next phases
+
+- `TableContainer.getColumnHeaders()` now returns **only mounted headers**. Any phase that
+  enumerates columns must read `state.schema` / `state.visibleColumns` / `state.columnOrder`, or
+  listen for `columnChange`.
+- `TableContainer.refreshColumnWindow()` refreshes **both** axes and is the call to make after any
+  programmatic `scrollLeft` write. `TableBody.refreshColumnWindow()` still exists and does the body
+  only.
+- The shared window module is `src/table/ColumnWindow.ts`; the container injects itself into
+  `TableBody` as a `ColumnWindowHost` (`ColumnWindow.ts:117`) exposing `model`, `viewport()`,
+  `setContentWidth()` and `refresh()`. **Phase 5 projects row fetches from this same window.**
+- The mount/unmount hook is `onHeaderMount` / `onHeaderUnmount` on `TableContainerOptions`, both
+  `@internal` (stripped from the published `.d.ts` by `stripInternal`). Both are throw-contained and
+  report via `console.error` without unwinding the mount loop. **Phase 6 builds gestures on this.**
+- The header window's anchor extension is **clamped to `MIN_OVERSCAN_COLUMNS`**
+  (`extendWindowToAnchors`). Past the clamp `aria-activedescendant` is dropped and real focus is
+  parked on `.dt-grid`. Measured: mounted at 1–10 columns outside the plain window, released at 11,
+  and confirmed in Chrome at 1,000 columns. Phase 6 should not assume an anchored header survives an
+  arbitrary scroll.
+- A header mounts with `subscribe: false`; the container fans one subscription per signal out to the
+  mounted set. A new piece of header state needs a `refresh*` entry point on `ColumnHeader` **and** a
+  fan-out in the container — a subscription taken inside `ColumnHeader` will not fire.
+- A `BaseStatsPanel` and a visualization are now constructed and destroyed as their column scrolls.
+  Per-instance state must move to `exportDataSnapshot()` or outside the instance.
+- **Line-drift warning for `TableContainer.ts`.** Phases 5 and 6 both cite its render path by line.
+  The file changed substantially: `render()`'s two-tier dispatch, `mountColumnHeader` /
+  `unmountColumnHeader` (`:~1180-1270`), `closePanelsAnchoredTo` (`:~1288`), `buildHeaderWindow`
+  (`:~1310`) and `syncHeaderWindow` are all new or rewritten. Re-locate by symbol, not by line.

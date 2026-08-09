@@ -873,6 +873,35 @@ export class ColumnHeader {
   }
 
   /**
+   * Re-key the header's cell identity after the column set or order changed.
+   *
+   * Both values are positions, not properties of the column: `cellId` encodes
+   * the column's index in `visibleColumns`, which is what
+   * `aria-activedescendant` is published against, and `colIndex` is its
+   * position in the presented table. Hiding, showing or moving *another*
+   * column shifts both without this column changing at all.
+   *
+   * Exists because the header row is reconciled rather than rebuilt. A
+   * surviving header keeps its element — and with it its chart, its listeners
+   * and any popover anchored inside it — so the two positional attributes have
+   * to be patched on the node instead of arriving with a new one.
+   *
+   * @param cellId - the element `id`, from `TableContainer`'s id scheme.
+   * @param colIndex - 1-based `aria-colindex`; omit to remove the attribute.
+   *
+   * @example
+   * ```typescript
+   * header.setCellIdentity('dt-t1-a1b2-colheader-4', 7);
+   * ```
+   */
+  setCellIdentity(cellId: string, colIndex?: number | undefined): void {
+    if (this.destroyed) return;
+    this.element.id = cellId;
+    if (colIndex === undefined) this.element.removeAttribute('aria-colindex');
+    else this.element.setAttribute('aria-colindex', String(colIndex));
+  }
+
+  /**
    * The current width of this column, in pixels.
    *
    * Reads `columnWidths` rather than the element, so it reports the state the

@@ -569,13 +569,15 @@ export class TableBody {
     // enough, and the in-flight `initialize()` fetch is not dropped by a
     // `fetchSequence` bump it did not need.
     //
-    // Measured honestly: through `TableContainer` this changes no query count.
-    // `render()` destroys and recreates the whole `TableBody` on any
-    // `visibleColumns` write, so one keyboard column move at 266 columns costs
-    // 534 DuckDB queries with or without this branch — all of them column-header
+    // This branch is now the whole story, and it did not used to be.
+    // `render()` destroyed and recreated the whole `TableBody` on any
+    // `visibleColumns` write, so one keyboard column move at 266 columns cost
+    // 534 DuckDB queries with or against this branch — all of them column-header
     // stats and plot queries from rebuilding 266 headers, none of them row
-    // fetches. It earns its keep where a `TableBody` is driven directly, which
-    // is a supported `/advanced` entry point.
+    // fetches — and the only place it earned its keep was a `TableBody` driven
+    // directly, which is a supported `/advanced` entry point. The container
+    // reconciles its header row and keeps this body now, so what a reorder
+    // costs is what this branch decides: measured **0** queries at 300 columns.
     const unsubVisibleCols = this.state.visibleColumns.subscribe((columns) => {
       if (this.destroyed) return;
       const orderOnly = sameColumnSet(this.lastVisibleColumns, columns);

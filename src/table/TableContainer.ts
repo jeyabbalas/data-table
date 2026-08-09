@@ -307,6 +307,30 @@ export class TableContainer {
   // Track previous visible columns for restore-highlight detection
   private previousVisibleColumns = new Set<string>();
 
+  /**
+   * The relation the header row was last **rebuilt** for, by identity.
+   *
+   * `render()` dispatches on this: a new `schema` array or a new `tableName`
+   * means the table is describing something else and everything is rebuilt;
+   * anything else reconciles the row in place.
+   *
+   * Identity is a sound key because every writer of `schema` in `src/`
+   * replaces the array rather than mutating it — the same fact the
+   * column-window model's cache rests on. It is also what collapses the load's
+   * double render: `initializeColumnsFromSchema` writes `schema` and
+   * `visibleColumns` in one batch, so the `schema` subscriber rebuilds against
+   * the final value of both, and the `visibleColumns` subscriber that follows
+   * finds every column already mounted where it belongs.
+   *
+   * `visibleColumns` is deliberately *not* part of this. It would only be
+   * usable to skip the cheap tier altogether, and `render()` does not skip —
+   * see its docblock for why.
+   */
+  private headerStructure: {
+    schema: readonly ColumnSchema[] | null;
+    tableName: string | null;
+  } = { schema: null, tableName: null };
+
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
 
@@ -1237,10 +1261,11 @@ export class TableContainer {
 
     if (this.headerWindowColumns !== visibleColumns || win.pinnedCount !== current.pinnedCount) {
       // The column set, its order, or the pinned prefix moved out from under
-      // the mounted run. Rebuilding the row's contents is the honest answer
-      // and it is not the scroll path — a later milestone diffs this case
-      // rather than rebuilding it.
-      this.rebuildHeaderRowContents(row, visibleColumns, columnWidths, win);
+      // the mounted run — a state `render()` normally reaches first. Reaching
+      // it from here means something wrote `visibleColumns` without a render,
+      // so reconcile rather than assume: keyed by name, it is correct from any
+      // starting arrangement and costs nothing when there was nothing to do.
+      this.reconcileHeaderRow(row, visibleColumns, columnWidths, win);
     } else if (win.start !== current.start || win.end !== current.end) {
       this.shiftHeaderWindow(row, visibleColumns, columnWidths, win, current);
     }
@@ -1252,24 +1277,73 @@ export class TableContainer {
     this.applyContentWidth(win.totalWidthPx);
   }
 
-  /** Replace every mounted header, keeping the row element and its spacers. */
-  private rebuildHeaderRowContents(
+  /**
+   * Reconcile the mounted headers against a new column set, keyed by name.
+   *
+   * Hide, show, reorder, pin and a derived-column add all rewrite
+   * `visibleColumns`, and every one of them used to destroy each mounted
+   * header and construct a replacement. Keyed by column name instead: a
+   * surviving column keeps its element, and with it its chart, its listeners,
+   * its popovers and its stats panel — so a move costs one `insertBefore` and
+   * two attribute writes rather than a teardown and a rebuild.
+   *
+   * That is also what makes hide/show/reorder cost no chart queries:
+   * `VizDataController.sync` destroys an instance only when its container
+   * *identity* changed, and under this reconcile a survivor's does not.
+   */
+  private reconcileHeaderRow(
     row: HTMLElement,
     visibleColumns: readonly string[],
     columnWidths: ReadonlyMap<string, number>,
     win: ColumnWindow,
   ): void {
-    this.destroyColumnHeaders();
     const leftSpacer = this.leftHeaderSpacer!;
     const rightSpacer = this.rightHeaderSpacer!;
 
+    const pinned: string[] = [];
     for (let i = 0; i < win.pinnedCount && i < visibleColumns.length; i++) {
-      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
-      if (header) row.insertBefore(header.getElement(), leftSpacer);
+      pinned.push(visibleColumns[i]!);
     }
-    for (let i = win.start; i < win.end; i++) {
-      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
-      if (header) row.insertBefore(header.getElement(), rightSpacer);
+    const windowed: string[] = [];
+    for (let i = win.start; i < win.end; i++) windowed.push(visibleColumns[i]!);
+    const wanted = new Set([...pinned, ...windowed]);
+
+    // Unmount first, so the placement walk below never has to step over a
+    // header that is on its way out.
+    for (const [name, header] of [...this.headerByColumn]) {
+      if (!wanted.has(name)) this.unmountColumnHeader(header);
+    }
+
+    // Descending, each header inserted before the one that follows it, so a
+    // run already in the right order costs zero DOM writes and a two-column
+    // swap costs one — where placing ascending against a fixed anchor would
+    // move every header in the window on every reorder.
+    const place = (names: readonly string[], terminator: ChildNode): void => {
+      let anchor: ChildNode = terminator;
+      for (let i = names.length - 1; i >= 0; i--) {
+        const name = names[i]!;
+        const header = this.headerByColumn.get(name) ?? this.mountColumnHeader(name, columnWidths);
+        if (!header) continue;
+        const el = header.getElement();
+        if (el.parentNode !== row || el.nextSibling !== anchor) row.insertBefore(el, anchor);
+        anchor = el;
+      }
+    };
+    place(pinned, leftSpacer);
+    place(windowed, rightSpacer);
+
+    // Re-key and re-size whatever survived. A header just mounted already
+    // carries both, from the same two maps; re-applying is cheaper than
+    // tracking which is which.
+    for (const name of wanted) {
+      const header = this.headerByColumn.get(name);
+      if (!header) continue;
+      const colIndex = this.colIndexByName.get(name) ?? 0;
+      header.setCellIdentity(
+        this.buildHeaderCellId(this.visibleIndexByName.get(name) ?? 0),
+        colIndex > 0 ? colIndex : undefined,
+      );
+      header.getElement().style.width = `${resolveColumnWidth(columnWidths.get(name))}px`;
     }
   }
 
@@ -2005,14 +2079,161 @@ export class TableContainer {
   }
 
   /**
-   * Render the table container
+   * Bring the table's DOM up to date with its state.
    *
-   * Creates ColumnHeader components for each visible column and renders
-   * placeholder content for the body (to be implemented in Task 3.4).
+   * Two tiers, dispatched on {@link headerStructure}:
+   *
+   * - **The schema or the relation changed** — a load. Everything is rebuilt
+   *   once, including `TableBody`, and scroll and focus are restored across
+   *   the rebuild.
+   * - **Anything else** — a hide, show, reorder, pin, derived-column add, or
+   *   a caller asking for a refresh. The header row is reconciled by column
+   *   name and `TableBody` *survives*: it has its own `visibleColumns`
+   *   subscription that re-renders a reorder and refetches a set change, so
+   *   destroying it here only threw away its row cache and its scroll
+   *   position. Focus and scroll are left alone, because nothing that held
+   *   either was removed — a header that *was* removed parks focus on the
+   *   grid as it goes, which is both earlier and more accurate than the
+   *   rebuild's frame-later rescue.
+   *
+   * This is what collapses the load's double render. Both signals write in one
+   * batch, so the `schema` subscriber rebuilds against the final value of
+   * both, and the `visibleColumns` subscriber that follows finds every column
+   * already mounted where it belongs — a walk over the window, no
+   * construction, no `TableBody`.
+   *
+   * Deliberately not a bare early return in that case, though the phase plan
+   * called for one: `render()` is public on an `/advanced` class and means
+   * "bring the DOM up to date", and the cheap tier is what keeps that true for
+   * state it does not dispatch on.
+   *
+   * A horizontal scroll is neither tier: it goes through
+   * {@link refreshColumnWindow}, which never reaches this method.
+   *
+   * Synchronous either way — callers assert on the DOM immediately after
+   * writing state.
    */
   render(): void {
     if (this.destroyed) return;
 
+    const schema = this.state.schema.get();
+    const visibleColumns = this.state.visibleColumns.get();
+    const tableName = this.state.tableName.get();
+    const columnWidths = this.state.columnWidths.get();
+    const columnOrder = this.state.columnOrder.get();
+
+    const last = this.headerStructure;
+    // No header row to reconcile is structural by definition: the first render,
+    // and the state a column set emptied to nothing leaves behind.
+    const structural =
+      last.schema !== schema || last.tableName !== tableName || this.headerRowInner === null;
+    this.headerStructure = { schema, tableName };
+
+    // O(1) lookups for the header work below — see the map fields. Both
+    // position maps have to be resynced on a column-set change too: a hide
+    // renumbers every column after it.
+    this.syncSchemaMap(schema);
+    this.syncVisibleIndexMap(visibleColumns);
+    this.syncColIndexMap(columnOrder, schema);
+
+    if (structural) this.renderStructural(schema, visibleColumns, tableName, columnWidths);
+    else this.renderColumnSet(visibleColumns, columnWidths);
+  }
+
+  /**
+   * The cheap tier: reconcile the header row in place and leave `TableBody`,
+   * the scroll offsets and DOM focus alone.
+   *
+   * The panels are still torn down — a filter panel anchored to a column the
+   * user just hid has nothing left to point at.
+   */
+  private renderColumnSet(
+    visibleColumns: string[],
+    columnWidths: ReadonlyMap<string, number>,
+  ): void {
+    const prevVisible = this.previousVisibleColumns;
+    this.destroyTransientPanels();
+    this.updateGridCounts();
+
+    const row = this.headerRowInner!;
+    const win = this.computeHeaderWindow(visibleColumns, columnWidths);
+    this.reconcileHeaderRow(row, visibleColumns, columnWidths, win);
+    this.headerWindow = win;
+    this.headerWindowColumns = visibleColumns;
+    this.rebuildMountedHeaderList(visibleColumns, win);
+    this.applyHeaderSpacerWidths(win);
+    this.columnWindowModel.sync(visibleColumns, columnWidths, BOX_OVERHEAD_PX);
+    this.applyContentWidth(this.columnWindowModel.totalWidthPx());
+
+    if (this.headerCellCount(row) === 0) {
+      // A `role="row"` owning no `columnheader` is a critical
+      // `aria-required-children` violation, and an empty visible set is
+      // reachable (`stripDerivedColumnRefs`, or a direct `visibleColumns`
+      // write). Take the row out rather than leave a pair of spacers claiming
+      // to be a row; the null `headerRowInner` makes the next render
+      // structural, which rebuilds it when there is something to put in it.
+      //
+      // Counted by role, the same way `renderStructural` decides whether to
+      // mount the row at all — and not from the names the window asked for.
+      // `mountColumnHeader` returns null for a column with no schema entry, so
+      // a `visibleColumns` naming one would report a full window and leave
+      // exactly the row this guard exists to remove.
+      row.remove();
+      this.headerRowInner = null;
+      this.leftHeaderSpacer = null;
+      this.rightHeaderSpacer = null;
+      this.headerWindowColumns = null;
+    }
+
+    if (!this.tableBody) this.updateBodyPlaceholder();
+    this.finishRender(visibleColumns, prevVisible);
+  }
+
+  /**
+   * Refresh the row count on the no-bridge body placeholder.
+   *
+   * An `/advanced` shell mounted without a bridge shows a count where the grid
+   * would be, and `totalRows` is not something `render()` dispatches on — so a
+   * caller that writes the count and calls `render()` to pick it up is met
+   * here rather than by a rebuild it does not need.
+   */
+  private updateBodyPlaceholder(): void {
+    const el = this.bodyContainer.querySelector(
+      `.${this.resolvedOptions.classPrefix}-body-placeholder`,
+    );
+    if (el) el.textContent = `${this.state.totalRows.get().toLocaleString()} rows`;
+  }
+
+  /**
+   * Drop the three panels that hang off a column, each recreated lazily on the
+   * next click that needs it.
+   *
+   * Torn down on a column-set change as well as a rebuild: each is anchored to
+   * a specific header, and the column it points at is exactly the one a hide
+   * or a reorder may have just moved or removed.
+   */
+  private destroyTransientPanels(): void {
+    if (this.filterPanel) {
+      this.filterPanel.destroy();
+      this.filterPanel = null;
+    }
+    if (this.presetPanel) {
+      this.presetPanel.destroy();
+      this.presetPanel = null;
+    }
+    if (this.derivedEditPanel) {
+      this.derivedEditPanel.destroy();
+      this.derivedEditPanel = null;
+    }
+  }
+
+  /** Tier 3: rebuild everything, and put scroll and focus back afterwards. */
+  private renderStructural(
+    schema: readonly ColumnSchema[],
+    visibleColumns: string[],
+    tableName: string | null,
+    columnWidths: ReadonlyMap<string, number>,
+  ): void {
     const prevVisible = this.previousVisibleColumns;
 
     // Save scroll positions before re-rendering (both containers for robustness)
@@ -2031,38 +2252,11 @@ export class TableContainer {
         ? focusedBefore
         : null;
 
-    const schema = this.state.schema.get();
-    const visibleColumns = this.state.visibleColumns.get();
-    const tableName = this.state.tableName.get();
-    const columnWidths = this.state.columnWidths.get();
-    const columnOrder = this.state.columnOrder.get();
-
-    // O(1) lookups for the header loop below — see the map fields.
-    this.syncSchemaMap(schema);
-    this.syncVisibleIndexMap(visibleColumns);
-    this.syncColIndexMap(columnOrder, schema);
-
     // Attach / detach the ARIA grid semantics, then refresh its dimensions.
     this.applyGridSemantics(schema.length > 0 && !!tableName);
     this.updateGridCounts();
 
-    // Destroy filter panel (will be recreated lazily on next filter click)
-    if (this.filterPanel) {
-      this.filterPanel.destroy();
-      this.filterPanel = null;
-    }
-
-    // Destroy preset panel (will be recreated lazily on next presets click)
-    if (this.presetPanel) {
-      this.presetPanel.destroy();
-      this.presetPanel = null;
-    }
-
-    // Destroy derived edit panel (will be recreated lazily on next f(x) click)
-    if (this.derivedEditPanel) {
-      this.derivedEditPanel.destroy();
-      this.derivedEditPanel = null;
-    }
+    this.destroyTransientPanels();
 
     // Clear existing column headers
     this.destroyColumnHeaders();
@@ -2219,66 +2413,7 @@ export class TableContainer {
       }
     }
 
-    // Apply pinned column styles after headers are created
-    this.updatePinnedColumnStyles();
-
-    // FLIP animation: if we have saved positions from a pin/unpin, animate columns
-    if (this.savedColumnPositions) {
-      const firstPositions = this.savedColumnPositions;
-      this.savedColumnPositions = null;
-
-      requestAnimationFrame(() => {
-        if (this.destroyed) return;
-
-        for (const header of this.columnHeaders) {
-          const col = header.getColumn().name;
-          const first = firstPositions.get(col);
-          if (!first) continue;
-
-          const last = header.getElement().getBoundingClientRect();
-          const deltaX = first.left - last.left;
-          if (Math.abs(deltaX) < 1) continue;
-
-          const el = header.getElement();
-          // Invert: snap to old position
-          el.style.transform = `translateX(${deltaX}px)`;
-          // Play: animate to new position in next frame
-          requestAnimationFrame(() => {
-            el.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-            el.style.transform = '';
-            el.addEventListener('transitionend', function handler() {
-              el.style.transition = '';
-              el.removeEventListener('transitionend', handler);
-            });
-          });
-        }
-      });
-    }
-
-    // Track visible columns and highlight newly restored ones
-    const newVisibleSet = new Set(visibleColumns);
-    if (prevVisible.size > 0) {
-      const prefix = this.resolvedOptions.classPrefix;
-      for (const header of this.columnHeaders) {
-        const col = header.getColumn().name;
-        if (!prevVisible.has(col)) {
-          const el = header.getElement();
-          el.classList.add(`${prefix}-col-header--restored`);
-          el.addEventListener('animationend', function handler() {
-            el.classList.remove(`${prefix}-col-header--restored`);
-            el.removeEventListener('animationend', handler);
-          });
-        }
-      }
-    }
-    this.previousVisibleColumns = newVisibleSet;
-
-    // render() rebuilt every ColumnHeader, so the cursor's target element is
-    // gone. Re-point it (dropping to the first visible column if its column
-    // disappeared) before anything reads aria-activedescendant.
-    this.reconcileCursorColumn(visibleColumns);
-    this.syncActiveDescendant();
-    this.updateHeaderCursorStyles();
+    this.finishRender(visibleColumns, prevVisible);
 
     // Restore scroll positions and focus after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
@@ -2315,6 +2450,82 @@ export class TableContainer {
         }
       }
     });
+  }
+
+  /**
+   * The half of a render that a column-set change and a rebuild both owe:
+   * pinned styles, the move animation, the restore highlight and the cursor.
+   *
+   * Every loop here walks `columnHeaders`, which is the mounted window — so
+   * all of it is O(window), not O(columns), whichever tier called it.
+   */
+  private finishRender(visibleColumns: string[], prevVisible: ReadonlySet<string>): void {
+    // Apply pinned column styles after headers are created
+    this.updatePinnedColumnStyles();
+
+    // FLIP animation: if we have saved positions from a pin/unpin, animate columns
+    if (this.savedColumnPositions) {
+      const firstPositions = this.savedColumnPositions;
+      this.savedColumnPositions = null;
+
+      requestAnimationFrame(() => {
+        if (this.destroyed) return;
+
+        for (const header of this.columnHeaders) {
+          const col = header.getColumn().name;
+          const first = firstPositions.get(col);
+          if (!first) continue;
+
+          const last = header.getElement().getBoundingClientRect();
+          const deltaX = first.left - last.left;
+          if (Math.abs(deltaX) < 1) continue;
+
+          const el = header.getElement();
+          // Invert: snap to old position
+          el.style.transform = `translateX(${deltaX}px)`;
+          // Play: animate to new position in next frame
+          requestAnimationFrame(() => {
+            el.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            el.style.transform = '';
+            el.addEventListener('transitionend', function handler() {
+              el.style.transition = '';
+              el.removeEventListener('transitionend', handler);
+            });
+          });
+        }
+      });
+    }
+
+    // Highlight columns that were hidden a moment ago and are back.
+    //
+    // Keyed to a *visibility* transition and never to a mount: a header
+    // arriving because the user scrolled to it was visible all along, and
+    // flashing it would turn a restore cue into scroll confetti. `prevVisible`
+    // is the whole visible set, not the mounted window, which is what keeps
+    // the two apart.
+    const newVisibleSet = new Set(visibleColumns);
+    if (prevVisible.size > 0) {
+      const prefix = this.resolvedOptions.classPrefix;
+      for (const header of this.columnHeaders) {
+        const col = header.getColumn().name;
+        if (!prevVisible.has(col)) {
+          const el = header.getElement();
+          el.classList.add(`${prefix}-col-header--restored`);
+          el.addEventListener('animationend', function handler() {
+            el.classList.remove(`${prefix}-col-header--restored`);
+            el.removeEventListener('animationend', handler);
+          });
+        }
+      }
+    }
+    this.previousVisibleColumns = newVisibleSet;
+
+    // The cursor's column may have been hidden or removed outright, and on a
+    // rebuild its element is gone regardless. Re-point it (dropping to the
+    // first visible column) before anything reads aria-activedescendant.
+    this.reconcileCursorColumn(visibleColumns);
+    this.syncActiveDescendant();
+    this.updateHeaderCursorStyles();
   }
 
   /**

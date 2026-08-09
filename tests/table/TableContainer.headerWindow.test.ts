@@ -540,6 +540,302 @@ describe('windowed header row — widths', () => {
 });
 
 /**
+ * The header row, reconciled rather than rebuilt.
+ *
+ * A hide, a show, a reorder, a pin and a derived-column add all rewrite
+ * `visibleColumns`, and every one of them used to destroy every mounted header
+ * and construct a replacement. `render()` now dispatches on `headerStructure`
+ * by **identity**: a new `schema` array or a new `tableName` is structural and
+ * rebuilds everything including `TableBody`; a new `visibleColumns` array is a
+ * column-set change and is reconciled by column name against the row that is
+ * already in the document.
+ *
+ * The survivors are the whole point. A column the new window still wants keeps
+ * its `ColumnHeader` *and its element*, and with them the chart drawn into that
+ * element, the listeners attached to it and the stats panel written into it —
+ * which is what makes a reorder cost zero DuckDB queries, because
+ * `VizDataController.sync` destroys a visualization only when its container's
+ * identity changed. So every assertion here is an identity assertion first: a
+ * rebuild satisfies any check on names, order or attributes while quietly
+ * replacing every object behind them, which is exactly how this regressed
+ * silently before.
+ */
+describe('windowed header row — reconcile in place', () => {
+  /** The mounted `ColumnHeader` for `column`, which the caller expects to exist. */
+  const headerInstance = (h: Harness, column: string): ColumnHeader =>
+    h.container.getColumnHeaders().find((header) => header.getColumn().name === column)!;
+
+  /**
+   * Re-derive both of a header's keys from state and compare, for every
+   * mounted header.
+   *
+   * The two keys move independently, which is why both are checked together.
+   * `aria-colindex` is a 1-based position in `columnOrder` — hidden columns
+   * included, so the gaps say "columns not present" rather than renumbering the
+   * table — and it is unmoved by a hide. The cell id is a position in
+   * `visibleColumns`, which is what `aria-activedescendant` resolves against,
+   * and a hide shifts it for every column after the hidden one. A reconcile
+   * that re-keys neither still passes a name-and-order check.
+   */
+  const expectRowKeys = (h: Harness): void => {
+    const order = h.state.columnOrder.get();
+    const visible = h.state.visibleColumns.get();
+    const cells = headerCells(h.root());
+    expect(cells.length).toBeGreaterThan(0);
+
+    for (const el of cells) {
+      const name = el.getAttribute('data-column')!;
+      expect(Number(el.getAttribute('aria-colindex')), `aria-colindex of ${name}`).toBe(
+        order.indexOf(name) + 1,
+      );
+      expect(el.id, `cell id of ${name}`).toBe(
+        `dt-${h.container.getInstanceId()}-colheader-${visible.indexOf(name)}`,
+      );
+    }
+
+    // ARIA requires `aria-colindex` to ascend in DOM order within a row — a
+    // MUST, not a SHOULD — and it is the invariant a reconcile breaks most
+    // easily, because moving an element is one operation and re-keying it is
+    // another. A header moved to the front while keeping its old number leaves
+    // the row reporting `6, 1, 2, …` while reading left to right as
+    // `col_5, col_0, col_1, …`.
+    const indices = cells.map((el) => Number(el.getAttribute('aria-colindex')));
+    expect(indices.every((v, i) => i === 0 || v > indices[i - 1]!)).toBe(true);
+  };
+
+  it('keeps every surviving column on its own ColumnHeader and element', () => {
+    const h = mount();
+    const before = h.container.getColumnHeaders();
+    const names = before.map((header) => header.getColumn().name);
+    const elements = before.map((header) => header.getElement());
+    expect(names).toEqual(headerColumns(h.root()));
+    expect(names).not.toContain('col_50');
+
+    // A column thirty-odd places outside the mounted window: the window at
+    // `scrollLeft = 0` is `[0, 14)` either side of the hide, so every mounted
+    // column survives and nothing is mounted to take a place. All that changed
+    // is the identity of the `visibleColumns` array.
+    h.actions.hideColumn('col_50');
+
+    const after = h.container.getColumnHeaders();
+    expect(after.map((header) => header.getColumn().name)).toEqual(names);
+    for (let i = 0; i < names.length; i++) {
+      // By identity, not by name — the assertion the whole reconcile rests on.
+      // A rebuild puts the same fourteen columns back in the same order under
+      // fourteen brand-new objects, so every name, order and attribute check in
+      // this file would still pass while `createDataTable` tore down and re-ran
+      // a chart query for each one.
+      expect(after[i], `ColumnHeader for ${names[i]}`).toBe(before[i]);
+      expect(after[i]!.getElement(), `element for ${names[i]}`).toBe(elements[i]);
+      expect(after[i]!.isDestroyed(), `${names[i]} was destroyed`).toBe(false);
+      expect(elements[i]!.isConnected, `${names[i]} was detached`).toBe(true);
+    }
+
+    h.container.destroy();
+  });
+
+  it('destroys the header of the column that left, and only that one', () => {
+    const h = mount();
+    const survivors = h.container
+      .getColumnHeaders()
+      .filter((header) => header.getColumn().name !== 'col_2');
+    const doomed = headerInstance(h, 'col_2');
+    const doomedEl = doomed.getElement();
+    expect(survivors.length).toBeGreaterThan(0);
+
+    h.actions.hideColumn('col_2');
+
+    expect(headerFor(h.root(), 'col_2')).toBeNull();
+    // `destroy()` is what unsubscribes the header from `sortColumns`,
+    // `pinnedColumns` and the rest and detaches its element. A header merely
+    // dropped from the row would keep both and go on reacting to every sort and
+    // filter for the table's lifetime, from a node nothing on screen contains.
+    expect(doomed.isDestroyed()).toBe(true);
+    expect(doomedEl.isConnected).toBe(false);
+    expect(h.container.getColumnHeaders()).not.toContain(doomed);
+    for (const header of survivors) {
+      expect(header.isDestroyed(), `${header.getColumn().name} was destroyed too`).toBe(false);
+    }
+
+    h.container.destroy();
+  });
+
+  it('re-keys the id and aria-colindex of every survivor a hide renumbers', () => {
+    const h = mount();
+    const cellId = (index: number): string =>
+      `dt-${h.container.getInstanceId()}-colheader-${index}`;
+    const survivor = headerFor(h.root(), 'col_9')!;
+    expect(survivor.id).toBe(cellId(9));
+
+    // An early column, so every column after it moves one place left in
+    // `visibleColumns` — and the cell id is built from that position. A
+    // survivor keeping its element also keeps its stale id unless the reconcile
+    // rewrites it, which points `aria-activedescendant` at the wrong header
+    // for every column past the hide.
+    h.actions.hideColumn('col_2');
+
+    expect(headerFor(h.root(), 'col_9')).toBe(survivor);
+    expect(survivor.id, 'col_9 kept the cell id it had before the hide').toBe(cellId(8));
+    expectRowKeys(h);
+
+    h.container.destroy();
+  });
+
+  it('puts the surviving headers into the new visibleColumns order', () => {
+    const h = mount();
+    const before = h.container.getColumnHeaders();
+    const moved = headerFor(h.root(), 'col_5')!;
+    const stayed = headerFor(h.root(), 'col_0')!;
+
+    const order = h.state.columnOrder.get();
+    h.actions.setColumnOrder(['col_5', ...order.filter((c) => c !== 'col_5')]);
+
+    // col_5 was already inside `[0, 14)` and only moved within it, so the
+    // window's *set* is unchanged: a pure reorder, with nothing built and
+    // nothing destroyed. That is the shape measured at zero DuckDB queries in
+    // the browser — every chart in the window survives the move untouched.
+    const after = h.container.getColumnHeaders();
+    expect(after.length).toBe(before.length);
+    for (const header of before) {
+      expect(after.includes(header), `${header.getColumn().name} was replaced`).toBe(true);
+      expect(header.isDestroyed(), `${header.getColumn().name} was destroyed`).toBe(false);
+    }
+    expect(headerFor(h.root(), 'col_5')).toBe(moved);
+    expect(headerFor(h.root(), 'col_0')).toBe(stayed);
+
+    // Read straight off the row, so a reconcile that re-keyed a header without
+    // relocating its element — or relocated it against a fixed anchor and left
+    // the run reversed — shows up here and nowhere else.
+    const expected = h.state.visibleColumns.get().slice(0, VISIBLE_RUN + MIN_OVERSCAN_COLUMNS);
+    expect(expected[0]).toBe('col_5');
+    expect(expected[1]).toBe('col_0');
+    expect(headerColumns(h.root())).toEqual(expected);
+
+    expectRowKeys(h);
+
+    h.container.destroy();
+  });
+
+  it('writes nothing to the row when a render finds it already correct', () => {
+    const h = mount();
+    const before = h.container.getColumnHeaders();
+    const row = headerRowEl(h.root())!;
+    const insertBefore = vi.spyOn(row, 'insertBefore');
+    const removeChild = vi.spyOn(row, 'removeChild');
+
+    h.container.render();
+    h.container.render();
+
+    // `reconcileHeaderRow` places descending against a moving anchor precisely
+    // so a run already in the right order is walked without being touched. One
+    // move here would mean every no-op render re-inserted the whole window, and
+    // `render()` runs on every `visibleColumns` write — including the second
+    // half of the load's double render, which is what collapsing this bought.
+    // `removeChild` covers the other half: `ColumnHeader.destroy()` detaches
+    // through the row, so a spurious teardown is counted here too.
+    expect(insertBefore).not.toHaveBeenCalled();
+    expect(removeChild).not.toHaveBeenCalled();
+
+    const after = h.container.getColumnHeaders();
+    expect(after.length).toBe(before.length);
+    for (let i = 0; i < before.length; i++) {
+      expect(after[i], `ColumnHeader for ${before[i]!.getColumn().name}`).toBe(before[i]);
+    }
+
+    h.container.destroy();
+  });
+
+  it('withholds the row when the column set empties, and rebuilds it after', () => {
+    const h = mount();
+    const restored = [...h.state.visibleColumns.get()];
+
+    h.state.visibleColumns.set([]);
+
+    // A `role="row"` owning no `columnheader` is a critical
+    // `aria-required-children` violation, and the two spacers do not save it:
+    // they are `aria-hidden`, so the row looks populated to `childElementCount`
+    // and empty to a screen reader. Taken out rather than left standing.
+    expect(
+      headerRowEl(h.root()),
+      'a role="row" with no columnheader was left in the document',
+    ).toBeNull();
+    expect(headerCells(h.root())).toEqual([]);
+    expect(headerSpacers(h.root())).toEqual({ left: null, right: null });
+
+    h.state.visibleColumns.set(restored);
+
+    // The null `headerRowInner` the removal leaves behind is what makes the
+    // next render structural, so the row comes back whole — role, rowindex and
+    // both spacers — rather than as a reconcile against a row that is no longer
+    // in the document, which would silently render into a detached node.
+    const row = headerRowEl(h.root());
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute('role')).toBe('row');
+    expect(row!.getAttribute('aria-rowindex')).toBe('1');
+    expect(headerColumns(row!)).toEqual(restored.slice(0, VISIBLE_RUN + MIN_OVERSCAN_COLUMNS));
+
+    const { left, right } = headerSpacers(h.root());
+    expect(Array.from(row!.children)).toEqual([left, ...headerCells(row!), right]);
+    expectRowKeys(h);
+
+    h.container.destroy();
+  });
+
+  it('withholds the row when every wanted column turns out to have no schema', () => {
+    const h = mount();
+
+    // A name the schema does not carry. `mountColumnHeader` returns null for
+    // it, so the window *asks* for one column and mounts none — and the guard
+    // above cannot be keyed to what the window asked for, or it reads a full
+    // window here and leaves a `role="row"` owning nothing but its two
+    // `aria-hidden` spacers standing in the document.
+    //
+    // Reachable through `state`, which is public on `/advanced`, and
+    // transiently whenever a schema write and a `visibleColumns` write land as
+    // separate signals with the schema arriving first.
+    h.state.visibleColumns.set(['no_such_column']);
+
+    expect(
+      headerRowEl(h.root()),
+      'a role="row" with no columnheader was left in the document',
+    ).toBeNull();
+    expect(headerCells(h.root())).toEqual([]);
+
+    h.container.destroy();
+  });
+
+  it('still rebuilds everything when the schema identity changes', () => {
+    const h = mount();
+    const before = h.container.getColumnHeaders();
+    const bodyBefore = h.container.getTableBody();
+    expect(before.length).toBeGreaterThan(0);
+    expect(bodyBefore).not.toBeNull();
+
+    // Same column names, new array — which is exactly what a second
+    // `loadData()` produces. Identity is the key `render()` dispatches on, and
+    // it has to stay the *structural* answer: the schema is what every header
+    // was constructed against and what `TableBody` builds its SELECT from, so
+    // reconciling here would leave both describing the previous relation.
+    h.state.schema.set(schemaOf(COLUMNS));
+
+    for (const header of before) {
+      expect(header.isDestroyed(), `${header.getColumn().name} survived a rebuild`).toBe(true);
+    }
+    const after = h.container.getColumnHeaders();
+    expect(after.length).toBe(before.length);
+    for (const header of after) {
+      expect(before.includes(header), `${header.getColumn().name} was reused`).toBe(false);
+    }
+    expect(h.container.getTableBody()).not.toBe(bodyBefore);
+    expect(headerColumns(h.root())).toEqual(
+      Array.from({ length: VISIBLE_RUN + MIN_OVERSCAN_COLUMNS }, (_, i) => `col_${i}`),
+    );
+
+    h.container.destroy();
+  });
+});
+
+/**
  * The two `@internal` mount hooks.
  *
  * They exist because a windowed row has no moment at which every column's

@@ -160,7 +160,16 @@ async function buildWideTable(host: HTMLElement): Promise<TableContainer> {
   });
   Object.defineProperty(scroll, 'clientWidth', { value: WIDE_VIEWPORT_WIDTH, configurable: true });
 
-  tc.render();
+  // Both axes are told to re-measure, because the box could only be stubbed
+  // after construction — `.dt-body-scroll` does not exist before it, and both
+  // `TableBody` and the column window read the viewport when they are built.
+  //
+  // This used to be a second `tc.render()`, which worked only because a render
+  // destroyed and rebuilt the whole `TableBody`. It no longer does: a render
+  // that changes no schema reconciles instead, and the body it would have
+  // thrown away is the one holding the row cache and the scroll offset.
+  tc.getTableBody()!.getVirtualScroller().refresh();
+  tc.refreshColumnWindow();
   await tc.whenBodyReady();
   return tc;
 }

@@ -77,9 +77,9 @@ function loaded(): TableContainer {
 }
 
 /**
- * A focusable element inside the table that the next `render()` will destroy —
- * `render()` clears `headerRow`, exactly as it does the real column-header
- * buttons that pin / hide remove.
+ * A focusable element inside the table that a structural render will destroy —
+ * that tier clears `headerRow`, exactly as it did the real column-header
+ * buttons that pin / hide removed before the row was reconciled instead.
  */
 function doomedButtonInTable(tc: TableContainer): HTMLButtonElement {
   const btn = document.createElement('button');
@@ -89,14 +89,24 @@ function doomedButtonInTable(tc: TableContainer): HTMLButtonElement {
   return btn;
 }
 
+/**
+ * Trigger the rebuild tier: a new `schema` array.
+ *
+ * A `visibleColumns` write no longer gets here — it reconciles the row in
+ * place, keeps every surviving header's element, and so cannot be what
+ * destroys the element focus is on. Schema identity is what a load changes,
+ * and a load is the one thing that still wipes the header row.
+ */
+function structuralRender(): void {
+  state.schema.set([...SCHEMA]);
+}
+
 describe('TableContainer — post-render focus restore', () => {
   it('restores focus to the grid when render destroyed the focused element', async () => {
     const tc = loaded();
     const btn = doomedButtonInTable(tc);
 
-    // Stands in for pin / hide / reorder: a render that removes the button
-    // the user was on, dropping focus to <body>.
-    state.visibleColumns.set(['id', 'name']);
+    structuralRender();
     expect(btn.isConnected).toBe(false);
     expect(document.activeElement).toBe(document.body);
 
@@ -107,13 +117,36 @@ describe('TableContainer — post-render focus restore', () => {
     tc.destroy();
   });
 
+  it('leaves the focused header alone when another column is hidden', async () => {
+    const tc = loaded();
+    const header = tc.getColumnHeaders().find((h) => h.getColumn().name === 'name');
+    expect(header).toBeDefined();
+    const button = header!.getElement().querySelector('button');
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    (button as HTMLButtonElement).focus();
+
+    // Hiding a *different* column reconciles the row rather than rebuilding
+    // it, so this header's element — and the focus inside it — survives
+    // untouched. Before the reconcile this destroyed all three headers, threw
+    // focus to <body>, and the frame-later rescue moved the user from the
+    // control they were operating to the grid.
+    state.visibleColumns.set(['id', 'name']);
+    expect((button as HTMLButtonElement).isConnected).toBe(true);
+    expect(document.activeElement).toBe(button);
+
+    await nextFrame();
+    expect(document.activeElement).toBe(button);
+
+    tc.destroy();
+  });
+
   it('leaves focus alone when the user tabbed out of the table mid-render', async () => {
     const tc = loaded();
     const outside = document.createElement('button');
     document.body.appendChild(outside);
     doomedButtonInTable(tc);
 
-    state.visibleColumns.set(['id', 'name']);
+    structuralRender();
 
     // The user's Tab lands in the window between render() and its rAF. Pulling
     // focus back here is a keyboard trap by another name.

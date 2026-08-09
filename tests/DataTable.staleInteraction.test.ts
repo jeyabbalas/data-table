@@ -3,10 +3,16 @@
  *
  * Found by the Phase 2 manual pass at 1,000 columns: drag-brush a histogram,
  * remove the resulting filter with its chip, then hide any column. The header
- * row rebuilds, the chart is re-created — and the brush comes back, painting a
- * selection for a filter that no longer exists. The stats slot then reads
+ * row rebuilt, the chart was re-created — and the brush came back, painting a
+ * selection for a filter that no longer existed. The stats slot then read
  * "60,000 rows" on line 1 and "24,271 rows (40.5%)" underneath, which cannot
  * both be true.
+ *
+ * Hiding *any* column no longer does it — the header row is reconciled by
+ * column name, so an untouched column keeps its chart. What still replaces an
+ * instance is anything happening to that column itself: hide/show, a scroll
+ * out of the header window and back, a reload. The bug survives all of them,
+ * which is why these tests still exist.
  *
  * There are two defences and these tests cover the second one on its own.
  * `StateActions` notifies `setOnFilterRemove` for every removal path, so
@@ -18,9 +24,9 @@
  * the callback.
  *
  * What Phase 2 changed is that charts are now re-created constantly (every
- * header rebuild, every scroll back into view), and `restoreInteractionState`
- * reads that map on each one. Before, a destroyed chart's state was simply
- * lost and the stale entry unreachable.
+ * scroll back into view, every hide and show of their own column), and
+ * `restoreInteractionState` reads that map on each one. Before, a destroyed
+ * chart's state was simply lost and the stale entry unreachable.
  *
  * @vitest-environment jsdom
  */
@@ -190,12 +196,22 @@ async function mount(): Promise<{ table: DataTable; container: HTMLElement }> {
   return { table, container };
 }
 
-/** Force the header row to rebuild, as hide/show/pin/reorder all do. */
-async function rebuildHeaders(table: DataTable): Promise<void> {
-  table.actions.hideColumn('b');
+/**
+ * Force `column`'s chart to be replaced, the way a user does.
+ *
+ * Hiding and showing a *different* column used to do this: any
+ * `visibleColumns` write destroyed every header, and every chart went with
+ * them. The header row is reconciled by column name now, so a column nobody
+ * touched keeps its element and its instance — which is the point of the
+ * phase, and means the only thing that replaces this chart is something
+ * happening to this column. `hideColumn` leaves filters alone, so the state
+ * under test survives the round trip.
+ */
+async function replaceChart(table: DataTable, column: string): Promise<void> {
+  table.actions.hideColumn(column);
   await Promise.resolve();
   await Promise.resolve();
-  table.actions.showColumn('b');
+  table.actions.showColumn(column);
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
@@ -225,7 +241,7 @@ describe('interaction state does not outlive its filter', () => {
     expect(table.state.filters.get()).toEqual([]);
 
     StubViz.created = [];
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
 
     // The replacement instance must come up clean. Before the guard it came
     // up brushed, contradicting its own row count.
@@ -246,7 +262,7 @@ describe('interaction state does not outlive its filter', () => {
     expect(table.state.filters.get().map((f) => f.column)).toContain('a');
 
     StubViz.created = [];
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
     await Promise.resolve();
 
     // The filter is still there, so the selection that produced it belongs on
@@ -274,7 +290,7 @@ describe('interaction state does not outlive its filter', () => {
     await Promise.resolve();
 
     StubViz.created = [];
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
 
     // The restore-side guard cannot help here: there *is* a filter on 'a', so
     // it hands the saved brush back. Only pruning the entry when the filter it
@@ -305,7 +321,7 @@ describe('interaction state does not outlive its filter', () => {
     await Promise.resolve();
 
     StubViz.created = [];
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
 
     const rebuilt = StubViz.created.filter((v) => v.getColumn().name === 'a');
     expect(rebuilt.length).toBeGreaterThan(0);
@@ -323,11 +339,11 @@ describe('interaction state does not outlive its filter', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
     StubViz.created = [];
     // Second rebuild: the stale entry must have been pruned, not merely
     // skipped, or it resurfaces the moment a new filter appears on 'a'.
-    await rebuildHeaders(table);
+    await replaceChart(table, 'a');
     for (const v of StubViz.created.filter((x) => x.getColumn().name === 'a')) {
       expect(v.restored).toBeNull();
     }

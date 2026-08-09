@@ -440,6 +440,41 @@ export class ColumnReorder {
     this.headerHandlers.clear();
   }
 
+  /**
+   * Bind one header element, if it is not bound already.
+   *
+   * The per-element half of {@link refresh}, for a windowed header row where
+   * headers mount and unmount at scroll rate: `refresh()` there would detach
+   * and re-bind the entire mounted set on every frame, and the map it keeps is
+   * the only handle on those anonymous listeners.
+   *
+   * A no-op while reordering is disabled, matching `attachHandlers`.
+   */
+  attachHandler(header: HTMLElement): void {
+    if (this.destroyed || !this.enabled) return;
+    if (this.headerHandlers.has(header)) return;
+    const handler = (e: MouseEvent) => this.handleMouseDown(e);
+    header.addEventListener('mousedown', handler);
+    this.headerHandlers.set(header, handler);
+    header.setAttribute('draggable', 'false');
+  }
+
+  /**
+   * Unbind one header element.
+   *
+   * Called as a header unmounts. Without it the handler — and through its
+   * closure this whole controller — stays reachable from an element the header
+   * row has already dropped, so a mount/unmount storm leaks one entry per
+   * header scrolled past. The `Map` is keyed by element, so an entry for a
+   * detached node is never collected on its own.
+   */
+  detachHandler(header: HTMLElement): void {
+    const handler = this.headerHandlers.get(header);
+    if (!handler) return;
+    header.removeEventListener('mousedown', handler);
+    this.headerHandlers.delete(header);
+  }
+
   // =========================================
   // Public API
   // =========================================

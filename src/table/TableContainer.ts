@@ -53,10 +53,12 @@ import { ColumnReorder } from './ColumnReorder';
 import {
   BOX_OVERHEAD_PX,
   ColumnWindowModel,
+  MIN_OVERSCAN_COLUMNS,
   buildColumnIndexMap,
   pinnedOffsets,
   resolveColumnWidth,
   resolvePinnedCount,
+  type ColumnWindow,
   type ColumnWindowHost,
 } from './ColumnWindow';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
@@ -181,7 +183,16 @@ export class TableContainer {
   private destroyed = false;
   private resizeCallbacks = new Set<ResizeCallback>();
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
+  /**
+   * The **mounted** column headers, in DOM order.
+   *
+   * Since the header row is windowed this is the visible window plus the
+   * pinned prefix, not one per visible column. `getColumnHeaders()` returns a
+   * copy of it and `KeyboardNavigator` walks it.
+   */
   private columnHeaders: ColumnHeader[] = [];
+  /** The same set, by column name — the header half of `syncActiveDescendant`. */
+  private headerByColumn = new Map<string, ColumnHeader>();
   private tableBody: TableBody | null = null;
   // Tracks the surviving TableBody's `initialize()` so the public
   // `loadDataImpl` can await first paint before resolving. Each `render()`
@@ -235,6 +246,24 @@ export class TableContainer {
   // build / while there is no data. Held rather than re-queried because it is
   // where the horizontal content extent is written on every body render pass.
   private headerRowInner: HTMLElement | null = null;
+  // The window the mounted headers were built for, and the `visibleColumns`
+  // identity they were built from. Together these say whether a recompute can
+  // be absorbed by moving the two edges or needs the run rebuilt.
+  private headerWindow: ColumnWindow = {
+    start: 0,
+    end: 0,
+    pinnedCount: 0,
+    leftSpacerPx: 0,
+    rightSpacerPx: 0,
+    pinnedWidthPx: 0,
+    totalWidthPx: 0,
+    pinnedPrefixViolated: false,
+  };
+  private headerWindowColumns: readonly string[] | null = null;
+  // The two `.dt-col-spacer` elements standing in for the columns either side
+  // of the window — the body row's primitive, in the header row.
+  private leftHeaderSpacer: HTMLElement | null = null;
+  private rightHeaderSpacer: HTMLElement | null = null;
   // Watches `.dt-body-scroll`'s box: the window is a function of `clientWidth`
   // as much as of `scrollLeft`, so a viewport that grows without scrolling has
   // to recompute. Lives here rather than in `TableBody` because both axes
@@ -855,10 +884,425 @@ export class TableContainer {
     // Record the offset this pass answered for, whatever the answer is: the
     // scroll handler skips work while `scrollLeft` still matches it.
     this.lastColumnScrollLeft = this.bodyScroll.scrollLeft;
+    // Header first, so a cursor move that mounts a header has its element in
+    // the DOM before the body's render pass calls back into
+    // `syncActiveDescendant` to resolve the cursor's id.
+    this.syncHeaderWindow();
     // The body re-derives the window from the *shared* model and applies its
     // own body-cursor focus extension, so the two axes cannot disagree about
     // where a column starts.
     this.tableBody?.refreshColumnWindow();
+  }
+
+  // =========================================
+  // Header column window
+  // =========================================
+
+  /**
+   * The window the header row should render at the current scroll offset.
+   *
+   * The base window is the body's — same model, same viewport — plus the
+   * header's own anchor extension. The two extensions are deliberately
+   * different: a body row widens for a *body* cursor, and the header widens
+   * for a header cursor, for real DOM focus, and for an open layout gesture,
+   * none of which a body row has to render anything for.
+   */
+  private computeHeaderWindow(
+    visibleColumns: readonly string[],
+    columnWidths: ReadonlyMap<string, number>,
+  ): ColumnWindow {
+    const { scrollLeft, viewportWidth } = this.columnWindowHost.viewport();
+    const win = this.columnWindowModel.compute({
+      visibleColumns,
+      columnWidths,
+      pinnedColumns: this.state.pinnedColumns.get(),
+      scrollLeft,
+      viewportWidth,
+      boxOverheadPx: BOX_OVERHEAD_PX,
+    });
+    return this.extendWindowToAnchors(win, visibleColumns);
+  }
+
+  /**
+   * Columns that must stay mounted regardless of where the window is.
+   *
+   * Pinned columns are not here — they are `[0, pinnedCount)` and always
+   * rendered. What is:
+   *
+   *  - the **cursor's column** while the cursor is on the header row, because
+   *    `aria-activedescendant` has to name an element that exists;
+   *  - the column of a header holding **real DOM focus** (F2 controls mode, or
+   *    a click straight onto a header button), because destroying the element
+   *    focus sits on drops focus to `<body>` and silently ends keyboard
+   *    navigation;
+   *  - the column of an open **Shift+F2 layout gesture**, which is a state
+   *    machine rather than DOM focus, so nothing else would keep the header
+   *    the arrow keys are resizing in the DOM.
+   *
+   * Derived on every call rather than tracked in a field. A stored set desyncs
+   * — `KeyboardNavigator.activeControls` makes the same choice for the same
+   * reason — and this runs at most once per animation frame.
+   */
+  private headerAnchorColumns(): Set<string> {
+    const anchors = new Set<string>();
+
+    const focused = this.state.focusedCell.get();
+    if (focused && focused.row === HEADER_ROW_INDEX) anchors.add(focused.column);
+
+    const active = this.activeElementInRoot();
+    if (active instanceof HTMLElement) {
+      const owner = active.closest<HTMLElement>(
+        `.${this.resolvedOptions.classPrefix}-col-header[data-column]`,
+      );
+      const name = owner?.getAttribute('data-column');
+      if (name) anchors.add(name);
+    }
+
+    const layoutColumn = this.keyboardNavigator?.getLayoutColumn();
+    if (layoutColumn) anchors.add(layoutColumn);
+
+    return anchors;
+  }
+
+  /**
+   * Widen `win` so the anchored columns are rendered — when they are close.
+   *
+   * Clamped to the same overscan budget the body clamps its focus extension
+   * to, and for the same reason: a cursor parked 900 columns from the viewport
+   * must not drag 900 headers into the DOM, which is the whole thing windowing
+   * exists to prevent. Past the budget the header simply is not mounted, and
+   * `syncActiveDescendant` drops the attribute rather than pointing at
+   * nothing — the correct ARIA answer for a cursor scrolled out of view.
+   *
+   * Real DOM focus is the one case the budget cannot be allowed to lose, and
+   * it is not this method that saves it: {@link unmountColumnHeader} parks
+   * focus on `.dt-grid` before detaching a header that holds it, the same
+   * rescue `TableBody` performs for a row it is about to recycle. So focus
+   * degrades to the grid cursor rather than to `<body>`, at any distance.
+   *
+   * Budgets are measured against the *incoming* window, never against a
+   * running total, so several anchors cannot ratchet the window open.
+   */
+  private extendWindowToAnchors(
+    win: ColumnWindow,
+    visibleColumns: readonly string[],
+  ): ColumnWindow {
+    const anchors = this.headerAnchorColumns();
+    if (anchors.size === 0) return win;
+
+    this.syncVisibleIndexMap(visibleColumns);
+    let start = win.start;
+    let end = win.end;
+    for (const column of anchors) {
+      const index = this.visibleIndexByName.get(column);
+      // Pinned columns are always rendered, so an anchor on one needs nothing.
+      if (index === undefined || index < win.pinnedCount) continue;
+      if (index < win.start) {
+        if (win.start - index <= MIN_OVERSCAN_COLUMNS) start = Math.min(start, index);
+      } else if (index >= win.end) {
+        if (index + 1 - win.end <= MIN_OVERSCAN_COLUMNS) end = Math.max(end, index + 1);
+      }
+    }
+
+    if (start === win.start && end === win.end) return win;
+    const n = this.columnWindowModel.size();
+    return {
+      ...win,
+      start,
+      end,
+      leftSpacerPx: this.columnWindowModel.spanPx(win.pinnedCount, start),
+      rightSpacerPx: this.columnWindowModel.spanPx(end, n),
+    };
+  }
+
+  /**
+   * A header spacer: the width of the columns the row does not render.
+   *
+   * The body's primitive, verbatim — `TableBody.createSpacer` builds the same
+   * element with the same class, role and attributes. `aria-hidden` is what
+   * actually keeps it out of the accessibility tree, so `role="row"` still
+   * satisfies `aria-required-children` with only spacers between its cells;
+   * `role="presentation"` is inert alongside it but says out loud to anything
+   * walking the DOM that this is not a column header.
+   */
+  private createColumnSpacer(side: 'left' | 'right'): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.resolvedOptions.classPrefix}-col-spacer`;
+    el.setAttribute('role', 'presentation');
+    el.setAttribute('aria-hidden', 'true');
+    el.setAttribute('data-col-spacer', side);
+    el.style.flex = '0 0 0px';
+    return el;
+  }
+
+  /** Column headers in `row`, spacers excluded — counted by role. */
+  private headerCellCount(row: HTMLElement): number {
+    return row.querySelectorAll(':scope > [role="columnheader"]').length;
+  }
+
+  /**
+   * Build one `ColumnHeader`, ready to be inserted.
+   *
+   * Everything a header needs to be *born correct* happens here: its width,
+   * its `aria-colindex`, its stable id, the cursor ring if the cursor is on
+   * it, the layout outline if a gesture is open on it, and its reorder
+   * handler. A header scrolled into view mid-session has to be
+   * indistinguishable from one built at load, or every piece of state the
+   * table carries becomes a scroll-position-dependent bug.
+   *
+   * Sticky pinning is *not* applied here, and that is not an omission: pinned
+   * columns are `[0, pinnedCount)`, which is force-rendered at every offset,
+   * so a header mounted at a window edge is never pinned. `render()` still
+   * runs `updatePinnedColumnStyles` over the whole mounted set.
+   *
+   * Returns `null` for a column with no schema entry — reachable transiently
+   * while `schema` and `visibleColumns` are landing as separate writes.
+   */
+  private mountColumnHeader(
+    colName: string,
+    columnWidths: ReadonlyMap<string, number>,
+  ): ColumnHeader | null {
+    const colSchema = this.schemaByName.get(colName);
+    if (!colSchema || !this.actions) return null;
+
+    // aria-colindex is a position in the *presented* table, and ARIA requires
+    // the values to ascend in DOM order within a row — a MUST, not a SHOULD.
+    // The numbering rule, and why it is `columnOrder` and not `schema`, lives
+    // on `buildColumnIndexMap`, which the body numbers its cells from too.
+    // Gaps are correct for a windowed row for the same reason they are correct
+    // for a hidden column: they say "columns not present", which is exactly
+    // what is true either side of a spacer.
+    const colIndex = this.colIndexByName.get(colName) ?? 0;
+
+    const header = new ColumnHeader(colSchema, this.state, this.actions, {
+      // The column's global index in `visibleColumns`, not a counter over what
+      // happens to be mounted. An id has to name the same column at every
+      // window position: a dense counter would give the leftmost mounted
+      // header id `…-colheader-0` at any scroll offset, so
+      // `aria-activedescendant` would silently follow the *window* rather than
+      // the cursor.
+      cellId: this.buildHeaderCellId(this.visibleIndexByName.get(colName) ?? 0),
+      classPrefix: this.resolvedOptions.classPrefix,
+      onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
+      onDerivedIconClick: (column, buttonEl) => void this.handleDerivedIconClick(column, buttonEl),
+      colIndex: colIndex > 0 ? colIndex : undefined,
+      messages: this.messages,
+      showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
+      annotations: this.resolvedOptions.annotations,
+      annotationPopover: this.resolvedOptions.annotationPopover,
+      columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
+      announce: (message) => this.announce(message),
+    });
+
+    // Apply dynamic width from state, resolved to match the body's prefix
+    // sums — see `updateColumnWidths`.
+    const el = header.getElement();
+    el.style.width = `${resolveColumnWidth(columnWidths.get(colName))}px`;
+
+    const focused = this.state.focusedCell.get();
+    if (focused && focused.row === HEADER_ROW_INDEX && focused.column === colName) {
+      el.classList.add(`${this.resolvedOptions.classPrefix}-col-header--focused`);
+    }
+    if (this.keyboardNavigator?.getLayoutColumn() === colName) header.setLayoutMode(true);
+
+    this.headerByColumn.set(colName, header);
+    this.columnReorder?.attachHandler(el);
+    return header;
+  }
+
+  /**
+   * Tear one header down and undo everything mounting it did.
+   *
+   * The rescue first: real DOM focus inside an element about to be detached
+   * falls back to `<body>`, which silently ends keyboard navigation — the same
+   * failure `TableBody.moveFocusToGridBeforeRemoval` exists for on the row
+   * axis, and the reason a windowed header row cannot simply destroy whatever
+   * scrolls past. Parking focus on `.dt-grid` also exits F2 controls mode by
+   * construction, since `KeyboardNavigator` derives that mode from
+   * `document.activeElement` rather than storing it.
+   *
+   * Then the two attachments `ColumnHeader.destroy()` cannot see: the reorder
+   * `mousedown`, which lives in `ColumnReorder`'s element-keyed map, and — via
+   * `destroy()` itself — any popover still anchored inside the header.
+   */
+  private unmountColumnHeader(header: ColumnHeader): void {
+    const el = header.getElement();
+    const active = this.activeElementInRoot();
+    if (active instanceof HTMLElement && el.contains(active)) {
+      if (this.gridSemanticsActive) this.gridElement.focus({ preventScroll: true });
+      else active.blur();
+    }
+    this.columnReorder?.detachHandler(el);
+    this.headerByColumn.delete(header.getColumn().name);
+    header.destroy();
+  }
+
+  /**
+   * Fill a fresh header row with `[P pinned][left spacer][window][right
+   * spacer]`, the body row's shape exactly.
+   *
+   * Pinned first, because they are sticky at `left: 0` and because
+   * `aria-colindex` has to ascend in DOM order — `[0, pinnedCount)` carries
+   * the lowest indices by construction.
+   */
+  private buildHeaderWindow(
+    headerRowEl: HTMLElement,
+    visibleColumns: readonly string[],
+    columnWidths: ReadonlyMap<string, number>,
+  ): void {
+    const win = this.computeHeaderWindow(visibleColumns, columnWidths);
+
+    for (let i = 0; i < win.pinnedCount && i < visibleColumns.length; i++) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) headerRowEl.appendChild(header.getElement());
+    }
+
+    const leftSpacer = this.createColumnSpacer('left');
+    headerRowEl.appendChild(leftSpacer);
+    this.leftHeaderSpacer = leftSpacer;
+
+    for (let i = win.start; i < win.end; i++) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) headerRowEl.appendChild(header.getElement());
+    }
+
+    const rightSpacer = this.createColumnSpacer('right');
+    headerRowEl.appendChild(rightSpacer);
+    this.rightHeaderSpacer = rightSpacer;
+
+    this.headerWindow = win;
+    this.headerWindowColumns = visibleColumns;
+    this.rebuildMountedHeaderList(visibleColumns, win);
+    this.applyHeaderSpacerWidths(win);
+  }
+
+  /**
+   * Recompute the header window and reconcile the row to it.
+   *
+   * The incremental path: mount and unmount at the two edges, rewrite two
+   * spacer widths, and touch nothing else. No `TableBody`, no panels, no focus
+   * restoration — this runs on every horizontal scroll frame, and anything it
+   * does that `render()` also does is something the user pays for at scroll
+   * rate.
+   */
+  private syncHeaderWindow(): void {
+    if (this.destroyed) return;
+    const row = this.headerRowInner;
+    if (!row || !this.actions || !this.leftHeaderSpacer || !this.rightHeaderSpacer) return;
+
+    const visibleColumns = this.state.visibleColumns.get();
+    const columnWidths = this.state.columnWidths.get();
+    const win = this.computeHeaderWindow(visibleColumns, columnWidths);
+    const current = this.headerWindow;
+
+    if (this.headerWindowColumns !== visibleColumns || win.pinnedCount !== current.pinnedCount) {
+      // The column set, its order, or the pinned prefix moved out from under
+      // the mounted run. Rebuilding the row's contents is the honest answer
+      // and it is not the scroll path — a later milestone diffs this case
+      // rather than rebuilding it.
+      this.rebuildHeaderRowContents(row, visibleColumns, columnWidths, win);
+    } else if (win.start !== current.start || win.end !== current.end) {
+      this.shiftHeaderWindow(row, visibleColumns, columnWidths, win, current);
+    }
+
+    this.headerWindow = win;
+    this.headerWindowColumns = visibleColumns;
+    this.rebuildMountedHeaderList(visibleColumns, win);
+    this.applyHeaderSpacerWidths(win);
+    this.applyContentWidth(win.totalWidthPx);
+  }
+
+  /** Replace every mounted header, keeping the row element and its spacers. */
+  private rebuildHeaderRowContents(
+    row: HTMLElement,
+    visibleColumns: readonly string[],
+    columnWidths: ReadonlyMap<string, number>,
+    win: ColumnWindow,
+  ): void {
+    this.destroyColumnHeaders();
+    const leftSpacer = this.leftHeaderSpacer!;
+    const rightSpacer = this.rightHeaderSpacer!;
+
+    for (let i = 0; i < win.pinnedCount && i < visibleColumns.length; i++) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) row.insertBefore(header.getElement(), leftSpacer);
+    }
+    for (let i = win.start; i < win.end; i++) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) row.insertBefore(header.getElement(), rightSpacer);
+    }
+  }
+
+  /**
+   * Move the mounted run from `current` to `win`, touching only the ends.
+   *
+   * A disjoint jump — a scrollbar drag across the table, `Ctrl+End` — is
+   * handled as unmount-all-then-mount-all rather than by walking edges that
+   * never meet. Either way the work is bounded by the two windows' sizes, not
+   * by the distance between them.
+   */
+  private shiftHeaderWindow(
+    row: HTMLElement,
+    visibleColumns: readonly string[],
+    columnWidths: ReadonlyMap<string, number>,
+    win: ColumnWindow,
+    current: ColumnWindow,
+  ): void {
+    const leftSpacer = this.leftHeaderSpacer!;
+    const rightSpacer = this.rightHeaderSpacer!;
+
+    const unmountAt = (index: number): void => {
+      const header = this.headerByColumn.get(visibleColumns[index]!);
+      if (header) this.unmountColumnHeader(header);
+    };
+
+    if (win.start >= current.end || win.end <= current.start) {
+      for (let i = current.start; i < current.end; i++) unmountAt(i);
+      for (let i = win.start; i < win.end; i++) {
+        const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+        if (header) row.insertBefore(header.getElement(), rightSpacer);
+      }
+      return;
+    }
+
+    for (let i = current.start; i < win.start; i++) unmountAt(i);
+    for (let i = current.end - 1; i >= win.end; i--) unmountAt(i);
+
+    // Descending, inserting each straight after the left spacer, so the run
+    // ends up in ascending order without a second pass.
+    for (let i = current.start - 1; i >= win.start; i--) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) row.insertBefore(header.getElement(), leftSpacer.nextSibling);
+    }
+    for (let i = Math.max(current.end, win.start); i < win.end; i++) {
+      const header = this.mountColumnHeader(visibleColumns[i]!, columnWidths);
+      if (header) row.insertBefore(header.getElement(), rightSpacer);
+    }
+  }
+
+  /**
+   * Rebuild `columnHeaders` so it is the mounted set in DOM order.
+   *
+   * The array is what `getColumnHeaders()` returns and what `KeyboardNavigator`
+   * walks, and both take its order to mean visual order. Derived from the
+   * window rather than maintained through the mount/unmount edges, because one
+   * missed splice would put the F2 cycle in a different order than the eye.
+   */
+  private rebuildMountedHeaderList(visibleColumns: readonly string[], win: ColumnWindow): void {
+    const mounted: ColumnHeader[] = [];
+    const push = (index: number): void => {
+      const header = this.headerByColumn.get(visibleColumns[index]!);
+      if (header) mounted.push(header);
+    };
+    for (let i = 0; i < win.pinnedCount && i < visibleColumns.length; i++) push(i);
+    for (let i = win.start; i < win.end; i++) push(i);
+    this.columnHeaders = mounted;
+  }
+
+  /** Size the two spacers to the columns they stand in for. */
+  private applyHeaderSpacerWidths(win: ColumnWindow): void {
+    if (this.leftHeaderSpacer) this.leftHeaderSpacer.style.flex = `0 0 ${win.leftSpacerPx}px`;
+    if (this.rightHeaderSpacer) this.rightHeaderSpacer.style.flex = `0 0 ${win.rightSpacerPx}px`;
   }
 
   /**
@@ -1059,7 +1503,12 @@ export class TableContainer {
 
     if (focused) {
       if (focused.row === HEADER_ROW_INDEX) {
-        const header = this.columnHeaders.find((h) => h.getColumn().name === focused.column);
+        // A map lookup, not a scan: this runs from the body's per-frame render
+        // callback, and the mounted set is walked on every cursor keystroke by
+        // `KeyboardNavigator` besides. A cursor whose header is not mounted
+        // resolves to nothing and the attribute is dropped, which is the
+        // correct answer for a column scrolled out of view.
+        const header = this.headerByColumn.get(focused.column);
         targetId = header?.getElement().id || null;
       } else {
         const columns = this.state.visibleColumns.get();
@@ -1269,6 +1718,14 @@ export class TableContainer {
     // cursor stays put but virtualization materializes or recycles its row.
     const unsubActiveDescendant = this.state.focusedCell.subscribe(() => {
       if (!this.destroyed) {
+        // The cursor is part of the header window's anchor set, so a move can
+        // change which headers are mounted — and it has to happen before the
+        // id lookup below, or a cursor landing on a column just outside the
+        // window would resolve to nothing for a frame. `KeyboardNavigator`
+        // normally scrolls the column into view first; this covers the
+        // `/advanced` path, where a host can write `focusedCell` with no
+        // scroll behind it at all.
+        this.syncHeaderWindow();
         this.syncActiveDescendant();
         this.updateHeaderCursorStyles();
       }
@@ -1379,13 +1836,20 @@ export class TableContainer {
   // =========================================
 
   /**
-   * Destroy all existing column headers
+   * Unmount every mounted column header.
+   *
+   * Through {@link unmountColumnHeader} rather than a bare `destroy()` loop,
+   * so the focus rescue, the reorder handler and the popover dismissal happen
+   * for a wholesale teardown exactly as they do for one header scrolling out
+   * of the window. Two teardown paths is how one of them ends up missing a
+   * detach.
    */
   private destroyColumnHeaders(): void {
     for (const header of this.columnHeaders) {
-      header.destroy();
+      this.unmountColumnHeader(header);
     }
     this.columnHeaders = [];
+    this.headerByColumn.clear();
   }
 
   /**
@@ -1410,6 +1874,12 @@ export class TableContainer {
       const width = resolveColumnWidth(columnWidths.get(col.name));
       header.getElement().style.width = `${width}px`;
     }
+
+    // A width change moves every column after it, so it moves the window and
+    // both spacers as well — widening one column far enough pushes the ones
+    // past it off screen. Updating the mounted headers alone would leave the
+    // row the right total width made of the wrong pieces.
+    this.syncHeaderWindow();
   }
 
   /**
@@ -1558,6 +2028,9 @@ export class TableContainer {
     this.destroyColumnHeaders();
     this.headerRow.innerHTML = '';
     this.headerRowInner = null;
+    this.leftHeaderSpacer = null;
+    this.rightHeaderSpacer = null;
+    this.headerWindowColumns = null;
     this.bodyContainer.innerHTML = '';
 
     if (schema.length === 0 || !tableName) {
@@ -1576,41 +2049,7 @@ export class TableContainer {
 
       // Create column headers
       if (this.actions) {
-        let visibleIndex = 0;
-        for (const colName of visibleColumns) {
-          const colSchema = this.schemaByName.get(colName);
-          if (colSchema) {
-            // aria-colindex is a position in the *presented* table, and ARIA
-            // requires the values to ascend in DOM order within a row — a MUST,
-            // not a SHOULD. The numbering rule, and why it is `columnOrder` and
-            // not `schema`, lives on `buildColumnIndexMap`, which the body
-            // numbers its cells from too.
-            const colIndex = this.colIndexByName.get(colName) ?? 0;
-            const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
-              cellId: this.buildHeaderCellId(visibleIndex++),
-              classPrefix: this.resolvedOptions.classPrefix,
-              onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
-              onDerivedIconClick: (column, buttonEl) =>
-                void this.handleDerivedIconClick(column, buttonEl),
-              colIndex: colIndex > 0 ? colIndex : undefined,
-              messages: this.messages,
-              showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
-              annotations: this.resolvedOptions.annotations,
-              annotationPopover: this.resolvedOptions.annotationPopover,
-              columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
-              announce: (message) => this.announce(message),
-            });
-            this.columnHeaders.push(columnHeader);
-
-            // Apply dynamic width from state, resolved to match the body's
-            // prefix sums — see `updateColumnWidths`.
-            const headerEl = columnHeader.getElement();
-            const width = resolveColumnWidth(columnWidths.get(colName));
-            headerEl.style.width = `${width}px`;
-
-            headerRowEl.appendChild(headerEl);
-          }
-        }
+        this.buildHeaderWindow(headerRowEl, visibleColumns, columnWidths);
       } else {
         // Fallback if no actions provided - show simple placeholders
         for (const colName of visibleColumns) {
@@ -1644,13 +2083,19 @@ export class TableContainer {
         }
       }
 
-      // Only mount the row once it actually owns column headers. A childless
-      // `role="row"` is a critical `aria-required-children` violation, and an
-      // empty visible set is reachable both permanently (`setColumnOrder([])`,
-      // `stripDerivedColumnRefs` — neither guards the way `hideColumn` does)
-      // and transiently, whenever `schema` and `visibleColumns` land as
-      // separate signal writes and the schema write renders first.
-      if (headerRowEl.childElementCount > 0) {
+      // Only mount the row once it actually owns column *headers*. A
+      // `role="row"` owning no cell is a critical `aria-required-children`
+      // violation, and an empty visible set is reachable both permanently
+      // (`setColumnOrder([])`, `stripDerivedColumnRefs` — neither guards the
+      // way `hideColumn` does) and transiently, whenever `schema` and
+      // `visibleColumns` land as separate signal writes and the schema write
+      // renders first.
+      //
+      // Counted by role rather than by `childElementCount`, which the spacers
+      // broke: a windowed row always has two of them, so the old test passed
+      // for a row holding nothing a screen reader can see — the exact state it
+      // existed to keep out of the DOM.
+      if (this.headerCellCount(headerRowEl) > 0) {
         this.headerRow.appendChild(headerRowEl);
         this.headerRowInner = headerRowEl;
         // Give the fresh row the content extent straight away. The body

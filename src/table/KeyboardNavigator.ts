@@ -808,6 +808,24 @@ export class KeyboardNavigator {
     this.announce(a.columnMovedAnnouncement(layout.column, target + 1, next.length));
   }
 
+  /**
+   * The column an open Shift+F2 layout gesture is operating on, or `null`.
+   *
+   * Read by `TableContainer` to anchor that column in the header window: the
+   * gesture is a state machine here rather than DOM focus, so nothing else
+   * would stop a scroll from unmounting the very header the arrow keys are
+   * resizing — and `syncLayoutAffordance` would then paint the outline on
+   * nothing.
+   *
+   * @example
+   * ```typescript
+   * const anchored = navigator.getLayoutColumn(); // 'price' while Shift+F2 is open
+   * ```
+   */
+  getLayoutColumn(): string | null {
+    return this.layout?.column ?? null;
+  }
+
   /** Put the layout outline on the gesture's header, and nowhere else. */
   private syncLayoutAffordance(): void {
     const column = this.layout?.column ?? null;

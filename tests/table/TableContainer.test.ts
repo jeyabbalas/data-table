@@ -313,7 +313,7 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
-    it('builds the header row as one columnheader per visible column, no spacers', () => {
+    it('builds the header row as pinned headers, the window, and two spacers', () => {
       state.tableName.set('t');
       initializeColumnsFromSchema(state, [
         { name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' },
@@ -322,21 +322,31 @@ describe('TableContainer', () => {
       const actions = new StateActions(state, mockBridge);
       const tableContainer = new TableContainer(container, state, actions, mockBridge);
 
-      // The shape every role-based reader in `tests/helpers/headerDom.ts` has
-      // to agree with *today*, which is what makes those readers a faithful
-      // stand-in for the positional reads they replaced rather than merely a
-      // tidier spelling of them. When the row windows it becomes
-      // `[left spacer][pinned headers][windowed headers][right spacer]` and
-      // only the two spacer expectations here change.
+      // `[P pinned][left spacer][window][right spacer]` — a body row's shape
+      // exactly, which is what lets one window computation drive both axes.
+      // Nothing is pinned here and jsdom reports `clientWidth === 0`, so the
+      // ten-column overscan floor takes over and both columns are inside the
+      // window: the left spacer leads and the right spacer trails.
       const row = headerRowEl(tableContainer.getElement())!;
       expect(row).not.toBeNull();
-      // Every child is a header and every header is a child, by identity —
-      // nothing else sits in the row yet.
       const cells = headerCells(row);
-      expect(cells).toHaveLength(row.childElementCount);
-      expect(cells.every((cell, i) => cell === row.children[i])).toBe(true);
       expect(headerColumns(row)).toEqual(['a', 'b']);
-      expect(headerSpacers(tableContainer.getElement())).toEqual({ left: null, right: null });
+
+      const spacers = headerSpacers(tableContainer.getElement());
+      expect(spacers.left).not.toBeNull();
+      expect(spacers.right).not.toBeNull();
+      expect(Array.from(row.children)).toEqual([spacers.left, ...cells, spacers.right]);
+
+      // Both spacers stand in for nothing, so the row is exactly its columns
+      // wide. The spacer element still has to exist — it is the insertion
+      // point every incremental mount is positioned against.
+      expect(spacers.left!.style.flex).toBe('0 0 0px');
+      expect(spacers.right!.style.flex).toBe('0 0 0px');
+
+      // `aria-hidden` is what keeps `role="row"` satisfying
+      // `aria-required-children` with spacer children.
+      expect(spacers.left!.getAttribute('aria-hidden')).toBe('true');
+      expect(spacers.left!.getAttribute('role')).toBe('presentation');
 
       tableContainer.destroy();
     });

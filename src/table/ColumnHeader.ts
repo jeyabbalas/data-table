@@ -1047,6 +1047,26 @@ export class ColumnHeader {
     if (this.destroyed) return;
     this.destroyed = true;
 
+    // Dismiss any popover still anchored inside this header.
+    //
+    // Both singletons are shared and outlive the header, and both position
+    // themselves against an anchor element they hold a reference to. Destroying
+    // the header without this leaves a popover floating over the table,
+    // describing a column that is no longer there, anchored to a detached node
+    // it will keep measuring on the next reposition — and, for the tooltip,
+    // holding an `aria-describedby` target that resolves to nothing.
+    //
+    // Scroll used to hide this for free: both install capture-phase `scroll`
+    // and `resize` listeners that dismiss. What that never covered is a
+    // dismissal with no scroll behind it — hiding the column, reordering it,
+    // a filter that drops it — and, now that the header row is windowed, an
+    // unmount at the edge of the window, which is itself scroll-driven but
+    // resolves *before* the listener would have fired.
+    const annotationPopover = this.options.annotationPopover;
+    if (annotationPopover?.isOpenFor(this.element)) annotationPopover.hide();
+    const tooltipPopover = this.options.columnHeaderTooltipPopover;
+    if (tooltipPopover?.isOpenFor(this.nameEl)) tooltipPopover.hide();
+
     // Detach column resizer
     this.resizer.detach();
 

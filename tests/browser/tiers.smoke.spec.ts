@@ -32,7 +32,13 @@ import {
   columnName,
 } from '../fixtures/tiers';
 
-import { bridgeStats, domNodeCount } from './helpers/metrics';
+import {
+  bridgeStats,
+  domNodeCount,
+  installObserverCensus,
+  readObserverCensus,
+  readSubscriberCounts,
+} from './helpers/metrics';
 import {
   installColumnInvariantProbe,
   mountTierTable,
@@ -119,6 +125,10 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
     if (m.type() === 'error') consoleErrors.push(m.text());
   });
 
+  // Before the first navigation: the census patches the observer constructors
+  // through `addInitScript`, and anything built earlier is invisible to it.
+  await installObserverCensus(page);
+
   const mounted = await mountTierTable(page, { tier: 'wide-ci', viz: false });
   expect(mounted.spec).toEqual(TIER);
   await waitForTierSettled(page);
@@ -191,6 +201,12 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
     stops.push(stop!);
     mergeCensus(census, await censusPass(page));
   }
+  // Read at every stop rather than once at the end, and read *by the sweep*
+  // rather than after it. The window is widest at 50 %, where both spacers are
+  // non-zero and both rows carry ~28 columns, and a DOM budget measured only
+  // where the window happens to be narrow is not a bound — see
+  // `DT_BUDGET.WIDE_CI.DOM_NODES_MAX`.
+  const nodesAtStop = stops.map((stop) => stop.domNodes);
 
   for (const stop of stops) {
     // Headers, not body cells: `readVisibleGrid` reads `.dt-col-header`, and
@@ -198,13 +214,21 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
     // prefix, a run of columns near the viewport, two spacers. So this counts
     // the window, not the table, and the two things that have to hold at
     // every offset are that the window is a proper subset and that it still
-    // covers what the user is looking at. The gated perf specs put a number
-    // on the first; the census above is what keeps the second from
-    // degenerating into "renders something".
+    // covers what the user is looking at. `COLVIRT.HEADERS_RENDERED_MAX` puts
+    // a number on the first; the census above is what keeps the second from
+    // degenerating into "renders something", and `column-window.spec.ts`
+    // proves the structure the number is counting.
     expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeGreaterThan(0);
     expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeLessThan(TIER.cols);
+    expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeLessThanOrEqual(
+      DT_BUDGET.COLVIRT.HEADERS_RENDERED_MAX,
+    );
     expect(stop.columns.some((col) => col.fullyVisible)).toBe(true);
   }
+  console.log(
+    `[tiers.smoke] mounted headers across the sweep: ` +
+      `[${stops.map((s) => s.columns.length).join(', ')}] of ${TIER.cols} columns`,
+  );
   expect(stops[0]!.scrollLeft).toBe(0);
   expect(stops[stops.length - 1]!.scrollLeft).toBeGreaterThan(0);
 
@@ -241,12 +265,41 @@ test('mounts WIDE_CI through the real load path with both oracles clean', async 
 
   // --- DOM weight --------------------------------------------------------
   // Machine-independent: the same build renders the same node count
-  // everywhere. Phases 3–4 are expected to cut this by an order of
-  // magnitude, and this is the number they will cut it from.
+  // everywhere. Phase 3 windowed the body and Phase 4 the header row, cutting
+  // this from 15,051 to ~1,500; the budget is what keeps it there.
   const nodes = await domNodeCount(page);
-  console.log(`[tiers.smoke] .dt-root subtree = ${nodes} nodes at ${TIER.cols} columns`);
-  expect(nodes, `.dt-root subtree = ${nodes} nodes`).toBeLessThanOrEqual(
+  const peakNodes = Math.max(nodes, ...nodesAtStop);
+  console.log(
+    `[tiers.smoke] .dt-root subtree = ${nodes} nodes at ${TIER.cols} columns ` +
+      `(sweep [${nodesAtStop.join(', ')}], peak ${peakNodes})`,
+  );
+  expect(peakNodes, `.dt-root subtree peaked at ${peakNodes} nodes`).toBeLessThanOrEqual(
     DT_BUDGET.WIDE_CI.DOM_NODES_MAX,
+  );
+
+  // --- gauges that must not track the column count -----------------------
+  // Both are read with visualizations off, which is what this tier is; the
+  // chart-driven versions live in `DT_BUDGET.VIZ` and are asserted by
+  // `viz-lazy.spec.ts`.
+  const observers = await readObserverCensus(page);
+  const subscribers = await readSubscriberCounts(page);
+  console.log(
+    `[tiers.smoke] gauges ${JSON.stringify({
+      ro: observers.resize,
+      mo: observers.mutation,
+      io: observers.intersection,
+      sortSubscribers: subscribers['sortColumns'],
+      visibleColumnSubscribers: subscribers['visibleColumns'],
+    })} at ${TIER.cols} columns`,
+  );
+  expect(observers.resize, 'live ResizeObservers').toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.RESIZE_OBSERVERS_MAX,
+  );
+  expect(observers.mutation, 'live MutationObservers').toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.MUTATION_OBSERVERS_MAX,
+  );
+  expect(subscribers['sortColumns'], 'sortColumns subscribers').toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.SORT_SIGNAL_SUBSCRIBERS_MAX,
   );
 
   expect(consoleErrors).toEqual([]);

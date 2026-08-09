@@ -133,20 +133,51 @@ scroll sweep.
 table pays for a viewport rather than for a schema — the same bargain
 row virtualization already made on the other axis.
 
-The caveat is that body cells for horizontally off-screen columns are no
-longer in the DOM. `body.querySelector('[data-column="revenue"]')` finds
-nothing until that column is scrolled into view; headers are unaffected,
-and `aria-colindex` stays absolute over the column order, so a windowed
-row reports a gapped index run rather than a renumbered one. On
-`/advanced`, `TableBody.getColumnSpan(column)` and `getPinnedWidthPx()`
-give you the offset to scroll to, and `refreshColumnWindow()` makes the
-cells for a freshly written `scrollLeft` exist synchronously rather than
-one frame later.
+The header row is windowed from the same model, so the whole grid — not
+just the body — now pays for a viewport rather than for a schema. On the
+same 300 × 20,000 tier the `.dt-root` subtree fell again, from 11,136
+nodes to 970 at rest, with 17 headers mounted instead of 300. The window
+is widened a little for three columns — the keyboard cursor's, any
+header holding real DOM focus, and the column of an open Shift+F2 layout
+gesture — so a small scroll does not destroy the element that focus, or
+`aria-activedescendant`, was pointing at. That widening is capped at ten
+columns, deliberately: a cursor parked far off screen must not drag its
+neighbourhood back into the DOM. Beyond the cap the grid degrades
+instead of breaking — the `aria-activedescendant` attribute is dropped
+rather than left dangling, and real focus is handed to the grid rather
+than to `<body>`.
 
-Column headers are not windowed yet. The ~11,000 nodes left at 300
-columns are dominated by the 300 eagerly built headers, so the total
-subtree still grows with column count even though the body no longer
-does. Windowing the header row is the next phase of this work.
+Two costs disappear with it. Header state updates are now diffed instead
+of rebuilt, so hiding, showing, pinning or reordering a column keeps
+every surviving header's element — and with it its chart, its listeners
+and its popovers — where it previously destroyed and reconstructed the
+entire row. And a header no longer subscribes to state signals itself:
+it used to register seven of its own, so the fan-out grew with the
+column count and a scroll sweep churned registrations in and out as
+headers mounted. The container now holds one subscription per signal and
+fans it out to the mounted headers.
+
+At 1,000 columns those figures do not move: 36,356 elements before and
+970 after, and 1,005 subscribers on `sortColumns` — one per column, every
+one of them woken by every sort — down to 5. The same 5 the 60-column and
+300-column tables report.
+
+**Implication:** DOM cost, subscription cost and chart cost all stop
+tracking column count. A 1,000-column table costs what a 60-column one
+does, plus arithmetic.
+
+The caveat is that cells _and headers_ for horizontally off-screen
+columns are no longer in the DOM.
+`root.querySelector('[data-column="revenue"]')` finds nothing until that
+column is scrolled into view, and `getColumnHeaders()` on `/advanced`
+returns the mounted window rather than one header per column.
+`aria-colindex` stays absolute over the column order, so a windowed row
+reports a gapped index run rather than a renumbered one. On `/advanced`,
+`TableBody.getColumnSpan(column)` and `getPinnedWidthPx()` give you the
+offset to scroll to, and `refreshColumnWindow()` — on `TableContainer`
+for both axes, or on `TableBody` for the body alone — makes the cells
+for a freshly written `scrollLeft` exist synchronously rather than one
+frame later.
 
 ### DuckDB in WASM
 
@@ -240,9 +271,15 @@ Four things bound the cost now:
   canvas, a `ResizeObserver`, and chart data.
 - **Chart data outlives the canvas.** Reclaiming a canvas snapshots the data,
   and scrolling back rebuilds from the snapshot with no query. Hiding,
-  showing, pinning, or reordering a column rebuilds the whole header row and
-  costs no chart queries at all — where it previously re-queried every
-  column (534 queries for one keyboard column move at 266 columns).
+  showing, pinning, or reordering a column reconciles the header row keyed by
+  column name, so a surviving column keeps the very same container element and
+  its chart is never touched: measured 0 chart queries, where the same
+  keyboard column move at 266 columns once cost 534.
+- **A chart's lifetime is its header's.** Headers mount and unmount with the
+  column window, and the mount hooks create the chart and hand its container to
+  the `IntersectionObserver` on the way in, then destroy it on the way out — so
+  scrolling past a column reclaims its canvas rather than leaving it live off
+  screen.
 - **Fetches run at `'low'` worker priority**, at most four in flight, so they
   can never delay a viewport row fetch.
 - **A filter change refetches only visible charts.** Offscreen columns are

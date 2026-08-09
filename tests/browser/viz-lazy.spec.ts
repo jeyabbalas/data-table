@@ -363,7 +363,7 @@ test('an offscreen column refreshes when it scrolls back into a filtered view', 
   );
 });
 
-test('moving or hiding a column costs no chart queries', async ({ page }) => {
+test('moving, hiding or showing a column costs no chart queries', async ({ page }) => {
   await mountAndSettle(page, { tier: 'wide-ci', viz: true });
   const before = await canvasCount(page);
 
@@ -397,21 +397,47 @@ test('moving or hiding a column costs no chart queries', async ({ page }) => {
   await waitForTierSettled(page);
   const afterHide = await bridgeStats(page);
 
+  // …and putting it back. Measured separately from the hide because the two
+  // take different paths through `visibleColumns` — `showColumn` splices at a
+  // computed restore index — and folding them into one number would hide a
+  // regression in whichever was the cheaper of the two.
+  await resetBridgeStats(page);
+  await page.evaluate(
+    (column) =>
+      (window as unknown as { __t: import('../../src/index').DataTable }).__t.actions.showColumn(
+        column,
+      ),
+    columnName(200),
+  );
+  await waitForTierSettled(page);
+  const afterShow = await bridgeStats(page);
+
   console.log(
-    `[viz-lazy] reorder/hide at rest ${JSON.stringify({
+    `[viz-lazy] reorder/hide/show at rest ${JSON.stringify({
       scrolled,
       reorderQueries: afterReorder?.sent.query,
       hideQueries: afterHide?.sent.query,
+      showQueries: afterShow?.sent.query,
       canvasBefore: before,
       canvasAfter: await canvasCount(page),
     })}`,
   );
 
   // The grid refetches its rows because the projection changed; the charts
-  // are rebuilt from their snapshots and query nothing. The ceiling is the
-  // grid's own cost with visualizations off, measured at 2.
-  expect(afterReorder!.sent.query, 'reorder at rest').toBeLessThanOrEqual(4);
-  expect(afterHide!.sent.query, 'hiding an offscreen column').toBeLessThanOrEqual(4);
+  // are rebuilt from their snapshots and query nothing. Measured 0 for the
+  // reorder — the header row is reconciled by column name now, so a survivor
+  // keeps its element and its chart — and 2 each for the hide and the show.
+  // The cap and what it does and does not catch are on
+  // `DT_BUDGET.INTERACTION.QUERIES_PER_HIDE_SHOW_MAX`.
+  expect(afterReorder!.sent.query, 'reorder at rest').toBeLessThanOrEqual(
+    DT_BUDGET.INTERACTION.QUERIES_PER_HIDE_SHOW_MAX,
+  );
+  expect(afterHide!.sent.query, 'hiding an offscreen column').toBeLessThanOrEqual(
+    DT_BUDGET.INTERACTION.QUERIES_PER_HIDE_SHOW_MAX,
+  );
+  expect(afterShow!.sent.query, 'showing it again').toBeLessThanOrEqual(
+    DT_BUDGET.INTERACTION.QUERIES_PER_HIDE_SHOW_MAX,
+  );
   expect(await canvasCount(page)).toBeGreaterThan(0);
 });
 
@@ -467,7 +493,15 @@ test.describe('WIDE — 1,000 columns', () => {
 
     // The same caps as WIDE_CI, at 3.3× the columns. That they hold
     // unchanged is the claim.
-    expect(census.headers).toBe(TIERS.wide.cols);
+    //
+    // `census.headers` read `toBe(TIERS.wide.cols)` until Phase 4 windowed the
+    // header row; a mounted set of 1,000 is now the *failure*, and the number
+    // that has to hold is the same 17 the 300-column tier mounts.
+    // `column-window.spec.ts` proves the structure behind it.
+    expect(census.headers, 'mounted headers').toBeGreaterThan(0);
+    expect(census.headers, 'mounted headers').toBeLessThanOrEqual(
+      DT_BUDGET.COLVIRT.HEADERS_RENDERED_MAX,
+    );
     expect(run.canvases).toBeGreaterThan(0);
     expect(run.canvases).toBeLessThanOrEqual(DT_BUDGET.VIZ.CANVAS_COUNT_MAX);
     expect(run.queries).toBeLessThanOrEqual(DT_BUDGET.VIZ.QUERIES_AT_LOAD_MAX);

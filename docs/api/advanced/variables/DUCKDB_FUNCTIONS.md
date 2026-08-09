@@ -8,7 +8,7 @@
 
 > `const` **DUCKDB\_FUNCTIONS**: readonly `string`[]
 
-Defined in: [sql-editor/duckdbFunctions.ts:18](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/sql-editor/duckdbFunctions.ts#L18)
+Defined in: [sql-editor/duckdbFunctions.ts:18](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/sql-editor/duckdbFunctions.ts#L18)
 
 Names-only view of the curated DuckDB function list. Derived at module
 load from [DUCKDB\_FUNCTION\_DETAILS](DUCKDB_FUNCTION_DETAILS.md) so the two cannot drift. Pass

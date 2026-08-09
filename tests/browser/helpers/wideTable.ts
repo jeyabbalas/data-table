@@ -36,6 +36,8 @@ import {
   type TierSpec,
 } from '../../fixtures/tiers';
 
+import { domNodeCount } from './metrics';
+
 /** Host element id, for host-scoped locators in the specs. */
 export const TIER_HOST_ID = 'tier-table-host';
 
@@ -156,10 +158,12 @@ export interface VisibleColumn {
  * What the **body** renders, as read back by {@link readBodyWindow}.
  *
  * A separate reader from {@link readVisibleGrid} because that one reads
- * `.dt-col-header` elements, and from Phase 3 the header row and the body no
- * longer render the same set of columns: the body windows, the header does
- * not (until Phase 4). Asserting the body's window against a header-derived
- * number would silently pass whatever the body did.
+ * `.dt-col-header` elements and reports only their geometry. Both axes window
+ * now — Phase 3 the body, Phase 4 the header row — and they are computed by
+ * two different objects (`TableBody` and `TableContainer`) from the same
+ * `ColumnWindowModel`. Asserting one axis against a number derived from the
+ * other would silently pass whatever the pair agreed on, however wrong; the
+ * counterpart reader for the header row is {@link readHeaderWindow}.
  */
 export interface BodyWindow {
   /** `data-row-index` of the row that was read; `-1` when none was painted. */
@@ -194,6 +198,63 @@ export interface BodyWindow {
   /** `.dt-body-scroll.scrollLeft` / `.clientWidth`, for the caller's arithmetic. */
   scrollLeft: number;
   clientWidth: number;
+}
+
+/**
+ * What the **header row** renders, as read back by {@link readHeaderWindow}.
+ *
+ * The header-axis counterpart of {@link BodyWindow}, and read the same way for
+ * the same reason. One difference in how the two are derived is worth stating:
+ * a body row publishes its own `data-window="P:W"` stamp, and the header row
+ * does not, so `pinnedCount` and `windowSize` here are read out of the **DOM
+ * layout itself** — the headers before the left spacer and the headers between
+ * the two spacers. That is the stronger reading: it cannot agree with a stamp
+ * that disagrees with the elements.
+ */
+export interface HeaderWindow {
+  /** `.dt-col-header` elements before the left spacer — the pinned prefix. */
+  pinnedCount: number;
+  /** `.dt-col-header` elements between the two spacers. */
+  windowSize: number;
+  /** Every mounted header's `data-column`, in DOM order. Pinned run first. */
+  columns: string[];
+  /** Every mounted header's `aria-colindex`, in the same DOM order. */
+  colIndices: number[];
+  /** `children.length` of the row — headers plus the two spacers. */
+  childCount: number;
+  /** Child index of the `data-col-spacer` elements; `-1` when one is absent. */
+  leftSpacerAt: number;
+  rightSpacerAt: number;
+  /** `role` on the left and right spacer, in that order. */
+  spacerRoles: Array<string | null>;
+  /** Declared spacer widths, in px, read off the inline `flex`. */
+  leftSpacerPx: number;
+  rightSpacerPx: number;
+  /** Σ declared `style.width` of the mounted headers, pinned included. */
+  renderedWidthPx: number;
+  /** `.dt-header-row`'s published `min-width` — the content extent, in px. */
+  contentWidthPx: number;
+  /** `visibleColumns.length` — the denominator that makes this a *window*. */
+  visibleCount: number;
+  /** Index into `visibleColumns` of the first windowed header; `-1` if none. */
+  windowStart: number;
+  /** One past the index of the last windowed header; `-1` if none. */
+  windowEnd: number;
+  /** `.dt-body-scroll`'s horizontal viewport edges, in client px. */
+  viewportLeft: number;
+  viewportRight: number;
+  /** The windowed run's outer edges, in client px. Pinned headers excluded. */
+  windowLeftPx: number;
+  windowRightPx: number;
+  /**
+   * Largest px gap between two consecutive windowed headers.
+   *
+   * The evidence that the run *tiles*: a column dropped from the middle of the
+   * window leaves a hole one column wide here, which is what turns "the
+   * mounted run reaches both viewport edges" into "every column between them
+   * is mounted".
+   */
+  maxGapPx: number;
 }
 
 /** One column's header/body horizontal agreement, from {@link readAlignment}. */
@@ -861,6 +922,139 @@ export async function readBodyWindow(page: Page, opts: HostOptions = {}): Promis
 }
 
 /**
+ * Read the **header row**'s rendered column window in one round trip.
+ *
+ * Structure first, geometry second, and both are needed: the structure says
+ * the row is `[P headers][left spacer][W headers][right spacer]`, and the
+ * geometry is the only non-circular way to ask whether that window covers what
+ * the user can see. A column with no header is invisible to any check phrased
+ * over the mounted headers — {@link readVisibleGrid} cannot report a header
+ * that does not exist — so the coverage question is answered by
+ * `windowLeftPx` / `windowRightPx` / {@link HeaderWindow.maxGapPx} reaching
+ * past `viewportLeft` / `viewportRight` without a hole, which is a fact about
+ * the *pixels* rather than about the set.
+ *
+ * Spacer widths come off the inline `flex` shorthand, exactly as
+ * {@link readBodyWindow} takes them: the declared value is what the container
+ * computed from its prefix sums, and that is the number that has to agree with
+ * the columns it stands in for.
+ */
+export async function readHeaderWindow(page: Page, opts: HostOptions = {}): Promise<HeaderWindow> {
+  return page.evaluate(
+    (hostSelector) => {
+      const scrollEl = document.querySelector(`${hostSelector} .dt-body-scroll`) as HTMLElement;
+      const row = document.querySelector<HTMLElement>(`${hostSelector} .dt-header-row`);
+      const scrollRect = scrollEl?.getBoundingClientRect();
+      const viewportLeft = scrollRect?.left ?? 0;
+      // clientWidth-based right edge: immune to a vertical scrollbar, the same
+      // choice `readVisibleGrid` makes for `fullyVisible`.
+      const viewportRight = viewportLeft + (scrollEl?.clientWidth ?? 0);
+
+      // `__t` for a `mountTierTable` host, `__dtPerf.table` for the demo's
+      // `?gen=` harness — the two places every other helper here looks.
+      const table =
+        (window as unknown as { __t?: { state: { visibleColumns: { get(): string[] } } } }).__t ??
+        (
+          window as unknown as {
+            __dtPerf?: { table?: { state: { visibleColumns: { get(): string[] } } } };
+          }
+        ).__dtPerf?.table;
+      const visible = table?.state.visibleColumns.get() ?? [];
+
+      const empty: HeaderWindow = {
+        pinnedCount: 0,
+        windowSize: 0,
+        columns: [],
+        colIndices: [],
+        childCount: 0,
+        leftSpacerAt: -1,
+        rightSpacerAt: -1,
+        spacerRoles: [null, null],
+        leftSpacerPx: Number.NaN,
+        rightSpacerPx: Number.NaN,
+        renderedWidthPx: 0,
+        contentWidthPx: parseFloat(row?.style.minWidth ?? '') || 0,
+        visibleCount: visible.length,
+        windowStart: -1,
+        windowEnd: -1,
+        viewportLeft,
+        viewportRight,
+        windowLeftPx: Number.NaN,
+        windowRightPx: Number.NaN,
+        maxGapPx: 0,
+      };
+      if (!row) return empty;
+
+      const children = Array.from(row.children) as HTMLElement[];
+      // Matched by `data-col-spacer`, never by position: finding them is the
+      // whole point of the structural assertions the caller makes about where
+      // they sit.
+      const leftSpacerAt = children.findIndex((el) => el.dataset['colSpacer'] === 'left');
+      const rightSpacerAt = children.findIndex((el) => el.dataset['colSpacer'] === 'right');
+      const spacerPx = (at: number): number => {
+        const el = children[at];
+        if (!el) return Number.NaN;
+        const match = /(-?[\d.]+)px\s*$/.exec(el.style.flex);
+        return match ? parseFloat(match[1]!) : Number.NaN;
+      };
+
+      // Counted by role, matching `TableContainer.headerCellCount` — the
+      // spacers are the reason `childElementCount` cannot stand in for it.
+      const headers = children.filter(
+        (el) => el.getAttribute('role') === 'columnheader' && el.hasAttribute('data-column'),
+      );
+      const columns = headers.map((el) => el.getAttribute('data-column')!);
+      const pinnedCount =
+        leftSpacerAt < 0
+          ? 0
+          : children
+              .slice(0, leftSpacerAt)
+              .filter((el) => el.getAttribute('role') === 'columnheader').length;
+      const windowed =
+        leftSpacerAt < 0 || rightSpacerAt < 0
+          ? []
+          : children
+              .slice(leftSpacerAt + 1, rightSpacerAt)
+              .filter((el) => el.getAttribute('role') === 'columnheader');
+      const rects = windowed.map((el) => el.getBoundingClientRect());
+      let maxGapPx = 0;
+      for (let i = 1; i < rects.length; i++) {
+        maxGapPx = Math.max(maxGapPx, Math.abs(rects[i]!.left - rects[i - 1]!.right));
+      }
+      const firstWindowed = windowed[0]?.getAttribute('data-column') ?? '';
+      const windowStart = windowed.length === 0 ? -1 : visible.indexOf(firstWindowed);
+
+      return {
+        pinnedCount,
+        windowSize: windowed.length,
+        columns,
+        colIndices: headers.map((el) => Number(el.getAttribute('aria-colindex'))),
+        childCount: children.length,
+        leftSpacerAt,
+        rightSpacerAt,
+        spacerRoles: [
+          children[leftSpacerAt]?.getAttribute('role') ?? null,
+          children[rightSpacerAt]?.getAttribute('role') ?? null,
+        ],
+        leftSpacerPx: spacerPx(leftSpacerAt),
+        rightSpacerPx: spacerPx(rightSpacerAt),
+        renderedWidthPx: headers.reduce((sum, el) => sum + (parseFloat(el.style.width) || 0), 0),
+        contentWidthPx: parseFloat(row.style.minWidth) || 0,
+        visibleCount: visible.length,
+        windowStart,
+        windowEnd: windowStart < 0 ? -1 : windowStart + windowed.length,
+        viewportLeft,
+        viewportRight,
+        windowLeftPx: rects[0]?.left ?? Number.NaN,
+        windowRightPx: rects[rects.length - 1]?.right ?? Number.NaN,
+        maxGapPx,
+      };
+    },
+    opts.host ?? `#${TIER_HOST_ID}`,
+  );
+}
+
+/**
  * Pair every rendered body cell with its header and measure the horizontal
  * disagreement between them.
  *
@@ -871,8 +1065,10 @@ export async function readBodyWindow(page: Page, opts: HostOptions = {}): Promis
  * `data-column`, never by position: that pairing is precisely what windowing
  * breaks.
  *
- * Only columns the body actually renders appear; the header row is still
- * built in full, and a header with no cell has nothing to disagree with.
+ * Only columns that have **both** a cell and a header appear. Both rows window
+ * now, so the pairing can come up short from either side, and the count is
+ * itself a fact worth asserting: `alignment.length === body.columns.length` is
+ * "every rendered cell has a header to line up with".
  */
 export async function readAlignment(
   page: Page,
@@ -915,12 +1111,29 @@ export interface SweepStop {
   /** The requested fraction of maximum scrollLeft. */
   at: number;
   scrollLeft: number;
-  /** Header geometry — the header row is not windowed until Phase 4. */
+  /** Geometry of the headers that are mounted at this offset. */
   columns: VisibleColumn[];
+  /** What the header row rendered at this offset. */
+  header: HeaderWindow;
   /** What the body rendered at this offset. */
   body: BodyWindow;
-  /** Header/body agreement for every column the body rendered. */
+  /** Header/body agreement for every column both rows rendered. */
   alignment: ColumnAlignment[];
+  /**
+   * Elements under `.dt-root` **at this offset** — `domNodeCount`, read while
+   * the viewport is still parked here.
+   *
+   * Carried on the stop rather than left to the caller, and that is a fix
+   * rather than a convenience. A batched `sweepHorizontal(page, [0, 0.5, 1])`
+   * returns three snapshots but leaves the page at the *last* one, so a caller
+   * that walks the returned array counting nodes reads the final offset three
+   * times. That is not a hypothetical: it measured `[950, 950, 950]` for a
+   * sweep whose windows were 17, 28 and 17 columns wide, turning a peak of
+   * 1,511 into a reported 950 — a DOM budget silently sampled at its trough.
+   * Anything else that has to be read *at* an offset belongs here for the same
+   * reason.
+   */
+  domNodes: number;
 }
 
 /**
@@ -960,8 +1173,13 @@ export async function sweepHorizontal(
       at,
       scrollLeft,
       columns: await readVisibleGrid(page, { host }),
+      header: await readHeaderWindow(page, { host }),
       body: await readBodyWindow(page, { host }),
       alignment: await readAlignment(page, { host }),
+      // Document-scoped, like every other `domNodeCount` call and like the
+      // measurements the DOM budgets were set from — `mountTierTable` and the
+      // demo harness each mount exactly one `.dt-root`.
+      domNodes: await domNodeCount(page),
     });
   }
   return out;

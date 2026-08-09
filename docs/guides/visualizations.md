@@ -66,10 +66,10 @@ The rules, if you need to reason about them precisely:
   table would still have built every canvas by the end.
 - **The data outlives the DOM.** Reclaiming a canvas snapshots the
   chart's data first, and scrolling the column back rebuilds the chart
-  from that snapshot with **no query**. The same seam covers header
-  rebuilds: hiding, showing, pinning, or moving a column throws away the
-  entire header row and its chart instances, and costs zero
-  visualization queries.
+  from that snapshot with **no query**. Hiding, showing, pinning, or
+  moving a column reconciles the header row by column name rather than
+  rebuilding it, so a surviving column's chart is not touched at all —
+  zero visualization queries either way.
 - Chart fetches run at the worker queue's **`'low'`** priority, below the
   grid's own queries, with at most four in flight. Scrolling the body
   never queues behind a wall of chart queries.
@@ -430,11 +430,13 @@ need to override this — the default implementation triggers `fetchData()` +
 `render()` on any change. Override it if you want to skip re-renders when the
 filter is unrelated to your column.
 
-### Optional: surviving a header rebuild
+### Optional: surviving a rebuild
 
-Every hide, show, pin, or reorder rebuilds the whole header row, which
-destroys your instance and constructs a new one. Two optional methods let the
-new instance start from the old one's data instead of re-querying:
+Your instance is destroyed whenever its canvas is reclaimed — most often
+because the column scrolled more than 400 px out of the header viewport, or
+because its header left the column window entirely — and a new one is
+constructed when the column comes back. Two optional methods let the new
+instance start from the old one's data instead of re-querying:
 
 | Method                  | Purpose                                                                       |
 | ----------------------- | ----------------------------------------------------------------------------- |
@@ -443,10 +445,14 @@ new instance start from the old one's data instead of re-querying:
 
 The base implementations return `null` and `false`, so a subclass that
 ignores them simply refetches on rebuild — correct, just not free. Implement
-the pair and a column move costs your chart no queries at all. The library
-hands the snapshot back through `VisualizationOptions.initialSnapshot` on the
-replacement instance; only ever accept a snapshot your own
-`exportDataSnapshot` produced.
+the pair and scrolling a column away and back costs your chart no queries at
+all. The library hands the snapshot back through
+`VisualizationOptions.initialSnapshot` on the replacement instance; only ever
+accept a snapshot your own `exportDataSnapshot` produced.
+
+Hiding, showing, pinning and reordering a column no longer rebuild anything:
+the header row is reconciled by column name, so a surviving column keeps its
+container element and your instance is left alone.
 
 ### Canvas scaling
 
@@ -526,8 +532,8 @@ registry.unregister('date-histogram');
 - **Shared `defaultVisualizationRegistry` is global.** A registration done without a per-instance registry affects every subsequent table on the page. Use a dedicated `VisualizationRegistry` if you need scoped behavior.
 - **Priority ties pick the first-registered.** Two registrations with the same priority are iterated in registration order. Be explicit about priority.
 - **`loadComplete` does not mean the charts are drawn.** Await `whenVizReady()`, listen for `vizReady`, or pass `visualizations: { eager: true }`. See [Waiting for the charts](#waiting-for-the-charts-vizready-and-whenvizready).
-- **A chart you can't see does not exist.** No canvas, no instance, no data — so nothing that walks the DOM for `.dt-root canvas`, or holds a reference to a visualization instance, can assume one per column. Scroll the column into view first.
-- **Your instance is destroyed and rebuilt more often than you expect.** Any hide, show, pin, or reorder rebuilds the header row. Keep per-instance state either in `exportDataSnapshot()` or somewhere outside the instance.
+- **A chart you can't see does not exist.** No canvas, no instance, no data — and for a column far enough off screen, no header element either. Nothing that walks the DOM for `.dt-root canvas`, reads `getColumnHeaders()`, or holds a reference to a visualization instance can assume one per column. Scroll the column into view first.
+- **Your instance is destroyed and rebuilt more often than you expect.** Scrolling a column out of view and back is enough. Keep per-instance state either in `exportDataSnapshot()` or somewhere outside the instance.
 - **`updateFilters` is called on every filter change _for live instances_.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
 - **Don't call `this.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
 - **`BaseVisualization.destroy()` is called by the library on table destroy.** Override it to clean up your own resources, but always call `super.destroy()`. It is also called whenever the column scrolls far out of view — treat it as routine, not terminal.

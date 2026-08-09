@@ -70,6 +70,7 @@ import {
   WIDE_MOUNT_ROWS,
   type ColViolation,
   type MountTierOptions,
+  type SweepStop,
 } from './helpers/wideTable';
 
 test.skip(process.env['RUN_BROWSER_PERF'] !== '1', 'perf tier — set RUN_BROWSER_PERF=1');
@@ -115,6 +116,16 @@ interface TierRun {
   mountStats: BridgeStatsSnapshot | null;
   finalStats: BridgeStatsSnapshot | null;
   nodes: number;
+  /**
+   * The largest `.dt-root` node count seen at any offset of the exercise —
+   * the at-rest reading above, plus one per horizontal stop.
+   *
+   * `nodes` alone understates the tier: the column window is at its widest
+   * mid-sweep, so a budget read only at rest (or, worse, after a batched sweep
+   * has already parked the viewport at its last position) samples the trough.
+   * `SweepStop.domNodes` is read inside the sweep, at the offset it describes.
+   */
+  peakNodes: number;
   observers: ObserverCensus;
   subscribers: Record<string, number>;
   frames: FrameStats;
@@ -207,11 +218,12 @@ async function exerciseTier(page: Page, opts: MountTierOptions): Promise<TierRun
   const shape = await readShape(page);
 
   await installColumnInvariantProbe(page, mounted.spec.seed);
+  let sweep: SweepStop[] = [];
   const frames = await frameSampler(page, async () => {
     await scrollStorm(page, VERTICAL_STOPS);
     // Horizontal only moves scrollLeft, so the body stays parked at the
     // bottom and `bottom` below reads the deepest rows the tier has.
-    await sweepHorizontal(page, HORIZONTAL_STOPS);
+    sweep = await sweepHorizontal(page, HORIZONTAL_STOPS);
   });
   const bottom = await readRowIndexRange(page);
   const violations = await readColViolations(page);
@@ -226,6 +238,7 @@ async function exerciseTier(page: Page, opts: MountTierOptions): Promise<TierRun
     mountStats,
     finalStats,
     nodes,
+    peakNodes: Math.max(nodes, ...sweep.map((stop) => stop.domNodes)),
     observers,
     subscribers,
     frames,
@@ -254,6 +267,7 @@ function report(label: string, run: TierRun): void {
         cacheHits: run.finalStats?.cacheHits ?? null,
         maxInFlight: run.finalStats?.maxInFlight ?? null,
         domNodes: run.nodes,
+        peakDomNodes: run.peakNodes,
         canvases: run.canvases,
         liveResizeObservers: run.observers.resize,
         liveMutationObservers: run.observers.mutation,
@@ -301,6 +315,15 @@ function expectTierIntact(run: TierRun): void {
   ).toEqual([]);
   expect(run.violations).toHaveLength(DT_BUDGET.WIDE_CI.ORACLE_VIOLATIONS);
 
+  // A constant at every tier and in both visualization modes — 5 measured at
+  // 20, 200, 300 and 1,000 columns, where before Phase 4 it was one per column
+  // plus the table's own (1,005 at WIDE). Asserted for every tier rather than
+  // only the wide ones precisely because it must not move with the width.
+  expect(
+    run.subscribers['sortColumns'],
+    `sortColumns subscribers at ${spec.cols} columns`,
+  ).toBeLessThanOrEqual(DT_BUDGET.COLVIRT.SORT_SIGNAL_SUBSCRIBERS_MAX);
+
   expect(run.finalStats).not.toBeNull();
   expect(run.finalStats!.sent.load).toBe(1);
   expect(run.finalStats!.sent.query).toBeGreaterThan(0);
@@ -333,19 +356,51 @@ test('WIDE — 1,000 columns, visualizations off', async ({ page }) => {
   report('wide viz=off', run);
   expectTierIntact(run);
 
-  // No column virtualization yet: every visible column is rendered at every
-  // scroll position. Phase 3 makes this a window, and the probe installed
-  // during the sweep is what will hold that honest.
+  // Both rows window now — Phase 3 the body, Phase 4 the header — so what a
+  // sweep proves at 1,000 columns is that neither renders the column *list*.
+  // This assertion read `toHaveLength(TIERS.wide.cols)` until the header row
+  // was windowed, which is the whole difference stated in one line.
+  // `column-window.spec.ts` owns the structure; what is checked here is the
+  // count, at the tier the count is about.
   const stops = await sweepHorizontal(page, HORIZONTAL_STOPS);
   for (const stop of stops) {
-    expect(stop.columns, `at scrollLeft ${stop.scrollLeft}`).toHaveLength(TIERS.wide.cols);
+    expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeGreaterThan(0);
+    expect(stop.columns.length, `at scrollLeft ${stop.scrollLeft}`).toBeLessThanOrEqual(
+      DT_BUDGET.COLVIRT.HEADERS_RENDERED_MAX,
+    );
     expect(stop.columns.some((col) => col.fullyVisible)).toBe(true);
   }
   expect(stops[stops.length - 1]!.scrollLeft).toBeGreaterThan(0);
 
+  // The DOM budget at its worst offset, not at the one a mount happens to
+  // leave behind: the window is widest at 50 %, where both spacers are
+  // non-zero and both rows carry ~28 columns. `run.peakNodes` folds the
+  // at-rest reading together with `SweepStop.domNodes`, which is read inside
+  // the sweep at the offset it describes — counting from out here would read
+  // the sweep's *last* offset once per stop, which is its narrowest.
+  const peakNodes = Math.max(run.peakNodes, ...stops.map((stop) => stop.domNodes));
+  console.log(
+    `[tiers.full] wide viz=off headers [${stops.map((s) => s.columns.length).join(', ')}] ` +
+      `of ${TIERS.wide.cols}, .dt-root nodes [${stops.map((s) => s.domNodes).join(', ')}], ` +
+      `peak ${peakNodes}`,
+  );
+  expect(peakNodes, `.dt-root subtree peaked at ${peakNodes} nodes`).toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.DOM_NODES_WIDE_MAX,
+  );
+
   // Visualizations off means no canvases, whatever the column count — the
   // control for the `viz=on` test below.
   expect(run.canvases).toBe(0);
+
+  // The structural observer gauges, read with charts off so there is no
+  // per-canvas term in them: what is left is what the table itself owns, and
+  // it is the same two numbers at 1,000 columns as at 20.
+  expect(run.observers.resize, 'live ResizeObservers').toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.RESIZE_OBSERVERS_MAX,
+  );
+  expect(run.observers.mutation, 'live MutationObservers').toBeLessThanOrEqual(
+    DT_BUDGET.COLVIRT.MUTATION_OBSERVERS_MAX,
+  );
 
   // Phase 1's load-path budget. Gated with the rest of this file, so a
   // wall-clock assertion is legitimate here in a way it never is in CI —
@@ -386,6 +441,14 @@ test('WIDE — 1,000 columns, visualizations on', async ({ page }) => {
   expect(run.observers.intersection, 'live IntersectionObservers').toBeLessThanOrEqual(
     DT_BUDGET.VIZ.INTERSECTION_OBSERVERS_MAX,
   );
+  // Phase 4's DOM budget with charts on: measured 994 at rest and 1,541 at the
+  // widest offset, against 36,380 before the header row was windowed. The
+  // extra ~30 nodes over `viz=off` are the eight canvases and their wrappers,
+  // not a per-column term.
+  expect(
+    run.peakNodes,
+    `.dt-root subtree peaked at ${run.peakNodes} nodes with charts on`,
+  ).toBeLessThanOrEqual(DT_BUDGET.COLVIRT.DOM_NODES_WIDE_MAX);
   console.log(
     `[tiers.full] wide viz=on cost ${run.mountStats!.sent.query} mount queries and ` +
       `${run.canvases} canvases for ${TIERS.wide.cols} columns ` +

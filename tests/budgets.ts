@@ -17,8 +17,10 @@
  * after in `plans/scaling/STATUS.md`.
  *
  * The namespaces below that are still empty are the agreed landing sites for
- * later phases (`DT_BUDGET.COLVIRT` in Phase 5, and so on), named up front so
- * thirteen agents do not invent thirteen conventions.
+ * later phases (`DT_BUDGET.DEEPROWS` in Phase 7, and so on), named up front so
+ * thirteen agents do not invent thirteen conventions. A phase may land a
+ * number in a namespace it does not own — Phase 4 put one in `INTERACTION` —
+ * as long as the docblock says which phase measured it.
  */
 
 export const DT_BUDGET = {
@@ -35,17 +37,25 @@ export const DT_BUDGET = {
      * That is ~50 nodes per column at 300 columns — an eager header plus a
      * cell in each rendered row. Cap was 18,000 (~20 % headroom).
      *
-     * **Phase 3 (body column windowing): 15,051 → 11,136**, and the cap with
-     * it, 18,000 → 13,500 at the same ~20 % headroom. The body now renders a
-     * window of ~17–28 columns per row instead of all 300 (see
-     * `COLVIRT.WINDOW_COLUMNS_MAX`), which is ~3,900 nodes. What is left is
-     * dominated by the 300 eagerly built column headers; Phase 4 windows
-     * those and tightens this number again.
+     * **Phase 3 (body column windowing): 15,051 → 11,136**, cap 18,000 →
+     * 13,500. **Phase 4 (header column windowing): 11,136 → 950**, cap
+     * 13,500 → 1,800. Both of those figures are read at the same point — the
+     * end of the spec's horizontal sweep — so the ~10,200 nodes that went are
+     * the 300 eagerly built column headers Phase 3 left behind. The header row
+     * is a `[pinned][spacer][window][spacer]` row now, on the same model and
+     * the same window as the body (`COLVIRT.HEADERS_RENDERED_MAX`).
+     *
+     * The cap is not 950 × 1.2, though: it is **1,511** × ~1.2, the maximum
+     * across the sweep rather than the value at its end. The window is widest
+     * at `scrollLeft` 50 % — 28 columns rather than 17, in both rows at once —
+     * and a cap tuned to one favourable offset is not a bound. The spec reads
+     * the count at every stop and asserts the largest, so both numbers appear
+     * in its log line.
      *
      * Note the plan's §4.6 estimate was ~120K; the real pre-phase number was
      * ~8× smaller because row virtualization already bounded the body.
      */
-    DOM_NODES_MAX: 13_500,
+    DOM_NODES_MAX: 1_800,
     /**
      * Row- and column-oracle breaches tolerated: none. A single one means
      * a rendered cell disagreed with `cellOracle`, which is a correctness
@@ -332,9 +342,130 @@ export const DT_BUDGET = {
      * short would be 150 px out, not 1.
      */
     HEADER_BODY_ALIGN_PX: 1,
+    /**
+     * Column headers the header row may mount — Phase 4's headline number.
+     *
+     * Measured **17** at rest and **28** mid-sweep, and *identical* at 60,
+     * 300 and 1,000 columns, with visualizations on and off
+     * (`column-window.spec.ts` and the WIDE runs in `tiers.full.spec.ts`, both
+     * of which log the live figure). Those are the same two numbers
+     * {@link WINDOW_COLUMNS_MAX} records for a body row, because they are the
+     * same window: `TableContainer.computeHeaderWindow` and `TableBody` both
+     * ask one `ColumnWindowModel` at one `scrollLeft`, and
+     * `column-window.spec.ts` asserts the two rendered sequences are equal
+     * rather than merely equally sized. Before this phase the row held one
+     * header per visible column — 300 at WIDE_CI, 1,000 at WIDE — whatever the
+     * viewport was.
+     *
+     * Cap at 48, the same as the body's, for a reason beyond symmetry: the
+     * header window is the *wider* of the two by construction.
+     * `extendWindowToAnchors` pulls a nearby keyboard cursor or focus holder
+     * back into the row so `aria-activedescendant` names an element that
+     * exists, clamped at `MIN_OVERSCAN_COLUMNS` (10) per side — so the worst
+     * case this cap has to hold is 28 + 10 = 38, and 48 still leaves ~1.3×
+     * over that while failing any tier of 48+ columns that stopped windowing.
+     */
+    HEADERS_RENDERED_MAX: 48,
+    /**
+     * Elements under `.dt-root` at the **WIDE** tier — 1,000 columns.
+     *
+     * Measured across a horizontal sweep at 1,000 × 60,000 (`tiers.full.spec.ts`,
+     * gated): **970** at rest and **1,511** at the widest stop with
+     * visualizations off, **994** and **1,541** with them on. Pre-phase:
+     * **36,356** off and **36,380** on.
+     *
+     * The reason this entry exists next to `WIDE_CI.DOM_NODES_MAX` rather than
+     * being folded into it is that the two are now *the same number* — 1,511
+     * at 300 columns and 1,511 at 1,000 — and that equality is the claim of
+     * the phase, so it is worth being able to state it twice and watch both.
+     * The same gated run measures **970** at rest for GRID (200 columns) and
+     * for DEEP (20), which is the corroboration: at rest the `.dt-root`
+     * subtree is now the same size at 20 columns as at 1,000. DEEP fell from
+     * 1,076 with it — even a table narrower than the overscan floor pays less,
+     * because the header row windows to 17 of its 20.
+     *
+     * Cap at 1,900, ~20 % over the larger (viz-on) measurement; the WIDE_CI
+     * cap is 1,800 because that tier is only ever measured with charts off.
+     */
+    DOM_NODES_WIDE_MAX: 1_900,
+    /**
+     * Live `ResizeObserver`s per table, visualizations **off**.
+     *
+     * Measured **2** at 60, 300 and 1,000 columns alike: the container's own
+     * over its host element, plus the column-viewport observer over
+     * `.dt-body-scroll` that recomputes the window when the viewport widens
+     * without anything scrolling.
+     * The last recorded WIDE capture (`baselines/baseline-wide-off-202bb18.json`)
+     * shows **1** — the second is not a leak but the ownership move this phase
+     * made: `TableBody` kept an observer of its own on the same element until
+     * the container took the window over, and it is `null` now.
+     *
+     * With charts on the count tracks *canvases* (one `ResizeObserver` per live
+     * chart), measured 10 for 8 charts at both tiers; `viz-lazy.spec.ts` holds
+     * that to `canvases + 4`. This cap is deliberately the structural one, so
+     * it fails for a per-header or per-column observer — 300 and 1,000
+     * respectively — rather than tracking the chart count and catching neither.
+     */
+    RESIZE_OBSERVERS_MAX: 4,
+    /**
+     * Live `MutationObserver`s per table, visualizations **off**.
+     *
+     * Measured **1** at 60, 300 and 1,000 columns — the table's own, and
+     * nothing per header. `VIZ.MUTATION_OBSERVERS_MAX` is the same gauge with
+     * charts on, where the shared `ThemeWatcher` makes it 2 and the cap is 4;
+     * this one is tighter precisely because it has no chart-driven term, so a
+     * single stray observer fails it.
+     */
+    MUTATION_OBSERVERS_MAX: 2,
+    /**
+     * Subscribers on `state.sortColumns`, the busiest of the seven signals a
+     * `ColumnHeader` used to watch for itself.
+     *
+     * Measured **5** at 60, 300 and 1,000 columns, with visualizations on and
+     * off, at rest and after a full horizontal sweep — a constant, which is
+     * the entire point. Before this phase it was one per column plus the
+     * table's own: **305** at WIDE_CI and **1,005** at WIDE, every one of them
+     * notified on every sort. `TableContainer` subscribes once and fans out to
+     * the mounted headers (`readSubscriberCounts`, `metrics.ts`).
+     *
+     * The jsdom milestone test measures **4** for the same signal
+     * (`TableContainer.subscriptions.test.ts`); the extra one in a browser is
+     * the fully assembled `DataTable` around it, not a per-header leak — the
+     * count is 5 at every column count.
+     *
+     * Cap at 8: room for a couple more container-level consumers, and still
+     * 38× below the per-header shape it exists to catch.
+     */
+    SORT_SIGNAL_SUBSCRIBERS_MAX: 8,
   },
-  /** Phase 6 — resize / pin / keynav query and frame budgets. */
-  INTERACTION: {},
+  /**
+   * Phase 6 — resize / pin / keynav query and frame budgets, and the one
+   * Phase 4 number that is about an *interaction* rather than about what is
+   * mounted: what a hide or a show costs the bridge.
+   */
+  INTERACTION: {
+    /**
+     * Bridge `sent.query` for one `hideColumn` or one `showColumn`.
+     *
+     * Measured **2** for each, at WIDE_CI and at WIDE, with visualizations on
+     * and off (`viz-lazy.spec.ts`, which logs `reorderQueries`, `hideQueries`
+     * and `showQueries`). Both are the grid's own cost: the projection
+     * changed, so the row block is re-fetched and the count re-synced. A
+     * reorder measures **0** — the projection is the same set of columns in a
+     * different order, and the rows already in hand are re-keyed rather than
+     * re-fetched. Before the header row was reconciled by name, a reorder cost
+     * **2**, because every header was destroyed and rebuilt and the
+     * visualizations went with them.
+     *
+     * Cap at 4, which is not 2 + slack but a measured case: hiding a column
+     * that is *inside* the mounted window with charts on costs 4 — the grid's
+     * 2, plus the two aggregates for the chart that the narrowing pulls into
+     * view. What the cap still catches is the fan-out this phase exists to
+     * prevent: a hide that re-queried the mounted charts would be ~40, and one
+     * that re-queried every column ~600 at WIDE_CI.
+     */
+    QUERIES_PER_HIDE_SHOW_MAX: 4,
+  },
   /** Phase 7 — deep sorted/filtered scrolling via the rank index. */
   DEEPROWS: {},
   /** Phases 8, 10 — selection model and direct-scan memory guardrails. */

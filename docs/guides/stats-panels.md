@@ -91,7 +91,7 @@ Subclasses can rely on every step happening exactly as described.
 | Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload). Columns without a visualization receive `update(null)` only.                                                                                                                                                                                                                                                                               |
 | Filter change  | `updateFilters(filters)`                  | Fires on a filter-array change, **before** any subsequent `update(stats)` from a viz refetch. With visualizations enabled the fan-out is visibility-gated: panels whose header is on screen are called immediately, offscreen panels are deferred until their column scrolls back in (see [Offscreen panels](#offscreen-panels-are-deferred-not-skipped)). The default implementation only refreshes `this.options.filters`; override to issue your own query. |
 | Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.                                                                                                                                                                                                                                                               |
-| Teardown       | `destroy()`                               | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                                                                                                                                                                                                                                                                                   |
+| Teardown       | `destroy()`                               | Called exactly once per instance — on schema change, on table destroy, or when the column's header leaves the column window. Subclasses must clear DOM and call `super.destroy()`.                                                                                                                                                                                                                                                                             |
 
 Lifecycle quoted from `BaseStatsPanel`'s JSDoc
 ([`src/visualizations/BaseStatsPanel.ts:108-127`](../../src/visualizations/BaseStatsPanel.ts)).
@@ -357,13 +357,17 @@ panel that runs `SELECT COUNT(DISTINCT col)` when the filters change.
 
 ### Offscreen panels are deferred, not skipped
 
-A panel instance is created for every applicable column, as before — panel
-creation is not lazy. What is gated is the **filter broadcast**: with
-visualizations enabled, a filter change calls `updateFilters` only on the
-panels whose column header is currently on screen. The rest are marked and
-called when their column scrolls into view, with the filter set current at
-that moment. This is what keeps a filter change on a 1,000-column table from
-firing 1,000 panel queries at once.
+A panel instance exists only while its column's header does. The header row
+is windowed on the column axis, so a panel is constructed when its header
+mounts and destroyed when it unmounts — on a 1,000-column table that is the
+~17 columns around the viewport rather than all 1,000.
+
+The **filter broadcast** is gated more tightly still. The column window
+overscans by a whole viewport, so some mounted headers are not actually on
+screen; with visualizations enabled, a filter change calls `updateFilters`
+only on the panels whose column is genuinely visible, marks the rest, and
+calls them when their column scrolls into view with the filter set current at
+that moment.
 
 Two consequences for a panel author:
 
@@ -399,6 +403,11 @@ enabled.
   Express loading / empty / error states inside `update` / `setHoverStats`
   instead, and let the library's lifecycle drive `destroy()` (quoted from
   [`BaseStatsPanel.destroy` JSDoc](../../src/visualizations/BaseStatsPanel.ts)).
+- **Your panel is constructed and destroyed as its column scrolls.** The
+  header row is windowed, so a panel's lifetime is its header's, not the
+  table's. Keep anything expensive to rebuild outside the instance — a
+  module-scoped cache keyed by column name — rather than in a field that a
+  horizontal scroll throws away.
 - **The registry starts empty.** Listing zero registrations is a feature,
   not a bug — every column type whose registration you omit falls through
   to the built-in formatter. There are no library built-ins to override.

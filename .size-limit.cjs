@@ -20,15 +20,20 @@
  * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
- *   root entry · ESM               10.82 kB   →  11.4 kB cap (5.4 %)
+ *   root entry · ESM               11.12 kB   →  11.4 kB cap (2.5 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
  *   stylesheet                     19.65 kB   →  20.7 kB cap (5.3 %)
- *   lazy ExportDialog chunk        74.65 kB   →  78.5 kB cap (5.2 %)
+ *   lazy ExportDialog chunk        78.99 kB   →  83.1 kB cap (5.2 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
- *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.9 %)
+ *   lazy DerivedColumnModal          3.6 kB   →   3.8 kB cap (5.6 %)
  *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
  *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *
+ * The root entry's 2.5 % is the tightest headroom in this table and is
+ * deliberately not "restored" to 5 %: the note further down argues 2.6 kB of
+ * chart controller does not belong in an entry `visualizations: false` also
+ * pays for, and a cap with 0.28 kB left is what keeps that argument live.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -76,8 +81,29 @@
  * rebuild, and `returnRowToPool`'s `cloneNode` path. The cap stays at 11.4 kB
  * with ~0.57 kB of headroom.
  *
- * The **stylesheet** did move, 18.96 → 19.65 kB, which put it 47 B over its
- * cap. The rules themselves are three lines — `box-sizing: border-box` on
+ * Phase 4, header column windowing, is the opposite case: it moved the root
+ * entry 10.86 → 11.12 kB and the **visualization chunk** 76.95 → 78.99 kB,
+ * putting the latter 486 B over its cap. Despite the chunk's name, that is
+ * where this phase's code lives — `TableContainer`, `TableBody`,
+ * `ColumnWindow` and `ColumnHeader` are all behind the same dynamic
+ * `import()` boundary, and only the facade is in the root entry. The 2.04 kB
+ * is the header window itself: `computeHeaderWindow` and the anchor
+ * extension, `reconcileHeaderRow`'s keyed diff, `shiftHeaderWindow`'s edge
+ * mount/unmount, the two header spacers, and the six incremental
+ * `refresh*` entry points on `ColumnHeader` that replaced its seven
+ * per-instance subscriptions. Cap raised 78.5 → 83.1 kB to restore the ~5 %
+ * convention.
+ *
+ * Two corrections while raising it. The 74.65 kB recorded above was stale by
+ * 2.3 kB — the real pre-phase size was 76.95 kB, so the gate had ~1.6 kB
+ * rather than ~3.9 kB of slack and the phase that spent it never said so.
+ * And `lazy DerivedColumnModal` was recorded at 3.59 kB against a measured
+ * 3.6 kB. Both figures above are now re-measured rather than carried
+ * forward; a baseline nobody re-measures is how 486 B of legitimate growth
+ * arrives looking like a regression.
+ *
+ * The **stylesheet** did move in Phase 3, 18.96 → 19.65 kB, which put it 47 B
+ * over its cap. The rules themselves are three lines — `box-sizing: border-box` on
  * `.dt-cell` and `.dt-col-header`, and a two-property `.dt-col-spacer` — minus
  * two deleted `:last-child` blocks. The rest is the comment prose explaining
  * why, which ships verbatim (see the note below on `buildStylesPlugin`). Cap
@@ -124,7 +150,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '78.5 kB',
+    limit: '83.1 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

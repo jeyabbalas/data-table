@@ -2123,7 +2123,8 @@ export class TableContainer {
   /**
    * Bring the table's DOM up to date with its state.
    *
-   * Two tiers, dispatched on {@link headerStructure}:
+   * Two tiers, dispatched on the header structure signature — the schema
+   * array's identity and the relation's name:
    *
    * - **The schema or the relation changed** — a load. Everything is rebuilt
    *   once, including `TableBody`, and scroll and focus are restored across

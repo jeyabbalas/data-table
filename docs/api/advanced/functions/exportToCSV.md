@@ -8,7 +8,7 @@
 
 > **exportToCSV**(`tableName`, `options`, `context`, `signal?`): `Promise`\<`string`\>
 
-Defined in: [export/CSVExport.ts:162](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/export/CSVExport.ts#L162)
+Defined in: [export/CSVExport.ts:162](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/export/CSVExport.ts#L162)
 
 Export table data as a CSV string.
 

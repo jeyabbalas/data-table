@@ -6,7 +6,7 @@
 
 # Class: TableContainer
 
-Defined in: [table/TableContainer.ts:200](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L200)
+Defined in: [table/TableContainer.ts:200](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L200)
 
 TableContainer manages the DOM structure and lifecycle for the data table.
 
@@ -27,7 +27,7 @@ table.destroy();
 
 > **new TableContainer**(`container`, `state`, `actions?`, `bridge?`, `options?`): `TableContainer`
 
-Defined in: [table/TableContainer.ts:366](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L366)
+Defined in: [table/TableContainer.ts:366](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L366)
 
 #### Parameters
 
@@ -61,7 +61,7 @@ Defined in: [table/TableContainer.ts:366](https://github.com/jeyabbalas/data-tab
 
 > **announce**(`message`): `void`
 
-Defined in: [table/TableContainer.ts:1542](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L1542)
+Defined in: [table/TableContainer.ts:1542](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L1542)
 
 Speak a transient message through the table's second polite live region.
 
@@ -98,7 +98,7 @@ container.announce('Price 220 pixels wide');
 
 > **destroy**(): `void`
 
-Defined in: [table/TableContainer.ts:3030](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L3030)
+Defined in: [table/TableContainer.ts:3031](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L3031)
 
 Destroy the table container and clean up resources
 
@@ -112,7 +112,7 @@ Destroy the table container and clean up resources
 
 > **getBodyContainer**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2922](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2922)
+Defined in: [table/TableContainer.ts:2923](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2923)
 
 Get the body container element
 
@@ -126,7 +126,7 @@ Get the body container element
 
 > **getColorScheme**(): [`ColorScheme`](../../index/type-aliases/ColorScheme.md)
 
-Defined in: [table/TableContainer.ts:704](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L704)
+Defined in: [table/TableContainer.ts:704](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L704)
 
 Returns the currently-applied color scheme.
 
@@ -140,7 +140,7 @@ Returns the currently-applied color scheme.
 
 > **getColumnHeaders**(): [`ColumnHeader`](ColumnHeader.md)[]
 
-Defined in: [table/TableContainer.ts:3009](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L3009)
+Defined in: [table/TableContainer.ts:3010](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L3010)
 
 The `ColumnHeader` instances that are **mounted right now**, in DOM order.
 
@@ -169,7 +169,7 @@ The array is a copy; the headers in it are live.
 
 > **getDimensions**(): `object`
 
-Defined in: [table/TableContainer.ts:2948](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2948)
+Defined in: [table/TableContainer.ts:2949](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2949)
 
 Get current container dimensions
 
@@ -191,7 +191,7 @@ Get current container dimensions
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2891](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2891)
+Defined in: [table/TableContainer.ts:2892](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2892)
 
 Get the root element
 
@@ -205,7 +205,7 @@ Get the root element
 
 > **getFilterBar**(): [`FilterBar`](FilterBar.md) \| `null`
 
-Defined in: [table/TableContainer.ts:3016](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L3016)
+Defined in: [table/TableContainer.ts:3017](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L3017)
 
 Get the filter bar instance
 
@@ -219,7 +219,7 @@ Get the filter bar instance
 
 > **getFilterPanel**(): [`FilterPanel`](FilterPanel.md) \| `null`
 
-Defined in: [table/TableContainer.ts:3023](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L3023)
+Defined in: [table/TableContainer.ts:3024](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L3024)
 
 Get the filter panel instance
 
@@ -233,7 +233,7 @@ Get the filter panel instance
 
 > **getGridElement**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2908](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2908)
+Defined in: [table/TableContainer.ts:2909](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2909)
 
 Get the ARIA grid element — the keyboard cursor's tab stop.
 
@@ -258,7 +258,7 @@ table.getContainer().getGridElement().focus();
 
 > **getHeaderRow**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2915](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2915)
+Defined in: [table/TableContainer.ts:2916](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2916)
 
 Get the header row element
 
@@ -272,7 +272,7 @@ Get the header row element
 
 > **getHeaderScroll**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2941](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2941)
+Defined in: [table/TableContainer.ts:2942](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2942)
 
 Get the header scroll element
 
@@ -289,7 +289,7 @@ It should be synced with the body scroll.
 
 > **getInstanceId**(): `string`
 
-Defined in: [table/TableContainer.ts:2973](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2973)
+Defined in: [table/TableContainer.ts:2974](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2974)
 
 The instance identifier actually mixed into this table's element IDs.
 
@@ -315,7 +315,7 @@ const cellId = `dt-${container.getInstanceId()}-cell-0-1`;
 
 > **getOptions**(): `Required`\<[`TableContainerOptions`](../interfaces/TableContainerOptions.md)\>
 
-Defined in: [table/TableContainer.ts:2955](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2955)
+Defined in: [table/TableContainer.ts:2956](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2956)
 
 Get the resolved options
 
@@ -329,7 +329,7 @@ Get the resolved options
 
 > **getPortalTarget**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2832](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2832)
+Defined in: [table/TableContainer.ts:2833](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2833)
 
 Where fixed-position modals owned by this table mount. Returns the
 `portalTarget` option if supplied, otherwise `document.body`. Exposed
@@ -347,7 +347,7 @@ without re-implementing the fallback.
 
 > **getScrollContainer**(): `HTMLElement`
 
-Defined in: [table/TableContainer.ts:2931](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2931)
+Defined in: [table/TableContainer.ts:2932](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2932)
 
 Get the scroll container element (body scroll)
 
@@ -363,7 +363,7 @@ This is the container that handles both horizontal and vertical scrolling for th
 
 > **getTableBody**(): [`TableBody`](TableBody.md) \| `null`
 
-Defined in: [table/TableContainer.ts:2987](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2987)
+Defined in: [table/TableContainer.ts:2988](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2988)
 
 Get the table body instance
 
@@ -377,7 +377,7 @@ Get the table body instance
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/TableContainer.ts:2980](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2980)
+Defined in: [table/TableContainer.ts:2981](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2981)
 
 Check if the container has been destroyed
 
@@ -391,7 +391,7 @@ Check if the container has been destroyed
 
 > **onResize**(`callback`): () => `void`
 
-Defined in: [table/TableContainer.ts:821](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L821)
+Defined in: [table/TableContainer.ts:821](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L821)
 
 Subscribe to resize events
 
@@ -415,7 +415,7 @@ Unsubscribe function
 
 > **refreshColumnWindow**(): `void`
 
-Defined in: [table/TableContainer.ts:936](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L936)
+Defined in: [table/TableContainer.ts:936](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L936)
 
 Recompute the shared column window and reconcile every consumer of it.
 
@@ -448,11 +448,12 @@ container.refreshColumnWindow(); // both axes match the new offset now
 
 > **render**(): `void`
 
-Defined in: [table/TableContainer.ts:2158](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2158)
+Defined in: [table/TableContainer.ts:2159](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2159)
 
 Bring the table's DOM up to date with its state.
 
-Two tiers, dispatched on headerStructure:
+Two tiers, dispatched on the header structure signature — the schema
+array's identity and the relation's name:
 
 - **The schema or the relation changed** — a load. Everything is rebuilt
   once, including `TableBody`, and scroll and focus are restored across
@@ -494,7 +495,7 @@ writing state.
 
 > **setColorScheme**(`scheme`): `void`
 
-Defined in: [table/TableContainer.ts:697](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L697)
+Defined in: [table/TableContainer.ts:697](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L697)
 
 Switch the light/dark theme for this container at runtime. Updates the
 `data-dt-color-scheme` attribute on the root element; open body-portalled
@@ -517,7 +518,7 @@ when they were opened) and re-sync automatically.
 
 > **whenBodyReady**(): `Promise`\<`void`\>
 
-Defined in: [table/TableContainer.ts:2884](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/TableContainer.ts#L2884)
+Defined in: [table/TableContainer.ts:2885](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/TableContainer.ts#L2885)
 
 Resolves once the surviving `TableBody`'s first paint has settled.
 

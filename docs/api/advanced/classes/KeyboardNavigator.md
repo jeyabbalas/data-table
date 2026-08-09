@@ -6,7 +6,7 @@
 
 # Class: KeyboardNavigator
 
-Defined in: [table/KeyboardNavigator.ts:128](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/KeyboardNavigator.ts#L128)
+Defined in: [table/KeyboardNavigator.ts:128](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/KeyboardNavigator.ts#L128)
 
 WCAG-oriented keyboard navigation controller for the table grid: arrow
 keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
@@ -21,7 +21,7 @@ assembling a custom container shell.
 
 > **new KeyboardNavigator**(`opts`): `KeyboardNavigator`
 
-Defined in: [table/KeyboardNavigator.ts:158](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/KeyboardNavigator.ts#L158)
+Defined in: [table/KeyboardNavigator.ts:158](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/KeyboardNavigator.ts#L158)
 
 #### Parameters
 
@@ -39,7 +39,7 @@ Defined in: [table/KeyboardNavigator.ts:158](https://github.com/jeyabbalas/data-
 
 > **destroy**(): `void`
 
-Defined in: [table/KeyboardNavigator.ts:192](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/KeyboardNavigator.ts#L192)
+Defined in: [table/KeyboardNavigator.ts:192](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/KeyboardNavigator.ts#L192)
 
 #### Returns
 
@@ -51,7 +51,7 @@ Defined in: [table/KeyboardNavigator.ts:192](https://github.com/jeyabbalas/data-
 
 > **getLayoutColumn**(): `string` \| `null`
 
-Defined in: [table/KeyboardNavigator.ts:825](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/table/KeyboardNavigator.ts#L825)
+Defined in: [table/KeyboardNavigator.ts:825](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/table/KeyboardNavigator.ts#L825)
 
 The column an open Shift+F2 layout gesture is operating on, or `null`.
 

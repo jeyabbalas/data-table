@@ -336,20 +336,94 @@ Measured in Chromium at 1280 × 720 on 300 columns × 20,000 rows, the
 count under `.dt-body` from ~4,500 to 255–420, with header and body
 agreeing to 0.000 px at every stop of a horizontal sweep. A row holds 17
 cells at rest and 28 mid-scroll — the same numbers at 60 columns as at
-300, which is the property being bought. What is left at 300 columns is
-dominated by the 300 eagerly built column headers; the header row is not
-windowed yet.
+300, which is the property being bought.
 
-The one user-visible consequence is that body cells for horizontally
-off-screen columns are no longer in the DOM, so code that selects
-`[data-column="…"]` inside the body must scroll the column into view
-first. `aria-colcount` / `aria-colindex` stay _absolute_ over
-`columnOrder`, so a windowed row reports a gapped, non-1-based colindex
-run — which is exactly what the ARIA grid pattern prescribes for a
-partially rendered row. `/advanced` exposes the geometry rather than
-making callers re-derive it: `refreshColumnWindow()`,
+#### The header row
+
+The header row is windowed the same way, from the same model. It is not
+a second implementation: `TableContainer` owns the `ColumnWindowModel`
+and hands `TableBody` a `ColumnWindowHost`
+([`src/table/TableContainer.ts:542-555`](../../src/table/TableContainer.ts))
+carrying the model, the viewport reader and the refresh callback, so the
+two axes cannot disagree about where a column starts. `.dt-header-row`
+gets the same `[P pinned][left spacer][W window][right spacer]` shape
+and the same `div.dt-col-spacer` elements
+([`src/table/TableContainer.ts:1226-1247`](../../src/table/TableContainer.ts)),
+and `refreshColumnWindow()`
+([`src/table/TableContainer.ts:936-949`](../../src/table/TableContainer.ts))
+recomputes the header first, then the body — order that matters, because
+a cursor move that mounts a header must have that element in the DOM
+before the body's pass calls back into `syncActiveDescendant` to resolve
+the cursor's id.
+
+The header window differs from a body row's in one respect: it is
+widened to cover a set of **anchor columns**
+([`src/table/TableContainer.ts:1000`](../../src/table/TableContainer.ts))
+— the header cursor's column, so `aria-activedescendant` names an
+element that exists; the column of a header holding real DOM focus, so
+F2 controls mode does not drop focus to `<body>`; and the column of an
+open Shift+F2 layout gesture, which is a state machine rather than DOM
+focus and so has nothing else keeping its header alive. A body row needs
+none of these.
+
+The extension is **clamped to `MIN_OVERSCAN_COLUMNS`**, and that clamp
+is the load-bearing part: an anchor parked 900 columns from the viewport
+must not drag 900 headers into the DOM, which is the thing windowing
+exists to prevent. Measured, a header stays mounted 1 to 10 columns
+outside the plain window and is released at 11. Past the clamp each
+anchor degrades rather than breaks — `syncActiveDescendant` drops the
+attribute instead of naming a missing element, and `unmountColumnHeader`
+parks real focus on `.dt-grid` before detaching, mirroring what
+`TableBody` does before recycling a row that holds it. So the anchor set
+buys continuity for a small scroll; the two fallbacks are what make an
+arbitrarily large one safe.
+
+Windowing a header is only half the cost. Three things follow from it:
+
+- **Updates are diffed, not rebuilt.** `render()` compares a structure
+  signature — schema identity plus table name — and takes the cheap
+  branch when neither moved
+  ([`src/table/TableContainer.ts:2168-2183`](../../src/table/TableContainer.ts)).
+  Hide, show, pin, reorder and derived-column adds all rewrite
+  `visibleColumns` without touching the schema, so they reconcile the
+  row keyed by column name
+  ([`src/table/TableContainer.ts:1301`](../../src/table/TableContainer.ts)):
+  a survivor keeps its element, and with it its chart, listeners,
+  popovers and stats panel.
+- **State subscriptions are multiplexed.** A header used to register
+  seven subscriptions of its own — `sortColumns`, `totalRows`,
+  `pinnedColumns`, `filtersByColumn`, `visibleColumns`, the tooltip
+  signal and the annotation store — so a wide table's fan-out grew with
+  its column count, and a scroll sweep churned registrations in and out
+  as headers mounted. Headers now mount with `subscribe: false` and the
+  container fans one subscription out to the mounted set.
+- **Charts follow the mount.** `onHeaderMount` / `onHeaderUnmount`
+  `@internal` hooks let `DataTable` attach a stats panel and hand the
+  container to `VizDataController.observeColumn`, and tear both down on
+  unmount — so a chart's lifetime is bounded by its header's rather than
+  by the schema's.
+
+Measured on the same 300 × 20,000 tier, `.dt-root` fell from 11,136
+nodes to 970 at rest (1,511 at the widest point of a scroll), mounted
+headers from 300 to 17, and subscribers on `sortColumns` from 305 to 5.
+One keyboard column move costs 0 DuckDB queries, down from 2 — and from
+the 534 it cost before the body was windowed. At 1,000 columns the
+before-figures are 36,356 nodes and 1,005 subscribers, and the after
+figures are the same 970 and the same 5: neither axis of the grid is a
+function of the column count any more.
+
+The one user-visible consequence is that cells and headers for
+horizontally off-screen columns are no longer in the DOM, so code that
+selects `[data-column="…"]` must scroll the column into view first, and
+`TableContainer.getColumnHeaders()` returns the mounted window rather
+than every column. `aria-colcount` / `aria-colindex` stay _absolute_
+over `columnOrder`, so a windowed row reports a gapped, non-1-based
+colindex run — which is exactly what the ARIA grid pattern prescribes
+for a partially rendered row. `/advanced` exposes the geometry rather
+than making callers re-derive it: `refreshColumnWindow()`,
 `getColumnWindow()`, `getColumnSpan(column)` and `getPinnedWidthPx()` on
-`TableBody`, with the `ColumnWindow` type re-exported from
+`TableBody`, `refreshColumnWindow()` on `TableContainer`, with the
+`ColumnWindow` type re-exported from
 [`src/advanced.ts`](../../src/advanced.ts).
 
 ### Scroll-space compression

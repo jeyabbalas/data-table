@@ -8,7 +8,7 @@
 
 > **fetchIntervalStats**(`tableName`, `column`, `filters`, `bridge`, `unfilteredTotal?`): `Promise`\<[`IntervalColumnStats`](../interfaces/IntervalColumnStats.md)\>
 
-Defined in: [statistics/StatsComputer.ts:36](https://github.com/jeyabbalas/data-table/blob/e27b31a13db38a2a6380497540343e8910254c1b/src/statistics/StatsComputer.ts#L36)
+Defined in: [statistics/StatsComputer.ts:36](https://github.com/jeyabbalas/data-table/blob/133b3883f711821391a3bdfe7775ae1fecbf59c3/src/statistics/StatsComputer.ts#L36)
 
 Fetch stats for an interval column via DuckDB SQL.
 

@@ -151,6 +151,25 @@ descendant exists at a time. Internally that is `focusedCell.row === -1`
 (`HEADER_ROW_INDEX`); body rows report `aria-rowindex = row + 2`, because under
 `role="grid"` the header is row 1.
 
+The header row is windowed on the column axis the same way the body is, so a
+header far enough off screen is not in the DOM and its `aria-colindex` run is
+gapped rather than renumbered — what the grid pattern prescribes for a
+partially rendered row. Three columns get a little extra reach so the
+windowing stays invisible during ordinary use: the column the cursor is on,
+the column of a header holding real DOM focus, and the column of an open
+`Shift+F2` layout gesture, which is tracked as state rather than as focus.
+Ten columns of reach, not unlimited — a cursor parked far off screen must not
+pull its neighbourhood back into the document.
+
+Past that distance the two guarantees that matter are kept by other means
+rather than by keeping the element alive. `aria-activedescendant` is
+**removed** rather than left naming an element that no longer exists — the
+correct answer for a cursor scrolled out of view, and never a dangling
+reference. And real DOM focus is moved to `.dt-grid` before its header is
+detached, so an F2 excursion interrupted by a scroll lands back on the grid
+with the cursor intact, rather than on `<body>` with the keyboard layer
+silently dead.
+
 `aria-rowcount` counts the rows the grid actually renders, plus that header row:
 `filteredRows + 1` while any filter is active, `totalRows + 1` otherwise
 (`TableContainer.updateGridCounts`). Counting the total under a filter would

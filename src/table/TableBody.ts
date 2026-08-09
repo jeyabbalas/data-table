@@ -20,6 +20,7 @@ import {
   BOX_OVERHEAD_PX,
   ColumnWindowModel,
   MIN_OVERSCAN_COLUMNS,
+  buildColumnIndexMap,
   pinnedOffsets,
   resolveColumnWidth,
   resolvePinnedCount,
@@ -488,29 +489,13 @@ export class TableBody {
   /**
    * Rebuild the column name -> 1-based `aria-colindex` map.
    *
-   * Numbered from `columnOrder` — the presented order, including hidden
-   * columns — and not from `schema`. ARIA requires `aria-colindex` to ascend
-   * in DOM order within a row (a MUST), and rows render in `visibleColumns`
-   * order, which is a filter over `columnOrder`. Numbering from the schema
-   * made a reordered row report `3, 1, 2`. Keeping the hidden columns in the
-   * numbering is deliberate: the gaps are what tell assistive tech that
-   * columns are missing rather than renumbered.
-   *
-   * Falls back to the schema position for any column `columnOrder` does not
-   * know about, so a header still carries an index during the window between
-   * a schema write and the column-order write that follows it.
+   * The numbering rule — and why it is `columnOrder` and not `schema` — lives
+   * on {@link buildColumnIndexMap}, which `TableContainer` calls for the
+   * header row from the same two signals. Deliberately one definition: the
+   * header and the cells beneath it have to report the same index per column.
    */
   private rebuildColIndexMap(): void {
-    this.colIndexMap.clear();
-    const columnOrder = this.state.columnOrder.get();
-    for (let i = 0; i < columnOrder.length; i++) {
-      this.colIndexMap.set(columnOrder[i]!, i + 1);
-    }
-    const schema = this.state.schema.get();
-    for (let i = 0; i < schema.length; i++) {
-      const name = schema[i]!.name;
-      if (!this.colIndexMap.has(name)) this.colIndexMap.set(name, i + 1);
-    }
+    this.colIndexMap = buildColumnIndexMap(this.state.columnOrder.get(), this.state.schema.get());
   }
 
   /**

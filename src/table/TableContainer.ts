@@ -34,6 +34,7 @@ import type { StateActions } from '../core/Actions';
 import { resolveInstanceId } from '../core/instanceId';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { ColumnSchema } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
@@ -49,7 +50,12 @@ import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { ColumnReorder } from './ColumnReorder';
-import { pinnedOffsets, resolveColumnWidth, resolvePinnedCount } from './ColumnWindow';
+import {
+  buildColumnIndexMap,
+  pinnedOffsets,
+  resolveColumnWidth,
+  resolvePinnedCount,
+} from './ColumnWindow';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
@@ -190,6 +196,28 @@ export class TableContainer {
   private addColumnButton: AddColumnButton | null = null;
   private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
+
+  // ---- Header column maps -------------------------------------------------
+  //
+  // The header build loop used to be O(cols²): a `schema.find` and a
+  // `columnOrder.indexOf` per column, i.e. ~1M string comparisons per render
+  // at 1,000 columns — and `render()` runs on every `schema` / `visibleColumns`
+  // write, twice on load. These three maps replace all of it.
+  //
+  // Each is rebuilt only when the array identity behind it changes. That is a
+  // sound cache key and not an optimistic one: the state layer replaces
+  // `schema`, `visibleColumns` and `columnOrder` wholesale rather than mutating
+  // them, which is the same premise `ColumnWindowModel.sync` and
+  // `TableBody.syncVisibleIndexMap` are built on.
+  private schemaByName = new Map<string, ColumnSchema>();
+  private schemaMapSource: readonly ColumnSchema[] | null = null;
+  /** Column name → index into `visibleColumns`. */
+  private visibleIndexByName = new Map<string, number>();
+  private visibleIndexSource: readonly string[] | null = null;
+  /** Column name → 1-based `aria-colindex` — see {@link buildColumnIndexMap}. */
+  private colIndexByName = new Map<string, number>();
+  private colIndexSchemaSource: readonly ColumnSchema[] | null = null;
+  private colIndexOrderSource: readonly string[] | null = null;
 
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
@@ -892,8 +920,10 @@ export class TableContainer {
         const header = this.columnHeaders.find((h) => h.getColumn().name === focused.column);
         targetId = header?.getElement().id || null;
       } else {
-        const colIndex = this.state.visibleColumns.get().indexOf(focused.column);
-        if (colIndex >= 0) {
+        const columns = this.state.visibleColumns.get();
+        this.syncVisibleIndexMap(columns);
+        const colIndex = this.visibleIndexByName.get(focused.column);
+        if (colIndex !== undefined) {
           targetId = this.buildCellId(focused.row, colIndex);
         }
       }
@@ -955,6 +985,41 @@ export class TableContainer {
   /** Stable DOM id for a column-header cell. */
   private buildHeaderCellId(colIndex: number): string {
     return `${this.resolvedOptions.classPrefix}-${this.resolvedOptions.instanceId}-colheader-${colIndex}`;
+  }
+
+  // =========================================
+  // Header column maps
+  // =========================================
+
+  /** Rebuild `name -> ColumnSchema` when the schema array identity changes. */
+  private syncSchemaMap(schema: readonly ColumnSchema[]): void {
+    if (this.schemaMapSource === schema) return;
+    this.schemaByName.clear();
+    for (const col of schema) this.schemaByName.set(col.name, col);
+    this.schemaMapSource = schema;
+  }
+
+  /** Rebuild `name -> visibleColumns index` when the array identity changes. */
+  private syncVisibleIndexMap(visibleColumns: readonly string[]): void {
+    if (this.visibleIndexSource === visibleColumns) return;
+    this.visibleIndexByName.clear();
+    for (let i = 0; i < visibleColumns.length; i++) {
+      this.visibleIndexByName.set(visibleColumns[i]!, i);
+    }
+    this.visibleIndexSource = visibleColumns;
+  }
+
+  /**
+   * Rebuild the 1-based `aria-colindex` map when either input identity
+   * changes. Keyed on both because the two move independently: a reorder
+   * rewrites `columnOrder` and leaves `schema` alone, and a derived-column
+   * add does the reverse for one frame.
+   */
+  private syncColIndexMap(columnOrder: readonly string[], schema: readonly ColumnSchema[]): void {
+    if (this.colIndexOrderSource === columnOrder && this.colIndexSchemaSource === schema) return;
+    this.colIndexByName = buildColumnIndexMap(columnOrder, schema);
+    this.colIndexOrderSource = columnOrder;
+    this.colIndexSchemaSource = schema;
   }
 
   // =========================================
@@ -1318,6 +1383,11 @@ export class TableContainer {
     const columnWidths = this.state.columnWidths.get();
     const columnOrder = this.state.columnOrder.get();
 
+    // O(1) lookups for the header loop below — see the map fields.
+    this.syncSchemaMap(schema);
+    this.syncVisibleIndexMap(visibleColumns);
+    this.syncColIndexMap(columnOrder, schema);
+
     // Attach / detach the ARIA grid semantics, then refresh its dimensions.
     this.applyGridSemantics(schema.length > 0 && !!tableName);
     this.updateGridCounts();
@@ -1363,18 +1433,14 @@ export class TableContainer {
       if (this.actions) {
         let visibleIndex = 0;
         for (const colName of visibleColumns) {
-          const colSchema = schema.find((s) => s.name === colName);
+          const colSchema = this.schemaByName.get(colName);
           if (colSchema) {
             // aria-colindex is a position in the *presented* table, and ARIA
             // requires the values to ascend in DOM order within a row — a MUST,
-            // not a SHOULD. `columnOrder` is the presentation order including
-            // hidden columns, and `visibleColumns` is a filter over it, so
-            // indexing into it ascends by construction while hidden columns
-            // still leave the gaps ARIA uses to signal "columns not present".
-            // Deriving from `schema` instead reported 3, 1, 2 after a reorder.
-            const orderIndex = columnOrder.indexOf(colName);
-            const colIndex =
-              orderIndex >= 0 ? orderIndex + 1 : schema.findIndex((s) => s.name === colName) + 1;
+            // not a SHOULD. The numbering rule, and why it is `columnOrder` and
+            // not `schema`, lives on `buildColumnIndexMap`, which the body
+            // numbers its cells from too.
+            const colIndex = this.colIndexByName.get(colName) ?? 0;
             const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
               cellId: this.buildHeaderCellId(visibleIndex++),
               classPrefix: this.resolvedOptions.classPrefix,
@@ -1403,7 +1469,7 @@ export class TableContainer {
       } else {
         // Fallback if no actions provided - show simple placeholders
         for (const colName of visibleColumns) {
-          const colSchema = schema.find((s) => s.name === colName);
+          const colSchema = this.schemaByName.get(colName);
           if (colSchema) {
             const colEl = document.createElement('div');
             colEl.className = `${this.resolvedOptions.classPrefix}-col-header`;

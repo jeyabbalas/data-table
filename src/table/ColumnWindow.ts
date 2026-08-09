@@ -200,6 +200,41 @@ export function resolveColumnWidth(declared: number | undefined): number {
     : DEFAULT_COLUMN_WIDTH;
 }
 
+/**
+ * Column name → 1-based index in the *presented* order, for `aria-colindex`.
+ *
+ * Numbered from `columnOrder` — the presentation order, hidden columns
+ * included — and not from `schema`. ARIA requires `aria-colindex` to ascend in
+ * DOM order within a row (a MUST), and both the header row and the body rows
+ * render in `visibleColumns` order, which is a filter over `columnOrder`.
+ * Numbering from the schema made a reordered row report `3, 1, 2`. Keeping the
+ * hidden columns in the numbering is deliberate: the gaps are what tell
+ * assistive tech that columns are missing rather than renumbered — which is
+ * also what makes the scheme correct for a *windowed* row, where the mounted
+ * cells are a contiguous slice rather than the whole table.
+ *
+ * Any column `columnOrder` does not know about falls back to its schema
+ * position, so a cell still carries an index during the window between a
+ * schema write and the column-order write that follows it.
+ *
+ * Exported because the header and the body must agree on every column's index
+ * — a header reporting `aria-colindex="7"` over cells reporting `8` is an
+ * `aria-required-parent`-adjacent inconsistency no test would catch from one
+ * side alone. One definition, two consumers.
+ */
+export function buildColumnIndexMap(
+  columnOrder: readonly string[],
+  schema: readonly { name: string }[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (let i = 0; i < columnOrder.length; i++) map.set(columnOrder[i]!, i + 1);
+  for (let i = 0; i < schema.length; i++) {
+    const name = schema[i]!.name;
+    if (!map.has(name)) map.set(name, i + 1);
+  }
+  return map;
+}
+
 /** Sticky placement for one pinned column. */
 export interface PinnedOffset {
   /** `left` in px — Σ occupied widths of the pinned columns before it. */

@@ -95,7 +95,7 @@ undo/redo reconciliation.
 
 ## State: `TableState`
 
-All table state lives on a single `TableState` object ([`src/core/State.ts:22-70`](../../src/core/State.ts)).
+All table state lives on a single `TableState` object ([`src/core/State.ts:22-72`](../../src/core/State.ts)).
 See the [state model](./state-model.md) for the field inventory. Briefly:
 
 - **Data signals** — `tableName`, `schema`, `totalRows`, `derivedColumns`
@@ -133,7 +133,7 @@ is a thin Promise-based RPC wrapper:
   mutation via `attachCacheInvalidation`. Individual queries can opt out
   or jump the queue through a `QueryOptions` third parameter on
   `query(sql, signal?, options?)`
-  ([`src/data/WorkerBridge.ts:51-63`](../../src/data/WorkerBridge.ts)):
+  ([`src/data/WorkerBridge.ts:51-78`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
   [Row fetching](#row-fetching)) — and
@@ -224,10 +224,10 @@ spacer (see [Scroll-space compression](#scroll-space-compression)).
 
 How _many_ rows that slice contains comes from a single measurement:
 `clientHeight` on the internal scroll container `.dt-body-scroll`
-([`src/table/VirtualScroller.ts:353`](../../src/table/VirtualScroller.ts)).
+([`src/table/VirtualScroller.ts:360`](../../src/table/VirtualScroller.ts)).
 The rendered count is `⌈clientHeight / rowHeight⌉ + 2 × bufferRows`, with
 `bufferRows` defaulting to 5
-([`src/table/VirtualScroller.ts:366-374`, `:148`](../../src/table/VirtualScroller.ts))
+([`src/table/VirtualScroller.ts:373-381`, `:148`](../../src/table/VirtualScroller.ts))
 — roughly 29 rows in a 600 px viewport at the default `rowHeight`.
 `bufferRows` is not reachable through `createDataTable`; only a direct
 `VirtualScroller` construction from `/advanced` can change it.
@@ -237,7 +237,7 @@ deliberately delegates the decision upward
 ([`src/styles/02-shell.css`](../../src/styles/02-shell.css)):
 
 ```
-.dt-root         { height: 100% }                           /* :11-19   */
+.dt-root         { height: 100% }                           /* :11-23   */
 .dt-grid         { flex: 1; min-height: 0 }                 /* :33-38   */
 .dt-body-scroll  { flex: 1; overflow: auto; min-height: 0 } /* :448-452 */
 ```
@@ -273,19 +273,19 @@ frame before first layout — where the pixel term collapses to nothing.
 The two spacers are `div.dt-col-spacer` with `role="presentation"`,
 `aria-hidden="true"`, `data-col-spacer="left" | "right"` and an inline
 `flex: 0 0 Npx`
-([`src/table/TableBody.ts:1652-1660`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1711-1719`](../../src/table/TableBody.ts)).
 They stand in for the total width of the columns not rendered, which is
 what keeps the horizontal scroll extent and every rendered cell's
 x-position identical to the un-windowed layout.
 
 Each row stamps its own structure as `data-window="P:W"`
-([`src/table/TableBody.ts:318-319`](../../src/table/TableBody.ts)) — a
+([`src/table/TableBody.ts:338-339`](../../src/table/TableBody.ts)) — a
 _structure_ signature, never a position one. A window that slides at
 constant size leaves every mounted row's shape valid, so those rows are
 repainted in place; only a change in `P` or `W` reshapes a row. The cell
 for absolute visible-column index `absIdx` sits at
 `absIdx < P ? absIdx : absIdx - start + P + 1`
-([`src/table/TableBody.ts:1679-1682`](../../src/table/TableBody.ts)),
+([`src/table/TableBody.ts:1738-1741`](../../src/table/TableBody.ts)),
 which is how a row's DOM is read and written without scanning it.
 
 The arithmetic lives in
@@ -294,7 +294,7 @@ pure — it measures nothing and reads no element. `ColumnWindowModel`
 keeps prefix sums over per-column occupied width in a `Float64Array`, so
 the span of `[i, j)` is one subtraction and the visible range is two
 binary searches
-([`src/table/ColumnWindow.ts:262-288`, `:335-405`](../../src/table/ColumnWindow.ts)).
+([`src/table/ColumnWindow.ts:302-380`, `:432-445`](../../src/table/ColumnWindow.ts)).
 The sums are rebuilt only when the `visibleColumns` array identity, the
 `columnWidths` map identity, or the box overhead changes — all three are
 replaced wholesale by the state layer rather than mutated, so identity is
@@ -307,7 +307,7 @@ Two preconditions are what make a DOM-free model possible. `.dt-cell` and
 configured width _is_ the occupied width and the per-column box overhead
 is the constant 0 rather than a quantity to measure. And declared widths
 are rounded to integers before they are summed
-([`src/table/ColumnWindow.ts:280`](../../src/table/ColumnWindow.ts)) — a
+([`src/table/ColumnWindow.ts:197-201`, `:333-338`](../../src/table/ColumnWindow.ts)) — a
 fractional width is reachable, since `setColumnWidth` does not round and
 a mouse resize under page zoom passes a fractional `clientX`. The header
 snaps each column box independently, so a sub-pixel residue stays
@@ -317,14 +317,14 @@ exactly, never round the spacer itself.
 
 Recompute is driven by a passive, rAF-throttled `scroll` listener on the
 body scroll container
-([`src/table/TableBody.ts:782-792`](../../src/table/TableBody.ts)): a
+([`src/table/TableBody.ts:812-822`](../../src/table/TableBody.ts)): a
 second listener on the same element rather than a hook into the
 scroller's own, because `VirtualScroller.onScroll` fires only when the
 _row_ range moves, which a purely horizontal scroll never does. It
 returns after one property read when only `scrollTop` moved, so vertical
 scrolling stays free, and it re-renders only when
 `(start, end, pinnedCount)` actually changed. `refreshColumnWindow()`
-([`src/table/TableBody.ts:2574-2596`](../../src/table/TableBody.ts)) is
+([`src/table/TableBody.ts:2694-2725`](../../src/table/TableBody.ts)) is
 the synchronous form, called after every programmatic `scrollLeft` write
 — keyboard navigation, the filter-change scroll pin, the scroll restore
 after a re-render — because the browser does not dispatch `scroll` until
@@ -371,7 +371,7 @@ changes: the physical scroll position _is_ the virtual position, the
 mapping is the identity, and `scrollHeight` is never read. Above it, the
 scroller keeps one virtual anchor, `virtualScrollTop`, and updates it
 once per scroll event with a dual-mode mapping
-([`src/table/VirtualScroller.ts:311-342`](../../src/table/VirtualScroller.ts)):
+([`src/table/VirtualScroller.ts:318-349`](../../src/table/VirtualScroller.ts)):
 
 ```
 delta     = scrollTop − lastScrollTop
@@ -414,7 +414,7 @@ inside the (possibly height-capped) content element, equal to
 `start × rowHeight` whenever the dataset fits under the cap. The offset
 is applied as an inline `style.top` rather than
 `transform: translateY(…)`
-([`src/table/VirtualScroller.ts:392-404`](../../src/table/VirtualScroller.ts)):
+([`src/table/VirtualScroller.ts:399-411`](../../src/table/VirtualScroller.ts)):
 `top` resolves through layout, which is fixed-point and exact at these
 magnitudes, while compositor transforms are float32, which quantizes by
 more than a pixel above ~8.4M px.
@@ -422,11 +422,11 @@ more than a pixel above ~8.4M px.
 Two operations touch the anchor directly. `scrollToRow()` computes its
 target in virtual space and writes the anchor rather than inverting the
 lossy proportional map, so any index lands exactly even above the cap
-([`src/table/VirtualScroller.ts:508-564`](../../src/table/VirtualScroller.ts)).
+([`src/table/VirtualScroller.ts:515-571`](../../src/table/VirtualScroller.ts)).
 `setTotalRows()` writes the newly capped height, then re-anchors
 preserving the current position — never proportionally re-deriving it,
 which would teleport a linearly-scrolled user
-([`src/table/VirtualScroller.ts:426-464`](../../src/table/VirtualScroller.ts)).
+([`src/table/VirtualScroller.ts:433-471`](../../src/table/VirtualScroller.ts)).
 `getVirtualScrollTop()` exposes the anchor: the virtual-space
 counterpart of `getScrollTop()`, identical below the cap. The cap itself
 is configurable only as `maxVirtualHeight` on `VirtualScrollerOptions` —
@@ -449,13 +449,13 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:155-190`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:183-218`](../../src/table/TableBody.ts).
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:699-772`](../../src/table/TableBody.ts)) keeps
+([`src/table/TableBody.ts:878-951`](../../src/table/TableBody.ts)) keeps
 at most 2 block fetches in flight — the worker executes serially, so
 that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
@@ -471,7 +471,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:928-961`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1107-1140`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -480,7 +480,7 @@ its own TTL/LRU would be a second staleness domain.
 The SQL itself has two shapes. With no filters and no user sort, a block
 is fetched by a range predicate on the dense synthetic row id —
 `WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
-([`src/table/TableBody.ts:1024-1030`](../../src/table/TableBody.ts)) —
+([`src/table/TableBody.ts:1203-1209`](../../src/table/TableBody.ts)) —
 which DuckDB prunes via zonemaps, so a block fetch costs about the same
 at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
 loader materializes `__rowid__` densely, and a runtime density valve
@@ -489,7 +489,7 @@ instance to OFFSET pagination with a single `console.warn` — slow but
 correct, never wrong rows. Sorted or filtered fetches keep
 `ORDER BY … LIMIT n OFFSET k`, always appending `"__rowid__" ASC` as a
 tiebreaker
-([`src/table/TableBody.ts:1054-1062`](../../src/table/TableBody.ts)) —
+([`src/table/TableBody.ts:1233-1241`](../../src/table/TableBody.ts)) —
 DuckDB's `ORDER BY` is non-deterministic for ties, and two block queries
 that permute ties differently would duplicate some rows across block
 boundaries and drop others.
@@ -503,7 +503,7 @@ public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by
 `setTotalRows()` writes an explicit
 `height: min(rowCount × rowHeight, 15,000,000)` px onto the body content
 element `.dt-body`
-([`src/table/VirtualScroller.ts:432-444`](../../src/table/VirtualScroller.ts))
+([`src/table/VirtualScroller.ts:439-451`](../../src/table/VirtualScroller.ts))
 so the scrollbar reflects the whole dataset (see
 [Scroll-space compression](#scroll-space-compression) for the cap). That
 tall element is the content `.dt-body-scroll` is asked to hold, and
@@ -519,16 +519,16 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1112`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1291`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was
 handed the wrong viewport. The only height the library complains about is
 zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
-([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
+([`src/table/VirtualScroller.ts:363-365`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:391-397`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:392-399`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 
@@ -682,7 +682,7 @@ without this guard the base-class default's last-write-wins on
 filter set F2's broadcast had already completed. The same race-guard
 pattern lives on `CrossfilterCoordinator`; the two coordinators stay in
 sync deliberately. The rationale is captured in
-[`StatsPanelCoordinator.ts:42–57`](../../src/visualizations/StatsPanelCoordinator.ts).
+[`StatsPanelCoordinator.ts:72–80`](../../src/visualizations/StatsPanelCoordinator.ts).
 
 Fan-out is bounded — `DEFAULT_PANEL_CONCURRENCY = 4` — sized
 independently of the visualization fan-out cap because a panel may issue

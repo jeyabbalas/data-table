@@ -10,6 +10,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 1     | [phase-01-load-path.md](./phase-01-load-path.md)                             | done        | 2026-08-08 | 2026-08-08 | 1 CTAS/load, 2× faster, real progress    |
 | 2     | [phase-02-lazy-visualizations.md](./phase-02-lazy-visualizations.md)         | done        | 2026-08-08 | 2026-08-08 | Charts cost the viewport, not the schema |
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
+| 3.5   | _(no doc — review-driven)_                                                   | done        | 2026-08-08 | 2026-08-08 | Hardening: 6 defects, comments, anchors  |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | not started | —          | —          | —                                        |
 | 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | not started | —          | —          | —                                        |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
@@ -1093,12 +1094,19 @@ doc rather than the code would be wrong about all eleven.
   hardcoded `col_0`. Same reason, same commit; without it the settle key stopped seeing row content
   at all and reported "settled" while cells were still being painted.
 - **D8 — `refreshColumnWindow()` at all four programmatic `scrollLeft` writers**:
-  `KeyboardNavigator:943`/`:945` (one call, after the branch), `TableContainer:1096` inside the
-  existing `if` so the filter-scroll pin's steady state stays free, and `TableContainer:1570`, the
-  blank body after any re-render at a scrolled-right offset. Deliberately **not** in
-  `setupScrollSync`'s reverse handler (`:697-702`): that writes `bodyScroll.scrollLeft` from inside
-  a real scroll event, so the body's own listener follows and a call there would recompute twice a
-  frame.
+  `KeyboardNavigator:939`/`:941` (one call after the branch, at `:951`), `TableContainer:1097`
+  inside the existing `if` so the filter-scroll pin's steady state stays free (call at `:1103`),
+  and `TableContainer:1580`, the blank body after any re-render at a scrolled-right offset (call
+  at `:1590`). Deliberately **not** in `setupScrollSync`'s reverse handler (`:701`): that writes
+  `bodyScroll.scrollLeft` from inside a real scroll event, so the body's own listener follows and
+  a call there would recompute twice a frame.
+
+  _Corrected at Phase 3.5_ — the four line numbers above were all one to ten lines off as written,
+  and the list was one writer short. `TableContainer.scrollToRightEnd:1882` also writes body scroll
+  position and has **no** `refreshColumnWindow()`. See Phase 3.5's record: it lands correctly today
+  only because `behavior: 'smooth'` emits a stream of `scroll` events, which is a dependency
+  nothing in that method acknowledges.
+
 - **D9 — one shared pinned-width helper over `visibleColumns[0, P)`.** `pinnedOffsets()` in
   `ColumnWindow.ts` serves the body, the header and the demarcation line.
 - **D10 — declared widths are quantized to integers at the render write sites**, not in `Actions`.
@@ -1396,3 +1404,207 @@ Also declined, per the phase doc: `refreshColumnWindow()` in `setupScrollSync`'s
 (`TableContainer.ts:698-703`). It writes `bodyScroll.scrollLeft` from inside a real scroll event, so
 the body's own listener follows and the lag is one frame that self-corrects; a call there would
 recompute twice per frame for the whole duration of a header scrollbar drag.
+
+### Phase 3.5 — Hardening pass before header column windowing
+
+Not a phase from the plan. A short session between Phases 3 and 4, opened because a deep review
+across Phases 0–3 (three parallel readers over the load path, the visualization controller and the
+windowing code, plus a pass over the orchestration, docs, changesets and CSS) found six defects,
+three of which live in files Phase 4 rewrites — and one of which is a guard Phase 3's own defect
+list records as shipped, which had landed in exactly one of the eight places that needed it.
+
+No design decision changed and no scope was taken from a later phase. Everything below is either a
+defect closed with a regression test, a comment corrected so Phase 4 does not read it as truth, or
+a record.
+
+#### What was wrong, and where the fix landed
+
+| #   | Severity | Defect                                                                                                       | Commit |
+| --- | -------- | ------------------------------------------------------------------------------------------------------------ | ------ |
+| F1  | High     | The non-finite width guard covered the prefix sums and none of the eight sites that write a width to the DOM | C1     |
+| F2  | Medium   | The ValueCounts "Other" segment was gated on an `approx_count_distinct` estimate                             | C2     |
+| F3  | Medium   | `fallbackVisible` was a one-way latch a transient null root made permanent                                   | C3     |
+| F4  | Low-Med  | `updateCellWidths`' replay was recursive, and its comment said it was not                                    | C4     |
+| F5  | Low-Med  | `refreshPanels` never got the per-column error isolation `refreshOnFilters` has                              | C3     |
+| F6  | Low      | `updateRowContent`'s spacer writes were not attribute-guarded                                                | C4     |
+
+**F1 in detail, because Phase 4 depends on it.** `occupiedWidth` (now `resolveColumnWidth`) was
+the only guarded reader. `TableBody.paintCell`, `TableBody.updateCellWidths`,
+`TableContainer.updateColumnWidths`, the pinned-prefix sum, both `render()` header paths, the
+`setContentWidth` sum and `ColumnHeader.getWidth` all read the raw map. `Math.round(NaN)` is `NaN`,
+and `width: NaNpx` / `flex-basis: NaNpx` are rejected by CSSOM — so the element kept whatever width
+it had (for a pooled row, some other column's) while the model believed 150, and everything right
+of the bad column disagreed across the header, the body and the spacer. `paintCell`'s own comment
+claimed it rounded "the same way the prefix sums round it so a cell and the spacer standing in for
+its neighbours cannot disagree." It did not. Phase 4's premise is that the header consumes the same
+geometry the body does; a width path that can silently disagree is the wrong thing to build that on.
+
+The guard also widened. `Number.isFinite(-50)` is `true`, so a negative width summed into `prefix`
+and made it non-monotonic, which puts `lowerBound` / `upperBound` outside the sorted-array
+precondition they are only correct under — the window boundaries become arbitrary rather than
+merely wrong. That failure mode did not exist before Phase 3 introduced the binary search.
+
+#### Deviations from the hardening plan
+
+- **The width guard rejects negative, not non-positive.** The plan specified
+  `Number.isFinite(d) && d > 0`. `0` is a legitimate width that Phase 3 designed for and tested —
+  `ColumnWindow.test.ts`'s "handles zero-width columns without excluding their neighbours" pins the
+  behaviour, and `compute`'s JSDoc explains it. Zero keeps `prefix` non-decreasing and both binary
+  searches correct, and `width: 0px` is a value CSSOM accepts, so it threatens nothing the guard
+  exists to protect. Rejecting it would have deleted a designed behaviour and its test in a pass
+  whose premise is that it changes no design decision. Shipped as `Number.isFinite(d) && d >= 0`.
+- **`ColumnHeader.getWidth()` resolves through the same helper**, which the plan asked only to
+  de-literalize. It is not a DOM write site, but it is the base of the next keyboard resize step,
+  and `Math.max(50, Math.min(500, NaN))` is `NaN` — so a poisoned width would have made every
+  subsequent resize a no-op. Strictly a superset of what the plan asked for.
+- **C4's exhaustion notice is a `console.warn`, not a `warning` event.** `TableBody` has no
+  emitter: `warning` is emitted only from `DataTable` and nothing plumbs an event seam down to the
+  body. `TableBody.ts` already reports the analogous "a guard tripped, we degraded, here is why"
+  case with `console.warn` (the `__rowid__` fast-path inconsistency), and `eslint.config.js` allows
+  `warn` / `error`. Building a `TableBody → TableContainer → DataTable` warning seam is real API
+  plumbing this pass did not budget, and Phase 4 rewrites these files. Consistency within the file
+  won.
+- **C2 also marks the approximate count, which needed a new string.** The plan asked to propagate
+  `distinctCountApprox` "so the renderer can mark it, consistent with how the stats line already
+  marks approximate counts with `~`". The renderer could already reach the flag
+  (`(backgroundData ?? data).distinctCountApprox`), so no propagation was needed — but leaving the
+  estimate bare one line under a `~N unique` would have been the inconsistency the plan named.
+  Added `statistics.approxOtherCategory`, following the precedent
+  `docs/guides/i18n.md` already sets for `approxUniqueCount`: its own string, because a translation
+  of the exact form presents an estimate as a fact.
+- **C5's F9 closed nine warnings, not six.** The plan diagnosed the typedoc regression as
+  `ThemeWatcher` plus the five `*Snapshot` types. Measured against `main` (`git archive` into a
+  scratch tree, `node_modules` symlinked), the pre-branch baseline is **1** warning
+  (`CrossfilterCoordinatorOptions`) and nine are new — the plan's list misses
+  `StatsPanelCoordinatorOptions` and `FilterFanOutScheduler`, and applying its prescription verbatim
+  leaves three. Eight types exported, `themeWatcher` marked `@internal`, back to the baseline 1.
+  `CrossfilterCoordinatorOptions` would take it to 0 and is the obviously correct end state, but it
+  predates the branch and the acceptance criterion was "back to 1" — routed to Phase 6 with the
+  other `CrossfilterCoordinator` item.
+- **C5 shipped as four commits, not one.** Its scope (comment corrections, a typedoc/public-surface
+  change, the `file:line` re-anchoring, and the ratchet plus changesets and this record) is four
+  logical changes, and the repo convention is one per commit. Same content, split by subject.
+
+#### Decisions recorded so they are not relitigated
+
+- **`StateActions.setColumnWidth` still validates nothing.** Considered and declined, per Phase 3's
+  D10: rounding or clamping a value a host set changes public state, while the requirement is about
+  what is drawn. The render-site guard is where it belongs. Phase 6 owns the separate product
+  question of whether `ColumnResizer`'s 50/500 clamps should move now that they are occupied widths.
+- **F7's remaining duplication was left in place, for Phase 4.** `TableContainer` still re-sums the
+  content width the model publishes as `totalWidthPx` (bypassing `TableBody.applyContentWidth`,
+  which also writes `headerRow.style.minWidth`) and still re-sums the pinned prefix that
+  `ColumnWindow.pinnedWidthPx` / `TableBody.getPinnedWidthPx()` already provide; `pinnedOffsets`
+  sums without `boxOverheadPx` while `ColumnWindowModel.sync` adds it per column, and they agree
+  only because `BOX_OVERHEAD_PX` is `0`. Phase 4 §4.1 hoists `ColumnWindowModel` onto
+  `TableContainer`, which removes all three by construction. Fixing them here and again there is
+  wasted motion. **If Phase 4's hoist is descoped, these come back.**
+
+#### Comments, anchors and one record that were wrong
+
+Six comments described the pre-windowing body and are corrected in place (see the commit for
+each). All six were genuinely stale; none was a false alarm. Two are worth repeating here because
+they are load-bearing beliefs rather than prose:
+
+- **`this.columnWindow` has two writers, not one** — `renderVisibleRows` and `updateCellWidths`.
+  The second publishes only on the branch where `start` / `end` / `pinnedCount` already compared
+  equal, so it can never move what is mounted; but "one writer" is not a fact Phase 4 can build on.
+- **`VirtualScroller`'s width spacer is not what gives the scroll container its horizontal
+  extent.** Measured on a live 50-column mount: zeroing the spacer leaves `scrollWidth` at 7,500 px,
+  and zeroing it together with both `minWidth` writes still leaves 7,500. `.dt-body`'s
+  `min-width: fit-content` means the rows' own overflow is the binding term. The comment claimed
+  the opposite.
+
+**`docs/concepts/architecture.md` carried 34 `file:line` anchors; 26 had drifted** and one
+(`ColumnWindow.ts:280`) pointed at a blank line. All 34 re-verified against the file they name; no
+prose changed, because every surrounding claim still holds. The column-windowing anchors were
+authored against `202bb18` rather than the phase's last commit, which is how they were stale on the
+day they landed.
+
+**D8's writer list was wrong on all four line numbers and one writer short.** Corrected in place
+above. The missing writer is the one Phase 4 should look at:
+`TableContainer.scrollToRightEnd:1882` writes `bodyScroll.scrollTo({ left, behavior: 'smooth' })`
+and never calls `refreshColumnWindow()`. **It works today, but by accident, not by design** —
+nothing in the method references the column window, and the three sites that do call
+`refreshColumnWindow()` each carry a comment saying why, so the absence here reads as omission. It
+lands correctly only because `behavior: 'smooth'` emits a stream of `scroll` events that
+`TableBody.handleHorizontalScroll` picks up. That makes it fragile in three specific ways:
+switching to `behavior: 'auto'` or a plain `scrollLeft =` write silently reintroduces the
+blank-body frame the invariant exists to prevent; under `prefers-reduced-motion` the smooth scroll
+degrades to an instant jump and the window is one frame stale; and jsdom fires no `scroll` event
+for `scrollTo`, so no unit test can observe it landing. Left as-is (it is not broken, and Phase 4
+touches this method anyway — it writes header `scrollLeft` at `:1881`), but **do not treat its
+current correctness as intentional.** Its only caller is the derived-column `onCreated` hook
+(`TableContainer:1738`).
+
+#### Coverage
+
+Thresholds ratcheted to actuals-minus-1pp, the file's standing convention, which three phases of
+new tests had left 11 pp behind: statements 76 → 86, branches 63 → 75.5, functions 81 → 89,
+lines 77 → 88. Phase 3.5 actuals: 87.07 / 76.54 / 90.16 / 89.18.
+
+#### Inherited-issue register — real, out of scope here, routed to the phase that owns the seam
+
+Per README §8.4 ("you own regressions you introduce, not inherited breakage"): all of these
+predate the branch point at `c326e9e` and were re-verified against the current tree. Recorded here
+so they are not rediscovered a fourth time.
+
+| Issue                                                                                                                                                                                                                                                                                                                                     | Route to                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `tableName` is interpolated unescaped into the source relation — `fileName = \`${tableName}.csv\`` then `read_csv_auto('${fileName}')` (`csv.ts:62,118`; siblings `json.ts:212`, `parquet.ts:83`). It is caller-supplied and validated on no path, while the *table identifier* built from the same string goes through `quoteIdentifier` | **Phase 10** — it retargets exactly this `relation` seam   |
+| The loaders' `finally { await db.dropFile(fileName) }` (`csv.ts:160-163` and siblings) is unguarded, so a cleanup failure replaces the real load error. The export path (`dispatcher.ts:363-367`) and the probe-sample cleanup (`common.ts:533-538`) both guard                                                                           | **Phase 10 or 11**, whichever touches the loaders first    |
+| A CTAS that succeeds before `SELECT COUNT(*)` / `DESCRIBE` fails leaves the new table materialized and orphaned                                                                                                                                                                                                                           | **Phase 10** — memory guardrails                           |
+| `WorkerBridge.ts:648-662` drops a malformed worker message with a `console.warn` and never rejects, so the request stays pending forever                                                                                                                                                                                                  | **Phase 11** — it owns the transfer path                   |
+| `LoadPayload` carries only `data` / `format` / `tableName`, so every `CSVLoadOptions` / `JSONLoadOptions` / `ParquetLoadOptions` field — and the `LOAD_INVALID_OPTIONS` throws that validate them — is unreachable in production                                                                                                          | **Phase 12** — docs truth pass, or delete the dead options |
+| `CrossfilterCoordinator.destroy()` (`:222`) has no `destroyed` flag, so `updateFilteredRowCount` can still write `state.filteredRows` post-destroy. `StatsPanelCoordinator` has one (`:63`) and guards three entry points with it                                                                                                         | **Phase 6**                                                |
+
+#### For Phase 4 — carry into its targeted review, do not assume any of it
+
+- **`TableBody.getColumnWindow()` is not the header's window.** It returns the _focus-extended_
+  window (`TableBody.extendWindowToFocus`), which is body-cursor-specific, and
+  `.dt-header-scroll.clientWidth` differs from `.dt-body-scroll.clientWidth` by the vertical
+  scrollbar — so reusing the body's answer leaves a scrollbar-width sliver unrendered at the right
+  edge of the header. §4.1's "hoist the computation" is the right call: put `ColumnWindowModel` on
+  `TableContainer`, compute one window from the body's `scrollLeft` and the wider of the two client
+  widths, and let each consumer derive its own anchor extension. `TableBody` also may not exist
+  when `render()` builds headers, so the header cannot ask it.
+- **Do not re-`sync()` the `VizDataController` on window shifts.** `sync()` destroys entries not in
+  the column list, clears the fetch queue, resets `stalePanels` / `panelRefresh`, and starts a new
+  wave. Called with the _mounted_ header list on every horizontal scroll step it would destroy
+  charts still inside the 400 px keep band, discard in-flight-adjacent queued fetches, and re-arm
+  `whenWaveSettled` per frame. Keep feeding `sync()` the full viz-applicable column list and use
+  the mount/unmount hook §4.2 already specifies.
+- `attachVisualizations` (`DataTable.ts`) is O(all headers) per attach and writes `statsEl.innerHTML`
+  per column — §4.6's mount-hook work, and the reason a hide at 1,000 columns still costs 1,000 DOM
+  writes. It also writes the placeholder stats line _before_ the `sync()` that re-creates the
+  instance, so a column whose chart is about to be restored still takes one placeholder write.
+- Body cells for off-screen columns are not in the DOM, and `aria-colindex` stays absolute and
+  gapped. Both are already in the changeset and `docs/performance.md`.
+- A rootless first `sync()` no longer latches (F3), but a header rebuild following a rootless sweep
+  still re-creates every column once — seeded, zero queries — before the first intersection
+  callback corrects `visible`. Self-correcting; noted because Phase 4 changes when headers rebuild.
+
+#### Verification
+
+All eight §8.4 gates green.
+
+| Gate                     | Result                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `npm run lint`           | clean                                                                            |
+| `npm run format:check`   | clean                                                                            |
+| `npm run typecheck`      | clean                                                                            |
+| `npm run test:coverage`  | **4,553 passed / 10 skipped**, 244 files (was 4,531 / 10) — +22 regression tests |
+| `npm run build`          | clean, `check:css-vars` 74 variables in sync                                     |
+| `npm run size`           | every limit under budget                                                         |
+| `npm run docs:api:check` | 0 errors, **1 warning** (was 10)                                                 |
+| `npm run test:browser`   | **51 passed / 13 skipped** — unmoved                                             |
+
+`tests/browser/column-window.spec.ts` and `viz-lazy.spec.ts` specifically: unmoved, and
+`HEADER_BODY_ALIGN_PX` still measures 0.000 at every stop.
+
+**No baselines re-captured.** Nothing here is a performance claim, and `tests/budgets.ts` is
+untouched.
+
+**No manual Chrome pass.** No user-visible behaviour changes except the ValueCounts "Other"
+segment, which the C2 unit tests cover exactly (an under-estimating sketch at 11 real categories,
+the over-estimating mirror, and Σ segment counts = non-null rows).

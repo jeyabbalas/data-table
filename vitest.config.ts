@@ -18,18 +18,23 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: ['node_modules/', 'dist/', '**/*.config.*', 'tests/'],
-      // Phase 9 tightening — actuals minus ~1 percentage point.
-      // Phase 8 actuals: statements 77.11, branches 64.14, functions 82.33,
-      // lines 78.96. Each subsystem phase added 1.5–2 pp; reaching the
-      // review-plan §4 long-term targets (90/85/90/90) needs roughly 5 more
-      // focused subsystem-coverage phases — branches dominate the remaining
-      // gap (CSV/format/error branches in src/data/ + worker glue). Tracked
-      // as a post-1.0 follow-up.
+      // Ratcheted at the scaling plan's Phase 3.5 — actuals minus ~1
+      // percentage point, the standing convention here. Phase 3.5 actuals:
+      // statements 87.07, branches 76.54, functions 90.16, lines 89.18.
+      // Phases 0–3 of the scaling plan landed ~10 pp of new tests each without
+      // moving the floor, so it had drifted 11 pp below what the suite
+      // actually holds and would no longer have caught a regression.
+      //
+      // Prior mark (Phase 8 actuals): statements 77.11, branches 64.14,
+      // functions 82.33, lines 78.96. Branches still dominate the gap to the
+      // review-plan §4 long-term targets (90/85/90/90) — CSV/format/error
+      // branches in src/data/ plus worker glue. Tracked as a post-1.0
+      // follow-up.
       thresholds: {
-        statements: 76,
-        branches: 63,
-        functions: 81,
-        lines: 77,
+        statements: 86,
+        branches: 75.5,
+        functions: 89,
+        lines: 88,
       },
     },
   },

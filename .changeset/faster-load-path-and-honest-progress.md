@@ -1,5 +1,5 @@
 ---
-'@jeyabbalas/data-table': patch
+'@jeyabbalas/data-table': minor
 ---
 
 Loading is roughly twice as fast and a fraction of the memory, `loadProgress` is emitted for the first time, and source buffers are transferred to the worker instead of copied.

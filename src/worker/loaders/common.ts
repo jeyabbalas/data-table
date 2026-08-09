@@ -42,6 +42,14 @@ export interface LoaderContext {
  * (`analyzing`), and only then materializes the typed table (`indexing`).
  * `analyzing` is the one band with real granularity — it advances per probe
  * chunk — which is why it is not the narrowest.
+ *
+ * **These are the ranges each stage may occupy, not the values it emits.** A
+ * stage with no granularity reports its band's *start* and then stays there
+ * until the next stage begins, so `parsing`'s 55 and `indexing`'s 95 are
+ * never sent — a consumer that waits for them waits forever. `indexing` is
+ * therefore the only stage reported twice: once at 80 when the CTAS starts,
+ * and once at 100 from `complete()`, which is the terminal signal and the one
+ * percentage no band contains.
  */
 export const WORKER_PROGRESS_START = 15;
 export const LOAD_PROGRESS_BANDS = {

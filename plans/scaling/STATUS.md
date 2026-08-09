@@ -12,7 +12,7 @@ handoff notes. Do not edit other phases' handoff sections.
 | 3     | [phase-03-body-column-windowing.md](./phase-03-body-column-windowing.md)     | done        | 2026-08-08 | 2026-08-08 | Body renders the column window only      |
 | 3.5   | _(no doc — review-driven)_                                                   | done        | 2026-08-08 | 2026-08-08 | Hardening: 6 defects, comments, anchors  |
 | 4     | [phase-04-header-column-windowing.md](./phase-04-header-column-windowing.md) | done        | 2026-08-08 | 2026-08-09 | Header row windowing + incremental diffs |
-| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | in progress | 2026-08-09 | —          | Column-clipped row fetch + cache bytes   |
+| 5     | [phase-05-projection-clipping.md](./phase-05-projection-clipping.md)         | done        | 2026-08-09 | 2026-08-09 | Column-clipped row fetch + cache bytes   |
 | 6     | [phase-06-interaction-sweep.md](./phase-06-interaction-sweep.md)             | not started | —          | —          | —                                        |
 | 7     | [phase-07-rank-index.md](./phase-07-rank-index.md)                           | not started | —          | —          | —                                        |
 | 8     | [phase-08-selection-model.md](./phase-08-selection-model.md)                 | not started | —          | —          | —                                        |
@@ -1896,3 +1896,209 @@ header".
   The file changed substantially: `render()`'s two-tier dispatch, `mountColumnHeader` /
   `unmountColumnHeader` (`:~1180-1270`), `closePanelsAnchoredTo` (`:~1288`), `buildHeaderWindow`
   (`:~1310`) and `syncHeaderWindow` are all new or rewritten. Re-locate by symbol, not by line.
+
+### Phase 5 — Column-clipped row fetch and cache byte-bounding
+
+A row fetch used to `SELECT` every visible column — 1,001 of them on a 1,000-column table,
+drained out of Arrow row by row and structured-cloned across the worker boundary, to paint the
+~28 columns on screen. It now projects the rendered column window padded by one full span each
+side and quantized outward to `COL_QUANTUM = 16`, and a horizontal move fetches what it exposes.
+What a block costs became a function of the viewport rather than of the schema.
+
+#### Assumption drift
+
+- **`buildRowQuery`'s signature does not change.** The phase doc predicted one. It already took a
+  `columns` array; only the argument passed to it changed. Phase 7 and Phase 10 should plan
+  around `fetchColumnsFor(win)` → `FetchColumnSet { columns, coverage, qStart, qEnd }`
+  (`TableBody.ts:1043`) rather than around the query builder.
+- **`pinnedColumns` already invalidated.** The doc listed adding an invalidation hook; the signal
+  already routes through `invalidateCacheAndRefresh()`. No change made.
+- **`COLVIRT.PROJECTED_COLS_MAX` was provisionally 96 and would have failed.** Measured 97 in
+  Chromium at 1,280 × 720 (the same 97 at 300 columns and at 1,000), 81 in jsdom, 114 over a
+  diagonal sweep in a wider viewport, and 193 in a pin transient. Shipped at **128**.
+- **`api-surface.snapshot.test.ts` records runtime `Object.keys` only**, so no `vitest -u` was
+  needed. `api-surface.exports.test.ts` did need `RowCache` / `CoverageInterner` added to
+  `MUST_NOT_LEAK_AT_ROOT`.
+
+#### Files created
+
+- `src/table/RowCache.ts` — `CoverageSet` / `CoverageInterner` / `RowCache`, `@internal`, DOM-free
+  so the merge algebra is property-testable. **Both axes evict**: `delete(index)` drops a row,
+  `prune(index, keep)` drops a row's off-window columns.
+- `tests/table/RowCache.test.ts` — 24 tests including 5 seeded randomized scripts of 400
+  merge/prune/delete/clear interleavings against a plain-`Map` model.
+- `tests/table/TableBody.projection.test.ts` — 17 tests, jsdom, 300 columns × 600 px.
+- `tests/performance/projection.duckdb.test.ts` — `RUN_DUCKDB_PERF=1` spike.
+- `tests/browser/projection.spec.ts` — 4 default + 1 `RUN_BROWSER_PERF` WIDE test.
+- `.changeset/column-clipped-row-fetches.md` — **minor**, not patch: `cache.maxBytes` is additive
+  public API.
+
+#### Budgets added (`tests/budgets.ts`, `DT_BUDGET.COLVIRT`)
+
+| Name                          |  Value | Measured                                                                |
+| ----------------------------- | -----: | ----------------------------------------------------------------------- |
+| `PROJECTED_COLS_MAX`          |    128 | 97 in Chromium at both 300 and 1,000 columns; 114 over a diagonal sweep |
+| `BLOCK_VALUES_MAX`            | 16,384 | 12,416 at 300 and at 1,000 columns (128 × 97)                           |
+| `QUERIES_PER_WINDOW_MOVE_MAX` |      4 | 0 for a one-viewport move, 1 for a jump past the pad                    |
+
+#### Spike — 128-row blocks over 1,000 columns, real DuckDB, macOS
+
+| Per block fetch         | Every column | Padded window | Typical window |
+| ----------------------- | -----------: | ------------: | -------------: |
+| Columns projected       |        1,001 |           113 |             41 |
+| Values per block        |      128,128 |        14,464 |          5,248 |
+| Execution (`conn.send`) |      22.1 ms |        3.5 ms |         1.5 ms |
+| Drain (Arrow → JS)      |      73.2 ms |        7.8 ms |         2.7 ms |
+| **Total**               |  **95.3 ms** |   **11.3 ms** |     **4.3 ms** |
+
+**Arrow-IPC deferral (README §9 asks for this explicitly).** The drain is **64–77 %** of a block
+fetch at every projection width — 77 % unclipped, 70 % at the padded window, 64 % at a typical
+one. README §9 says re-evaluate the deferral only if serialization is still > 20 % of block
+latency; it is, by a wide margin, so **the recommendation is that Arrow IPC for row blocks should
+be re-evaluated**. Clipping cut the dominant term rather than working around it, and the term is
+still dominant. The measurement is recorded in `docs/performance.md`'s scroll-pipeline section.
+
+#### Baselines (append-only, this laptop: darwin, 10 cpus, node v22.23.2)
+
+Two Phase-5 captures. `4b9bd9e` is the feature; `bb49bd6` is the review pass, captured because it
+changed the eviction budget's multiplicand and could have moved memory.
+
+| WIDE (1,000 × 60,000), viz off | `133b388` | `4b9bd9e` | `bb49bd6` |
+| ------------------------------ | --------: | --------: | --------: |
+| Load (ms)                      |     5,101 |     3,490 |     3,678 |
+| One sort (ms)                  |     165.0 |      23.8 |  **19.0** |
+| One filter (ms)                |     173.9 |      23.9 |  **21.9** |
+| JS heap (MB)                   |      22.0 |      18.4 |  **18.4** |
+| One row-block fetch (ms)       |         — |       7.4 |   **6.2** |
+| Values per block               |         — |     6,272 | **6,272** |
+
+GRID (200 × 500,000) lands on the same 6,272 values per block — the payload is a function of the
+viewport, not of the schema. Two metrics were added to the `Baseline` interface this phase
+(`blockFetchMs`, `blockPayloadValues`); they read `—` for every earlier capture, and the
+baselines README states what the pre-phase value was rather than leaving it blank.
+
+#### Deviations from the phase doc
+
+- **Changeset is `minor`, not `patch`** — `cache.maxBytes` is new public API.
+- **`RowCache` keeps a `Map`-shaped surface** (`get`/`has`/`delete`/`keys`/`entries`/`size`/
+  `[Symbol.iterator]`) rather than the doc's `deleteRow` naming. Ten fetch-pipeline suites reach
+  into the old bare `Map` field directly; the Map shape is what let all ten pass **unedited**,
+  which is the behavioural proof that clipping is a no-op below one window of columns.
+- **`RowCache.prune` was built**, though an earlier draft of the module header recorded column
+  pruning as deliberate future work. See the review pass below — without it the cell budget is
+  unsatisfiable exactly when it matters.
+
+#### Review pass — three reviewers, six defects, all with regression tests
+
+Two reviewers independently found the same first two.
+
+1. **`rowCacheRows` held a third of the rows it documents** (`TableBody.ts:1441`). The budget
+   multiplied the _render window_ while `cellCount` accumulates what a _fetch_ projected — the
+   window padded and quantized, roughly 3× wider. `rowCacheRows: 1024` retained 384 rows on a
+   scroll that never moved the column window, in the regime six doc sites called "unchanged".
+   Fixed by budgeting against `fetchColumnsFor(win).coverage.names.size`.
+2. **The budget was unsatisfiable while parked on a wide table.** The block under the viewport is
+   exempt from eviction by design and a horizontal sweep merges the whole column axis into it.
+   Row eviction cannot reach it, so it deleted every _other_ block on every write and stayed over:
+   a sweep took the cache from 640 warmed rows to 128 and left it 2.6× over budget (10× at
+   `fetchBlockSize: 1024`). `RowCache.prune` reclaims on the column axis; the warmed rows survive.
+3. **The coverage interner grew for the life of the table.** `covers` took an interned set, so the
+   unquantized render need minted one set per scroll position — 342 after one 300-column sweep,
+   1,149 after a single drag at 1,000 columns. It takes a plain `ReadonlySet<string>` now; a sweep
+   interns 42. `MEMO_CAPACITY = 1024` caps all three maps as a backstop.
+4. **`QueryCache.estimateBytes` sampled the head, not a stride.** Eleven head-skewed results fit a
+   1 MiB budget while retaining ~41 MiB.
+5. **`.dt-cell--pending` was a dead rule** — a text colour on a permanently empty box. A loading
+   cell was indistinguishable from an empty or NULL value; it draws a faint static bar now.
+6. Dead `epoch` field on `inFlightBlocks`; a guard against a collapsed speculative band; a stale
+   comment claiming a reorder costs zero queries; **ten stale `TableBody.ts` line references** in
+   the docs (six broken by this phase's +484 lines, four already wrong at `f4235c8`); the
+   regenerated API reference, which never carried `maxBytes`; and `[data-placeholder]`-only settle
+   conditions in `perf-baseline.spec.ts` and `bigTable.ts`.
+
+#### Manual verification (Claude in Chrome)
+
+`?gen=wide&viz=on&rows=60000` — 1,000 columns × 60,000 rows, Chromium, dev server on 5173.
+
+Final `window.__dtPerf.refresh()`:
+
+```json
+{
+  "tier": "wide",
+  "rows": 60000,
+  "cols": 1000,
+  "mode": "load",
+  "viz": true,
+  "state": "ready",
+  "genMs": 40252.5,
+  "loadMs": 3201.4,
+  "firstPaintMs": 3200.7,
+  "vizReadyMs": 3199.7,
+  "queryCount": 257,
+  "cacheHits": 2,
+  "maxInFlight": 13,
+  "domNodes": 1666,
+  "heapMB": 32.3,
+  "error": null
+}
+```
+
+`queryCount` and `maxInFlight` are whole-session totals across sort, filter, pin, hide, undo,
+resize, export and theme flip — not a mount cost. Mount was 15 queries; `domNodes` 1,666 against
+the 1,900 budget. Row-fetch concurrency stayed at its own cap of 2 throughout; the 13 is lazy
+column-chart traffic.
+
+| Step                                    | Result                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3 — load                                | rows/cols match the tier; `loadMs` 3,201 against a 3,097 baseline; 15 mount queries ≤ 19; `domNodes` 1,054 ≤ 1,900                                                                                                                                                                                                                         |
+| 4 — vertical jumps (50 %, 97 %, 100 %)  | rows 29,989 / 58,183 / 59,983; `data-row-id === data-row-index` and `col_0` text = row index at every stop; 0 placeholders, 0 pending                                                                                                                                                                                                      |
+| 5 — horizontal sweep (0/25/50/75/100 %) | window 17–28 columns of 1,000, strictly ascending, header and body render an identical column list at every stop; **45 cells verified against DuckDB** (9 per stop, joined on `__rowid__`), 0 mismatches                                                                                                                                   |
+| 5b — diagonal stress                    | 5 alternating half-viewport steps on both axes; 0 placeholders, 0 pending, oracle clean; heap 31.5 → 30.3 MB (no monotone growth); one isolated window move cost **1** row fetch, 0 high-priority, ≤ `QUERIES_PER_WINDOW_MOVE_MAX`                                                                                                         |
+| 6 — sort                                | `col_1` asc → desc → cleared via the header control; values ordered both ways; **1** row fetch, 49-column `SELECT`; oracle clean while sorted                                                                                                                                                                                              |
+| 7 — filter                              | histogram brush → chip `col_1 133.332 – 733.326`, 35,978 / 60,000 rows, every visible histogram re-rendered; **1** row fetch, 49 columns; oracle clean while filtered; chip × restored 60,000                                                                                                                                              |
+| 8 — column ops                          | **pin cost 1 row fetch at 49 columns — no full-viewport refetch**, and the pinned `col_0` still showed `0`, not pending, at 85 % of the axis. Hide → 999 columns (2 fetches, 98 columns); Cmd+Z restored 1,000 with the pin intact. A width change (320 px → 90 px) cost **0** fetches — the window moved one column, still inside the pad |
+| 9 — export                              | `exportToBuffer(… LIMIT 1000, 'parquet')` → 4,057,476 B (3.87 MB) in 269 ms; dialog rendered and closed; no native download triggered                                                                                                                                                                                                      |
+| 10 — theme                              | dark in 924 ms, no stall, oracle clean; flipped back to auto                                                                                                                                                                                                                                                                               |
+| 11 — console                            | **zero errors and zero warnings for the whole session**                                                                                                                                                                                                                                                                                    |
+
+Closing sweep at 1,000 columns: 17 row fetches, widest `SELECT` list **114** (median 98) against
+1,001 unclipped — 14,592 values per block against 128,128, **8.8× fewer**. 0 placeholders, 0
+pending, `domNodes` 1,071, heap 34.8 MB.
+
+Screenshots (session-local temp dir, not committed):
+`screenshot-1786261898408-16.jpg` (first paint), `screenshot-1786271662034-17.jpg` (deepest
+vertical position, row 59,999), `screenshot-1786271994849-18.jpg` (dark theme, pinned column).
+
+One environment note for whoever runs this next: the Chrome tab must be **foreground and
+visible**. A backgrounded tab reports `visibilityState: "hidden"`, Chrome suspends
+`requestAnimationFrame`, and the body's rAF-throttled scroll handler never re-renders —
+`scrollTop` moves to 320,000 while `getVisibleRange()` stays `{start: 0, end: 19}`. It looks
+exactly like a broken scroller and is not one.
+
+#### For the next phases
+
+- **Phase 6 (interaction sweep).** `TableBody.ts` grew 2,837 → 3,370 lines; re-locate by symbol.
+  The regions Phase 6 touches: `handleHorizontalScroll` `:947`, `refreshColumnWindow` `:3141`,
+  `renderVisibleRows` `:1654`, `attachRowEventListeners` `:2726`. **`StateActions.toggleColumnPin`
+  writes `pinnedColumns` before `columnOrder`**, so there is one render between them in which the
+  column is pinned and still in place — `ColumnWindow.pinnedPrefixViolated`, and a 193-column
+  projection for one frame (measured in `projection.spec.ts`, logged and deliberately not asserted
+  against the steady-state budget). Batching the two writes closes it. The Chrome pass did not
+  reproduce it because `col_0` was already first.
+- **Phase 7 (rank index).** The sorted path is unchanged — `ORDER BY … LIMIT n OFFSET k` with
+  `"__rowid__" ASC` appended as a tiebreaker (`TableBody.ts:1596`). Reshape it around
+  `fetchColumnsFor` / `buildFetchSet` (`:1043` / `:1062`), which own the projection independently
+  of the row-window shape.
+- **Phase 10 (direct scan).** `FetchColumnSet.qStart` / `qEnd` are the quantized column range and
+  are exactly what Parquet column-chunk pruning wants. Reuse rather than recompute.
+- **Unresolved, both pre-existing rather than Phase-5 regressions.** (a) Editing a derived
+  column's _expression_ leaves stale cached values: `visibleColumns` is unchanged so the
+  order-only branch takes it with no epoch bump, and `DerivedColumnManager.viewName` is a fixed
+  string so the `tableName` subscription has nothing to fire on. The pre-clipping
+  `Map<number, RowData>` had the identical exposure. (b) The in-flight abort predicate compares
+  _index_ ranges (`entry.qEnd <= fetchSet.qStart`) while the dedupe key is name-based, so after a
+  `visibleColumns` permutation the indices no longer describe the flight's columns. Worst case is
+  a redundant abort or a missed one; merge is by name, so no wrong data.
+- **`.size-limit.cjs` headroom is now ~2.6 %** on both the stylesheet (20.11 / 20.7 kB) and the
+  grid chunk (80.98 / 83.1 kB), below the repo's 5 % convention. The next phase to touch either
+  should raise the cap rather than shave the feature.

@@ -213,8 +213,10 @@ describe('TableBody — __rowid__ tiebreaker on ORDER BY (buildRowQuery)', () =>
     await Promise.resolve();
 
     const sql = calls[calls.length - 1]!;
-    expect(sql).toContain('ORDER BY "__rowid__" ASC, "tag" DESC');
-    expect(sql.match(/"__rowid__"/g)?.length).toBe(2); // once in SELECT, once in ORDER BY
+    // Both ORDER BYs — the row-id subquery's and the outer one that
+    // restores its order — carry the user's sort and nothing after it.
+    expect(sql).toContain('ORDER BY "__rowid__" ASC, "tag" DESC LIMIT');
+    expect(sql).toMatch(/ORDER BY "t"\."__rowid__" ASC, "t"\."tag" DESC$/);
 
     queryQueue[queryQueue.length - 1]!.resolve([]);
     body.destroy();

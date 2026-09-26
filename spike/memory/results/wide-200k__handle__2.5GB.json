@@ -1,0 +1,32 @@
+{
+  "config": {
+    "strategy": "handle",
+    "interactions": false,
+    "memoryLimit": "2.5GB",
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k.parquet",
+    "mib": 1463.8
+  },
+  "ok": false,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "end": 3114.2
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 45052,
+      "wasmMiB": 3114.2,
+      "error": "Out of Memory Error: could not allocate block of size 256.0 KiB (2.3 GiB/2.3 GiB used)\nDatabase is launched in in-memory mode and no temporary directory is specified.\nUnused blocks cannot be offloaded to disk.\n\nLaunch the database with a persistent storage back-end\nOr set SET temp_directory='/path/to/tmp.tmp'\n\nPossible solutions:\n* Reducing the number of threads (SET threads=X)\n* Disabling insertion-order preservation (SET preserve_insertion_order=false)\n* Increasing the memory limit (SET memory_limit='...GB')\n\nSee also https://duckdb.org/docs/stable/guides/performance/how_to_tune_workloads"
+    }
+  },
+  "memoryLimit": "2.3 GiB",
+  "failedAt": "load",
+  "error": "Out of Memory Error: could not allocate block of size 256.0 KiB (2.3 GiB/2.3 GiB used)\nDatabase is launched in in-memory mode and no temporary directory is specified.\nUnused blocks cannot be offloaded to disk.\n\nLaunch the database with a persistent storage back-end\nOr set SET temp_directory='/path/to/tmp.tmp'\n\nPossible solutions:\n* Reducing the number of threads (SET threads=X)\n* Disabling insertion-order preservation (SET preserve_insertion_order=false)\n* Increasing the memory limit (SET memory_limit='...GB')\n\nSee also https://duckdb.org/docs/stable/guides/performance/how_to_tune_workloads"
+}

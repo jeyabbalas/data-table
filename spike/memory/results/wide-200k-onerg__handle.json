@@ -1,0 +1,89 @@
+{
+  "config": {
+    "strategy": "handle",
+    "interactions": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k-onerg.parquet",
+    "mib": 1369.8
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "afterLoad": 3596.1,
+    "end": 3596.1
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 37208,
+      "wasmMiB": 3596.1
+    },
+    "count": {
+      "ms": 8,
+      "wasmMiB": 3596.1
+    },
+    "firstBlock": {
+      "ms": 12,
+      "wasmMiB": 3596.1,
+      "rows": 128
+    },
+    "midBlock": {
+      "ms": 7,
+      "wasmMiB": 3596.1,
+      "rows": 128
+    },
+    "sortedFirstBlock": {
+      "ms": 59,
+      "wasmMiB": 3596.1,
+      "rows": 128
+    },
+    "sortedMidBlock": {
+      "ms": 95,
+      "wasmMiB": 3596.1,
+      "rows": 128
+    },
+    "filterCount": {
+      "ms": 4,
+      "wasmMiB": 3596.1,
+      "rows": 1
+    },
+    "histogram": {
+      "ms": 23,
+      "wasmMiB": 3596.1,
+      "rows": 30
+    },
+    "filteredHistogram": {
+      "ms": 10,
+      "wasmMiB": 3596.1,
+      "rows": 30
+    },
+    "valueCounts": {
+      "ms": 7,
+      "wasmMiB": 3596.1,
+      "rows": 10
+    },
+    "filteredValueCounts": {
+      "ms": 5,
+      "wasmMiB": 3596.1,
+      "rows": 10
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 200000,
+  "cols": 1000,
+  "rowGroups": 1,
+  "duckdbMiB": {
+    "total": 2253.4,
+    "byTag": {
+      "IN_MEMORY_TABLE": 2207.8,
+      "EXTERNAL_FILE_CACHE": 45.5,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

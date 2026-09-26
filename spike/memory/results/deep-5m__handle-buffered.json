@@ -1,0 +1,44 @@
+{
+  "config": {
+    "strategy": "handle-buffered",
+    "interactions": false,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "deep-5m.parquet",
+    "mib": 1461.5
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "afterLoad": 2346.4,
+    "end": 2346.4
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 89027,
+      "wasmMiB": 2346.4
+    },
+    "count": {
+      "ms": 11,
+      "wasmMiB": 2346.4
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 5000000,
+  "cols": 40,
+  "rowGroups": 41,
+  "duckdbMiB": {
+    "total": 2081.5,
+    "byTag": {
+      "IN_MEMORY_TABLE": 2030.7,
+      "EXTERNAL_FILE_CACHE": 50.8,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

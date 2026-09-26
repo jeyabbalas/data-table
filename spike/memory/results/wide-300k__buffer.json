@@ -1,0 +1,26 @@
+{
+  "config": {
+    "strategy": "buffer",
+    "interactions": false,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-300k.parquet",
+    "mib": 2195.9
+  },
+  "ok": false,
+  "wasmMiB": {
+    "boot": 16,
+    "end": 16
+  },
+  "timings": {
+    "register": {
+      "ms": 10,
+      "wasmMiB": 16,
+      "error": "The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired."
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "failedAt": "register",
+  "error": "The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired."
+}

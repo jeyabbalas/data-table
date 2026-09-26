@@ -1,0 +1,93 @@
+{
+  "config": {
+    "strategy": "view",
+    "interactions": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "deep-5m.parquet",
+    "mib": 1461.5
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "afterLoad": 16,
+    "end": 1865.1
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 666,
+      "wasmMiB": 16
+    },
+    "count": {
+      "ms": 26,
+      "wasmMiB": 16
+    },
+    "firstBlock": {
+      "ms": 267,
+      "wasmMiB": 48,
+      "rows": 128
+    },
+    "midBlock": {
+      "ms": 223,
+      "wasmMiB": 48,
+      "rows": 128
+    },
+    "keyedSortedMidBlock": {
+      "ms": 15073,
+      "wasmMiB": 143.6,
+      "rows": 128
+    },
+    "sortedFirstBlock": {
+      "ms": 14819,
+      "wasmMiB": 143.6,
+      "rows": 128
+    },
+    "sortedMidBlock": {
+      "ms": 17188,
+      "wasmMiB": 1865.1,
+      "rows": 128
+    },
+    "filterCount": {
+      "ms": 365,
+      "wasmMiB": 1865.1,
+      "rows": 1
+    },
+    "histogram": {
+      "ms": 1005,
+      "wasmMiB": 1865.1,
+      "rows": 30
+    },
+    "filteredHistogram": {
+      "ms": 1644,
+      "wasmMiB": 1865.1,
+      "rows": 30
+    },
+    "valueCounts": {
+      "ms": 464,
+      "wasmMiB": 1865.1,
+      "rows": 10
+    },
+    "filteredValueCounts": {
+      "ms": 852,
+      "wasmMiB": 1865.1,
+      "rows": 10
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 5000000,
+  "cols": 40,
+  "rowGroups": 41,
+  "duckdbMiB": {
+    "total": 0.2,
+    "byTag": {
+      "EXTERNAL_FILE_CACHE": 0.2,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "config": {
+    "strategy": "buffer",
+    "interactions": false,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-100k.parquet",
+    "mib": 732
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 738.1,
+    "afterLoad": 2764,
+    "end": 2764
+  },
+  "timings": {
+    "register": {
+      "ms": 1636,
+      "wasmMiB": 738.1
+    },
+    "load": {
+      "ms": 5115,
+      "wasmMiB": 2764
+    },
+    "count": {
+      "ms": 8,
+      "wasmMiB": 2764
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 100000,
+  "cols": 1000,
+  "rowGroups": -1,
+  "duckdbMiB": {
+    "total": 1055,
+    "byTag": {
+      "IN_MEMORY_TABLE": 1031.6,
+      "EXTERNAL_FILE_CACHE": 23.4,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

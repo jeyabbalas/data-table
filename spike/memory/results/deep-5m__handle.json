@@ -1,0 +1,94 @@
+{
+  "config": {
+    "strategy": "handle",
+    "interactions": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "deep-5m.parquet",
+    "mib": 1461.5
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "afterLoad": 2154.2,
+    "end": 3405.3
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 31182,
+      "wasmMiB": 2154.2
+    },
+    "count": {
+      "ms": 8,
+      "wasmMiB": 2154.2
+    },
+    "firstBlock": {
+      "ms": 15,
+      "wasmMiB": 2154.2,
+      "rows": 128
+    },
+    "midBlock": {
+      "ms": 5,
+      "wasmMiB": 2154.2,
+      "rows": 128
+    },
+    "keyedSortedMidBlock": {
+      "ms": 933,
+      "wasmMiB": 2250.4,
+      "rows": 128
+    },
+    "sortedFirstBlock": {
+      "ms": 273,
+      "wasmMiB": 2250.4,
+      "rows": 128
+    },
+    "sortedMidBlock": {
+      "ms": 1152,
+      "wasmMiB": 3405.3,
+      "error": "Out of Memory Error: could not allocate block of size 256.0 KiB (3.1 GiB/3.1 GiB used)\nDatabase is launched in in-memory mode and no temporary directory is specified.\nUnused blocks cannot be offloaded to disk.\n\nLaunch the database with a persistent storage back-end\nOr set SET temp_directory='/path/to/tmp.tmp'\n\nPossible solutions:\n* Reducing the number of threads (SET threads=X)\n* Disabling insertion-order preservation (SET preserve_insertion_order=false)\n* Increasing the memory limit (SET memory_limit='...GB')\n\nSee also https://duckdb.org/docs/stable/guides/performance/how_to_tune_workloads"
+    },
+    "filterCount": {
+      "ms": 33,
+      "wasmMiB": 3405.3,
+      "rows": 1
+    },
+    "histogram": {
+      "ms": 295,
+      "wasmMiB": 3405.3,
+      "rows": 30
+    },
+    "filteredHistogram": {
+      "ms": 150,
+      "wasmMiB": 3405.3,
+      "rows": 30
+    },
+    "valueCounts": {
+      "ms": 121,
+      "wasmMiB": 3405.3,
+      "rows": 10
+    },
+    "filteredValueCounts": {
+      "ms": 80,
+      "wasmMiB": 3405.3,
+      "rows": 10
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 5000000,
+  "cols": 40,
+  "rowGroups": 41,
+  "duckdbMiB": {
+    "total": 2081.5,
+    "byTag": {
+      "IN_MEMORY_TABLE": 2030.7,
+      "EXTERNAL_FILE_CACHE": 50.8,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

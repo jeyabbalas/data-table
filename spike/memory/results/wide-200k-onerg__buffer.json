@@ -1,0 +1,31 @@
+{
+  "config": {
+    "strategy": "buffer",
+    "interactions": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k-onerg.parquet",
+    "mib": 1369.8
+  },
+  "ok": false,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 1375.9,
+    "end": 4095.9
+  },
+  "timings": {
+    "register": {
+      "ms": 1769,
+      "wasmMiB": 1375.9
+    },
+    "load": {
+      "ms": 5925,
+      "wasmMiB": 4095.9,
+      "error": "Out of Memory Error: Allocation failure"
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "failedAt": "load",
+  "error": "Out of Memory Error: Allocation failure"
+}

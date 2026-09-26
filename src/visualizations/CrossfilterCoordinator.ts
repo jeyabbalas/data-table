@@ -51,6 +51,7 @@ export class CrossfilterCoordinator {
   private visualizations = new Map<string, BaseVisualization>();
   private unsubscribe: (() => void) | null = null;
   private filterSequence = 0;
+  private destroyed = false;
   private readonly concurrency: number;
   private readonly options: CrossfilterCoordinatorOptions;
 
@@ -84,11 +85,12 @@ export class CrossfilterCoordinator {
    * Call after registering all visualizations when filters may have been
    * restored from persistence before the coordinator was created. */
   syncExistingFilters(): Promise<void> {
+    if (this.destroyed) return Promise.resolve();
     const filters = this.state.filters.get();
     if (filters.length === 0) return Promise.resolve();
     const seq = ++this.filterSequence;
     return this.updateFilteredRowCount(filters, seq).then(() => {
-      if (seq !== this.filterSequence) return;
+      if (this.destroyed || seq !== this.filterSequence) return;
       this.options.onFilterCycleComplete?.(filters);
     });
   }
@@ -122,7 +124,7 @@ export class CrossfilterCoordinator {
     // public `filterChange` event payload carries an up-to-date count. Skip
     // when a newer filter cycle has already started — the latest cycle will
     // emit its own event and we don't want a stale snapshot to overwrite it.
-    if (seq !== this.filterSequence) return;
+    if (this.destroyed || seq !== this.filterSequence) return;
     this.options.onFilterCycleComplete?.(filters);
   }
 
@@ -157,15 +159,23 @@ export class CrossfilterCoordinator {
       const sql = `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(tableName)} WHERE ${where}`;
       const result = await this.bridge.query<{ cnt: number }>(sql);
       // Only apply if this is still the latest filter change
-      if (seq !== this.filterSequence) return;
+      if (this.destroyed || seq !== this.filterSequence) return;
       this.state.filteredRows.set(Number(result[0]!.cnt));
     } catch (error) {
+      // A count still in flight when the table is destroyed typically fails
+      // because its worker was terminated — expected, not worth reporting.
+      if (this.destroyed) return;
       console.error('[CrossfilterCoordinator] Failed to update filtered row count:', error);
     }
   }
 
-  /** Clean up signal subscription and clear registrations */
+  /**
+   * Clean up signal subscription and clear registrations. A row-count query
+   * still in flight is discarded when it settles: it writes nothing to
+   * `state.filteredRows` and fires no `onFilterCycleComplete`.
+   */
   destroy(): void {
+    this.destroyed = true;
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;

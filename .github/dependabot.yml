@@ -74,6 +74,13 @@ updates:
       - dependency-name: 'jsdom'
         update-types:
           - version-update:semver-major
+      # `@changesets/cli` 3 requires Node `^22.11 || ^24 || >=26`, so
+      # `engine-strict` fails `npm ci` on the Node 20 runners. It must move
+      # together with `changesets/action` v2 (see the github-actions ignore
+      # below). Hold back until the project drops Node 20.
+      - dependency-name: '@changesets/cli'
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
@@ -81,3 +88,15 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 3
+    ignore:
+      # `changesets/action` v2 refuses to run against Changesets CLI v2
+      # ("designed to work with Changesets CLI v3 ... use Changesets action
+      # v1 instead"), and `@changesets/cli` 3 requires Node
+      # `^22.11 || ^24 || >=26`. With `engine-strict=true` in `.npmrc`, that
+      # hard-fails `npm ci` on the Node 20 CI runners. Same story as
+      # `size-limit` / `jsdom` above: hold back until the project drops
+      # Node 20, then bump the CLI and the action together (the action's v2
+      # inputs are renamed: `version-script`, `commit-message`, `pr-title`).
+      - dependency-name: 'changesets/action'
+        update-types:
+          - version-update:semver-major

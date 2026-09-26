@@ -1,6 +1,6 @@
 {
   "name": "@jeyabbalas/data-table",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A client-side JavaScript library for interactive, explorable data tables using DuckDB WASM",
   "type": "module",
   "main": "./dist/data-table.js",

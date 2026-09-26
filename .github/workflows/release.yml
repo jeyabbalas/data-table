@@ -14,7 +14,7 @@ name: Release
 #
 #   2. The "Version PR (changesets/action)" step opens / updates the
 #      "Version Packages" PR off any pending `.changeset/*.md` files.
-#      `publish:` is intentionally NOT passed — publishing is handled by
+#      `publish-script:` is intentionally NOT passed — publishing is handled by
 #      step (1), so changesets/action only manages the version PR; no
 #      second publish attempt, no spurious red.
 #
@@ -92,13 +92,11 @@ jobs:
             npm publish --access public --provenance
           fi
 
-      # Version-PR creation only. No `publish:` input — see the workflow
+      # Version-PR creation only. No `publish-script:` input — see the workflow
       # header comment for why.
       - name: Version PR (changesets/action)
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          version: npm run version
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version-script: npm run version
+          commit-message: 'chore: version packages'
+          pr-title: 'chore: version packages'

@@ -10,6 +10,8 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  dropSourceFile,
+  sourceFileName,
   type LoaderContext,
 } from './common';
 import type { LoadResult, CSVLoadOptions } from './types';
@@ -59,7 +61,7 @@ export async function loadCSV(
     data instanceof ArrayBuffer ? new Uint8Array(data) : new TextEncoder().encode(data);
 
   // Register file with DuckDB's virtual filesystem
-  const fileName = `${tableName}.csv`;
+  const fileName = sourceFileName('csv');
   await db.registerFileBuffer(fileName, content);
 
   try {
@@ -160,7 +162,7 @@ export async function loadCSV(
     return { tableName, rowCount, columns, schema };
   } finally {
     // Clean up virtual file
-    await db.dropFile(fileName);
+    await dropSourceFile(db, fileName);
   }
 }
 

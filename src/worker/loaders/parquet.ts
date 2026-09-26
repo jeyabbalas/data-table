@@ -10,6 +10,8 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  dropSourceFile,
+  sourceFileName,
   type LoaderContext,
 } from './common';
 import type { LoadResult, ParquetLoadOptions } from './types';
@@ -55,7 +57,7 @@ export async function loadParquet(
   const content = new Uint8Array(data);
 
   // Register file with DuckDB's virtual filesystem
-  const fileName = `${tableName}.parquet`;
+  const fileName = sourceFileName('parquet');
   await db.registerFileBuffer(fileName, content);
 
   try {
@@ -123,6 +125,6 @@ export async function loadParquet(
     return { tableName, rowCount, columns, schema };
   } finally {
     // Clean up virtual file
-    await db.dropFile(fileName);
+    await dropSourceFile(db, fileName);
   }
 }

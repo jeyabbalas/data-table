@@ -10,6 +10,8 @@ import {
   quoteIdentifier,
   wrapReservedColumnError,
   makeReservedColumnError,
+  dropSourceFile,
+  sourceFileName,
   type LoaderContext,
 } from './common';
 import type { LoadResult, JSONLoadOptions } from './types';
@@ -82,7 +84,7 @@ export async function loadJSON(
   const content = new TextEncoder().encode(jsonString);
 
   // Register file with DuckDB's virtual filesystem
-  const fileName = `${tableName}.json`;
+  const fileName = sourceFileName('json');
   await db.registerFileBuffer(fileName, content);
 
   try {
@@ -174,6 +176,6 @@ export async function loadJSON(
     return { tableName, rowCount, columns, schema };
   } finally {
     // Clean up virtual file
-    await db.dropFile(fileName);
+    await dropSourceFile(db, fileName);
   }
 }

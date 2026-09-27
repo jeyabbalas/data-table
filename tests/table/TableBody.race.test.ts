@@ -257,8 +257,8 @@ describe('TableBody — race protection (epoch guard + superseded-fetch abort)',
  * harness because the assertion is a query count, which needs both a
  * controllable bridge and a non-zero viewport.
  */
-describe('TableBody — visibleColumns: reorder vs. set change', () => {
-  it('a same-set reorder renders from the warm cache while a real set change re-fetches', async () => {
+describe('TableBody — visibleColumns: a reorder and a hide', () => {
+  it('render from the warm cache, fetching nothing', async () => {
     const { body, state, queries } = setup();
 
     const initPromise = body.initialize();
@@ -292,16 +292,13 @@ describe('TableBody — visibleColumns: reorder vs. set change', () => {
     expect(queries.length).toBe(callsAfterInit);
     expect(cache.size).toBe(window0.limit);
 
-    // Control: dropping a column is a genuine set change, and the projection
-    // it needs is not in the cache — so this one must still invalidate.
+    // Hiding a column: the rows still hold every column left, so nothing is
+    // fetched again. (A column shown is read on its own, by row id: see
+    // `TableBody.fetchColumns.test.ts`.)
     state.visibleColumns.set(['tag']);
 
-    expect(queries.length).toBe(callsAfterInit + 1);
-    expect(cache.size).toBe(0);
-
-    queries[queries.length - 1]!.deferred.resolve(
-      rowsFor(queries[queries.length - 1]!.sql, ['tag']),
-    );
+    expect(queries.length).toBe(callsAfterInit);
+    expect(cache.size).toBe(window0.limit);
     body.destroy();
   });
 });

@@ -77,13 +77,14 @@ function loaded(): TableContainer {
 }
 
 /**
- * A focusable element inside the table that the next `render()` will destroy —
- * `render()` clears `headerRow`, exactly as it does the real column-header
- * buttons that pin / hide remove.
+ * A focused button inside the table that the next `render()` will destroy:
+ * the sort button of the `score` header, which a render without `score`
+ * removes, as hiding a column from its own header does.
  */
 function doomedButtonInTable(tc: TableContainer): HTMLButtonElement {
-  const btn = document.createElement('button');
-  tc.getHeaderRow().appendChild(btn);
+  const btn = tc
+    .getHeaderRow()
+    .querySelector<HTMLButtonElement>('.dt-col-header[data-column="score"] .dt-col-sort-btn')!;
   btn.focus();
   expect(document.activeElement).toBe(btn);
   return btn;

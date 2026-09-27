@@ -198,6 +198,65 @@ describe('TableBody row fetches with a column window', () => {
     harness.body.destroy();
   });
 
+  it('fetch nothing for a hide or a move, and read a column shown by id for the rows they have', async () => {
+    const { harness, actions } = setup(span(0, 8));
+    // Hidden before the first fetch, which selects the visible columns only.
+    actions.hideColumn('c03');
+    const init = harness.body.initialize();
+    await harness.drain();
+    expect(selected(harness.queries[0]!.sql)).not.toContain('c03');
+    await land(harness);
+    await init;
+    const fetched = harness.queries.length;
+
+    actions.hideColumn('c02');
+    const order = harness.state.visibleColumns.get();
+    actions.setColumnOrder(['c01', 'c00', ...order.slice(2)]);
+    await harness.drain();
+    expect(harness.queries.length).toBe(fetched);
+    const shown = () =>
+      Array.from(row(harness).querySelectorAll('.dt-cell'), (c) => c.getAttribute('data-column'));
+    expect(shown().slice(0, 3)).toEqual(['c01', 'c00', 'c04']);
+    expect(cell(harness, 'c04').textContent).toBe('c04-0');
+
+    actions.showColumn('c03');
+    await harness.drain();
+    const topUp = harness.queries.slice(fetched);
+    expect(topUp).toHaveLength(1);
+    expect(selected(topUp[0]!.sql)).toEqual(['c03']);
+    expect(rowidsRead(topUp[0]!.sql)).toEqual(Array.from({ length: 128 }, (_, i) => i));
+    expect(cell(harness, 'c03').classList.contains('dt-cell--pending')).toBe(true);
+    await land(harness);
+    expect(cell(harness, 'c03').textContent).toBe('c03-0');
+    harness.body.destroy();
+  });
+
+  it('fetch the rows again when a column’s schema entry is replaced under the same table', async () => {
+    const { harness, actions } = setup(span(0, 8));
+    const init = harness.body.initialize();
+    await harness.drain();
+    await land(harness);
+    await init;
+    const fetched = harness.queries.length;
+
+    // What editing a derived column's expression does: a new entry for the
+    // column, the table name unchanged. Hidden and shown around it, a body
+    // that kept its rows showed the old values.
+    actions.hideColumn('c03');
+    harness.state.schema.set(
+      harness.state.schema.get().map((c) => (c.name === 'c03' ? { ...c } : c)),
+    );
+    actions.showColumn('c03');
+    await harness.drain();
+    // Land each fetch since, and what landing it sets off.
+    for (let i = fetched; i < harness.queries.length; i++) {
+      await land(harness, harness.queries[i]!);
+    }
+    const since = harness.queries.slice(fetched);
+    expect(since.some((q) => selected(q.sql).includes('c03'))).toBe(true);
+    harness.body.destroy();
+  });
+
   it('let a fetch in flight land without columns rendered since, then read those', async () => {
     const { harness, mounted } = setup(span(40, 48));
     const init = harness.body.initialize();

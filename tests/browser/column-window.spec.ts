@@ -423,3 +423,152 @@ test('a column in use stays mounted, cells and all, while the wheel takes it awa
     ),
   ).toBe('c202');
 });
+
+test('a hide, a show and a move at 1,000 columns keep every other header and the body, and fetch no rows', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 1000, rows: 60 });
+  await wheelBy(page, 30_000);
+  /** Mark every header and the body now, and later name the headers left unmarked. */
+  const mark = () =>
+    page.evaluate((hostId) => {
+      const w = window as unknown as TestWindow;
+      for (const h of document.querySelectorAll(`#${hostId} .dt-col-header`)) {
+        (h as unknown as { __kept?: boolean }).__kept = true;
+      }
+      (w.__dt.container.getTableBody() as unknown as { __kept?: boolean }).__kept = true;
+    }, HOST_ID);
+  const rebuilt = () =>
+    page.evaluate((hostId) => {
+      const w = window as unknown as TestWindow;
+      return {
+        headers: Array.from(document.querySelectorAll(`#${hostId} .dt-col-header`))
+          .filter((h) => !(h as unknown as { __kept?: boolean }).__kept)
+          .map((h) => h.getAttribute('data-column')),
+        body: !(w.__dt.container.getTableBody() as unknown as { __kept?: boolean }).__kept,
+      };
+    }, HOST_ID);
+  await mark();
+  await probe(page, 'rowFetchWidths');
+  const column = (await probe(page, 'inView'))[3]!;
+
+  await page.evaluate((c) => (window as unknown as TestWindow).__dt.actions.hideColumn(c), column);
+  await settle(page);
+  expect(await rebuilt()).toEqual({ headers: [], body: false });
+  expect(await probe(page, 'rowFetchWidths')).toEqual([]);
+  expect(await probe(page, 'wrongCellsInView')).toEqual([]);
+
+  await page.evaluate((c) => (window as unknown as TestWindow).__dt.actions.showColumn(c), column);
+  await settle(page);
+  expect(await rebuilt()).toEqual({ headers: [column], body: false });
+  // The rows still hold its values from before the hide. (A column they lack
+  // is read on its own, by row id: see `TableBody.fetchColumns.test.ts`.)
+  expect(await probe(page, 'rowFetchWidths')).toEqual([]);
+  expect(await probe(page, 'wrongCellsInView')).toEqual([]);
+
+  await mark();
+  await page.evaluate((c) => {
+    const { actions, state } = (window as unknown as TestWindow).__dt;
+    // Two places to the right.
+    const at = state.visibleColumns.get().indexOf(c);
+    const order = state.visibleColumns.get().filter((name) => name !== c);
+    order.splice(at + 2, 0, c);
+    actions.setColumnOrder(order);
+  }, column);
+  await settle(page);
+  expect(await rebuilt()).toEqual({ headers: [], body: false });
+  expect(await probe(page, 'rowFetchWidths')).toEqual([]);
+  expect(await probe(page, 'wrongCellsInView')).toEqual([]);
+  const misaligned = await probe(page, 'cellHeaderMisalignment');
+  expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
+
+  // Pinning slides the headers that move, but only those near the view: a
+  // thousand transitions on headers nobody can see cost a layout read each.
+  const slid = await page.evaluate(
+    ({ hostId, c }) =>
+      new Promise<number>((resolve) => {
+        (window as unknown as TestWindow).__dt.actions.toggleColumnPin(c);
+        requestAnimationFrame(() =>
+          resolve(
+            Array.from(document.querySelectorAll<HTMLElement>(`#${hostId} .dt-col-header`)).filter(
+              (h) => h.style.transform !== '',
+            ).length,
+          ),
+        );
+      }),
+    { hostId: HOST_ID, c: column },
+  );
+  expect(slid).toBeGreaterThan(0);
+  expect(slid).toBeLessThanOrEqual((await probe(page, 'mounted')).length);
+});
+
+test('a column change after a scroll slides no header in from where it was at load', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 300 });
+  await wheelBy(page, 20_000);
+  const column = (await probe(page, 'inView'))[3]!;
+  const slid = await page.evaluate(
+    ({ hostId, c }) =>
+      new Promise<string[]>((resolve) => {
+        (window as unknown as TestWindow).__dt.actions.hideColumn(c);
+        requestAnimationFrame(() =>
+          resolve(
+            Array.from(document.querySelectorAll<HTMLElement>(`#${hostId} .dt-col-header`))
+              .filter((h) => h.style.transform !== '')
+              .map((h) => h.getAttribute('data-column')!),
+          ),
+        );
+      }),
+    { hostId: HOST_ID, c: column },
+  );
+  expect(slid).toEqual([]);
+});
+
+test('a column moved across the header holding focus leaves that header, and focus, in place', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await page.locator(`#${HOST_ID} .dt-grid`).focus();
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.setFocusedCell({ row: -1, column: 'c05' }),
+  );
+  // F2: DOM focus on the header's first control.
+  await page.keyboard.press('F2');
+  const focused = await page.evaluate(() => {
+    const active = document.activeElement!;
+    (window as unknown as { __blurred?: boolean }).__blurred = false;
+    active.addEventListener('blur', () => {
+      (window as unknown as { __blurred?: boolean }).__blurred = true;
+    });
+    return {
+      column: active.closest('[data-column]')?.getAttribute('data-column'),
+      className: active.className,
+    };
+  });
+  expect(focused.column).toBe('c05');
+
+  // c02 moves from left of c05 to right of it.
+  await page.evaluate(() => {
+    const { actions, state } = (window as unknown as TestWindow).__dt;
+    const order = state.visibleColumns.get().filter((c) => c !== 'c02');
+    order.splice(order.indexOf('c05') + 1, 0, 'c02');
+    actions.setColumnOrder(order);
+  });
+  await settle(page);
+  expect((await probe(page, 'order')).slice(0, 7)).toEqual([
+    'c00',
+    'c01',
+    'c03',
+    'c04',
+    'c05',
+    'c02',
+    'c06',
+  ]);
+  const after = await page.evaluate(() => ({
+    column: document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+    className: document.activeElement?.className,
+    blurred: (window as unknown as { __blurred?: boolean }).__blurred,
+  }));
+  expect(after).toEqual({ ...focused, blurred: false });
+});

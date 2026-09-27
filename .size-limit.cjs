@@ -24,7 +24,7 @@
  *   root entry · ESM                9.00 kB   →   9.3 kB cap (3.3 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
  *   stylesheet                     19.45 kB   →  20.4 kB cap (4.9 %)
- *   lazy ExportDialog chunk        74.03 kB   →  78 kB   cap (5.4 %)
+ *   lazy ExportDialog chunk        78.21 kB   →  82 kB   cap (4.8 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.8 %)
  *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
@@ -42,7 +42,12 @@
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
  * body, keyboard navigation. It measured 69.91 kB until the column-geometry
  * work (the one column layout, the pinned-column fixes, the measured
- * scrollbar gutter) took it to 74.03 kB. The same work took the stylesheet
+ * scrollbar gutter) took it to 74.03 kB. The column window, which renders
+ * and fetches only the columns near the view, took it to 77.47 kB, and the
+ * header work after it to 78.21 kB: columns held while a drag or a panel
+ * uses them, header controls built and taken down with their column, and a
+ * header row and body updated in place on a column change instead of
+ * rebuilt. The cap moved from 78 to 82 kB then. The same work took the stylesheet
  * from 18.66 to 19.45 kB, mostly in comments (see below), and its cap from
  * 19.6 to 20.4 kB.
  *
@@ -91,7 +96,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '78 kB',
+    limit: '82 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

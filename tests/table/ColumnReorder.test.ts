@@ -776,6 +776,40 @@ describe('ColumnReorder', () => {
     });
   });
 
+  describe('the header row', () => {
+    it('hears a press on a header added after it was made', () => {
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      setupHeaders(['col1', 'col2']);
+
+      getDragHandle(headerRow.querySelector('[data-column="col1"]')!).dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 90, clientY: 16 }));
+      expect(reorder.isDraggingNow()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 90, clientY: 16 }));
+
+      reorder.destroy();
+    });
+
+    it('holds the drop indicator only while a drag shows it', () => {
+      setupHeaders(['col1', 'col2']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      getDragHandle(headerRow.querySelector('[data-column="col1"]')!).dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 16 }));
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, clientY: 16 }));
+      expect(headerRow.querySelector('.dt-drop-indicator')).not.toBeNull();
+
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 250, clientY: 16 }));
+      // The row outlives renders; left in it, the indicator would be its last
+      // child, where `.dt-col-header:last-child` expects the last header.
+      expect(headerRow.querySelector('.dt-drop-indicator')).toBeNull();
+
+      reorder.destroy();
+    });
+  });
+
   describe('visual feedback', () => {
     it('adds dragging class to body during drag', () => {
       setupHeaders(['col1', 'col2']);

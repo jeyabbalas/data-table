@@ -91,8 +91,9 @@ export interface KeyboardNavigatorOptions {
   getTableBody: () => TableBody | null;
   /**
    * Late-bound accessor for the live ColumnHeader instances — `render()`
-   * destroys and rebuilds them, so they cannot be captured at construction.
-   * Without it, header-row navigation and F2 controls mode are inert.
+   * adds, removes and rebuilds them, so they cannot be captured at
+   * construction. Without it, header-row navigation and F2 controls mode are
+   * inert.
    */
   getColumnHeaders?: (() => ColumnHeader[]) | undefined;
   /**
@@ -145,11 +146,11 @@ export class KeyboardNavigator {
   /**
    * The open column-layout gesture, keyed by column **name**.
    *
-   * By name and not by index or by `ColumnHeader` reference: a move rewrites
-   * `visibleColumns`, which re-renders the header row and destroys every
-   * `ColumnHeader` instance, so anything else would be stale one keystroke
-   * into the gesture. The entry width and position are not stored here either
-   * — `StateActions` holds a pre-gesture snapshot and `Escape` restores from
+   * By name and not by index or by `ColumnHeader` reference: a move changes
+   * every index after it, and a render rebuilds a header whose column's
+   * schema entry changed, so anything else could be stale one keystroke into
+   * the gesture. The entry width and position are not stored here either —
+   * `StateActions` holds a pre-gesture snapshot and `Escape` restores from
    * it, so there is exactly one restore path.
    */
   private layout: { column: string } | null = null;
@@ -638,8 +639,7 @@ export class KeyboardNavigator {
       this.actions.endColumnLayoutChange();
       this.announce(a.columnLayoutCommitted(layout.column));
     }
-    // After the restore, not before: cancelling rewrites the column order,
-    // which rebuilds every header.
+    // After the restore, not before: cancelling rewrites the column order.
     this.syncLayoutAffordance();
   }
 
@@ -836,9 +836,8 @@ export class KeyboardNavigator {
 
     this.claimGridFocus();
     this.actions.setColumnOrder(next);
-    // setColumnOrder re-renders the header row, which destroys and rebuilds
-    // every ColumnHeader — the affordance has to be re-applied, and the
-    // column has moved out from under the cursor.
+    // The column has moved out from under the view; the affordance follows
+    // the header, which a render may have rebuilt.
     this.syncLayoutAffordance();
     this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
     this.announce(a.columnMovedAnnouncement(layout.column, target + 1, next.length));

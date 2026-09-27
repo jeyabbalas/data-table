@@ -274,3 +274,25 @@ panels and charts right across a trackpad sweep.
   stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
   which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
   failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.
+- **Found building 4d PR 4, on main too.** Pinning slides headers from their old places to their
+  new ones (FLIP), from positions saved when `pinnedColumns` changes. Loading data writes
+  `pinnedColumns` after the columns in one batch, so the positions were saved after the render
+  that load causes and kept until the next one: the first hide, show or move after a scroll slid
+  every header in from where it was at load. With 299 headers translated, the create observer
+  saw charts 20,000 px away as in reach and built them. Saved positions now last to the end of the
+  task that saved them.
+- **Found in review of #144.**
+  - A load whose session restored a sort or filters resolved before the rows were painted. The body
+    built for the load was kept through the restore, which made it fetch again, and
+    `whenBodyReady()` waited only for its first fetch. It now waits for the body's latest refetch.
+  - Undoing the add or rename of a derived column in view logged a DuckDB binder error. The schema
+    is written before the column list, and the body, kept through both, fetched a column the
+    relation no longer had. Row fetches leave out columns the schema lacks.
+  - `setColumnOrder` accepted a name twice, and the header row, which keys headers by name, had one
+    header where the layout had two places. `setColumnOrder` now drops a repeat.
+  - A `TableBody` driven directly, without `TableContainer`, kept values cached for a column whose
+    schema entry changed (a derived column edited) under the same table name. It fetches again when
+    the schema changes.
+  - Moving a column to the front anchored the reorder on the first header in the row, which was
+    the column moved, and moved every header it passed: 900 at 1,000 columns. It anchors on a
+    header already after its neighbour now, and moves one.

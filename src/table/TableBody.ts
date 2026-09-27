@@ -116,22 +116,6 @@ export interface TableBodyOptions {
 export type RowData = Record<string, unknown>;
 
 /**
- * Whether two column lists hold the same names, ignoring order.
- *
- * Used to tell a reorder (same set) from a show / hide / derived-column change
- * (different set). Rows are keyed by column name, so the former needs a
- * re-render and the latter needs a re-fetch.
- */
-function sameColumnSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  const seen = new Set(a);
-  for (const name of b) {
-    if (!seen.has(name)) return false;
-  }
-  return true;
-}
-
-/**
  * What a data row holds, left to right: a cell for each column it renders,
  * and a spacer as wide as each run of columns between two of them, or after
  * the last. Built once per render pass and shared by every row built from it,
@@ -262,6 +246,10 @@ export class TableBody {
   private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
   // The single speculative block fetch beyond the viewport, or null.
   private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  // The fetch that fills the rows in view after the last change that emptied
+  // them: the first, or the refetch after a filter, sort or table change.
+  // See `whenFetched`.
+  private refetch: Promise<void> = Promise.resolve();
   // The columns each cached block holds, by block start. Its rows hold values
   // for those only: when rows render a column their block lacks, the block
   // reads it, and until then those cells are pending.
@@ -296,10 +284,6 @@ export class TableBody {
   // `--dt-z-pinned-col`, read at most once per render pass: reading it
   // forces a style recalculation, and `updateRowContent` runs per row.
   private pinnedZBaseCache: number | null = null;
-
-  // Last observed visibleColumns, so a write can be classified as a reorder
-  // (same set, new order — re-render) or a real change (re-fetch).
-  private lastVisibleColumns: string[] = [];
 
   private readonly rowHeight: number;
   private readonly classPrefix: string;
@@ -384,8 +368,6 @@ export class TableBody {
   async initialize(): Promise<void> {
     if (this.destroyed) return;
 
-    this.lastVisibleColumns = [...this.state.visibleColumns.get()];
-
     // Set total rows (use filteredRows when filters are active)
     const filters = this.state.filters.get();
     const effectiveTotal =
@@ -410,7 +392,8 @@ export class TableBody {
     if (effectiveTotal > 0) {
       this.currentRange = this.virtualScroller.getVisibleRange();
       this.renderVisibleRows();
-      await this.ensureFetched();
+      this.refetch = this.ensureFetched();
+      await this.refetch;
     }
 
     // Subscribe to scroll events. Safe to do after the initial fetch — the
@@ -429,33 +412,28 @@ export class TableBody {
    * Subscribe to state signals that require re-render
    */
   private subscribeToState(): void {
-    // Re-fetch when the visible column *set* changes.
-    //
-    // A write that only permutes the set is a reorder, and rows are keyed by
-    // column name — every value fetched is still right, so a re-render is
-    // enough, and the in-flight `initialize()` fetch is not dropped by a
-    // `fetchSequence` bump it did not need. Columns a reorder brings near the
-    // view come as a new set of mounted columns, which fetches what the rows
-    // lack.
-    //
-    // Measured honestly: through `TableContainer` this changes no query count.
-    // `render()` destroys and recreates the whole `TableBody` on any
-    // `visibleColumns` write, so one keyboard column move at 266 columns costs
-    // 534 DuckDB queries with or without this branch — all of them column-header
-    // stats and plot queries from rebuilding 266 headers, none of them row
-    // fetches. It earns its keep where a `TableBody` is driven directly, which
-    // is a supported `/advanced` entry point.
-    const unsubVisibleCols = this.state.visibleColumns.subscribe((columns) => {
+    // Re-render when the visible columns change, and read only what the rows
+    // now lack. Rows are keyed by column name, so every value fetched stays
+    // right through a hide, a show or a move, and the rows already cached
+    // read a column shown by `__rowid__` (see `fetchBlock`) rather than
+    // fetching again, which on a sorted or filtered table would sort or
+    // filter it all again. What makes cached values wrong is a new schema
+    // or table, below.
+    const unsubVisibleCols = this.state.visibleColumns.subscribe(() => {
       if (this.destroyed) return;
-      const orderOnly = sameColumnSet(this.lastVisibleColumns, columns);
-      this.lastVisibleColumns = [...columns];
-      if (orderOnly) {
-        this.renderVisibleRows();
-      } else {
-        this.invalidateCacheAndRefresh();
-      }
+      this.renderVisibleRows();
+      if (!this.isAnimatingScroll) void this.ensureFetched();
     });
     this.unsubscribes.push(unsubVisibleCols);
+
+    // Re-fetch when the schema changes. A derived column edited or renamed
+    // replaces its entry under the same table name, and the values cached for
+    // it are stale. `TableContainer` builds a new body for a new schema; this
+    // is for a body driven directly.
+    const unsubSchema = this.state.schema.subscribe(() => {
+      if (!this.destroyed) this.invalidateCacheAndRefresh();
+    });
+    this.unsubscribes.push(unsubSchema);
 
     // Re-fetch when sort changes
     const unsubSort = this.state.sortColumns.subscribe(() => {
@@ -662,7 +640,26 @@ export class TableBody {
     // while the re-fetch runs) and reconcile.
     this.currentRange = this.virtualScroller.getVisibleRange();
     this.renderVisibleRows();
-    void this.ensureFetched();
+    this.refetch = this.ensureFetched();
+  }
+
+  /**
+   * Resolves once the rows in view have been fetched since the last change
+   * that emptied them: the first fetch, or the refetch after a filter, sort
+   * or table change, whichever came last.
+   *
+   * For `TableContainer.whenBodyReady()`. A body kept through a load's later
+   * writes, a restored session's sort or filters, fetches its rows again, and
+   * the load has to wait for that fetch, not for the first.
+   *
+   * @internal
+   */
+  async whenFetched(): Promise<void> {
+    let fetch: Promise<void>;
+    do {
+      fetch = this.refetch;
+      await fetch;
+    } while (fetch !== this.refetch && !this.destroyed);
   }
 
   /** Abort every in-flight block fetch and the prefetch, clearing both. */
@@ -807,6 +804,7 @@ export class TableBody {
    */
   private fetchColumns(): FetchColumns {
     const layout = getColumnLayout(this.state);
+    const schema = this.schemaMap();
     const n = layout.columns.length;
     const picked = new Set<number>();
     // The pinned block as it is; every other run of adjacent columns widened.
@@ -833,9 +831,20 @@ export class TableBody {
     const names: string[] = [];
     for (const index of [...picked].sort((a, b) => a - b)) {
       const name = layout.columns[index]!;
-      if (name !== ROWID_COLUMN) names.push(name);
+      if (name !== ROWID_COLUMN && schema.has(name)) names.push(name);
     }
     return { names, set: new Set(names) };
+  }
+
+  /**
+   * The columns rows render that a fetch can read: the ones the schema has.
+   * Undoing the add of a derived column writes the schema before the column
+   * list, and a fetch between the two asked the relation for a column it no
+   * longer has, which DuckDB refused.
+   */
+  private fetchableRenderedColumns(): string[] {
+    const schema = this.schemaMap();
+    return this.rowShape().columns.filter((column) => schema.has(column));
   }
 
   /**
@@ -855,7 +864,7 @@ export class TableBody {
     if (this.state.visibleColumns.get().length === 0) return;
 
     // The columns rows render, and the ones a fetch started now selects.
-    const rendered = this.rowShape().columns;
+    const rendered = this.fetchableRenderedColumns();
     const columns = this.fetchColumns();
     const needed = this.missingBlocks(this.currentRange, rendered);
 
@@ -2425,8 +2434,8 @@ export class TableBody {
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,
     // so a cell holding real focus (from a click) has to be rescued first —
-    // `TableContainer.render()` destroys and rebuilds the body on every
-    // schema / visibleColumns change, and dropping focus to `<body>` there
+    // `TableContainer.render()` destroys and rebuilds the body when the
+    // schema or the table changes, and dropping focus to `<body>` there
     // would silently kill the keyboard layer.
     this.moveFocusToGridBeforeRemoval(this.virtualScroller.getViewportContainer());
     this.virtualScroller.destroy();

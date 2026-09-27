@@ -1165,7 +1165,9 @@ export class StateActions {
    * positions. Pinned columns stay first, in the order given: an order that
    * puts one after an unpinned column has it moved to the pinned block, and
    * `pinnedColumns` takes the block's new order, so a pinned column hidden
-   * and shown again goes back to its place in it.
+   * and shown again goes back to its place in it. A name given twice counts
+   * once, at its first place: the table has one header and one place for
+   * it.
    */
   setColumnOrder(columns: string[]): void {
     this.throwIfDestroyed('setColumnOrder');
@@ -1173,7 +1175,7 @@ export class StateActions {
     const pinned = this.state.pinnedColumns.get();
     // Hidden columns go back at their relative positions.
     const newOrder = pinnedColumnsFirst(
-      mergeMissingColumns(columns, this.state.columnOrder.get()),
+      mergeMissingColumns([...new Set(columns)], this.state.columnOrder.get()),
       pinned,
     );
     const pinnedSet = new Set(pinned);

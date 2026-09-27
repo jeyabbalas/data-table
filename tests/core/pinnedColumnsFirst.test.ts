@@ -86,6 +86,25 @@ describe('pinned columns stay first', () => {
     expect(seen).toEqual([['b', 'a', 'c', 'd', 'e']]);
   });
 
+  it('ignores a column the table does not have', () => {
+    const before = { order: state.columnOrder.get(), pinned: state.pinnedColumns.get() };
+
+    actions.toggleColumnPin('nope');
+
+    expect(state.columnOrder.get()).toBe(before.order);
+    expect(state.pinnedColumns.get()).toBe(before.pinned);
+  });
+
+  it('unpins a stale pinned name without adding it to columnOrder', () => {
+    state.pinnedColumns.set(['gone', 'a']);
+    const order = state.columnOrder.get();
+
+    actions.toggleColumnPin('gone');
+
+    expect(state.pinnedColumns.get()).toEqual(['a']);
+    expect(state.columnOrder.get()).toBe(order);
+  });
+
   it('showing a column keeps it out of a pinned block formed while it was hidden', () => {
     // `a`'s right neighbour at hide time was `b`, which is pinned since.
     actions.hideColumn('a');

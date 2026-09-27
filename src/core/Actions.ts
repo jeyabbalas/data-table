@@ -1204,10 +1204,22 @@ export class StateActions {
    */
   toggleColumnPin(column: string): void {
     this.throwIfDestroyed('toggleColumnPin');
-    this.captureForUndo();
     const pinned = this.state.pinnedColumns.get();
     const order = this.state.columnOrder.get();
     const isPinned = pinned.includes(column);
+
+    // A name the table does not have would otherwise be pinned and spliced
+    // into `columnOrder` as a phantom column, shifting the `aria-colindex` of
+    // every column after it. One that is pinned all the same (a stale entry)
+    // is only unpinned.
+    if (!order.includes(column)) {
+      if (!isPinned) return;
+      this.captureForUndo();
+      this.state.pinnedColumns.set(pinned.filter((c) => c !== column));
+      return;
+    }
+
+    this.captureForUndo();
 
     // Suppress undo capture for the internal setColumnOrder call. Batched so
     // subscribers see the pinned set and the order that goes with it

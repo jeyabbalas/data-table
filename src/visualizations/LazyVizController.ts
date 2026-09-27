@@ -65,6 +65,8 @@ export interface LazyVizHost {
   onVizCreated?(columnName: string, viz: BaseVisualization): void;
   /** Called just before a chart is destroyed. */
   onVizDestroyed?(columnName: string, viz: BaseVisualization): void;
+  /** Called by {@link LazyVizController.sync} for a column that no longer gets a chart. */
+  onColumnRemoved?(columnName: string): void;
   /** A `createViz` or `destroy` that threw. */
   onError?(error: unknown, columnName: string): void;
 }
@@ -97,6 +99,8 @@ interface Entry {
   viz: BaseVisualization | null;
   /** Inside the create band, as the create observer last reported. */
   wanted: boolean;
+  /** `createViz` threw; not tried again until the next sync. */
+  failed: boolean;
 }
 
 /** The charts a {@link LazyVizController.sync} creates for the columns in view. */
@@ -169,11 +173,15 @@ export class LazyVizController {
    */
   sync(columns: ColumnSchema[]): void {
     if (this.destroyed) return;
-    for (const [name, entry] of this.entries) this.destroyViz(name, entry);
+    const names = new Set(columns.map((column) => column.name));
+    for (const [name, entry] of this.entries) {
+      this.destroyViz(name, entry);
+      if (!names.has(name)) this.host.onColumnRemoved?.(name);
+    }
     this.entries.clear();
     this.queue = [];
     for (const column of columns) {
-      this.entries.set(column.name, { column, viz: null, wanted: false });
+      this.entries.set(column.name, { column, viz: null, wanted: false, failed: false });
     }
     const wave = this.startWave();
 
@@ -211,6 +219,20 @@ export class LazyVizController {
       return;
     }
     wave.timer = setTimeout(() => this.closeWave(wave), VIZ_FIRST_REPORT_TIMEOUT_MS);
+  }
+
+  /**
+   * Queue every column in reach that has no chart, such as one whose
+   * creation the host declined by returning `null` while the table's
+   * relation was changing.
+   */
+  requeueWanted(): void {
+    if (this.destroyed) return;
+    for (const [name, entry] of this.entries) {
+      if (!entry.wanted || entry.viz || entry.failed || this.queue.includes(name)) continue;
+      this.queue.push(name);
+    }
+    this.pump();
   }
 
   /**
@@ -274,7 +296,7 @@ export class LazyVizController {
       // creation is skipped, but destroys nothing: that is the keep band's
       // job, further out.
       entry.wanted = record.isIntersecting;
-      if (!entry.wanted || entry.viz || this.queue.includes(name)) continue;
+      if (!entry.wanted || entry.viz || entry.failed || this.queue.includes(name)) continue;
       this.queue.push(name);
       wave?.members.add(name);
     }
@@ -302,7 +324,8 @@ export class LazyVizController {
     while (!this.destroyed && this.creating < this.concurrency && this.queue.length > 0) {
       const name = this.queue.shift()!;
       const entry = this.entries.get(name);
-      const viz = entry && !entry.viz && entry.wanted ? this.createViz(name, entry) : null;
+      const viz =
+        entry && !entry.viz && !entry.failed && entry.wanted ? this.createViz(name, entry) : null;
       const wave = this.wave?.members.has(name) ? this.wave : null;
       if (!viz) {
         if (wave) this.leaveWave(wave, name);
@@ -325,6 +348,10 @@ export class LazyVizController {
     try {
       viz = this.host.createViz(entry.column, container);
     } catch (error) {
+      // A chart that throws in its constructor may already have added its
+      // canvas, and would throw again: leave it until the next sync.
+      entry.failed = true;
+      container.replaceChildren();
       this.host.onError?.(error, name);
       return null;
     }

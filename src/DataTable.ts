@@ -728,6 +728,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     };
   };
 
+  // Per chart, puts its stats slot back once the chart is destroyed.
+  const statsSlotResets = new WeakMap<BaseVisualization, () => void>();
+
   /**
    * Build one column's chart. Called whenever the column comes into view,
    * so each call makes fresh closures over the column's current header.
@@ -738,7 +741,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   ): BaseVisualization | null => {
     const tableName = state.tableName.get();
     const header = headersByName.get(column.name);
-    if (!tableName || !header) return null;
+    // While a derived-column change waits on DuckDB, `tableName` may name a
+    // VIEW it has already dropped or replaced. The column is queued again
+    // once the change settles (see `setOnRelationSettled` below).
+    if (!tableName || !header || actions.isRelationChanging()) return null;
     const statsEl = header.getStatsElement();
     // A custom stats panel owns the slot. Panels are rebuilt by each attach
     // pass, which also destroys every chart, so this one outlives the chart.
@@ -825,6 +831,23 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     const created = vizRegistry.create(vizContainer, column, vizOptions);
     if (!created) return null;
     viz = created as VisualizationType;
+    // Once the chart is gone, its stats must not linger: a panel goes back
+    // to its initial state, and the default slot to the table-wide count,
+    // which `refreshNonVizStats` keeps current from then on.
+    statsSlotResets.set(created, () => {
+      if (destroyed) return;
+      if (!panel) {
+        statsEl.innerHTML = tableWideLine1Html();
+        return;
+      }
+      // Replaced by a newer attach pass, whose panel now owns the slot.
+      if (panel.isDestroyed()) return;
+      try {
+        panel.update(null);
+      } catch (err) {
+        emitStatsPanelError(err, column.name, 'update');
+      }
+    });
     return created;
   };
 
@@ -835,10 +858,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         createViz: createVizForColumn,
         getVizContainer: (columnName) => headersByName.get(columnName)?.getVizContainer() ?? null,
         onVizCreated: (columnName, viz) => coordinator.register(columnName, viz),
-        onVizDestroyed: (columnName) => {
+        onVizDestroyed: (columnName, viz) => {
+          statsSlotResets.get(viz)?.();
           interactionManager?.replaceVisualization(columnName, detachedInteraction(columnName));
           coordinator.unregister(columnName);
         },
+        // A hidden or removed column leaves the Escape stack, as its chart
+        // would when the header row is rebuilt without it.
+        onColumnRemoved: (columnName) => interactionManager?.removeColumn(columnName),
         onError: (err) => {
           const typed =
             err instanceof DataTableError
@@ -851,6 +878,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
+    });
+    // Build the charts skipped during a derived-column change. After a
+    // success the attach pass that follows re-syncs anyway; after a failure
+    // nothing else would. A task rather than a microtask, so it runs after
+    // the state update that follows the change and the attach pass it
+    // schedules.
+    actions.setOnRelationSettled(() => {
+      setTimeout(() => {
+        if (!destroyed) vizController?.requeueWanted();
+      }, 0);
     });
   }
 

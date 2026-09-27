@@ -6,7 +6,7 @@
 
 - Column-header charts are built only for columns near the view. A chart is created when its header scrolls within 200 px of the visible header row and removed once the header is 400 px away, and a filter change refreshes only the charts that exist. A column scrolled into view later gets its chart built with the filters in force then. On a 50,000-row × 1,000-column Parquet file in Chrome, `loadData` drops from 20.4 s to 6.2 s (2,004 queries to 22), a filter from 4.4 s to 0.5 s, and hiding a column from 20.6 s to 2.2 s.
 - `loadData`, and `await createDataTable({ source })`, now wait for the charts in view to draw their first data rather than every column's. In a hidden tab they don't wait for charts, and in a page the browser isn't rendering, such as a hidden iframe, they stop waiting after one second. Without `IntersectionObserver` (jsdom, for example), every column's chart is built at once, as before.
-- A custom visualization is now constructed each time its column comes within reach, and destroyed when the column leaves. Header rebuilds still re-create the ones near the view.
+- A custom visualization is now constructed each time its column comes within reach, and destroyed when the column leaves. Header rebuilds still re-create the ones near the view. One that throws in its constructor is reported once and not tried again until the next header rebuild. A custom stats panel gets `update(null)` again when its column's chart is removed.
 
 ### Added
 

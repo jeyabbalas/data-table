@@ -70,7 +70,8 @@ What to expect:
 - **Filtering.** A filter change refreshes only the charts that exist. A
   column scrolled into view later gets its chart built with the filters in
   force then, so it is correct when it appears. Until then its stats show
-  the table-wide row count.
+  the table-wide row count, and a custom stats panel gets `update(null)`
+  when the chart goes away.
 - **Brushes and selections.** A rebuilt chart draws its brush or selection
   from the column's filter, so it matches the filter however that changed
   while the column was out of view. Escape still clears the most recent

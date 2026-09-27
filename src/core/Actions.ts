@@ -123,6 +123,9 @@ export class StateActions {
     | undefined;
   private initialSnapshot: StateSnapshot | null = null;
   private derivedManager: DerivedColumnManager | null = null;
+  /** Derived-column changes awaiting DuckDB; see {@link changeRelation}. */
+  private relationChanges = 0;
+  private onRelationSettledCallback?: (() => void) | undefined;
   private destroyed = false;
 
   constructor(
@@ -168,6 +171,40 @@ export class StateActions {
   private throwIfDestroyed(method: string): void {
     if (this.destroyed) {
       throw new DestroyedError(`DataTable is destroyed; cannot call actions.${method}().`);
+    }
+  }
+
+  /**
+   * Whether a derived-column change is waiting on DuckDB. Until it settles,
+   * `state.tableName` and `state.schema` may name a VIEW or a column that
+   * DuckDB has already dropped or replaced.
+   *
+   * @internal
+   */
+  isRelationChanging(): boolean {
+    return this.relationChanges > 0;
+  }
+
+  /**
+   * Set a callback invoked when the last derived-column change in flight
+   * settles, whether it succeeded or failed. It runs before the state update
+   * that follows a successful change.
+   *
+   * @internal
+   */
+  setOnRelationSettled(callback: () => void): void {
+    this.throwIfDestroyed('setOnRelationSettled');
+    this.onRelationSettledCallback = callback;
+  }
+
+  /** Run a DuckDB change to the derived-column relation, counted for {@link isRelationChanging}. */
+  private async changeRelation<T>(change: () => Promise<T>): Promise<T> {
+    this.relationChanges++;
+    try {
+      return await change();
+    } finally {
+      this.relationChanges--;
+      if (this.relationChanges === 0) this.onRelationSettledCallback?.();
     }
   }
 
@@ -268,7 +305,7 @@ export class StateActions {
       // Reconcile DuckDB state BEFORE applying snapshot signals.
       // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
       if (derivedChanged) {
-        await this.reconcileDerivedColumns(snapshot);
+        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
       }
       this.throwIfDestroyed('undo');
 
@@ -316,7 +353,7 @@ export class StateActions {
       const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
 
       if (derivedChanged) {
-        await this.reconcileDerivedColumns(snapshot);
+        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
       }
       this.throwIfDestroyed('redo');
 
@@ -456,9 +493,10 @@ export class StateActions {
       const prevFilters = this.state.filters.get();
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
-      if (this.derivedManager) {
+      const manager = this.derivedManager;
+      if (manager) {
         try {
-          await this.derivedManager.destroy();
+          await this.changeRelation(() => manager.destroy());
         } catch {
           /* best-effort cleanup */
         }
@@ -562,7 +600,9 @@ export class StateActions {
         if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
           try {
             const manager = this.ensureDerivedManager();
-            const restoredSchemas = await manager.restoreColumns(this.state.derivedColumns.get());
+            const restoredSchemas = await this.changeRelation(() =>
+              manager.restoreColumns(this.state.derivedColumns.get()),
+            );
             this.throwIfDestroyed('loadData');
 
             if (restoredSchemas.length > 0) {
@@ -1328,7 +1368,7 @@ export class StateActions {
 
     try {
       const manager = this.ensureDerivedManager();
-      const info = await manager.addColumn(def);
+      const info = await this.changeRelation(() => manager.addColumn(def));
 
       // Drop the result if the table was destroyed during the await — do not
       // touch state and do not push to the undo stack.
@@ -1418,7 +1458,7 @@ export class StateActions {
 
     try {
       const manager = this.ensureDerivedManager();
-      const info = await manager.updateColumn(oldName, def);
+      const info = await this.changeRelation(() => manager.updateColumn(oldName, def));
 
       // Drop the result if the table was destroyed during the await.
       if (this.destroyed) {
@@ -1601,7 +1641,7 @@ export class StateActions {
     let info: DerivedColumnInfo;
     try {
       const manager = this.ensureDerivedManager();
-      info = await manager.replaceColumn(name, newDef);
+      info = await this.changeRelation(() => manager.replaceColumn(name, newDef));
     } catch (err) {
       const typedError =
         err instanceof DerivedColumnError
@@ -1677,7 +1717,7 @@ export class StateActions {
       this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     const manager = this.ensureDerivedManager();
-    await manager.removeColumn(name);
+    await this.changeRelation(() => manager.removeColumn(name));
     this.throwIfDestroyed('removeDerivedColumn');
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation

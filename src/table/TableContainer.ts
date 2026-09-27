@@ -197,8 +197,9 @@ export class TableContainer {
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
 
-  // Track previous visible columns for restore-highlight detection
-  private previousVisibleColumns = new Set<string>();
+  // The visible columns as of the last render, in order: for the restore
+  // highlight, and for where the cursor goes when its column disappears
+  private previousVisibleOrder: readonly string[] = [];
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -1233,24 +1234,6 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubFocusClamp);
-
-    // Snap focus to first visible column if focused column is hidden
-    const unsubFocusCol = this.state.visibleColumns.subscribe((cols) => {
-      if (this.destroyed) return;
-      const focusedCell = this.state.focusedCell.get();
-      if (!focusedCell) return;
-      if (!cols.includes(focusedCell.column)) {
-        if (cols.length === 0) {
-          this.actions?.clearFocusedCell();
-        } else {
-          this.actions?.setFocusedCell({
-            row: focusedCell.row,
-            column: cols[0]!,
-          });
-        }
-      }
-    });
-    this.unsubscribes.push(unsubFocusCol);
   }
 
   // =========================================
@@ -1349,7 +1332,8 @@ export class TableContainer {
   render(): void {
     if (this.destroyed) return;
 
-    const prevVisible = this.previousVisibleColumns;
+    const previousOrder = this.previousVisibleOrder;
+    const prevVisible = new Set(previousOrder);
 
     // Save the body's scroll position before re-rendering; the header follows it
     const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
@@ -1584,8 +1568,7 @@ export class TableContainer {
       });
     }
 
-    // Track visible columns and highlight newly restored ones
-    const newVisibleSet = new Set(visibleColumns);
+    // Highlight newly restored columns
     if (prevVisible.size > 0) {
       const prefix = this.resolvedOptions.classPrefix;
       for (const header of this.columnHeaders) {
@@ -1600,14 +1583,7 @@ export class TableContainer {
         }
       }
     }
-    this.previousVisibleColumns = newVisibleSet;
-
-    // render() rebuilt every ColumnHeader, so the cursor's target element is
-    // gone. Re-point it (dropping to the first visible column if its column
-    // disappeared) before anything reads aria-activedescendant.
-    this.reconcileCursorColumn(visibleColumns);
-    this.syncActiveDescendant();
-    this.updateHeaderCursorStyles();
+    this.previousVisibleOrder = visibleColumns;
 
     // Put the scroll positions back now. Emptying the scrollers clamped them
     // to 0 as soon as the rebuild read layout; the new body has its full size
@@ -1618,6 +1594,14 @@ export class TableContainer {
     this.bodyScroll.scrollLeft = savedBodyScrollLeft;
     this.bodyScroll.scrollTop = savedBodyScrollTop;
     this.syncHeaderScroll();
+
+    // render() rebuilt every ColumnHeader, so the cursor's target element is
+    // gone. Re-point it (to the column in its place if its column
+    // disappeared) before anything reads aria-activedescendant. After the
+    // scroll restore: where the cursor goes can depend on what is in view.
+    this.reconcileCursorColumn(visibleColumns, previousOrder);
+    this.syncActiveDescendant();
+    this.updateHeaderCursorStyles();
 
     requestAnimationFrame(() => {
       if (!this.destroyed) {
@@ -1647,15 +1631,79 @@ export class TableContainer {
    * Keep the cursor on a column that still exists. Hiding or removing the
    * cursor's column would otherwise leave `aria-activedescendant` pointing at
    * a destroyed header and the header ring painted on nothing.
+   *
+   * The cursor goes to the column in the lost one's place (see
+   * {@link columnInPlaceOf}). It used to go to the first column, which sent a
+   * keyboard user who hid a column far to the right back to the start of the
+   * table, with the view still where it was.
    */
-  private reconcileCursorColumn(visibleColumns: string[]): void {
+  private reconcileCursorColumn(
+    visibleColumns: readonly string[],
+    previousOrder: readonly string[],
+  ): void {
     const focused = this.state.focusedCell.get();
     if (!focused || visibleColumns.includes(focused.column)) return;
     if (visibleColumns.length === 0) {
       this.actions?.clearFocusedCell();
       return;
     }
-    this.actions?.setFocusedCell({ row: focused.row, column: visibleColumns[0]! });
+    this.actions?.setFocusedCell({
+      row: focused.row,
+      column: this.columnInPlaceOf(focused.column, previousOrder, visibleColumns),
+    });
+  }
+
+  /**
+   * The column now shown where `lost` was, in `previous`, the last render's
+   * visible order:
+   *
+   * - a column the last render did not have, standing at the lost one's
+   *   index: the same column renamed, or its replacement;
+   * - for a pinned column, another pinned one after it, else before it; with
+   *   none left, the first column at the left of the view. The pinned block
+   *   is always in view, and the column after it in order need not be;
+   * - otherwise the first column still shown after it, else the last before
+   *   it;
+   * - the first column, when `lost` was not shown at all.
+   */
+  private columnInPlaceOf(
+    lost: string,
+    previous: readonly string[],
+    shown: readonly string[],
+  ): string {
+    const at = previous.indexOf(lost);
+    if (at < 0) return shown[0]!;
+    const inPlace = shown[at];
+    if (inPlace !== undefined && !previous.includes(inPlace)) return inPlace;
+
+    const visible = new Set(shown);
+    const nearest = (keep: (column: string) => boolean): string | undefined => {
+      for (let i = at + 1; i < previous.length; i++) {
+        if (visible.has(previous[i]!) && keep(previous[i]!)) return previous[i]!;
+      }
+      for (let i = at - 1; i >= 0; i--) {
+        if (visible.has(previous[i]!) && keep(previous[i]!)) return previous[i]!;
+      }
+      return undefined;
+    };
+
+    // `hideColumn` leaves a hidden column in `pinnedColumns`.
+    const pinned = new Set(this.state.pinnedColumns.get());
+    if (pinned.has(lost)) {
+      const column = nearest((c) => pinned.has(c)) ?? this.firstUnpinnedColumnInView();
+      if (column) return column;
+    }
+    return nearest(() => true) ?? shown[0]!;
+  }
+
+  /** The first column at least partly in view right of the pinned block. */
+  private firstUnpinnedColumnInView(): string | undefined {
+    const layout = getColumnLayout(this.state);
+    const edge = this.bodyScroll.scrollLeft + layout.pinnedWidth;
+    for (let i = layout.pinnedCount; i < layout.columns.length; i++) {
+      if (layout.leftAt(i) + layout.widthAt(i) > edge) return layout.columns[i];
+    }
+    return undefined;
   }
 
   /**

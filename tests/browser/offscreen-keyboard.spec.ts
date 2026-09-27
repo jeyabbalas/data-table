@@ -316,7 +316,7 @@ test('F2 on a header scrolled away opens its tooltip, and the scroll back leaves
   await expect(page.locator('.dt-col-tooltip__description')).toHaveText('Column 150');
 });
 
-test('a cursor set in code names its cell off-screen, and survives its column being hidden', async ({
+test('a cursor set in code names its cell off-screen, and hiding its column keeps it nearby', async ({
   page,
 }) => {
   await mountTable(page);
@@ -328,12 +328,53 @@ test('a cursor set in code names its cell off-screen, and survives its column be
   await settle(page);
   expectCursor(await probe(page, 'cursor'), 5, 'c150', { inView: false });
 
-  // Hidden while off-screen: the cursor moves to a column still shown, and
-  // aria-activedescendant names that column's ringed cell.
+  // Hidden while off-screen: the cursor moves to the column that takes its
+  // place, still naming a ringed cell.
   await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.hideColumn('c150'));
   await settle(page);
-  const after = await probe(page, 'cursor');
-  expect(after.focused?.row).toBe(5);
-  expect(after.focused?.column).not.toBe('c150');
-  expectCursor(after, 5, after.focused!.column);
+  expectCursor(await probe(page, 'cursor'), 5, 'c151');
+
+  // And through the header's own hide button, from the keyboard.
+  await page.keyboard.press('ArrowLeft');
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowUp');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c149', { inView: true });
+  await page.keyboard.press('F2');
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(
+    'dt-col-hide-btn',
+  );
+  await page.keyboard.press('Enter');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c151', { inView: true });
+});
+
+test('hiding the last of two pinned columns, scrolled far right, keeps the cursor pinned and in view', async ({
+  page,
+}) => {
+  await mountTable(page);
+  await page.evaluate(() => {
+    const { actions } = (window as unknown as TestWindow).__dt;
+    actions.toggleColumnPin('c000');
+    actions.toggleColumnPin('c001');
+  });
+  await settle(page);
+  await placeCursor(page, 3, 'c150');
+  // Onto the header row, then along the pinned block, which does not scroll.
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c001', { inView: true });
+
+  // Its own hide button: F2, then the second control.
+  await page.keyboard.press('F2');
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(
+    'dt-col-hide-btn',
+  );
+  await page.keyboard.press('Enter');
+  await settle(page);
+  // Not c002, the next column in order: the scroll has left it far out of view.
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c000', { inView: true });
 });

@@ -33,6 +33,16 @@ const DEFAULT_CASES = [
   'handle:wide-200k::limit=2.5GB',
 ];
 
+/** `prefetch` and `nocache` flags map to DuckDB settings applied before the load. */
+function settingsFor(flags: string[]): string[] {
+  return [
+    ...(flags.includes('prefetch') ? ['SET prefetch_all_parquet_files = true'] : []),
+    ...(flags.includes('nocache') ? ['SET enable_external_file_cache = false'] : []),
+  ];
+}
+const settingTag = (settings?: string[]) =>
+  (settings ?? []).map((s) => (s.includes('prefetch') ? 'prefetch' : 'nocache'));
+
 const cases = (process.env['SPIKE_CASES']?.split(',') ?? DEFAULT_CASES).map((spec) => {
   const [strategy, file, ...flags] = spec.split(':');
   const limit = flags.find((f) => f.startsWith('limit='))?.slice('limit='.length);
@@ -41,6 +51,9 @@ const cases = (process.env['SPIKE_CASES']?.split(',') ?? DEFAULT_CASES).map((spe
     file: file!,
     interactions: flags.includes('i'),
     ...(limit ? { memoryLimit: limit } : {}),
+    ...(settingsFor(flags).length ? { settings: settingsFor(flags) } : {}),
+    ...(flags.includes('lib') ? { loader: 'library' as const } : {}),
+    ...(flags.includes('retry') ? { retryLazy: true } : {}),
   };
 });
 
@@ -48,11 +61,19 @@ test.skip(!DATA, 'set SPIKE_DATA to the directory holding gen.py output');
 mkdirSync(RESULTS, { recursive: true });
 
 for (const c of cases) {
-  const label = `${c.file} ${c.strategy}${c.interactions ? ' +interactions' : ''}${c.memoryLimit ? ` limit=${c.memoryLimit}` : ''}`;
+  const label = `${c.file} ${c.strategy}${c.interactions ? ' +interactions' : ''}${c.memoryLimit ? ` limit=${c.memoryLimit}` : ''}${settingTag(
+    c.settings,
+  )
+    .map((s) => ` +${s}`)
+    .join('')}${c.loader === 'library' ? ' +library' : ''}`;
   test(label, async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const name = `${c.file}__${c.strategy}${c.memoryLimit ? `__${c.memoryLimit}` : ''}.json`;
+    const name = `${c.file}__${c.strategy}${c.memoryLimit ? `__${c.memoryLimit}` : ''}${settingTag(
+      c.settings,
+    )
+      .map((s) => `__${s}`)
+      .join('')}${c.loader === 'library' ? '__library' : ''}${c.retryLazy ? '__retry' : ''}.json`;
     try {
       await page.goto('/');
       await page.waitForFunction(() => window.spike?.ready === true, undefined, {
@@ -63,12 +84,20 @@ for (const c of cases) {
         strategy: c.strategy,
         interactions: c.interactions,
         ...(c.memoryLimit ? { memoryLimit: c.memoryLimit } : {}),
+        ...(c.settings ? { settings: c.settings } : {}),
+        ...(c.loader ? { loader: c.loader } : {}),
+        ...(c.retryLazy ? { retryLazy: true } : {}),
         timeoutMs: 5 * 60_000,
       });
       writeFileSync(join(RESULTS, name), JSON.stringify(result, null, 2) + '\n');
       console.log(
         `${label}: ${result.ok ? 'OK' : `FAILED at ${result.failedAt}: ${result.error}`}` +
-          ` | wasm peak ${result.wasmMiB.end} MiB | load ${result.timings['load']?.ms ?? '-'} ms`,
+          ` | wasm peak ${result.wasmMiB.end} MiB | load ${result.timings['load']?.ms ?? '-'} ms` +
+          (result.timings['enhance'] ? ` | enhance ${result.timings['enhance'].ms} ms` : '') +
+          (result.timings['retry']
+            ? ` | first load: ${result.timings['load']?.error?.slice(0, 40)} | retry ${result.timings['retry'].ms} ms${result.timings['retry'].error ? ' ' + result.timings['retry'].error : ''}`
+            : '') +
+          (result.convertedColumns?.length ? ` | converted ${result.convertedColumns.length}` : ''),
       );
     } catch (err) {
       // The tab itself died (e.g. the renderer was killed for memory): that

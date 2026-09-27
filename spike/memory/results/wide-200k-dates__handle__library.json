@@ -1,0 +1,40 @@
+{
+  "config": {
+    "strategy": "handle",
+    "interactions": false,
+    "loader": "library",
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k-dates.parquet",
+    "mib": 446.2
+  },
+  "ok": false,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "end": 3496.9
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "probe": {
+      "ms": 564,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 22435,
+      "wasmMiB": 2726.9
+    },
+    "enhance": {
+      "ms": 3204,
+      "wasmMiB": 3496.9,
+      "error": "Failed to convert columns to date in table t"
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "failedAt": "enhance",
+  "error": "Failed to convert columns to date in table t"
+}

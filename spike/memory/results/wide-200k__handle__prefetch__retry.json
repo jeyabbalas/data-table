@@ -1,0 +1,48 @@
+{
+  "config": {
+    "strategy": "handle",
+    "interactions": false,
+    "settings": [
+      "SET prefetch_all_parquet_files = true"
+    ],
+    "retryLazy": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k.parquet",
+    "mib": 1463.8
+  },
+  "ok": false,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 16,
+    "end": 4095.9
+  },
+  "timings": {
+    "register": {
+      "ms": 1,
+      "wasmMiB": 16
+    },
+    "load": {
+      "ms": 8023,
+      "wasmMiB": 4095.9,
+      "error": "Out of Memory Error: Allocation failure"
+    },
+    "probe100MB": {
+      "ms": 164,
+      "wasmMiB": 4095.9
+    },
+    "probe1GB": {
+      "ms": 1964,
+      "wasmMiB": 4095.9
+    },
+    "retry": {
+      "ms": 15054,
+      "wasmMiB": 4095.9,
+      "error": "Out of Memory Error: Allocation failure"
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "failedAt": "retry",
+  "error": "Out of Memory Error: Allocation failure"
+}

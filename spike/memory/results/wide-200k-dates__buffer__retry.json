@@ -1,0 +1,45 @@
+{
+  "config": {
+    "strategy": "buffer",
+    "interactions": false,
+    "retryLazy": true,
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "wide-200k-dates.parquet",
+    "mib": 446.2
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 452.3,
+    "afterLoad": 3237.6,
+    "end": 3237.6
+  },
+  "timings": {
+    "register": {
+      "ms": 330,
+      "wasmMiB": 452.3
+    },
+    "load": {
+      "ms": 6908,
+      "wasmMiB": 3237.6
+    },
+    "count": {
+      "ms": 8,
+      "wasmMiB": 3237.6
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 200000,
+  "cols": 1000,
+  "rowGroups": -1,
+  "duckdbMiB": {
+    "total": 2263.5,
+    "byTag": {
+      "IN_MEMORY_TABLE": 2212.8,
+      "EXTERNAL_FILE_CACHE": 50.7,
+      "OBJECT_CACHE": 0
+    }
+  }
+}

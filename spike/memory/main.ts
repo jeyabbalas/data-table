@@ -20,6 +20,8 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import ehWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import ehWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
+import { enhanceSchemaTypes } from '../../src/worker/loaders/common';
+
 type Strategy = 'buffer' | 'handle' | 'handle-buffered' | 'view';
 
 interface RunConfig {
@@ -28,6 +30,16 @@ interface RunConfig {
   memoryLimit?: string;
   interactions?: boolean;
   timeoutMs?: number;
+  /** SQL run before the file is registered, e.g. `SET prefetch_all_parquet_files = true`. */
+  settings?: string[];
+  /**
+   * `ctas` (default): the bare CREATE TABLE AS. `library`: main's whole
+   * loadParquet sequence — DESCRIBE probe, CTAS, COUNT, DESCRIBE, and the
+   * string-column type detection that may rebuild the table.
+   */
+  loader?: 'ctas' | 'library';
+  /** On a failed load, drop the file, re-register it lazily with default settings and load again. */
+  retryLazy?: boolean;
 }
 
 interface Timed {
@@ -48,6 +60,7 @@ interface RunResult {
   rows?: number;
   cols?: number;
   rowGroups?: number;
+  convertedColumns?: string[];
   wasmMiB: {
     boot: number | null;
     afterRegister?: number | null;
@@ -183,6 +196,8 @@ async function run(config: RunConfig): Promise<RunResult> {
   let phase = 'configure';
   try {
     if (config.memoryLimit) await rows(`SET memory_limit = '${config.memoryLimit}'`);
+    if (config.settings?.length) await rows('LOAD parquet');
+    for (const setting of config.settings ?? []) await rows(setting);
     result.memoryLimit = String(
       (await rows<{ m: string }>("SELECT current_setting('memory_limit') AS m"))[0]!.m,
     );
@@ -205,19 +220,63 @@ async function run(config: RunConfig): Promise<RunResult> {
     result.wasmMiB.afterRegister = await wasmMiB();
 
     phase = 'load';
-    await step('load', async () => {
-      if (config.strategy === 'view') {
-        await conn.query(
-          `CREATE VIEW t AS SELECT CAST(file_row_number AS BIGINT) AS "__rowid__", * EXCLUDE (file_row_number) ` +
-            `FROM read_parquet('src.parquet', file_row_number = true)`,
+    if (config.loader === 'library') {
+      await step('probe', () => rows("DESCRIBE SELECT * FROM read_parquet('src.parquet')"));
+    }
+    const ctas = () =>
+      conn.query(
+        `CREATE TABLE t AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS "__rowid__", * FROM read_parquet('src.parquet')`,
+      );
+    if (config.retryLazy) {
+      try {
+        await step('load', ctas);
+      } catch {
+        phase = 'retry';
+        await db.dropFile('src.parquet').catch(() => {});
+        // Health probes after the failure: a modest new table, then a query.
+        await step('probe100MB', () =>
+          conn.query('CREATE TABLE small AS SELECT range AS a, random() AS b FROM range(5000000)'),
+        ).catch(() => undefined);
+        await step('probe1GB', () =>
+          conn.query(
+            'CREATE TABLE mid AS SELECT range AS a, random() AS b, random() AS c, random() AS d, random() AS e FROM range(20000000)',
+          ),
+        ).catch(() => undefined);
+        await conn.query('DROP TABLE IF EXISTS small').catch(() => {});
+        await conn.query('DROP TABLE IF EXISTS mid').catch(() => {});
+        for (const setting of config.settings ?? []) {
+          await rows(`RESET ${setting.replace(/^SET\s+(\w+).*$/i, '$1')}`);
+        }
+        await db.registerFileHandle(
+          'src.parquet',
+          file,
+          duckdb.DuckDBDataProtocol.BROWSER_FILEREADER,
+          true,
         );
-      } else {
-        // The library's CTAS, verbatim in shape (src/worker/loaders/parquet.ts).
-        await conn.query(
-          `CREATE TABLE t AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS "__rowid__", * FROM read_parquet('src.parquet')`,
-        );
+        await step('retry', ctas);
       }
-    });
+    } else
+      await step('load', async () => {
+        if (config.strategy === 'view') {
+          await conn.query(
+            `CREATE VIEW t AS SELECT CAST(file_row_number AS BIGINT) AS "__rowid__", * EXCLUDE (file_row_number) ` +
+              `FROM read_parquet('src.parquet', file_row_number = true)`,
+          );
+        } else {
+          // The library's CTAS, verbatim in shape (src/worker/loaders/parquet.ts).
+          await conn.query(
+            `CREATE TABLE t AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS "__rowid__", * FROM read_parquet('src.parquet')`,
+          );
+        }
+      });
+    if (config.loader === 'library') {
+      phase = 'enhance';
+      const describe = await rows('DESCRIBE t');
+      const enhanced = await step('enhance', () => enhanceSchemaTypes(conn, 't', describe));
+      result.convertedColumns = enhanced
+        .filter((r, i) => String(r['column_type']) !== String(describe[i]!['column_type']))
+        .map((r) => `${String(r['column_name'])}:${String(r['column_type'])}`);
+    }
     if (config.strategy === 'buffer') await db.dropFile('src.parquet');
     result.wasmMiB.afterLoad = await wasmMiB();
 

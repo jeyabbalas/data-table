@@ -34,5 +34,18 @@ SPIKE_DATA=/some/dir npx playwright test -c spike/memory/playwright.config.ts
 python3 spike/memory/summarize.py
 ```
 
-`SPIKE_CASES=strategy:file[:i][:limit=2.5GB],…` runs a subset; `i` adds the interaction queries.
+`SPIKE_CASES=strategy:file[:flag…],…` runs a subset. Flags:
+
+| Flag          | Effect                                                                           |
+| ------------- | -------------------------------------------------------------------------------- |
+| `i`           | Run the interaction queries after the load                                       |
+| `limit=2.5GB` | Set DuckDB's `memory_limit` first                                                |
+| `prefetch`    | `SET prefetch_all_parquet_files = true` before the load                          |
+| `nocache`     | `SET enable_external_file_cache = false` before the load                         |
+| `lib`         | Run the library's whole Parquet sequence, including string-column type detection |
+| `retry`       | On a failed load, probe DuckDB's health, then re-register lazily and load again  |
+
 Each case runs in a fresh browser context, so a fresh DuckDB and a fresh linear memory.
+
+`gen.py --date-strings N` makes the first N string columns hold ISO date text, which the library's
+type detection converts by rebuilding the table.

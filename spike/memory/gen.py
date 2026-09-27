@@ -40,7 +40,12 @@ def kind(c: int) -> str:
     return "timestamp" if k == 18 else "bool"
 
 
-def schema_for(cols: int) -> pa.Schema:
+def is_date_string(c: int, date_strings: int) -> bool:
+    """The first `date_strings` string-kind columns hold ISO date text."""
+    return kind(c) == "string" and (c // CYCLE) * 3 + (c % CYCLE) - 15 < date_strings
+
+
+def schema_for(cols: int, date_strings: int = 0) -> pa.Schema:
     types = {
         "double": pa.float64(),
         "int": pa.int32(),
@@ -48,15 +53,25 @@ def schema_for(cols: int) -> pa.Schema:
         "timestamp": pa.timestamp("us"),
         "bool": pa.bool_(),
     }
-    return pa.schema([pa.field(f"col_{c}", types[kind(c)]) for c in range(cols)])
+    return pa.schema(
+        [
+            pa.field(f"col_{c}", pa.string() if is_date_string(c, date_strings) else types[kind(c)])
+            for c in range(cols)
+        ]
+    )
 
 
 def vocab(cardinality: int) -> pa.Array:
     return pa.array([f"v_{i:06d}" for i in range(cardinality)], pa.string())
 
 
-def column(c: int, n: int, rng: np.random.Generator, entropy: str, vocabs) -> pa.Array:
+def column(
+    c: int, n: int, rng: np.random.Generator, entropy: str, vocabs, date_strings: int = 0
+) -> pa.Array:
     k = kind(c)
+    if is_date_string(c, date_strings):
+        days = rng.integers(0, 3650, n)
+        return pa.array(np.datetime_as_string(np.datetime64("2015-01-01") + days, unit="D"))
     if k == "double":
         values = rng.random(n) * 1000
         if entropy == "rounded":
@@ -82,18 +97,23 @@ def main() -> None:
     ap.add_argument("--rg", type=int, default=122_880, help="rows per row group")
     ap.add_argument("--entropy", choices=("random", "rounded"), default="random")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument(
+        "--date-strings", type=int, default=0, help="string columns holding ISO date text"
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     rng = np.random.default_rng(args.seed)
     vocabs = [vocab(k) for k in CARDINALITIES]
-    schema = schema_for(args.cols)
+    schema = schema_for(args.cols, args.date_strings)
     started = time.time()
     with pq.ParquetWriter(args.out, schema, compression="snappy") as writer:
         written = 0
         while written < args.rows:
             n = min(args.rg, args.rows - written)
-            arrays = [column(c, n, rng, args.entropy, vocabs) for c in range(args.cols)]
+            arrays = [
+                column(c, n, rng, args.entropy, vocabs, args.date_strings) for c in range(args.cols)
+            ]
             writer.write_table(pa.Table.from_arrays(arrays, schema=schema), row_group_size=n)
             written += n
     meta = pq.ParquetFile(args.out).metadata

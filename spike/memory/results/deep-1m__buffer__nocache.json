@@ -1,0 +1,45 @@
+{
+  "config": {
+    "strategy": "buffer",
+    "interactions": false,
+    "settings": [
+      "SET enable_external_file_cache = false"
+    ],
+    "timeoutMs": 300000
+  },
+  "file": {
+    "name": "deep-1m.parquet",
+    "mib": 292.6
+  },
+  "ok": true,
+  "wasmMiB": {
+    "boot": 16,
+    "afterRegister": 301.8,
+    "afterLoad": 810.9,
+    "end": 810.9
+  },
+  "timings": {
+    "register": {
+      "ms": 208,
+      "wasmMiB": 301.8
+    },
+    "load": {
+      "ms": 1130,
+      "wasmMiB": 810.9
+    },
+    "count": {
+      "ms": 5,
+      "wasmMiB": 810.9
+    }
+  },
+  "memoryLimit": "3.1 GiB",
+  "rows": 1000000,
+  "cols": 40,
+  "rowGroups": -1,
+  "duckdbMiB": {
+    "total": 419.2,
+    "byTag": {
+      "IN_MEMORY_TABLE": 419.2
+    }
+  }
+}

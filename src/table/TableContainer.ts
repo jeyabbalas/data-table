@@ -1196,12 +1196,13 @@ export class TableContainer {
   /**
    * Update sticky positioning for pinned columns (freeze pane effect)
    *
-   * Applies position:sticky and computed left offsets to both header and body
-   * cells for pinned columns. Called after render and when pinned/width state changes.
+   * Applies position:sticky and computed left offsets to the pinned column
+   * headers, and places the divider. Called after render and when pinned
+   * state changes. Body cells are `TableBody`'s: it styles each row it
+   * renders, and re-renders its rows when the pinned set changes.
    */
   private updatePinnedColumnStyles(): void {
     const pinnedColumns = this.state.pinnedColumns.get();
-    const visibleColumns = this.state.visibleColumns.get();
     const columnWidths = this.state.columnWidths.get();
     const prefix = this.resolvedOptions.classPrefix;
 
@@ -1238,30 +1239,6 @@ export class TableContainer {
         el.style.left = '';
         el.style.zIndex = '';
         el.classList.remove(`${prefix}-col-header--pinned`);
-      }
-    }
-
-    // Apply to body cells
-    const bodyContainer = this.bodyContainer;
-    const rows = bodyContainer.querySelectorAll(`.${prefix}-row`);
-    for (const row of rows) {
-      const cells = row.children;
-      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i]!;
-        const cell = cells[i] as HTMLElement;
-        const offset = pinnedOffsets.get(colName);
-
-        if (offset) {
-          cell.style.position = 'sticky';
-          cell.style.left = `${offset.left}px`;
-          cell.style.zIndex = String(offset.zIndex);
-          cell.classList.add(`${prefix}-cell--pinned`);
-        } else {
-          cell.style.position = '';
-          cell.style.left = '';
-          cell.style.zIndex = '';
-          cell.classList.remove(`${prefix}-cell--pinned`);
-        }
       }
     }
 

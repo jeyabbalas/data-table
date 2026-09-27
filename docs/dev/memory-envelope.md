@@ -91,10 +91,43 @@ main's own shape (`ORDER BY <sort>, __rowid__ LIMIT 128 OFFSET k` over every pro
    (every query under 1 s with a clipped projection) but useless for sorting deep ones (11–19 s).
    Revisit only if a user needs more than ~250M cells.
 
+## Follow-up: read modes and the table estimate
+
+Measured afterwards to design the load path (#120), same setup. `prefetch` is
+`SET prefetch_all_parquet_files = true`; "cache off" adds
+`SET enable_external_file_cache = false`. Load time and peak WASM memory (MiB):
+
+| File                               | `buffer`      | `handle`     | `handle` + prefetch | `handle` + prefetch, cache off |
+| ---------------------------------- | ------------- | ------------ | ------------------- | ------------------------------ |
+| 1M × 40, 293 MB                    | 1.6 s, 805    | 5.4 s, 515   | 1.3 s, 828          | 1.3 s, 537                     |
+| 50K × 1,000, 370 MB, one row group | 2.8 s, 1,792  | 7.8 s, 1,381 | 2.3 s, 1,763        | 2.4 s, 1,762                   |
+| 200K × 1,000, 1.5 GB               | out of memory | 27 s, 3,114  | out of memory       | 9.9 s, 3,642                   |
+
+- **Prefetching makes lazy reads as fast as buffering, but only with the external file cache
+  off.** The cache is on by default and keeps every prefetched block, so the load then costs the
+  whole file again. With it off, prefetching costs at most about one row group. This replaces
+  recommendation 1's "keep `buffer` when it fits".
+- **The table estimate needs block granularity.** DuckDB stores each column of each 122,880-row
+  group in whole 256 KiB blocks, plus one block for its validity mask. That matches
+  `duckdb_memory()` within 1% for every type measured and within 3–5% for the three files. The flat
+  11.5 B per cell in recommendation 4 is a third low for short, wide tables.
+- **Do not retry after running out.** After an "Allocation failure", a lazy retry of the same file
+  failed too, although new 100 MB and 1 GB tables still loaded. The estimate has to be the guard.
+- **The library's own load adds type detection.** At 200K × 1,000 it takes 2.6 s. When string
+  columns hold ISO dates, it rebuilds the whole table to convert them; with 10 such columns, that
+  second copy ran the 200K × 1,000 load out of memory. Converting in the load's single
+  `CREATE TABLE` fixes it.
+- **In-memory compression is a possible later lever.** `ATTACH ':memory:' AS db (COMPRESS)`
+  followed by `CHECKPOINT` shrank a realistic 500K × 40 table from 209 to 42 MiB and a 3M × 40 one
+  from 1,163 to 253 MiB, with queries 2–5× slower (a block fetch went from 4 to 21 ms). Nothing is
+  compressed until the checkpoint, though, so the load's peak is unchanged; using it would take a
+  load that checkpoints in chunks. Worth a spike only if users need more than the current ceiling.
+
 ## Caveats
 
 - Synthetic data. Its strings are 8 characters, which DuckDB stores inline; longer strings cost
   more per cell. Check the 250K figure against real user files before promising it.
-- The spike measures DuckDB alone. The library adds its type-detection queries (time, not memory),
-  chart queries, and main-thread copies of the file (JavaScript heap, but real tab memory).
+- The first round measures DuckDB alone. The library adds type detection (time, and a full-table
+  rebuild when it converts string columns; see the follow-up), chart queries, and, before #120,
+  main-thread copies of the file.
 - One machine and one browser. The WASM ceiling is the same everywhere; timings are not.

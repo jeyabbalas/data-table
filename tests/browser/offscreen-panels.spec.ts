@@ -1,7 +1,7 @@
 /**
- * What a column carries besides its cells — an open derived-column editor, a
- * tooltip, annotations, a custom stats panel — when the column scrolls out of
- * view, or is set up while it is out of view.
+ * What a column carries besides its cells — an open filter panel or
+ * derived-column editor, a tooltip, annotations, a custom stats panel — when
+ * the column scrolls out of view, or is set up while it is out of view.
  *
  * These hold on the unwindowed grid, where every header stays in the DOM.
  * Rendering only the headers near the view must keep them holding: a panel's
@@ -45,6 +45,82 @@ async function wheelBodyCorner(page: Page, dx: number): Promise<void> {
   await page.mouse.move(box.x + 40, box.y + box.height - 40);
   await wheelBy(page, dx, { over: 'pointer' });
 }
+
+test('a filter panel keeps focus while its column scrolls away, and Escape returns to the column', async ({
+  page,
+}) => {
+  await mountTable(page);
+  await wheelIntoView(page, 'c150');
+  await header(page, 'c150').locator('.dt-col-filter-btn').click();
+  const panel = page.locator(`#${HOST_ID} .dt-filter-panel`);
+  await expect(panel).toBeVisible();
+  await expect.poll(() => focusIsIn(page)).toBe('panel');
+
+  await wheelBodyCorner(page, 8_000);
+  expect((await probe(page, 'column', 'c150'))!.inView).toBe(false);
+  await expect(panel).toBeVisible();
+  expect(await focusIsIn(page)).toBe('panel');
+
+  // Focus goes back to the filter button that opened the panel, which
+  // brings its column back into view.
+  await page.keyboard.press('Escape');
+  await settle(page);
+  await expect(panel).toBeHidden();
+  const back = await page.evaluate(() => ({
+    cls: document.activeElement?.className ?? '',
+    column: document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+  }));
+  expect(back.cls).toContain('dt-col-filter-btn');
+  expect(back.column).toBe('c150');
+  expect((await probe(page, 'column', 'c150'))!.inView).toBe(true);
+  // And the keyboard still drives the table from there.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ArrowDown');
+  await settle(page);
+  expect((await probe(page, 'cursor')).target).not.toBeNull();
+});
+
+test('the filter panel opened from the keyboard takes focus, keeps it, and gives it back', async ({
+  page,
+}) => {
+  await mountTable(page);
+  const grid = page.locator(`#${HOST_ID} .dt-grid`);
+  await grid.focus();
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.setFocusedCell({ row: -1, column: 'c149' }),
+  );
+  await page.keyboard.press('ArrowRight');
+  // F2 enters the header's controls: pin, hide, filter.
+  await page.keyboard.press('F2');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(
+    'dt-col-filter-btn',
+  );
+  await page.keyboard.press('Enter');
+  const panel = page.locator(`#${HOST_ID} .dt-filter-panel`);
+  await expect(panel).toBeVisible();
+  // The panel's first control, Clear, is hidden while the column has no
+  // filter; focus has to land on the next one.
+  await expect.poll(() => focusIsIn(page)).toBe('panel');
+
+  // The focus trap keeps Shift+Tab and Tab inside the panel, at every step.
+  await page.keyboard.press('Shift+Tab');
+  expect(await focusIsIn(page)).toBe('panel');
+  for (let i = 1; i <= 8; i++) {
+    await page.keyboard.press('Tab');
+    expect(await focusIsIn(page), `after Tab ${i}`).toBe('panel');
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  const back = await page.evaluate(() => ({
+    cls: document.activeElement?.className ?? '',
+    column: document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+  }));
+  expect(back.cls).toContain('dt-col-filter-btn');
+  expect(back.column).toBe('c150');
+});
 
 test('a derived-column editor keeps focus while its column scrolls away, and Escape returns to the column', async ({
   page,

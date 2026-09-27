@@ -78,4 +78,19 @@ describe('FilterPanel — panel-mode focus/escape', () => {
     expect(panel.getIsOpen()).toBe(false);
     expect(document.activeElement).toBe(anchor);
   });
+
+  it('hands focus to the close button when Clear hides itself', () => {
+    actions.addFilter({ type: 'range', column: 'price', min: 1, max: 5 });
+    panel.open('price', anchor);
+    const clear = panel.getElement().querySelector<HTMLButtonElement>('.dt-filter-panel-clear')!;
+    expect(clear.classList.contains('dt-filter-panel-clear--hidden')).toBe(false);
+
+    // What Enter on the focused button does.
+    clear.focus();
+    clear.click();
+
+    expect(clear.classList.contains('dt-filter-panel-clear--hidden')).toBe(true);
+    expect(document.activeElement).toBe(panel.getElement().querySelector('.dt-filter-panel-close'));
+    panel.close();
+  });
 });

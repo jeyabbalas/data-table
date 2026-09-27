@@ -303,9 +303,9 @@ export class RovingTabindex {
     if (el.getAttribute('aria-disabled') === 'true') return false;
 
     // Hidden-ness is read from inline styles and the `hidden` attribute rather
-    // than getComputedStyle, the same trade-off ModalHost's focus trap makes:
-    // jsdom's layout numbers do not match a browser's, and every control these
-    // toolbars hide is hidden with an inline `display: none`.
+    // than computed styles: every control these toolbars hide is hidden with an
+    // inline `display: none`. (ModalHost's focus trap also checks stylesheets,
+    // because its dialogs hide controls with classes.)
     for (let node: HTMLElement | null = el; node; node = node.parentElement) {
       if (node.hasAttribute('hidden')) return false;
       if (node.style.display === 'none' || node.style.visibility === 'hidden') return false;

@@ -186,10 +186,13 @@ function focusableDescendants(root: HTMLElement): HTMLElement[] {
   const nodes = root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
   const result: HTMLElement[] = [];
   for (const el of Array.from(nodes)) {
-    // Skip elements the page has explicitly hidden. We check inline styles +
-    // the `hidden` attribute (portable across jsdom and browsers). A heavier
-    // visibility check via getComputedStyle is avoided because jsdom's layout
-    // engine returns values that don't match browser reality.
+    // Disabled by a `<fieldset disabled>` around it, which the selector's
+    // `[disabled]` cannot see; Tab skips it all the same. Checked here rather
+    // than as `:disabled` in the selector list, which made jsdom return the
+    // matches out of document order.
+    if (el.matches(':disabled')) continue;
+    // The `hidden` attribute and inline styles: cheap, and the same in jsdom
+    // and browsers.
     if (el.hasAttribute('hidden')) continue;
     if (el.style.display === 'none') continue;
     if (el.style.visibility === 'hidden') continue;
@@ -202,9 +205,81 @@ function focusableDescendants(root: HTMLElement): HTMLElement[] {
       }
     }
     if (hidden) continue;
+    if (hiddenByStylesheet(el, root)) continue;
     result.push(el);
   }
-  return result;
+  return oneStopPerRadioGroup(result);
+}
+
+/**
+ * Whether a stylesheet hides `el`, which the inline checks cannot see.
+ * `focus()` on such an element silently does nothing: the filter panel's
+ * Clear button is `display: none` until its column has a filter, and as the
+ * panel's first control it kept focus from ever entering the panel, and let
+ * Shift+Tab walk out of it.
+ *
+ * `checkVisibility` where there is one. Engines older than it (Chrome 105,
+ * Firefox 106, Safari 17.4) get the answer from computed styles: the
+ * element's own `visibility`, and `display` on it and its ancestors up to the
+ * dialog. jsdom has no `checkVisibility` and applies no stylesheet, so
+ * neither path changes anything there.
+ */
+function hiddenByStylesheet(el: HTMLElement, root: HTMLElement): boolean {
+  if (typeof el.checkVisibility === 'function') {
+    return !el.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true });
+  }
+  if (getComputedStyle(el).visibility === 'hidden') return true;
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === 'none') return true;
+    if (node === root) break;
+  }
+  return false;
+}
+
+/** A radio button that belongs to a named group. */
+function isGroupedRadio(el: Element | null): el is HTMLInputElement {
+  return el instanceof HTMLInputElement && el.type === 'radio' && el.name !== '';
+}
+
+/** Whether `a` and `b` are radios of the same group, which Tab treats as one stop. */
+function sameRadioGroup(a: Element | null, b: Element | null): boolean {
+  return isGroupedRadio(a) && isGroupedRadio(b) && a.name === b.name && a.form === b.form;
+}
+
+/**
+ * Keep one radio of each named group: the checked one, or the first when none
+ * is checked. Sequential focus navigation stops on a radio group once, so a
+ * list with every radio in it names stops that Tab never lands on. The filter
+ * panel ends with a three-radio group, and because the trap waited for focus
+ * on its last radio, Tab from the group walked out of the panel.
+ *
+ * A group whose checked radio is outside the dialog gets no stop at all: Tab
+ * passes over the radios left in the dialog.
+ */
+function oneStopPerRadioGroup(elements: HTMLElement[]): HTMLElement[] {
+  const groups: HTMLInputElement[][] = [];
+  for (const el of elements) {
+    if (!isGroupedRadio(el)) continue;
+    const group = groups.find((g) => sameRadioGroup(g[0]!, el));
+    if (group) group.push(el);
+    else groups.push([el]);
+  }
+  if (groups.length === 0) return elements;
+  const stops = new Set<HTMLElement>();
+  for (const group of groups) {
+    const checked = group.find((r) => r.checked);
+    if (checked) {
+      stops.add(checked);
+      continue;
+    }
+    const first = group[0]!;
+    const scope = first.form ?? first.ownerDocument;
+    const checkedElsewhere = Array.from(
+      scope.querySelectorAll<HTMLInputElement>('input[type="radio"]:checked'),
+    ).some((r) => sameRadioGroup(r, first));
+    if (!checkedElsewhere) stops.add(first);
+  }
+  return elements.filter((el) => !isGroupedRadio(el) || stops.has(el));
 }
 
 // ---------------------------------------------------------------------------
@@ -292,22 +367,21 @@ export class ModalHost {
 
     this._isOpen = true;
 
-    // Initial focus.
-    const target = this.resolveInitialFocus();
-    if (target) {
-      // Defer to the next frame so any lazy-rendered content (CodeMirror,
-      // async form setup) has a chance to mount before we focus.
-      const focusNow = () => {
-        if (!this._isOpen) return;
-        try {
-          target.focus({ preventScroll: false });
-        } catch {
-          /* focus may fail in jsdom for non-focusable targets */
-        }
-      };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusNow);
-      else focusNow();
-    }
+    // Initial focus. Deferred to the next frame so any lazy-rendered content
+    // (CodeMirror, async form setup) has a chance to mount, and the target
+    // picked then, so it is one of the controls that did.
+    const focusNow = () => {
+      if (!this._isOpen) return;
+      const target = this.resolveInitialFocus();
+      if (!target) return;
+      try {
+        target.focus({ preventScroll: false });
+      } catch {
+        /* focus may fail in jsdom for non-focusable targets */
+      }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusNow);
+    else focusNow();
 
     this.events.emit('opened', { stackIndex });
     notifyGlobalOpen();
@@ -480,13 +554,16 @@ export class ModalHost {
       const first = focusables[0]!;
       const last = focusables[focusables.length - 1]!;
       const active = document.activeElement as HTMLElement | null;
+      // Any radio of a group is at that group's stop: Shift+Tab into a group
+      // with nothing checked lands on its last radio, not the one listed.
+      const at = (stop: HTMLElement): boolean => active === stop || sameRadioGroup(active, stop);
       if (e.shiftKey) {
-        if (!active || active === first || !dialog.contains(active)) {
+        if (!active || at(first) || !dialog.contains(active)) {
           e.preventDefault();
           last.focus();
         }
       } else {
-        if (!active || active === last || !dialog.contains(active)) {
+        if (!active || at(last) || !dialog.contains(active)) {
           e.preventDefault();
           first.focus();
         }

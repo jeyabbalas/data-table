@@ -281,3 +281,19 @@ panels and charts right across a trackpad sweep.
   every header in from where it was at load. With 299 headers translated, the create observer
   saw charts 20,000 px away as in reach and built them. Saved positions now last to the end of the
   task that saved them.
+- **2026-09-27, headless Chromium, the four 4d PRs stacked, the 50K × 1,000 Parquet file.**
+  - **Load:** 5.4 s and 24 queries.
+  - **DOM:** 11,088 elements under `.dt-root`, where 4c left 36,600: 1,000 headers, 19 of them
+    with their controls, and 475 body cells.
+  - **Sweep:** a 70,000 px wheel sweep, checked in each of its 1,015 frames: every row held
+    exactly the mounted columns, every column in view was mounted, every visible column had a
+    header, with its controls exactly when mounted, and the cursor was named whenever its row was
+    rendered. Every column in view had its chart at the end.
+  - **Values:** the 300 cells in view matched DuckDB's values through the table's own renderer.
+  - **Column changes:** a hide took 41 ms and 2 queries (the chart of the column the shift
+    brought into reach), a show 55 ms and 2, a move 34 ms and none, a pin 82 ms and 2.
+  - **Features:** `F2` on the cursor's header 1,500 px away focused its first button. A filter
+    panel's column stayed mounted while the wheel took it away, and `Escape` gave focus back to its
+    filter button.
+  - **Errors:** no console errors.
+  - **Still to do:** the manual trackpad pass in a desktop Chrome window.

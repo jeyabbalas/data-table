@@ -451,6 +451,50 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     await table.destroy();
   });
 
+  it('a hide, a show and a move keep every other column’s panel and chart', async () => {
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'all',
+      isApplicable: () => true,
+      constructor: CapturingPanel,
+      priority: 0,
+    });
+    const { table } = await mount({ statsPanelRegistry: reg });
+    const charts = () => StubViz.instances.filter((viz) => !viz.isDestroyed());
+    const lifecycle = () =>
+      CapturingPanel.events
+        .filter((e) => e.type === 'construct' || e.type === 'destroy')
+        .map((e) => `${e.type} ${e.column}`);
+    const amountChart = charts().find((viz) => viz.getColumn().name === 'amount')!;
+    expect(amountChart).toBeDefined();
+    // With a filter in force, which a new relation would send every panel
+    // again; a column change sends it none.
+    table.actions.addFilter({ type: 'range', column: 'amount', min: 0, max: 10 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    CapturingPanel.events = [];
+
+    table.actions.hideColumn('name');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lifecycle()).toEqual(['destroy name']);
+    expect(CapturingPanel.events.filter((e) => e.type === 'updateFilters')).toEqual([]);
+    expect(charts().map((viz) => viz.getColumn().name)).toEqual(['amount']);
+
+    table.actions.showColumn('name');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lifecycle()).toEqual(['destroy name', 'construct name']);
+
+    table.actions.setColumnOrder(['name', 'amount']);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lifecycle()).toEqual(['destroy name', 'construct name']);
+    expect(charts()).toContain(amountChart);
+    expect(amountChart.isDestroyed()).toBe(false);
+
+    await table.destroy();
+  });
+
   it('two tables with different statsPanelRegistry values do not leak panels', async () => {
     class PanelA extends CapturingPanel {}
     class PanelB extends CapturingPanel {}

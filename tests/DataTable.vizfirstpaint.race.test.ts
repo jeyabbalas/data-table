@@ -348,7 +348,7 @@ describe('createDataTable awaits viz first fetch', () => {
     await expect(loadPromise).rejects.toBeInstanceOf(DestroyedError);
   });
 
-  it('a header rebuild during the load waits for the charts it creates', async () => {
+  it('a column change during the load keeps its charts, and the load waits for them', async () => {
     const bridge = makePopulatedBridge();
     const first = deferred<void>();
     HoldableViz.fetchDeferred = first;
@@ -372,11 +372,47 @@ describe('createDataTable awaits viz first fetch', () => {
     const firstCharts = HoldableViz.instances.length;
     expect(firstCharts).toBeGreaterThan(0);
 
-    // A column change while the first charts are still fetching rebuilds
-    // the headers, which destroys those charts and creates new ones.
+    // A column change while the first charts are still fetching keeps them.
+    table.state.visibleColumns.set([...table.state.visibleColumns.get()]);
+    await drainMicrotasks();
+    expect(HoldableViz.instances.length).toBe(firstCharts);
+    expect(loaded).toBe(false);
+
+    first.resolve();
+    await loadPromise;
+    expect(loaded).toBe(true);
+    await table.destroy();
+  });
+
+  it('new data during the load waits for the charts it creates', async () => {
+    const bridge = makePopulatedBridge();
+    const first = deferred<void>();
+    HoldableViz.fetchDeferred = first;
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const table = await createDataTable({
+      container,
+      bridge,
+      visualizationRegistry: makeStubVizRegistry(HoldableViz),
+      persistence: { sessionStore: makeSessionStore() },
+      ...baseOpts,
+    });
+
+    let loaded = false;
+    const loadPromise = table.loadData(new File(['a\n1\n2\n3'], 'x.csv', { type: 'text/csv' }));
+    void loadPromise.then(() => {
+      loaded = true;
+    });
+    await drainMicrotasks();
+    const firstCharts = HoldableViz.instances.length;
+    expect(firstCharts).toBeGreaterThan(0);
+
+    // A new schema while the first charts are still fetching destroys
+    // those charts and creates new ones.
     const second = deferred<void>();
     HoldableViz.fetchDeferred = second;
-    table.state.visibleColumns.set([...table.state.visibleColumns.get()]);
+    table.state.schema.set([...table.state.schema.get()]);
     await drainMicrotasks();
     expect(HoldableViz.instances.length).toBeGreaterThan(firstCharts);
 

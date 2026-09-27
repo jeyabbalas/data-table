@@ -21,7 +21,7 @@
  * top of 0.9.0-next.0, under Vite 8.0.13 / rolldown 1.0.1, which inlined the
  * shared ModalHost code into each modal consumer and shifted some helper code
  * into VisualizationRegistry):
- *   root entry · ESM                9.00 kB   →   9.3 kB cap (3.3 %)
+ *   root entry · ESM                9.38 kB   →   9.8 kB cap (4.5 %)
  *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
  *   stylesheet                     19.45 kB   →  20.4 kB cap (4.9 %)
  *   lazy ExportDialog chunk        78.21 kB   →  82 kB   cap (4.8 %)
@@ -36,7 +36,10 @@
  * reachable from `createDataTable`, so it lands in the root entry, and
  * `visualizations: false` pays for it too. The shared chunk
  * the root entry imports is loaded up front as well, so moving the
- * controller there would not change what a page downloads.
+ * controller there would not change what a page downloads. Keeping charts
+ * and custom stats panels through column changes, and building panels only
+ * for the columns near the view, took it from 9.00 to 9.38 kB, and the cap
+ * from 9.3 to 9.8 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
@@ -81,7 +84,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '9.3 kB',
+    limit: '9.8 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',

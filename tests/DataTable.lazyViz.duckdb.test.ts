@@ -560,7 +560,7 @@ describe('lazy column charts (real DuckDB)', () => {
     await m.table.destroy();
   }, 20_000);
 
-  it('tries a chart that throws in its constructor once per header rebuild', async () => {
+  it('tries a chart that throws in its constructor once per relation', async () => {
     const visualizationRegistry = new VisualizationRegistry();
     visualizationRegistry.register({
       name: 'throwing',
@@ -584,8 +584,15 @@ describe('lazy column charts (real DuckDB)', () => {
     expect(count('c0')).toBe(0);
     expect(m.container.querySelectorAll('.dt-col-viz canvas')).toHaveLength(0);
 
-    // A header rebuild tries again, once.
+    // A column change leaves it be: the same relation would fail the same
+    // way.
     m.table.state.visibleColumns.set([...m.table.state.visibleColumns.get()]);
+    await afterRebuild();
+    await sleep(50);
+    expect(count('c0')).toBe(0);
+
+    // New data tries again, once.
+    m.table.state.schema.set([...m.table.state.schema.get()]);
     await afterRebuild();
     await sleep(50);
     expect(count('c0')).toBe(1);

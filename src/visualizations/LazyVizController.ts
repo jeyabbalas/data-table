@@ -97,6 +97,8 @@ export interface LazyVizControllerOptions {
 interface Entry {
   column: ColumnSchema;
   viz: BaseVisualization | null;
+  /** The column's chart container as the observers were last given it. */
+  observed: Element | null;
   /** Inside the create band, as the create observer last reported. */
   wanted: boolean;
   /** `createViz` threw; not tried again until the next sync. */
@@ -162,33 +164,60 @@ export class LazyVizController {
   }
 
   /**
-   * Start over with `columns`, after the header row was rebuilt or the
-   * table's relation changed.
+   * Bring the charts up to date with `columns`, after the header row changed
+   * or the table's relation did.
    *
-   * Every live chart is destroyed: a rebuild discarded the element its canvas
-   * sits in, and a chart queries the relation it was built with. The charts
-   * in view are then created again as the observers report them.
+   * A column that `keep` answers `true` for keeps its chart and its place in
+   * the observers: its header outlived the change, and the chart still
+   * queries the relation it should. Every other chart is destroyed. A new
+   * header has a new element for its canvas, and a chart queries the relation
+   * it was built with. The charts in view are then created again as the
+   * observers report them. Without `keep`, nothing is kept.
    *
    * @param columns - the columns that get a chart, in display order.
+   * @param keep - whether a column's chart outlives this sync.
    */
-  sync(columns: ColumnSchema[]): void {
+  sync(columns: ColumnSchema[], keep: (columnName: string) => boolean = () => false): void {
     if (this.destroyed) return;
-    const names = new Set(columns.map((column) => column.name));
+    const next = new Map(columns.map((column) => [column.name, column]));
     for (const [name, entry] of this.entries) {
+      const column = next.get(name);
+      if (column === entry.column && keep(name)) continue;
       this.destroyViz(name, entry);
-      if (!names.has(name)) this.host.onColumnRemoved?.(name);
+      this.unobserve(entry);
+      this.entries.delete(name);
+      if (!column) this.host.onColumnRemoved?.(name);
     }
-    this.entries.clear();
-    this.queue = [];
+    this.queue = this.queue.filter((name) => this.entries.has(name));
     for (const column of columns) {
-      this.entries.set(column.name, { column, viz: null, wanted: false, failed: false });
+      if (this.entries.has(column.name)) continue;
+      this.entries.set(column.name, {
+        column,
+        viz: null,
+        observed: null,
+        wanted: false,
+        failed: false,
+      });
     }
+    // Kept charts the previous wave still waits on join this one: a column
+    // change while the first charts fetch must not let the load resolve
+    // without them.
+    const previous = this.wave && !this.wave.settled ? this.wave : null;
+    const carried = previous ? [...previous.members].filter((name) => this.entries.has(name)) : [];
     const wave = this.startWave();
+    for (const name of carried) {
+      wave.members.add(name);
+      // One still queued joins through `pump` once it is created.
+      const viz = this.entries.get(name)!.viz;
+      if (viz) this.leaveWaveOnSettle(wave, name, viz.waitForData());
+    }
 
-    if (!this.ensureObservers()) {
+    const observers = this.ensureObservers();
+    if (observers === 'none') {
       // No visibility signal will come: create every chart now.
       for (const [name, entry] of this.entries) {
         entry.wanted = true;
+        if (entry.viz) continue;
         const viz = this.createViz(name, entry);
         if (!viz) continue;
         wave.members.add(name);
@@ -198,14 +227,24 @@ export class LazyVizController {
       return;
     }
 
-    this.createObserver!.disconnect();
-    this.keepObserver!.disconnect();
+    // Observe the containers not yet observed: those of the columns just
+    // added, and all of them under new observers. A kept column's container
+    // is watched already, and its chart, if it has one, stays.
     let observed = 0;
-    for (const name of this.entries.keys()) {
+    for (const [name, entry] of this.entries) {
       const container = this.host.getVizContainer(name);
+      const moved = entry.observed !== container;
+      if (observers === 'kept' && !moved) continue;
+      if (moved) {
+        // Its chart is in an element the column no longer shows.
+        this.destroyViz(name, entry);
+        entry.wanted = false;
+      }
+      this.unobserve(entry);
       if (!container) continue;
       this.createObserver!.observe(container);
       this.keepObserver!.observe(container);
+      entry.observed = container;
       observed++;
     }
     // The wave closes on the create observer's first report, which covers
@@ -261,16 +300,21 @@ export class LazyVizController {
   // Observation
   // =========================================
 
-  /** @returns whether both observers exist, rooted at the current root. */
-  private ensureObservers(): boolean {
+  /**
+   * Make sure both observers exist, rooted at the current root.
+   *
+   * @returns `'kept'` when the ones there were still are, `'new'` when they
+   *   were made now and observe nothing yet, `'none'` when there can be none.
+   */
+  private ensureObservers(): 'kept' | 'new' | 'none' {
     const root = this.getRoot();
-    if (this.createObserver && this.observerRoot === root) return true;
+    if (this.createObserver && this.observerRoot === root) return 'kept';
     this.createObserver?.disconnect();
     this.keepObserver?.disconnect();
     this.createObserver = null;
     this.keepObserver = null;
     this.observerRoot = root;
-    if (!this.factory || !root) return false;
+    if (!this.factory || !root) return 'none';
 
     this.createObserver = this.factory((records) => this.onCreateBand(records), {
       root,
@@ -280,7 +324,15 @@ export class LazyVizController {
       root,
       rootMargin: `0px ${VIZ_KEEP_MARGIN_PX}px`,
     });
-    return true;
+    return 'new';
+  }
+
+  /** Stop watching an entry's container. */
+  private unobserve(entry: Entry): void {
+    if (!entry.observed) return;
+    this.createObserver?.unobserve(entry.observed);
+    this.keepObserver?.unobserve(entry.observed);
+    entry.observed = null;
   }
 
   private onCreateBand(records: IntersectionObserverEntry[]): void {

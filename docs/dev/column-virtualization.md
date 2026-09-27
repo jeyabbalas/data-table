@@ -9,7 +9,9 @@ documentation.
 
 1. **4a: one column geometry.** No windowing yet. Every reader of column positions (header, body,
    keyboard navigation, pinned offsets) gets them from one place, cells are found by column name
-   rather than by position, and the column actions keep the pinned columns first.
+   rather than by position, and the column actions keep the pinned columns first. Merged: #125
+   (border-box geometry), #126 (cells by column name), #127 (pinned columns first), #128 (the
+   layout model).
 2. **4b: feature × off-screen column tests.** The checklist in scaling-lessons.md, written as tests
    against the unwindowed grid before any windowing exists.
 3. **4c: one `ColumnWindowController`,** owned by `TableContainer`: it owns the geometry, the scroll
@@ -17,36 +19,53 @@ documentation.
    publishes.
 4. **4d: persistent header shells,** with the heavy parts built lazily. Spike first.
 
-## 4a plan
+## 4b plan
 
-**Geometry is the declared width.** `.dt-cell` and `.dt-col-header` declare `box-sizing: border-box`,
-so a column's width in `columnWidths` (150 px when unset) is the width it occupies. Until now the
-occupied width depended on the host page: with a global `box-sizing` reset (the demo has one) it was
-the declared width; without one it was the declared width plus 25 px of padding and border. Every
-reader that adds widths up assumed the first. On a page without a reset that put keyboard
-scroll-into-view, pinned offsets, the pinned divider, the scroll extent of an empty result and the
-resize drag off by 25 px per column, and at container widths under 550 px, where the header padding
-shrinks, headers drifted 8 px per column from their cells.
+**Tests first, against the grid as it is.** Before any windowing, browser tests pin down what each
+column feature does when its column scrolls out of view and back. They run on the unwindowed grid,
+where every header and cell stays in the DOM, and 4c has to keep them green. A test that fails on
+main has found a bug in main: the bug gets its own PR, which adds the test.
 
-**Cells are found by column name.** `TableBody`, `TableContainer.updatePinnedColumnStyles` and
-`ColumnHeader.getColumnCells` read `data-column` instead of child position or `:nth-child`, so a row
-may later hold a subset of the columns.
+**Harness.** `tests/browser/helpers/table.ts` mounts a table in-page through the public API, in a
+fixed-position host whose size, column count, charts, stats panel, extra CSS and `box-sizing`
+reset a spec chooses. Every cell is a function of its row and column. Probes on `window.__dtTest`
+report where the cursor is and what `aria-activedescendant` names (on demand, or every frame of a
+scroll), where a column sits against the viewport and whether its header is mounted, and
+`aria-colindex` along the header and a row. Column order and geometry come from the table's state,
+never from the header row: a check that needs a header for every column would stop testing anything
+the moment 4c renders only some of them. Expectations do the same, so `aria-colindex` is checked
+against `columnOrder`, with a column hidden so that numbering the rendered cells from 1 would fail.
+Scrolling uses real wheel events, including with a mouse button held.
 
-**The pinned columns stay first.** `toggleColumnPin` writes `pinnedColumns`, `columnOrder` and
-`visibleColumns` in one `batch()`, so no subscriber sees a pinned column outside the pinned block.
-`showColumn` clamps the restored column out of the pinned block (into it, for a pinned column) and
-keeps `visibleColumns` a subsequence of `columnOrder`, which `aria-colindex` relies on.
+**Matrix.** 300 columns; the target is near column 150, scrolled about 20,000 px away and back.
 
-**One layout model.** `src/table/ColumnLayout.ts` is a pure, read-only snapshot computed from state:
-visible order, resolved widths, prefix sums, pinned offsets over the _visible_ pinned columns, total
-width and the `aria-colindex` numbering. Header, body and keyboard navigation read it instead of
-summing `columnWidths.get(c) ?? 150` in seven places. That fixes pinned offsets after a pinned
-column is hidden or resized, and the width of a column whose stored width is not a finite,
-non-negative number.
+| Spec                         | Covers                                                                                                                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offscreen-keyboard.spec.ts` | Cursor through a wheel sweep; Home, End, Ctrl+End with pinned columns; Enter, F2, Escape and Shift+F2 on a header scrolled back; a cursor set in code; hiding the cursor's column |
+| `offscreen-columns.spec.ts`  | Drag-reorder with a wheel scroll mid-drag; resize drag and double-click reset; pin far right and unpin; hide → pin → show; `aria-colindex` ascending                              |
+| `offscreen-panels.spec.ts`   | Derived-column editor open while its column scrolls away; tooltip, annotations and a custom stats panel set off-screen                                                            |
+| `offscreen-charts.spec.ts`   | Charts on columns a growing container reveals                                                                                                                                     |
+| `offscreen-derived.spec.ts`  | Edit, remove, undo and redo of a derived column while it is off-screen                                                                                                            |
 
-PRs, in order: border-box geometry (#125); cells by column name (#126); pinned columns first (#127);
-the layout model (#128, stacked on #126). Each has tests that fail on the old code, a changeset and
-docs, and was reviewed by a separate agent before merging.
+That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
+
+**Bugs the matrix found on main,** each fixed in its own PR with the tests that caught it:
+
+- The header's scrollbar gutter was a fixed 17 px (#130).
+- The table's own scroll writers undo other scrolls. For a second after a filter change,
+  `TableContainer` resets `scrollLeft` every frame, so a brush followed by a sideways wheel goes
+  nowhere. `render()` restores the scroll position a frame late, undoing a scroll made right after
+  it (a `Shift+F2` move to the edge) and losing the position across two renders in a row (adding a
+  derived column). `scrollToRightEnd` ends its smooth scroll after a fixed 600 ms, which a wide
+  table outlasts, so a column added from the + button is never scrolled to.
+- A panel whose first control is hidden by CSS never takes focus: the filter panel's Clear button is
+  `display: none` until the column has a filter, so opening the panel from the keyboard leaves focus
+  on the header button.
+- Keys that act on the cursor (`F2`, `Shift+F2`, `Enter`) leave an off-screen cursor off-screen, and
+  a `Shift+F2` resize grows a column past the right edge. Hiding the cursor's column moves the cursor
+  to the first column, far from where the user was.
+- A drag-reorder takes its drop position from the last pointer move, so a wheel scroll mid-drag with
+  the pointer still drops the column where it would have gone before the scroll.
 
 ## Findings log
 

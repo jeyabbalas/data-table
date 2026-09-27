@@ -262,6 +262,9 @@ describe('ColumnWindowController', () => {
     bodyScroll.dispatchEvent(new Event('scroll'));
     expect(headerScroll.scrollLeft).toBe(0);
     expect(controller.revealColumn('j')).toBe(false);
+    const before = controller.mountedColumns.get();
+    controller.hold('j')();
+    expect(controller.mountedColumns.get()).toBe(before);
   });
 });
 
@@ -378,6 +381,44 @@ describe('the columns to mount', () => {
     expect(heard).toEqual([]);
     await Promise.resolve();
     expect(heard).toEqual(['a b c d e f j']);
+  });
+
+  it('keep a held column mounted wherever it is, until every hold on it is released', () => {
+    const first = controller.hold('i');
+    expect(mounted()).toBe('a b c d e f i');
+    const second = controller.hold('i');
+    first();
+    // A release counts once, however often it is called.
+    first();
+    expect(mounted()).toBe('a b c d e f i');
+    second();
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('keep a held column through scrolls and column changes, and publish a hold at once', () => {
+    const heard: string[] = [];
+    controller.mountedColumns.subscribe((columns) => heard.push(columns.join(' ')));
+    const release = controller.hold('a');
+    // Already in the run: nothing to publish.
+    expect(heard).toEqual([]);
+    scrollBody(600);
+    expect(mounted()).toBe('a d e f g h i j');
+    // Hiding `b` works the run out afresh, 100px further left.
+    actions.hideColumn('b');
+    expect(mounted()).toBe('a e f g h i j');
+    release();
+    expect(mounted()).toBe('e f g h i j');
+    expect(heard).toEqual(['a d e f g h i j', 'a e f g h i j', 'e f g h i j']);
+  });
+
+  it('hold a hidden column for when it is shown', () => {
+    actions.hideColumn('j');
+    const release = controller.hold('j');
+    expect(mounted()).toBe('a b c d e f');
+    actions.showColumn('j');
+    expect(mounted()).toBe('a b c d e f j');
+    release();
+    expect(mounted()).toBe('a b c d e f');
   });
 
   it('are worked out afresh when the columns change', () => {

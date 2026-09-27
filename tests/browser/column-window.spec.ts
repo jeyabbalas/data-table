@@ -10,7 +10,43 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { HOST_ID, type TestWindow, mountTable, probe, wheelBy } from './helpers/table';
+import type { Page } from '@playwright/test';
+import { settle } from './helpers/demo';
+import {
+  HOST_ID,
+  type TestWindow,
+  mountTable,
+  probe,
+  wheelBy,
+  wheelIntoView,
+} from './helpers/table';
+
+/** Whether `column` is mounted, and how many body rows with data have a cell for it. */
+async function mountedWithCells(
+  page: Page,
+  column: string,
+): Promise<{ mounted: boolean; rowsWithCell: number; rows: number }> {
+  const mounted = (await probe(page, 'mounted')).includes(column);
+  return page.evaluate(
+    ({ hostId, column, mounted }) => {
+      const rows = Array.from(
+        document.querySelectorAll(`#${hostId} .dt-body .dt-row:not([data-placeholder])`),
+      );
+      const rowsWithCell = rows.filter((r) =>
+        r.querySelector(`.dt-cell[data-column="${column}"]`),
+      ).length;
+      return { mounted, rowsWithCell, rows: rows.length };
+    },
+    { hostId: HOST_ID, column, mounted },
+  );
+}
+
+/** Wheel the body with the pointer over its bottom-left corner, clear of any panel. */
+async function wheelBodyCorner(page: Page, dx: number): Promise<void> {
+  const box = (await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox())!;
+  await page.mouse.move(box.x + 40, box.y + box.height - 40);
+  await wheelBy(page, dx, { over: 'pointer' });
+}
 
 test('every column in view is mounted, in every frame of a sweep across 400 columns', async ({
   page,
@@ -270,4 +306,87 @@ test('on a sorted table, a fast sideways fling ends with every cell in view righ
     await page.waitForTimeout(50);
   }
   await expect.poll(() => probe(page, 'wrongCellsInView'), { timeout: 10_000 }).toEqual([]);
+});
+
+test('a column in use stays mounted, cells and all, while the wheel takes it away', async ({
+  page,
+}) => {
+  await mountTable(page);
+  const header = (column: string) =>
+    page.locator(`#${HOST_ID} .dt-col-header[data-column="${column}"]`);
+  const expectHeld = async (column: string) => {
+    expect((await probe(page, 'column', column))!.inView).toBe(false);
+    const now = await mountedWithCells(page, column);
+    expect(now.mounted).toBe(true);
+    expect(now.rows).toBeGreaterThan(0);
+    expect(now.rowsWithCell).toBe(now.rows);
+  };
+
+  // A resize drag, with the button held while the wheel scrolls. The column
+  // is one in the middle of the view: the pointer has to stay over the grid.
+  await wheelBy(page, 20_000);
+  const resized = (await probe(page, 'inView'))[3]!;
+  let box = (await header(resized).locator('.dt-col-resize-handle').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2, { steps: 2 });
+  await wheelBy(page, 8_000, { over: 'pointer' });
+  await expectHeld(resized);
+  await page.mouse.up();
+  await settle(page);
+  expect((await mountedWithCells(page, resized)).mounted).toBe(false);
+
+  // A drag-reorder, likewise.
+  const dragged = (await probe(page, 'inView'))[3]!;
+  box = (await header(dragged).locator('.dt-col-drag-handle').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2, { steps: 3 });
+  await wheelBy(page, -8_000, { over: 'pointer' });
+  await expectHeld(dragged);
+  await page.mouse.up();
+  await settle(page);
+  // Dropped under the pointer, in view; held no longer once it scrolls away.
+  await wheelBy(page, 10_000);
+  expect((await mountedWithCells(page, dragged)).mounted).toBe(false);
+
+  // An open filter panel, and a derived-column editor: held until they
+  // close, and focus has left the button they give it back to.
+  const added = await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'd_sum',
+      expression: 'c000 + c002',
+    }),
+  );
+  expect(added.success).toBe(true);
+  await settle(page);
+  for (const [column, button, dx] of [
+    ['c200', '.dt-col-filter-btn', 8_000],
+    ['d_sum', '.dt-derived-icon-btn', -8_000],
+  ] as const) {
+    await wheelIntoView(page, column);
+    await header(column).locator(button).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => !!document.activeElement?.closest('.dt-filter-panel, .dt-derived-edit-panel'),
+        ),
+      )
+      .toBe(true);
+    await wheelBodyCorner(page, dx);
+    await expectHeld(column);
+    // Closing gives focus back to the button, and the column comes into view.
+    await page.keyboard.press('Escape');
+    await settle(page);
+    expect(
+      await page.evaluate(() =>
+        document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+      ),
+    ).toBe(column);
+    // Out of controls mode: nothing is holding the column any more.
+    await page.keyboard.press('Escape');
+    await wheelBodyCorner(page, dx);
+    expect((await mountedWithCells(page, column)).mounted, column).toBe(false);
+  }
 });

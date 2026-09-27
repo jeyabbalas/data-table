@@ -23,6 +23,14 @@ export interface DerivedColumnEditPanelOptions {
   colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
+  /**
+   * Called with the column the panel opens for, again when it switches to
+   * another, and with `null` once it closes. `TableContainer` keeps that
+   * column mounted meanwhile, so the button focus goes back to is there.
+   *
+   * @internal
+   */
+  onOpenChange?: ((column: string | null) => void) | undefined;
 }
 
 /**
@@ -49,6 +57,7 @@ export class DerivedColumnEditPanel {
   private readonly messages: Strings;
   private editorFactory?: ExpressionEditorFactory | undefined;
   private colorSchemeSource?: HTMLElement | undefined;
+  private readonly onOpenChange: ((column: string | null) => void) | undefined;
   private currentEditor: ExpressionEditor | null = null;
   private currentColumn: string | null = null;
   private currentDef: DerivedColumnDef | null = null;
@@ -72,6 +81,7 @@ export class DerivedColumnEditPanel {
     this.messages = options?.messages ?? defaultStrings;
     this.editorFactory = options?.editorFactory;
     this.colorSchemeSource = options?.colorSchemeSource;
+    this.onOpenChange = options?.onOpenChange;
 
     // Build DOM
     this.element = this.createElement();
@@ -461,6 +471,7 @@ export class DerivedColumnEditPanel {
     // Show panel
     this.isOpen = true;
     this.element.style.display = '';
+    this.onOpenChange?.(columnName);
 
     // Position below anchor (reads offsetWidth — must run after the panel is
     // visible).
@@ -495,6 +506,7 @@ export class DerivedColumnEditPanel {
     }
 
     this.element.style.display = 'none';
+    this.onOpenChange?.(null);
   }
 
   // =========================================

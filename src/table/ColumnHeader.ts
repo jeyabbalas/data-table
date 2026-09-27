@@ -65,6 +65,14 @@ export interface ColumnHeaderOptions {
    * reader. `TableContainer.announce` is the wiring.
    */
   announce?: ((message: string) => void) | undefined;
+  /**
+   * Keep the column mounted until the returned release is called. A resize
+   * drag holds its column, so a wheel mid-drag cannot take the handle away.
+   * `TableContainer` passes its column window controller's.
+   *
+   * @internal
+   */
+  holdColumn?: ((column: string) => () => void) | undefined;
 }
 
 /**
@@ -91,6 +99,8 @@ export class ColumnHeader {
   private statsEl: HTMLElement;
   private nameEl!: HTMLElement;
   private resizer: ColumnResizer;
+  /** Releases the hold a resize drag keeps on the column, while one runs. */
+  private releaseResizeHold: (() => void) | null = null;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
   private readonly classPrefix: string;
@@ -123,8 +133,14 @@ export class ColumnHeader {
       () => this.getColumnCells(),
       {
         classPrefix: this.classPrefix,
-        onDragStart: () => this.actions.beginColumnWidthChange(),
+        onDragStart: () => {
+          this.actions.beginColumnWidthChange();
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = this.options.holdColumn?.(this.column.name) ?? null;
+        },
         onDragEnd: () => {
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = null;
           this.actions.endColumnWidthChange();
           // Announced once at drag end, not on every mousemove — a live
           // region fired at pointer rate is noise, not information.

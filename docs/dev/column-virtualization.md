@@ -17,69 +17,89 @@ documentation.
    the harness in `tests/browser/helpers/table.ts`. Merged: #131 (the matrix) and #130, #132–#136 (the
    bugs it found on main, in the findings log).
 3. **4c: one `ColumnWindowController`,** owned by `TableContainer`: it owns the geometry, the scroll
-   and resize drivers and the set of columns to keep mounted. Header and body render what it
-   publishes.
-4. **4d: persistent header shells,** with the heavy parts built lazily. Spike first.
+   and resize drivers and the set of columns to keep mounted. The body renders only those columns
+   and fetches only them. Merged: #137 (the controller owns horizontal scrolling), #138 (it
+   publishes the columns to mount), #139 (body rows render only those), #141 (row fetches select
+   only those) and #140 (pinned columns first in every column order).
+4. **4d: persistent header shells,** with the heavy parts built lazily, and column changes that
+   update the grid in place.
 
-## 4c plan
+## 4d plan
 
-**One owner for the column axis.** Five pieces of code wrote `scrollLeft` on their own: the
-header↔body sync, the hold after a filter change, `render()`'s restore, the smooth scroll to a new
-column and the keyboard's scroll into view. 4b found three bugs where one undid another. Nothing
-knows which columns a row needs, either. 4c moves all of it into a `ColumnWindowController` that
-`TableContainer` creates once and keeps across renders. It listens to both scrollers and to the body's
-size, it is the only code that writes the grid's `scrollLeft` (a unit test greps `src/` for any
-other), and it publishes the columns to mount as a signal. The body renders what it publishes. The
-header keeps every column until 4d.
+**Why.** At 1,000 columns the table is still about 36,600 elements, 36,000 of them in the header:
+each header builds five buttons, each with an inline SVG, and a resize handle, in view or not. And
+every column change rebuilds all of it. `render()` destroys every header and the body on each write
+of `visibleColumns` or `schema`, and the facade then destroys every chart and custom stats panel and
+makes them again. On the 50K × 1,000 Parquet file, hiding one column costs 182 ms of script, 830 ms
+before the next frame and 24 queries. Moving one costs 175 ms and 24 queries, for every step of a
+keyboard move (`Shift+F2`, `Shift+→`).
 
-**What is mounted:** the pinned block, a run of columns around the view, and the columns something
-is holding on to.
+**The spike.** Headless Chromium at 1,400 × 900, on that file. Each variant was made in the live
+table by swapping elements: the real header for a column the controller mounts, something lighter
+for the rest.
 
-- The run covers the view and one viewport either side. A scroll recomputes it only when the view
-  comes within half a viewport of its edge, so a scroll of a few columns re-renders nothing.
-- The cursor's column, header or body, so `aria-activedescendant` always resolves: a cursor wheeled
-  out of view keeps its cell.
-- The column holding DOM focus (a clicked cell, a header button in `F2` mode), so a scroll cannot
-  take focus with it.
-- Until the body has a width (not laid out, hidden, jsdom), every column, which is what every
-  existing unit test sees.
+| Header row                      | Elements | Theme restyle | Width change | Sweep frames over 33 ms |
+| ------------------------------- | -------- | ------------- | ------------ | ----------------------- |
+| Today: a full header per column | 36,594   | 110 ms        | 1.5 ms       | 49 of 287               |
+| Structural shells, no controls  | 11,088   | 22 ms         | 1.5 ms       | 4 of 262                |
+| Minimal shells, header and name | 3,240    | 14 ms         | 1.1 ms       | 4 of 279                |
+| Windowed row with spacers       | 1,279    | 2.7 ms        | 0.4 ms       | 2 of 257                |
 
-The layout-mode column, the column being dragged and an open panel's anchor join in 4d, when headers
-start to depend on the set. Until then they are all in the header, which 4c never windows.
+Building 1,000 full headers takes 122 ms, and 1,000 shells 6 ms. Shells cost little: they scroll
+like a windowed row, and trail it by milliseconds on a restyle. The structural shell keeps a
+header's boxes (name, type, dividers, stats slot, chart slot, the empty action bar), so building its
+controls moves nothing, and `getStatsElement()` and `getVizContainer()` keep answering for every
+column. That is the shell 4d builds.
+
+**What changes:**
+
+- **A header is a shell until its column is mounted,** in the controller's set, the one the body
+  renders, with its hysteresis. A shell is the `columnheader` with its id, `aria-colindex`, label,
+  sort state, width, pinned placement and its classes for the cursor, filters, annotations and
+  layout mode, and the header's boxes. Mounting adds the controls: the derived-column icon, pin,
+  hide, filter, sort, the drag handle and the resize handle. A `ColumnHeader` made outside
+  `TableContainer` stays whole.
+- **The controller holds the columns in use,** so their controls stay: a resize drag's, a
+  drag-reorder's, and the column an open filter panel or derived-column editor belongs to, whose
+  close gives focus back to the button that opened it. The cursor's column and the one with DOM
+  focus (`F2` mode) are held already, and layout mode lives on the cursor's column.
+- **A column change updates the grid in place.** `render()` keeps each column's `ColumnHeader` and
+  makes a new one only when the column's schema entry changes. The row is put in order around the
+  header holding focus, as body rows are, and ids and `aria-colindex` are rewritten where they
+  moved. The body is kept unless the schema or the table changed: rows are keyed by column, and a
+  column shown reads only itself, by `__rowid__`.
+- **Charts and stats panels outlive column changes.** The attach pass keeps the chart and panel of
+  every header that survived, unless the table's relation changed. Custom stats panels are made
+  only for mounted columns and destroyed when they unmount; today every column gets one, and every
+  attach pass rebuilds them all.
 
 **PRs,** each stacked on the one before:
 
-1. **The controller owns horizontal scrolling.** No windowing. The sync and its echo guard, the gutter
-   measurement, the restore, the filter hold, the smooth scroll and the keyboard's reveal move into
-   it, with `revealColumn(column)` the one way to scroll a column into view. Only one thing changes:
-   the header now moves with the body in the same task when the keyboard reveals a column. The 4b
-   matrix is the regression suite. The browser's own scrolls are not writes and stay: a wheel, and
-   `ModalHost` focusing a header button as its panel closes, which scrolls the header.
-2. **It publishes the columns to mount.** The window arithmetic from the archive's `ColumnWindow.ts`,
-   on `ColumnLayout`'s offsets instead of prefix sums of its own, plus the hysteresis and the keep
-   set, unit-tested against a stubbed viewport and exposed to the browser probes. Nothing renders
-   from it yet.
-3. **Body rows render only those columns.** A row is its mounted cells in layout order, with a spacer
-   for each gap. Cells are keyed by column, so a scroll adds and removes cells around the ones that
-   stay and never moves a cell that holds focus. The row-shape check compares shapes, not
-   `visibleColumns.length`. Browser tests: the cell count stays within the mounted set through a
-   wheel sweep of 1,000 columns, every cell a sweep leaves in view shows its value, and the 4b matrix
-   stays green.
-4. **Row fetches select only those columns,** padded by a window either side and rounded out to
-   16-column steps, so that small scrolls reuse the block. Each cached block records its columns. A
-   block missing a mounted column is fetched again, and its cells show as pending until it lands. The
-   archive measured 95 ms → 11 ms for one 128-row block at 1,000 columns.
+1. **The controller holds columns in use.** `hold(column)` returns a release. Resize and reorder
+   drags and the two panels hold their column. The body keeps a held column's cells, which is what
+   the tests can see before headers depend on it.
+2. **Headers build their controls only for mounted columns.** Browser tests: a 1,000-column wheel
+   sweep in which, every frame, every mounted header has its controls and no other header has; the
+   element count at 1,000 columns; the 4b matrix.
+3. **A column change updates the header row in place,** and keeps the body. `ColumnReorder`
+   listens on the row instead of on each header. Measured: a hide, a show and a move at 1,000
+   columns.
+4. **Charts and stats panels outlive column changes,** and panels follow the mounted set.
+   Measured: the queries a hide, a show and a move cost.
 
-**Not in 4c:**
+**Not in 4d:** hit-testing drops against the layout model, and ending a drag whose `mouseup` was
+lost (both in the log); dropping the filter hold (it needs Firefox and WebKit); a searchable column
+picker.
 
-- For 4d: windowing the header; the drag, panel and layout-mode keeps; and `render()` rebuilding the
-  body and every header on each column change.
-- Dropping the filter hold. It needs Firefox and WebKit, which this machine's Playwright lacks.
+**Budget.** The shared chunk (`VisualizationRegistry-*`, capped as the ExportDialog chunk) has
+526 B of its 78 kB cap left. 4d will need more. The cap moves with a line of history in
+`.size-limit.cjs`, as it did for 4a.
 
-**Done when** the whole browser suite passes on each PR, and a 1,000-column table keeps the body's
-cell count within the mounted set through a wheel sweep. A Chrome pass on the 50K × 1,000 Parquet
-file must show no console errors, with values, cursor, focus, reorder and panels right across a
-trackpad sweep.
+**Done when** the whole browser suite passes on each PR; at 1,000 columns the header holds a shell
+for every column and controls only for the mounted ones; a hide, a show or a move takes
+milliseconds and no chart or panel query for a column that stays; and a Chrome pass on the
+50K × 1,000 Parquet file shows no console errors, with values, cursor, focus, reorder, resize,
+panels and charts right across a trackpad sweep.
 
 ## Findings log
 
@@ -220,3 +240,8 @@ trackpad sweep.
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the
   window (alt-tab mid-drag) keeps the drag alive until the next one. Both pre-existing; 4c's
   controller, working from the layout model, is the place to hit-test drops.
+- **2026-09-27, the 4d spike.** The table in the 4d plan. Column changes cost more than scrolling:
+  at 1,000 columns, hiding one column runs 182 ms of script and 830 ms before the next frame, and
+  moving one 175 ms, each with 24 queries, all from rebuilding. The body refetches, and every chart
+  and panel in view queries again. Building 1,000 `ColumnHeader`s takes 122 ms and destroying them
+  16 ms.

@@ -616,6 +616,25 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    it('keeps the column an open filter panel belongs to mounted, until the panel closes', () => {
+      const { tableContainer, root, body } = wideTable();
+      const mounted = () => tableContainer.getColumnWindow().mountedColumns.get().join(' ');
+      body.dispatchEvent(new Event('scroll'));
+      expect(mounted()).toBe('a b c d e f');
+
+      root
+        .querySelector<HTMLElement>('.dt-col-header[data-column="b"] .dt-col-filter-btn')!
+        .click();
+      body.scrollLeft = 700;
+      body.dispatchEvent(new Event('scroll'));
+      expect(mounted()).toBe('b e f g h i j');
+
+      tableContainer.getFilterPanel()!.close();
+      expect(mounted()).toBe('e f g h i j');
+
+      tableContainer.destroy();
+    });
+
     it('stops following the scrollers and state once destroyed', () => {
       let filtersBefore = 0;
       const { tableContainer, body } = wideTable(() => {

@@ -24,6 +24,14 @@ export interface ColumnReorderOptions {
    * no clamping is applied.
    */
   getPinnedColumns?: (() => readonly string[]) | undefined;
+  /**
+   * Keep the dragged column mounted until the returned release is called,
+   * from the press on its drag handle to the drop. `TableContainer` passes its
+   * column window controller's.
+   *
+   * @internal
+   */
+  holdColumn?: ((column: string) => () => void) | undefined;
 }
 
 /**
@@ -103,6 +111,9 @@ export class ColumnReorder {
   private readonly classPrefix: string;
   private readonly dragThreshold: number;
   private readonly getPinnedColumns: (() => readonly string[]) | undefined;
+  private readonly holdColumn: ((column: string) => () => void) | undefined;
+  /** Releases the hold on the dragged column, from the press to the drop. */
+  private releaseHold: (() => void) | null = null;
 
   // Bound event handlers for proper cleanup
   private readonly boundMouseMove: (e: MouseEvent) => void;
@@ -126,6 +137,7 @@ export class ColumnReorder {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.dragThreshold = options.dragThreshold ?? 5;
     this.getPinnedColumns = options.getPinnedColumns;
+    this.holdColumn = options.holdColumn;
 
     // Bind document-level handlers
     this.boundMouseMove = this.handleMouseMove.bind(this);
@@ -222,6 +234,8 @@ export class ColumnReorder {
     this.lastClientX = event.clientX;
     this.draggedHeader = header;
     this.draggedColumn = columnName;
+    this.releaseHold?.();
+    this.releaseHold = this.holdColumn?.(columnName) ?? null;
 
     // Add class to show grabbing cursor immediately (scoped to table root).
     this.resolveDragScope().classList.add(`${this.classPrefix}-column-potential-drag`);
@@ -411,6 +425,8 @@ export class ColumnReorder {
    * Reset all drag state
    */
   private resetDragState(): void {
+    this.releaseHold?.();
+    this.releaseHold = null;
     document.removeEventListener('scroll', this.boundScroll, true);
     this.shadowScrollRoot?.removeEventListener('scroll', this.boundScroll, true);
     this.shadowScrollRoot = null;

@@ -423,6 +423,7 @@ export class TableContainer {
         {
           classPrefix: this.resolvedOptions.classPrefix,
           getPinnedColumns: () => this.state.pinnedColumns.get(),
+          holdColumn: (column) => this.columnWindow.hold(column),
         },
       );
     }
@@ -1283,6 +1284,7 @@ export class TableContainer {
               annotationPopover: this.resolvedOptions.annotationPopover,
               columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
               announce: (message) => this.announce(message),
+              holdColumn: (column) => this.columnWindow.hold(column),
             });
             this.columnHeaders.push(columnHeader);
 
@@ -1569,6 +1571,19 @@ export class TableContainer {
   }
 
   /**
+   * An `onOpenChange` for a panel anchored on a header button: hold the
+   * column the panel is open for, and let it go when it closes. Closing gives
+   * focus back to the button that opened the panel, which has to be there.
+   */
+  private holdWhileOpen(): (column: string | null) => void {
+    let release: (() => void) | null = null;
+    return (column) => {
+      release?.();
+      release = column === null ? null : this.columnWindow.hold(column);
+    };
+  }
+
+  /**
    * Handle filter button click from a column header.
    * Creates the FilterPanel lazily and toggles it for the clicked column.
    */
@@ -1592,6 +1607,7 @@ export class TableContainer {
         classPrefix: this.resolvedOptions.classPrefix,
         colorSchemeSource: this.element,
         messages: this.messages,
+        onOpenChange: this.holdWhileOpen(),
       });
       this.element.appendChild(this.filterPanel.getElement());
     }
@@ -1632,6 +1648,7 @@ export class TableContainer {
           editorFactory: this.resolvedOptions.editorFactory,
           colorSchemeSource: this.element,
           messages: this.messages,
+          onOpenChange: this.holdWhileOpen(),
         });
         this.element.appendChild(this.derivedEditPanel.getElement());
       }

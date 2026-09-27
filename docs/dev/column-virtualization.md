@@ -123,7 +123,8 @@ trackpad sweep.
   unpinned header. Pre-existing; the resize minimum is 50 px.
 - **A width under the padding and border (25 px at a 16 px root) still occupies that much.** Only
   `setColumnWidth` can set one; the resize paths clamp to 50–500 px. The layout would then disagree
-  with the DOM by the difference.
+  with the DOM by the difference, which a windowed row's spacers turn into cells 25 px off their
+  headers. Widths are drawn at 50 px at least since #139.
 - **`--dt-col-width` sizes nothing but loading placeholders.** Every header and cell gets an inline
   width from `columnWidths` (150 px default), which wins over the variable. The theming guide and the
   state-model page said it was the default column width.
@@ -137,9 +138,10 @@ trackpad sweep.
   `columnOrder` as a phantom column; fixed in #127.
 - **For 4b/4c, from the reviews.** Body cell ids are keyed by the column's layout index (#128), so
   `aria-activedescendant` stays right once a row holds a window of columns; a 4b test should assert
-  that it always names the ringed cell. `TableBody.renderVisibleRows` still rebuilds any row whose
-  cell count differs from `visibleColumns.length`, which a windowed row always does. `ColumnReorder`
-  takes the drop index and the new order from the header DOM, which will hold only mounted headers.
+  that it always names the ringed cell. `TableBody.renderVisibleRows` rebuilt any row whose cell
+  count differed from `visibleColumns.length`, which a windowed row always does; it compares row
+  shapes since #139. `ColumnReorder` takes the drop index and the new order from the header DOM,
+  which will hold only mounted headers.
 - **Found in review, outside this work, not fixed.** The SQL filter modal's Remove section never
   shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
@@ -171,6 +173,18 @@ trackpad sweep.
   - The grid inherited a right-to-left page's direction, which reverses its flex rows and makes
     `scrollLeft` negative. Every column offset in the table assumes left to right, so `.dt-grid`
     is now `direction: ltr`.
+- **Found in review of #139.**
+  - A reorder moved kept cells to their new places, the one holding focus among them, and moving
+    it blurred it. The controller publishes before `render()` rebuilds the body, so the old body
+    had dropped focus to `<body>` by then, and `render()`, finding focus already gone, restored
+    none. Rows are now put in order around the focused cell, which never moves.
+  - Moving focus off a row being removed fired a synchronous `focusin` that the controller turned
+    into a publish, and so a second render inside the first. That left rows twice in the viewport,
+    or shaped for the old columns. The controller now follows focus a microtask later, a render
+    asked for during a render runs after it, and a refresh empties the row map before it moves
+    focus.
+  - A pinned column placed after an unpinned one lost its body cells: see the review of #138,
+    fixed in #140.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

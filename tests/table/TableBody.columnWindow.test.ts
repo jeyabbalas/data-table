@@ -184,6 +184,80 @@ describe('TableBody rows with a column window', () => {
     harness.body.destroy();
   });
 
+  it('keep focus on a focused cell that a reorder shifts, and move it last of all', async () => {
+    const { harness } = await setup(COLUMNS);
+    const rowEl = row(harness);
+    const d = cellOf(rowEl, 'd');
+    d.focus();
+
+    // `b` moves right past `d`, and `g` left past it: cells on both sides
+    // of the focused one have to move.
+    harness.state.visibleColumns.set(['a', 'c', 'g', 'd', 'e', 'b', 'f', 'h']);
+
+    expect(children(rowEl)).toEqual(['a', 'c', 'g', 'd', 'e', 'b', 'f', 'h']);
+    expect(cellOf(rowEl, 'd')).toBe(d);
+    expect(document.activeElement).toBe(d);
+    harness.body.destroy();
+  });
+
+  it('render once more after a render that sets off another, never inside it', async () => {
+    // What the column window controller does when the body moves focus off
+    // a row it is removing: hear the focus, and publish other columns.
+    const { harness, mounted } = await setup(['a', 'b', 'c', 'd']);
+    const grid = document.createElement('div');
+    grid.tabIndex = 0;
+    document.body.appendChild(grid);
+    const internal = harness.body as unknown as { gridElement: HTMLElement | null };
+    internal.gridElement = grid;
+    grid.addEventListener('focusin', () => mounted.set(['a', 'b']));
+
+    cellOf(row(harness, 0), 'c').focus();
+    harness.body.refresh();
+    const query = harness.queries.at(-1)!;
+    query.deferred.resolve(rowsFor(query.sql, COLUMNS));
+    await harness.drain();
+
+    expect(harness.body.__verifyDomOrderForTests()).toBe(true);
+    const indices = Array.from(harness.container.querySelectorAll('.dt-row'), (el) =>
+      el.getAttribute('data-row-index'),
+    );
+    expect(new Set(indices).size).toBe(indices.length);
+    for (const rowEl of harness.container.querySelectorAll<HTMLElement>(
+      '.dt-row:not([data-placeholder])',
+    )) {
+      expect(children(rowEl)).toEqual(['a', 'b', '|600px|']);
+    }
+    harness.body.destroy();
+  });
+
+  it('shape every row for the columns published during a scroll that removes the focused row', async () => {
+    const { harness, mounted } = await setup(['a', 'b', 'c', 'd']);
+    const grid = document.createElement('div');
+    grid.tabIndex = 0;
+    document.body.appendChild(grid);
+    const internal = harness.body as unknown as { gridElement: HTMLElement | null };
+    internal.gridElement = grid;
+    grid.addEventListener('focusin', () => mounted.set(['a', 'b']));
+
+    // Row 0 holds focus. A scroll of twelve rows removes it, past the five
+    // rows of buffer above the view, and the rows that stay and come in are
+    // all fetched already.
+    cellOf(row(harness, 0), 'c').focus();
+    harness.scrollToRow(12);
+
+    expect(row(harness, 0)).toBeNull();
+    for (const rowEl of harness.container.querySelectorAll<HTMLElement>(
+      '.dt-row:not([data-placeholder])',
+    )) {
+      expect(children(rowEl), `row ${rowEl.getAttribute('data-row-index')}`).toEqual([
+        'a',
+        'b',
+        '|600px|',
+      ]);
+    }
+    harness.body.destroy();
+  });
+
   it('leave out a mounted name that is not a visible column', async () => {
     const { harness } = await setup(['a', 'nope', 'c']);
     expect(children(row(harness))).toEqual(['a', '|100px|', 'c', '|500px|']);

@@ -24,8 +24,18 @@ import type { TableState } from '../core/State';
 export const DEFAULT_COLUMN_WIDTH = 150;
 
 /**
- * The width a declared column width occupies: rounded to a whole pixel, or
- * {@link DEFAULT_COLUMN_WIDTH} when it is missing, not finite or negative.
+ * The narrowest a column is drawn, and the resize handle's minimum. A cell
+ * cannot be narrower than its padding and border (25 px at a 16 px root),
+ * so a smaller width took more room than it said, and every column placed
+ * by adding widths up, as the spacers of a row that renders only some
+ * columns are, landed that far from its header.
+ */
+export const MIN_COLUMN_WIDTH = 50;
+
+/**
+ * The width a declared column width occupies: rounded to a whole pixel and
+ * at least {@link MIN_COLUMN_WIDTH}, or {@link DEFAULT_COLUMN_WIDTH} when it
+ * is missing, not finite or negative.
  *
  * Rounded so the header, the body and any sum of their widths land on the
  * same pixels: the layout engine snaps each box to its own unit, so a
@@ -38,11 +48,12 @@ export const DEFAULT_COLUMN_WIDTH = 150;
  * ```typescript
  * resolveColumnWidth(undefined); // → 150
  * resolveColumnWidth(151.6); // → 152
+ * resolveColumnWidth(10); // → 50
  * ```
  */
 export function resolveColumnWidth(declared: number | undefined): number {
   return declared !== undefined && Number.isFinite(declared) && declared >= 0
-    ? Math.round(declared)
+    ? Math.max(MIN_COLUMN_WIDTH, Math.round(declared))
     : DEFAULT_COLUMN_WIDTH;
 }
 

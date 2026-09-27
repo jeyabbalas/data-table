@@ -47,8 +47,12 @@ describe('resolveColumnWidth', () => {
     expect(resolveColumnWidth(w)).toBe(DEFAULT_COLUMN_WIDTH);
   });
 
-  it('keeps a zero width', () => {
-    expect(resolveColumnWidth(0)).toBe(0);
+  it('draws a width under the minimum at the minimum', () => {
+    // A cell cannot be narrower than its padding and border, so a smaller
+    // width would take more room than it says.
+    expect(resolveColumnWidth(0)).toBe(50);
+    expect(resolveColumnWidth(24.4)).toBe(50);
+    expect(resolveColumnWidth(50)).toBe(50);
   });
 });
 

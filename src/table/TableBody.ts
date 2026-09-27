@@ -252,8 +252,14 @@ export class TableBody {
   // whose shape differs is reconciled to the new one (see shapeRow).
   private readonly mountedColumns: Pick<Signal<readonly string[]>, 'get' | 'subscribe'> | null;
   private cachedShape: RowShape | null = null;
-  private renderedShape: RowShape | null = null;
   private readonly rowShapes = new WeakMap<HTMLElement, RowShape>();
+
+  // A render in progress, and another asked for during it (see renderVisibleRows)
+  private rendering = false;
+  private renderAgain = false;
+
+  // Column name → schema entry, rebuilt when the schema changes
+  private schemaMapCache: { schema: ColumnSchema[]; map: Map<string, ColumnSchema> } | null = null;
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
@@ -605,13 +611,16 @@ export class TableBody {
     // Clear data cache
     this.rowDataCache.clear();
 
-    // Clear row element map and return all rows to pool
-    for (const [, element] of this.rowElementMap) {
+    // Clear row element map and return all rows to pool. Cleared before the
+    // rows go: moving focus off one can set off a render, which must find
+    // none of them.
+    const rows = [...this.rowElementMap.values()];
+    this.rowElementMap.clear();
+    for (const element of rows) {
       this.moveFocusToGridBeforeRemoval(element);
       element.remove();
       this.returnRowToPool(element);
     }
-    this.rowElementMap.clear();
 
     // Re-read the live range — the scroller does not re-notify on
     // offset-only changes, so a stored range could be stale here — then
@@ -1011,27 +1020,41 @@ export class TableBody {
    * all rows on every scroll. Rows that leave the viewport are returned to
    * a pool for reuse, and rows that enter are either taken from the pool
    * or created if the pool is empty.
+   *
+   * A render asked for while one is running runs after it rather than inside
+   * it. One can be: a pass that removes the element holding focus moves focus
+   * to the grid, and the column window controller hears of that focus.
    */
   private renderVisibleRows(): void {
     if (this.destroyed) return;
+    if (this.rendering) {
+      this.renderAgain = true;
+      return;
+    }
+    this.rendering = true;
+    try {
+      do {
+        this.renderAgain = false;
+        this.renderPass();
+      } while (this.renderAgain && !this.destroyed);
+    } finally {
+      this.rendering = false;
+    }
+  }
+
+  /** One pass of {@link renderVisibleRows}. */
+  private renderPass(): void {
     this.pinnedZBaseCache = null;
 
     const viewport = this.virtualScroller.getViewportContainer();
-    const schema = this.state.schema.get();
     const shape = this.rowShape();
-    this.renderedShape = shape;
     const selectedRows = this.state.selectedRows.get();
     const hoveredRow = this.state.hoveredRow.get();
     const focusedCell = this.state.focusedCell.get();
 
     const newStart = this.currentRange.start;
     const newEnd = this.currentRange.end;
-
-    // Build schema map for quick lookup
-    const schemaMap = new Map<string, ColumnSchema>();
-    for (const col of schema) {
-      schemaMap.set(col.name, col);
-    }
+    const schemaMap = this.schemaMap();
 
     // 1. Remove rows no longer visible (return to pool)
     for (const [index, element] of this.rowElementMap) {
@@ -1204,6 +1227,15 @@ export class TableBody {
     return rowEl;
   }
 
+  /** Column name → schema entry for the current schema. */
+  private schemaMap(): Map<string, ColumnSchema> {
+    const schema = this.state.schema.get();
+    if (this.schemaMapCache?.schema !== schema) {
+      this.schemaMapCache = { schema, map: new Map(schema.map((col) => [col.name, col])) };
+    }
+    return this.schemaMapCache.map;
+  }
+
   /**
    * The shape data rows take in this render pass: a cell for each column to
    * render, in layout order, with a spacer standing in for each run of
@@ -1256,12 +1288,13 @@ export class TableBody {
    * Make a data row's children match `shape`: a cell for each of its columns
    * and a spacer for each gap, in order.
    *
-   * A cell keeps its column. Cells of columns the shape still has stay where
-   * they are, in place, and everything else is built or taken out around
-   * them, so a scroll never detaches a cell that stays mounted: detaching
-   * the one holding focus would drop focus to `<body>`. Only a new column
-   * order moves cells. Cells of columns the shape no longer has, and spacers,
-   * are reused for the new ones; {@link updateRowContent} then fills them.
+   * A cell keeps its column. Cells of columns the shape still has stay in
+   * place, and everything else is built or taken out around them, so a
+   * scroll never detaches a cell that stays mounted: detaching the one
+   * holding focus would drop focus to `<body>`. A new column order moves the
+   * cells it has to, but never the one holding focus. Cells of columns the
+   * shape no longer has, and spacers, are reused for the new ones;
+   * {@link updateRowContent} then fills them.
    */
   private shapeRow(rowEl: HTMLElement, shape: RowShape): void {
     const built = this.rowShapes.get(rowEl);
@@ -1295,29 +1328,40 @@ export class TableBody {
       else freeCells.push(child);
     }
 
-    // Only the kept cells are left, in their old order. Walk the shape and
-    // put each child before the first kept cell not yet placed.
-    let next = rowEl.firstElementChild as HTMLElement | null;
-    for (const slot of shape.slots) {
+    // What the row is to hold, in order: the kept cells, and freed cells and
+    // spacers reused for the rest.
+    const nodes = shape.slots.map((slot): HTMLElement => {
       if (typeof slot === 'number') {
         const spacer = freeSpacers.pop() ?? this.createSpacer();
         spacer.style.width = `${slot}px`;
-        rowEl.insertBefore(spacer, next);
-        continue;
+        return spacer;
       }
       const cell = kept.get(slot);
-      if (cell === next && cell) {
-        next = cell.nextElementSibling as HTMLElement | null;
-        continue;
-      }
-      if (cell) {
-        // Out of order: the columns were reordered.
-        rowEl.insertBefore(cell, next);
-        continue;
-      }
+      if (cell) return cell;
       const fresh = freeCells.pop() ?? this.createCell();
       fresh.setAttribute('data-column', slot);
-      rowEl.insertBefore(fresh, next);
+      return fresh;
+    });
+
+    // Put each node next to its neighbour, working out from one that stays
+    // where it is: the cell holding focus, or else the first kept cell. A
+    // node already beside its neighbour is not touched, so a scroll moves no
+    // kept cell. A reorder moves the kept cells it has to, and never the one
+    // holding focus, which moving would blur.
+    const root = rowEl.getRootNode();
+    const active = 'activeElement' in root ? (root as Document | ShadowRoot).activeElement : null;
+    let anchor = active ? nodes.findIndex((node) => node.contains(active)) : -1;
+    if (anchor < 0) anchor = nodes.findIndex((node) => node.parentNode === rowEl);
+    if (anchor < 0) {
+      rowEl.append(...nodes);
+      return;
+    }
+    for (let i = anchor - 1; i >= 0; i--) {
+      if (nodes[i]!.nextSibling !== nodes[i + 1]) rowEl.insertBefore(nodes[i]!, nodes[i + 1]!);
+    }
+    for (let i = anchor + 1; i < nodes.length; i++) {
+      const previous = nodes[i - 1]!;
+      if (previous.nextSibling !== nodes[i]) rowEl.insertBefore(nodes[i]!, previous.nextSibling);
     }
   }
 
@@ -1690,9 +1734,7 @@ export class TableBody {
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;
-    const schema = this.state.schema.get();
-    const schemaMap = new Map<string, ColumnSchema>();
-    for (const col of schema) schemaMap.set(col.name, col);
+    const schemaMap = this.schemaMap();
     for (const [index, rowEl] of this.rowElementMap) {
       const rowData = this.rowDataCache.get(index);
       if (!rowData) continue;
@@ -2023,18 +2065,15 @@ export class TableBody {
    *
    * In place, without re-rendering content: this runs on every step of a
    * resize drag. A width moves every column after it, so spacers are resized
-   * too, and a change in which columns rows render is a render.
+   * too. Which columns rows render does not change here: when a width moves
+   * the column window, the controller has published the new columns, and
+   * the rows have been rendered for them, before this runs.
    */
   private updateCellWidths(): void {
     const layout = getColumnLayout(this.state);
     this.pinnedZBaseCache = null;
 
     const shape = this.rowShape();
-    if (this.renderedShape && shape.structure !== this.renderedShape.structure) {
-      this.renderVisibleRows();
-      return;
-    }
-    this.renderedShape = shape;
 
     // Update cell widths for all visible rows. A pinned column's width also
     // moves every later pinned column's sticky offset.

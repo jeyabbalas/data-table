@@ -122,3 +122,38 @@ test('a pinned column keeps its cells at the left edge however far the rows scro
   const body = await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox();
   expect(pinned!.x).toBe(body!.x);
 });
+
+test('a column set narrower than its padding keeps its cells under its header', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 300 });
+  // Only code can set such a width; it is drawn at the 50px minimum.
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.setColumnWidth('c005', 0),
+  );
+  await wheelBy(page, 20_000);
+  const misaligned = await probe(page, 'cellHeaderMisalignment');
+  expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
+});
+
+test('undoing a column move keeps focus in the grid when a clicked cell had it', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await page.evaluate(() => {
+    const { actions, state } = (window as unknown as TestWindow).__dt;
+    const order = [...state.visibleColumns.get()];
+    order.splice(1, 0, order.splice(8, 1)[0]!);
+    actions.setColumnOrder(order);
+  });
+  await page.locator(`#${HOST_ID} .dt-row[data-row-index="1"] .dt-cell[data-column="c05"]`).click();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.closest('.dt-grid') !== null))
+    .toBe(true);
+  // And the keyboard still drives the table.
+  await page.keyboard.press('ArrowDown');
+  await expect
+    .poll(async () => (await probe(page, 'cursor')).focused)
+    .toEqual({ row: 2, column: 'c05' });
+});

@@ -47,11 +47,12 @@ describe('unpinnedColumnsMeeting', () => {
     expect(pinned.names(unpinnedColumnsMeeting(pinned.layout, 0, 250))).toBe('c0 c1');
   });
 
-  it('handles columns of very different widths and zero widths', () => {
-    const { layout: w, names: n } = layout([50, 0, 400, 0, 50]);
-    // c0 0–50, c1 50–50, c2 50–450, c3 450–450, c4 450–500
-    expect(n(unpinnedColumnsMeeting(w, 60, 100))).toBe('c2');
-    expect(n(unpinnedColumnsMeeting(w, 0, 60))).toBe('c0 c1 c2');
+  it('handles columns of very different widths', () => {
+    const { layout: w, names: n } = layout([50, 50, 400, 50, 50]);
+    // c0 0–50, c1 50–100, c2 100–500, c3 500–550, c4 550–600
+    expect(n(unpinnedColumnsMeeting(w, 110, 400))).toBe('c2');
+    expect(n(unpinnedColumnsMeeting(w, 0, 110))).toBe('c0 c1 c2');
+    expect(n(unpinnedColumnsMeeting(w, 499, 551))).toBe('c2 c3 c4');
   });
 });
 

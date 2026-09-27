@@ -328,21 +328,23 @@ describe('the columns to mount', () => {
     expect(mounted()).toBe('a b c d e f');
   });
 
-  it('keep the column holding DOM focus while the window is away, which leaves it focused', () => {
+  it('keep the column holding DOM focus while the window is away, which leaves it focused', async () => {
     const cell = document.createElement('div');
     cell.setAttribute('data-column', 'j');
     cell.tabIndex = -1;
     bodyScroll.appendChild(cell);
     cell.focus();
+    await Promise.resolve();
     expect(mounted()).toBe('a b c d e f j');
 
     // What switching apps sends: a focusout to nowhere, focus left in place.
     cell.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    await Promise.resolve();
     expect(document.activeElement).toBe(cell);
     expect(mounted()).toBe('a b c d e f j');
   });
 
-  it('keep the column holding DOM focus mounted until focus leaves the grid', () => {
+  it('keep the column holding DOM focus mounted until focus leaves the grid', async () => {
     const cell = document.createElement('div');
     cell.setAttribute('data-column', 'j');
     cell.tabIndex = -1;
@@ -351,14 +353,31 @@ describe('the columns to mount', () => {
     document.body.appendChild(outside);
 
     cell.focus();
+    await Promise.resolve();
     expect(mounted()).toBe('a b c d e f j');
     // Within the grid, to an element of no column: nothing is held.
     grid.tabIndex = 0;
     grid.focus();
+    await Promise.resolve();
     expect(mounted()).toBe('a b c d e f');
     cell.focus();
     outside.focus();
+    await Promise.resolve();
     expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('follow a focus change a microtask later, never while the change is being made', async () => {
+    const cell = document.createElement('div');
+    cell.setAttribute('data-column', 'j');
+    cell.tabIndex = -1;
+    bodyScroll.appendChild(cell);
+    const heard: string[] = [];
+    controller.mountedColumns.subscribe((columns) => heard.push(columns.join(' ')));
+
+    cell.focus();
+    expect(heard).toEqual([]);
+    await Promise.resolve();
+    expect(heard).toEqual(['a b c d e f j']);
   });
 
   it('are worked out afresh when the columns change', () => {

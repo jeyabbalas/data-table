@@ -18,7 +18,7 @@ import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
-import { buildRowQuery } from './rowQuery';
+import { buildRowColumnsQuery, buildRowQuery } from './rowQuery';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
 
 /**
@@ -142,6 +142,8 @@ interface RowShape {
   readonly layout: ColumnLayout;
   /** The column list it was built from: the mounted columns, or `visibleColumns`. */
   readonly source: readonly string[];
+  /** The columns it has a cell for, in layout order. */
+  readonly columns: readonly string[];
   /** Each child's slot: a column's name for a cell, a width in px for a spacer. */
   readonly slots: readonly (string | number)[];
   /**
@@ -161,6 +163,30 @@ interface RowShape {
 function isFetchCancellation(error: unknown): boolean {
   const code = (error as { code?: unknown } | null | undefined)?.code;
   return code === 'QUERY_ABORTED' || code === 'QUERY_CANCELLED';
+}
+
+/**
+ * Column granularity of a row fetch. Around the columns rows render, a fetch
+ * selects a run that far again either side, rounded out to multiples of this,
+ * so that a scroll of a few columns keeps selecting the same columns, and the
+ * rows fetched already keep covering the view.
+ */
+const FETCH_COLUMN_STEP = 16;
+
+/** The columns a block fetch selects, besides `__rowid__`, which every row has. */
+interface FetchColumns {
+  /** In layout order, for the `SELECT` list. */
+  readonly names: readonly string[];
+  readonly set: ReadonlySet<string>;
+}
+
+/** Whether rows fetched with `fetched` hold a value for every column in `columns`. */
+function holdsAll(fetched: ReadonlySet<string> | undefined, columns: readonly string[]): boolean {
+  if (!fetched) return false;
+  for (const column of columns) {
+    if (column !== ROWID_COLUMN && !fetched.has(column)) return false;
+  }
+  return true;
 }
 
 /**
@@ -236,6 +262,10 @@ export class TableBody {
   private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
   // The single speculative block fetch beyond the viewport, or null.
   private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  // The columns each cached block holds, by block start. Its rows hold values
+  // for those only: when rows render a column their block lacks, the block
+  // reads it, and until then those cells are pending.
+  private blockColumns = new Map<number, ReadonlySet<string>>();
   private lastScrollDirection: 1 | -1 = 1;
   // Runtime safety valve for the __rowid__ range fast path: flipped (once,
   // with a console.warn) if a fast-path result ever violates the dense-rowid
@@ -402,9 +432,11 @@ export class TableBody {
     // Re-fetch when the visible column *set* changes.
     //
     // A write that only permutes the set is a reorder, and rows are keyed by
-    // column name — every value is already in the cache, so a re-render is
+    // column name — every value fetched is still right, so a re-render is
     // enough, and the in-flight `initialize()` fetch is not dropped by a
-    // `fetchSequence` bump it did not need.
+    // `fetchSequence` bump it did not need. Columns a reorder brings near the
+    // view come as a new set of mounted columns, which fetches what the rows
+    // lack.
     //
     // Measured honestly: through `TableContainer` this changes no query count.
     // `render()` destroys and recreates the whole `TableBody` on any
@@ -496,12 +528,13 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubWidths);
 
-    // Re-render when the columns to render change. From the cache: rows hold
-    // every visible column's value, so a scroll needs no fetch.
+    // Re-render when the columns to render change, then fetch the rows
+    // again if they were fetched without some of them.
     if (this.mountedColumns) {
       const unsubMounted = this.mountedColumns.subscribe(() => {
         if (!this.destroyed) {
           this.renderVisibleRows();
+          if (!this.isAnimatingScroll) void this.ensureFetched();
         }
       });
       this.unsubscribes.push(unsubMounted);
@@ -610,6 +643,7 @@ export class TableBody {
 
     // Clear data cache
     this.rowDataCache.clear();
+    this.blockColumns.clear();
 
     // Clear row element map and return all rows to pool. Cleared before the
     // rows go: moving focus off one can set off a render, which must find
@@ -685,19 +719,123 @@ export class TableBody {
 
   /**
    * Starts of the blocks intersecting `range` in which at least one row
-   * index is missing from `rowDataCache`, ordered viewport-top-first.
+   * index is missing from `rowDataCache`, or which were fetched without one
+   * of `columns`, ordered viewport-top-first.
    */
-  private missingBlocks(range: VisibleRange): number[] {
+  private missingBlocks(range: VisibleRange, columns: readonly string[]): number[] {
     const blocks: number[] = [];
-    for (let i = Math.max(0, range.start); i < range.end; i++) {
-      if (!this.rowDataCache.has(i)) {
-        const blockStart = this.blockStartOf(i);
-        blocks.push(blockStart);
-        // One miss marks the whole block — skip to the next one.
-        i = blockStart + this.fetchBlockSize - 1;
+    const start = Math.max(0, range.start);
+    for (
+      let blockStart = this.blockStartOf(start);
+      blockStart < range.end;
+      blockStart += this.fetchBlockSize
+    ) {
+      let complete = holdsAll(this.blockColumns.get(blockStart), columns);
+      const end = Math.min(range.end, blockStart + this.fetchBlockSize);
+      for (let i = Math.max(start, blockStart); complete && i < end; i++) {
+        if (!this.rowDataCache.has(i)) complete = false;
       }
+      if (!complete) blocks.push(blockStart);
     }
     return blocks;
+  }
+
+  /**
+   * What a fetch of the block at `blockStart` can skip: when every row of the
+   * block is cached, their `__rowid__`s, and the columns in `columns` they
+   * lack. `null` when a row is missing, and the block has to be fetched
+   * whole.
+   */
+  private columnTopUp(
+    blockStart: number,
+    columns: FetchColumns,
+  ): { rowids: number[]; missing: string[] } | null {
+    const fetched = this.blockColumns.get(blockStart);
+    if (!fetched) return null;
+    const end = Math.min(blockStart + this.fetchBlockSize, this.virtualScroller.getTotalRows());
+    const rowids: number[] = [];
+    for (let i = blockStart; i < end; i++) {
+      const row = this.rowDataCache.get(i);
+      const id = row ? Number(row[ROWID_COLUMN]) : Number.NaN;
+      if (!Number.isSafeInteger(id)) return null;
+      rowids.push(id);
+    }
+    const missing = columns.names.filter((column) => !fetched.has(column));
+    return rowids.length > 0 && missing.length > 0 ? { rowids, missing } : null;
+  }
+
+  /**
+   * Put the columns a top-up read into the block's cached rows, matched by
+   * `__rowid__`, and drop the ones `columns` no longer has, so that a block
+   * holds about one fetch's columns however far it is swept. A row the read
+   * did not return is dropped too, and so fetched again with its block.
+   */
+  private mergeColumns(
+    blockStart: number,
+    rows: RowData[],
+    missing: readonly string[],
+    columns: FetchColumns,
+  ): void {
+    const byId = new Map<number, RowData>();
+    for (const row of rows) byId.set(Number(row[ROWID_COLUMN]), row);
+    const end = blockStart + this.fetchBlockSize;
+    for (let i = blockStart; i < end; i++) {
+      const cached = this.rowDataCache.get(i);
+      if (!cached) continue;
+      const fresh = byId.get(Number(cached[ROWID_COLUMN]));
+      if (!fresh) {
+        this.rowDataCache.delete(i);
+        continue;
+      }
+      for (const key of Object.keys(cached)) {
+        if (key !== ROWID_COLUMN && !columns.set.has(key)) delete cached[key];
+      }
+      for (const key of missing) cached[key] = fresh[key];
+    }
+    this.blockColumns.set(blockStart, columns.set);
+  }
+
+  /**
+   * The columns a block fetch selects now: the ones rows render, and around
+   * each run of them as many again either side, rounded out to multiples of
+   * {@link FETCH_COLUMN_STEP}.
+   *
+   * Every visible column when rows render every visible column. With a column
+   * window, a 1,000-column table's block selects some hundred columns rather
+   * than all of them, and converting a block to JavaScript objects, most of a
+   * fetch's time, shrinks with it.
+   */
+  private fetchColumns(): FetchColumns {
+    const layout = getColumnLayout(this.state);
+    const n = layout.columns.length;
+    const picked = new Set<number>();
+    // The pinned block as it is; every other run of adjacent columns widened.
+    const unpinned: number[] = [];
+    for (const column of this.rowShape().columns) {
+      const index = layout.indexOf(column);
+      if (index < layout.pinnedCount) picked.add(index);
+      else unpinned.push(index);
+    }
+    for (let i = 0; i < unpinned.length;) {
+      let j = i + 1;
+      while (j < unpinned.length && unpinned[j] === unpinned[j - 1]! + 1) j++;
+      const start = unpinned[i]!;
+      const end = unpinned[j - 1]! + 1;
+      const pad = end - start;
+      const from = Math.max(
+        layout.pinnedCount,
+        Math.floor((start - pad) / FETCH_COLUMN_STEP) * FETCH_COLUMN_STEP,
+      );
+      const to = Math.min(n, Math.ceil((end + pad) / FETCH_COLUMN_STEP) * FETCH_COLUMN_STEP);
+      for (let k = from; k < to; k++) picked.add(k);
+      i = j;
+    }
+    const names: string[] = [];
+    for (const index of [...picked].sort((a, b) => a - b)) {
+      const name = layout.columns[index]!;
+      if (name !== ROWID_COLUMN) names.push(name);
+    }
+    return { names, set: new Set(names) };
   }
 
   /**
@@ -716,11 +854,17 @@ export class TableBody {
     if (!this.state.tableName.get()) return;
     if (this.state.visibleColumns.get().length === 0) return;
 
-    const needed = this.missingBlocks(this.currentRange);
+    // The columns rows render, and the ones a fetch started now selects.
+    const rendered = this.rowShape().columns;
+    const columns = this.fetchColumns();
+    const needed = this.missingBlocks(this.currentRange, rendered);
 
     // Abort in-flight blocks that no longer intersect the current range
     // padded by one block on each side. Deleting the entry here (not in the
     // fetch's own `finally`) frees the slot for the same-pass top-up below.
+    // A fetch that will land without columns rows render now is left to land:
+    // aborting it during a sideways fling starved the view of every fetch,
+    // and reading the columns it lacks afterwards is cheap (see fetchBlock).
     const padStart = this.currentRange.start - this.fetchBlockSize;
     const padEnd = this.currentRange.end + this.fetchBlockSize;
     for (const [blockStart, entry] of this.inFlightBlocks) {
@@ -754,7 +898,7 @@ export class TableBody {
       if (this.inFlightBlocks.has(blockStart)) continue;
       const controller = new AbortController();
       this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch });
-      started.push(this.fetchBlock(blockStart, this.epoch, controller, false));
+      started.push(this.fetchBlock(blockStart, this.epoch, controller, false, columns));
     }
 
     // Prefetch: one block beyond the viewport in the last scroll direction,
@@ -773,11 +917,11 @@ export class TableBody {
       if (
         candidate >= 0 &&
         candidate < this.virtualScroller.getTotalRows() &&
-        !this.rowDataCache.has(candidate)
+        (!this.rowDataCache.has(candidate) || !holdsAll(this.blockColumns.get(candidate), rendered))
       ) {
         const controller = new AbortController();
         this.prefetch = { blockStart: candidate, controller };
-        started.push(this.fetchBlock(candidate, this.epoch, controller, true));
+        started.push(this.fetchBlock(candidate, this.epoch, controller, true, columns));
       }
     }
 
@@ -797,7 +941,15 @@ export class TableBody {
   }
 
   /**
-   * Fetch one aligned block and write it into `rowDataCache`.
+   * Fetch one aligned block, selecting `columns`, and write it into
+   * `rowDataCache`.
+   *
+   * When every row of the block is cached already, only the columns in
+   * `columns` it lacks are read, by `__rowid__` (see {@link columnTopUp}):
+   * fetching a sorted or filtered block again repeats its sort and `OFFSET`,
+   * which clipping the columns does nothing for. Otherwise the fetched rows
+   * replace any cached for the block. Either way the block ends up holding
+   * `columns`, and no more.
    *
    * Cache keying: the fast path keys by each row's own `__rowid__` (which
    * the density valve has just proven equals the positional index); the
@@ -810,22 +962,42 @@ export class TableBody {
     epochAtStart: number,
     controller: AbortController,
     isPrefetch: boolean,
+    columns: FetchColumns,
   ): Promise<void> {
     try {
       const tableName = this.state.tableName.get();
       if (!tableName) return;
-      const visibleColumns = this.state.visibleColumns.get();
-      if (visibleColumns.length === 0) return;
+      if (this.state.visibleColumns.get().length === 0) return;
 
       const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
       if (limit <= 0) return;
+
+      const topUp = this.columnTopUp(blockStart, columns);
+      if (topUp) {
+        const read = await this.bridge.query<RowData>(
+          buildRowColumnsQuery({
+            tableName,
+            columns: topUp.missing,
+            rowids: topUp.rowids,
+            schema: this.state.schema.get(),
+          }),
+          controller.signal,
+          { cache: false, priority: isPrefetch ? 'normal' : 'high' },
+        );
+        if (this.destroyed || epochAtStart !== this.epoch || controller.signal.aborted) return;
+        this.mergeColumns(blockStart, read, topUp.missing, columns);
+        if (blockStart < this.currentRange.end && blockStart + limit > this.currentRange.start) {
+          this.renderVisibleRows();
+        }
+        return;
+      }
 
       const sortColumns = this.state.sortColumns.get();
       const filters = this.state.filters.get();
       const usedFastPath = this.useRowidFastPath(sortColumns, filters);
       const sql = buildRowQuery({
         tableName,
-        columns: visibleColumns,
+        columns: [...columns.names],
         sortColumns,
         filters,
         offset: blockStart,
@@ -881,7 +1053,7 @@ export class TableBody {
           // still in flight, and the reconciler would double-issue the
           // block. With `await`, the retry's own finally deregisters first
           // and this one's identity guard turns into a no-op.
-          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch);
+          return await this.fetchBlock(blockStart, epochAtStart, controller, isPrefetch, columns);
         }
         for (const row of rows) {
           this.rowDataCache.set(Number(row[ROWID_COLUMN]), row);
@@ -891,6 +1063,7 @@ export class TableBody {
           this.rowDataCache.set(blockStart + i, row);
         });
       }
+      this.blockColumns.set(blockStart, columns.set);
 
       this.evictDistantBlocks(blockStart);
 
@@ -972,6 +1145,7 @@ export class TableBody {
       for (let i = blockStart; i < blockEnd; i++) {
         this.rowDataCache.delete(i);
       }
+      this.blockColumns.delete(blockStart);
       total -= blockRowCounts.get(blockStart) ?? 0;
     }
   }
@@ -1262,6 +1436,7 @@ export class TableBody {
     indices.sort((a, b) => a - b);
 
     const slots: (string | number)[] = [];
+    const columns: string[] = [];
     let x = 0;
     let previous = -1;
     for (const index of indices) {
@@ -1270,6 +1445,7 @@ export class TableBody {
       const left = layout.leftAt(index);
       if (left > x) slots.push(left - x);
       slots.push(layout.columns[index]!);
+      columns.push(layout.columns[index]!);
       x = left + layout.widthAt(index);
     }
     if (layout.totalWidth > x) slots.push(layout.totalWidth - x);
@@ -1277,6 +1453,7 @@ export class TableBody {
     const shape: RowShape = {
       layout,
       source,
+      columns,
       slots,
       structure: JSON.stringify(slots.map((slot) => (typeof slot === 'number' ? 0 : slot))),
     };
@@ -1539,13 +1716,17 @@ export class TableBody {
 
     const layout = getColumnLayout(this.state);
 
+    // The columns the row's block was fetched with. A cell of any other has
+    // no value yet: it is pending until the block is fetched again with it.
+    const fetched = this.blockColumns.get(this.blockStartOf(index));
+    let pending = false;
+
     // Each cell's column is its `data-column`, which `shapeRow` set; spacers
     // have none.
     for (const child of rowEl.children) {
       const colName = child.getAttribute('data-column');
       if (colName === null) continue;
       const colSchema = schemaMap.get(colName);
-      const value = data[colName];
       const cellEl = child as HTMLElement;
 
       // Stable id so `aria-activedescendant` on `.dt-grid` can name this
@@ -1580,9 +1761,41 @@ export class TableBody {
       // sole tooltip for annotated cells, so the native title would be a
       // duplicate. When all annotations are later removed, a subsequent
       // render restores the formatted title without any tracking state.
-      this.cellRenderer.render(cellEl, value, colSchema);
+      if (this.renderCellValue(cellEl, data, colName, colSchema, fetched)) pending = true;
       this.applyCellAnnotationClasses(cellEl, rowId, colName);
     }
+    // Hold assistive tech off a row still missing some of its values, as a
+    // placeholder row does.
+    if (pending) rowEl.setAttribute('aria-busy', 'true');
+  }
+
+  /**
+   * Render one cell's value from its row's data, or leave it empty and
+   * pending when the row was fetched without its column: `undefined` there
+   * means "not fetched", not NULL.
+   *
+   * @returns whether the cell is pending.
+   */
+  private renderCellValue(
+    cellEl: HTMLElement,
+    data: RowData,
+    colName: string,
+    colSchema: ColumnSchema | undefined,
+    fetched: ReadonlySet<string> | undefined,
+  ): boolean {
+    const pendingClass = `${this.classPrefix}-cell--pending`;
+    if (colName !== ROWID_COLUMN && fetched !== undefined && !fetched.has(colName)) {
+      cellEl.textContent = '';
+      cellEl.removeAttribute('title');
+      // A cell reused from another column may carry what CellRenderer wrote
+      // there, and a selector for NULLs would count it.
+      cellEl.classList.remove(`${this.classPrefix}-cell--null`, `${this.classPrefix}-cell--number`);
+      cellEl.classList.add(pendingClass);
+      return true;
+    }
+    cellEl.classList.remove(pendingClass);
+    this.cellRenderer.render(cellEl, data[colName], colSchema);
+    return false;
   }
 
   /**
@@ -1725,12 +1938,13 @@ export class TableBody {
    * annotations disappeared, we close it — the list of annotations that
    * drove the original `show()` is no longer valid.
    *
-   * Each cell is re-rendered through `cellRenderer.render` before the
+   * Each cell is re-rendered through `renderCellValue` before the
    * annotation classes are reapplied. The render call restores the
    * formatted value to `cellEl.title`; `applyCellAnnotationClasses`
    * re-clears it when annotations remain. Without this re-render, removing
    * the last annotation from a cell would leave its native tooltip empty
-   * until the next virtualization render swap.
+   * until the next virtualization render swap. A cell whose row was fetched
+   * without its column stays pending, not NULL.
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;
@@ -1746,11 +1960,12 @@ export class TableBody {
             ? rawRowId
             : null;
       this.applyRowAnnotationClasses(rowEl, rowId);
+      const fetched = this.blockColumns.get(this.blockStartOf(index));
       for (const cell of rowEl.children) {
         const colName = cell.getAttribute('data-column');
         if (colName === null) continue;
         const cellEl = cell as HTMLElement;
-        this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
+        this.renderCellValue(cellEl, rowData, colName, schemaMap.get(colName), fetched);
         this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
     }
@@ -2204,6 +2419,7 @@ export class TableBody {
 
     // Clear caches and pools
     this.rowDataCache.clear();
+    this.blockColumns.clear();
     this.rowElementMap.clear();
     this.rowPool = [];
 

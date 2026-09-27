@@ -89,7 +89,10 @@ test('body rows hold only the mounted columns through a sweep of 1,000 columns, 
   await probe(page, 'watchWindow');
   for (const dx of [40_000, -25_000, 150_000, -60_000]) {
     await wheelBy(page, dx);
-    expect(await probe(page, 'wrongCellsInView'), `after a wheel of ${dx}px`).toEqual([]);
+    // Rows fetched without the columns now in view get them a moment later.
+    await expect
+      .poll(() => probe(page, 'wrongCellsInView'), { message: `after a wheel of ${dx}px` })
+      .toEqual([]);
     const misaligned = await probe(page, 'cellHeaderMisalignment');
     expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
   }
@@ -158,6 +161,24 @@ test('undoing a column move keeps focus in the grid when a clicked cell had it',
     .toEqual({ row: 2, column: 'c05' });
 });
 
+test('row fetches select the columns near the view, not all 1,000', async ({ page }) => {
+  await mountTable(page, { columns: 1000, rows: 400 });
+  const atLoad = await probe(page, 'rowFetchWidths');
+  expect(atLoad.length).toBeGreaterThan(0);
+  // The eight columns in view and a viewport to their right, widened by as
+  // many again and rounded out to 16: 32.
+  expect(Math.max(...atLoad)).toBe(32);
+
+  // Far along, down some rows, and back: every fetch stays near the view.
+  await wheelBy(page, 60_000);
+  await page.mouse.wheel(0, 6_000);
+  await wheelBy(page, -30_000);
+  await expect.poll(() => probe(page, 'wrongCellsInView')).toEqual([]);
+  const later = await probe(page, 'rowFetchWidths');
+  expect(later.length).toBeGreaterThan(0);
+  expect(Math.max(...later)).toBeLessThanOrEqual(96);
+});
+
 test('on a right-to-left page the grid scrolls left to right, and cells keep their own text direction', async ({
   page,
 }) => {
@@ -193,4 +214,60 @@ test('on a right-to-left page the grid scrolls left to right, and cells keep the
     return out;
   }, HOST_ID);
   expect(mismatches).toEqual([]);
+});
+
+test('the cursor names its cell only once the cell has its value', async ({ page }) => {
+  await mountTable(page, { columns: 1000 });
+  await page.locator(`#${HOST_ID} .dt-grid`).focus();
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.setFocusedCell({ row: 2, column: 'c000' }),
+  );
+  // Every value `aria-activedescendant` takes, with what it names then.
+  await page.evaluate((hostId) => {
+    const grid = document.querySelector(`#${hostId} .dt-grid`)!;
+    const seen: string[] = [];
+    (window as unknown as { __named: string[] }).__named = seen;
+    new MutationObserver(() => {
+      const id = grid.getAttribute('aria-activedescendant');
+      const el = id ? document.getElementById(id) : null;
+      seen.push(
+        el
+          ? `${el.getAttribute('data-column')} "${el.textContent}"${
+              el.classList.contains('dt-cell--pending') ? ' pending' : ''
+            }`
+          : 'none',
+      );
+    }).observe(grid, { attributeFilter: ['aria-activedescendant'] });
+  }, HOST_ID);
+
+  // The far end: rows were fetched with the columns near the start only.
+  await page.keyboard.press('End');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __named: string[] }).__named.at(-1)))
+    .toMatch(/^c999 "\S+"$/);
+  const named = await page.evaluate(() => (window as unknown as { __named: string[] }).__named);
+  expect(named.filter((entry) => entry.includes('pending') || entry.endsWith('""'))).toEqual([]);
+});
+
+test('on a sorted table, a fast sideways fling ends with every cell in view right', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 400, rows: 3000 });
+  await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.toggleSort('c000'));
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.querySelector('.dt-row[data-row-index="0"]')?.getAttribute('data-row-id'),
+      ),
+    )
+    .not.toBe('0');
+  // Far past what the rows were fetched with, faster than a fetch: the
+  // columns come by row id, without sorting the table again.
+  const box = (await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 100);
+  for (let i = 0; i < 30; i++) {
+    await page.mouse.wheel(1200, 0);
+    await page.waitForTimeout(50);
+  }
+  await expect.poll(() => probe(page, 'wrongCellsInView'), { timeout: 10_000 }).toEqual([]);
 });

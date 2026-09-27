@@ -877,7 +877,12 @@ export class TableContainer {
       }
     }
 
-    const resolved = targetId && this.resolveInGrid(targetId) ? targetId : null;
+    // A cell still waiting for its value counts as missing, like a row not
+    // yet rendered: naming it would announce an empty cell, and the id would
+    // not change when the value arrives, so it would never be announced.
+    const target = targetId ? this.resolveInGrid(targetId) : null;
+    const pendingClass = `${this.resolvedOptions.classPrefix}-cell--pending`;
+    const resolved = target && !target.classList.contains(pendingClass) ? targetId : null;
 
     // Write only on change: this runs from TableBody's per-frame render
     // callback, and a no-op attribute write still produces a mutation record

@@ -29,9 +29,13 @@ main has found a bug in main: the bug gets its own PR, which adds the test.
 **Harness.** `tests/browser/helpers/table.ts` mounts a table in-page through the public API, in a
 fixed-position host whose size, column count, charts, stats panel, extra CSS and `box-sizing`
 reset a spec chooses. Every cell is a function of its row and column. Probes on `window.__dtTest`
-report where the cursor is and what `aria-activedescendant` names, where a column sits against the
-viewport that shows it, and `aria-colindex` along the header and a row. Scrolling uses real wheel
-events, including with a mouse button held.
+report where the cursor is and what `aria-activedescendant` names (on demand, or every frame of a
+scroll), where a column sits against the viewport and whether its header is mounted, and
+`aria-colindex` along the header and a row. Column order and geometry come from the table's state,
+never from the header row: a check that needs a header for every column would stop testing anything
+the moment 4c renders only some of them. Expectations do the same, so `aria-colindex` is checked
+against `columnOrder`, with a column hidden so that numbering the rendered cells from 1 would fail.
+Scrolling uses real wheel events, including with a mouse button held.
 
 **Matrix.** 300 columns; the target is near column 150, scrolled about 20,000 px away and back.
 

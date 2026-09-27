@@ -13,59 +13,73 @@ documentation.
    (border-box geometry), #126 (cells by column name), #127 (pinned columns first), #128 (the
    layout model).
 2. **4b: feature × off-screen column tests.** The checklist in scaling-lessons.md, written as tests
-   against the unwindowed grid before any windowing exists.
+   against the unwindowed grid before any windowing exists: `tests/browser/offscreen-*.spec.ts`, on
+   the harness in `tests/browser/helpers/table.ts`. Merged: #131 (the matrix) and #130, #132–#136 (the
+   bugs it found on main, in the findings log).
 3. **4c: one `ColumnWindowController`,** owned by `TableContainer`: it owns the geometry, the scroll
    and resize drivers and the set of columns to keep mounted. Header and body render what it
    publishes.
 4. **4d: persistent header shells,** with the heavy parts built lazily. Spike first.
 
-## 4b plan
+## 4c plan
 
-**Tests first, against the grid as it is.** Before any windowing, browser tests pin down what each
-column feature does when its column scrolls out of view and back. They run on the unwindowed grid,
-where every header and cell stays in the DOM, and 4c has to keep them green. A test that fails on
-main has found a bug in main: the bug gets its own PR, which adds the test.
+**One owner for the column axis.** Five pieces of code wrote `scrollLeft` on their own: the
+header↔body sync, the hold after a filter change, `render()`'s restore, the smooth scroll to a new
+column and the keyboard's scroll into view. 4b found three bugs where one undid another. Nothing
+knows which columns a row needs, either. 4c moves all of it into a `ColumnWindowController` that
+`TableContainer` creates once and keeps across renders. It listens to both scrollers and to the body's
+size, it is the only code that writes the grid's `scrollLeft` (a unit test greps `src/` for any
+other), and it publishes the columns to mount as a signal. The body renders what it publishes. The
+header keeps every column until 4d.
 
-**Harness.** `tests/browser/helpers/table.ts` mounts a table in-page through the public API, in a
-fixed-position host whose size, column count, charts, stats panel, extra CSS and `box-sizing`
-reset a spec chooses. Every cell is a function of its row and column. Probes on `window.__dtTest`
-report where the cursor is and what `aria-activedescendant` names (on demand, or every frame of a
-scroll), where a column sits against the viewport and whether its header is mounted, and
-`aria-colindex` along the header and a row. Column order and geometry come from the table's state,
-never from the header row: a check that needs a header for every column would stop testing anything
-the moment 4c renders only some of them. Expectations do the same, so `aria-colindex` is checked
-against `columnOrder`, with a column hidden so that numbering the rendered cells from 1 would fail.
-Scrolling uses real wheel events, including with a mouse button held.
+**What is mounted:** the pinned block, a run of columns around the view, and the columns something
+is holding on to.
 
-**Matrix.** 300 columns; the target is near column 150, scrolled about 20,000 px away and back.
+- The run covers the view and one viewport either side. A scroll recomputes it only when the view
+  comes within half a viewport of its edge, so a scroll of a few columns re-renders nothing.
+- The cursor's column, header or body, so `aria-activedescendant` always resolves: a cursor wheeled
+  out of view keeps its cell.
+- The column holding DOM focus (a clicked cell, a header button in `F2` mode), so a scroll cannot
+  take focus with it.
+- Until the body has a width (not laid out, hidden, jsdom), every column, which is what every
+  existing unit test sees.
 
-| Spec                         | Covers                                                                                                                                                                            |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `offscreen-keyboard.spec.ts` | Cursor through a wheel sweep; Home, End, Ctrl+End with pinned columns; Enter, F2, Escape and Shift+F2 on a header scrolled back; a cursor set in code; hiding the cursor's column |
-| `offscreen-columns.spec.ts`  | Drag-reorder with a wheel scroll mid-drag; resize drag and double-click reset; pin far right and unpin; hide → pin → show; `aria-colindex` ascending                              |
-| `offscreen-panels.spec.ts`   | Derived-column editor open while its column scrolls away; tooltip, annotations and a custom stats panel set off-screen                                                            |
-| `offscreen-charts.spec.ts`   | Charts on columns a growing container reveals                                                                                                                                     |
-| `offscreen-derived.spec.ts`  | Edit, remove, undo and redo of a derived column while it is off-screen                                                                                                            |
+The layout-mode column, the column being dragged and an open panel's anchor join in 4d, when headers
+start to depend on the set. Until then they are all in the header, which 4c never windows.
 
-That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
+**PRs,** each stacked on the one before:
 
-**Bugs the matrix found on main,** each fixed in its own PR with the tests that caught it:
+1. **The controller owns horizontal scrolling.** No windowing. The sync and its echo guard, the gutter
+   measurement, the restore, the filter hold, the smooth scroll and the keyboard's reveal move into
+   it, with `revealColumn(column)` the one way to scroll a column into view. Only one thing changes:
+   the header now moves with the body in the same task when the keyboard reveals a column. The 4b
+   matrix is the regression suite. The browser's own scrolls are not writes and stay: a wheel, and
+   `ModalHost` focusing a header button as its panel closes, which scrolls the header.
+2. **It publishes the columns to mount.** The window arithmetic from the archive's `ColumnWindow.ts`,
+   on `ColumnLayout`'s offsets instead of prefix sums of its own, plus the hysteresis and the keep
+   set, unit-tested against a stubbed viewport and exposed to the browser probes. Nothing renders
+   from it yet.
+3. **Body rows render only those columns.** A row is its mounted cells in layout order, with a spacer
+   for each gap. Cells are keyed by column, so a scroll adds and removes cells around the ones that
+   stay and never moves a cell that holds focus. The row-shape check compares shapes, not
+   `visibleColumns.length`. Browser tests: the cell count stays within the mounted set through a
+   wheel sweep of 1,000 columns, every cell a sweep leaves in view shows its value, and the 4b matrix
+   stays green.
+4. **Row fetches select only those columns,** padded by a window either side and rounded out to
+   16-column steps, so that small scrolls reuse the block. Each cached block records its columns. A
+   block missing a mounted column is fetched again, and its cells show as pending until it lands. The
+   archive measured 95 ms → 11 ms for one 128-row block at 1,000 columns.
 
-- The header's scrollbar gutter was a fixed 17 px (#130).
-- The table's own scroll writers undo other scrolls. For a second after a filter change,
-  `TableContainer` resets `scrollLeft` every frame, so a brush followed by a sideways wheel goes
-  nowhere. `render()` restores the scroll position a frame late, undoing a scroll made right after
-  it (a `Shift+F2` move to the edge) and losing the position across two renders in a row (adding a
-  derived column). `scrollToRightEnd` ends its smooth scroll after a fixed 600 ms, which a wide
-  table outlasts, so a column added from the + button is never scrolled to.
-- A panel whose first control is hidden by CSS never takes focus: the filter panel's Clear button is
-  `display: none` until the column has a filter, so opening the panel from the keyboard leaves focus
-  on the header button.
-- Keys that act on the cursor (`F2`, `Shift+F2`, `Enter`) leave an off-screen cursor off-screen, and
-  a `Shift+F2` resize grows a column past the right edge. Hiding the cursor's column moves the cursor
-  to the first column, far from where the user was.
-- A drag-reorder takes its drop position from the last pointer move, so a wheel scroll mid-drag with
-  the pointer still drops the column where it would have gone before the scroll.
+**Not in 4c:**
+
+- For 4d: windowing the header; the drag, panel and layout-mode keeps; and `render()` rebuilding the
+  body and every header on each column change.
+- Dropping the filter hold. It needs Firefox and WebKit, which this machine's Playwright lacks.
+
+**Done when** the whole browser suite passes on each PR, and a 1,000-column table keeps the body's
+cell count within the mounted set through a wheel sweep. A Chrome pass on the 50K × 1,000 Parquet
+file must show no console errors, with values, cursor, focus, reorder and panels right across a
+trackpad sweep.
 
 ## Findings log
 
@@ -130,6 +144,19 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
   shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
   with two tables on a page the first table's export dialog opens with no format or scope checked.
+- **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
+  header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
+  scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and
+  lost it across two renders in a row, and the smooth scroll to a new column (`scrollToRightEnd`,
+  now the controller's `scrollToEnd`) stopped after a fixed 600 ms. A panel whose first control is hidden by CSS never took focus (#133). Keys that act on the
+  cursor left an off-screen cursor off-screen (#134). Hiding the cursor's column sent the cursor to
+  the first column (#135). A drag dropped where the last pointer move said, whatever a wheel had done
+  since (#136).
+- **A file-header `@internal` breaks the emitted declarations.** With `stripInternal`, TypeScript
+  attaches a tag in the file's opening comment to the first statement, usually an import, and drops
+  it: `dist/visualizations/LazyVizController.d.ts` loses its `ColumnSchema` import and fails to
+  type-check. Nothing public reaches that file, so no consumer breaks. Found in review of #137, which
+  keeps the tag off `ColumnWindowController.ts`; `LazyVizController.ts` is not fixed.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

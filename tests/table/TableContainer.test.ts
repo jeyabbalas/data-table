@@ -52,6 +52,11 @@ class MockResizeObserver implements ResizeObserver {
     return MockResizeObserver.instances[MockResizeObserver.instances.length - 1];
   }
 
+  /** The observer watching `element`: the body scroller has its own. */
+  static observing(element: Element): MockResizeObserver | undefined {
+    return MockResizeObserver.instances.find((o) => o.observedElements.has(element));
+  }
+
   static clearInstances(): void {
     MockResizeObserver.instances = [];
   }
@@ -465,13 +470,13 @@ describe('TableContainer', () => {
 
     it("sizes the header's scrollbar gutter to the body's vertical scrollbar", () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance()!;
       const root = tableContainer.getElement();
       const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
       const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
       const resizeCallback = vi.fn();
       tableContainer.onResize(resizeCallback);
-      expect(mockInstance.getObservedElements().has(body)).toBe(true);
+      const mockInstance = MockResizeObserver.observing(body)!;
+      expect(mockInstance).toBeDefined();
 
       const measure = (border: number, content: number): void => {
         mockInstance.triggerResize([
@@ -493,7 +498,9 @@ describe('TableContainer', () => {
       // A scrollbar that is a fraction of a pixel wide, at 125% zoom.
       measure(800.5, 787.7);
       expect(gutter.style.width).toBe('12.8px');
-      // The body is not the container: its resizes are not reported as such.
+      // The body is not the container: the observer behind `onResize` does
+      // not watch it, so its resizes are not reported as the container's.
+      expect(MockResizeObserver.observing(root)?.getObservedElements().has(body)).toBe(false);
       expect(resizeCallback).not.toHaveBeenCalled();
 
       tableContainer.destroy();
@@ -501,10 +508,10 @@ describe('TableContainer', () => {
 
     it('falls back to client widths, and puts the header back where the body is', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance()!;
       const root = tableContainer.getElement();
       const headerArea = root.querySelector<HTMLElement>('.dt-header-area')!;
       const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const mockInstance = MockResizeObserver.observing(body)!;
       const headerScroll = root.querySelector<HTMLElement>('.dt-header-scroll')!;
       const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
 
@@ -558,6 +565,71 @@ describe('TableContainer', () => {
   });
 
   describe('scroll sync', () => {
+    /**
+     * Ten 100px columns, `a`…`j`, with a body 300px wide. `before` runs once
+     * the state and actions exist, and before the container does.
+     */
+    function wideTable(before?: () => void) {
+      const names = 'abcdefghij'.split('');
+      const schema: ColumnSchema[] = names.map((name) => ({
+        name,
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+      }));
+      const bridge = {
+        ...mockBridge,
+        query: vi.fn().mockResolvedValue([]),
+      } as unknown as WorkerBridge;
+      const actions = new StateActions(state, bridge);
+      state.schema.set(schema);
+      initializeColumnsFromSchema(state, schema);
+      for (const name of names) actions.setColumnWidth(name, 100);
+      state.totalRows.set(10);
+      state.tableName.set('t');
+      document.body.appendChild(container);
+      before?.();
+      const tableContainer = new TableContainer(container, state, actions, bridge);
+      const root = tableContainer.getElement();
+      const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const headerScroll = root.querySelector<HTMLElement>('.dt-header-scroll')!;
+      Object.defineProperty(body, 'clientWidth', { configurable: true, value: 300 });
+      return { tableContainer, actions, root, body, headerScroll };
+    }
+
+    it('scrolls the keyboard cursor into view through the one scroll owner', () => {
+      const { tableContainer, actions, body, headerScroll } = wideTable();
+      tableContainer.getGridElement().focus();
+      actions.setFocusedCell({ row: -1, column: 'a' });
+
+      tableContainer
+        .getGridElement()
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+
+      // `j` spans 900–1,000 in a 300px view. The header moves with the body
+      // at once, which only the column window controller does: a navigator
+      // on its own leaves the header for the body's scroll event.
+      expect(state.focusedCell.get()).toEqual({ row: -1, column: 'j' });
+      expect(body.scrollLeft).toBe(700);
+      expect(headerScroll.scrollLeft).toBe(700);
+
+      tableContainer.destroy();
+    });
+
+    it('stops following the scrollers and state once destroyed', () => {
+      let filtersBefore = 0;
+      const { tableContainer, body } = wideTable(() => {
+        filtersBefore = state.filters.subscriberCount();
+      });
+      const bodyObserver = MockResizeObserver.observing(body)!;
+      expect(state.filters.subscriberCount()).toBeGreaterThan(filtersBefore);
+
+      tableContainer.destroy();
+
+      expect(state.filters.subscriberCount()).toBe(filtersBefore);
+      expect(bodyObserver.getObservedElements().size).toBe(0);
+    });
+
     it("does not let the header's shorter reach pull the body back", () => {
       const tableContainer = new TableContainer(container, state);
       const root = tableContainer.getElement();

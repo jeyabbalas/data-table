@@ -10,8 +10,10 @@
  * of its row and column.
  *
  * The probes on `window.__dtTest` exist because `page.evaluate` callbacks
- * cannot see module scope. Installing them once beats inlining the same
- * geometry into every callback.
+ * cannot see module scope. They take column order and geometry from the
+ * table's state, not from the header row: a table that renders only the
+ * columns near the view has no header for the others, and a check that
+ * needs one would fail, or pass, without testing anything.
  */
 
 import { expect, type Page } from '@playwright/test';
@@ -50,7 +52,11 @@ export interface MountOptions {
   statsPanel?: boolean;
 }
 
-/** Where a column's header sits against the header viewport, in px. */
+/**
+ * Where a column sits against the body's viewport, in px, worked out from
+ * the table's state: visible order, widths, pinned columns and `scrollLeft`.
+ * The header and the cells of a column share it.
+ */
 export interface ColumnView {
   left: number;
   right: number;
@@ -58,8 +64,10 @@ export interface ColumnView {
   viewLeft: number;
   viewRight: number;
   pinned: boolean;
-  /** The whole header is inside the visible part. */
+  /** The whole column is inside the visible part. */
   inView: boolean;
+  /** Its header is in the DOM. */
+  mounted: boolean;
 }
 
 /** What `aria-activedescendant` names, and where the cursor ring is painted. */
@@ -87,19 +95,35 @@ export interface CursorState {
   active: string;
 }
 
+/** `aria-colindex` as rendered, with the column order it has to follow. */
+export interface AriaColIndexes {
+  columnOrder: string[];
+  /** Every header in the DOM, in DOM order, as `[column, aria-colindex]`. */
+  headers: [string, number][];
+  /** The cells of the first row with data, likewise. */
+  cells: [string, number][];
+}
+
 /** Page-side probes installed by {@link mountTable}. */
 export interface TableProbes {
   cursor(): CursorState;
-  /** `null` when the column has no header in the DOM. */
+  /** `null` when the column is not visible. */
   column(name: string): ColumnView | null;
-  /** Column names in DOM order of the header row. */
-  headerOrder(): string[];
-  /** `aria-colindex` of every header, in DOM order. */
-  headerColIndexes(): number[];
-  /** `aria-colindex` of every cell of the first rendered row, in DOM order. */
-  cellColIndexes(): number[];
+  /** `state.visibleColumns`: the presented order. */
+  order(): string[];
+  /** Visible columns at least partly inside the body's viewport, from state. */
+  inView(): string[];
+  ariaColIndexes(): AriaColIndexes;
   /** The body scroller's horizontal position and its maximum. */
   scroll(): { left: number; max: number };
+  /**
+   * Check the cursor every frame until {@link TableProbes.cursorBreaches}:
+   * whenever there is one, `aria-activedescendant` has to name the element
+   * that carries its ring.
+   */
+  watchCursor(): void;
+  /** Stop {@link TableProbes.watchCursor} and return every frame that failed. */
+  cursorBreaches(): string[];
   panelLog: { event: 'construct' | 'destroy'; column: string }[];
 }
 
@@ -181,7 +205,7 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
           container.textContent = `panel ${column.name}`;
         }
         update(): void {}
-        destroy(): void {
+        override destroy(): void {
           panelLog.push({ event: 'destroy', column: this.column.name });
           super.destroy();
         }
@@ -206,6 +230,10 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
     w.__dt = table;
 
     const q = (selector: string) => host.querySelector<HTMLElement>(selector);
+    const headerOf = (column: string) =>
+      Array.from(host.querySelectorAll<HTMLElement>('.dt-col-header[data-column]')).find(
+        (h) => h.dataset.column === column,
+      ) ?? null;
     const describe = (el: Element | null): string => {
       if (!el) return 'null';
       if (el === document.body) return 'body';
@@ -216,6 +244,13 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
       const column = el.closest('[data-column]')?.getAttribute('data-column');
       return column ? `${s} (${column})` : s;
     };
+    /** A column's width as the table resolves it: whole pixels, 150 when unset or invalid. */
+    const widthOf = (column: string): number => {
+      const declared = table.state.columnWidths.get().get(column);
+      return typeof declared === 'number' && Number.isFinite(declared) && declared >= 0
+        ? Math.round(declared)
+        : 150;
+    };
     /** Right edge of the pinned block, or `viewLeft` when nothing is pinned. */
     const pinnedRight = (viewLeft: number): number => {
       let right = viewLeft;
@@ -225,7 +260,9 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
       return right;
     };
 
-    w.__dtTest = {
+    let watch: { active: boolean; breaches: string[] } | null = null;
+
+    const probes: TableProbes = {
       panelLog,
       cursor() {
         const grid = q('.dt-grid')!;
@@ -268,49 +305,88 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         return { focused, activeId, target, rings, active: describe(document.activeElement) };
       },
       column(name) {
-        const header = Array.from(
-          host.querySelectorAll<HTMLElement>('.dt-col-header[data-column]'),
-        ).find((h) => h.dataset.column === name);
-        if (!header) return null;
-        const scroller = q('.dt-header-scroll')!;
-        const view = scroller.getBoundingClientRect();
-        const box = header.getBoundingClientRect();
-        const pinned = header.classList.contains('dt-col-header--pinned');
-        const viewLeft = pinned ? view.left : pinnedRight(view.left);
-        const viewRight = view.left + scroller.clientWidth;
+        const visible = table.state.visibleColumns.get();
+        if (!visible.includes(name)) return null;
+        // Pinned columns lead the visible order, so offsets into the content
+        // double as offsets into the pinned block.
+        const pinnedSet = new Set(table.state.pinnedColumns.get());
+        let x = 0;
+        let offset = 0;
+        let pinnedWidth = 0;
+        for (const c of visible) {
+          if (c === name) offset = x;
+          if (pinnedSet.has(c)) pinnedWidth += widthOf(c);
+          x += widthOf(c);
+        }
+        const body = q('.dt-body-scroll')!;
+        const view = body.getBoundingClientRect();
+        const pinned = pinnedSet.has(name);
+        const left = view.left + offset - (pinned ? 0 : body.scrollLeft);
+        const right = left + widthOf(name);
+        const viewLeft = pinned ? view.left : view.left + pinnedWidth;
+        const viewRight = view.left + body.clientWidth;
         return {
-          left: box.left,
-          right: box.right,
+          left,
+          right,
           viewLeft,
           viewRight,
           pinned,
-          inView: box.left >= viewLeft - 0.5 && box.right <= viewRight + 0.5,
+          inView: left >= viewLeft - 0.5 && right <= viewRight + 0.5,
+          mounted: headerOf(name) !== null,
         };
       },
-      headerOrder() {
-        return Array.from(
-          host.querySelectorAll('.dt-col-header[data-column]'),
-          (h) => h.getAttribute('data-column') ?? '',
-        );
+      order() {
+        return [...table.state.visibleColumns.get()];
       },
-      headerColIndexes() {
-        return Array.from(host.querySelectorAll('.dt-col-header[data-column]'), (h) =>
-          Number(h.getAttribute('aria-colindex')),
-        );
+      inView() {
+        return table.state.visibleColumns.get().filter((name) => {
+          const c = probes.column(name)!;
+          return c.right > c.viewLeft && c.left < c.viewRight;
+        });
       },
-      cellColIndexes() {
-        const row = q('.dt-body .dt-row:not([data-placeholder])');
-        return row
-          ? Array.from(row.querySelectorAll('.dt-cell[data-column]'), (c) =>
-              Number(c.getAttribute('aria-colindex')),
-            )
-          : [];
+      ariaColIndexes() {
+        const read = (els: Iterable<Element>): [string, number][] =>
+          Array.from(els, (el) => [
+            el.getAttribute('data-column') ?? '',
+            Number(el.getAttribute('aria-colindex')),
+          ]);
+        const row = Array.from(
+          host.querySelectorAll('.dt-body .dt-row:not([data-placeholder])'),
+        ).find((r) => r.querySelector('.dt-cell[data-column]'));
+        return {
+          columnOrder: [...table.state.columnOrder.get()],
+          headers: read(host.querySelectorAll('.dt-col-header[data-column]')),
+          cells: row ? read(row.querySelectorAll('.dt-cell[data-column]')) : [],
+        };
       },
       scroll() {
         const body = q('.dt-body-scroll')!;
         return { left: body.scrollLeft, max: body.scrollWidth - body.clientWidth };
       },
+      watchCursor() {
+        const state = { active: true, breaches: [] as string[] };
+        watch = state;
+        const frame = () => {
+          if (!state.active) return;
+          const c = probes.cursor();
+          if (c.focused && !c.target?.ringed && state.breaches.length < 20) {
+            state.breaches.push(
+              `${c.focused.row}/${c.focused.column}: aria-activedescendant=${c.activeId}` +
+                ` resolves to ${c.target ? `${c.target.kind} ${c.target.column}` : 'nothing'}`,
+            );
+          }
+          requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      },
+      cursorBreaches() {
+        const breaches = watch?.breaches ?? [];
+        if (watch) watch.active = false;
+        watch = null;
+        return breaches;
+      },
     };
+    w.__dtTest = probes;
 
     await table.loadData(new File([lines.join('\n')], 'generated.csv', { type: 'text/csv' }));
   }, o);
@@ -338,12 +414,36 @@ export function probe<K extends keyof Omit<TableProbes, 'panelLog'>>(
 }
 
 /**
- * Scroll sideways with real wheel events, `stepPx` at a time, until the table
- * has moved by `dx` or stopped at an edge, then wait for it to settle.
+ * Every rendered header and every cell of the first row with data carries
+ * the `aria-colindex` its column has in `columnOrder`, which counts hidden
+ * columns too, and there is at least one of each.
+ *
+ * The exact value, not only ascending order: numbering the columns a row
+ * happens to render, from 1, also ascends.
+ */
+export async function expectAriaColIndexes(page: Page): Promise<void> {
+  const { columnOrder, headers, cells } = await probe(page, 'ariaColIndexes');
+  for (const [kind, list] of [
+    ['header', headers],
+    ['cell', cells],
+  ] as const) {
+    expect(list.length, `${kind}s carrying aria-colindex`).toBeGreaterThan(0);
+    for (const [column, index] of list) {
+      expect(index, `aria-colindex of the ${kind} of ${column}`).toBe(
+        columnOrder.indexOf(column) + 1,
+      );
+    }
+  }
+}
+
+/**
+ * Scroll sideways with real wheel events until the table has moved by `dx`
+ * or stopped moving, then wait for it to settle.
  *
  * Wheel events rather than `scrollLeft` writes: a wheel scroll arrives as a
  * run of moves, which is what a user produces and what observers and
- * windowing have to keep up with.
+ * windowing have to keep up with. Steps grow with the distance, and the last
+ * one is cut to what is left.
  *
  * @param opts.over - Where the pointer wheels: the body (default) or the
  *   header, or `pointer` to leave it where it is, which a drag in progress
@@ -354,7 +454,7 @@ export async function wheelBy(
   dx: number,
   opts: { stepPx?: number; over?: 'body' | 'header' | 'pointer' } = {},
 ): Promise<void> {
-  const stepPx = Math.min(Math.abs(dx), opts.stepPx ?? 400) * Math.sign(dx);
+  const maxStep = opts.stepPx ?? Math.max(400, Math.min(2_000, Math.abs(dx) / 10));
   if (opts.over !== 'pointer') {
     const target = opts.over === 'header' ? '.dt-header-scroll' : '.dt-body-scroll';
     const box = (await page.locator(`#${HOST_ID} ${target}`).boundingBox())!;
@@ -363,13 +463,19 @@ export async function wheelBy(
 
   const start = (await probe(page, 'scroll')).left;
   let last = start;
-  let stuck = 0;
-  while (Math.abs(last - start) < Math.abs(dx) - 1 && stuck < 5) {
-    await page.mouse.wheel(stepPx, 0);
+  let lastMoved = Date.now();
+  while (Math.abs(last - start) < Math.abs(dx) - 0.5) {
+    const remaining = Math.abs(dx) - Math.abs(last - start);
+    await page.mouse.wheel(Math.sign(dx) * Math.max(1, Math.min(maxStep, remaining)), 0);
     await page.waitForTimeout(16);
     const now = (await probe(page, 'scroll')).left;
-    stuck = now === last ? stuck + 1 : 0;
-    last = now;
+    if (now !== last) {
+      last = now;
+      lastMoved = Date.now();
+    } else if (Date.now() - lastMoved > 1_000) {
+      // At an edge, or nothing is scrolling it any more.
+      break;
+    }
   }
   expect(last, 'the wheel did not move the table').not.toBe(start);
   // A wheel scroll can animate; measure only once it has stopped.
@@ -386,16 +492,19 @@ export async function wheelBy(
   await settle(page);
 }
 
-/** Wheel until `column`'s header is wholly in view, from whichever side it is on. */
+/**
+ * Wheel until `column` is wholly in view, from whichever side it is on. Works
+ * from the table's state, so the column needs no header until it arrives.
+ */
 export async function wheelIntoView(page: Page, column: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
     const view = await probe(page, 'column', column);
-    expect(view, `${column} has no header`).not.toBeNull();
+    expect(view, `${column} is not a visible column`).not.toBeNull();
     if (view!.inView) return;
-    const dx =
-      view!.left < view!.viewLeft ? view!.left - view!.viewLeft : view!.right - view!.viewRight;
-    // Long distances in big steps, the last stretch in small ones.
-    await wheelBy(page, dx, { stepPx: Math.max(400, Math.min(2_000, Math.abs(dx) / 10)) });
+    await wheelBy(
+      page,
+      view!.left < view!.viewLeft ? view!.left - view!.viewLeft : view!.right - view!.viewRight,
+    );
   }
   throw new Error(`could not wheel ${column} into view`);
 }

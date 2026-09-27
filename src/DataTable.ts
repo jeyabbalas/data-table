@@ -1126,10 +1126,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
 
   // Debounced re-attach of visualizations. `initializeColumnsFromSchema`
   // (see `src/core/State.ts`) sets `schema` and `visibleColumns` back-to-back
-  // and each triggers a `TableContainer.render()` that rebuilds column
-  // headers — so attaching synchronously inside the schema subscriber would
-  // bind visualizations to headers that are immediately destroyed by the
-  // following visibleColumns render.
+  // and each triggers a `TableContainer.render()` — so attaching
+  // synchronously inside each subscriber would run a pass per write, the
+  // first against a header row the next write changes again.
   //
   // `queueMicrotask` defers until all synchronous signal updates in the
   // current call stack have fired (and the last `render()` has run), but

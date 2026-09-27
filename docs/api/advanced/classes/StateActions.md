@@ -904,7 +904,9 @@ update. Preserves hidden columns in columnOrder at their relative
 positions. Pinned columns stay first, in the order given: an order that
 puts one after an unpinned column has it moved to the pinned block, and
 `pinnedColumns` takes the block's new order, so a pinned column hidden
-and shown again goes back to its place in it.
+and shown again goes back to its place in it. A name given twice counts
+once, at its first place: the table has one header and one place for
+it.
 
 #### Parameters
 

@@ -119,6 +119,25 @@ describe('a column change', () => {
     expect(blur).not.toHaveBeenCalled();
   });
 
+  it('moves only the header of a column moved to either end', () => {
+    const headerRow = table.getHeaderRow().querySelector('.dt-header-row')!;
+    const observer = new MutationObserver(() => {});
+    observer.observe(headerRow, { childList: true });
+    const moved = (): string[] =>
+      observer
+        .takeRecords()
+        .flatMap((r) => Array.from(r.addedNodes))
+        .map((n) => (n as Element).getAttribute('data-column')!);
+
+    actions.setColumnOrder(['f', 'a', 'b', 'c', 'd', 'e']);
+    expect(order()).toBe('f a b c d e');
+    expect(moved()).toEqual(['f']);
+    actions.setColumnOrder(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(order()).toBe('a b c d e f');
+    expect(moved()).toEqual(['f']);
+    observer.disconnect();
+  });
+
   it('keeps the body, and builds another for a new schema', () => {
     const body = table.getTableBody();
     expect(body).not.toBeNull();

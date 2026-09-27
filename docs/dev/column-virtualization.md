@@ -130,3 +130,8 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
   shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
   with two tables on a page the first table's export dialog opens with no format or scope checked.
+- **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
+  of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
+  those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the
+  window (alt-tab mid-drag) keeps the drag alive until the next one. Both pre-existing; 4c's
+  controller, working from the layout model, is the place to hit-test drops.

@@ -94,6 +94,8 @@ export class ColumnReorder {
   private draggedColumn: string | null = null;
   private startX = 0;
   private startY = 0;
+  /** The pointer's latest x, for a drop position recomputed on scroll. */
+  private lastClientX = 0;
   private dropIndex = -1;
   private destroyed = false;
   private enabled = true;
@@ -105,6 +107,9 @@ export class ColumnReorder {
   // Bound event handlers for proper cleanup
   private readonly boundMouseMove: (e: MouseEvent) => void;
   private readonly boundMouseUp: (e: MouseEvent) => void;
+  private readonly boundScroll: (e: Event) => void;
+  /** The shadow root the table is in, while a drag listens to its scrolls. */
+  private shadowScrollRoot: ShadowRoot | null = null;
 
   // Map of header elements to their mousedown handlers
   private headerHandlers = new Map<HTMLElement, (e: MouseEvent) => void>();
@@ -125,6 +130,7 @@ export class ColumnReorder {
     // Bind document-level handlers
     this.boundMouseMove = this.handleMouseMove.bind(this);
     this.boundMouseUp = this.handleMouseUp.bind(this);
+    this.boundScroll = this.handleScroll.bind(this);
 
     // Create drop indicator element
     this.createDropIndicator();
@@ -213,6 +219,7 @@ export class ColumnReorder {
     this.isPotentialDrag = true;
     this.startX = event.clientX;
     this.startY = event.clientY;
+    this.lastClientX = event.clientX;
     this.draggedHeader = header;
     this.draggedColumn = columnName;
 
@@ -234,6 +241,7 @@ export class ColumnReorder {
     if (this.destroyed) return;
 
     event.preventDefault();
+    this.lastClientX = event.clientX;
 
     if (this.isPotentialDrag && !this.isDragging) {
       // Check if we've moved past the threshold
@@ -263,6 +271,33 @@ export class ColumnReorder {
     // Add visual feedback (scoped to table root).
     this.resolveDragScope().classList.add(`${this.classPrefix}-column-dragging`);
     this.draggedHeader?.classList.add(`${this.classPrefix}-col-header--dragging`);
+
+    // The headers can scroll under a pointer that stays put: a wheel or a
+    // trackpad with the button held. Scroll events neither bubble nor leave a
+    // shadow root, so this listens in the capture phase, on the document and
+    // on the table's shadow root if it is in one.
+    document.addEventListener('scroll', this.boundScroll, true);
+    const root = this.headerRow.getRootNode();
+    if (root instanceof ShadowRoot) {
+      root.addEventListener('scroll', this.boundScroll, true);
+      this.shadowScrollRoot = root;
+    }
+  }
+
+  /**
+   * Keep the drop position under the pointer while the headers scroll beneath
+   * it. It came from the last mouse move alone, so a column dragged, wheeled
+   * to somewhere far off and released without moving the pointer dropped
+   * where the pointer had been before the scroll.
+   */
+  private handleScroll(event: Event): void {
+    if (this.destroyed || !this.isDragging) return;
+    // Only a scroll that can move the headers: of the header scroller or
+    // another of their ancestors, or of the page. Not a sidebar's, nor the
+    // body's, whose scroll reaches the headers as a header scroll anyway.
+    const target = event.target;
+    if (!(target instanceof Node) || !target.contains(this.headerRow)) return;
+    this.updateDropPosition(this.lastClientX);
   }
 
   /**
@@ -314,6 +349,9 @@ export class ColumnReorder {
     document.removeEventListener('mouseup', this.boundMouseUp);
 
     if (this.isDragging) {
+      // Once more, against the headers as they are now: they may have moved
+      // in ways no scroll event reported, such as a resize.
+      this.updateDropPosition(this.lastClientX);
       this.endDrag();
     } else {
       // Was just a potential drag (click), reset
@@ -373,6 +411,10 @@ export class ColumnReorder {
    * Reset all drag state
    */
   private resetDragState(): void {
+    document.removeEventListener('scroll', this.boundScroll, true);
+    this.shadowScrollRoot?.removeEventListener('scroll', this.boundScroll, true);
+    this.shadowScrollRoot = null;
+
     // Remove visual feedback (from the same scope we added it to).
     const scope = this.resolveDragScope();
     scope.classList.remove(`${this.classPrefix}-column-dragging`);

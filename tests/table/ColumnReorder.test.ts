@@ -393,6 +393,134 @@ describe('ColumnReorder', () => {
       reorder.destroy();
     });
 
+    it('drops where the pointer is after the headers scroll under it', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+
+      const header = headerRow.querySelector('[data-column="col1"]')!;
+      getDragHandle(header).dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 85, clientY: 16 }));
+      // Past col2's middle: before the scroll, the drop is between col2 and col3.
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240, clientY: 16 }));
+
+      // The headers scroll 150px left under the still pointer, which is then
+      // past col3's middle.
+      for (const [i, name] of ['col1', 'col2', 'col3'].entries()) {
+        Object.defineProperty(
+          headerRow.querySelector(`[data-column="${name}"]`)!,
+          'getBoundingClientRect',
+          {
+            value: () => ({
+              left: i * 150 - 150,
+              right: i * 150,
+              width: 150,
+              top: 0,
+              bottom: 32,
+              height: 32,
+            }),
+            configurable: true,
+          },
+        );
+      }
+      headerRow.dispatchEvent(new Event('scroll'));
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+      expect(onReorder).toHaveBeenCalledWith(['col2', 'col3', 'col1'], 'col1');
+      reorder.destroy();
+    });
+
+    /** Move every header's rect `dx` px, as a scroll or resize would. */
+    function shiftHeaders(root: ParentNode, dx: number): void {
+      for (const [i, name] of ['col1', 'col2', 'col3'].entries()) {
+        Object.defineProperty(
+          root.querySelector(`[data-column="${name}"]`)!,
+          'getBoundingClientRect',
+          {
+            value: () => ({
+              left: i * 150 + dx,
+              right: (i + 1) * 150 + dx,
+              width: 150,
+              top: 0,
+              bottom: 32,
+              height: 32,
+            }),
+            configurable: true,
+          },
+        );
+      }
+    }
+
+    /** Drag col1 by its handle to x = 240, past col2's middle. */
+    function dragCol1To240(root: ParentNode): void {
+      getDragHandle(root.querySelector('[data-column="col1"]')!).dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 85, clientY: 16 }));
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240, clientY: 16 }));
+    }
+
+    function indicatorLeft(root: ParentNode): string {
+      return root.querySelector<HTMLElement>('.dt-drop-indicator')!.style.left;
+    }
+
+    it('moves the indicator on a scroll of the headers, and not of anything else', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+      dragCol1To240(headerRow);
+      expect(indicatorLeft(headerRow)).toBe('300px');
+
+      // 100px left: the pointer is now before col3's middle, at 200.
+      shiftHeaders(headerRow, -100);
+      const sidebar = document.createElement('div');
+      document.body.appendChild(sidebar);
+      sidebar.dispatchEvent(new Event('scroll'));
+      expect(indicatorLeft(headerRow)).toBe('300px');
+      headerRow.dispatchEvent(new Event('scroll'));
+      expect(indicatorLeft(headerRow)).toBe('200px');
+
+      sidebar.remove();
+      reorder.destroy();
+    });
+
+    it('takes the drop from the headers as they are at release', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+      dragCol1To240(headerRow);
+
+      // Moved without a scroll event, as a resize or a rebuild would.
+      shiftHeaders(headerRow, -150);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+      expect(onReorder).toHaveBeenCalledWith(['col2', 'col3', 'col1'], 'col1');
+      reorder.destroy();
+    });
+
+    it('hears the header scroller inside a shadow root', () => {
+      const shadowHost = document.createElement('div');
+      document.body.appendChild(shadowHost);
+      const shadow = shadowHost.attachShadow({ mode: 'open' });
+      shadow.appendChild(container);
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+      dragCol1To240(shadow);
+      expect(indicatorLeft(shadow)).toBe('300px');
+
+      shiftHeaders(shadow, -100);
+      // A scroll event does not leave the shadow root.
+      headerRow.dispatchEvent(new Event('scroll'));
+      expect(indicatorLeft(shadow)).toBe('200px');
+
+      reorder.destroy();
+      document.body.appendChild(container);
+      shadowHost.remove();
+    });
+
     it('does not call onReorder when dropped in same position', () => {
       setupHeaders(['col1', 'col2', 'col3']);
       const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });

@@ -18,6 +18,8 @@ The visible symptom: drag a brush on a histogram, remove the resulting filter fr
 
 **If you registered `setOnFilterRemove`**
 
-You will now see calls you did not see before — one per column, on paths that previously stayed silent. Handlers should be idempotent and cheap: the callback fires synchronously inside the removal, and one user action can produce several calls. Removing a filter from inside the handler is safe.
+On `table.actions`, don't: the callback has one slot, and the table fills it to clear its charts' brushes and selections, so registering your own replaces that handler. Listen to the `filterChange` event instead.
+
+On a `StateActions` you built yourself, you will now see calls you did not see before — one per column, on paths that previously stayed silent. Handlers should be idempotent and cheap: the callback fires synchronously inside the removal, and one user action can produce several calls. Removing a filter from inside the handler is safe.
 
 Nothing else changes. Filters, chips, presets, undo and redo behave as before; only the notification and the two no-op cases are different.

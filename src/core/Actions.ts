@@ -196,6 +196,12 @@ export class StateActions {
    * Use this to clear state that tracks a filter but does not live in the
    * signals — a chart's brush or bar selection, most obviously.
    *
+   * There is one slot, and a table made by `createDataTable` fills it to
+   * clear its charts' brushes and selections. Calling this on
+   * `table.actions` replaces that handler, so a brush can outlive its
+   * filter. To react to removed filters from a host app, listen to the
+   * `filterChange` event instead.
+   *
    * Fires for every path that can drop a filter: {@link StateActions.removeFilter}
    * (and so the filter chips, the filter panel, and a chart clearing its own
    * selection), {@link StateActions.clearFilters},

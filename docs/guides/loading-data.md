@@ -11,6 +11,7 @@ or a spinner.
 - Override format detection when the extension lies (or there isn't one)
 - Show a progress bar from `loadStart` / `loadProgress` / `loadComplete`
 - Recover from a load failure and retry
+- Know when text columns of dates load as dates
 - Replace the current dataset without destroying the table
 
 ## Prerequisites
@@ -208,6 +209,35 @@ table.on('loadError', ({ error }) => {
 
 See [Troubleshooting §27](../troubleshooting.md#27-loaderror-with-code-load_memory_exceeded)
 for what to do about it.
+
+## Dates and times stored as text
+
+Text columns of ISO 8601 dates (`2024-03-15`), timestamps
+(`2024-03-15 14:30:00`, `2024-03-15T14:30:00.250Z`), or 24-hour times
+(`14:30:00`) load as `date`, `timestamp`, or `time` columns, so they sort,
+filter, and chart as dates. DuckDB's CSV and JSON readers type most such
+columns themselves. The loader converts the text columns they leave, and
+the text columns of a Parquet file.
+
+A column converts only if every value in it does:
+
+- The loader guesses from each column's first 2,048 rows, then checks every
+  value. If one value would not convert (`N/A`, or an impossible date such
+  as `2024-02-30`), the whole column stays text, so no value turns into
+  `null`.
+- Timestamps with a UTC offset (`+05:30`) load as `TIMESTAMP WITH TIME ZONE`
+  and display in UTC, so the offset is not dropped. The loader works in UTC,
+  so `Z` and `+00:00` load as plain timestamps.
+- A column that is empty for its first 2,048 rows stays text.
+
+Parquet columns convert as the file is read, so the table is built once, at
+its final size. CSV and JSON columns convert in place after loading, one
+column at a time.
+
+To use a column that stayed text as dates, fix its values upstream, or add a
+[derived column](./derived-columns.md) such as `TRY_CAST(due AS DATE)`, which
+turns the values that do not convert into `null` deliberately. See
+[Troubleshooting §28](../troubleshooting.md#28-a-column-of-dates-loaded-as-text).
 
 ## Recipes
 

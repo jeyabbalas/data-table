@@ -5,9 +5,10 @@
  * it as a file handle (BROWSER_FILEREADER), which only works in a real
  * browser: Node has no FileReaderSync, so the loader's Node tests cover the
  * ArrayBuffer path only. These specs load through the public API and check
- * three things: the rows arrive intact, the page never reads the File, and
- * a load that cannot fit rejects with LOAD_MEMORY_EXCEEDED while the DuckDB
- * table already loaded stays queryable.
+ * three things: the rows arrive intact (a text column of dates converted
+ * from the file), the page never reads the File, and a load that cannot fit
+ * rejects with LOAD_MEMORY_EXCEEDED while the DuckDB table already loaded
+ * stays queryable.
  */
 
 import { expect, test } from '@playwright/test';
@@ -44,7 +45,8 @@ async function makeParquetFile(page: import('@playwright/test').Page, rows: numb
     const bridge = w.__t.bridge;
     await bridge.query(
       `CREATE OR REPLACE TABLE src AS
-       SELECT CAST(i AS INTEGER) AS id, 'name ' || (i % 1000) AS name, i / 7.0 AS score
+       SELECT CAST(i AS INTEGER) AS id, 'name ' || (i % 1000) AS name, i / 7.0 AS score,
+              strftime(DATE '2020-01-01' + CAST(i % 900 AS INTEGER), '%Y-%m-%d') AS day
        FROM range(0, ${rows}) t(i)`,
     );
     const bytes = await bridge.exportToBuffer('SELECT * FROM src ORDER BY id', 'parquet');
@@ -72,16 +74,23 @@ test('loads a Parquet File without reading it on the page', async ({ page }) => 
     const w = window as unknown as Window & { __file: File };
     await w.__t.loadData(w.__file);
     const table = w.__t.state.tableName.get()!;
-    const [summary] = await w.__t.bridge.query<{ n: number; ids: number; last: string }>(
+    const [summary] = await w.__t.bridge.query<{
+      n: number;
+      ids: number;
+      last: string;
+      wrongDays: number;
+    }>(
       `SELECT count(*) AS n, sum(id) AS ids,
-              max_by(name, "__rowid__") AS last
+              max_by(name, "__rowid__") AS last,
+              count(*) FILTER (WHERE day <> DATE '2020-01-01' + CAST(id % 900 AS INTEGER)) AS "wrongDays"
        FROM "${table}"`,
     );
     const [settings] = await w.__t.bridge.query<{ prefetch: string; cache: string }>(
       `SELECT current_setting('prefetch_all_parquet_files')::VARCHAR AS prefetch,
               current_setting('enable_external_file_cache')::VARCHAR AS cache`,
     );
-    return { summary, settings, reads: w.__reads, total: w.__t.state.totalRows.get() };
+    const dayType = w.__t.state.schema.get().find((c) => c.name === 'day')?.originalType;
+    return { summary, settings, dayType, reads: w.__reads, total: w.__t.state.totalRows.get() };
   });
 
   expect(result.reads).toBe(0);
@@ -90,7 +99,9 @@ test('loads a Parquet File without reading it on the page', async ({ page }) => 
     n: ROWS,
     ids: (ROWS * (ROWS - 1)) / 2,
     last: `name ${(ROWS - 1) % 1000}`,
+    wrongDays: 0,
   });
+  expect(result.dayType).toBe('DATE');
   // The loader's read settings are back to DuckDB's defaults.
   expect(result.settings).toEqual({ prefetch: 'false', cache: 'true' });
   await expect(page.locator('#table-container .dt-body .dt-row').first()).toBeVisible();

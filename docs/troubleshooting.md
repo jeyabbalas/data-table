@@ -639,6 +639,14 @@ Fix, in order of impact:
 
 Raising `memory_limit` does not help beyond the 4 GiB WebAssembly ceiling, and lowering it makes loads fail sooner.
 
+### 28. A column of dates loaded as text
+
+Symptom: a column of values like `2024-03-15` or `2024-03-15T14:30:00` has type `string` in `state.schema`, so it sorts as text and shows a value-count chart instead of a histogram.
+
+Cause: the loader converts a text column to a date, timestamp, or time only when every value converts. One value that does not (`N/A`, `unknown`, `2024-02-30`) keeps the whole column as text, because converting it would turn that value into `null`. The loader also skips columns whose first 2,048 rows are empty, and formats other than ISO 8601 (`03/15/2024`, `15 Mar 2024`), which are ambiguous. See [Dates and times stored as text](./guides/loading-data.md#dates-and-times-stored-as-text).
+
+Fix: find the values that do not convert with a raw SQL filter such as `due IS NOT NULL AND TRY_CAST(due AS DATE) IS NULL`. Then either clean them upstream and reload, or add a derived column `TRY_CAST(due AS DATE)` and use it in place of the text column; the values that do not convert become `null` there.
+
 ---
 
 ## Browser support quick reference

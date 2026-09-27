@@ -7,8 +7,9 @@ import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
 import {
-  enhanceSchemaTypes,
+  detectTemporalColumns,
   quoteIdentifier,
+  temporalCast,
   wrapReservedColumnError,
   makeReservedColumnError,
   dropSourceFile,
@@ -73,6 +74,10 @@ function generateTableName(): string {
  * way the load is checked against the memory budget before the table is
  * built; see memoryBudget.ts.
  *
+ * Text columns of ISO dates, timestamps or times convert as the table is
+ * built, so the table is written once, never as text first; see
+ * {@link detectTemporalColumns}.
+ *
  * @param data - Parquet content as a Blob/File (read lazily) or ArrayBuffer
  * @param options - Parquet loading options
  * @param context - Optional explicit { db, conn }; see {@link loadCSV} for
@@ -115,25 +120,32 @@ export async function loadParquet(
       throw makeReservedColumnError();
     }
 
-    // Build column selection
-    const columnSelect = options.columns?.length
-      ? options.columns.map((c) => quoteIdentifier(c)).join(', ')
-      : '*';
+    // The columns to load, as a relation to read from.
+    const source = `read_parquet('${fileName}')`;
+    const projected = options.columns?.length
+      ? `(SELECT ${options.columns.map((c) => quoteIdentifier(c)).join(', ')} FROM ${source})`
+      : source;
 
     // DESCRIBE the load's projection before building anything. It gives
     // the column types the memory estimate needs, and rejects a source that
     // already has a __rowid__ column: DuckDB silently aliases a duplicate
     // name in the projection (producing __rowid___1) rather than throwing.
     // The wrapReservedColumnError catch below stays as defense-in-depth.
-    const probeResult = await conn.query(
-      `DESCRIBE SELECT ${columnSelect} FROM read_parquet('${fileName}')`,
-    );
+    const probeResult = await conn.query(`DESCRIBE SELECT * FROM ${projected}`);
     const probeRows = probeResult.toArray().map((row) => row.toJSON());
     if (probeRows.some((row) => String(row.column_name) === ROWID_COLUMN)) {
       throw makeReservedColumnError();
     }
 
-    const footprint = await measureParquetFootprint(conn, fileName, probeRows);
+    // Text columns of dates and times, read from the file, and the types
+    // the table will hold once they are cast.
+    const temporal = await detectTemporalColumns(conn, projected, probeRows);
+    const loadedRows = probeRows.map((row) => {
+      const type = temporal.get(String(row.column_name));
+      return type ? { ...row, column_type: type } : row;
+    });
+
+    const footprint = await measureParquetFootprint(conn, fileName, loadedRows);
     const budget = await readMemoryBudget(conn);
     const shortfall = (stage: MemoryShortfall['stage']): MemoryShortfall => ({
       footprint,
@@ -151,7 +163,9 @@ export async function loadParquet(
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
     // the rationale (single typed-array shape on read, symmetry across
     // loaders). The reserved-name guard above is case-sensitive.
-    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
+    const casts = [...temporal].map(([name, type]) => temporalCast(name, type));
+    const replace = casts.length > 0 ? ` REPLACE (${casts.join(', ')})` : '';
+    const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, *${replace} FROM ${projected}`;
     const prefetching = mode === 'prefetch' && (await enablePrefetch(conn));
     try {
       await conn.query(createSql);
@@ -168,17 +182,7 @@ export async function loadParquet(
 
     // Get full schema info from DESCRIBE
     const describeResult = await conn.query(`DESCRIBE ${tbl}`);
-    let describeRows = describeResult.toArray().map((row) => row.toJSON());
-
-    // Enhance schema by detecting and converting string columns to
-    // appropriate types. A conversion rebuilds the table, which needs a
-    // second copy of it in memory.
-    try {
-      describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
-    } catch (err) {
-      if (isOutOfMemoryError(err)) throw memoryExceededError(shortfall('load'), err);
-      throw err;
-    }
+    const describeRows = describeResult.toArray().map((row) => row.toJSON());
 
     const columns = describeRows.map((row) => String(row.column_name));
     const schema = describeRows.map((row) => {

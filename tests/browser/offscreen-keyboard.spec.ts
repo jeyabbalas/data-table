@@ -196,6 +196,39 @@ test('Shift+F2 on a header scrolled away and back resizes, moves, and Escape res
   expectCursor(await probe(page, 'cursor'), HEADER, 'c150', { inView: true });
 });
 
+test('Shift+F2 then Shift+End keeps the moved column in view', async ({ page }) => {
+  await mountTable(page);
+  await placeCursor(page, HEADER, 'c150');
+  await page.keyboard.press('Shift+F2');
+  // Moving the column rebuilds the header row, and the rebuild used to put
+  // the old scroll position back a frame after the move had scrolled to it.
+  await page.keyboard.press('Shift+End');
+  await settle(page);
+  const order = await probe(page, 'headerOrder');
+  expect(order.at(-1)).toBe('c150');
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c150', { inView: true });
+});
+
+test('End right after a filter change keeps the cursor in view', async ({ page }) => {
+  await mountTable(page);
+  // On the header row, which a filter change leaves alone; it clears a body
+  // cursor, whose rows it replaces.
+  await placeCursor(page, HEADER, 'c150');
+  // For a second after a filter change the table puts back any horizontal
+  // scroll it did not make itself; the keyboard's scroll is the user's.
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.addFilter({
+      type: 'range',
+      column: 'c000',
+      min: 0,
+      max: 50,
+    }),
+  );
+  await page.keyboard.press('End');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c299', { inView: true });
+});
+
 test('a cursor set in code names its cell off-screen, and survives its column being hidden', async ({
   page,
 }) => {

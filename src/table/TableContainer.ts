@@ -54,6 +54,9 @@ import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
 
+/** Input that means the user is about to scroll, or have the table scroll for them. */
+const USER_SCROLL_INPUTS = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
+
 /**
  * Options for configuring the TableContainer
  */
@@ -220,6 +223,10 @@ export class TableContainer {
   // Where the header stopped short of the body on the last sync, until the
   // header's scroll event for it arrives (see syncHeaderScroll)
   private headerEcho: number | null = null;
+
+  // Ends the horizontal-scroll hold that follows a filter change, while one
+  // is running
+  private releaseFilterScrollHold: (() => void) | null = null;
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
@@ -1147,20 +1154,42 @@ export class TableContainer {
     // the 300ms smooth scroll-to-top, the 200ms bar transition (in both
     // directions — reveal on add, collapse on remove), plus async row
     // and viz re-fetches.
+    //
+    // The first wheel, key, pointer press or touch in the table ends the
+    // hold early. A scroll the user makes in that second, or the keyboard
+    // makes for them, is not drift: undoing it snapped a sideways wheel
+    // after a chart brush straight back, and left a cursor moved with End
+    // out of view.
     const unsubFilterScroll = this.state.filters.subscribe(() => {
       if (this.destroyed) return;
+      this.releaseFilterScrollHold?.();
       const savedLeft = this.bodyScroll.scrollLeft;
       if (savedLeft === 0) return;
 
       const deadline = performance.now() + 1000;
+      let held = true;
+      const release = (): void => {
+        held = false;
+        for (const type of USER_SCROLL_INPUTS) {
+          this.element.removeEventListener(type, release, true);
+        }
+        if (this.releaseFilterScrollHold === release) this.releaseFilterScrollHold = null;
+      };
+      for (const type of USER_SCROLL_INPUTS) {
+        this.element.addEventListener(type, release, { capture: true, passive: true });
+      }
+      this.releaseFilterScrollHold = release;
+
       const correct = () => {
-        if (this.destroyed) return;
+        if (this.destroyed || !held) return;
         if (this.bodyScroll.scrollLeft !== savedLeft) {
           this.bodyScroll.scrollLeft = savedLeft;
           this.headerScroll.scrollLeft = savedLeft;
         }
         if (performance.now() < deadline) {
           requestAnimationFrame(correct);
+        } else {
+          release();
         }
       };
       requestAnimationFrame(correct);
@@ -1581,13 +1610,18 @@ export class TableContainer {
     this.syncActiveDescendant();
     this.updateHeaderCursorStyles();
 
-    // Restore scroll positions and focus after DOM updates (both containers for robustness)
+    // Put the scroll positions back now. Emptying the scrollers clamped them
+    // to 0 as soon as the rebuild read layout; the new body has its full size
+    // again by here. A frame later was too late: it undid any scroll made
+    // right after this render (the keyboard bringing a moved column into
+    // view), and a second render before then saved the clamped 0 and put
+    // that back instead.
+    this.bodyScroll.scrollLeft = savedBodyScrollLeft;
+    this.bodyScroll.scrollTop = savedBodyScrollTop;
+    this.headerScroll.scrollLeft = savedHeaderScrollLeft;
+
     requestAnimationFrame(() => {
       if (!this.destroyed) {
-        this.bodyScroll.scrollLeft = savedBodyScrollLeft;
-        this.bodyScroll.scrollTop = savedBodyScrollTop;
-        this.headerScroll.scrollLeft = savedHeaderScrollLeft;
-
         // Restore focus only when this render is what destroyed it: the element
         // focus was on is gone from the table AND focus fell to nothing (body,
         // or null under a shadow root). Anything else — most importantly a Tab
@@ -1852,10 +1886,6 @@ export class TableContainer {
   }
 
   /**
-   * Smooth-scroll the body to the right end so the newly created column is visible.
-   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
-   */
-  /**
    * Where fixed-position modals owned by this table mount. Returns the
    * `portalTarget` option if supplied, otherwise `document.body`. Exposed
    * as the single source of truth so higher-level wiring (e.g.
@@ -1866,6 +1896,10 @@ export class TableContainer {
     return this.resolvedOptions.portalTarget ?? document.body;
   }
 
+  /**
+   * Smooth-scroll the body to the right end so the newly created column is visible.
+   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
+   */
   private scrollToRightEnd(): void {
     // Wait for the re-render triggered by the new column
     requestAnimationFrame(() => {
@@ -1883,14 +1917,35 @@ export class TableContainer {
           behavior: 'smooth',
         });
 
-        // Re-enable sync after the animation settles and align both containers.
-        const onEnd = () => {
+        // Re-enable sync once the body has stopped, and align both
+        // containers: on `scrollend`, or where there is none, once the
+        // position has held for a few frames. Not after a fixed time: a wide
+        // table outlasted the 600ms that used to end this, and the header's
+        // position, synced back into the still-moving body, stopped it short
+        // of the column just added.
+        let ended = false;
+        const onEnd = (): void => {
+          if (ended) return;
+          ended = true;
+          this.bodyScroll.removeEventListener('scrollend', onEnd);
+          if (this.destroyed) return;
           this.suppressReverseScrollSync = false;
-          this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+          this.syncHeaderScroll();
         };
         this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
-        // Fallback for browsers without scrollend support
-        setTimeout(onEnd, 600);
+        const started = performance.now();
+        let last = Number.NaN;
+        let still = 0;
+        const watch = (): void => {
+          if (ended || this.destroyed) return;
+          const left = this.bodyScroll.scrollLeft;
+          still = left === last ? still + 1 : 0;
+          last = left;
+          // The time floor covers a smooth scroll that has not started yet.
+          if (still >= 3 && performance.now() - started > 100) onEnd();
+          else requestAnimationFrame(watch);
+        };
+        requestAnimationFrame(watch);
       });
     });
   }
@@ -2114,6 +2169,8 @@ export class TableContainer {
 
     // Disconnect resize observer
     this.resizeObserver.disconnect();
+
+    this.releaseFilterScrollHold?.();
 
     // Clear resize callbacks
     this.resizeCallbacks.clear();

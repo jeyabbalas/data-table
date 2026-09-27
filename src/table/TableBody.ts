@@ -18,7 +18,7 @@ import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
-import { buildRowQuery } from './rowQuery';
+import { buildRowColumnsQuery, buildRowQuery } from './rowQuery';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
 
 /**
@@ -259,19 +259,12 @@ export class TableBody {
   // MAX_INFLIGHT_BLOCK_FETCHES; an in-flight block is never re-issued, and
   // aborting deletes the entry immediately so the reconciler can top up in
   // the same pass.
-  private inFlightBlocks = new Map<
-    number,
-    { controller: AbortController; epoch: number; columns: FetchColumns }
-  >();
+  private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
   // The single speculative block fetch beyond the viewport, or null.
-  private prefetch: {
-    blockStart: number;
-    controller: AbortController;
-    columns: FetchColumns;
-  } | null = null;
-  // The columns each cached block was fetched with, by block start. Its rows
-  // hold values for those only: a block that lacks a column rows now render
-  // is fetched again, and until then those cells are pending.
+  private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  // The columns each cached block holds, by block start. Its rows hold values
+  // for those only: when rows render a column their block lacks, the block
+  // reads it, and until then those cells are pending.
   private blockColumns = new Map<number, ReadonlySet<string>>();
   private lastScrollDirection: 1 | -1 = 1;
   // Runtime safety valve for the __rowid__ range fast path: flipped (once,
@@ -441,9 +434,9 @@ export class TableBody {
     // A write that only permutes the set is a reorder, and rows are keyed by
     // column name — every value fetched is still right, so a re-render is
     // enough, and the in-flight `initialize()` fetch is not dropped by a
-    // `fetchSequence` bump it did not need. The reorder can bring columns
-    // rows were not fetched with into the rendered ones, which the reconcile
-    // fetches.
+    // `fetchSequence` bump it did not need. Columns a reorder brings near the
+    // view come as a new set of mounted columns, which fetches what the rows
+    // lack.
     //
     // Measured honestly: through `TableContainer` this changes no query count.
     // `render()` destroys and recreates the whole `TableBody` on any
@@ -458,7 +451,6 @@ export class TableBody {
       this.lastVisibleColumns = [...columns];
       if (orderOnly) {
         this.renderVisibleRows();
-        if (!this.isAnimatingScroll) void this.ensureFetched();
       } else {
         this.invalidateCacheAndRefresh();
       }
@@ -732,15 +724,75 @@ export class TableBody {
    */
   private missingBlocks(range: VisibleRange, columns: readonly string[]): number[] {
     const blocks: number[] = [];
-    for (let i = Math.max(0, range.start); i < range.end; i++) {
-      const blockStart = this.blockStartOf(i);
-      if (!this.rowDataCache.has(i) || !holdsAll(this.blockColumns.get(blockStart), columns)) {
-        blocks.push(blockStart);
-        // One miss marks the whole block — skip to the next one.
-        i = blockStart + this.fetchBlockSize - 1;
+    const start = Math.max(0, range.start);
+    for (
+      let blockStart = this.blockStartOf(start);
+      blockStart < range.end;
+      blockStart += this.fetchBlockSize
+    ) {
+      let complete = holdsAll(this.blockColumns.get(blockStart), columns);
+      const end = Math.min(range.end, blockStart + this.fetchBlockSize);
+      for (let i = Math.max(start, blockStart); complete && i < end; i++) {
+        if (!this.rowDataCache.has(i)) complete = false;
       }
+      if (!complete) blocks.push(blockStart);
     }
     return blocks;
+  }
+
+  /**
+   * What a fetch of the block at `blockStart` can skip: when every row of the
+   * block is cached, their `__rowid__`s, and the columns in `columns` they
+   * lack. `null` when a row is missing, and the block has to be fetched
+   * whole.
+   */
+  private columnTopUp(
+    blockStart: number,
+    columns: FetchColumns,
+  ): { rowids: number[]; missing: string[] } | null {
+    const fetched = this.blockColumns.get(blockStart);
+    if (!fetched) return null;
+    const end = Math.min(blockStart + this.fetchBlockSize, this.virtualScroller.getTotalRows());
+    const rowids: number[] = [];
+    for (let i = blockStart; i < end; i++) {
+      const row = this.rowDataCache.get(i);
+      const id = row ? Number(row[ROWID_COLUMN]) : Number.NaN;
+      if (!Number.isSafeInteger(id)) return null;
+      rowids.push(id);
+    }
+    const missing = columns.names.filter((column) => !fetched.has(column));
+    return rowids.length > 0 && missing.length > 0 ? { rowids, missing } : null;
+  }
+
+  /**
+   * Put the columns a top-up read into the block's cached rows, matched by
+   * `__rowid__`, and drop the ones `columns` no longer has, so that a block
+   * holds about one fetch's columns however far it is swept. A row the read
+   * did not return is dropped too, and so fetched again with its block.
+   */
+  private mergeColumns(
+    blockStart: number,
+    rows: RowData[],
+    missing: readonly string[],
+    columns: FetchColumns,
+  ): void {
+    const byId = new Map<number, RowData>();
+    for (const row of rows) byId.set(Number(row[ROWID_COLUMN]), row);
+    const end = blockStart + this.fetchBlockSize;
+    for (let i = blockStart; i < end; i++) {
+      const cached = this.rowDataCache.get(i);
+      if (!cached) continue;
+      const fresh = byId.get(Number(cached[ROWID_COLUMN]));
+      if (!fresh) {
+        this.rowDataCache.delete(i);
+        continue;
+      }
+      for (const key of Object.keys(cached)) {
+        if (key !== ROWID_COLUMN && !columns.set.has(key)) delete cached[key];
+      }
+      for (const key of missing) cached[key] = fresh[key];
+    }
+    this.blockColumns.set(blockStart, columns.set);
   }
 
   /**
@@ -808,15 +860,16 @@ export class TableBody {
     const needed = this.missingBlocks(this.currentRange, rendered);
 
     // Abort in-flight blocks that no longer intersect the current range
-    // padded by one block on each side, or that would land without a column
-    // rows now render: a sideways scroll went past what they select. Deleting
-    // the entry here (not in the fetch's own `finally`) frees the slot for the
-    // same-pass top-up below.
+    // padded by one block on each side. Deleting the entry here (not in the
+    // fetch's own `finally`) frees the slot for the same-pass top-up below.
+    // A fetch that will land without columns rows render now is left to land:
+    // aborting it during a sideways fling starved the view of every fetch,
+    // and reading the columns it lacks afterwards is cheap (see fetchBlock).
     const padStart = this.currentRange.start - this.fetchBlockSize;
     const padEnd = this.currentRange.end + this.fetchBlockSize;
     for (const [blockStart, entry] of this.inFlightBlocks) {
       const blockEnd = blockStart + this.fetchBlockSize;
-      if (blockEnd <= padStart || blockStart >= padEnd || !holdsAll(entry.columns.set, rendered)) {
+      if (blockEnd <= padStart || blockStart >= padEnd) {
         entry.controller.abort();
         this.inFlightBlocks.delete(blockStart);
       }
@@ -832,8 +885,7 @@ export class TableBody {
         this.lastScrollDirection === 1
           ? this.prefetch.blockStart < this.blockStartOf(Math.max(0, this.currentRange.start))
           : this.prefetch.blockStart > this.blockStartOf(Math.max(0, this.currentRange.end - 1));
-      const wrongColumns = !holdsAll(this.prefetch.columns.set, rendered);
-      if (prefetchNowNeeded || wrongDirection || wrongColumns) {
+      if (prefetchNowNeeded || wrongDirection) {
         this.prefetch.controller.abort();
         this.prefetch = null;
       }
@@ -845,7 +897,7 @@ export class TableBody {
       if (this.inFlightBlocks.size >= TableBody.MAX_INFLIGHT_BLOCK_FETCHES) break;
       if (this.inFlightBlocks.has(blockStart)) continue;
       const controller = new AbortController();
-      this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch, columns });
+      this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch });
       started.push(this.fetchBlock(blockStart, this.epoch, controller, false, columns));
     }
 
@@ -868,7 +920,7 @@ export class TableBody {
         (!this.rowDataCache.has(candidate) || !holdsAll(this.blockColumns.get(candidate), rendered))
       ) {
         const controller = new AbortController();
-        this.prefetch = { blockStart: candidate, controller, columns };
+        this.prefetch = { blockStart: candidate, controller };
         started.push(this.fetchBlock(candidate, this.epoch, controller, true, columns));
       }
     }
@@ -890,8 +942,14 @@ export class TableBody {
 
   /**
    * Fetch one aligned block, selecting `columns`, and write it into
-   * `rowDataCache`. Its rows replace any cached for the block, whatever those
-   * were fetched with, so a block holds one fetch's columns at a time.
+   * `rowDataCache`.
+   *
+   * When every row of the block is cached already, only the columns in
+   * `columns` it lacks are read, by `__rowid__` (see {@link columnTopUp}):
+   * fetching a sorted or filtered block again repeats its sort and `OFFSET`,
+   * which clipping the columns does nothing for. Otherwise the fetched rows
+   * replace any cached for the block. Either way the block ends up holding
+   * `columns`, and no more.
    *
    * Cache keying: the fast path keys by each row's own `__rowid__` (which
    * the density valve has just proven equals the positional index); the
@@ -913,6 +971,26 @@ export class TableBody {
 
       const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
       if (limit <= 0) return;
+
+      const topUp = this.columnTopUp(blockStart, columns);
+      if (topUp) {
+        const read = await this.bridge.query<RowData>(
+          buildRowColumnsQuery({
+            tableName,
+            columns: topUp.missing,
+            rowids: topUp.rowids,
+            schema: this.state.schema.get(),
+          }),
+          controller.signal,
+          { cache: false, priority: isPrefetch ? 'normal' : 'high' },
+        );
+        if (this.destroyed || epochAtStart !== this.epoch || controller.signal.aborted) return;
+        this.mergeColumns(blockStart, read, topUp.missing, columns);
+        if (blockStart < this.currentRange.end && blockStart + limit > this.currentRange.start) {
+          this.renderVisibleRows();
+        }
+        return;
+      }
 
       const sortColumns = this.state.sortColumns.get();
       const filters = this.state.filters.get();
@@ -1709,6 +1787,9 @@ export class TableBody {
     if (colName !== ROWID_COLUMN && fetched !== undefined && !fetched.has(colName)) {
       cellEl.textContent = '';
       cellEl.removeAttribute('title');
+      // A cell reused from another column may carry what CellRenderer wrote
+      // there, and a selector for NULLs would count it.
+      cellEl.classList.remove(`${this.classPrefix}-cell--null`, `${this.classPrefix}-cell--number`);
       cellEl.classList.add(pendingClass);
       return true;
     }
@@ -1857,12 +1938,13 @@ export class TableBody {
    * annotations disappeared, we close it — the list of annotations that
    * drove the original `show()` is no longer valid.
    *
-   * Each cell is re-rendered through `cellRenderer.render` before the
+   * Each cell is re-rendered through `renderCellValue` before the
    * annotation classes are reapplied. The render call restores the
    * formatted value to `cellEl.title`; `applyCellAnnotationClasses`
    * re-clears it when annotations remain. Without this re-render, removing
    * the last annotation from a cell would leave its native tooltip empty
-   * until the next virtualization render swap.
+   * until the next virtualization render swap. A cell whose row was fetched
+   * without its column stays pending, not NULL.
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;

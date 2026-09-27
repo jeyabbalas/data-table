@@ -513,7 +513,9 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         const wrong: string[] = [];
         const columns = probes.inView();
         for (const row of dataRows()) {
-          const r = Number(row.getAttribute('data-row-index'));
+          // By the row's id, which is its line in the generated data, sorted
+          // or filtered.
+          const r = Number(row.getAttribute('data-row-id'));
           for (const column of columns) {
             const cell = row.querySelector(`.dt-cell[data-column="${column}"]`);
             const want = generated(r, column);

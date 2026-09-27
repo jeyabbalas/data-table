@@ -185,6 +185,36 @@ trackpad sweep.
     focus.
   - A pinned column placed after an unpinned one lost its body cells: see the review of #138,
     fixed in #140.
+- **2026-09-27, headless Chromium, the four 4c PRs stacked, the 50K × 1,000 Parquet file.**
+  - **Load:** 6.4 s and 25 queries.
+  - **Cells:** the body holds 19 cells a row, 475 in all, where it held 25,000. The DOM is still
+    36,600 nodes, almost all of them headers, which 4d addresses.
+  - **Sweep:** a 70,000 px wheel sweep was checked in every one of its 993 frames. Every row held
+    exactly the mounted columns, and every column in view was mounted.
+  - **Values:** the 300 cells in view matched DuckDB's values when put through the table's own
+    renderer.
+  - **Features:** the cursor, a clicked cell's focus, an open filter panel and a pinned column all
+    held.
+  - **Errors:** no console errors.
+  - **Fetches:** a 128-row block takes 7.8 ms with 96 of the 1,000 columns selected, against 76 ms
+    with all of them.
+  - **Still to do:** the manual trackpad pass in a desktop Chrome window. The window used was
+    hidden behind others, which stops `requestAnimationFrame` and scroll events, so nothing
+    rendered.
+- **Found in review of #141.**
+  - Scrolling sideways past what a block was fetched with fetched the whole block again. On a
+    sorted or filtered table that repeats the sort and the `OFFSET`, which clipping the
+    projection does nothing for.
+  - A fetch in flight was aborted as soon as it would land without a newly rendered column. With
+    600 ms added to each fetch, a fling at 20 viewports a second started 8 fetches and landed
+    none, and the view stayed blank until the scroll stopped.
+  - The fix: a block whose rows are all cached reads only the columns it lacks, by `__rowid__`,
+    and drops the ones the new projection leaves out, so a block holds about one projection.
+    Nothing is aborted for its columns any more. With the same 600 ms, every fetch lands, and
+    cells in view are pending for about one fetch's time.
+  - The cursor could be named by `aria-activedescendant` while its cell was still pending: empty,
+    and never announced again once filled, because the id does not change. It is now named once
+    the value is there.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

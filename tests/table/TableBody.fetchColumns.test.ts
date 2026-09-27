@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StateActions } from '@/core/Actions';
 import { createSignal } from '@/core/Signal';
 import { initializeColumnsFromSchema } from '@/core/State';
+import { AnnotationStore } from '@/annotations/AnnotationStore';
 import type { ColumnSchema } from '@/core/types';
 
 import { rowsFor } from '../helpers/rowFetchBridge';
@@ -68,10 +69,29 @@ function setup(mountedAtFirst: string[], pinned: string[] = []) {
   return { harness, mounted, actions };
 }
 
-/** Land the last query with rows holding exactly what it selected. */
-async function land(harness: TableBodyHarness): Promise<void> {
-  const query = harness.queries.at(-1)!;
-  query.deferred.resolve(rowsFor(query.sql, selected(query.sql)));
+/** The `__rowid__`s a top-up reads, or `null` for a block fetch. */
+function rowidsRead(sql: string): number[] | null {
+  // A literal list: a sorted block fetch has `IN (SELECT …)` instead.
+  const list = /"__rowid__" IN \((\d+(?:, \d+)*)\)/.exec(sql)?.[1];
+  return list === undefined ? null : list.split(', ').map(Number);
+}
+
+/**
+ * Land a query with rows holding exactly what it selected: a block fetch's
+ * window, or the rows a top-up reads by id. The last query unless told.
+ */
+async function land(harness: TableBodyHarness, query = harness.queries.at(-1)!): Promise<void> {
+  const ids = rowidsRead(query.sql);
+  const columns = selected(query.sql);
+  query.deferred.resolve(
+    ids === null
+      ? rowsFor(query.sql, columns)
+      : ids.map((id) => {
+          const row: Record<string, unknown> = { __rowid__: id };
+          for (const column of columns) row[column] = `${column}-${id}`;
+          return row;
+        }),
+  );
   await harness.drain();
 }
 
@@ -100,6 +120,31 @@ describe('TableBody row fetches with a column window', () => {
     harness.body.destroy();
   });
 
+  it('fetch nothing for a sideways move the fetched columns still cover, though the next fetch would select others', async () => {
+    // 100 columns, so the projection can move without leaving the table.
+    const wide = Array.from({ length: 100 }, (_, i) => `c${String(i).padStart(2, '0')}`);
+    const mounted = createSignal<readonly string[]>(wide.slice(40, 48));
+    const harness = setupTableBody({ body: { mountedColumns: mounted } });
+    initializeColumnsFromSchema(
+      harness.state,
+      wide.map((name) => ({ name, type: 'string', nullable: true, originalType: 'VARCHAR' })),
+    );
+    const init = harness.body.initialize();
+    await harness.drain();
+    await land(harness);
+    await init;
+    const fetched = harness.queries.length;
+
+    // Rendered c52–c59 are within the 32–64 fetched; a fetch now would select
+    // 32–80.
+    mounted.set(wide.slice(52, 60));
+    await harness.drain();
+
+    expect(harness.queries.length).toBe(fetched);
+    expect(cell(harness, 'c59').textContent).toBe('c59-0');
+    harness.body.destroy();
+  });
+
   it('fetch nothing for a sideways move the fetched columns still cover', async () => {
     const { harness, mounted } = setup(span(40, 48));
     const init = harness.body.initialize();
@@ -116,7 +161,7 @@ describe('TableBody row fetches with a column window', () => {
     harness.body.destroy();
   });
 
-  it('fetch again past them, with the new cells pending until the rows land', async () => {
+  it('read the columns past them for the rows they have, with the new cells pending until they land', async () => {
     const { harness, mounted } = setup(span(40, 48));
     const init = harness.body.initialize();
     await harness.drain();
@@ -129,8 +174,12 @@ describe('TableBody row fetches with a column window', () => {
 
     const again = harness.queries.slice(fetched);
     expect(again.length).toBeGreaterThan(0);
-    // Run 20–28 widened by 8 is 12–36, rounded out to 0–48.
-    expect(selected(again[0]!.sql)).toEqual(span(0, 48));
+    // Run 20–28 widened by 8 is 12–36, rounded out to 0–48; the block has
+    // 32–63 already, so it reads 0–31, for its own rows, by id: no sort, no
+    // OFFSET.
+    expect(selected(again[0]!.sql)).toEqual(span(0, 32));
+    expect(rowidsRead(again[0]!.sql)).toEqual(Array.from({ length: 128 }, (_, i) => i));
+    expect(again[0]!.sql).not.toMatch(/OFFSET|ORDER BY/);
     // Cells of c20–c27 have no value yet, and the row says it is busy.
     expect(cell(harness, 'c24').textContent).toBe('');
     expect(cell(harness, 'c24').classList.contains('dt-cell--pending')).toBe(true);
@@ -140,25 +189,110 @@ describe('TableBody row fetches with a column window', () => {
     expect(cell(harness, 'c24').textContent).toBe('c24-0');
     expect(cell(harness, 'c24').classList.contains('dt-cell--pending')).toBe(false);
     expect(row(harness).hasAttribute('aria-busy')).toBe(false);
+    // The block now holds c00–c47, the columns a fetch would select here:
+    // what it had past them is dropped, so a sweep does not pile columns up.
+    const cached = (
+      harness.body as unknown as { rowDataCache: Map<number, object> }
+    ).rowDataCache.get(5)!;
+    expect(Object.keys(cached).sort()).toEqual(['__rowid__', ...span(0, 48)].sort());
     harness.body.destroy();
   });
 
-  it('replace a fetch in flight that would land without a column now rendered', async () => {
+  it('let a fetch in flight land without columns rendered since, then read those', async () => {
     const { harness, mounted } = setup(span(40, 48));
     const init = harness.body.initialize();
     await harness.drain();
     const first = harness.queries[0]!;
 
+    // A sideways scroll while the block is on its way: aborting it here, as
+    // the view keeps moving, starved the view of every fetch.
+    mounted.set(span(4, 12));
+    await harness.drain();
+    expect(first.signal?.aborted).toBe(false);
+    expect(harness.queries.length).toBe(1);
+
+    await land(harness, first);
+    await init;
+    const topUp = harness.queries.at(-1)!;
+    expect(topUp).not.toBe(first);
+    expect(rowidsRead(topUp.sql)).not.toBeNull();
+    expect(selected(topUp.sql)).toContain('c04');
+    await land(harness, topUp);
+    expect(cell(harness, 'c04').textContent).toBe('c04-0');
+    harness.body.destroy();
+  });
+
+  it('read the columns rows lack by id on a sorted table, not the sorted block again', async () => {
+    const { harness, mounted } = setup(span(40, 48));
+    harness.state.sortColumns.set([{ column: 'c00', direction: 'desc' }]);
+    const init = harness.body.initialize();
+    await harness.drain();
+    const block = harness.queries.at(-1)!;
+    expect(block.sql).toMatch(/OFFSET/);
+    await land(harness, block);
+    await init;
+    const fetched = harness.queries.length;
+
     mounted.set(span(4, 12));
     await harness.drain();
 
-    expect(first.signal?.aborted).toBe(true);
-    const replacement = harness.queries.at(-1)!;
-    expect(replacement).not.toBe(first);
-    expect(selected(replacement.sql)).toContain('c04');
+    const topUp = harness.queries[fetched]!;
+    expect(topUp.sql).not.toMatch(/OFFSET|ORDER BY/);
+    // The ids of the rows the sorted block holds, in its order. (The test
+    // bridge numbers a block's rows by position, whatever the sort.)
+    expect(rowidsRead(topUp.sql)).toEqual(Array.from({ length: 128 }, (_, i) => i));
+    await land(harness, topUp);
+    expect(cell(harness, 'c04', 3).textContent).toBe('c04-3');
+    harness.body.destroy();
+  });
+
+  it('keep pending cells empty, never NULL, through an annotation change', async () => {
+    const annotations = new AnnotationStore();
+    const mounted = createSignal<readonly string[]>(span(40, 48));
+    const harness = setupTableBody({ body: { mountedColumns: mounted, annotations } });
+    initializeColumnsFromSchema(harness.state, SCHEMA);
+    const init = harness.body.initialize();
+    await harness.drain();
     await land(harness);
     await init;
-    expect(cell(harness, 'c04').textContent).toBe('c04-0');
+
+    mounted.set(span(4, 12));
+    await harness.drain();
+    expect(cell(harness, 'c04').classList.contains('dt-cell--pending')).toBe(true);
+
+    annotations.add({ scope: 'row', rowId: 0, severity: 'info', message: 'x' });
+    const pending = cell(harness, 'c04');
+    expect(pending.textContent).toBe('');
+    expect(pending.classList.contains('dt-cell--pending')).toBe(true);
+    expect(pending.classList.contains('dt-cell--null')).toBe(false);
+    harness.body.destroy();
+  });
+
+  it("prefetch the next block's missing columns once the view has what it needs", async () => {
+    const { harness, mounted } = setup(span(40, 48));
+    const init = harness.body.initialize();
+    await harness.drain();
+    // The visible block, then the next one as a prefetch, both with c32–c63.
+    await land(harness);
+    await init;
+    const next = harness.queries.at(-1)!;
+    expect(next.options?.priority).toBe('normal');
+    await land(harness, next);
+    const fetched = harness.queries.length;
+
+    mounted.set(span(20, 28));
+    await harness.drain();
+    // The visible block's new columns first, by id…
+    const visible = harness.queries[fetched]!;
+    expect(visible.options?.priority).toBe('high');
+    expect(rowidsRead(visible.sql)?.[0]).toBe(0);
+    await land(harness, visible);
+    // …then the next block's, as a prefetch.
+    const prefetch = harness.queries.at(-1)!;
+    expect(prefetch).not.toBe(visible);
+    expect(prefetch.options?.priority).toBe('normal');
+    expect(rowidsRead(prefetch.sql)?.[0]).toBe(128);
+    expect(selected(prefetch.sql)).toEqual(span(0, 32));
     harness.body.destroy();
   });
 

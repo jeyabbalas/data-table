@@ -26,6 +26,51 @@ export interface RowQuery {
 }
 
 /**
+ * The `SELECT` list for `columns`, `__rowid__` first.
+ *
+ * Quotes column names and casts INTERVAL columns to VARCHAR so DuckDB returns
+ * strings instead of Arrow MonthDayNano objects. Drops any accidental
+ * `__rowid__` in `columns`, which is always prepended (keeps the projection
+ * deterministic).
+ */
+function selectList(columns: readonly string[], schema: ColumnSchema[] | undefined): string {
+  const types = new Map<string, ColumnSchema['type']>();
+  for (const col of schema ?? []) types.set(col.name, col.type);
+  const parts: string[] = [quoteIdentifier(ROWID_COLUMN)];
+  for (const col of columns) {
+    if (col === ROWID_COLUMN) continue;
+    const quoted = quoteIdentifier(col);
+    parts.push(types.get(col) === 'interval' ? `CAST(${quoted} AS VARCHAR) AS ${quoted}` : quoted);
+  }
+  return parts.join(', ');
+}
+
+/** A {@link buildRowColumnsQuery} request. */
+export interface RowColumnsQuery {
+  tableName: string;
+  /** Columns to read, besides `__rowid__`. */
+  columns: readonly string[];
+  /** The `__rowid__` of each row to read. */
+  rowids: readonly number[];
+  schema?: ColumnSchema[] | undefined;
+}
+
+/**
+ * SQL for more columns of rows already fetched, found by their `__rowid__`.
+ *
+ * For a block whose rows are cached without columns rows now render. Reading
+ * the rows by id skips the filter, the sort and the `OFFSET` that fetching
+ * the block again would pay for, which on a sorted table is nearly all of it.
+ * The result comes in no particular order: callers match rows by id.
+ */
+export function buildRowColumnsQuery(query: RowColumnsQuery): string {
+  const ids = query.rowids.filter((id) => Number.isSafeInteger(id));
+  const table = quoteIdentifier(query.tableName);
+  const rowid = quoteIdentifier(ROWID_COLUMN);
+  return `SELECT ${selectList(query.columns, query.schema)} FROM ${table} WHERE ${rowid} IN (${ids.join(', ')})`;
+}
+
+/**
  * Build the SQL for one block of rows.
  *
  * Always prepends the synthetic `__rowid__` column to the projection so
@@ -38,28 +83,7 @@ export function buildRowQuery(query: RowQuery): string {
   const { tableName, columns, sortColumns, filters, offset, limit, schema, rowidFastPath } = query;
   const table = quoteIdentifier(tableName);
   const rowid = quoteIdentifier(ROWID_COLUMN);
-
-  // Build schema lookup for type-aware column selection
-  const schemaMap = new Map<string, ColumnSchema>();
-  if (schema) {
-    for (const col of schema) schemaMap.set(col.name, col);
-  }
-
-  // Quote column names; cast INTERVAL columns to VARCHAR so DuckDB
-  // returns strings instead of Arrow MonthDayNano objects. Also drop any
-  // accidental __rowid__ appearance in `columns` — we always prepend it
-  // ourselves below (keeps the projection deterministic).
-  const parts: string[] = [rowid];
-  for (const col of columns) {
-    if (col === ROWID_COLUMN) continue;
-    const quoted = quoteIdentifier(col);
-    if (schemaMap.get(col)?.type === 'interval') {
-      parts.push(`CAST(${quoted} AS VARCHAR) AS ${quoted}`);
-    } else {
-      parts.push(quoted);
-    }
-  }
-  const select = `SELECT ${parts.join(', ')} FROM ${table}`;
+  const select = `SELECT ${selectList(columns, schema)} FROM ${table}`;
 
   // FAST PATH — no filters, no user sort: fetch the window by a range
   // predicate on the dense synthetic __rowid__ instead of LIMIT/OFFSET.

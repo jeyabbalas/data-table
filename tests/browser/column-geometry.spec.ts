@@ -15,56 +15,17 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { settle } from './helpers/demo';
+import { HOST_ID, type TestWindow, mountTable } from './helpers/table';
 
 const COLUMNS = 40;
-const HOST_ID = 'geometry-host';
 const DECLARED_WIDTH = 150;
 
-type GeometryWindow = { __geo: import('../../src/index').DataTable };
-
 /**
- * Mount a 40-column table in a fixed-position host `width` px wide, on a page
- * whose reset has been overridden back to content-box.
+ * Mount a 40-column table in a host `width` px wide, on a page whose reset
+ * has been overridden back to content-box.
  */
-async function mountWithoutReset(page: Page, width: number, rows = 60): Promise<void> {
-  await page.goto('./');
-  // Same specificity as the demo's `*` reset and later in the cascade, so it
-  // wins everywhere the library does not declare box-sizing itself.
-  await page.addStyleTag({ content: '*, *::before, *::after { box-sizing: content-box; }' });
-  await page.evaluate(
-    async ({ columns, width, rows, hostId }) => {
-      const mod = (await import(
-        /* @vite-ignore */ '/data-table/src/index.ts'
-      )) as typeof import('../../src/index');
-      const host = document.createElement('div');
-      host.id = hostId;
-      host.style.cssText =
-        `position: fixed; left: 0; top: 0; width: ${width}px; height: 480px;` +
-        ' z-index: 10000; background: white;';
-      document.body.appendChild(host);
-
-      const names = Array.from({ length: columns }, (_, i) => `c${String(i).padStart(2, '0')}`);
-      const lines = [names.join(',')];
-      for (let r = 0; r < rows; r++) lines.push(names.map((_, i) => (r * 7 + i) % 97).join(','));
-
-      const table = await mod.createDataTable({
-        container: host,
-        tableName: 'geometry',
-        persistence: false,
-        visualizations: false,
-      });
-      (window as unknown as GeometryWindow).__geo = table;
-      await table.loadData(new File([lines.join('\n')], 'geometry.csv', { type: 'text/csv' }));
-    },
-    { columns: COLUMNS, width, rows, hostId: HOST_ID },
-  );
-  await page.waitForFunction(
-    (hostId) =>
-      document.querySelectorAll(`#${hostId} .dt-body .dt-row:not([data-placeholder])`).length > 0,
-    HOST_ID,
-    { timeout: 90_000 },
-  );
-  await settle(page);
+function mountWithoutReset(page: Page, width: number): Promise<void> {
+  return mountTable(page, { columns: COLUMNS, rows: 60, width, height: 480, contentBox: true });
 }
 
 interface ColumnBox {
@@ -192,54 +153,6 @@ test('End scrolls the last column fully into view', async ({ page }) => {
   expect(view.right).toBeLessThanOrEqual(view.width + 0.5);
 });
 
-for (const [rows, scrollbar] of [
-  [60, 'a vertical scrollbar'],
-  [5, 'no vertical scrollbar'],
-] as const) {
-  test(`at the far right the last header sits over its cells, with ${scrollbar}`, async ({
-    page,
-  }) => {
-    // The header's scrollbar gutter was a fixed 17px, whatever the body's
-    // scrollbar took: nothing with overlay scrollbars or with too few rows to
-    // scroll. The header viewport was then narrower than the body's, and at
-    // the far right the last header was cut off by the difference.
-    await mountWithoutReset(page, 1200, rows);
-    await page.locator(`#${HOST_ID} .dt-grid`).focus();
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('End');
-    await settle(page);
-
-    const edge = await page.evaluate(
-      ({ hostId, last }) => {
-        const host = document.getElementById(hostId)!;
-        const body = host.querySelector<HTMLElement>('.dt-body-scroll')!;
-        const headerScroll = host.querySelector<HTMLElement>('.dt-header-scroll')!;
-        const header = host.querySelector(`.dt-col-header[data-column="${last}"]`)!;
-        const cell = host.querySelector(
-          `.dt-body .dt-row:not([data-placeholder]) .dt-cell[data-column="${last}"]`,
-        )!;
-        return {
-          cursor: header.classList.contains('dt-col-header--focused'),
-          header: header.getBoundingClientRect().right,
-          cell: cell.getBoundingClientRect().right,
-          headerView: headerScroll.getBoundingClientRect().left + headerScroll.clientWidth,
-          bodyView: body.getBoundingClientRect().left + body.clientWidth,
-        };
-      },
-      { hostId: HOST_ID, last: `c${COLUMNS - 1}` },
-    );
-    expect(edge.cursor).toBe(true);
-    expect(edge.header, 'the last header is wholly in view').toBeLessThanOrEqual(
-      edge.headerView + 0.5,
-    );
-    expect(edge.header, 'the last header sits over its cells').toBeCloseTo(edge.cell, 0);
-    expect(edge.headerView, 'the header viewport is as wide as the body').toBeCloseTo(
-      edge.bodyView,
-      0,
-    );
-  });
-}
-
 test('a resize drag grows the column from its declared width', async ({ page }) => {
   await mountWithoutReset(page, 1200);
   const handle = page.locator(
@@ -255,7 +168,7 @@ test('a resize drag grows the column from its declared width', async ({ page }) 
   await page.mouse.up();
 
   const widths = await page.evaluate((hostId) => {
-    const table = (window as unknown as GeometryWindow).__geo;
+    const table = (window as unknown as TestWindow).__dt;
     const header = document.querySelector(`#${hostId} .dt-col-header[data-column="c02"]`)!;
     return {
       declared: table.state.columnWidths.get().get('c02'),
@@ -271,11 +184,11 @@ test('a filter that matches no rows keeps the scroll extent as wide as the heade
 }) => {
   await mountWithoutReset(page, 1200);
   await page.evaluate(() => {
-    const table = (window as unknown as GeometryWindow).__geo;
+    const table = (window as unknown as TestWindow).__dt;
     table.actions.addFilter({ type: 'range', column: 'c00', min: 1000, max: 2000 });
   });
   await page.waitForFunction(
-    () => (window as unknown as GeometryWindow).__geo.state.filteredRows.get() === 0,
+    () => (window as unknown as TestWindow).__dt.state.filteredRows.get() === 0,
   );
   await settle(page);
 

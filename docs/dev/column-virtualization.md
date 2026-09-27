@@ -63,14 +63,23 @@ docs, and was reviewed by a separate agent before merging.
   (`height: 100%` plus a border) overflowed the container by 2 px. Fixed with the columns.
 - **The browser suite could not see any of it.** Every spec runs on the demo, whose global
   `* { box-sizing: border-box }` reset hid the content-box arithmetic.
-  `tests/browser/column-geometry.spec.ts` mounts a table with the reset overridden.
+  `tests/browser/column-geometry.spec.ts` mounts a table with the reset overridden. Nor does any spec
+  have a scrollbar: Playwright starts headless Chromium with `--hide-scrollbars`, which takes them
+  out of layout. `tests/browser/scrollbar-gutter.spec.ts` turns the flag off, which only works for a
+  whole file.
 - **The header's scrollbar gutter is a fixed 17 px** (`--dt-scrollbar-width`), whatever the body's
   vertical scrollbar measures: 0 with overlay scrollbars (macOS default), 0 when the body has too few
   rows to scroll, 15 px for classic macOS scrollbars. Scroll sync copies `scrollLeft` one to one, so
-  at the far right the header is clipped by the difference. Fixed at the start of 4b, where the
-  keyboard tests hit it: `TableContainer` sizes the gutter to the header area's width minus the
-  body's client width whenever the body scroller resizes, which includes its scrollbar coming or
-  going.
+  at the far right the header is clipped by the difference. A scrollbar wider than 17 px did the
+  opposite: the header clamped short of the body, and the header-to-body scroll sync pulled the body
+  back with it. Fixed at the start of 4b (#130), where the keyboard tests hit it: `TableContainer`
+  measures the scrollbar whenever the body scroller resizes, which includes the scrollbar coming or
+  going, and the header drops the echo of a sync that it could not follow, which still happens for
+  the frame before a new scrollbar is measured.
+- **A filter change holds the body's horizontal position for a second.** `TableContainer` resets
+  `scrollLeft` every frame for 1 s after `filters` changes, to undo the clamps a filter causes. It
+  also undoes any scroll made in that second: a keyboard move or wheel scroll right after applying a
+  filter snaps back. Pre-existing; one of the `scrollLeft` writers 4c's controller should own.
 - **Header controls spill out of narrow columns.** `.dt-col-header` does not clip, and its five
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_

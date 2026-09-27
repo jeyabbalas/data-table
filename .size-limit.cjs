@@ -23,7 +23,7 @@
  *   root entry · ESM                8.80 kB   →   9.3 kB cap (5.7 %)
  *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
  *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
- *   lazy ExportDialog chunk        69.91 kB   →  74 kB   cap (5.8 %)
+ *   lazy ExportDialog chunk        74.04 kB   →  78 kB   cap (5.3 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
  *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
  *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
@@ -36,6 +36,12 @@
  * `visualizations: false` pays for it too. The shared chunk
  * the root entry imports is loaded up front as well, so moving the
  * controller there would not change what a page downloads.
+ *
+ * ExportDialog chunk history. Despite its name, the glob matches the shared
+ * `VisualizationRegistry-*` chunk, which holds most of the table: header,
+ * body, keyboard navigation. It measured 69.91 kB until the column-geometry
+ * work (the one column layout, the pinned-column fixes, the measured
+ * scrollbar gutter) took it to 74.04 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -82,7 +88,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '74 kB',
+    limit: '78 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

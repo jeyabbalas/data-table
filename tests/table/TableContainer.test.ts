@@ -467,29 +467,58 @@ describe('TableContainer', () => {
       const tableContainer = new TableContainer(container, state);
       const mockInstance = MockResizeObserver.getLastInstance()!;
       const root = tableContainer.getElement();
-      const headerArea = root.querySelector<HTMLElement>('.dt-header-area')!;
       const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
       const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
       const resizeCallback = vi.fn();
       tableContainer.onResize(resizeCallback);
       expect(mockInstance.getObservedElements().has(body)).toBe(true);
 
-      const measure = (bodyClientWidth: number): void => {
-        Object.defineProperty(headerArea, 'clientWidth', { configurable: true, value: 800 });
-        Object.defineProperty(body, 'clientWidth', { configurable: true, value: bodyClientWidth });
+      const measure = (border: number, content: number): void => {
         mockInstance.triggerResize([
-          { contentRect: { width: bodyClientWidth, height: 400 } as DOMRectReadOnly, target: body },
+          {
+            target: body,
+            contentRect: { width: content, height: 400 } as DOMRectReadOnly,
+            borderBoxSize: [{ inlineSize: border, blockSize: 400 }],
+            contentBoxSize: [{ inlineSize: content, blockSize: 400 }],
+          },
         ]);
       };
 
       // A classic 15px scrollbar.
-      measure(785);
+      measure(800, 785);
       expect(gutter.style.width).toBe('15px');
       // Overlay scrollbars, or too few rows to scroll.
-      measure(800);
+      measure(800, 800);
       expect(gutter.style.width).toBe('0px');
+      // A scrollbar that is a fraction of a pixel wide, at 125% zoom.
+      measure(800.5, 787.7);
+      expect(gutter.style.width).toBe('12.8px');
       // The body is not the container: its resizes are not reported as such.
       expect(resizeCallback).not.toHaveBeenCalled();
+
+      tableContainer.destroy();
+    });
+
+    it('falls back to client widths, and puts the header back where the body is', () => {
+      const tableContainer = new TableContainer(container, state);
+      const mockInstance = MockResizeObserver.getLastInstance()!;
+      const root = tableContainer.getElement();
+      const headerArea = root.querySelector<HTMLElement>('.dt-header-area')!;
+      const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const headerScroll = root.querySelector<HTMLElement>('.dt-header-scroll')!;
+      const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
+
+      // An entry without box sizes, as older engines report it.
+      Object.defineProperty(headerArea, 'clientWidth', { configurable: true, value: 800 });
+      Object.defineProperty(body, 'clientWidth', { configurable: true, value: 785 });
+      // The header clamped short of the body while its gutter was too narrow.
+      body.scrollLeft = 4845;
+      headerScroll.scrollLeft = 4830;
+      mockInstance.triggerResize([
+        { target: body, contentRect: { width: 785, height: 400 } as DOMRectReadOnly },
+      ]);
+      expect(gutter.style.width).toBe('15px');
+      expect(headerScroll.scrollLeft).toBe(4845);
 
       tableContainer.destroy();
     });
@@ -523,6 +552,43 @@ describe('TableContainer', () => {
       ]);
 
       expect(resizeCallback).toHaveBeenCalledTimes(1); // Still 1
+
+      tableContainer.destroy();
+    });
+  });
+
+  describe('scroll sync', () => {
+    it("does not let the header's shorter reach pull the body back", () => {
+      const tableContainer = new TableContainer(container, state);
+      const root = tableContainer.getElement();
+      const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const headerScroll = root.querySelector<HTMLElement>('.dt-header-scroll')!;
+      // A header that can scroll no further than 4830, as when its viewport
+      // is still wider than a body that has just grown a scrollbar.
+      let headerLeft = 0;
+      Object.defineProperty(headerScroll, 'scrollLeft', {
+        configurable: true,
+        get: () => headerLeft,
+        set: (v: number) => {
+          headerLeft = Math.min(v, 4830);
+        },
+      });
+
+      body.scrollLeft = 4845;
+      body.dispatchEvent(new Event('scroll'));
+      expect(headerScroll.scrollLeft).toBe(4830);
+      // The header's scroll event for that sync.
+      headerScroll.dispatchEvent(new Event('scroll'));
+      expect(body.scrollLeft).toBe(4845);
+
+      // A scroll of the header's own still moves the body, even back to where
+      // the header stopped before.
+      headerScroll.scrollLeft = 4700;
+      headerScroll.dispatchEvent(new Event('scroll'));
+      expect(body.scrollLeft).toBe(4700);
+      headerScroll.scrollLeft = 4830;
+      headerScroll.dispatchEvent(new Event('scroll'));
+      expect(body.scrollLeft).toBe(4830);
 
       tableContainer.destroy();
     });

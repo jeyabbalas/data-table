@@ -75,8 +75,8 @@
 
 .dt-scrollbar-gutter {
   /* Beside the header, as wide as the body's vertical scrollbar, so the two
-     viewports match. TableContainer measures the scrollbar; this is the
-     width until it has. */
+     viewports match. TableContainer sets it to the measured scrollbar before
+     the first paint, so the variable never shows. */
   width: var(--dt-scrollbar-width);
   flex-shrink: 0;
   background: var(--dt-bg-secondary);

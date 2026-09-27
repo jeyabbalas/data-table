@@ -98,7 +98,7 @@
   --dt-header-height: 120px;
   --dt-row-height: 32px;
   --dt-col-width: 200px; /* Loading placeholder cell width; columns take theirs from columnWidths */
-  --dt-scrollbar-width: 17px; /* Header scrollbar gutter until the body's scrollbar is measured */
+  --dt-scrollbar-width: 17px; /* No visible effect: the gutter is measured before first paint */
 
   /* Semantic colors, split by role: `success` / `error` are painted as text
      on near-white surfaces (green-500 read 2.02:1, red-500 3.76:1 on --dt-bg),

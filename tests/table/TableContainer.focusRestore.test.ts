@@ -107,6 +107,25 @@ describe('TableContainer — post-render focus restore', () => {
     tc.destroy();
   });
 
+  it('restores focus to the grid when a column is hidden with its own hide button', async () => {
+    const tc = loaded();
+    const hide = tc
+      .getHeaderRow()
+      .querySelector<HTMLButtonElement>('.dt-col-header[data-column="score"] .dt-col-hide-btn')!;
+    hide.focus();
+    // Hiding the column takes it out of the columns to mount before render()
+    // sees that focus was in the table.
+    hide.click();
+    expect(state.visibleColumns.get()).toEqual(['id', 'name']);
+    expect(hide.isConnected).toBe(false);
+
+    await nextFrame();
+
+    expect(document.activeElement).toBe(tc.getGridElement());
+
+    tc.destroy();
+  });
+
   it('leaves focus alone when the user tabbed out of the table mid-render', async () => {
     const tc = loaded();
     const outside = document.createElement('button');

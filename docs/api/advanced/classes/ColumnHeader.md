@@ -233,8 +233,8 @@ non-negative number.
 
 Defined in: [table/ColumnHeader.ts:886](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/ColumnHeader.ts#L886)
 
-The clamp bounds a width change is held to — the resizer's own
-`minWidth` / `maxWidth` (50 / 500 by default).
+The clamp bounds a width change is held to: 50 / 500, the range the
+resize handle drags within.
 
 Exposed so a caller can tell "the step was applied" from "the step was
 refused because we are already at the edge" without duplicating the

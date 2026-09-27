@@ -16,7 +16,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { WIDE_COLUMNS, loadCsv, mountEmptyTable, openDemo, setTheme } from './helpers/demo';
+import { WIDE_COLUMNS, loadCsv, mountEmptyTable, openDemo, setTheme, settle } from './helpers/demo';
 
 /**
  * The rules issue #84 reported. An `incomplete` result here means axe could
@@ -97,6 +97,10 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('.dt-col-header--layout')).toHaveCount(1);
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Shift+ArrowRight');
+    // The move rebuilds the charts in view, and they rewrite their stats
+    // lines in the next few frames. Scanned while they do, a line that goes
+    // mid-scan has a background axe cannot determine.
+    await settle(page);
 
     assertClean(await scan(page), `column layout mode, ${theme}`);
   });

@@ -4,9 +4,13 @@
  * Renders a column header with:
  * - Column name
  * - Type label
- * - Stats line (placeholder for future implementation)
- * - Visualization container (placeholder for Phase 4)
- * - Sort indicator with multi-sort badges
+ * - Stats line, and the slot a column's chart draws in
+ * - Pin, hide, filter and sort buttons, with multi-sort badges
+ * - A drag handle and a resize handle
+ *
+ * The buttons and the two handles are the header's controls, and can be left
+ * out: a header without them is a shell, which is what `TableContainer` keeps
+ * for a column far from the view (see {@link ColumnHeader.setControlsMounted}).
  *
  * Supports click to sort and Shift+click for multi-column sort.
  */
@@ -19,7 +23,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
 import type { AnnotationPopover } from './AnnotationPopover';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
-import { resolveColumnWidth } from './ColumnLayout';
+import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, resolveColumnWidth } from './ColumnLayout';
 import { ColumnResizer } from './ColumnResizer';
 
 /**
@@ -73,6 +77,26 @@ export interface ColumnHeaderOptions {
    * @internal
    */
   holdColumn?: ((column: string) => () => void) | undefined;
+  /**
+   * Build the controls now (default `true`). `false` makes a shell: the cell,
+   * its name and type, the stats and chart slots, the derived-column icon, and
+   * none of the pin, hide, filter and sort buttons or the drag and resize
+   * handles, until {@link ColumnHeader.setControlsMounted} builds them.
+   *
+   * @internal
+   */
+  controls?: boolean | undefined;
+}
+
+/** The parts of a header a shell does without. */
+interface HeaderControls {
+  pinButton: HTMLElement;
+  hideButton: HTMLElement;
+  filterButton: HTMLElement;
+  sortButton: HTMLElement;
+  sortBadge: HTMLElement;
+  dragHandle: HTMLElement;
+  resizer: ColumnResizer;
 }
 
 /**
@@ -89,16 +113,14 @@ export interface ColumnHeaderOptions {
  */
 export class ColumnHeader {
   private element: HTMLElement;
-  private sortButton: HTMLElement;
-  private sortBadge: HTMLElement;
-  private pinButton: HTMLElement;
-  private hideButton: HTMLElement;
-  private filterButton: HTMLElement;
-  private dragHandle: HTMLElement;
+  private actionPanel!: HTMLElement;
   private derivedIconBtn: HTMLElement | null = null;
   private statsEl: HTMLElement;
   private nameEl!: HTMLElement;
-  private resizer: ColumnResizer;
+  /** The controls, while they are built (see {@link setControlsMounted}). */
+  private controls: HeaderControls | null = null;
+  /** Whether column layout mode is on, for controls built while it is. */
+  private layoutMode = false;
   /** Releases the hold a resize drag keeps on the column, while one runs. */
   private releaseResizeHold: (() => void) | null = null;
   private unsubscribes: (() => void)[] = [];
@@ -117,43 +139,11 @@ export class ColumnHeader {
     this.classPrefix = options.classPrefix ?? 'dt';
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
-    this.sortButton = this.element.querySelector(`.${this.classPrefix}-col-sort-btn`)!;
-    this.sortBadge = this.element.querySelector(`.${this.classPrefix}-col-sort-badge`)!;
-    this.pinButton = this.element.querySelector(`.${this.classPrefix}-col-pin-btn`)!;
-    this.hideButton = this.element.querySelector(`.${this.classPrefix}-col-hide-btn`)!;
-    this.filterButton = this.element.querySelector(`.${this.classPrefix}-col-filter-btn`)!;
-    this.dragHandle = this.element.querySelector(`.${this.classPrefix}-col-drag-handle`)!;
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
-
-    // Create resizer for column width adjustment
-    this.resizer = new ColumnResizer(
-      this.element,
-      (width) => this.actions.setColumnWidth(this.column.name, width),
-      () => this.actions.resetColumnWidth(this.column.name),
-      () => this.getColumnCells(),
-      {
-        classPrefix: this.classPrefix,
-        onDragStart: () => {
-          this.actions.beginColumnWidthChange();
-          this.releaseResizeHold?.();
-          this.releaseResizeHold = this.options.holdColumn?.(this.column.name) ?? null;
-        },
-        onDragEnd: () => {
-          this.releaseResizeHold?.();
-          this.releaseResizeHold = null;
-          this.actions.endColumnWidthChange();
-          // Announced once at drag end, not on every mousemove — a live
-          // region fired at pointer rate is noise, not information.
-          this.options.announce?.(
-            this.messages.a11y.columnWidthAnnouncement(this.column.name, this.getWidth()),
-          );
-        },
-        messages: this.messages,
-      },
-    );
 
     this.attachEventListeners();
     this.subscribeToState();
+    if (options.controls !== false) this.mountControls();
     this.update();
   }
 
@@ -193,31 +183,17 @@ export class ColumnHeader {
     const nameRow = document.createElement('div');
     nameRow.className = `${this.classPrefix}-col-name-row`;
 
-    // Drag handle
-    const dragHandle = document.createElement('button');
-    dragHandle.className = `${this.classPrefix}-col-drag-handle`;
-    dragHandle.setAttribute('type', 'button');
-    dragHandle.setAttribute('aria-label', this.messages.a11y.dragHandleLabel(this.column.name));
-    dragHandle.setAttribute('title', this.messages.a11y.dragHandleTitle);
-    dragHandle.innerHTML = `
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="5" cy="4" r="1.5" />
-        <circle cx="11" cy="4" r="1.5" />
-        <circle cx="5" cy="8" r="1.5" />
-        <circle cx="11" cy="8" r="1.5" />
-        <circle cx="5" cy="12" r="1.5" />
-        <circle cx="11" cy="12" r="1.5" />
-      </svg>
-    `;
     // Derived column f(x) edit icon. Gated by `showDerivedEditIcon` so consumers
     // with `derivedColumns: false` can fully skip the CodeMirror-bound edit
-    // panel (the icon is the only entry point to it).
+    // panel (the icon is the only entry point to it). Part of a shell too: the
+    // name row is as tall as the icon, and would change height without it.
     if (this.column.isDerived && this.options.showDerivedEditIcon !== false) {
       const iconBtn = document.createElement('button');
       iconBtn.className = `${this.classPrefix}-derived-icon-btn`;
       iconBtn.setAttribute('type', 'button');
       iconBtn.setAttribute('aria-label', this.messages.a11y.editDerivedColumnLabel);
       iconBtn.setAttribute('title', this.messages.a11y.editDerivedColumnTitle);
+      iconBtn.setAttribute('tabindex', '-1');
       iconBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/>
         <text x="12" y="16" class="${this.classPrefix}-derived-fx-glyph" fill="currentColor" text-anchor="middle">f</text>
@@ -240,69 +216,7 @@ export class ColumnHeader {
     nameRow.appendChild(nameEl);
     this.applyTooltipReactivity();
 
-    // Sort button with SVG arrows
-    const sortBtn = document.createElement('button');
-    sortBtn.className = `${this.classPrefix}-col-sort-btn`;
-    sortBtn.setAttribute('type', 'button');
-    sortBtn.setAttribute('aria-label', this.messages.a11y.sortButtonLabel(this.column.name));
-    sortBtn.setAttribute('title', this.messages.a11y.sortAscendingTitle);
-    sortBtn.innerHTML = `
-      <svg viewBox="0 0 10 14" aria-hidden="true">
-        <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
-        <path d="M5 14 L10 9 L0 9 Z" class="arrow-down" />
-      </svg>
-    `;
-
-    // Sort badge for multi-sort (inside button, positioned absolutely)
-    const sortBadge = document.createElement('span');
-    sortBadge.className = `${this.classPrefix}-col-sort-badge`;
-    sortBadge.style.display = 'none';
-    sortBtn.appendChild(sortBadge);
-
     el.appendChild(nameRow);
-
-    // Action panel (pin, hide, filter, sort, drag-to-reorder buttons)
-    const actionPanel = document.createElement('div');
-    actionPanel.className = `${this.classPrefix}-col-action-panel`;
-
-    // Pin button (thumbtack icon)
-    const pinBtn = document.createElement('button');
-    pinBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-pin-btn`;
-    pinBtn.setAttribute('type', 'button');
-    pinBtn.setAttribute('aria-label', this.messages.a11y.pinButtonLabel(this.column.name));
-    pinBtn.setAttribute('title', this.messages.a11y.pinColumnTitle);
-    pinBtn.innerHTML = `
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="4.5" r="2.5" />
-        <rect x="7.25" y="6.5" width="1.5" height="7" rx="0.75" />
-      </svg>
-    `;
-
-    // Hide button (eye-slash icon — placeholder, no handler yet)
-    const hideBtn = document.createElement('button');
-    hideBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-hide-btn`;
-    hideBtn.setAttribute('type', 'button');
-    hideBtn.setAttribute('aria-label', this.messages.a11y.hideButtonLabel(this.column.name));
-    hideBtn.setAttribute('title', this.messages.a11y.hideColumnTitle);
-    hideBtn.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">
-        <path d="M2 8s2.5-4.5 6-4.5S14 8 14 8s-2.5 4.5-6 4.5S2 8 2 8z" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
-        <line x1="3.5" y1="12.5" x2="12.5" y2="3.5" fill="none" stroke-width="1.5" stroke-linecap="round" />
-      </svg>
-    `;
-
-    // Filter button (funnel icon — placeholder, no handler yet)
-    const filterBtn = document.createElement('button');
-    filterBtn.className = `${this.classPrefix}-col-action-btn ${this.classPrefix}-col-filter-btn`;
-    filterBtn.setAttribute('type', 'button');
-    filterBtn.setAttribute('aria-label', this.messages.a11y.filterButtonLabel(this.column.name));
-    filterBtn.setAttribute('title', this.messages.a11y.filterColumnTitle);
-    filterBtn.innerHTML = `
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M2 3h12L9.5 8.5v4L6.5 14V8.5L2 3z" />
-      </svg>
-    `;
 
     // Type label
     const typeEl = document.createElement('div');
@@ -331,22 +245,13 @@ export class ColumnHeader {
     divider2.className = `${this.classPrefix}-col-divider`;
     el.appendChild(divider2);
 
-    // Action panel (pin, hide, filter, sort, drag-to-reorder buttons)
-    actionPanel.appendChild(pinBtn);
-    actionPanel.appendChild(hideBtn);
-    actionPanel.appendChild(filterBtn);
-    actionPanel.appendChild(sortBtn);
-    actionPanel.appendChild(dragHandle);
+    // Action panel, for the pin, hide, filter and sort buttons and the drag
+    // handle (see mountControls). The last box in the header, so nothing
+    // moves when they come or go.
+    const actionPanel = document.createElement('div');
+    actionPanel.className = `${this.classPrefix}-col-action-panel`;
     el.appendChild(actionPanel);
-
-    // Take every per-column control out of the native tab order. A 266-column
-    // table renders ~1,600 of these; leaving them tabbable would make Tab-ing
-    // past the grid take over a thousand presses. They stay reachable through
-    // F2 controls mode (see KeyboardNavigator), which is what keeps this
-    // WCAG 2.1.1-conformant rather than merely quiet.
-    for (const btn of el.querySelectorAll('button')) {
-      btn.setAttribute('tabindex', '-1');
-    }
+    this.actionPanel = actionPanel;
 
     // Apply annotation classes + popover wiring on initial render. The
     // store subscription in subscribeToState() re-applies on every
@@ -354,6 +259,166 @@ export class ColumnHeader {
     this.applyAnnotationClasses(el);
 
     return el;
+  }
+
+  /**
+   * Build the controls: the pin, hide, filter and sort buttons, the drag
+   * handle and the resize handle.
+   *
+   * Every button is out of the native tab order. A 266-column table rendered
+   * ~1,600 of them when every header had its controls; leaving them tabbable
+   * would make Tab-ing past the grid take over a thousand presses. They stay
+   * reachable through F2 controls mode (see KeyboardNavigator), which is what
+   * keeps this WCAG 2.1.1-conformant rather than merely quiet.
+   */
+  private mountControls(): void {
+    if (this.controls) return;
+    const p = this.classPrefix;
+    const a = this.messages.a11y;
+
+    // Pin button (thumbtack icon)
+    const pinBtn = document.createElement('button');
+    pinBtn.className = `${p}-col-action-btn ${p}-col-pin-btn`;
+    pinBtn.setAttribute('type', 'button');
+    pinBtn.setAttribute('aria-label', a.pinButtonLabel(this.column.name));
+    pinBtn.setAttribute('title', a.pinColumnTitle);
+    pinBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="4.5" r="2.5" />
+        <rect x="7.25" y="6.5" width="1.5" height="7" rx="0.75" />
+      </svg>
+    `;
+
+    // Hide button (eye-slash icon)
+    const hideBtn = document.createElement('button');
+    hideBtn.className = `${p}-col-action-btn ${p}-col-hide-btn`;
+    hideBtn.setAttribute('type', 'button');
+    hideBtn.setAttribute('aria-label', a.hideButtonLabel(this.column.name));
+    hideBtn.setAttribute('title', a.hideColumnTitle);
+    hideBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">
+        <path d="M2 8s2.5-4.5 6-4.5S14 8 14 8s-2.5 4.5-6 4.5S2 8 2 8z" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+        <line x1="3.5" y1="12.5" x2="12.5" y2="3.5" fill="none" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+    `;
+
+    // Filter button (funnel icon)
+    const filterBtn = document.createElement('button');
+    filterBtn.className = `${p}-col-action-btn ${p}-col-filter-btn`;
+    filterBtn.setAttribute('type', 'button');
+    filterBtn.setAttribute('aria-label', a.filterButtonLabel(this.column.name));
+    filterBtn.setAttribute('title', a.filterColumnTitle);
+    filterBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2 3h12L9.5 8.5v4L6.5 14V8.5L2 3z" />
+      </svg>
+    `;
+
+    // Sort button with SVG arrows
+    const sortBtn = document.createElement('button');
+    sortBtn.className = `${p}-col-sort-btn`;
+    sortBtn.setAttribute('type', 'button');
+    sortBtn.setAttribute('aria-label', a.sortButtonLabel(this.column.name));
+    sortBtn.setAttribute('title', a.sortAscendingTitle);
+    sortBtn.innerHTML = `
+      <svg viewBox="0 0 10 14" aria-hidden="true">
+        <path d="M5 0 L10 5 L0 5 Z" class="arrow-up" />
+        <path d="M5 14 L10 9 L0 9 Z" class="arrow-down" />
+      </svg>
+    `;
+
+    // Sort badge for multi-sort (inside button, positioned absolutely)
+    const sortBadge = document.createElement('span');
+    sortBadge.className = `${p}-col-sort-badge`;
+    sortBadge.style.display = 'none';
+    sortBtn.appendChild(sortBadge);
+
+    // Drag handle
+    const dragHandle = document.createElement('button');
+    dragHandle.className = `${p}-col-drag-handle`;
+    dragHandle.setAttribute('type', 'button');
+    dragHandle.setAttribute('aria-label', a.dragHandleLabel(this.column.name));
+    dragHandle.setAttribute('title', a.dragHandleTitle);
+    dragHandle.innerHTML = `
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="5" cy="4" r="1.5" />
+        <circle cx="11" cy="4" r="1.5" />
+        <circle cx="5" cy="8" r="1.5" />
+        <circle cx="11" cy="8" r="1.5" />
+        <circle cx="5" cy="12" r="1.5" />
+        <circle cx="11" cy="12" r="1.5" />
+      </svg>
+    `;
+
+    for (const btn of [pinBtn, hideBtn, filterBtn, sortBtn, dragHandle]) {
+      btn.setAttribute('tabindex', '-1');
+    }
+    this.actionPanel.append(pinBtn, hideBtn, filterBtn, sortBtn, dragHandle);
+
+    // Only the sort button sorts, NOT the whole header: a resize handle's
+    // release would trigger it otherwise.
+    sortBtn.addEventListener('click', this.handleSortClick);
+    pinBtn.addEventListener('click', this.handlePinClick);
+    hideBtn.addEventListener('click', this.handleHideClick);
+    filterBtn.addEventListener('click', this.handleFilterClick);
+
+    // Create resizer for column width adjustment
+    const resizer = new ColumnResizer(
+      this.element,
+      (width) => this.actions.setColumnWidth(this.column.name, width),
+      () => this.actions.resetColumnWidth(this.column.name),
+      () => this.getColumnCells(),
+      {
+        classPrefix: p,
+        onDragStart: () => {
+          this.actions.beginColumnWidthChange();
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = this.options.holdColumn?.(this.column.name) ?? null;
+        },
+        onDragEnd: () => {
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = null;
+          this.actions.endColumnWidthChange();
+          // Announced once at drag end, not on every mousemove — a live
+          // region fired at pointer rate is noise, not information.
+          this.options.announce?.(
+            this.messages.a11y.columnWidthAnnouncement(this.column.name, this.getWidth()),
+          );
+        },
+        messages: this.messages,
+      },
+    );
+
+    this.controls = {
+      pinButton: pinBtn,
+      hideButton: hideBtn,
+      filterButton: filterBtn,
+      sortButton: sortBtn,
+      sortBadge,
+      dragHandle,
+      resizer,
+    };
+    this.update();
+    this.updateFilterIndicator();
+    this.updatePinState();
+    this.updateHideButtonState(this.state.visibleColumns.get());
+    resizer.setActive(this.layoutMode);
+  }
+
+  /** Take the controls down, leaving a shell. */
+  private unmountControls(): void {
+    const controls = this.controls;
+    if (!controls) return;
+    this.controls = null;
+    // Ends a resize drag as its release would. The column window controller
+    // holds a column while its drag runs, so only destroy() gets here then.
+    controls.resizer.detach();
+    controls.sortButton.removeEventListener('click', this.handleSortClick);
+    controls.pinButton.removeEventListener('click', this.handlePinClick);
+    controls.hideButton.removeEventListener('click', this.handleHideClick);
+    controls.filterButton.removeEventListener('click', this.handleFilterClick);
+    this.actionPanel.replaceChildren();
   }
 
   /**
@@ -475,18 +540,7 @@ export class ColumnHeader {
    * Attach click event listeners for sorting (on sort button only)
    */
   private attachEventListeners(): void {
-    // Only attach click to sort button, NOT the whole header
-    // This prevents resize release from triggering sort
-    this.sortButton.addEventListener('click', this.handleSortClick);
-
-    // Pin button
-    this.pinButton.addEventListener('click', this.handlePinClick);
-
-    // Hide button
-    this.hideButton.addEventListener('click', this.handleHideClick);
-
-    // Filter button
-    this.filterButton.addEventListener('click', this.handleFilterClick);
+    // The controls' own listeners come and go with them (see mountControls).
 
     // Derived column icon button
     if (this.derivedIconBtn) {
@@ -576,7 +630,7 @@ export class ColumnHeader {
   private handleFilterClick = (event: MouseEvent): void => {
     if (this.destroyed) return;
     event.stopPropagation();
-    this.options.onFilterClick?.(this.column.name, this.filterButton);
+    this.options.onFilterClick?.(this.column.name, event.currentTarget as HTMLElement);
   };
 
   private handleDerivedIconClick = (event: MouseEvent): void => {
@@ -684,7 +738,10 @@ export class ColumnHeader {
     const hasFilter = this.state.filtersByColumn.get().has(this.column.name);
     this.element.classList.toggle(`${this.classPrefix}-col-header--filtered`, hasFilter);
     // Toggle active class on the filter button itself
-    this.filterButton.classList.toggle(`${this.classPrefix}-col-action-btn--active`, hasFilter);
+    this.controls?.filterButton.classList.toggle(
+      `${this.classPrefix}-col-action-btn--active`,
+      hasFilter,
+    );
 
     // Update aria-label to reflect current sort/filter state
     this.element.setAttribute('aria-label', this.buildAriaLabel());
@@ -694,13 +751,15 @@ export class ColumnHeader {
    * Update pin button active state based on pinned columns
    */
   private updatePinState(): void {
+    const controls = this.controls;
+    if (!controls) return;
     const isPinned = this.state.pinnedColumns.get().includes(this.column.name);
-    this.pinButton.classList.toggle(`${this.classPrefix}-col-action-btn--active`, isPinned);
-    this.pinButton.setAttribute(
+    controls.pinButton.classList.toggle(`${this.classPrefix}-col-action-btn--active`, isPinned);
+    controls.pinButton.setAttribute(
       'title',
       isPinned ? this.messages.a11y.unpinColumnTitle : this.messages.a11y.pinColumnTitle,
     );
-    this.pinButton.setAttribute(
+    controls.pinButton.setAttribute(
       'aria-label',
       isPinned
         ? this.messages.a11y.unpinButtonLabel(this.column.name)
@@ -708,23 +767,25 @@ export class ColumnHeader {
     );
 
     // Disable drag-to-reorder for pinned columns
-    this.dragHandle.classList.toggle(`${this.classPrefix}-col-drag-handle--disabled`, isPinned);
-    this.dragHandle.setAttribute('aria-disabled', String(isPinned));
+    controls.dragHandle.classList.toggle(`${this.classPrefix}-col-drag-handle--disabled`, isPinned);
+    controls.dragHandle.setAttribute('aria-disabled', String(isPinned));
   }
 
   /**
    * Update hide button disabled state when only one column is visible
    */
   private updateHideButtonState(visibleColumns: string[]): void {
+    const hideButton = this.controls?.hideButton;
+    if (!hideButton) return;
     const isLastColumn = visibleColumns.length <= 1;
     if (isLastColumn) {
-      this.hideButton.setAttribute('disabled', '');
-      this.hideButton.setAttribute('title', this.messages.a11y.cannotHideLastColumn);
-      this.hideButton.classList.add(`${this.classPrefix}-col-action-btn--disabled`);
+      hideButton.setAttribute('disabled', '');
+      hideButton.setAttribute('title', this.messages.a11y.cannotHideLastColumn);
+      hideButton.classList.add(`${this.classPrefix}-col-action-btn--disabled`);
     } else {
-      this.hideButton.removeAttribute('disabled');
-      this.hideButton.setAttribute('title', this.messages.a11y.hideColumnTitle);
-      this.hideButton.classList.remove(`${this.classPrefix}-col-action-btn--disabled`);
+      hideButton.removeAttribute('disabled');
+      hideButton.setAttribute('title', this.messages.a11y.hideColumnTitle);
+      hideButton.classList.remove(`${this.classPrefix}-col-action-btn--disabled`);
     }
   }
 
@@ -793,38 +854,42 @@ export class ColumnHeader {
 
     const sortColumns = this.state.sortColumns.get();
     const sortIndex = sortColumns.findIndex((s) => s.column === this.column.name);
-
-    // Remove existing state classes
-    this.sortButton.classList.remove(
-      `${this.classPrefix}-col-sort-btn--asc`,
-      `${this.classPrefix}-col-sort-btn--desc`,
+    const sortConfig = sortIndex === -1 ? null : sortColumns[sortIndex]!;
+    const isAsc = sortConfig?.direction === 'asc';
+    this.element.setAttribute(
+      'aria-sort',
+      sortConfig ? (isAsc ? 'ascending' : 'descending') : 'none',
     );
 
-    if (sortIndex === -1) {
-      // Not sorted - hide badge
-      this.sortBadge.style.display = 'none';
-      this.element.setAttribute('aria-sort', 'none');
-      this.sortButton.setAttribute('title', this.messages.a11y.sortAscendingTitle);
-    } else {
-      const sortConfig = sortColumns[sortIndex]!;
-      const isAsc = sortConfig.direction === 'asc';
-
-      // Add appropriate class for arrow styling
-      this.sortButton.classList.add(`${this.classPrefix}-col-sort-btn--${isAsc ? 'asc' : 'desc'}`);
-
-      // For multi-sort, show position badge
-      if (sortColumns.length > 1) {
-        this.sortBadge.textContent = String(sortIndex + 1);
-        this.sortBadge.style.display = '';
-      } else {
-        this.sortBadge.style.display = 'none';
-      }
-
-      this.element.setAttribute('aria-sort', isAsc ? 'ascending' : 'descending');
-      this.sortButton.setAttribute(
-        'title',
-        isAsc ? this.messages.a11y.sortDescendingTitle : this.messages.a11y.sortRemoveTitle,
+    const controls = this.controls;
+    if (controls) {
+      const { sortButton, sortBadge } = controls;
+      // Remove existing state classes
+      sortButton.classList.remove(
+        `${this.classPrefix}-col-sort-btn--asc`,
+        `${this.classPrefix}-col-sort-btn--desc`,
       );
+      if (!sortConfig) {
+        // Not sorted - hide badge
+        sortBadge.style.display = 'none';
+        sortButton.setAttribute('title', this.messages.a11y.sortAscendingTitle);
+      } else {
+        // Add appropriate class for arrow styling
+        sortButton.classList.add(`${this.classPrefix}-col-sort-btn--${isAsc ? 'asc' : 'desc'}`);
+
+        // For multi-sort, show position badge
+        if (sortColumns.length > 1) {
+          sortBadge.textContent = String(sortIndex + 1);
+          sortBadge.style.display = '';
+        } else {
+          sortBadge.style.display = 'none';
+        }
+
+        sortButton.setAttribute(
+          'title',
+          isAsc ? this.messages.a11y.sortDescendingTitle : this.messages.a11y.sortRemoveTitle,
+        );
+      }
     }
 
     // Update aria-label to reflect current sort/filter state
@@ -871,8 +936,36 @@ export class ColumnHeader {
    */
   setLayoutMode(active: boolean): void {
     if (this.destroyed) return;
+    this.layoutMode = active;
     this.element.classList.toggle(`${this.classPrefix}-col-header--layout`, active);
-    this.resizer.setActive(active);
+    this.controls?.resizer.setActive(active);
+  }
+
+  /**
+   * Build the header's controls, or take them down to leave a shell.
+   *
+   * `TableContainer` builds them for the columns its column window controller
+   * mounts, which the body renders cells for, and takes them from the rest. A
+   * shell keeps everything but the pin, hide, filter and sort buttons and the
+   * drag and resize handles. The controller keeps a column mounted while
+   * anything uses those: DOM focus on one, the cursor, a resize or reorder
+   * drag, an open panel.
+   *
+   * @internal
+   */
+  setControlsMounted(mounted: boolean): void {
+    if (this.destroyed) return;
+    if (mounted) this.mountControls();
+    else this.unmountControls();
+  }
+
+  /**
+   * Whether the controls are built (see {@link ColumnHeader.setControlsMounted}).
+   *
+   * @internal
+   */
+  hasControls(): boolean {
+    return this.controls !== null;
   }
 
   /**
@@ -889,8 +982,8 @@ export class ColumnHeader {
   }
 
   /**
-   * The clamp bounds a width change is held to — the resizer's own
-   * `minWidth` / `maxWidth` (50 / 500 by default).
+   * The clamp bounds a width change is held to: 50 / 500, the range the
+   * resize handle drags within.
    *
    * Exposed so a caller can tell "the step was applied" from "the step was
    * refused because we are already at the edge" without duplicating the
@@ -902,7 +995,7 @@ export class ColumnHeader {
    * ```
    */
   getWidthBounds(): { min: number; max: number } {
-    return { min: this.resizer.getMinWidth(), max: this.resizer.getMaxWidth() };
+    return { min: MIN_COLUMN_WIDTH, max: MAX_COLUMN_WIDTH };
   }
 
   /**
@@ -975,13 +1068,14 @@ export class ColumnHeader {
    */
   getControls(): HTMLElement[] {
     if (this.destroyed) return [];
+    const controls = this.controls;
     const candidates: (HTMLElement | null)[] = [
       this.derivedIconBtn,
       this.nameEl.hasAttribute('tabindex') ? this.nameEl : null,
-      this.pinButton,
-      this.hideButton,
-      this.filterButton,
-      this.sortButton,
+      controls?.pinButton ?? null,
+      controls?.hideButton ?? null,
+      controls?.filterButton ?? null,
+      controls?.sortButton ?? null,
     ];
     return candidates.filter((el): el is HTMLElement => el !== null && this.isControlActive(el));
   }
@@ -1048,14 +1142,10 @@ export class ColumnHeader {
     if (this.destroyed) return;
     this.destroyed = true;
 
-    // Detach column resizer
-    this.resizer.detach();
+    // Detach the resizer and the controls' listeners
+    this.unmountControls();
 
     // Remove event listeners
-    this.sortButton.removeEventListener('click', this.handleSortClick);
-    this.pinButton.removeEventListener('click', this.handlePinClick);
-    this.hideButton.removeEventListener('click', this.handleHideClick);
-    this.filterButton.removeEventListener('click', this.handleFilterClick);
     this.element.removeEventListener('keydown', this.handleHeaderKeyDown);
     this.element.removeEventListener('pointerenter', this.showAnnotationPopover);
     this.element.removeEventListener('pointerleave', this.scheduleAnnotationHide);

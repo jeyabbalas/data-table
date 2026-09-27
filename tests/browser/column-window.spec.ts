@@ -118,7 +118,7 @@ test("the cursor's column stays mounted wherever the view goes, and so does a fo
   expect(await probe(page, 'mounted')).toEqual(expect.arrayContaining(['c299', column]));
 });
 
-test('body rows hold only the mounted columns through a sweep of 1,000 columns, and show the right values', async ({
+test('rows and header controls follow the mounted columns through a sweep of 1,000 columns, and cells show the right values', async ({
   page,
 }) => {
   await mountTable(page, { columns: 1000, rows: 60 });
@@ -143,6 +143,20 @@ test('body rows hold only the mounted columns through a sweep of 1,000 columns, 
   const { rows, cells } = await probe(page, 'bodyCells');
   expect(rows).toBeGreaterThan(10);
   expect(cells).toBe(rows * mounted.length);
+
+  // Every column keeps its header, and only the mounted ones their controls:
+  // a shell is 9 elements, a header with its controls 35.
+  const header = await page.evaluate(
+    (hostId) => ({
+      headers: document.querySelectorAll(`#${hostId} .dt-header-row > .dt-col-header`).length,
+      elements: document.querySelector(`#${hostId} .dt-header-row`)!.querySelectorAll('*').length,
+      withControls: document.querySelectorAll(`#${hostId} .dt-col-header .dt-col-sort-btn`).length,
+    }),
+    HOST_ID,
+  );
+  expect(header.headers).toBe(1000);
+  expect(header.withControls).toBe(mounted.length);
+  expect(header.elements).toBeLessThanOrEqual(1000 * 9 + mounted.length * 26 + 1);
 });
 
 test('a pinned column keeps its cells at the left edge however far the rows scroll', async ({

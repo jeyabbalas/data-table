@@ -12,7 +12,7 @@
  */
 
 import { type Strings, defaultStrings } from '../core/Strings';
-import { DEFAULT_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from './ColumnLayout';
+import { DEFAULT_COLUMN_WIDTH, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from './ColumnLayout';
 
 /**
  * Options for configuring the ColumnResizer
@@ -85,7 +85,7 @@ export class ColumnResizer {
     options: ColumnResizerOptions = {},
   ) {
     this.minWidth = options.minWidth ?? MIN_COLUMN_WIDTH;
-    this.maxWidth = options.maxWidth ?? 500;
+    this.maxWidth = options.maxWidth ?? MAX_COLUMN_WIDTH;
     this.classPrefix = options.classPrefix ?? 'dt';
     this.onDragStart = options.onDragStart;
     this.onDragEnd = options.onDragEnd;

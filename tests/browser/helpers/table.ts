@@ -128,9 +128,11 @@ export interface TableProbes {
   mounted(): string[];
   /**
    * Check every frame until {@link TableProbes.windowReport} that each column
-   * at least partly in view is among the mounted ones, and that every body
-   * row with data holds a cell for exactly the mounted columns, in order.
-   * Count how often the mounted columns change.
+   * at least partly in view is among the mounted ones, that every body row
+   * with data holds a cell for exactly the mounted columns, in order, and that
+   * the header row holds a header for every visible column, in order, with
+   * its controls exactly when its column is mounted. Count how often the
+   * mounted columns change.
    */
   watchWindow(): void;
   /** Stop {@link TableProbes.watchWindow}: the frames that failed, and the changes seen. */
@@ -487,6 +489,25 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
             if (cells !== expected && state.breaches.length < 20) {
               state.breaches.push(
                 `${at}: row ${row.getAttribute('data-row-index')} holds [${cells}], not [${expected}]`,
+              );
+            }
+          }
+          const headers = Array.from(
+            host.querySelectorAll<HTMLElement>('.dt-header-row > .dt-col-header[data-column]'),
+          );
+          const headerOrder = headers.map((h) => h.getAttribute('data-column')).join(' ');
+          if (
+            headerOrder !== table.state.visibleColumns.get().join(' ') &&
+            state.breaches.length < 20
+          ) {
+            state.breaches.push(`${at}: the header row does not hold every visible column`);
+          }
+          for (const header of headers) {
+            const column = header.getAttribute('data-column')!;
+            const controls = header.querySelector('.dt-col-sort-btn') !== null;
+            if (controls !== mounted.has(column) && state.breaches.length < 20) {
+              state.breaches.push(
+                `${at}: ${column}'s header ${controls ? 'has' : 'lacks'} its controls, mounted: ${mounted.has(column)}`,
               );
             }
           }

@@ -949,6 +949,25 @@ export class TableContainer {
    * Subscribe to relevant state changes
    */
   private subscribeToState(): void {
+    // Headers have their controls while their column is mounted. The
+    // controller publishes only changes.
+    this.unsubscribes.push(
+      this.columnWindow.mountedColumns.subscribe((columns) => {
+        if (this.destroyed) return;
+        const mounted = new Set(columns);
+        const focused = this.activeElementInRoot();
+        for (const header of this.columnHeaders) {
+          const keep = mounted.has(header.getColumn().name);
+          // Never out from under DOM focus. The controller keeps the column
+          // holding focus mounted, so this is one on its way out of the
+          // table (hidden with its own hide button), and `render()`, which
+          // runs next, has to find focus on it to put it back on the grid.
+          if (!keep && focused && header.getElement().contains(focused)) continue;
+          header.setControlsMounted(keep);
+        }
+      }),
+    );
+
     // Subscribe to schema changes to update header structure
     const unsubSchema = this.state.schema.subscribe(() => {
       if (!this.destroyed) {
@@ -1259,8 +1278,10 @@ export class TableContainer {
       // Row 1 of the grid — body rows start at 2 (see updateGridCounts).
       headerRowEl.setAttribute('aria-rowindex', '1');
 
-      // Create column headers
+      // Create column headers: with their controls for the columns the
+      // controller mounts, shells for the rest
       if (this.actions) {
+        const mounted = new Set(this.columnWindow.mountedColumns.get());
         let visibleIndex = 0;
         for (const colName of visibleColumns) {
           const colSchema = schema.find((s) => s.name === colName);
@@ -1285,6 +1306,7 @@ export class TableContainer {
               columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
               announce: (message) => this.announce(message),
               holdColumn: (column) => this.columnWindow.hold(column),
+              controls: mounted.has(colName),
             });
             this.columnHeaders.push(columnHeader);
 
@@ -1938,8 +1960,12 @@ export class TableContainer {
   }
 
   /**
-   * Get all column header instances.
+   * Get all column header instances, one per visible column, in order.
    * Useful for accessing visualization containers in each header.
+   *
+   * Every header has its stats and chart slots, but only the columns near the
+   * view have their buttons and handles: the others are shells, whose
+   * `getControls()` is empty.
    */
   getColumnHeaders(): ColumnHeader[] {
     return [...this.columnHeaders];

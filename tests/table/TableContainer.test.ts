@@ -616,6 +616,28 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    it('gives only the mounted columns’ headers their controls, and every column a header', () => {
+      const { tableContainer, actions, root, body } = wideTable();
+      const withControls = () =>
+        Array.from(root.querySelectorAll('.dt-col-header'), (h) =>
+          h.querySelector('.dt-col-sort-btn') ? h.getAttribute('data-column') : '-',
+        ).join(' ');
+      // Until the body has a width, every column is mounted.
+      expect(withControls()).toBe('a b c d e f g h i j');
+
+      body.dispatchEvent(new Event('scroll'));
+      expect(withControls()).toBe('a b c d e f - - - -');
+      body.scrollLeft = 700;
+      body.dispatchEvent(new Event('scroll'));
+      expect(withControls()).toBe('- - - - e f g h i j');
+
+      // A header rebuilt by a render starts the way the controller has it.
+      actions.hideColumn('a');
+      expect(withControls()).toBe('- - - e f g h i j');
+
+      tableContainer.destroy();
+    });
+
     it('keeps the column an open filter panel belongs to mounted, until the panel closes', () => {
       const { tableContainer, root, body } = wideTable();
       const mounted = () => tableContainer.getColumnWindow().mountedColumns.get().join(' ');

@@ -1604,3 +1604,8 @@ is used.
 Defined in: [DataTable.ts:191](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L191)
 
 Enable auto-attached column header visualizations (histograms, value counts). Default: `true`.
+
+A column's chart is built when its header scrolls within 200 px of view
+and removed once the header is 400 px away, so a wide table runs chart
+queries only for the columns near the view. `loadData` waits for the
+charts in view to draw.

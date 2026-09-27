@@ -13,10 +13,10 @@ import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
+import { buildRowQuery } from './rowQuery';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
 
 /**
@@ -773,9 +773,9 @@ export class TableBody {
 
   /**
    * Whether the unsorted/unfiltered `__rowid__` range fast path applies.
-   * The single decision point shared by `buildRowQuery` (SQL shape) and
-   * `fetchBlock` (cache keying + density valve) so the two can never
-   * disagree about which shape a query used.
+   * `fetchBlock` asks once per fetch and passes the answer to
+   * `buildRowQuery` (SQL shape), so the SQL and the cache keying + density
+   * valve can never disagree about which shape a query used.
    */
   private useRowidFastPath(sortColumns: SortColumn[], filters: Filter[]): boolean {
     return filters.length === 0 && sortColumns.length === 0 && !this.rowidFastPathDisabled;
@@ -787,8 +787,8 @@ export class TableBody {
    * Cache keying: the fast path keys by each row's own `__rowid__` (which
    * the density valve has just proven equals the positional index); the
    * OFFSET path keys by `blockStart + i` — valid because `buildRowQuery`
-   * always emits a fully deterministic ORDER BY (see the tiebreaker note
-   * there), so the block window is stable across queries.
+   * (rowQuery.ts) always emits a fully deterministic ORDER BY (see the
+   * tiebreaker note there), so the block window is stable across queries.
    */
   private async fetchBlock(
     blockStart: number,
@@ -808,15 +808,16 @@ export class TableBody {
       const sortColumns = this.state.sortColumns.get();
       const filters = this.state.filters.get();
       const usedFastPath = this.useRowidFastPath(sortColumns, filters);
-      const sql = this.buildRowQuery(
+      const sql = buildRowQuery({
         tableName,
-        visibleColumns,
+        columns: visibleColumns,
         sortColumns,
         filters,
-        blockStart,
+        offset: blockStart,
         limit,
-        this.state.schema.get(),
-      );
+        schema: this.state.schema.get(),
+        rowidFastPath: usedFastPath,
+      });
 
       // Scroll SQL bypasses the SQL-keyed QueryCache: `rowDataCache` is the
       // authoritative row store, invalidated in lockstep with `epoch` — a
@@ -958,110 +959,6 @@ export class TableBody {
       }
       total -= blockRowCounts.get(blockStart) ?? 0;
     }
-  }
-
-  /**
-   * Build SQL query for fetching rows.
-   *
-   * Always prepends the synthetic `__rowid__` column to the projection so
-   * annotations (which key on rowId) can be resolved per visible-index
-   * without a second query. The column is kept hidden in the grid via
-   * `system: true` on its schema entry; the extra value adds negligible
-   * overhead and lands in `rowDataCache` as `row['__rowid__']`.
-   */
-  private buildRowQuery(
-    tableName: string,
-    columns: string[],
-    sortColumns: SortColumn[],
-    filters: Filter[],
-    offset: number,
-    limit: number,
-    schema?: ColumnSchema[],
-  ): string {
-    // Build schema lookup for type-aware column selection
-    const schemaMap = new Map<string, ColumnSchema>();
-    if (schema) {
-      for (const col of schema) schemaMap.set(col.name, col);
-    }
-
-    // Quote column names; cast INTERVAL columns to VARCHAR so DuckDB
-    // returns strings instead of Arrow MonthDayNano objects. Also drop any
-    // accidental __rowid__ appearance in `columns` — we always prepend it
-    // ourselves below (keeps the projection deterministic).
-    const parts: string[] = [quoteIdentifier(ROWID_COLUMN)];
-    for (const col of columns) {
-      if (col === ROWID_COLUMN) continue;
-      const quoted = quoteIdentifier(col);
-      if (schemaMap.get(col)?.type === 'interval') {
-        parts.push(`CAST(${quoted} AS VARCHAR) AS ${quoted}`);
-      } else {
-        parts.push(quoted);
-      }
-    }
-    const columnList = parts.join(', ');
-
-    let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
-
-    // FAST PATH — no filters, no user sort: fetch the window by a range
-    // predicate on the dense synthetic __rowid__ instead of LIMIT/OFFSET.
-    //
-    // Premise (verified at the call sites cited): every loader materializes
-    // __rowid__ densely as `row_number() OVER () - 1` (0..N-1 — parquet.ts,
-    // csv.ts, json.ts), and the derived-column VIEW preserves exactly the
-    // base rows (`base t LEFT JOIN helper h ON t.__rowid__ = h.__rowid__`,
-    // DerivedColumnManager). With no WHERE and no user sort, positional
-    // index ≡ __rowid__, so the range predicate returns exactly the OFFSET
-    // window — but as a zonemap-prunable scan (~ms at any scroll depth)
-    // instead of a top-(offset+limit) sort that grows with depth. The code
-    // that could break the premise is the table-rebuild path in
-    // worker/loaders/common.ts; fetchBlock's density valve turns any
-    // violation into slow-but-correct OFFSET pagination, never wrong rows.
-    //
-    // Sorted/filtered fetches keep LIMIT/OFFSET below — there is no closed
-    // form for "position k" under an arbitrary ORDER BY/WHERE. They still
-    // gain block dedupe, cancellation, priority, and the larger row cache.
-    // Keyset pagination for sorted mode is deliberate future work.
-    if (this.useRowidFastPath(sortColumns, filters)) {
-      sql += ` WHERE ${quoteIdentifier(ROWID_COLUMN)} >= ${offset}`;
-      sql += ` AND ${quoteIdentifier(ROWID_COLUMN)} < ${offset + limit}`;
-      // Scan order is not guaranteed, even for a single index range.
-      sql += ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)} ASC`;
-      sql += ` LIMIT ${limit}`; // defensive cap only
-      return sql;
-    }
-
-    // Add WHERE clause if filters are active
-    if (filters.length > 0) {
-      const whereClause = filtersToWhereClause(filters);
-      if (whereClause) {
-        sql += ` WHERE ${whereClause}`;
-      }
-    }
-
-    // Always emit ORDER BY with __rowid__ as the final tiebreaker. DuckDB's
-    // ORDER BY is non-deterministic for ties, so without a tiebreaker two
-    // paginated queries over different LIMIT/OFFSET windows (which the
-    // scroll path issues per aligned block as the viewport moves, see
-    // `ensureFetched` + `fetchBlock`) can permute ties differently and
-    // return *different* rows for the same logical positions — duplicating
-    // some rows across blocks and dropping others. The cache write at
-    // `rowDataCache.set(blockStart + i, row)` then holds shuffled data and
-    // the user sees row contents change while scrolling. The
-    // empty-sort branch also emits `ORDER BY __rowid__` so filter+scroll
-    // (no user sort) is deterministic against any DuckDB parallel-scan
-    // permutation. Skipped if the user already sorts on __rowid__ (they
-    // own the order and don't want a redundant tail clause).
-    const orderParts = sortColumns.map(
-      (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
-    );
-    if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
-      orderParts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
-    }
-    sql += ` ORDER BY ${orderParts.join(', ')}`;
-
-    sql += ` LIMIT ${limit} OFFSET ${offset}`;
-
-    return sql;
   }
 
   // =========================================

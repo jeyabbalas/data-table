@@ -310,7 +310,9 @@ export class CellRenderer {
     let formatted = iso.replace('T', ' ').replace('Z', '');
     // Remove trailing zeros from milliseconds
     // ".120" → ".12", ".100" → ".1", ".000" → ""
-    formatted = formatted.replace(/(\.\d*)0+$/, '$1').replace(/\.$/, '');
+    // The lazy `\d*?` lets `0+` take every trailing zero; a greedy `\d*`
+    // would give back only one (".000" → ".00").
+    formatted = formatted.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
     return formatted;
   }
 

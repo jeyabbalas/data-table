@@ -348,7 +348,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:928-961`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:929-962`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -357,19 +357,26 @@ its own TTL/LRU would be a second staleness domain.
 The SQL itself has two shapes. With no filters and no user sort, a block
 is fetched by a range predicate on the dense synthetic row id —
 `WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
-([`src/table/TableBody.ts:1024-1030`](../../src/table/TableBody.ts)) —
+([`src/table/rowQuery.ts:78-84`](../../src/table/rowQuery.ts)) —
 which DuckDB prunes via zonemaps, so a block fetch costs about the same
 at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
 loader materializes `__rowid__` densely, and a runtime density valve
 verifies each fast-path result: any violation permanently switches the
 instance to OFFSET pagination with a single `console.warn` — slow but
-correct, never wrong rows. Sorted or filtered fetches keep
-`ORDER BY … LIMIT n OFFSET k`, always appending `"__rowid__" ASC` as a
-tiebreaker
-([`src/table/TableBody.ts:1054-1062`](../../src/table/TableBody.ts)) —
-DuckDB's `ORDER BY` is non-deterministic for ties, and two block queries
-that permute ties differently would duplicate some rows across block
-boundaries and drop others.
+correct, never wrong rows.
+
+Sorted or filtered fetches page with `ORDER BY … LIMIT n OFFSET k` in two
+phases
+([`src/table/rowQuery.ts:99-125`](../../src/table/rowQuery.ts)). A
+subquery sorts only the sort keys and `"__rowid__"` to find the block's
+row ids, and the outer query reads the visible columns for those ids,
+`WHERE "__rowid__" IN (…)`, and restores the order. Paging the full
+projection in one query makes DuckDB's top-N hold `k + n` complete rows,
+which ran a mid-table block of a sorted 5M-row, 40-column table out of
+WASM memory. Both `ORDER BY`s end with `"__rowid__" ASC` as a
+tiebreaker: DuckDB's `ORDER BY` is non-deterministic for ties, and two
+block queries that permute ties differently would duplicate some rows
+across block boundaries and drop others.
 
 Unlike `bufferRows` and `maxVirtualHeight`, the pipeline knobs are
 public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by
@@ -396,7 +403,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1112`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1009`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was

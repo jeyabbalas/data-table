@@ -41,6 +41,9 @@ import { ROWID_COLUMN } from './types';
 import { captureSnapshot, applySnapshot, derivedColumnsEqual, snapshotsEqual } from './UndoManager';
 import type { StateSnapshot, UndoManager } from './UndoManager';
 
+/** Shared empty "after" list for clearFilters' removal notification. */
+const EMPTY_FILTERS: readonly Filter[] = [];
+
 /**
  * Options for {@link StateActions.getColumnValues}.
  */
@@ -123,6 +126,9 @@ export class StateActions {
     | undefined;
   private initialSnapshot: StateSnapshot | null = null;
   private derivedManager: DerivedColumnManager | null = null;
+  /** Derived-column changes awaiting DuckDB; see {@link changeRelation}. */
+  private relationChanges = 0;
+  private onRelationSettledCallback?: (() => void) | undefined;
   private destroyed = false;
 
   constructor(
@@ -171,6 +177,40 @@ export class StateActions {
     }
   }
 
+  /**
+   * Whether a derived-column change is waiting on DuckDB. Until it settles,
+   * `state.tableName` and `state.schema` may name a VIEW or a column that
+   * DuckDB has already dropped or replaced.
+   *
+   * @internal
+   */
+  isRelationChanging(): boolean {
+    return this.relationChanges > 0;
+  }
+
+  /**
+   * Set a callback invoked when the last derived-column change in flight
+   * settles, whether it succeeded or failed. It runs before the state update
+   * that follows a successful change.
+   *
+   * @internal
+   */
+  setOnRelationSettled(callback: () => void): void {
+    this.throwIfDestroyed('setOnRelationSettled');
+    this.onRelationSettledCallback = callback;
+  }
+
+  /** Run a DuckDB change to the derived-column relation, counted for {@link isRelationChanging}. */
+  private async changeRelation<T>(change: () => Promise<T>): Promise<T> {
+    this.relationChanges++;
+    try {
+      return await change();
+    } finally {
+      this.relationChanges--;
+      if (this.relationChanges === 0) this.onRelationSettledCallback?.();
+    }
+  }
+
   // =========================================
   // Undo/Redo
   // =========================================
@@ -189,9 +229,35 @@ export class StateActions {
   }
 
   /**
-   * Set a callback invoked for each column whose filter is removed by undo/redo.
-   * Use this to clear visualization interaction state (brush, selection) that
-   * lives outside the signal-driven state.
+   * Set a callback invoked once for each column that loses its filter.
+   * Use this to clear state that tracks a filter but does not live in the
+   * signals — a chart's brush or bar selection, most obviously.
+   *
+   * There is one slot, and a table made by `createDataTable` fills it to
+   * clear its charts' brushes and selections. Calling this on
+   * `table.actions` replaces that handler, so a brush can outlive its
+   * filter. To react to removed filters from a host app, listen to the
+   * `filterChange` event instead.
+   *
+   * Fires for every path that can drop a filter: {@link StateActions.removeFilter}
+   * (and so the filter chips, the filter panel, and a chart clearing its own
+   * selection), {@link StateActions.clearFilters},
+   * {@link StateActions.loadFilterPreset} when the preset does not carry a
+   * column forward, {@link StateActions.undo} / {@link StateActions.redo},
+   * {@link StateActions.resetToInitial}, and the derived-column paths that
+   * retype or delete a filtered column.
+   *
+   * It does *not* fire when a filter is merely replaced —
+   * {@link StateActions.addFilter} over an existing column, or a preset that
+   * gives that column a different filter. The column still has a filter, so
+   * state keyed to it is still live.
+   *
+   * Called synchronously, after the signals have settled: reading
+   * `state.filters` from inside the callback shows the post-removal list.
+   * Removing a filter from inside the callback is safe — removals are
+   * idempotent, so a callback that ends up asking for the same removal again
+   * (a chart clearing its brush routes back through `removeFilter`) is a
+   * no-op rather than a second undo entry and a second filter cycle.
    */
   setOnFilterRemove(callback: (column: string) => void): void {
     this.throwIfDestroyed('setOnFilterRemove');
@@ -232,8 +298,15 @@ export class StateActions {
     });
   }
 
-  /** Notify callback for each column that lost its filter between two states */
-  private notifyRemovedFilters(before: Filter[], after: Filter[]): void {
+  /**
+   * Notify callback for each column that lost its filter between two states.
+   *
+   * Compares by column, not by filter identity: a column that swapped one
+   * filter for another has not lost anything a consumer keys off. Both
+   * arguments are snapshots taken by the caller, so a callback that mutates
+   * `state.filters` cannot make this loop skip or repeat a column.
+   */
+  private notifyRemovedFilters(before: readonly Filter[], after: readonly Filter[]): void {
     if (!this.onFilterRemoveCallback) return;
     const afterColumns = new Set(after.map((f) => f.column));
     for (const f of before) {
@@ -268,7 +341,7 @@ export class StateActions {
       // Reconcile DuckDB state BEFORE applying snapshot signals.
       // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
       if (derivedChanged) {
-        await this.reconcileDerivedColumns(snapshot);
+        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
       }
       this.throwIfDestroyed('undo');
 
@@ -316,7 +389,7 @@ export class StateActions {
       const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
 
       if (derivedChanged) {
-        await this.reconcileDerivedColumns(snapshot);
+        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
       }
       this.throwIfDestroyed('redo');
 
@@ -456,9 +529,10 @@ export class StateActions {
       const prevFilters = this.state.filters.get();
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
-      if (this.derivedManager) {
+      const manager = this.derivedManager;
+      if (manager) {
         try {
-          await this.derivedManager.destroy();
+          await this.changeRelation(() => manager.destroy());
         } catch {
           /* best-effort cleanup */
         }
@@ -562,7 +636,9 @@ export class StateActions {
         if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
           try {
             const manager = this.ensureDerivedManager();
-            const restoredSchemas = await manager.restoreColumns(this.state.derivedColumns.get());
+            const restoredSchemas = await this.changeRelation(() =>
+              manager.restoreColumns(this.state.derivedColumns.get()),
+            );
             this.throwIfDestroyed('loadData');
 
             if (restoredSchemas.length > 0) {
@@ -630,36 +706,58 @@ export class StateActions {
   /**
    * Remove filter(s) for a column
    *
+   * Idempotent: asking to remove a filter that is not there changes nothing,
+   * pushes no undo entry, and notifies no subscriber. That matters beyond
+   * tidiness — a chart clearing its brush routes back through here while the
+   * removal that cleared it is still unwinding, and without the guard every
+   * chip click would cost a second filter cycle and leave a dead undo step.
+   *
    * @param column - Column name
    * @param type - Optional filter type to remove (if not specified, removes all filters for column)
    */
   removeFilter(column: string, type?: FilterType): void {
     this.throwIfDestroyed('removeFilter');
-    this.captureForUndo();
-    const current = this.state.filters.get();
-    const updated = current.filter((f) =>
+    const before = this.state.filters.get();
+    const after = before.filter((f) =>
       type ? !(f.column === column && f.type === type) : f.column !== column,
     );
-    this.state.filters.set(updated);
+    if (after.length === before.length) return;
+    this.captureForUndo();
+    this.state.filters.set(after);
+    this.notifyRemovedFilters(before, after);
   }
 
   /**
    * Clear all filters
+   *
+   * The `filteredRows` reset is unconditional — it repairs the count whether
+   * or not there was anything to clear — but the filter list is only written
+   * when it actually changes, so this is idempotent in the same way
+   * {@link StateActions.removeFilter} is.
    */
   clearFilters(): void {
     this.throwIfDestroyed('clearFilters');
-    this.captureForUndo();
-    this.state.filters.set([]);
+    const before = this.state.filters.get();
+    if (before.length > 0) {
+      this.captureForUndo();
+      this.state.filters.set([]);
+    }
     this.state.filteredRows.set(this.state.totalRows.get());
+    this.notifyRemovedFilters(before, EMPTY_FILTERS);
   }
 
   /**
    * Load a filter preset: replace all filters (and optionally sort) in one
    * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
    * entire pre-load state atomically.
+   *
+   * Columns the preset does not carry forward have lost their filter, so they
+   * are notified — outside the suppression window, since the callback may
+   * legitimately want to record an undo entry of its own.
    */
   loadFilterPreset(filters: Filter[], sortColumns?: SortColumn[]): void {
     this.throwIfDestroyed('loadFilterPreset');
+    const before = this.state.filters.get();
     this.captureForUndo();
     this.suppressUndoCapture = true;
     try {
@@ -672,6 +770,7 @@ export class StateActions {
     } finally {
       this.suppressUndoCapture = false;
     }
+    this.notifyRemovedFilters(before, this.state.filters.get());
   }
 
   // =========================================
@@ -1328,7 +1427,7 @@ export class StateActions {
 
     try {
       const manager = this.ensureDerivedManager();
-      const info = await manager.addColumn(def);
+      const info = await this.changeRelation(() => manager.addColumn(def));
 
       // Drop the result if the table was destroyed during the await — do not
       // touch state and do not push to the undo stack.
@@ -1418,7 +1517,7 @@ export class StateActions {
 
     try {
       const manager = this.ensureDerivedManager();
-      const info = await manager.updateColumn(oldName, def);
+      const info = await this.changeRelation(() => manager.updateColumn(oldName, def));
 
       // Drop the result if the table was destroyed during the await.
       if (this.destroyed) {
@@ -1601,7 +1700,7 @@ export class StateActions {
     let info: DerivedColumnInfo;
     try {
       const manager = this.ensureDerivedManager();
-      info = await manager.replaceColumn(name, newDef);
+      info = await this.changeRelation(() => manager.replaceColumn(name, newDef));
     } catch (err) {
       const typedError =
         err instanceof DerivedColumnError
@@ -1677,7 +1776,7 @@ export class StateActions {
       this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
     const manager = this.ensureDerivedManager();
-    await manager.removeColumn(name);
+    await this.changeRelation(() => manager.removeColumn(name));
     this.throwIfDestroyed('removeDerivedColumn');
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation

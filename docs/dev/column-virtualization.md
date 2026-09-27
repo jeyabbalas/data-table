@@ -44,8 +44,9 @@ summing `columnWidths.get(c) ?? 150` in seven places. That fixes pinned offsets 
 column is hidden or resized, and the width of a column whose stored width is not a finite,
 non-negative number.
 
-PRs, in order: border-box geometry; cells by column name; pinned columns first; the layout model.
-Each has tests that fail on the old code, a changeset and docs.
+PRs, in order: border-box geometry (#125); cells by column name (#126); pinned columns first (#127);
+the layout model (#128, stacked on #126). Each has tests that fail on the old code, a changeset and
+docs, and was reviewed by a separate agent before merging.
 
 ## Findings log
 
@@ -79,3 +80,16 @@ Each has tests that fail on the old code, a changeset and docs.
 - **`--dt-col-width` sizes nothing but loading placeholders.** Every header and cell gets an inline
   width from `columnWidths` (150 px default), which wins over the variable. The theming guide and the
   state-model page said it was the default column width.
+- **2026-09-27, Chrome, the four 4a PRs merged locally, page without a reset.** Every bug above is
+  gone: columns and cells take 150 px and rows 32 px; hiding the first pinned column closes the block
+  up; resizing a pinned column moves the next one and the divider; hide → pin → show keeps the shown
+  column after the pinned block with `aria-colindex` ascending; a real 40 px resize drag gives 190;
+  at 500 px headers sit over their cells; an empty result scrolls exactly as far as the header. On
+  the 50K × 1,000 Parquet file, `End` lands on `col_999` fully in view, and two pinned columns stay
+  side by side 40,000 px into the table. A mistyped name passed to `toggleColumnPin` was spliced into
+  `columnOrder` as a phantom column; fixed in #127.
+- **For 4b/4c, from the reviews.** Body cell ids are keyed by the column's layout index (#128), so
+  `aria-activedescendant` stays right once a row holds a window of columns; a 4b test should assert
+  that it always names the ringed cell. `TableBody.renderVisibleRows` still rebuilds any row whose
+  cell count differs from `visibleColumns.length`, which a windowed row always does. `ColumnReorder`
+  takes the drop index and the new order from the header DOM, which will hold only mounted headers.

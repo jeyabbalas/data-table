@@ -403,6 +403,25 @@ test('a column in use stays mounted, cells and all, while the wheel takes it awa
     await wheelBodyCorner(page, dx);
     expect((await mountedWithCells(page, column)).mounted, column).toBe(false);
   }
+
+  // A panel switched to another column holds that one instead, and gives
+  // focus back to the button that switched it.
+  await wheelIntoView(page, 'c202');
+  await header('c201').locator('.dt-col-filter-btn').click();
+  await header('c202').locator('.dt-col-filter-btn').click();
+  // The click leaves focus on c202's button, whose focus would hold the
+  // column by itself; into the panel, so only the panel holds it.
+  await page.locator(`#${HOST_ID} .dt-filter-panel-close`).focus();
+  await wheelBodyCorner(page, 8_000);
+  await expectHeld('c202');
+  expect((await mountedWithCells(page, 'c201')).mounted).toBe(false);
+  await page.keyboard.press('Escape');
+  await settle(page);
+  expect(
+    await page.evaluate(() =>
+      document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+    ),
+  ).toBe('c202');
 });
 
 test('a hide, a show and a move at 1,000 columns keep every other header and the body, and fetch no rows', async ({

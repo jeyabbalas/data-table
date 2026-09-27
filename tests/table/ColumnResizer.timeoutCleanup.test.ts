@@ -60,6 +60,20 @@ describe('ColumnResizer — setTimeout cleanup on detach (Phase 2)', () => {
     removeSpy.mockRestore();
   });
 
+  it('takes the resetting class off when detach() comes mid-animation', () => {
+    const cell = document.createElement('div');
+    const resizer = new ColumnResizer(header, onResize, onReset, () => [cell]);
+    header
+      .querySelector('.dt-col-resize-handle')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(header.classList.contains('dt-col-resetting')).toBe(true);
+    expect(cell.classList.contains('dt-col-resetting')).toBe(true);
+
+    resizer.detach();
+    expect(header.classList.contains('dt-col-resetting')).toBe(false);
+    expect(cell.classList.contains('dt-col-resetting')).toBe(false);
+  });
+
   it('setTimeout fires normally if detach() is not called', () => {
     const resizer = new ColumnResizer(header, onResize, onReset);
 

@@ -8,9 +8,10 @@
  * - Pin, hide, filter and sort buttons, with multi-sort badges
  * - A drag handle and a resize handle
  *
- * The buttons and the two handles are the header's controls, and can be left
- * out: a header without them is a shell, which is what `TableContainer` keeps
- * for a column far from the view (see {@link ColumnHeader.setControlsMounted}).
+ * The pin, hide, filter and sort buttons and the two handles are the header's
+ * controls, and can be left out: a header without them is a shell, which is
+ * what `TableContainer` keeps for a column far from the view (see
+ * {@link ColumnHeader.setControlsMounted}). A derived column's f(x) icon stays.
  *
  * Supports click to sort and Shift+click for multi-column sort.
  */
@@ -377,14 +378,14 @@ export class ColumnHeader {
           this.releaseResizeHold = this.options.holdColumn?.(this.column.name) ?? null;
         },
         onDragEnd: () => {
-          this.releaseResizeHold?.();
-          this.releaseResizeHold = null;
           this.actions.endColumnWidthChange();
           // Announced once at drag end, not on every mousemove — a live
           // region fired at pointer rate is noise, not information.
           this.options.announce?.(
             this.messages.a11y.columnWidthAnnouncement(this.column.name, this.getWidth()),
           );
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = null;
         },
         messages: this.messages,
       },
@@ -1022,8 +1023,8 @@ export class ColumnHeader {
    * The keyboard entry point for `Home` / `End` in column layout mode, and the
    * counterpart to {@link ColumnHeader.activateSort} for sizing.
    * `KeyboardNavigator` goes through here rather than calling
-   * `actions.setColumnWidth` directly so the clamp stays in exactly one place
-   * — the mouse drag applies the same bounds from the same resizer instance.
+   * `actions.setColumnWidth` directly so the clamp stays in one place: the
+   * bounds are the ones the resize handle drags within.
    *
    * @param px - Desired width in pixels, before clamping.
    * @returns The width actually applied.

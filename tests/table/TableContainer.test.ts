@@ -638,21 +638,54 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
-    it('keeps the column an open filter panel belongs to mounted, until the panel closes', () => {
+    it('keeps the column an open filter panel belongs to mounted, until the panel closes', async () => {
       const { tableContainer, root, body } = wideTable();
       const mounted = () => tableContainer.getColumnWindow().mountedColumns.get().join(' ');
+      const filterButton = (column: string) =>
+        root.querySelector<HTMLElement>(
+          `.dt-col-header[data-column="${column}"] .dt-col-filter-btn`,
+        )!;
       body.dispatchEvent(new Event('scroll'));
       expect(mounted()).toBe('a b c d e f');
 
-      root
-        .querySelector<HTMLElement>('.dt-col-header[data-column="b"] .dt-col-filter-btn')!
-        .click();
+      filterButton('b').click();
       body.scrollLeft = 700;
       body.dispatchEvent(new Event('scroll'));
       expect(mounted()).toBe('b e f g h i j');
 
+      // Closing gives focus back to the button, whose own focus holds the
+      // column; the panel's hold is gone once focus moves on.
       tableContainer.getFilterPanel()!.close();
+      expect(document.activeElement).toBe(filterButton('b'));
+      tableContainer.getGridElement().focus();
+      await Promise.resolve();
       expect(mounted()).toBe('e f g h i j');
+
+      tableContainer.destroy();
+    });
+
+    it('moves the hold, and where focus goes back to, when the panel switches columns', async () => {
+      const { tableContainer, root, body } = wideTable();
+      const mounted = () => tableContainer.getColumnWindow().mountedColumns.get().join(' ');
+      const filterButton = (column: string) =>
+        root.querySelector<HTMLElement>(
+          `.dt-col-header[data-column="${column}"] .dt-col-filter-btn`,
+        )!;
+      body.dispatchEvent(new Event('scroll'));
+
+      // Clicked with focus on each, as Chrome gives a clicked button focus.
+      filterButton('b').focus();
+      filterButton('b').click();
+      filterButton('c').focus();
+      filterButton('c').click();
+      expect(tableContainer.getFilterPanel()!.getCurrentColumn()).toBe('c');
+      body.scrollLeft = 700;
+      body.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+      expect(mounted()).toBe('c e f g h i j');
+
+      tableContainer.getFilterPanel()!.close();
+      expect(document.activeElement).toBe(filterButton('c'));
 
       tableContainer.destroy();
     });

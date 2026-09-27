@@ -167,6 +167,31 @@ describe('a header made without its controls', () => {
     expect(state.columnWidths.get().has('price')).toBe(false);
   });
 
+  it('leaves no width-reset animation behind when its controls come down mid-reset', () => {
+    const root = document.createElement('div');
+    root.className = 'dt-root';
+    const row = document.createElement('div');
+    row.className = 'dt-row';
+    const cell = document.createElement('div');
+    cell.className = 'dt-cell';
+    cell.setAttribute('data-column', 'price');
+    row.appendChild(cell);
+    document.body.appendChild(root);
+    const h = shell();
+    root.append(h.getElement(), row);
+    h.setControlsMounted(true);
+    h.getElement()
+      .querySelector('.dt-col-resize-handle')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(cell.classList.contains('dt-col-resetting')).toBe(true);
+
+    // Its column scrolled away before the 250 ms animation ended. The header
+    // stays, and the body reuses the cell for another column.
+    h.setControlsMounted(false);
+    expect(h.getElement().classList.contains('dt-col-resetting')).toBe(false);
+    expect(cell.classList.contains('dt-col-resetting')).toBe(false);
+  });
+
   it('answers the keyboard width gestures without a resize handle', () => {
     const h = shell();
     expect(h.getWidthBounds()).toEqual({ min: 50, max: 500 });

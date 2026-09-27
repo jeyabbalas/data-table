@@ -148,6 +148,11 @@ export interface TableProbes {
    * header, horizontally: the largest gap, in px, and the column it is in.
    */
   cellHeaderMisalignment(): { px: number; column: string | null };
+  /**
+   * How many columns each body row fetch since the last call selected,
+   * `__rowid__` left out, in the order they were sent.
+   */
+  rowFetchWidths(): number[];
   panelLog: { event: 'construct' | 'destroy'; column: string }[];
 }
 
@@ -252,6 +257,16 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
       ...(statsPanelRegistry ? { statsPanelRegistry } : {}),
     });
     w.__dt = table;
+
+    // Every body row fetch, by the columns it selects. They are the queries
+    // that select `__rowid__` first.
+    const rowFetches: number[] = [];
+    const query = table.bridge.query.bind(table.bridge);
+    table.bridge.query = ((sql: string, ...rest: unknown[]) => {
+      const list = /^SELECT "__rowid__"(.*?) FROM /.exec(sql)?.[1];
+      if (list !== undefined) rowFetches.push(list === '' ? 0 : list.split(', ').length - 1);
+      return (query as (...a: unknown[]) => unknown)(sql, ...rest);
+    }) as typeof table.bridge.query;
 
     const q = (selector: string) => host.querySelector<HTMLElement>(selector);
     const headerOf = (column: string) =>
@@ -510,6 +525,9 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
           }
         }
         return wrong;
+      },
+      rowFetchWidths() {
+        return rowFetches.splice(0);
       },
       cellHeaderMisalignment() {
         let worst = { px: 0, column: null as string | null };

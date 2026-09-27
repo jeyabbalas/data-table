@@ -89,7 +89,10 @@ test('body rows hold only the mounted columns through a sweep of 1,000 columns, 
   await probe(page, 'watchWindow');
   for (const dx of [40_000, -25_000, 150_000, -60_000]) {
     await wheelBy(page, dx);
-    expect(await probe(page, 'wrongCellsInView'), `after a wheel of ${dx}px`).toEqual([]);
+    // Rows fetched without the columns now in view get them a moment later.
+    await expect
+      .poll(() => probe(page, 'wrongCellsInView'), { message: `after a wheel of ${dx}px` })
+      .toEqual([]);
     const misaligned = await probe(page, 'cellHeaderMisalignment');
     expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
   }
@@ -156,4 +159,22 @@ test('undoing a column move keeps focus in the grid when a clicked cell had it',
   await expect
     .poll(async () => (await probe(page, 'cursor')).focused)
     .toEqual({ row: 2, column: 'c05' });
+});
+
+test('row fetches select the columns near the view, not all 1,000', async ({ page }) => {
+  await mountTable(page, { columns: 1000, rows: 400 });
+  const atLoad = await probe(page, 'rowFetchWidths');
+  expect(atLoad.length).toBeGreaterThan(0);
+  // The eight columns in view and a viewport to their right, widened by as
+  // many again and rounded out to 16: 32.
+  expect(Math.max(...atLoad)).toBe(32);
+
+  // Far along, down some rows, and back: every fetch stays near the view.
+  await wheelBy(page, 60_000);
+  await page.mouse.wheel(0, 6_000);
+  await wheelBy(page, -30_000);
+  await expect.poll(() => probe(page, 'wrongCellsInView')).toEqual([]);
+  const later = await probe(page, 'rowFetchWidths');
+  expect(later.length).toBeGreaterThan(0);
+  expect(Math.max(...later)).toBeLessThanOrEqual(96);
 });

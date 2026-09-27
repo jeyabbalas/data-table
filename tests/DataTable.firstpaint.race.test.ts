@@ -16,6 +16,7 @@ import { createDataTable, type DataTable } from '@/index';
 import { DestroyedError } from '@/core/errors';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { SessionStore } from '@/persistence/SessionStore';
+import { SNAPSHOT_VERSION } from '@/persistence/types';
 
 // jsdom returns 0 for clientHeight (no layout engine), which short-circuits
 // VirtualScroller.getVisibleRange to {start:0,end:0,offsetY:0} and the body
@@ -199,6 +200,68 @@ describe('createDataTable awaits first body paint', () => {
       .join('|');
     expect(cellText).toContain('sentinel');
 
+    await table.destroy();
+  });
+});
+
+describe('table.loadData awaits the rows a restored session shows', () => {
+  it('waits for the refetch a restored sort makes, not only the first fetch', async () => {
+    const bridge = makePopulatedBridge();
+    const sorted = deferred<Array<{ __rowid__: number; a: string }>>();
+    // The first fetch goes by `__rowid__`; the sort orders by the column.
+    (bridge.query as ReturnType<typeof vi.fn>).mockImplementation((sql: string) =>
+      /ORDER BY "a" DESC/.test(sql)
+        ? sorted.promise
+        : Promise.resolve([
+            { __rowid__: 0, a: 'first-1' },
+            { __rowid__: 1, a: 'first-2' },
+            { __rowid__: 2, a: 'first-3' },
+          ]),
+    );
+    const sessionStore = makeSessionStore();
+    (sessionStore.load as ReturnType<typeof vi.fn>).mockResolvedValue({
+      version: SNAPSHOT_VERSION,
+      timestamp: 0,
+      tableName: 'data',
+      filters: [],
+      sortColumns: [{ column: 'a', direction: 'desc' }],
+      visibleColumns: ['a'],
+      columnOrder: ['a'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const table = await createDataTable({
+      container,
+      bridge,
+      persistence: { sessionStore },
+      ...baseOpts,
+    });
+    let loaded = false;
+    const loading = table
+      .loadData(new File(['a\n1\n2\n3'], 'x.csv', { type: 'text/csv' }))
+      .then(() => {
+        loaded = true;
+      });
+    // Long enough for the load to finish if only its first fetch counted.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(table.state.sortColumns.get()).toEqual([{ column: 'a', direction: 'desc' }]);
+    expect(loaded).toBe(false);
+
+    sorted.resolve([
+      { __rowid__: 2, a: 'sorted-3' },
+      { __rowid__: 1, a: 'sorted-2' },
+      { __rowid__: 0, a: 'sorted-1' },
+    ]);
+    await loading;
+    const cellText = Array.from(container.querySelectorAll('.dt-cell'))
+      .map((c) => c.textContent ?? '')
+      .join('|');
+    expect(cellText).toContain('sorted-3');
     await table.destroy();
   });
 });

@@ -397,6 +397,13 @@ describe('StateActions', () => {
       expect(state.visibleColumns.get()).toEqual(['email', 'age', 'name', 'id']);
     });
 
+    it('setColumnOrder() counts a name given twice once, at its first place', () => {
+      actions.setColumnOrder(['email', 'age', 'email', 'name', 'id', 'age']);
+
+      expect(state.columnOrder.get()).toEqual(['email', 'age', 'name', 'id']);
+      expect(state.visibleColumns.get()).toEqual(['email', 'age', 'name', 'id']);
+    });
+
     it('setColumnOrder() should maintain hidden columns as hidden', () => {
       state.visibleColumns.set(['id', 'age']);
 

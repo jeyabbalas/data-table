@@ -1190,7 +1190,8 @@ export class TableContainer {
     const byColumn = new Map<string, ColumnHeader>();
     for (const colName of visibleColumns) {
       const colSchema = byName.get(colName);
-      // A name listed twice gets one header, as it gets one place in the layout.
+      // A name listed twice gets one header. The column actions list each
+      // column once; `setColumnOrder` drops a repeat.
       if (!colSchema || byColumn.has(colName)) continue;
       // aria-colindex is a position in the *presented* table, and ARIA
       // requires the values to ascend in DOM order within a row — a MUST,
@@ -1258,15 +1259,24 @@ export class TableContainer {
 
   /**
    * Put the header elements in `row` in the order given, working out from one
-   * that stays where it is: the header holding focus, or else the first one
-   * already in the row. A header already beside its neighbour is not touched,
-   * so a move moves the headers it has to and a hide moves none. The one
-   * holding focus never moves: moving an element blurs it. The same as body
-   * rows do with their cells.
+   * that stays where it is: the header holding focus, or else one already
+   * after the header it follows now, or else the first one in the row. A
+   * header already beside its neighbour is not touched, so a hide moves
+   * none, and a move of one column moves that one. The one holding focus
+   * never moves: moving an element blurs it. The same as body rows do with
+   * their cells.
    */
   private orderHeaderRow(row: HTMLElement, elements: HTMLElement[]): void {
     const focused = this.activeElementInRoot();
     let anchor = focused ? elements.findIndex((el) => el.contains(focused)) : -1;
+    // Not the first header in the row: when a column moves to the front,
+    // that is the column that moved, and every header it passed would move
+    // around it.
+    if (anchor < 0) {
+      anchor = elements.findIndex(
+        (el, i) => i > 0 && el.parentNode === row && el.previousSibling === elements[i - 1],
+      );
+    }
     if (anchor < 0) anchor = elements.findIndex((el) => el.parentNode === row);
     if (anchor < 0) {
       row.append(...elements);
@@ -1373,10 +1383,11 @@ export class TableContainer {
     const savedPosition = this.columnWindow.savePosition();
 
     // Remember the *specific* element focus sits on before render destroys DOM
-    // elements. Actions like pin/hide remove the focused button, dropping focus
-    // to document.body — the rAF below puts it back on the grid. Tracking the
-    // element rather than a boolean is what distinguishes that from "the user
-    // tabbed away while we were rendering", which must not be reeled back in.
+    // elements. Hiding a column with its own hide button destroys its header
+    // and the focused button with it, dropping focus to document.body — the
+    // rAF below puts it back on the grid. Tracking the element rather than a
+    // boolean is what distinguishes that from "the user tabbed away while we
+    // were rendering", which must not be reeled back in.
     const focusedBefore = this.activeElementInRoot();
     const focusedInTable =
       focusedBefore instanceof HTMLElement && this.element.contains(focusedBefore)
@@ -1589,15 +1600,15 @@ export class TableContainer {
     }
     this.previousVisibleOrder = visibleColumns;
 
-    // Put the scroll positions back now: emptying the scrollers clamped them
-    // to 0 as soon as the rebuild read layout, and the new body has its full
-    // size again by here.
+    // Put the scroll positions back now: a body built anew empties the body
+    // scroller, which clamps it to 0 as soon as anything reads layout, and
+    // the new body has its full size again by here.
     this.columnWindow.restorePosition(savedPosition);
 
-    // render() rebuilt every ColumnHeader, so the cursor's target element is
-    // gone. Re-point it (to the column in its place if its column
-    // disappeared) before anything reads aria-activedescendant. After the
-    // scroll restore: where the cursor goes can depend on what is in view.
+    // The cursor's column may be gone, or its header rebuilt or given a new
+    // id. Re-point it (to the column in its place if its column disappeared)
+    // before anything reads aria-activedescendant. After the scroll restore:
+    // where the cursor goes can depend on what is in view.
     this.reconcileCursorColumn(visibleColumns, previousOrder);
     this.syncActiveDescendant();
     this.updateHeaderCursorStyles();
@@ -1948,7 +1959,9 @@ export class TableContainer {
   }
 
   /**
-   * Resolves once the surviving `TableBody`'s first paint has settled.
+   * Resolves once the surviving `TableBody` has painted the rows in view:
+   * its first fetch, and the refetch a restored session's sort or filters
+   * cause.
    *
    * Used by `loadDataImpl` so `await createDataTable({ source })` and
    * `await table.loadData(source)` only resolve after the first row
@@ -1959,8 +1972,18 @@ export class TableContainer {
    * (swallowed at the assignment site), `destroy()` mid-init, and the
    * no-fetch paths (zero rows, empty `visibleColumns`).
    */
-  whenBodyReady(): Promise<void> {
-    return this.currentBodyInit;
+  async whenBodyReady(): Promise<void> {
+    // The body built for the load may be kept through the load's later
+    // writes: a restored session sorts or filters it, and it fetches its rows
+    // again. Wait for that too, and for any body built meanwhile.
+    let body: TableBody | null;
+    let init: Promise<void>;
+    do {
+      body = this.tableBody;
+      init = this.currentBodyInit;
+      await init;
+      await body?.whenFetched();
+    } while (!this.destroyed && (body !== this.tableBody || init !== this.currentBodyInit));
   }
 
   /**

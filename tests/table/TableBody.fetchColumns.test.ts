@@ -231,6 +231,32 @@ describe('TableBody row fetches with a column window', () => {
     harness.body.destroy();
   });
 
+  it('fetch the rows again when a column’s schema entry is replaced under the same table', async () => {
+    const { harness, actions } = setup(span(0, 8));
+    const init = harness.body.initialize();
+    await harness.drain();
+    await land(harness);
+    await init;
+    const fetched = harness.queries.length;
+
+    // What editing a derived column's expression does: a new entry for the
+    // column, the table name unchanged. Hidden and shown around it, a body
+    // that kept its rows showed the old values.
+    actions.hideColumn('c03');
+    harness.state.schema.set(
+      harness.state.schema.get().map((c) => (c.name === 'c03' ? { ...c } : c)),
+    );
+    actions.showColumn('c03');
+    await harness.drain();
+    // Land each fetch since, and what landing it sets off.
+    for (let i = fetched; i < harness.queries.length; i++) {
+      await land(harness, harness.queries[i]!);
+    }
+    const since = harness.queries.slice(fetched);
+    expect(since.some((q) => selected(q.sql).includes('c03'))).toBe(true);
+    harness.body.destroy();
+  });
+
   it('let a fetch in flight land without columns rendered since, then read those', async () => {
     const { harness, mounted } = setup(span(40, 48));
     const init = harness.body.initialize();

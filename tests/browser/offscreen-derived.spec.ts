@@ -134,3 +134,44 @@ test('a derived column added from the + button is scrolled into view', async ({ 
   expect((await probe(page, 'column', 'd'))!.inView).toBe(true);
   await expect.poll(() => staleCells(page, 'a')).toEqual([]);
 });
+
+test('undoing a derived column added or renamed in view asks DuckDB for no column it lacks', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await mountTable(page);
+  for (const name of ['d1', 'd2']) {
+    const added = await act<{ success: boolean }>(page, 'addDerivedColumn', {
+      kind: 'expression',
+      name,
+      expression: expression(name),
+    });
+    expect(added.success).toBe(true);
+  }
+  await settle(page);
+  await wheelIntoView(page, 'd2');
+
+  // Undo the add of d2: the schema loses it before the column list does, and
+  // the body is kept through both.
+  await act(page, 'undo');
+  await settle(page);
+  expect(await probe(page, 'order')).not.toContain('d2');
+
+  // And a rename, undone.
+  const renamed = await act<{ success: boolean }>(page, 'updateDerivedColumn', 'd1', {
+    kind: 'expression',
+    name: 'd3',
+    expression: expression('d3'),
+  });
+  expect(renamed.success).toBe(true);
+  await settle(page);
+  await wheelIntoView(page, 'd3');
+  await act(page, 'undo');
+  await settle(page);
+  expect(await probe(page, 'order')).toContain('d1');
+
+  expect(errors.filter((e) => /Binder Error|not found/i.test(e))).toEqual([]);
+});

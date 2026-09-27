@@ -281,6 +281,21 @@ panels and charts right across a trackpad sweep.
   every header in from where it was at load. With 299 headers translated, the create observer
   saw charts 20,000 px away as in reach and built them. Saved positions now last to the end of the
   task that saved them.
+- **Found in review of #144.**
+  - A load whose session restored a sort or filters resolved before the rows were painted. The body
+    built for the load was kept through the restore, which made it fetch again, and
+    `whenBodyReady()` waited only for its first fetch. It now waits for the body's latest refetch.
+  - Undoing the add or rename of a derived column in view logged a DuckDB binder error. The schema
+    is written before the column list, and the body, kept through both, fetched a column the
+    relation no longer had. Row fetches leave out columns the schema lacks.
+  - `setColumnOrder` accepted a name twice, and the header row, which keys headers by name, had one
+    header where the layout had two places. `setColumnOrder` now drops a repeat.
+  - A `TableBody` driven directly, without `TableContainer`, kept values cached for a column whose
+    schema entry changed (a derived column edited) under the same table name. It fetches again when
+    the schema changes.
+  - Moving a column to the front anchored the reorder on the first header in the row, which was
+    the column moved, and moved every header it passed: 900 at 1,000 columns. It anchors on a
+    header already after its neighbour now, and moves one.
 - **2026-09-27, headless Chromium, the four 4d PRs stacked, the 50K × 1,000 Parquet file.**
   - **Load:** 5.4 s and 24 queries.
   - **DOM:** 11,088 elements under `.dt-root`, where 4c left 36,600: 1,000 headers, 19 of them

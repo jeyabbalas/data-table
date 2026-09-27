@@ -246,6 +246,10 @@ export class TableBody {
   private inFlightBlocks = new Map<number, { controller: AbortController; epoch: number }>();
   // The single speculative block fetch beyond the viewport, or null.
   private prefetch: { blockStart: number; controller: AbortController } | null = null;
+  // The fetch that fills the rows in view after the last change that emptied
+  // them: the first, or the refetch after a filter, sort or table change.
+  // See `whenFetched`.
+  private refetch: Promise<void> = Promise.resolve();
   // The columns each cached block holds, by block start. Its rows hold values
   // for those only: when rows render a column their block lacks, the block
   // reads it, and until then those cells are pending.
@@ -388,7 +392,8 @@ export class TableBody {
     if (effectiveTotal > 0) {
       this.currentRange = this.virtualScroller.getVisibleRange();
       this.renderVisibleRows();
-      await this.ensureFetched();
+      this.refetch = this.ensureFetched();
+      await this.refetch;
     }
 
     // Subscribe to scroll events. Safe to do after the initial fetch — the
@@ -412,15 +417,23 @@ export class TableBody {
     // right through a hide, a show or a move, and the rows already cached
     // read a column shown by `__rowid__` (see `fetchBlock`) rather than
     // fetching again, which on a sorted or filtered table would sort or
-    // filter it all again. A change that brings a new relation (a derived
-    // column added, edited or removed) changes `tableName` too, which
-    // refetches everything.
+    // filter it all again. What makes cached values wrong is a new schema
+    // or table, below.
     const unsubVisibleCols = this.state.visibleColumns.subscribe(() => {
       if (this.destroyed) return;
       this.renderVisibleRows();
       if (!this.isAnimatingScroll) void this.ensureFetched();
     });
     this.unsubscribes.push(unsubVisibleCols);
+
+    // Re-fetch when the schema changes. A derived column edited or renamed
+    // replaces its entry under the same table name, and the values cached for
+    // it are stale. `TableContainer` builds a new body for a new schema; this
+    // is for a body driven directly.
+    const unsubSchema = this.state.schema.subscribe(() => {
+      if (!this.destroyed) this.invalidateCacheAndRefresh();
+    });
+    this.unsubscribes.push(unsubSchema);
 
     // Re-fetch when sort changes
     const unsubSort = this.state.sortColumns.subscribe(() => {
@@ -627,7 +640,26 @@ export class TableBody {
     // while the re-fetch runs) and reconcile.
     this.currentRange = this.virtualScroller.getVisibleRange();
     this.renderVisibleRows();
-    void this.ensureFetched();
+    this.refetch = this.ensureFetched();
+  }
+
+  /**
+   * Resolves once the rows in view have been fetched since the last change
+   * that emptied them: the first fetch, or the refetch after a filter, sort
+   * or table change, whichever came last.
+   *
+   * For `TableContainer.whenBodyReady()`. A body kept through a load's later
+   * writes, a restored session's sort or filters, fetches its rows again, and
+   * the load has to wait for that fetch, not for the first.
+   *
+   * @internal
+   */
+  async whenFetched(): Promise<void> {
+    let fetch: Promise<void>;
+    do {
+      fetch = this.refetch;
+      await fetch;
+    } while (fetch !== this.refetch && !this.destroyed);
   }
 
   /** Abort every in-flight block fetch and the prefetch, clearing both. */
@@ -772,6 +804,7 @@ export class TableBody {
    */
   private fetchColumns(): FetchColumns {
     const layout = getColumnLayout(this.state);
+    const schema = this.schemaMap();
     const n = layout.columns.length;
     const picked = new Set<number>();
     // The pinned block as it is; every other run of adjacent columns widened.
@@ -798,9 +831,20 @@ export class TableBody {
     const names: string[] = [];
     for (const index of [...picked].sort((a, b) => a - b)) {
       const name = layout.columns[index]!;
-      if (name !== ROWID_COLUMN) names.push(name);
+      if (name !== ROWID_COLUMN && schema.has(name)) names.push(name);
     }
     return { names, set: new Set(names) };
+  }
+
+  /**
+   * The columns rows render that a fetch can read: the ones the schema has.
+   * Undoing the add of a derived column writes the schema before the column
+   * list, and a fetch between the two asked the relation for a column it no
+   * longer has, which DuckDB refused.
+   */
+  private fetchableRenderedColumns(): string[] {
+    const schema = this.schemaMap();
+    return this.rowShape().columns.filter((column) => schema.has(column));
   }
 
   /**
@@ -820,7 +864,7 @@ export class TableBody {
     if (this.state.visibleColumns.get().length === 0) return;
 
     // The columns rows render, and the ones a fetch started now selects.
-    const rendered = this.rowShape().columns;
+    const rendered = this.fetchableRenderedColumns();
     const columns = this.fetchColumns();
     const needed = this.missingBlocks(this.currentRange, rendered);
 

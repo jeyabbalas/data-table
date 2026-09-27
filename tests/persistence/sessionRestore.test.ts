@@ -45,10 +45,12 @@ function createTestSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSn
     tableName: 'test_table',
     filters: [{ type: 'range', column: 'age', min: 18, max: 65 }],
     sortColumns: [{ column: 'name', direction: 'desc' as const }],
-    visibleColumns: ['id', 'name'],
+    // A custom order, the pinned column first as the column actions keep
+    // it, and the visible columns following it.
+    visibleColumns: ['name', 'id'],
     columnOrder: ['name', 'id', 'age'],
     columnWidths: { id: 120, name: 250 },
-    pinnedColumns: ['id'],
+    pinnedColumns: ['name'],
     hiddenColumnInfo: {
       age: { column: 'age', leftNeighbor: 'name', rightNeighbor: null },
     },
@@ -94,9 +96,9 @@ describe('Session Restore on Load', () => {
 
     expect(store.load).toHaveBeenCalledWith('test_table');
     expect(state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
-    expect(state.visibleColumns.get()).toEqual(['id', 'name']);
+    expect(state.visibleColumns.get()).toEqual(['name', 'id']);
     expect(state.columnOrder.get()).toEqual(['name', 'id', 'age']);
-    expect(state.pinnedColumns.get()).toEqual(['id']);
+    expect(state.pinnedColumns.get()).toEqual(['name']);
     expect(state.columnWidths.get().get('id')).toBe(120);
     expect(state.columnWidths.get().get('name')).toBe(250);
   });
@@ -205,8 +207,9 @@ describe('Session Restore on Load', () => {
       schema: schemaWithRowid,
     });
 
-    // Snapshot predates __rowid__: columnOrder = ['name', 'id', 'age']
-    const snapshot = createTestSnapshot();
+    // Snapshot predates __rowid__: columnOrder = ['name', 'id', 'age']. No
+    // pinned column, which the new column would go after.
+    const snapshot = createTestSnapshot({ pinnedColumns: [] });
     const store = createMockStore(snapshot);
 
     await actions.loadData(new File([''], 'test.csv'), {
@@ -235,7 +238,7 @@ describe('Session Restore on Load', () => {
 
     // Snapshot had a custom order: ['name', 'id', 'age']. 'email' must
     // land at its schema index (2), which is position 2 in this order.
-    const snapshot = createTestSnapshot();
+    const snapshot = createTestSnapshot({ pinnedColumns: [] });
     const store = createMockStore(snapshot);
 
     await actions.loadData(new File([''], 'test.csv'), {
@@ -244,6 +247,101 @@ describe('Session Restore on Load', () => {
     });
 
     expect(state.columnOrder.get()).toEqual(['name', 'id', 'email', 'age']);
+  });
+
+  it('puts a pinned column saved after an unpinned one first', async () => {
+    // As a session saved before the column actions kept pinned columns
+    // first could have it.
+    mockDataLoad();
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['age', 'id', 'name'],
+      columnOrder: ['name', 'id', 'age'],
+      pinnedColumns: ['id'],
+      hiddenColumnInfo: {},
+    });
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    // The shown order, pinned column first.
+    expect(state.visibleColumns.get()).toEqual(['id', 'age', 'name']);
+    expect(state.columnOrder.get()).toEqual(['id', 'age', 'name']);
+  });
+
+  it('keeps the columns in the order the table showed them, with hidden ones beside their old neighbours', async () => {
+    // A session saved when showing a column did not keep `visibleColumns`
+    // in `columnOrder`: hide name, hide age, drag… the table showed
+    // [age, id] while the order said [name, age, id].
+    mockDataLoad();
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['age', 'id'],
+      columnOrder: ['name', 'age', 'id'],
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+    });
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.visibleColumns.get()).toEqual(['age', 'id']);
+    expect(state.columnOrder.get()).toEqual(['name', 'age', 'id']);
+  });
+
+  it('keeps a new system column leftmost in a session whose visible order had drifted', async () => {
+    // Saved when showing a column did not keep `visibleColumns` in
+    // `columnOrder`: shown [name, id, age] under the order [id, name, age].
+    const schemaWithRowid: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...sampleSchema,
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithRowid,
+    });
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['name', 'id', 'age'],
+      columnOrder: ['id', 'name', 'age'],
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+    });
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.columnOrder.get()).toEqual(['__rowid__', 'name', 'id', 'age']);
+    expect(state.visibleColumns.get()).toEqual(['name', 'id', 'age']);
+  });
+
+  it('puts a new system column after the pinned columns', async () => {
+    const schemaWithRowid: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...sampleSchema,
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithRowid,
+    });
+    const store = createMockStore(createTestSnapshot());
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    // The fixture pins `name`, which leads its order.
+    expect(state.columnOrder.get()).toEqual(['name', '__rowid__', 'id', 'age']);
+    expect(state.visibleColumns.get()).toEqual(['name', 'id']);
   });
 
   it('round-trips state through snapshot and restore', async () => {

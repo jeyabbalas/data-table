@@ -27,7 +27,12 @@ import {
 } from './errors';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
-import { resetTableState, initializeColumnsFromSchema } from './State';
+import {
+  resetTableState,
+  initializeColumnsFromSchema,
+  mergeMissingColumns,
+  pinnedColumnsFirst,
+} from './State';
 import type {
   Filter,
   FilterType,
@@ -1155,44 +1160,37 @@ export class StateActions {
   /**
    * Set the column order
    *
-   * Also reorders visible columns to match the new order.
-   * Preserves hidden columns in columnOrder at their relative positions.
+   * Also reorders visible columns to match the new order, in the same
+   * update. Preserves hidden columns in columnOrder at their relative
+   * positions. Pinned columns stay first, in the order given: an order that
+   * puts one after an unpinned column has it moved to the pinned block, and
+   * `pinnedColumns` takes the block's new order, so a pinned column hidden
+   * and shown again goes back to its place in it.
    */
   setColumnOrder(columns: string[]): void {
     this.throwIfDestroyed('setColumnOrder');
     this.captureForUndo();
-    const currentOrder = this.state.columnOrder.get();
-    const columnsSet = new Set(columns);
-
-    // Find columns in currentOrder that are NOT in the incoming list (hidden columns)
-    const missingColumns = currentOrder.filter((c) => !columnsSet.has(c));
-
-    if (missingColumns.length > 0) {
-      // Merge hidden columns back at their relative positions
-      const fullOrder = [...columns];
-      for (const missing of missingColumns) {
-        const oldIndex = currentOrder.indexOf(missing);
-        // Find the nearest column to the right in currentOrder that is in fullOrder
-        let insertIndex = fullOrder.length; // default: append at end
-        for (let i = oldIndex + 1; i < currentOrder.length; i++) {
-          const idx = fullOrder.indexOf(currentOrder[i]!);
-          if (idx !== -1) {
-            insertIndex = idx;
-            break;
-          }
-        }
-        fullOrder.splice(insertIndex, 0, missing);
-      }
-      this.state.columnOrder.set(fullOrder);
-    } else {
-      this.state.columnOrder.set(columns);
-    }
+    const pinned = this.state.pinnedColumns.get();
+    // Hidden columns go back at their relative positions.
+    const newOrder = pinnedColumnsFirst(
+      mergeMissingColumns(columns, this.state.columnOrder.get()),
+      pinned,
+    );
+    const pinnedSet = new Set(pinned);
+    const newPinned = [
+      ...newOrder.filter((c) => pinnedSet.has(c)),
+      ...pinned.filter((c) => !newOrder.includes(c)),
+    ];
 
     // Reorder visible columns to match
-    const visible = this.state.visibleColumns.get();
-    const newOrder = this.state.columnOrder.get();
-    const reorderedVisible = newOrder.filter((c) => visible.includes(c));
-    this.state.visibleColumns.set(reorderedVisible);
+    const visible = new Set(this.state.visibleColumns.get());
+    batch(() => {
+      // Pinned first, as toggleColumnPin does: its subscribers read the
+      // header positions before the new order re-renders them.
+      if (newPinned.some((c, i) => c !== pinned[i])) this.state.pinnedColumns.set(newPinned);
+      this.state.columnOrder.set(newOrder);
+      this.state.visibleColumns.set(newOrder.filter((c) => visible.has(c)));
+    });
   }
 
   /**

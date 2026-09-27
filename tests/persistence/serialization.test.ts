@@ -184,8 +184,10 @@ describe('restoreStateFromSnapshot — round-trip', () => {
     const stateA = setupState();
     stateA.filters.set([{ type: 'range', column: 'age', min: 18, max: 65, maxInclusive: true }]);
     stateA.sortColumns.set([{ column: 'name', direction: 'desc' }]);
-    stateA.visibleColumns.set(['id', 'name', 'age']);
-    stateA.columnOrder.set(['name', 'id', 'age', 'created']);
+    // A custom order that keeps the pinned column first, as the column
+    // actions do, with the visible columns following it.
+    stateA.visibleColumns.set(['id', 'age', 'name']);
+    stateA.columnOrder.set(['id', 'age', 'name', 'created']);
     stateA.columnWidths.set(
       new Map([
         ['id', 80],
@@ -342,6 +344,7 @@ describe('restoreStateFromSnapshot — schema validation', () => {
     const state = setupState();
     const snapshot = createTestSnapshot({
       columnOrder: ['removed_col', 'name', 'id'],
+      visibleColumns: ['name', 'id', 'age', 'created'],
     });
 
     restoreStateFromSnapshot(state, snapshot);
@@ -545,7 +548,8 @@ describe('restoreStateFromSnapshot — derived column state preservation', () =>
       visibleColumns: ['id', 'total', 'name', 'age', 'created'],
       columnOrder: ['id', 'total', 'name', 'age', 'created'],
       columnWidths: { total: 200, id: 100 },
-      pinnedColumns: ['id', 'total'],
+      // `total` unpinned, so its place in the order is the restore's to keep.
+      pinnedColumns: ['id'],
       hiddenColumnInfo: {},
       derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
     });
@@ -568,8 +572,22 @@ describe('restoreStateFromSnapshot — derived column state preservation', () =>
     // Derived column width preserved
     expect(state.columnWidths.get().get('total')).toBe(200);
 
-    // Derived column pin preserved
-    expect(state.pinnedColumns.get()).toEqual(['id', 'total']);
+    expect(state.pinnedColumns.get()).toEqual(['id']);
+  });
+
+  it('keeps a pin on a derived column', () => {
+    const state = setupState();
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['total', 'id', 'name', 'age', 'created'],
+      columnOrder: ['total', 'id', 'name', 'age', 'created'],
+      pinnedColumns: ['total'],
+      derivedColumns: [{ kind: 'expression', name: 'total', expression: 'id * 2' }],
+    });
+
+    restoreStateFromSnapshot(state, snapshot);
+
+    expect(state.pinnedColumns.get()).toEqual(['total']);
+    expect(state.visibleColumns.get()[0]).toBe('total');
   });
 
   it('preserves hidden state for derived columns', () => {
@@ -1191,5 +1209,47 @@ describe('vector value pool — round-trip', () => {
       // Graceful fallback to empty array
       expect(vec.values).toEqual([]);
     }
+  });
+});
+
+// =========================================
+// Column order consistency on restore
+// =========================================
+
+describe('deserializeStateSnapshot — column order', () => {
+  it('puts the pinned columns first in an undo entry saved without them first', () => {
+    // An entry from before the column actions kept pinned columns first:
+    // hide a, pin b, show a put `a` back ahead of the pinned `b`.
+    const serialized: SerializedStateSnapshot = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'name', 'age', 'created'],
+      columnOrder: ['name', 'id', 'age', 'created'],
+      columnWidths: {},
+      pinnedColumns: ['name'],
+      hiddenColumnInfo: {},
+    };
+    const entry = deserializeStateSnapshot(serialized, new Set(['id', 'name', 'age', 'created']));
+
+    expect(entry.visibleColumns).toEqual(['name', 'id', 'age', 'created']);
+    expect(entry.columnOrder).toEqual(['name', 'id', 'age', 'created']);
+    expect(entry.pinnedColumns).toEqual(['name']);
+  });
+
+  it('leaves an entry that keeps the rules as it is', () => {
+    const serialized: SerializedStateSnapshot = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['age', 'name'],
+      columnOrder: ['age', 'id', 'name', 'created'],
+      columnWidths: {},
+      pinnedColumns: ['age'],
+      hiddenColumnInfo: {},
+    };
+    const entry = deserializeStateSnapshot(serialized, new Set(['id', 'name', 'age', 'created']));
+
+    expect(entry.visibleColumns).toEqual(['age', 'name']);
+    expect(entry.columnOrder).toEqual(['age', 'id', 'name', 'created']);
+    expect(entry.pinnedColumns).toEqual(['age']);
   });
 });

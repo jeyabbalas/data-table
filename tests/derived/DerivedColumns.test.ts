@@ -1263,7 +1263,8 @@ describe('Derived Columns — Actions Integration', () => {
         visibleColumns: ['id', 'total', 'name', 'price', 'quantity'],
         columnOrder: ['id', 'total', 'name', 'price', 'quantity'],
         columnWidths: { total: 180 },
-        pinnedColumns: ['total'],
+        // `total` unpinned, so its place in the order is the restore's to keep.
+        pinnedColumns: ['id'],
         hiddenColumnInfo: {},
         derivedColumns: [
           {
@@ -1283,7 +1284,7 @@ describe('Derived Columns — Actions Integration', () => {
       expect(state.filters.get()).toHaveLength(1);
       expect(state.filters.get()[0].column).toBe('total');
       expect(state.sortColumns.get()).toEqual([{ column: 'total', direction: 'desc' }]);
-      expect(state.pinnedColumns.get()).toContain('total');
+      expect(state.pinnedColumns.get()).toEqual(['id']);
       expect(state.columnWidths.get().get('total')).toBe(180);
 
       // Column order position preserved (total at index 1, not appended to end)

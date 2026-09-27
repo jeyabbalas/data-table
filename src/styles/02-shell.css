@@ -9,6 +9,9 @@
    =========================================== */
 
 .dt-root {
+  /* `height: 100%` has to include the border, or the table overflows its
+     container by 2px on a page without a box-sizing reset. */
+  box-sizing: border-box;
   position: relative; /* Containing block for pinned demarcation overlay */
   display: flex;
   flex-direction: column;

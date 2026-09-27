@@ -191,7 +191,11 @@ export class ColumnResizer {
     this.isDragging = true;
     this.onDragStart?.();
     this.startX = event.clientX;
-    this.startWidth = this.header.offsetWidth;
+    // Seed from the declared width, the value `onResize` writes back. The
+    // occupied width (`offsetWidth`) matches it only under border-box, and a
+    // host stylesheet can override that; seeding from it then widened the
+    // column by the padding and border before the pointer moved.
+    this.startWidth = parseFloat(this.header.style.width) || this.header.offsetWidth;
 
     // Add active class to handle
     if (this.handle) {

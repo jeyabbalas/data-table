@@ -97,7 +97,7 @@
   /* Sizing */
   --dt-header-height: 120px;
   --dt-row-height: 32px;
-  --dt-col-width: 200px; /* Default column width */
+  --dt-col-width: 200px; /* Loading placeholder cell width; columns take theirs from columnWidths */
   --dt-scrollbar-width: 17px;
 
   /* Semantic colors, split by role: `success` / `error` are painted as text

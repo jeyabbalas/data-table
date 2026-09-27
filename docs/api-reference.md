@@ -541,7 +541,7 @@ Source: `src/core/State.ts`. Access via `table.state.<name>.get()` / `.subscribe
 | `sortColumns`          | `Signal<SortColumn[]>`                            | Sort columns in priority order.                                                                                                                                                                                                                      |
 | `visibleColumns`       | `Signal<string[]>`                                | Currently visible column names.                                                                                                                                                                                                                      |
 | `columnOrder`          | `Signal<string[]>`                                | Display order.                                                                                                                                                                                                                                       |
-| `columnWidths`         | `Signal<Map<string, number>>`                     | Custom widths (pixels).                                                                                                                                                                                                                              |
+| `columnWidths`         | `Signal<Map<string, number>>`                     | Custom widths in pixels, padding and border included. A column without an entry is 150 px wide.                                                                                                                                                      |
 | `pinnedColumns`        | `Signal<string[]>`                                | Left-pinned column names.                                                                                                                                                                                                                            |
 | `hiddenColumnInfo`     | `Signal<Map<string, HiddenColumnInfo>>`           | Neighbor metadata for hidden columns.                                                                                                                                                                                                                |
 | `columnHeaderTooltips` | `Signal<Map<string, ColumnHeaderTooltipContent>>` | Per-column structured popover content set via `actions.setColumnHeaderTooltip`. Empty map by default; persisted into `SessionSnapshot.columnHeaderTooltips`.                                                                                         |
@@ -641,7 +641,7 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 | ------------------ | ----------------------------------------- | --------------------------------- |
 | `setColumnOrder`   | `(columns: string[]) => void`             |                                   |
 | `toggleColumnPin`  | `(column: string) => void`                | Moves to / from the pinned group. |
-| `setColumnWidth`   | `(column: string, width: number) => void` |                                   |
+| `setColumnWidth`   | `(column: string, width: number) => void` | Padding and border included.      |
 | `resetColumnWidth` | `(column: string) => void`                |                                   |
 
 ### Derived columns

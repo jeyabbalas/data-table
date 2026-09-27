@@ -196,7 +196,7 @@ all derivatives automatically — you don't need to redeclare them.
 | ---------------------- | ------: | ----------------------------------------------------------------- |
 | `--dt-header-height`   | `120px` | Column header area height. **Set via the `headerHeight` option.** |
 | `--dt-row-height`      |  `32px` | Virtual-scroller row height. **Set via the `rowHeight` option.**  |
-| `--dt-col-width`       | `200px` | Default column width.                                             |
+| `--dt-col-width`       | `200px` | Width of a loading row's placeholder cell. Not the column width.  |
 | `--dt-scrollbar-width` |  `17px` | Reserved gutter for the body's vertical scrollbar.                |
 | `--dt-panel-width`     | `320px` | Floating-panel (filter / preset / derived-edit) width.            |
 | `--dt-radius`          |   `8px` | Default border radius.                                            |
@@ -221,6 +221,18 @@ one number in one place: `.dt-row`'s height and the `line-height` that centres
 text in stretched cells both follow whatever the scroller is using.
 
 The rest of the table is ordinary CSS and overrides normally.
+
+**A column's width includes its padding and border.** Header cells and body
+cells are `box-sizing: border-box`, so the width in `columnWidths` (150 px
+unless set with `setColumnWidth` or a resize) is the space the column takes,
+on any page, with or without a global `box-sizing` reset. The same goes for a
+row's height and `rowHeight`. Restyling the padding of `.dt-cell` or
+`.dt-col-header` changes how much text fits, not where columns fall. Don't set
+their `box-sizing` back to `content-box`: the header, the body, pinned columns
+and keyboard navigation all place columns by adding widths up, and they only
+agree while each column takes exactly its width. A column can't be narrower
+than its padding and border (25 px at the default font size); a smaller width
+set through `setColumnWidth` still takes that much.
 
 These tokens size the table's _contents_. They are not how you size the table
 itself: the mount container's height comes from your own CSS, is mandatory,

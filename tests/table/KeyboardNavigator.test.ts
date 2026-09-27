@@ -1247,3 +1247,170 @@ describe('KeyboardNavigator', () => {
     });
   });
 });
+
+describe('KeyboardNavigator — keys that act on the cursor bring it into view', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    __resetModalHostForTests();
+  });
+
+  /**
+   * Three 150px columns in a 200px viewport: column `c` spans 300–450, so a
+   * scroll of 250 puts it wholly in view at the right edge.
+   */
+  function setup() {
+    const state = createTableState();
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.totalRows.set(100);
+    const actions = new StateActions(state, mockBridge);
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const grid = document.createElement('div');
+    grid.setAttribute('tabindex', '0');
+    root.appendChild(grid);
+    const bodyScroll = document.createElement('div');
+    Object.defineProperty(bodyScroll, 'clientWidth', { configurable: true, value: 200 });
+
+    let headers: ColumnHeader[] = [];
+    const renderHeaders = (): void => {
+      for (const h of headers) h.destroy();
+      headers = state.visibleColumns.get().map(
+        (name, i) =>
+          new ColumnHeader(
+            schema.find((c) => c.name === name)!,
+            state,
+            actions,
+            {
+              cellId: `dt-t1-colheader-${i}`,
+            },
+          ),
+      );
+      for (const h of headers) grid.appendChild(h.getElement());
+    };
+    renderHeaders();
+    // As TableContainer does: a new column order rebuilds the header row.
+    const unsubscribe = state.visibleColumns.subscribe(renderHeaders);
+
+    const body = makeStubBody();
+    const nav = new KeyboardNavigator({
+      rootElement: root,
+      gridElement: grid,
+      bodyScroll,
+      state,
+      actions,
+      getTableBody: () => body,
+      getColumnHeaders: () => headers,
+    });
+    grid.focus();
+
+    const cleanup = (): void => {
+      unsubscribe();
+      nav.destroy();
+      for (const h of headers) h.destroy();
+    };
+    return { state, root, grid, bodyScroll, body, getHeaders: () => headers, cleanup };
+  }
+
+  const twoFrames = (): Promise<void> =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+  it.each([
+    ['F2', {}],
+    ['Shift+F2', { shiftKey: true }],
+  ] as const)('%s on a header scrolled out of view', (_label, modifiers) => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+
+    keydown(root, { key: 'F2', ...modifiers });
+
+    expect(bodyScroll.scrollLeft).toBe(250);
+    cleanup();
+  });
+
+  it('F2 that had to scroll focuses the control once the scroll has passed', async () => {
+    const { state, root, grid, bodyScroll, getHeaders, cleanup } = setup();
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+
+    keydown(root, { key: 'F2' });
+    expect(bodyScroll.scrollLeft).toBe(250);
+    // Not yet: the scroll's events, which close a popover the control
+    // opens on focus, are still to come.
+    expect(document.activeElement).toBe(grid);
+    await twoFrames();
+    expect(document.activeElement).toBe(getHeaders()[2]!.getControls()[0]);
+    cleanup();
+  });
+
+  it('Enter on a header scrolled out of view, and on a body cell out of view', () => {
+    const { state, root, bodyScroll, body, cleanup } = setup();
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+    keydown(root, { key: 'Enter' });
+    expect(state.sortColumns.get()).toEqual([{ column: 'c', direction: 'asc' }]);
+    expect(bodyScroll.scrollLeft).toBe(250);
+
+    // Ten rows fit; row 50 is well below them.
+    bodyScroll.scrollLeft = 0;
+    state.focusedCell.set({ row: 50, column: 'c' });
+    keydown(root, { key: 'Enter' });
+    expect(state.selectedRows.get().has(50)).toBe(true);
+    expect(bodyScroll.scrollLeft).toBe(250);
+    expect(body.getVirtualScroller().scrollToRow).toHaveBeenCalledWith(50, 'end');
+    cleanup();
+  });
+
+  it('a column wider than the view shows its start, and stays put once it fills the view', () => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    state.columnWidths.set(new Map([['b', 500]]));
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'b' });
+
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(150);
+    // Filling the view from 150 to 350: another key must not flip it to
+    // show the column's end instead.
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(150);
+    bodyScroll.scrollLeft = 200;
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(200);
+    cleanup();
+  });
+
+  it('Backspace in layout mode follows a column that grows back at the right edge', () => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    // `c` is 50px, 300–350, at the right edge of a view from 150 to 350.
+    state.columnWidths.set(new Map([['c', 50]]));
+    bodyScroll.scrollLeft = 150;
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+    keydown(root, { key: 'F2', shiftKey: true });
+
+    keydown(root, { key: 'Backspace' });
+    expect(state.columnWidths.get().has('c')).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(250);
+    cleanup();
+  });
+
+  it('a layout-mode resize at the right edge, and Escape after a move', () => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    bodyScroll.scrollLeft = 250;
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+    keydown(root, { key: 'F2', shiftKey: true });
+
+    // 166px wide, `c` now ends at 466.
+    keydown(root, { key: 'ArrowRight' });
+    expect(bodyScroll.scrollLeft).toBe(266);
+    keydown(root, { key: 'Escape' });
+
+    // Move `b` to the end, look away, then cancel: `b` is back at 150–300.
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'b' });
+    keydown(root, { key: 'F2', shiftKey: true });
+    keydown(root, { key: 'End', shiftKey: true });
+    expect(state.visibleColumns.get()).toEqual(['a', 'c', 'b']);
+    bodyScroll.scrollLeft = 0;
+    keydown(root, { key: 'Escape' });
+    expect(state.visibleColumns.get()).toEqual(['a', 'b', 'c']);
+    expect(bodyScroll.scrollLeft).toBe(100);
+    cleanup();
+  });
+});

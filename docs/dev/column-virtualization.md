@@ -98,7 +98,10 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
 - **A filter change holds the body's horizontal position for a second.** `TableContainer` resets
   `scrollLeft` every frame for 1 s after `filters` changes, to undo the clamps a filter causes. It
   also undoes any scroll made in that second: a keyboard move or wheel scroll right after applying a
-  filter snaps back. Pre-existing; one of the `scrollLeft` writers 4c's controller should own.
+  filter snaps back. Pre-existing. The hold now ends at the first user input in the table. Its review
+  found no filter path in Chromium that still clamps `scrollLeft` (the body's width no longer
+  depends on its rows), so it probably protects nothing now; 4c's controller, which should own every
+  `scrollLeft` writer, can drop it once other engines agree.
 - **Header controls spill out of narrow columns.** `.dt-col-header` does not clip, and its five
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_
@@ -123,6 +126,10 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
   that it always names the ringed cell. `TableBody.renderVisibleRows` still rebuilds any row whose
   cell count differs from `visibleColumns.length`, which a windowed row always does. `ColumnReorder`
   takes the drop index and the new order from the header DOM, which will hold only mounted headers.
+- **Found in review, outside this work, not fixed.** The SQL filter modal's Remove section never
+  shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
+  export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
+  with two tables on a page the first table's export dialog opens with no format or scope checked.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

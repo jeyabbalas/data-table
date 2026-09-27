@@ -60,6 +60,13 @@ four others the table contributes — and then:
 | `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)          |
 | `Ctrl` + `C` / `Cmd` + `C`                             | Copy selected rows (defers to native copy behavior)          |
 
+The keys that move the cursor scroll its cell into view, and so do the keys
+that act on it where it is — `Enter`, `Space`, `F2` and `Shift+F2` — so a
+cursor the user has scrolled away from with the mouse comes back into sight.
+In layout mode the view follows the column as its width changes, as it moves,
+and back to its place on `Escape`. A column wider than the view is shown from
+its start.
+
 When any modal is open (export dialog, SQL filter editor, derived-column
 editor, preset panel), the grid keyboard shortcuts are disabled — the
 modal owns input until dismissed.
@@ -249,9 +256,12 @@ for non-English locales.
 
 ## Modal focus trap
 
-When a dialog opens (`role="dialog"`), focus moves to the first focusable
-control inside it. `Tab` cycles within the dialog; `Escape` dismisses it
-and returns focus to the control that opened it.
+When a dialog opens (`role="dialog"`), focus moves to its designated field,
+or else to the first control inside it that is shown: one a stylesheet hides,
+such as the filter panel's Clear button before its column has a filter, is
+skipped. `Tab` cycles within the dialog, stopping once on a radio group as the
+browser does; `Escape` dismisses it and returns focus to the control that
+opened it.
 
 - **Focus trap.** Tab can't escape the dialog while it's open.
 - **Keyboard deferral.** The grid's keyboard handlers check

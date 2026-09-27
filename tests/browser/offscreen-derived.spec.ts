@@ -102,3 +102,35 @@ test('a derived column added, edited, removed and restored off-screen shows curr
   await changeOffScreen(page, () => act(page, 'undo'), 'b');
   await changeOffScreen(page, () => act(page, 'redo'), null);
 });
+
+test('a derived column added from the + button is scrolled into view', async ({ page }) => {
+  await mountTable(page);
+  await wheelBy(page, 8_000);
+
+  await page.locator(`#${HOST_ID} .dt-add-column-btn`).click();
+  const modal = page.locator('.dt-derived-modal-body');
+  await expect(modal).toBeVisible();
+  await modal.locator('input.dt-filter-input').first().fill('d');
+  await modal.locator('.cm-content').click();
+  await page.keyboard.type(expression('a'));
+  await page.locator('.dt-derived-modal-validate').click();
+  const create = page.locator('.dt-derived-modal-create');
+  await expect(create).toBeEnabled();
+  await create.click();
+  await expect(modal).toBeHidden();
+
+  // The body smooth-scrolls to the right end once the column renders. The
+  // header jumps there at once, so wait for the body to arrive.
+  await expect
+    .poll(
+      async () => {
+        const { left, max } = await probe(page, 'scroll');
+        return max - left;
+      },
+      { timeout: 10_000 },
+    )
+    .toBeLessThan(1);
+  await settle(page);
+  expect((await probe(page, 'column', 'd'))!.inView).toBe(true);
+  await expect.poll(() => staleCells(page, 'a')).toEqual([]);
+});

@@ -283,6 +283,12 @@ export class FilterPanel {
   // =========================================
 
   private updatePanelClearButton(hasFilter: boolean): void {
+    // Clearing from the keyboard hides the button that has focus, and a
+    // hidden element drops focus to <body>, outside the panel, where Escape
+    // no longer reaches it. Hand focus to the close button first.
+    if (!hasFilter && this.clearBtn.contains(document.activeElement)) {
+      this.element.querySelector<HTMLElement>(`.${this.prefix}-filter-panel-close`)?.focus();
+    }
     this.clearBtn.classList.toggle(`${this.prefix}-filter-panel-clear--hidden`, !hasFilter);
   }
 

@@ -54,6 +54,9 @@ import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
 
+/** Input that means the user is about to scroll, or have the table scroll for them. */
+const USER_SCROLL_INPUTS = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
+
 /**
  * Options for configuring the TableContainer
  */
@@ -194,8 +197,9 @@ export class TableContainer {
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
 
-  // Track previous visible columns for restore-highlight detection
-  private previousVisibleColumns = new Set<string>();
+  // The visible columns as of the last render, in order: for the restore
+  // highlight, and for where the cursor goes when its column disappears
+  private previousVisibleOrder: readonly string[] = [];
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -220,6 +224,10 @@ export class TableContainer {
   // Where the header stopped short of the body on the last sync, until the
   // header's scroll event for it arrives (see syncHeaderScroll)
   private headerEcho: number | null = null;
+
+  // Ends the horizontal-scroll hold that follows a filter change, while one
+  // is running
+  private releaseFilterScrollHold: (() => void) | null = null;
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
@@ -1147,20 +1155,42 @@ export class TableContainer {
     // the 300ms smooth scroll-to-top, the 200ms bar transition (in both
     // directions — reveal on add, collapse on remove), plus async row
     // and viz re-fetches.
+    //
+    // The first wheel, key, pointer press or touch in the table ends the
+    // hold early. A scroll the user makes in that second, or the keyboard
+    // makes for them, is not drift: undoing it snapped a sideways wheel
+    // after a chart brush straight back, and left a cursor moved with End
+    // out of view.
     const unsubFilterScroll = this.state.filters.subscribe(() => {
       if (this.destroyed) return;
+      this.releaseFilterScrollHold?.();
       const savedLeft = this.bodyScroll.scrollLeft;
       if (savedLeft === 0) return;
 
       const deadline = performance.now() + 1000;
+      let held = true;
+      const release = (): void => {
+        held = false;
+        for (const type of USER_SCROLL_INPUTS) {
+          this.element.removeEventListener(type, release, true);
+        }
+        if (this.releaseFilterScrollHold === release) this.releaseFilterScrollHold = null;
+      };
+      for (const type of USER_SCROLL_INPUTS) {
+        this.element.addEventListener(type, release, { capture: true, passive: true });
+      }
+      this.releaseFilterScrollHold = release;
+
       const correct = () => {
-        if (this.destroyed) return;
+        if (this.destroyed || !held) return;
         if (this.bodyScroll.scrollLeft !== savedLeft) {
           this.bodyScroll.scrollLeft = savedLeft;
-          this.headerScroll.scrollLeft = savedLeft;
+          this.syncHeaderScroll();
         }
         if (performance.now() < deadline) {
           requestAnimationFrame(correct);
+        } else {
+          release();
         }
       };
       requestAnimationFrame(correct);
@@ -1204,24 +1234,6 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubFocusClamp);
-
-    // Snap focus to first visible column if focused column is hidden
-    const unsubFocusCol = this.state.visibleColumns.subscribe((cols) => {
-      if (this.destroyed) return;
-      const focusedCell = this.state.focusedCell.get();
-      if (!focusedCell) return;
-      if (!cols.includes(focusedCell.column)) {
-        if (cols.length === 0) {
-          this.actions?.clearFocusedCell();
-        } else {
-          this.actions?.setFocusedCell({
-            row: focusedCell.row,
-            column: cols[0]!,
-          });
-        }
-      }
-    });
-    this.unsubscribes.push(unsubFocusCol);
   }
 
   // =========================================
@@ -1320,12 +1332,12 @@ export class TableContainer {
   render(): void {
     if (this.destroyed) return;
 
-    const prevVisible = this.previousVisibleColumns;
+    const previousOrder = this.previousVisibleOrder;
+    const prevVisible = new Set(previousOrder);
 
-    // Save scroll positions before re-rendering (both containers for robustness)
+    // Save the body's scroll position before re-rendering; the header follows it
     const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
     const savedBodyScrollTop = this.bodyScroll.scrollTop;
-    const savedHeaderScrollLeft = this.headerScroll.scrollLeft;
 
     // Remember the *specific* element focus sits on before render destroys DOM
     // elements. Actions like pin/hide remove the focused button, dropping focus
@@ -1556,8 +1568,7 @@ export class TableContainer {
       });
     }
 
-    // Track visible columns and highlight newly restored ones
-    const newVisibleSet = new Set(visibleColumns);
+    // Highlight newly restored columns
     if (prevVisible.size > 0) {
       const prefix = this.resolvedOptions.classPrefix;
       for (const header of this.columnHeaders) {
@@ -1572,22 +1583,28 @@ export class TableContainer {
         }
       }
     }
-    this.previousVisibleColumns = newVisibleSet;
+    this.previousVisibleOrder = visibleColumns;
+
+    // Put the scroll positions back now. Emptying the scrollers clamped them
+    // to 0 as soon as the rebuild read layout; the new body has its full size
+    // again by here. A frame later was too late: it undid any scroll made
+    // right after this render (the keyboard bringing a moved column into
+    // view), and a second render before then saved the clamped 0 and put
+    // that back instead.
+    this.bodyScroll.scrollLeft = savedBodyScrollLeft;
+    this.bodyScroll.scrollTop = savedBodyScrollTop;
+    this.syncHeaderScroll();
 
     // render() rebuilt every ColumnHeader, so the cursor's target element is
-    // gone. Re-point it (dropping to the first visible column if its column
-    // disappeared) before anything reads aria-activedescendant.
-    this.reconcileCursorColumn(visibleColumns);
+    // gone. Re-point it (to the column in its place if its column
+    // disappeared) before anything reads aria-activedescendant. After the
+    // scroll restore: where the cursor goes can depend on what is in view.
+    this.reconcileCursorColumn(visibleColumns, previousOrder);
     this.syncActiveDescendant();
     this.updateHeaderCursorStyles();
 
-    // Restore scroll positions and focus after DOM updates (both containers for robustness)
     requestAnimationFrame(() => {
       if (!this.destroyed) {
-        this.bodyScroll.scrollLeft = savedBodyScrollLeft;
-        this.bodyScroll.scrollTop = savedBodyScrollTop;
-        this.headerScroll.scrollLeft = savedHeaderScrollLeft;
-
         // Restore focus only when this render is what destroyed it: the element
         // focus was on is gone from the table AND focus fell to nothing (body,
         // or null under a shadow root). Anything else — most importantly a Tab
@@ -1614,15 +1631,79 @@ export class TableContainer {
    * Keep the cursor on a column that still exists. Hiding or removing the
    * cursor's column would otherwise leave `aria-activedescendant` pointing at
    * a destroyed header and the header ring painted on nothing.
+   *
+   * The cursor goes to the column in the lost one's place (see
+   * {@link columnInPlaceOf}). It used to go to the first column, which sent a
+   * keyboard user who hid a column far to the right back to the start of the
+   * table, with the view still where it was.
    */
-  private reconcileCursorColumn(visibleColumns: string[]): void {
+  private reconcileCursorColumn(
+    visibleColumns: readonly string[],
+    previousOrder: readonly string[],
+  ): void {
     const focused = this.state.focusedCell.get();
     if (!focused || visibleColumns.includes(focused.column)) return;
     if (visibleColumns.length === 0) {
       this.actions?.clearFocusedCell();
       return;
     }
-    this.actions?.setFocusedCell({ row: focused.row, column: visibleColumns[0]! });
+    this.actions?.setFocusedCell({
+      row: focused.row,
+      column: this.columnInPlaceOf(focused.column, previousOrder, visibleColumns),
+    });
+  }
+
+  /**
+   * The column now shown where `lost` was, in `previous`, the last render's
+   * visible order:
+   *
+   * - a column the last render did not have, standing at the lost one's
+   *   index: the same column renamed, or its replacement;
+   * - for a pinned column, another pinned one after it, else before it; with
+   *   none left, the first column at the left of the view. The pinned block
+   *   is always in view, and the column after it in order need not be;
+   * - otherwise the first column still shown after it, else the last before
+   *   it;
+   * - the first column, when `lost` was not shown at all.
+   */
+  private columnInPlaceOf(
+    lost: string,
+    previous: readonly string[],
+    shown: readonly string[],
+  ): string {
+    const at = previous.indexOf(lost);
+    if (at < 0) return shown[0]!;
+    const inPlace = shown[at];
+    if (inPlace !== undefined && !previous.includes(inPlace)) return inPlace;
+
+    const visible = new Set(shown);
+    const nearest = (keep: (column: string) => boolean): string | undefined => {
+      for (let i = at + 1; i < previous.length; i++) {
+        if (visible.has(previous[i]!) && keep(previous[i]!)) return previous[i]!;
+      }
+      for (let i = at - 1; i >= 0; i--) {
+        if (visible.has(previous[i]!) && keep(previous[i]!)) return previous[i]!;
+      }
+      return undefined;
+    };
+
+    // `hideColumn` leaves a hidden column in `pinnedColumns`.
+    const pinned = new Set(this.state.pinnedColumns.get());
+    if (pinned.has(lost)) {
+      const column = nearest((c) => pinned.has(c)) ?? this.firstUnpinnedColumnInView();
+      if (column) return column;
+    }
+    return nearest(() => true) ?? shown[0]!;
+  }
+
+  /** The first column at least partly in view right of the pinned block. */
+  private firstUnpinnedColumnInView(): string | undefined {
+    const layout = getColumnLayout(this.state);
+    const edge = this.bodyScroll.scrollLeft + layout.pinnedWidth;
+    for (let i = layout.pinnedCount; i < layout.columns.length; i++) {
+      if (layout.leftAt(i) + layout.widthAt(i) > edge) return layout.columns[i];
+    }
+    return undefined;
   }
 
   /**
@@ -1852,10 +1933,6 @@ export class TableContainer {
   }
 
   /**
-   * Smooth-scroll the body to the right end so the newly created column is visible.
-   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
-   */
-  /**
    * Where fixed-position modals owned by this table mount. Returns the
    * `portalTarget` option if supplied, otherwise `document.body`. Exposed
    * as the single source of truth so higher-level wiring (e.g.
@@ -1866,6 +1943,10 @@ export class TableContainer {
     return this.resolvedOptions.portalTarget ?? document.body;
   }
 
+  /**
+   * Smooth-scroll the body to the right end so the newly created column is visible.
+   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
+   */
   private scrollToRightEnd(): void {
     // Wait for the re-render triggered by the new column
     requestAnimationFrame(() => {
@@ -1883,14 +1964,35 @@ export class TableContainer {
           behavior: 'smooth',
         });
 
-        // Re-enable sync after the animation settles and align both containers.
-        const onEnd = () => {
+        // Re-enable sync once the body has stopped, and align both
+        // containers: on `scrollend`, or where there is none, once the
+        // position has held for a few frames. Not after a fixed time: a wide
+        // table outlasted the 600ms that used to end this, and the header's
+        // position, synced back into the still-moving body, stopped it short
+        // of the column just added.
+        let ended = false;
+        const onEnd = (): void => {
+          if (ended) return;
+          ended = true;
+          this.bodyScroll.removeEventListener('scrollend', onEnd);
+          if (this.destroyed) return;
           this.suppressReverseScrollSync = false;
-          this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+          this.syncHeaderScroll();
         };
         this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
-        // Fallback for browsers without scrollend support
-        setTimeout(onEnd, 600);
+        const started = performance.now();
+        let last = Number.NaN;
+        let still = 0;
+        const watch = (): void => {
+          if (ended || this.destroyed) return;
+          const left = this.bodyScroll.scrollLeft;
+          still = left === last ? still + 1 : 0;
+          last = left;
+          // The time floor covers a smooth scroll that has not started yet.
+          if (still >= 3 && performance.now() - started > 100) onEnd();
+          else requestAnimationFrame(watch);
+        };
+        requestAnimationFrame(watch);
       });
     });
   }
@@ -2114,6 +2216,8 @@ export class TableContainer {
 
     // Disconnect resize observer
     this.resizeObserver.disconnect();
+
+    this.releaseFilterScrollHold?.();
 
     // Clear resize callbacks
     this.resizeCallbacks.clear();

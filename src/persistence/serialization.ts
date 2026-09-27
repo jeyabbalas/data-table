@@ -8,7 +8,7 @@
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
 import { batch } from '../core/Signal';
-import type { TableState, HiddenColumnInfo } from '../core/State';
+import { type TableState, type HiddenColumnInfo, pinnedColumnsFirst } from '../core/State';
 import type { ColumnHeaderTooltipContent } from '../core/types';
 import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { VectorColumnDef } from '../derived/types';
@@ -293,26 +293,34 @@ export function restoreStateFromSnapshot(
   // Sort: drop stale column references
   const sortColumns = snapshot.sortColumns.filter((s) => validColumns.has(s.column));
 
-  // Visible columns: filter to valid; fallback to all if empty
-  let visibleColumns = snapshot.visibleColumns.filter((c) => validColumns.has(c));
-  if (visibleColumns.length === 0) {
-    visibleColumns = allColumnNames;
-  }
+  // Pinned columns: filter to valid
+  const pinnedColumns = snapshot.pinnedColumns.filter((c) => validColumns.has(c));
 
   // Column order: filter to valid, then insert any schema columns that
   // weren't in the snapshot at their schema index (rather than always
   // appending to the end). This keeps system columns like __rowid__ —
   // which live at schema index 0 — at the leftmost position when a
   // pre-Phase-1 snapshot restores against a post-Phase-1 schema.
-  const restoredOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
-  const orderSet = new Set(restoredOrder);
+  const snapshotOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
+  const orderSet = new Set(snapshotOrder);
   for (let i = 0; i < allColumnNames.length; i++) {
     // Bounds-checked by `i < allColumnNames.length`.
     const col = allColumnNames[i]!;
     if (orderSet.has(col)) continue;
-    const insertAt = Math.min(i, restoredOrder.length);
-    restoredOrder.splice(insertAt, 0, col);
+    const insertAt = Math.min(i, snapshotOrder.length);
+    snapshotOrder.splice(insertAt, 0, col);
     orderSet.add(col);
+  }
+  // A session saved before the column actions kept pinned columns first, or
+  // edited by hand, can have one after an unpinned column.
+  const restoredOrder = pinnedColumnsFirst(snapshotOrder, pinnedColumns);
+
+  // Visible columns: filter to valid, in the order just restored, which
+  // `aria-colindex` numbers them by; fallback to all if empty
+  const visibleSet = new Set(snapshot.visibleColumns.filter((c) => validColumns.has(c)));
+  let visibleColumns = restoredOrder.filter((c) => visibleSet.has(c));
+  if (visibleColumns.length === 0) {
+    visibleColumns = restoredOrder;
   }
 
   // Column widths: Record → Map, skip stale columns
@@ -335,9 +343,6 @@ export function restoreStateFromSnapshot(
       if (normalized !== null) columnHeaderTooltips.set(col, normalized);
     }
   }
-
-  // Pinned columns: filter to valid
-  const pinnedColumns = snapshot.pinnedColumns.filter((c) => validColumns.has(c));
 
   // Hidden column info: Record → Map, skip stale columns, nullify dangling neighbors
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();

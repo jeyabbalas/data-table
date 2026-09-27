@@ -212,6 +212,26 @@ export function initializeColumnsFromSchema(state: TableState, schema: ColumnSch
 }
 
 /**
+ * `order` with the pinned columns moved to its front, each group kept in its
+ * own order.
+ *
+ * The table assumes the pinned columns lead: their sticky offsets are the
+ * widths of the pinned columns before each one, and the body mounts them as
+ * the leading block wherever it is scrolled. `toggleColumnPin` and
+ * `showColumn` keep them first as they go; this is for the paths that take a
+ * whole order from outside, `setColumnOrder` and a restored session.
+ *
+ * @example
+ * ```typescript
+ * pinnedColumnsFirst(['a', 'b', 'c'], ['c']); // → ['c', 'a', 'b']
+ * ```
+ */
+export function pinnedColumnsFirst(order: readonly string[], pinned: readonly string[]): string[] {
+  const set = new Set(pinned);
+  return [...order.filter((c) => set.has(c)), ...order.filter((c) => !set.has(c))];
+}
+
+/**
  * Return true if `name` refers to a library-synthesized system column
  * (e.g. the reserved `__rowid__`).
  */

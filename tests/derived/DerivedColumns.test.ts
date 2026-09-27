@@ -1263,7 +1263,8 @@ describe('Derived Columns — Actions Integration', () => {
         visibleColumns: ['id', 'total', 'name', 'price', 'quantity'],
         columnOrder: ['id', 'total', 'name', 'price', 'quantity'],
         columnWidths: { total: 180 },
-        pinnedColumns: ['total'],
+        // Both leading columns pinned, as the column actions keep them.
+        pinnedColumns: ['id', 'total'],
         hiddenColumnInfo: {},
         derivedColumns: [
           {

@@ -27,7 +27,7 @@ import {
 } from './errors';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
-import { resetTableState, initializeColumnsFromSchema } from './State';
+import { resetTableState, initializeColumnsFromSchema, pinnedColumnsFirst } from './State';
 import type {
   Filter,
   FilterType,
@@ -1155,8 +1155,10 @@ export class StateActions {
   /**
    * Set the column order
    *
-   * Also reorders visible columns to match the new order.
-   * Preserves hidden columns in columnOrder at their relative positions.
+   * Also reorders visible columns to match the new order, in the same
+   * update. Preserves hidden columns in columnOrder at their relative
+   * positions. Pinned columns stay first, in the order given: an order that
+   * puts one after an unpinned column has it moved to the pinned block.
    */
   setColumnOrder(columns: string[]): void {
     this.throwIfDestroyed('setColumnOrder');
@@ -1167,32 +1169,29 @@ export class StateActions {
     // Find columns in currentOrder that are NOT in the incoming list (hidden columns)
     const missingColumns = currentOrder.filter((c) => !columnsSet.has(c));
 
-    if (missingColumns.length > 0) {
-      // Merge hidden columns back at their relative positions
-      const fullOrder = [...columns];
-      for (const missing of missingColumns) {
-        const oldIndex = currentOrder.indexOf(missing);
-        // Find the nearest column to the right in currentOrder that is in fullOrder
-        let insertIndex = fullOrder.length; // default: append at end
-        for (let i = oldIndex + 1; i < currentOrder.length; i++) {
-          const idx = fullOrder.indexOf(currentOrder[i]!);
-          if (idx !== -1) {
-            insertIndex = idx;
-            break;
-          }
+    // Merge hidden columns back at their relative positions
+    const fullOrder = [...columns];
+    for (const missing of missingColumns) {
+      const oldIndex = currentOrder.indexOf(missing);
+      // Find the nearest column to the right in currentOrder that is in fullOrder
+      let insertIndex = fullOrder.length; // default: append at end
+      for (let i = oldIndex + 1; i < currentOrder.length; i++) {
+        const idx = fullOrder.indexOf(currentOrder[i]!);
+        if (idx !== -1) {
+          insertIndex = idx;
+          break;
         }
-        fullOrder.splice(insertIndex, 0, missing);
       }
-      this.state.columnOrder.set(fullOrder);
-    } else {
-      this.state.columnOrder.set(columns);
+      fullOrder.splice(insertIndex, 0, missing);
     }
+    const newOrder = pinnedColumnsFirst(fullOrder, this.state.pinnedColumns.get());
 
     // Reorder visible columns to match
-    const visible = this.state.visibleColumns.get();
-    const newOrder = this.state.columnOrder.get();
-    const reorderedVisible = newOrder.filter((c) => visible.includes(c));
-    this.state.visibleColumns.set(reorderedVisible);
+    const visible = new Set(this.state.visibleColumns.get());
+    batch(() => {
+      this.state.columnOrder.set(newOrder);
+      this.state.visibleColumns.set(newOrder.filter((c) => visible.has(c)));
+    });
   }
 
   /**

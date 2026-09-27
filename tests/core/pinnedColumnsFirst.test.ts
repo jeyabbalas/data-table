@@ -153,6 +153,39 @@ describe('pinned columns stay first', () => {
     expect(state.visibleColumns.get()).toEqual(['a', 'b', 'e', 'c', 'd']);
   });
 
+  it('setColumnOrder keeps the pinned columns first, in the order given', () => {
+    actions.toggleColumnPin('b');
+    actions.toggleColumnPin('d');
+    // Pinned b, d; an order that puts both after unpinned columns, d first.
+    actions.setColumnOrder(['a', 'd', 'c', 'b', 'e']);
+
+    expect(state.columnOrder.get()).toEqual(['d', 'b', 'a', 'c', 'e']);
+    expect(state.visibleColumns.get()).toEqual(['d', 'b', 'a', 'c', 'e']);
+    expect(leadingPinned(state.visibleColumns.get(), state.pinnedColumns.get())).toBe(2);
+  });
+
+  it('setColumnOrder keeps a hidden pinned column in the pinned block of columnOrder', () => {
+    actions.toggleColumnPin('c');
+    actions.hideColumn('c');
+    actions.setColumnOrder(['e', 'd', 'b', 'a']);
+
+    expect(state.columnOrder.get()).toEqual(['c', 'e', 'd', 'b', 'a']);
+    expect(state.visibleColumns.get()).toEqual(['e', 'd', 'b', 'a']);
+    actions.showColumn('c');
+    expect(state.visibleColumns.get()[0]).toBe('c');
+  });
+
+  it('setColumnOrder writes columnOrder and visibleColumns in one update', () => {
+    const seen: boolean[] = [];
+    state.columnOrder.subscribe(() => {
+      seen.push(isSubsequence(state.visibleColumns.get(), state.columnOrder.get()));
+    });
+
+    actions.setColumnOrder(['e', 'd', 'c', 'b', 'a']);
+
+    expect(seen).toEqual([true]);
+  });
+
   it('showing a column keeps visibleColumns in columnOrder after a reorder', () => {
     // Hide b (neighbours a, c) and c (neighbours a, d), then swap the two
     // columns left showing. setColumnOrder files b and c in front of d.

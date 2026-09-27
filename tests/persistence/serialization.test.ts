@@ -184,8 +184,10 @@ describe('restoreStateFromSnapshot — round-trip', () => {
     const stateA = setupState();
     stateA.filters.set([{ type: 'range', column: 'age', min: 18, max: 65, maxInclusive: true }]);
     stateA.sortColumns.set([{ column: 'name', direction: 'desc' }]);
-    stateA.visibleColumns.set(['id', 'name', 'age']);
-    stateA.columnOrder.set(['name', 'id', 'age', 'created']);
+    // A custom order that keeps the pinned column first, as the column
+    // actions do, with the visible columns following it.
+    stateA.visibleColumns.set(['id', 'age', 'name']);
+    stateA.columnOrder.set(['id', 'age', 'name', 'created']);
     stateA.columnWidths.set(
       new Map([
         ['id', 80],

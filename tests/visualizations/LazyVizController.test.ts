@@ -51,6 +51,8 @@ function setup(count: number, options: { hold?: boolean; concurrency?: number } 
   world.placeRow(names, COLUMN_WIDTH);
 
   const live = new Map<string, StubViz>();
+  /** Every chart made, destroyed or not: one destroyed mid-fetch keeps its slot until released. */
+  const all: StubViz[] = [];
   const created: string[] = [];
   const events: string[] = [];
   const host: LazyVizHost = {
@@ -71,6 +73,7 @@ function setup(count: number, options: { hold?: boolean; concurrency?: number } 
         },
       };
       created.push(col.name);
+      all.push(viz);
       return viz as unknown as BaseVisualization;
     }),
     getVizContainer: (name) => containers.get(name) ?? null,
@@ -90,7 +93,7 @@ function setup(count: number, options: { hold?: boolean; concurrency?: number } 
     intersectionObserverFactory: world.factory,
     ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
   });
-  return { names, root, world, controller, host, live, created, events, containers };
+  return { names, root, world, controller, host, live, all, created, events, containers };
 }
 
 /** Columns at least partly inside the viewport at the world's scroll offset. */
@@ -257,6 +260,181 @@ describe('LazyVizController', () => {
     expect(events.filter((e) => e.startsWith('-'))).toHaveLength(first.size);
   });
 
+  it('keeps the charts of the columns kept through a sync, and creates only the others', async () => {
+    const { names, world, controller, live, events } = setup(30);
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+    const first = new Map(live);
+    expect(first.has('c3')).toBe(true);
+    events.length = 0;
+
+    // The same columns, c3 among them with a new header: every other chart
+    // outlives the sync.
+    controller.sync(columns, (name) => name !== 'c3');
+    expect(events).toEqual(['-c3']);
+    world.flush();
+    await drain();
+    expect(events).toEqual(['-c3', '+c3']);
+    for (const [name, viz] of first) {
+      if (name === 'c3') continue;
+      expect(live.get(name)).toBe(viz);
+      expect(viz.destroyed).toBe(false);
+    }
+  });
+
+  it('keeps a column only with its schema entry, and only in the container it was built in', async () => {
+    const { names, world, controller, live, containers } = setup(10);
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+    const before = new Map(live);
+
+    // c1 gets a new schema entry, and c2 a new chart container.
+    const moved = document.createElement('div');
+    containers.get('c2')!.parentElement!.appendChild(moved);
+    containers.set('c2', moved);
+    controller.sync(
+      columns.map((c) => (c.name === 'c1' ? column('c1') : c)),
+      () => true,
+    );
+    expect(before.get('c1')!.destroyed).toBe(true);
+    expect(before.get('c2')!.destroyed).toBe(true);
+    expect(before.get('c0')!.destroyed).toBe(false);
+    world.flush();
+    await drain();
+    expect(live.has('c1')).toBe(true);
+    expect(live.has('c2')).toBe(true);
+  });
+
+  it('waits after a keeping sync for kept charts still on their first fetch, and no others', async () => {
+    const { names, world, controller, live } = setup(30, { hold: true });
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+
+    // Kept while their first fetches run, and while the rest of the first
+    // wave waits its turn: the new wave waits for all twelve, as the load
+    // that started them does.
+    controller.sync(columns, () => true);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    // Four at a time: each release lets the next ones be created.
+    for (let round = 0; round < 3; round++) {
+      await drain();
+      expect(settled).toBe(false);
+      for (const viz of [...live.values()]) viz.release();
+    }
+    await drain();
+    expect(live.size).toBe(12);
+    expect(settled).toBe(true);
+
+    // Kept once their data is in: nothing to wait for, and nothing new to
+    // observe.
+    controller.sync(columns, () => true);
+    await expect(controller.whenWaveSettled()).resolves.toBeUndefined();
+    expect(world.observers.map((o) => o.observedCount)).toEqual([30, 30]);
+  });
+
+  it('does not wait for the previous wave’s columns once a sync rebuilds them out of view', async () => {
+    const { names, world, controller, all } = setup(30, { hold: true });
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+
+    // New data while c0–c11, the first wave, fetch, and the view has moved on
+    // to c12–c23. The new entries for c0–c11 get no chart, out of view.
+    world.scrollLeft = 1200;
+    controller.sync(columns);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    world.flush();
+    for (let round = 0; round < 10 && !settled; round++) {
+      for (const viz of all) viz.release();
+      await drain();
+    }
+    expect(settled).toBe(true);
+    expect(controller.hasLiveViz('c0')).toBe(false);
+    expect(controller.hasLiveViz('c12')).toBe(true);
+  });
+
+  it('does not wait for a chart the keep band destroyed during its first fetch', async () => {
+    const { names, world, controller, all } = setup(60, { hold: true });
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+    // c0–c3 are on their first fetch when the view moves far away.
+    world.scrollTo(4000);
+    await drain();
+    expect(controller.hasLiveViz('c0')).toBe(false);
+
+    // A column change that keeps every header.
+    controller.sync(columns, () => true);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    for (let round = 0; round < 10 && !settled; round++) {
+      for (const viz of all) viz.release();
+      await drain();
+    }
+    expect(settled).toBe(true);
+  });
+
+  it('settles at once in a hidden document after a sync that rebuilds the first wave', async () => {
+    const { names, world, controller } = setup(30, { hold: true });
+    const columns = names.map(column);
+    controller.sync(columns);
+    world.flush();
+    await drain();
+
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    controller.sync(columns);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    await drain();
+    expect(settled).toBe(true);
+  });
+
+  it('waits for the charts in view after a keeping sync that comes before the first report', async () => {
+    const { names, world, controller, live } = setup(30, { hold: true });
+    const columns = names.map(column);
+    controller.sync(columns);
+    // Before the observer has reported, as when a session restore sets the
+    // column layout right after the data loads.
+    controller.sync(columns, () => true);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    await drain();
+    expect(settled).toBe(false);
+
+    world.flush();
+    await drain();
+    expect(live.size).toBe(4);
+    expect(settled).toBe(false);
+    // Twelve columns in reach, four at a time.
+    for (let round = 0; round < 3; round++) {
+      expect(settled).toBe(false);
+      for (const viz of [...live.values()]) viz.release();
+      await drain();
+    }
+    expect(live.size).toBe(12);
+    expect(settled).toBe(true);
+  });
+
   it('drops columns removed by a sync', async () => {
     const { names, world, controller, live } = setup(10);
     controller.sync(names.map(column));
@@ -368,6 +546,85 @@ describe('LazyVizController', () => {
     controller.sync(names.map(column));
     expect(createViz).toHaveBeenCalledTimes(3);
     await expect(controller.whenWaveSettled()).resolves.toBeUndefined();
+  });
+
+  it('tries a chart that threw again only on a sync that does not keep it, with no observer', () => {
+    const root = document.createElement('div');
+    for (const name of ['a', 'b']) {
+      const header = document.createElement('div');
+      header.setAttribute('data-column', name);
+      header.appendChild(document.createElement('div'));
+      root.appendChild(header);
+    }
+    const onError = vi.fn();
+    const controller = new LazyVizController({
+      host: {
+        createViz: (col) => {
+          if (col.name === 'b') throw new Error('boom');
+          return {
+            waitForData: () => Promise.resolve(),
+            destroy: () => {},
+          } as unknown as BaseVisualization;
+        },
+        getVizContainer: (name) => root.querySelector<HTMLElement>(`[data-column="${name}"] > div`),
+        onError,
+      },
+      getRoot: () => root,
+    });
+    const columns = ['a', 'b'].map(column);
+    controller.sync(columns);
+    expect(onError).toHaveBeenCalledTimes(1);
+    controller.sync(columns, () => true);
+    expect(onError).toHaveBeenCalledTimes(1);
+    controller.sync(columns);
+    expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for the charts a sync makes for the queued columns, with no observer', async () => {
+    const names = Array.from({ length: 8 }, (_, i) => `c${i}`);
+    const root = document.createElement('div');
+    for (const name of names) {
+      const header = document.createElement('div');
+      header.setAttribute('data-column', name);
+      header.appendChild(document.createElement('div'));
+      root.appendChild(header);
+    }
+    let declining = true;
+    const releases: (() => void)[] = [];
+    const createViz = vi.fn((): BaseVisualization | null => {
+      if (declining) return null;
+      const data = new Promise<void>((resolve) => releases.push(resolve));
+      return { waitForData: () => data, destroy: () => {} } as unknown as BaseVisualization;
+    });
+    const controller = new LazyVizController({
+      host: {
+        createViz,
+        getVizContainer: (name) => root.querySelector<HTMLElement>(`[data-column="${name}"] > div`),
+      },
+      getRoot: () => root,
+    });
+    const columns = names.map(column);
+    // Declined during a derived-column change, then queued once it settles:
+    // four are created, and four wait their turn.
+    controller.sync(columns);
+    declining = false;
+    controller.requeueWanted();
+    expect(releases).toHaveLength(4);
+
+    // A column change creates the four still queued.
+    controller.sync(columns, () => true);
+    expect(releases).toHaveLength(8);
+    let settled = false;
+    void controller.whenWaveSettled().then(() => {
+      settled = true;
+    });
+    for (const release of releases.slice(0, 4)) release();
+    await drain();
+    expect(settled).toBe(false);
+    for (const release of releases.slice(4)) release();
+    await drain();
+    expect(settled).toBe(true);
+    expect(createViz).toHaveBeenCalledTimes(16);
   });
 
   it('reports a chart that throws while being built and carries on', async () => {

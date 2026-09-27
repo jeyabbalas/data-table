@@ -76,8 +76,9 @@ What to expect:
   from the column's filter, so it matches the filter however that changed
   while the column was out of view. Escape still clears the most recent
   one, even when its column has scrolled out of view.
-- **Hide, show, pin, reorder.** These rebuild the header row, which
-  rebuilds the charts in view and no others.
+- **Hide, show, pin, reorder.** Every other column keeps its chart. The
+  column shown gets a new one, as does any column the change brings into
+  reach.
 - **Background tabs.** A hidden page has nothing in view, so `loadData`
   does not wait for charts; they are built when the page is shown. A page
   the browser is not rendering, such as a hidden iframe, gets the same

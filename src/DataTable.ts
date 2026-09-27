@@ -698,6 +698,26 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // header rebuild schedules one, so it is current whenever a chart is made.
   let headersByName = new Map<string, ColumnHeader>();
 
+  // The schema and table the last attach pass built charts and panels for.
+  // A pass for the same ones keeps the chart and the panel of every header
+  // that outlived the column change: a hide, show, move or pin rebuilds no
+  // header but the one shown, and only a new relation needs new queries.
+  let attachedSchema: readonly ColumnSchema[] | null = null;
+  let attachedTableName: string | null = null;
+
+  // The default stats each live chart last reported, for a stats panel made
+  // while its column's chart is live.
+  const latestStats = new Map<string, ColumnStatsData>();
+
+  // Per column with a live chart, draws the chart's stats into the stats
+  // slot, for a slot a panel was to take and did not.
+  const chartStatsRenderers = new Map<string, () => void>();
+
+  // Columns whose custom stats panel threw while being built. As with a chart
+  // that throws, the same header on the same relation would throw again, so
+  // it is not tried again until one of them changes.
+  const failedStatsPanels = new Set<string>();
+
   /**
    * Holds a column's place on the Escape stack once its chart is destroyed.
    * Escape then removes the column's filter, which is what clearing the
@@ -733,9 +753,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // once the change settles (see `setOnRelationSettled` below).
     if (!tableName || !header || actions.isRelationChanging()) return null;
     const statsEl = header.getStatsElement();
-    // A custom stats panel owns the slot. Panels are rebuilt by each attach
-    // pass, which also destroys every chart, so this one outlives the chart.
-    const panel = activeStatsPanels.get(column.name) ?? null;
+    // A custom stats panel owns the slot while its column is mounted, which
+    // need not be for as long as the chart lives, so it is looked up each
+    // time.
+    const panelOf = (): BaseStatsPanel | null => activeStatsPanels.get(column.name) ?? null;
 
     // The stats slot is composed of two regions: line 1 (the row-count
     // line, always present) and the detail region below it. Line 1 comes
@@ -764,7 +785,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         : line1;
     };
     // Only write the placeholder fallback when there's no panel taking the slot.
-    if (!panel) renderStatsSlot();
+    if (!panelOf()) renderStatsSlot();
 
     let viz: VisualizationType | undefined;
     const vizOptions = {
@@ -776,6 +797,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         coordinator.handleFilterChange(column.name, filter);
       },
       onDefaultStatsChange: (stats: ColumnStatsData) => {
+        latestStats.set(column.name, stats);
+        lastStats = stats;
+        const panel = panelOf();
         if (panel) {
           try {
             panel.update(stats);
@@ -784,10 +808,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           }
           return;
         }
-        lastStats = stats;
         renderStatsSlot();
       },
       onStatsChange: (stats: string | null) => {
+        detailHtml = stats;
+        const panel = panelOf();
         if (panel) {
           try {
             panel.setHoverStats(stats);
@@ -796,7 +821,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           }
           return;
         }
-        detailHtml = stats;
         renderStatsSlot();
       },
       onBrushCommit: (colName: string) => {
@@ -818,16 +842,19 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     const created = vizRegistry.create(vizContainer, column, vizOptions);
     if (!created) return null;
     viz = created as VisualizationType;
+    chartStatsRenderers.set(column.name, renderStatsSlot);
     // Once the chart is gone, its stats must not linger: a panel goes back
     // to its initial state, and the default slot to the table-wide count,
     // which `refreshNonVizStats` keeps current from then on.
     statsSlotResets.set(created, () => {
+      chartStatsRenderers.delete(column.name);
       if (destroyed) return;
+      latestStats.delete(column.name);
+      const panel = panelOf();
       if (!panel) {
         statsEl.innerHTML = tableWideLine1Html();
         return;
       }
-      // Replaced by a newer attach pass, whose panel now owns the slot.
       if (panel.isDestroyed()) return;
       try {
         panel.update(null);
@@ -866,17 +893,85 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
     });
-    // Build the charts skipped during a derived-column change. After a
-    // success the attach pass that follows re-syncs anyway; after a failure
-    // nothing else would. A task rather than a microtask, so it runs after
-    // the state update that follows the change and the attach pass it
-    // schedules.
-    actions.setOnRelationSettled(() => {
-      setTimeout(() => {
-        if (!destroyed) vizController?.requeueWanted();
-      }, 0);
-    });
   }
+
+  /**
+   * Build a column's custom stats panel into its stats slot, when the
+   * registry has one for it. A panel lives while its column is mounted (see
+   * `syncStatsPanels` below).
+   */
+  const createStatsPanel = (header: ColumnHeader, tableName: string): void => {
+    const column = header.getColumn();
+    if (!statsPanelCoordinator || activeStatsPanels.has(column.name)) return;
+    // While a derived-column change waits on DuckDB, `tableName` may name a
+    // VIEW it has already dropped, as for charts. The panels skipped are
+    // built once the change settles (see `setOnRelationSettled` below).
+    if (actions.isRelationChanging() || failedStatsPanels.has(column.name)) return;
+    if (!statsPanelRegistry.isApplicable(column)) return;
+    const statsEl = header.getStatsElement();
+    const panelOptions: StatsPanelOptions = {
+      tableName,
+      bridge,
+      filters: state.filters.get(),
+      messages,
+      onError: (err, ctx) => {
+        // Merge ctx into err.details so async errors carry the same
+        // {column, phase} payload the synchronous-throw path attaches
+        // via emitStatsPanelError. Without this, listeners see two
+        // different shapes depending on which path the panel took.
+        // `details` is declared readonly on DataTableError; the cast
+        // is the deliberate write-through site.
+        const target = err as { details?: Record<string, unknown> };
+        target.details = {
+          ...(target.details ?? {}),
+          column: ctx.column,
+          phase: ctx.phase,
+        };
+        emitter.emit('error', { error: err, source: 'stats-panel' });
+      },
+    };
+    let panel: BaseStatsPanel | null = null;
+    try {
+      // Clear the slot before construction so the panel starts on a blank
+      // canvas — any prior fallback HTML or previous-panel residue is gone.
+      statsEl.innerHTML = '';
+      panel = statsPanelRegistry.create(statsEl, column, panelOptions);
+    } catch (err) {
+      failedStatsPanels.add(column.name);
+      emitStatsPanelError(err, column.name, 'construct');
+    }
+    if (!panel) {
+      // The slot as it is without a panel: the stats of the column's chart
+      // while it lives (it reports them again only on its next fetch), and
+      // otherwise the table-wide count, until a chart writes its own.
+      const renderChartStats = chartStatsRenderers.get(column.name);
+      if (renderChartStats) renderChartStats();
+      else statsEl.innerHTML = tableWideLine1Html();
+      return;
+    }
+    activeStatsPanels.set(column.name, panel);
+    statsPanelCoordinator.register(column.name, panel);
+    // What the column's chart has reported, if it is live; a later fetch
+    // routes through `onDefaultStatsChange` to `panel.update(stats)`.
+    try {
+      panel.update(latestStats.get(column.name) ?? null);
+    } catch (err) {
+      emitStatsPanelError(err, column.name, 'update');
+    }
+  };
+
+  /** Destroy a column's stats panel, if it has one. */
+  const destroyStatsPanel = (columnName: string): void => {
+    const panel = activeStatsPanels.get(columnName);
+    if (!panel) return;
+    activeStatsPanels.delete(columnName);
+    statsPanelCoordinator?.unregister(columnName);
+    try {
+      panel.destroy();
+    } catch (err) {
+      emitStatsPanelError(err, columnName, 'destroy');
+    }
+  };
 
   // Auto-attach/detach visualizations as the schema changes. This replaces
   // the ~200 lines of manual wiring that every consumer used to have to write.
@@ -888,22 +983,42 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const attachVisualizations = (): void => {
     const tableName = state.tableName.get();
     if (!tableName) return;
+    const schema = state.schema.get();
+    // New data, or a derived column added, edited or removed: every chart and
+    // panel queries the relation it was built with.
+    const relationChanged = schema !== attachedSchema || tableName !== attachedTableName;
+    attachedSchema = schema;
+    attachedTableName = tableName;
 
-    // Tear down previous stats panels (run before the coordinator resets so a
-    // panel's destroy hook still sees a valid registration if it queries us).
-    for (const [colName, panel] of activeStatsPanels) {
-      try {
-        panel.destroy();
-      } catch (err) {
-        emitStatsPanelError(err, colName, 'destroy');
-      }
+    const headers = tableContainer.getColumnHeaders();
+    const previousHeaders = headersByName;
+    headersByName = new Map(headers.map((header) => [header.getColumn().name, header]));
+    // A column keeps its chart and panel when its header outlived the change.
+    const kept = (columnName: string): boolean => {
+      const header = headersByName.get(columnName);
+      return !relationChanged && header !== undefined && previousHeaders.get(columnName) === header;
+    };
+
+    // Tear down the stats panels that do not carry over (run before the
+    // coordinator resets so a panel's destroy hook still sees a valid
+    // registration if it queries us).
+    for (const columnName of [...activeStatsPanels.keys()]) {
+      if (!kept(columnName)) destroyStatsPanel(columnName);
     }
-    activeStatsPanels.clear();
+    for (const columnName of [...latestStats.keys()]) {
+      if (!kept(columnName)) latestStats.delete(columnName);
+    }
+    for (const columnName of [...failedStatsPanels]) {
+      if (!kept(columnName)) failedStatsPanels.delete(columnName);
+    }
 
-    // Recreate stats panel coordinator. Panels for non-viz columns still need
-    // filter-aware updates, so we keep this coordinator independent of the viz one.
-    if (statsPanelCoordinator) statsPanelCoordinator.destroy();
-    statsPanelCoordinator = new StatsPanelCoordinator(state);
+    // Recreate stats panel coordinator for a new relation. Panels for non-viz
+    // columns still need filter-aware updates, so we keep this coordinator
+    // independent of the viz one.
+    if (relationChanged || !statsPanelCoordinator) {
+      statsPanelCoordinator?.destroy();
+      statsPanelCoordinator = new StatsPanelCoordinator(state);
+    }
 
     // Per-column work (viz instances + custom stats panels) is gated by the
     // `visualizations` opt; the coordinator above is now wired regardless so
@@ -916,97 +1031,48 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       return;
     }
 
-    const headers = tableContainer.getColumnHeaders();
-    headersByName = new Map(headers.map((header) => [header.getColumn().name, header]));
+    const mounted = new Set(tableContainer.getColumnWindow().mountedColumns.get());
     const vizColumns: ColumnSchema[] = [];
     for (const header of headers) {
       const column = header.getColumn();
-      const statsEl = header.getStatsElement();
+      const carriedOver = kept(column.name);
+      // A custom stats panel owns the contents of `.dt-col-stats` while it
+      // lives; the library never writes to the slot directly. Built for the
+      // columns mounted now; the others get theirs when they mount.
+      if (!carriedOver && mounted.has(column.name)) createStatsPanel(header, tableName);
+      const hasPanel = activeStatsPanels.has(column.name);
 
-      // Try to instantiate a custom stats panel for this column. When a panel
-      // is created, it owns the contents of `.dt-col-stats` for the lifetime
-      // of this attach pass; the library never writes to the slot directly.
-      // Failures during construction route to the `error` event and the
-      // column gracefully falls back to the default HTML formatter.
-      let panel: BaseStatsPanel | null = null;
-      if (statsPanelRegistry.isApplicable(column)) {
-        const panelOptions: StatsPanelOptions = {
-          tableName,
-          bridge,
-          filters: state.filters.get(),
-          messages,
-          onError: (err, ctx) => {
-            // Merge ctx into err.details so async errors carry the same
-            // {column, phase} payload the synchronous-throw path attaches
-            // via emitStatsPanelError. Without this, listeners see two
-            // different shapes depending on which path the panel took.
-            // `details` is declared readonly on DataTableError; the cast
-            // is the deliberate write-through site.
-            const target = err as { details?: Record<string, unknown> };
-            target.details = {
-              ...(target.details ?? {}),
-              column: ctx.column,
-              phase: ctx.phase,
-            };
-            emitter.emit('error', { error: err, source: 'stats-panel' });
-          },
-        };
-        try {
-          // Clear the slot before construction so the panel starts on a blank
-          // canvas — any prior fallback HTML or previous-panel residue is gone.
-          statsEl.innerHTML = '';
-          panel = statsPanelRegistry.create(statsEl, column, panelOptions);
-        } catch (err) {
-          emitStatsPanelError(err, column.name, 'construct');
-          panel = null;
-        }
-        if (panel) {
-          activeStatsPanels.set(column.name, panel);
-          statsPanelCoordinator.register(column.name, panel);
-          // Initial render with no stats. A subsequent viz fetch (if any) will
-          // emit `onDefaultStatsChange` which routes to `panel.update(stats)`.
-          try {
-            panel.update(null);
-          } catch (err) {
-            emitStatsPanelError(err, column.name, 'update');
-          }
-        }
-      }
-
-      if (!vizRegistry.isApplicable(column)) {
-        // No visualization for this column. If a custom panel is mounted, it
-        // owns the stats slot — `refreshNonVizStats` skips panel-owned columns
-        // and the panel's own `updateFilters` (via the coordinator) handles
-        // filter-aware refreshes. Otherwise, write the simple row-count fallback.
-        if (!panel) {
-          statsEl.innerHTML = tableWideLine1Html();
-        }
-        continue;
-      }
-
-      vizColumns.push(column);
-      // The table-wide row count, until the column's chart exists.
-      if (!panel) statsEl.innerHTML = tableWideLine1Html();
+      if (vizRegistry.isApplicable(column)) vizColumns.push(column);
+      // A header that carried over has its slot as it was: its chart's, its
+      // panel's, or the table-wide count `refreshNonVizStats` keeps current.
+      // Otherwise the table-wide count, until the column's chart exists.
+      if (!hasPanel && !carriedOver) header.getStatsElement().innerHTML = tableWideLine1Html();
     }
 
-    // Destroys every chart, then creates the ones in view.
-    vizController.sync(vizColumns);
+    // Destroys the charts that do not carry over, then creates the ones in
+    // view.
+    vizController.sync(vizColumns, kept);
 
-    // Rebroadcast any filters already in state (e.g., restored from session).
-    // Both coordinators now return a Promise; we feed those into pendingVizInit
-    // so loadDataImpl can await them in parallel with the table body's first
-    // SELECT. Errors per task are swallowed by allSettled below — viz fetch
-    // errors already route via options.onError → 'error' event with
-    // source: 'visualization'; panel errors via source: 'stats-panel'; the
-    // count query in updateFilteredRowCount is best-effort.
-    const initPromises: Promise<unknown>[] = [
-      vizController.whenWaveSettled(),
-      coordinator.syncExistingFilters(),
-      // Same for stats panels — give them the current filter array up-front so
-      // panels with their own DuckDB queries don't have to wait for the next
-      // user-driven filter change.
-      statsPanelCoordinator.syncExistingFilters(state.filters.get()),
-    ];
+    // Rebroadcast any filters already in state (e.g., restored from session)
+    // to a new relation. Both coordinators return a Promise; we feed those
+    // into pendingVizInit so loadDataImpl can await them in parallel with the
+    // table body's first SELECT. Errors per task are swallowed by allSettled
+    // below — viz fetch errors already route via options.onError → 'error'
+    // event with source: 'visualization'; panel errors via source:
+    // 'stats-panel'; the count query in updateFilteredRowCount is
+    // best-effort. A column change on the same relation needs none of this:
+    // charts and panels that carried over are current, and new ones are made
+    // with the filters in force.
+    const initPromises: Promise<unknown>[] = [vizController.whenWaveSettled()];
+    if (relationChanged) {
+      initPromises.push(
+        coordinator.syncExistingFilters(),
+        // Same for stats panels — give them the current filter array up-front
+        // so panels with their own DuckDB queries don't have to wait for the
+        // next user-driven filter change.
+        statsPanelCoordinator.syncExistingFilters(state.filters.get()),
+      );
+    }
 
     pendingVizInit = Promise.allSettled(initPromises).then(() => undefined);
   };
@@ -1152,6 +1218,46 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.schema.subscribe(scheduleAttach));
   unsubscribes.push(state.visibleColumns.subscribe(scheduleAttach));
   unsubscribes.push(state.tableName.subscribe(scheduleAttach));
+
+  /**
+   * Give each mounted column its custom stats panel, and destroy those of the
+   * columns no longer mounted. Custom stats panels live while their column
+   * is mounted: built as it comes within about a viewport of the view,
+   * destroyed once it leaves, with the hysteresis the mounted columns have,
+   * so a scroll back and forth rebuilds none.
+   *
+   * Does nothing until an attach pass has run for the current table and
+   * schema; that pass builds the panels of the columns mounted then.
+   */
+  const syncStatsPanels = (columns: readonly string[]): void => {
+    const tableName = state.tableName.get();
+    if (destroyed || !tableName || tableName !== attachedTableName) return;
+    if (state.schema.get() !== attachedSchema) return;
+    const mounted = new Set(columns);
+    for (const columnName of [...activeStatsPanels.keys()]) {
+      if (!mounted.has(columnName)) destroyStatsPanel(columnName);
+    }
+    for (const columnName of columns) {
+      const header = headersByName.get(columnName);
+      if (header && !activeStatsPanels.has(columnName)) createStatsPanel(header, tableName);
+    }
+  };
+  if (vizController) {
+    const columnWindow = tableContainer.getColumnWindow();
+    unsubscribes.push(columnWindow.mountedColumns.subscribe(syncStatsPanels));
+    // Build the charts and panels skipped during a derived-column change.
+    // After a success the attach pass that follows builds them anyway; after
+    // a failure nothing else would. A task rather than a microtask, so it
+    // runs after the state update that follows the change and the attach
+    // pass it schedules.
+    actions.setOnRelationSettled(() => {
+      setTimeout(() => {
+        if (destroyed) return;
+        vizController?.requeueWanted();
+        syncStatsPanels(columnWindow.mountedColumns.get());
+      }, 0);
+    });
+  }
 
   // Keep the row-count stats line live for every column without a live
   // chart: columns with no visualization (e.g. uuid), and chart columns out

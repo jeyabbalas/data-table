@@ -572,3 +572,112 @@ test('a column moved across the header holding focus leaves that header, and foc
   }));
   expect(after).toEqual({ ...focused, blurred: false });
 });
+
+test('stats panels follow the mounted columns, and a hide, a show and a move rebuild no other chart or panel', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 300, statsPanel: true, visualizations: true });
+  const livePanels = () =>
+    page.evaluate(() => {
+      const live = new Map<string, number>();
+      for (const { event, column } of (window as unknown as TestWindow).__dtTest.panelLog) {
+        live.set(column, (live.get(column) ?? 0) + (event === 'construct' ? 1 : -1));
+      }
+      return [...live].filter(([, n]) => n > 0).map(([column]) => column);
+    });
+  const expectPanelsOnMounted = async () => {
+    const mounted = new Set(await probe(page, 'mounted'));
+    const live = await livePanels();
+    expect(live.length).toBeGreaterThan(0);
+    expect(live.filter((column) => !mounted.has(column))).toEqual([]);
+  };
+  await settle(page);
+  await expectPanelsOnMounted();
+  await wheelBy(page, 20_000);
+  await settle(page);
+  await expectPanelsOnMounted();
+
+  // Count every query from here, and mark every chart canvas.
+  await page.evaluate((hostId) => {
+    const w = window as unknown as TestWindow & { __queries: number };
+    w.__queries = 0;
+    const query = w.__dt.bridge.query.bind(w.__dt.bridge);
+    w.__dt.bridge.query = ((...args: unknown[]) => {
+      w.__queries++;
+      return (query as (...a: unknown[]) => unknown)(...args);
+    }) as typeof w.__dt.bridge.query;
+    for (const canvas of document.querySelectorAll(`#${hostId} .dt-col-viz canvas`)) {
+      (canvas as unknown as { __kept?: boolean }).__kept = true;
+    }
+  }, HOST_ID);
+  /**
+   * Since the last call: the queries run, the columns whose chart is new, and
+   * the columns in view that had a chart before and have another now.
+   */
+  const since = async (inViewBefore: string[]) => {
+    const result = await page.evaluate(
+      ({ hostId, inViewBefore }) => {
+        const w = window as unknown as TestWindow & { __queries: number };
+        const canvases = Array.from(document.querySelectorAll(`#${hostId} .dt-col-viz canvas`));
+        const columnOf = (c: Element) => c.closest('[data-column]')!.getAttribute('data-column')!;
+        const kept = (c: Element) => !!(c as unknown as { __kept?: boolean }).__kept;
+        const created = canvases.filter((c) => !kept(c)).map(columnOf);
+        const keptColumns = new Set(canvases.filter(kept).map(columnOf));
+        const rebuilt = inViewBefore.filter((c) => created.includes(c) && !keptColumns.has(c));
+        for (const canvas of canvases) (canvas as unknown as { __kept?: boolean }).__kept = true;
+        const queries = w.__queries;
+        w.__queries = 0;
+        return { queries, created, rebuilt };
+      },
+      { hostId: HOST_ID, inViewBefore },
+    );
+    return result;
+  };
+  const constructedSince = async (mark: number) =>
+    (await page.evaluate(() => (window as unknown as TestWindow).__dtTest.panelLog.slice()))
+      .slice(mark)
+      .filter((e) => e.event === 'construct')
+      .map((e) => e.column);
+  const logLength = () =>
+    page.evaluate(() => (window as unknown as TestWindow).__dtTest.panelLog.length);
+
+  // A numeric column in view, with a chart and a panel.
+  let inView = await probe(page, 'inView');
+  const column = inView.find((c) => Number(c.slice(1)) % 3 !== 1)!;
+
+  // Hidden: every column shifts left one place past it, which brings one more
+  // into reach, and only that one gets a chart.
+  let mark = await logLength();
+  await page.evaluate((c) => (window as unknown as TestWindow).__dt.actions.hideColumn(c), column);
+  await settle(page);
+  let change = await since(inView.filter((c) => c !== column));
+  expect(change.rebuilt).toEqual([]);
+  expect(change.created.length).toBeLessThanOrEqual(1);
+  expect(change.queries).toBeLessThanOrEqual(2 * change.created.length);
+  expect((await constructedSince(mark)).every((c) => !inView.includes(c))).toBe(true);
+
+  // Shown: it gets a chart and a panel of its own, and nothing else is rebuilt.
+  inView = await probe(page, 'inView');
+  mark = await logLength();
+  await page.evaluate((c) => (window as unknown as TestWindow).__dt.actions.showColumn(c), column);
+  await settle(page);
+  change = await since(inView);
+  expect(change.rebuilt).toEqual([]);
+  expect(change.created).toContain(column);
+  expect(change.queries).toBeLessThanOrEqual(2 * change.created.length);
+  expect(await constructedSince(mark)).toContain(column);
+
+  // Moved two places: nothing comes into reach or leaves it.
+  inView = await probe(page, 'inView');
+  mark = await logLength();
+  await page.evaluate((c) => {
+    const { actions, state } = (window as unknown as TestWindow).__dt;
+    const at = state.visibleColumns.get().indexOf(c);
+    const order = state.visibleColumns.get().filter((name) => name !== c);
+    order.splice(at + 2, 0, c);
+    actions.setColumnOrder(order);
+  }, column);
+  await settle(page);
+  expect(await since(inView)).toEqual({ queries: 0, created: [], rebuilt: [] });
+  expect(await constructedSince(mark)).toEqual([]);
+});

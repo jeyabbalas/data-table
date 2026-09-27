@@ -84,17 +84,17 @@ registration, so the library renders its built-in formatter for them.
 The library guarantees the following call ordering on every panel instance.
 Subclasses can rely on every step happening exactly as described.
 
-| Stage          | Method                                    | Notes                                                                                                                                                                                                                                                                                     |
-| -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mount          | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Build any persistent DOM here so later updates are simple `textContent` writes.                                                                                                                                 |
-| Initial paint  | `update(null)`                            | Fires on mount before any visualization stats have landed, and again whenever the column's chart is removed — charts exist only for columns near the view — so no stats from a chart that is gone linger. Render a "loading" or empty state.                                              |
-| Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload) while its chart exists. A column scrolled into view gets a new chart, which fires it once its data lands. Columns without a visualization receive `update(null)` only. |
-| Filter change  | `updateFilters(filters)`                  | Fires on every filter-array change, **before** any subsequent `update(stats)` from a viz refetch. The default implementation only refreshes `this.options.filters`; override to issue your own query.                                                                                     |
-| Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.                                                                                          |
-| Teardown       | `destroy()`                               | Called exactly once on schema change or table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                                                                                                              |
+| Stage          | Method                                    | Notes                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mount          | `constructor(container, column, options)` | `container` is empty (the `.dt-col-stats` slot inside the column header). Called as the column comes within about a viewport of the view: a panel lives while its column is near it, through hides, shows and moves of other columns. Build any persistent DOM here so later updates are simple `textContent` writes. |
+| Initial paint  | `update(null)` or `update(stats)`         | Fires on mount, with the stats the column's chart last emitted if its chart is live, and again whenever the column's chart is removed — charts exist only for columns near the view — so no stats from a chart that is gone linger. Render a "loading" or empty state for `null`.                                     |
+| Stats from viz | `update(stats)`                           | Fires whenever the column's visualization recomputes its data (after load, after filter change, after data reload) while its chart exists. A column scrolled into view gets a new chart, which fires it once its data lands. Columns without a visualization receive `update(null)` only.                             |
+| Filter change  | `updateFilters(filters)`                  | Fires on every filter-array change, **before** any subsequent `update(stats)` from a viz refetch. The default implementation only refreshes `this.options.filters`; override to issue your own query.                                                                                                                 |
+| Viz hover      | `setHoverStats(html \| null)`             | Fires when the visualization emits a hover snippet (e.g. histogram bin info), and again with `null` when the user mouses off. Default no-op. Columns without a visualization never trigger this.                                                                                                                      |
+| Teardown       | `destroy()`                               | Called exactly once: when the column moves away from the view or is hidden, when new data or a derived-column change replaces the panel, or on table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                                   |
 
 Lifecycle quoted from `BaseStatsPanel`'s JSDoc
-([`src/visualizations/BaseStatsPanel.ts:108-127`](../../src/visualizations/BaseStatsPanel.ts)).
+([`src/visualizations/BaseStatsPanel.ts:108-132`](../../src/visualizations/BaseStatsPanel.ts)).
 
 ## Registration
 
@@ -318,6 +318,12 @@ landed:
 | `'hover'`     | Inside `setHoverStats(html)`.                                         |
 | `'fetch'`     | Inside a panel-authored DuckDB query (most common).                   |
 | `'destroy'`   | Inside `destroy()`.                                                   |
+
+A panel whose constructor throws is not built again for that column until
+new data arrives or the column's header is rebuilt, for example when the
+column is hidden and shown again. Until then the slot shows what it would
+without a panel: the stats of the column's chart, or the table-wide row
+count.
 
 The library's `StatsPanelCoordinator` deliberately swallows per-panel
 `updateFilters` rejections so one panel's failure can't cascade across

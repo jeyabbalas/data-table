@@ -112,18 +112,23 @@ export interface StatsPanelOptions {
  * default. The library guarantees:
  *
  * - The constructor is called with an empty `container` element (the
- *   `.dt-col-stats` slot inside a column header).
- * - {@link update} fires with `null` on mount and whenever the column's
- *   chart is removed, and with each `ColumnStatsData` the chart emits (and on
- *   data reload). Columns without a visualization receive `update(null)` only.
+ *   `.dt-col-stats` slot inside a column header), when the column comes
+ *   within about a viewport of the view. A panel lives while its column is
+ *   near the view, through hides, shows and moves of other columns.
+ * - {@link update} fires on mount, with the stats the column's chart last
+ *   emitted if it has one, `null` otherwise; with `null` whenever the chart
+ *   is removed; and with each `ColumnStatsData` the chart emits (and on data
+ *   reload). Columns without a visualization receive `update(null)` only.
  * - {@link updateFilters} fires every time the table's active filter array
  *   changes, before any subsequent `update(stats)` call from a viz refetch.
  * - {@link setHoverStats} fires when a viz emits a hover snippet for this
  *   column (and again with `null` to clear). Columns without a viz never
  *   trigger this.
- * - {@link destroy} is called exactly once, before the container is reused
- *   for a freshly-constructed panel (e.g. on a schema change). Subclasses
- *   are responsible for clearing any DOM nodes they appended.
+ * - {@link destroy} is called exactly once: when the column moves away from
+ *   the view or is hidden, before the container is reused for a
+ *   freshly-constructed panel (new data, a derived column changed), or when
+ *   the table is destroyed. Subclasses are responsible for clearing any DOM
+ *   nodes they appended.
  */
 export abstract class BaseStatsPanel {
   protected readonly container: HTMLElement;

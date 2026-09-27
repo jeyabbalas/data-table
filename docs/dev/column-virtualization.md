@@ -296,3 +296,45 @@ panels and charts right across a trackpad sweep.
   - Moving a column to the front anchored the reorder on the first header in the row, which was
     the column moved, and moved every header it passed: 900 at 1,000 columns. It anchors on a
     header already after its neighbour now, and moves one.
+- **2026-09-27, headless Chromium, the four 4d PRs stacked, the 50K × 1,000 Parquet file.**
+  - **Load:** 5.4 s and 24 queries.
+  - **DOM:** 11,088 elements under `.dt-root`, where 4c left 36,600: 1,000 headers, 19 of them
+    with their controls, and 475 body cells.
+  - **Sweep:** a 70,000 px wheel sweep, checked in each of its 1,015 frames: every row held
+    exactly the mounted columns, every column in view was mounted, every visible column had a
+    header, with its controls exactly when mounted, and the cursor was named whenever its row was
+    rendered. Every column in view had its chart at the end.
+  - **Values:** the 300 cells in view matched DuckDB's values through the table's own renderer.
+  - **Column changes:** a hide took 41 ms and 2 queries (the chart of the column the shift
+    brought into reach), a show 55 ms and 2, a move 34 ms and none, a pin 82 ms and 2.
+  - **Features:** `F2` on the cursor's header 1,500 px away focused its first button. A filter
+    panel's column stayed mounted while the wheel took it away, and `Escape` gave focus back to its
+    filter button.
+  - **Errors:** no console errors.
+  - **Still to do:** the manual trackpad pass in a desktop Chrome window.
+- **Found in review of #145.**
+  - A load could hang for good. A column change during the first chart fetches carries the charts
+    the load waits for into the new wave, and it carried every column of the old wave still
+    listed, some of whose charts would never come: a column rebuilt for new data and now out of
+    view, or one whose chart the keep band destroyed as the view moved away. The load resolved
+    only once those columns were scrolled back into view. Only a kept chart still on its first
+    fetch, or a kept column still queued, is carried now.
+  - A load that restored a saved session resolved before the charts in view had their data. The
+    restore sets the column layout before the create observer's first report, and the column
+    change it makes closed its wave at once, with nothing new to observe; the report then came to
+    a closed wave. A wave now stays open while the one before it still waits for that report.
+  - Stats panels were built during a derived-column change, against the VIEW it had dropped: 100
+    panels and 100 errors for a sideways scroll while the change waited on DuckDB. Panels now wait
+    for the change to settle, as charts do, and those skipped are built once it has, whether it
+    succeeded or failed.
+  - A panel whose constructor threw was tried again on every change to the mounted columns: an
+    error each time, and the fallback line written over the stats of the column's live chart. As
+    with a chart, a failure now lasts until new data or a new header, and a slot a panel did not
+    take shows its chart's stats.
+- **Found checking the review of #145, pre-existing (on main too).** The body issues a block's
+  fetch again as soon as one ends without the block, failed or short. During a derived-column
+  change a sideways scroll makes the body read columns from the VIEW the change dropped, and every
+  read fails: about 1,750 failed queries, each logged to the console, while a test held the DROP's
+  reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
+  test double, the loop never yields. Not fixed here: body fetches should wait out a
+  derived-column change, and a failed fetch should back off.

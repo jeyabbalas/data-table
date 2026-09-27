@@ -268,6 +268,35 @@ class CountPanel extends BaseStatsPanel {
   }
 }
 
+/** A {@link CountPanel} that records the column and relation of each one built. */
+class RecordingPanel extends CountPanel {
+  static built: string[] = [];
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
+    super(container, column, options);
+    RecordingPanel.built.push(`${column.name}@${options.tableName}`);
+  }
+}
+
+function recordingPanels(): StatsPanelRegistry {
+  const registry = new StatsPanelRegistry();
+  registry.register({
+    name: 'count',
+    isApplicable: (type) => type === 'integer',
+    constructor: RecordingPanel,
+    priority: 10,
+  });
+  return registry;
+}
+
+/** A panel whose constructor throws. */
+class ThrowingPanel extends BaseStatsPanel {
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
+    super(container, column, options);
+    throw new Error(`no panel for ${column.name}`);
+  }
+  update(): void {}
+}
+
 /** A custom chart whose constructor throws after the base class added its canvas. */
 class ThrowingChart extends BaseVisualization {
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
@@ -560,7 +589,89 @@ describe('lazy column charts (real DuckDB)', () => {
     await m.table.destroy();
   }, 20_000);
 
-  it('tries a chart that throws in its constructor once per header rebuild', async () => {
+  it('shows the table-wide count when a panel fails to build for a column whose chart has gone', async () => {
+    const statsPanelRegistry = new StatsPanelRegistry();
+    const m = await mount({ statsPanelRegistry });
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    scrollTo(900);
+    await vi.waitFor(() => expect(m.charts()).not.toContain('c1'), { timeout: 5000 });
+    expect(m.slot('c1')).toBe('20 rows');
+
+    // A panel that throws, first tried as the columns mounted change.
+    statsPanelRegistry.register({
+      name: 'throwing',
+      isApplicable: (type) => type === 'integer',
+      constructor: ThrowingPanel,
+      priority: 10,
+    });
+    m.table.actions.hideColumn('c3');
+    await afterRebuild();
+    expect(m.slot('c1')).toBe('20 rows');
+    await m.table.destroy();
+  }, 20_000);
+
+  it('builds no stats panel against a VIEW a derived-column change is dropping', async () => {
+    const m = await mount({ statsPanelRegistry: recordingPanels() });
+    await waitForSlot(m, 'c1', 'panel 20 rows');
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'd',
+      expression: 'c1 * 2',
+    });
+    expect(added.success).toBe(true);
+    await afterRebuild();
+    m.table.actions.hideColumn('c3');
+    await afterRebuild();
+    RecordingPanel.built = [];
+
+    // Shown while the DROP has run but the state still names the VIEW.
+    const gate = m.hold((sql) => sql.startsWith('DROP VIEW'), true);
+    const removing = m.table.actions.removeDerivedColumn('d');
+    await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
+    m.table.actions.showColumn('c3');
+    await afterRebuild();
+    await sleep(50);
+    expect(RecordingPanel.built).toEqual([]);
+
+    gate.release();
+    await removing;
+    await afterRebuild();
+    await vi.waitFor(() => expect(RecordingPanel.built).toContain('c3@lazy_viz'), {
+      timeout: 5000,
+    });
+    expect(RecordingPanel.built.every((panel) => panel.endsWith('@lazy_viz'))).toBe(true);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('builds the stats panels skipped during a derived-column change that fails', async () => {
+    const m = await mount({ statsPanelRegistry: recordingPanels() });
+    await waitForSlot(m, 'c1', 'panel 20 rows');
+    m.table.actions.hideColumn('c3');
+    await afterRebuild();
+    RecordingPanel.built = [];
+
+    const gate = m.hold((sql) => sql.includes('no_such_col'));
+    const adding = m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'bad',
+      expression: 'no_such_col + 1',
+    });
+    await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
+    m.table.actions.showColumn('c3');
+    await afterRebuild();
+    await sleep(50);
+    expect(RecordingPanel.built).toEqual([]);
+
+    // No header rebuild follows a failed change; the panel comes anyway.
+    gate.release();
+    expect((await adding).success).toBe(false);
+    await vi.waitFor(() => expect(RecordingPanel.built).toEqual(['c3@lazy_viz']), {
+      timeout: 5000,
+    });
+    await m.table.destroy();
+  }, 20_000);
+
+  it('tries a chart that throws in its constructor once per relation', async () => {
     const visualizationRegistry = new VisualizationRegistry();
     visualizationRegistry.register({
       name: 'throwing',
@@ -584,8 +695,15 @@ describe('lazy column charts (real DuckDB)', () => {
     expect(count('c0')).toBe(0);
     expect(m.container.querySelectorAll('.dt-col-viz canvas')).toHaveLength(0);
 
-    // A header rebuild tries again, once.
+    // A column change leaves it be: the same relation would fail the same
+    // way.
     m.table.state.visibleColumns.set([...m.table.state.visibleColumns.get()]);
+    await afterRebuild();
+    await sleep(50);
+    expect(count('c0')).toBe(0);
+
+    // New data tries again, once.
+    m.table.state.schema.set([...m.table.state.schema.get()]);
     await afterRebuild();
     await sleep(50);
     expect(count('c0')).toBe(1);

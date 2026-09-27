@@ -24,11 +24,12 @@ test('every column in view is mounted, in every frame of a sweep across 400 colu
   expect(report.frames).toBeGreaterThan(10);
   expect(report.breaches).toEqual([]);
 
-  // At the far right of a 1,200px view of 150px columns: the eight in view
-  // and a viewport's worth to their left.
+  // At the far right of a 1,200px view of 150px columns: the eight in view,
+  // and up to a viewport's worth either side of the view where the set was
+  // last recomputed.
   const mounted = await probe(page, 'mounted');
   expect(mounted.at(-1)).toBe('c399');
-  expect(mounted.length).toBeLessThanOrEqual(8 + 8 + 2);
+  expect(mounted.length).toBeLessThanOrEqual(8 * 3 + 2);
 });
 
 test('a scroll back and forth across a column or two leaves the mounted columns alone', async ({

@@ -157,6 +157,20 @@ trackpad sweep.
   it: `dist/visualizations/LazyVizController.d.ts` loses its `ColumnSchema` import and fails to
   type-check. Nothing public reaches that file, so no consumer breaks. Found in review of #137, which
   keeps the tag off `ColumnWindowController.ts`; `LazyVizController.ts` is not fixed.
+- **Found in review of #138.**
+  - A change that shortens the table (hiding a wide column at the far right) reached the controller
+    before the browser clamped `scrollLeft`, a frame later, and the set it worked out from the old
+    position was empty. It now clamps the position to the new layout itself.
+  - Loading data, and adding or renaming a derived column, write `schema` before `visibleColumns`
+    in one batch, and `TableContainer` renders on `schema`, so the body was built from the old
+    set. The controller now follows `schema` and `columnOrder` too.
+  - A window losing focus sends a `focusout` to nowhere but leaves the element focused. The
+    controller used to drop the focused column from the set when that happened.
+  - The controller takes pinned columns to lead the visible order, as the column actions keep
+    them, but `setColumnOrder` and a restored session do not enforce it.
+  - The grid inherited a right-to-left page's direction, which reverses its flex rows and makes
+    `scrollLeft` negative. Every column offset in the table assumes left to right, so `.dt-grid`
+    is now `direction: ltr`.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

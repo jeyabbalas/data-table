@@ -82,7 +82,8 @@ describe('columnWindow', () => {
 
   it('drops a current run that no longer fits the layout', () => {
     const { layout: short } = layout([150, 150, 150]);
-    const stale = { start: 10, end: 30 };
+    // Covers the view, but runs past the three columns there are.
+    const stale = { start: 0, end: 30 };
     expect(columnWindow(short, { scrollLeft: 0, width: 300 }, stale)).toEqual({ start: 0, end: 3 });
   });
 

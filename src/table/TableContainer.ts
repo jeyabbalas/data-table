@@ -1268,11 +1268,13 @@ export class TableContainer {
     }
     if (elements[anchor]!.parentNode !== row) row.appendChild(elements[anchor]!);
     for (let i = anchor - 1; i >= 0; i--) {
-      if (elements[i]!.nextSibling !== elements[i + 1]) row.insertBefore(elements[i]!, elements[i + 1]!);
+      if (elements[i]!.nextSibling !== elements[i + 1])
+        row.insertBefore(elements[i]!, elements[i + 1]!);
     }
     for (let i = anchor + 1; i < elements.length; i++) {
       const previous = elements[i - 1]!;
-      if (previous.nextSibling !== elements[i]) row.insertBefore(elements[i]!, previous.nextSibling);
+      if (previous.nextSibling !== elements[i])
+        row.insertBefore(elements[i]!, previous.nextSibling);
     }
   }
 

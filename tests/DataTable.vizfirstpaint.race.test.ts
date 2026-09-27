@@ -18,13 +18,16 @@
  * `tests/DataTable.firstpaint.race.test.ts` for helpers and the
  * `tests/DataTable.statsPanel.test.ts` `StubViz` / registry pattern.
  */
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 import { createDataTable, VisualizationRegistry, type DataTable } from '@/index';
 import { DestroyedError } from '@/core/errors';
 import { BaseVisualization, type VisualizationOptions } from '@/visualizations/BaseVisualization';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { SessionStore } from '@/persistence/SessionStore';
+import type { SessionSnapshot } from '@/persistence/types';
+import { FakeIntersectionWorld } from './helpers/fakeIntersectionObserver';
+import { rowsFor } from './helpers/rowFetchBridge';
 
 // jsdom returns 0 for clientHeight (no layout engine), which short-circuits
 // VirtualScroller.getVisibleRange to {start:0,end:0,offsetY:0} and the body
@@ -476,6 +479,139 @@ describe('createDataTable awaits viz first fetch', () => {
 
     expect(table).toBeDefined();
     expect(HoldableViz.fetchCallCount).toBeGreaterThan(0);
+    await table.destroy();
+  });
+});
+
+/**
+ * With an observer that reports the columns in view, as a browser's does,
+ * the load waits for the charts of the columns in view at the first report,
+ * and for no others.
+ */
+describe('createDataTable awaits the first fetch of the charts in view', () => {
+  /** 40 columns, 100 px wide, in a 1,000 px view: c0–c11 are in reach. */
+  const NAMES = Array.from({ length: 40 }, (_, i) => `c${i}`);
+  let world: FakeIntersectionWorld;
+
+  beforeAll(() => {
+    (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class {
+      constructor(callback: IntersectionObserverCallback, init?: IntersectionObserverInit) {
+        return world.factory(callback, init);
+      }
+    };
+  });
+
+  afterAll(() => {
+    delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
+  });
+
+  beforeEach(() => {
+    world = new FakeIntersectionWorld();
+    world.viewportWidth = 1000;
+    world.placeRow(NAMES, 100);
+  });
+
+  /**
+   * Three rows of 40 integer columns. Row fetches get their rows: a fetch
+   * that came back short would be issued again at once, and with a bridge
+   * that answers in the same tick that never yields to a timer.
+   */
+  function makeWideBridge(): WorkerBridge {
+    const bridge = makePopulatedBridge();
+    (bridge.query as ReturnType<typeof vi.fn>).mockImplementation(async (sql: string) =>
+      /"__rowid__"\s*>=|LIMIT\s+\d+\s+OFFSET/i.test(sql)
+        ? rowsFor(sql, NAMES).filter((row) => (row.__rowid__ as number) < 3)
+        : [],
+    );
+    (bridge.loadData as ReturnType<typeof vi.fn>).mockResolvedValue({
+      tableName: 'data',
+      rowCount: 3,
+      columns: NAMES,
+      schema: NAMES.map((name) => ({
+        name,
+        type: 'integer',
+        nullable: true,
+        originalType: 'INTEGER',
+      })),
+    });
+    return bridge;
+  }
+
+  async function mountWide(sessionStore: SessionStore = makeSessionStore()): Promise<DataTable> {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    return createDataTable({
+      container,
+      bridge: makeWideBridge(),
+      visualizationRegistry: makeStubVizRegistry(HoldableViz),
+      persistence: { sessionStore },
+      ...baseOpts,
+    });
+  }
+
+  function load(table: DataTable): { loaded: () => boolean } {
+    let loaded = false;
+    void table.loadData(new File(['c0\n1'], 'x.csv', { type: 'text/csv' })).then(() => {
+      loaded = true;
+    });
+    return { loaded: () => loaded };
+  }
+
+  it('waits for them when a saved session sets the column layout before the first report', async () => {
+    const gate = deferred<void>();
+    HoldableViz.fetchDeferred = gate;
+    const sessionStore = makeSessionStore();
+    const saved: SessionSnapshot = {
+      version: 5,
+      timestamp: 1,
+      tableName: 'data',
+      filters: [],
+      sortColumns: [],
+      visibleColumns: NAMES,
+      columnOrder: NAMES,
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [],
+    };
+    (sessionStore.load as ReturnType<typeof vi.fn>).mockResolvedValue(saved);
+    const table = await mountWide(sessionStore);
+    const loading = load(table);
+    await drainMicrotasks();
+    expect(sessionStore.load).toHaveBeenCalled();
+
+    // The first frame: the observer reports the columns in view.
+    world.flush();
+    await drainMicrotasks();
+    expect(HoldableViz.instances.length).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(loading.loaded()).toBe(false);
+
+    gate.resolve();
+    await vi.waitFor(() => expect(loading.loaded()).toBe(true), { timeout: 2000 });
+    await table.destroy();
+  });
+
+  it('resolves once its charts land, after a scroll away and a column change', async () => {
+    const gate = deferred<void>();
+    HoldableViz.fetchDeferred = gate;
+    const table = await mountWide();
+    const loading = load(table);
+    await drainMicrotasks();
+    world.flush();
+    await drainMicrotasks();
+    expect(HoldableViz.instances.length).toBeGreaterThan(0);
+
+    // The view moves far away while the first charts fetch, which destroys
+    // them, and a column is hidden.
+    world.scrollTo(2500);
+    await drainMicrotasks();
+    table.actions.hideColumn('c39');
+    await drainMicrotasks();
+    world.flush();
+
+    gate.resolve();
+    await vi.waitFor(() => expect(loading.loaded()).toBe(true), { timeout: 2000 });
     await table.destroy();
   });
 });

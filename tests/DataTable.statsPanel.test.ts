@@ -223,6 +223,45 @@ async function mount(
   return { table, container, bridge };
 }
 
+/** A panel for every column but `amount`, whose constructor throws. */
+class ThrowsForAmount extends CapturingPanel {
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
+    if (column.name === 'amount') {
+      CapturingPanel.events.push({ type: 'construct', column: 'amount (threw)' });
+      throw new Error('amount panel boom');
+    }
+    super(container, column, options);
+  }
+}
+
+function amountAttempts(): number {
+  return CapturingPanel.events.filter((e) => e.column === 'amount (threw)').length;
+}
+
+const AMOUNT_STATS: ColumnStatsData = {
+  kind: 'numeric',
+  totalRows: 100,
+  nonNullCount: 90,
+  nullCount: 10,
+  filteredTotalRows: null,
+  min: 0,
+  max: 1000,
+  median: 50,
+  distinctCount: 80,
+};
+
+/** The column's live chart. */
+function liveChart(column: string): StubViz {
+  const chart = StubViz.instances.find((v) => v.getColumn().name === column && !v.isDestroyed());
+  expect(chart).toBeDefined();
+  return chart!;
+}
+
+function statsSlot(container: HTMLElement, column: string): string {
+  return container.querySelector(`.dt-col-header[data-column="${column}"] .dt-col-stats`)!
+    .innerHTML;
+}
+
 beforeEach(() => {
   CapturingPanel.events = [];
   CapturingPanel.throwIn = {};
@@ -571,6 +610,64 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
       expect((slot as HTMLElement).dataset.panelMounted).toBeUndefined();
     }
     CapturingPanel.throwIn = {};
+    await table.destroy();
+  });
+
+  it('does not try a panel that threw again on a column change, nor write over its chart’s stats', async () => {
+    const reg = new StatsPanelRegistry();
+    reg.register({
+      name: 'all',
+      isApplicable: () => true,
+      constructor: ThrowsForAmount,
+      priority: 0,
+    });
+    const { table, container } = await mount({ statsPanelRegistry: reg });
+    expect(amountAttempts()).toBe(1);
+    const errors: string[] = [];
+    table.on('error', ({ source }) => errors.push(source));
+    liveChart('amount').emitDefaultStats(AMOUNT_STATS);
+    const shown = statsSlot(container, 'amount');
+    expect(shown).toContain('100 rows');
+
+    // Each changes the columns mounted, and keeps amount's header and chart.
+    table.actions.hideColumn('name');
+    await Promise.resolve();
+    await Promise.resolve();
+    table.actions.showColumn('name');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(amountAttempts()).toBe(1);
+    expect(errors).toEqual([]);
+    expect(statsSlot(container, 'amount')).toBe(shown);
+
+    // New data tries it again, once.
+    table.state.schema.set([...table.state.schema.get()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(amountAttempts()).toBe(2);
+    await table.destroy();
+  });
+
+  it('leaves a live chart’s stats in place when its column’s panel fails to build', async () => {
+    const reg = new StatsPanelRegistry();
+    const { table, container } = await mount({ statsPanelRegistry: reg });
+    liveChart('amount').emitDefaultStats(AMOUNT_STATS);
+    const shown = statsSlot(container, 'amount');
+
+    // A panel first tried while the column's chart is live, as in a table
+    // narrower than the charts' reach, where a column's chart is made before
+    // the column is mounted.
+    reg.register({
+      name: 'all',
+      isApplicable: () => true,
+      constructor: ThrowsForAmount,
+      priority: 0,
+    });
+    table.actions.hideColumn('name');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(amountAttempts()).toBe(1);
+    expect(statsSlot(container, 'amount')).toBe(shown);
     await table.destroy();
   });
 

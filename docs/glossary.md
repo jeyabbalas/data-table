@@ -52,9 +52,10 @@ has a default. Receives the same `ColumnStatsData` the visualization for that
 column emits, plus filter-aware `updateFilters(filters: Filter[])` callbacks
 the panel can use to issue its own queries via `options.bridge`. Default
 `updateFilters` only refreshes `this.options.filters`; default `setHoverStats`
-is a no-op. The library guarantees `update(null)` once on mount,
-`updateFilters(filters)` on every filter change before any subsequent
-`update`, `setHoverStats(html | null)` on visualization hover in / out, and
+is a no-op. The library guarantees `update()` on mount (the stats of the
+column's chart if it is live, `null` otherwise), `updateFilters(filters)`
+on every filter change before any subsequent `update`,
+`setHoverStats(html | null)` on visualization hover in / out, and
 `destroy()` exactly once. Errors route through `options.onError(err, {
 source: 'stats-panel', column, phase: 'construct' | 'update' | 'hover' |
 'fetch' | 'destroy' })`. Registered via [`StatsPanelRegistry`](#statspanelregistry);

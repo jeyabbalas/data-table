@@ -101,7 +101,10 @@ interface Entry {
   observed: Element | null;
   /** Inside the create band, as the create observer last reported. */
   wanted: boolean;
-  /** `createViz` threw; not tried again until the next sync. */
+  /**
+   * `createViz` threw. Not tried again while the entry lives: until a sync
+   * that does not keep the column.
+   */
   failed: boolean;
 }
 
@@ -189,6 +192,23 @@ export class LazyVizController {
       if (!column) this.host.onColumnRemoved?.(name);
     }
     this.queue = this.queue.filter((name) => this.entries.has(name));
+    // The previous wave's kept columns whose chart is still coming join this
+    // wave: a column change while the first charts fetch must not let the
+    // load resolve without them. That is a kept chart on its first fetch, or
+    // a kept column still queued. Any other member has no chart coming, and
+    // would hold the wave open for good: its entry was just replaced, or the
+    // keep band destroyed its chart as it scrolled away.
+    const previous = this.wave && !this.wave.settled ? this.wave : null;
+    const carried = previous
+      ? [...previous.members].filter((name) => {
+          const entry = this.entries.get(name);
+          return entry !== undefined && (entry.viz !== null || this.queue.includes(name));
+        })
+      : [];
+    // Still waiting for the create observer's first report on what it
+    // observed. A sync can come before that report does: the one a session
+    // restore makes as it sets the column layout, for one.
+    const reportPending = previous !== null && !previous.closed;
     for (const column of columns) {
       if (this.entries.has(column.name)) continue;
       this.entries.set(column.name, {
@@ -199,11 +219,6 @@ export class LazyVizController {
         failed: false,
       });
     }
-    // Kept charts the previous wave still waits on join this one: a column
-    // change while the first charts fetch must not let the load resolve
-    // without them.
-    const previous = this.wave && !this.wave.settled ? this.wave : null;
-    const carried = previous ? [...previous.members].filter((name) => this.entries.has(name)) : [];
     const wave = this.startWave();
     for (const name of carried) {
       wave.members.add(name);
@@ -214,10 +229,13 @@ export class LazyVizController {
 
     const observers = this.ensureObservers();
     if (observers === 'none') {
-      // No visibility signal will come: create every chart now.
+      // No visibility signal will come: create every chart now. That leaves
+      // nothing queued. A column left in the queue would leave this wave when
+      // its turn came, while the chart made for it here still fetched.
+      this.queue = [];
       for (const [name, entry] of this.entries) {
         entry.wanted = true;
-        if (entry.viz) continue;
+        if (entry.viz || entry.failed) continue;
         const viz = this.createViz(name, entry);
         if (!viz) continue;
         wave.members.add(name);
@@ -248,12 +266,13 @@ export class LazyVizController {
       observed++;
     }
     // The wave closes on the create observer's first report, which covers
-    // every target observed above. With nothing observed there is no report
-    // to wait for. A hidden document gets no rendering updates, so it gets
-    // no report either until it is shown; nothing in it is visible, so the
-    // visible wave is empty. Any other page that does not render gets the
-    // same answer after a timeout.
-    if (observed === 0 || documentHidden()) {
+    // every target observed above, and those the previous wave was still
+    // waiting to hear about. With neither there is no report to wait for. A
+    // hidden document gets no rendering updates, so it gets no report either
+    // until it is shown; nothing in it is visible, so the visible wave is
+    // empty. Any other page that does not render gets the same answer after
+    // a timeout.
+    if ((observed === 0 && !reportPending) || documentHidden()) {
       this.closeWave(wave);
       return;
     }

@@ -94,7 +94,7 @@ Subclasses can rely on every step happening exactly as described.
 | Teardown       | `destroy()`                               | Called exactly once: when the column moves away from the view or is hidden, when new data or a derived-column change replaces the panel, or on table destroy. Subclasses must clear DOM and call `super.destroy()`.                                                                                                   |
 
 Lifecycle quoted from `BaseStatsPanel`'s JSDoc
-([`src/visualizations/BaseStatsPanel.ts:108-127`](../../src/visualizations/BaseStatsPanel.ts)).
+([`src/visualizations/BaseStatsPanel.ts:108-132`](../../src/visualizations/BaseStatsPanel.ts)).
 
 ## Registration
 
@@ -318,6 +318,12 @@ landed:
 | `'hover'`     | Inside `setHoverStats(html)`.                                         |
 | `'fetch'`     | Inside a panel-authored DuckDB query (most common).                   |
 | `'destroy'`   | Inside `destroy()`.                                                   |
+
+A panel whose constructor throws is not built again for that column until
+new data arrives or the column's header is rebuilt, for example when the
+column is hidden and shown again. Until then the slot shows what it would
+without a panel: the stats of the column's chart, or the table-wide row
+count.
 
 The library's `StatsPanelCoordinator` deliberately swallows per-panel
 `updateFilters` rejections so one panel's failure can't cascade across

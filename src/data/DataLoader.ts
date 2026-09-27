@@ -47,16 +47,23 @@ export class DataLoader {
    * blocking the main thread with sequential queries.
    */
   async load(
-    source: File | string | ArrayBuffer,
+    source: File | Blob | string | ArrayBuffer,
     options: DataLoaderOptions = {},
   ): Promise<LoadResult> {
-    let data: ArrayBuffer | string;
+    let data: ArrayBuffer | string | Blob;
     let format: DataFormat;
 
+    // Parquet from a File, Blob, or URL goes to the worker as a Blob, which
+    // DuckDB reads from disk as it loads: the file is never copied into
+    // memory, here or in the worker.
     if (source instanceof File) {
       // File upload
       format = options.format || this.detectFormatFromFile(source);
-      data = format === 'parquet' ? await source.arrayBuffer() : await source.text();
+      data = format === 'parquet' ? source : await source.text();
+    } else if (source instanceof Blob) {
+      // Unnamed binary data, like an ArrayBuffer, is taken to be Parquet.
+      format = options.format || 'parquet';
+      data = format === 'parquet' ? source : await source.arrayBuffer();
     } else if (typeof source === 'string') {
       const kind = this.classifyStringSource(source);
       if (kind === 'url') {
@@ -73,7 +80,7 @@ export class DataLoader {
             },
           });
         }
-        data = format === 'parquet' ? await response.arrayBuffer() : await response.text();
+        data = format === 'parquet' ? await response.blob() : await response.text();
       } else if (kind === 'ambiguous') {
         const preview = source.length > 60 ? `${source.slice(0, 60)}…` : source;
         throw new LoadError(

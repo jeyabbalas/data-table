@@ -149,9 +149,8 @@ describe('DataTable destroy race — loadData mid-flight (Phase 3)', () => {
     table.on('loadError', loadError);
     table.on('error', errorEvent);
 
-    // Kick off loadData. The first await inside loadDataImpl is normalizeSource
-    // (sync for File/string), so we yield once before destroy to ensure the
-    // bridge.loadData call is in flight.
+    // Kick off loadData, then yield before destroy so the bridge.loadData
+    // call is in flight.
     const file = new File(['a,b\n1,2'], 'x.csv', { type: 'text/csv' });
     const loadPromise = table.loadData(file);
     await Promise.resolve();

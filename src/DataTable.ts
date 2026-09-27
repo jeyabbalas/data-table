@@ -430,19 +430,6 @@ interface SelectionStateSnapshot {
 }
 
 /**
- * Resolve a source argument into something `DataLoader.load()` accepts.
- * It natively handles File/string/ArrayBuffer; we convert Blob to ArrayBuffer.
- */
-async function normalizeSource(
-  source: File | string | ArrayBuffer | Blob,
-): Promise<File | string | ArrayBuffer> {
-  if (source instanceof Blob && !(source instanceof File)) {
-    return source.arrayBuffer();
-  }
-  return source;
-}
-
-/**
  * Create a fully-wired data table mounted in `container`.
  *
  * Awaits worker initialization before returning so the caller can immediately
@@ -1214,10 +1201,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // half-initialized state.
     autoSave?.disable();
     try {
-      const normalized = await normalizeSource(source);
-      if (destroyed) {
-        throw new DestroyedError('DataTable is destroyed; load aborted.');
-      }
       // Capture the previous base table NOW, before `actions.loadData`
       // resets state. We drop it AFTER the new load resolves successfully —
       // a failed load leaves the previous data queryable as a fallback.
@@ -1245,7 +1228,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
       };
-      await actions.loadData(normalized, mergedOpts);
+      await actions.loadData(source, mergedOpts);
       if (destroyed) {
         // Tearing down — skip the loadComplete emit on a dead emitter and
         // surface a destroy error so consumers know the load was aborted.

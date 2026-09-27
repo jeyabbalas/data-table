@@ -510,11 +510,11 @@ export class StateActions {
    * All metadata (row count, schema) is retrieved in the worker to avoid
    * blocking the main thread with sequential queries.
    *
-   * @param source - File, URL string, or raw data (ArrayBuffer for Parquet; string for CSV/JSON)
+   * @param source - File, Blob, URL string, or raw data (ArrayBuffer for Parquet; string for CSV/JSON)
    * @param options - Loading options (tableName, format)
    */
   async loadData(
-    source: File | string | ArrayBuffer,
+    source: File | Blob | string | ArrayBuffer,
     options: LoadDataOptions = {},
   ): Promise<void> {
     this.throwIfDestroyed('loadData');

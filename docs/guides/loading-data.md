@@ -39,24 +39,32 @@ string as raw data.
 ### `File`
 
 Comes from an `<input type="file">`, a drag-and-drop event, or the File
-System Access API. The library reads the file:
+System Access API.
 
-- **Parquet** — `file.arrayBuffer()` (binary)
-- **CSV / JSON** — `file.text()`
+- **Parquet** — handed to DuckDB unread. DuckDB reads the file from disk as
+  it loads, so the file is never held in memory next to the table. This is
+  the way to load large files; see [Large Parquet files](#large-parquet-files).
+- **CSV / JSON** — read with `file.text()`.
 
 ### URL (`string` starting with `http`)
 
 Fetched with the platform `fetch()` — cross-origin URLs must send the
 appropriate CORS headers. A non-2xx response throws `LoadError` with
-`code: 'FETCH_FAILED'` and the status in `details`.
+`code: 'FETCH_FAILED'` and the status in `details`. A Parquet response is
+read as a `Blob`, which the browser may keep on disk, and then loaded like
+a `File`.
 
 ### `ArrayBuffer`
 
-Treated as binary (Parquet) unless you set `sourceFormat` explicitly.
+Treated as binary (Parquet) unless you set `sourceFormat` explicitly. The
+whole buffer is copied into DuckDB's memory before the table is built, so a
+Parquet `ArrayBuffer` needs room for the file and the table at once. Prefer
+a `File` or `Blob` for large files.
 
 ### `Blob`
 
-Wrapped internally and read the same way as a `File`.
+A Parquet `Blob` is read from disk like a `File`. Without `sourceFormat`, a
+`Blob` is assumed to be Parquet, as an `ArrayBuffer` is.
 
 ### Raw `string`
 
@@ -167,6 +175,40 @@ await table.destroy();
 table = await createDataTable({ container, source: newSource });
 ```
 
+## Large Parquet files
+
+DuckDB-WASM holds the whole table in WebAssembly memory, which browsers cap
+at 4 GiB; DuckDB's own `memory_limit` is 3.1 GiB by default. A loaded table
+takes roughly 5–20 bytes per value, plus the length of its text: 200,000
+rows × 1,000 mostly numeric columns come to about 2.2 GiB.
+
+To load files near that size, pass the Parquet file as a `File`, `Blob`, or
+URL. DuckDB then reads it from disk as it builds the table. Before loading,
+the loader estimates the table's size from the file's footer and a sample
+of its text columns, and picks how to read the file:
+
+- When there is room, DuckDB reads a whole row group at a time, which is
+  as fast as loading from memory.
+- Near the limit, it reads one column chunk at a time, two to four times
+  slower but with the smallest peak. A 1.5 GB file of 200,000 rows × 1,000
+  columns of random doubles loads this way in about 35 seconds.
+
+A load that will not fit rejects with `LoadError` code
+`LOAD_MEMORY_EXCEEDED` before anything is loaded, and the current table
+stays in DuckDB:
+
+```ts
+table.on('loadError', ({ error }) => {
+  if (error instanceof LoadError && error.code === 'LOAD_MEMORY_EXCEEDED') {
+    // error.message explains what would fit; error.details has the numbers.
+    showMessage(error.message);
+  }
+});
+```
+
+See [Troubleshooting §27](../troubleshooting.md#27-loaderror-with-code-load_memory_exceeded)
+for what to do about it.
+
 ## Recipes
 
 ### Load from a file input
@@ -182,13 +224,13 @@ fileInput.addEventListener('change', async (e) => {
 ### Load a URL with credentials
 
 The library uses `fetch()` with defaults — to include cookies or headers,
-fetch yourself and pass the `ArrayBuffer`:
+fetch yourself and pass the body as a `Blob`, which DuckDB can read from
+disk (an `ArrayBuffer` would be copied into its memory whole):
 
 ```ts
 const res = await fetch(url, { credentials: 'include', headers: { 'X-Token': token } });
 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-const buf = await res.arrayBuffer();
-await table.loadData(buf, { sourceFormat: 'parquet' });
+await table.loadData(await res.blob(), { sourceFormat: 'parquet' });
 ```
 
 ### Retry on failure
@@ -244,6 +286,7 @@ for a runnable demo.
 ## Gotchas
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
+- **Large Parquet files need a `File`, `Blob`, or URL.** An `ArrayBuffer` is copied into DuckDB's memory whole, next to the table. A load that will not fit rejects with `LOAD_MEMORY_EXCEEDED`; see [Large Parquet files](#large-parquet-files).
 - **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are _not_ auto-fetched — read them yourself and pass the bytes.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.

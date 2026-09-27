@@ -48,7 +48,7 @@ function boxes(page: Page, column: string) {
   );
 }
 
-test('a drag-reorder lands where the pointer is after the wheel scrolls mid-drag', async ({
+test('a drag-reorder lands where the pointer is after the wheel scrolls the headers under it', async ({
   page,
 }) => {
   await mountTable(page);
@@ -63,11 +63,9 @@ test('a drag-reorder lands where the pointer is after the wheel scrolls mid-drag
   await page.mouse.move(x, y, { steps: 3 });
   await expect(page.locator(`#${HOST_ID} .dt-root`)).toHaveClass(/dt-column-dragging/);
 
-  // Scroll about twenty columns on with the button held, then nudge the
-  // pointer the way a hand holding a mouse does.
+  // Scroll about twenty columns on with the button held, and let go without
+  // moving the pointer: the drop has to follow the headers that moved under it.
   await wheelBy(page, 3_000, { over: 'pointer' });
-  x += 2;
-  await page.mouse.move(x, y);
 
   // Where the pointer is now: before the column under it, or after it if the
   // pointer is past its middle. The header under the pointer is in view; the

@@ -393,6 +393,45 @@ describe('ColumnReorder', () => {
       reorder.destroy();
     });
 
+    it('drops where the pointer is after the headers scroll under it', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+      reorder.refresh();
+
+      const header = headerRow.querySelector('[data-column="col1"]')!;
+      getDragHandle(header).dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 85, clientY: 16 }));
+      // Past col2's middle: before the scroll, the drop is between col2 and col3.
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240, clientY: 16 }));
+
+      // The headers scroll 150px left under the still pointer, which is then
+      // past col3's middle.
+      for (const [i, name] of ['col1', 'col2', 'col3'].entries()) {
+        Object.defineProperty(
+          headerRow.querySelector(`[data-column="${name}"]`)!,
+          'getBoundingClientRect',
+          {
+            value: () => ({
+              left: i * 150 - 150,
+              right: i * 150,
+              width: 150,
+              top: 0,
+              bottom: 32,
+              height: 32,
+            }),
+            configurable: true,
+          },
+        );
+      }
+      headerRow.dispatchEvent(new Event('scroll'));
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+      expect(onReorder).toHaveBeenCalledWith(['col2', 'col3', 'col1'], 'col1');
+      reorder.destroy();
+    });
+
     it('does not call onReorder when dropped in same position', () => {
       setupHeaders(['col1', 'col2', 'col3']);
       const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });

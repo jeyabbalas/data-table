@@ -32,7 +32,8 @@ columns × 5,000,000 rows.
   (~50 nodes per column) comes second.
 - Deep unsorted scrolling already works at 5M rows. Sorted or filtered deep scrolling pays
   `LIMIT … OFFSET k`, which grows with depth.
-- Converting a row block from Arrow to JS objects is 64–77% of its fetch time even after clipping.
+- Converting a row block from Arrow to JS objects is 77% of its fetch time unclipped, and still 64–70%
+  after clipping.
 - In-memory footprint was **estimated** at ~1 GB per 100M cells and never measured in the worker. The
   default WASM heap is ~3.1 GiB. The test harness could not export 1,000 columns past ~85K rows in one
   Parquet row group, and loading was only ever validated at 60K × 1,000. Treat 200K × 1,000 as unproven
@@ -40,8 +41,8 @@ columns × 5,000,000 rows.
 
 ## Implicit contracts behind most defects
 
-Each phase found 6–8 defects after its suite was green. Almost all came from code relying on one of
-these, usually without saying so:
+Phases 2–5 each found 6–11 defects after their suites were green. Almost all came from code relying on
+one of these, usually without saying so:
 
 1. **Every visible column has a live `ColumnHeader` in the DOM.** Focus rescue, filter and
    derived-column panels, tooltip popovers, `ColumnReorder` (reads headers from the DOM),
@@ -50,7 +51,9 @@ these, usually without saying so:
 3. **Related state is written in separate signal writes.** `toggleColumnPin` writes `pinnedColumns`
    before `columnOrder`, and `showColumn`'s restore index can put an unpinned column between pinned ones.
 4. **Charts and stats panels hold per-instance state**, so creating and destroying them on scroll
-   loses brushes and selections and re-queries DuckDB.
+   loses it unless something outside the instance keeps it. The archive's `VizDataController`
+   snapshots chart data (a re-created chart issues no query) and the host restores brushes and
+   selections; stats panels have no such seam and re-query DuckDB on every mount.
 5. **`__rowid__` is `row_number() OVER ()` over a single-threaded scan.** A threaded (cross-origin
    isolated) build would make row identity depend on scan order.
 
@@ -81,9 +84,10 @@ Fix these when harvesting the corresponding piece:
   wobble), `vizReady` can fire early on a second attach, `syncExistingFilters` runs twice per load,
   `loadMarks` uses page-global names, and the palette cache ignores runtime CSS-variable changes.
 - **Load path:** type detection reads a 4,096-row head sample and converts with `TRY_CAST`, so later
-  values that don't parse become NULL with no warning, and the docs claim the opposite. Caller-owned
-  `ArrayBuffer`s are detached by the transfer. BOM stripping is missing on the `ArrayBuffer`/`Blob`
-  path. `memory_limit` is a hard-coded `'2.5GB'`.
+  values that don't parse become NULL. The docs say so, but the load raises no warning. Caller-owned
+  `ArrayBuffer`s are detached by the transfer; that was a deliberate, documented contract rather than
+  a defect, so decide it again instead of inheriting it. BOM stripping is missing on the
+  `ArrayBuffer`/`Blob` path. `memory_limit` is a hard-coded `'2.5GB'`.
 - **Column windowing:** header and body each keep their own copy of the window, its widening and its
   index maps. Correctness depends on subscriber order and on every `scrollLeft` writer calling
   `refreshColumnWindow()`. Headers are created and destroyed at scroll speed.
@@ -115,8 +119,9 @@ Fix these when harvesting the corresponding piece:
   without conflicts at 0.8.0 and does not depend on the column-windowing hooks.
 - `src/table/ColumnWindow.ts` (window model, prefix sums) and `src/table/RowCache.ts`: pure and
   heavily tested.
-- The `QueryCache` byte bound (`4b9bd9e`).
+- The `QueryCache` byte bound (`4b9bd9e`), with its fix in `dcf3300`: `estimateBytes` sampled only the
+  head of a result.
 - Role-based DOM lookups instead of positional ones (`803c0f3`, `38583b4`).
 - The harness: `tests/fixtures/tiers.ts` (tier generators, cell oracle), `tests/budgets.ts`,
   `demo/perf.ts`.
-- Already ported to main: `6b4d9b6` (`setOnFilterRemove` on every filter-removal path).
+- Ported to main in #115: `6b4d9b6` (`setOnFilterRemove` on every filter-removal path).

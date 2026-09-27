@@ -123,3 +123,8 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
   that it always names the ringed cell. `TableBody.renderVisibleRows` still rebuilds any row whose
   cell count differs from `visibleColumns.length`, which a windowed row always does. `ColumnReorder`
   takes the drop index and the new order from the header DOM, which will hold only mounted headers.
+- **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
+  of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
+  those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the
+  window (alt-tab mid-drag) keeps the drag alive until the next one. Both pre-existing; 4c's
+  controller, working from the layout model, is the place to hit-test drops.

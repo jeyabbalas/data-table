@@ -88,6 +88,19 @@ test('a drag-reorder lands where the pointer is after the wheel scrolls the head
   const drop = before.indexOf(under.column) + (under.pastMiddle ? 1 : 0);
   const expected = before.filter((c) => c !== 'c150');
   expected.splice(drop - (before.indexOf('c150') < drop ? 1 : 0), 0, 'c150');
+  // The drop indicator followed the headers: it marks that gap, at the edge
+  // of the header under the pointer, rather than scrolling off with the row.
+  const indicator = await page.evaluate(
+    ({ hostId, column, pastMiddle }) => {
+      const h = document
+        .querySelector(`#${hostId} .dt-col-header[data-column="${column}"]`)!
+        .getBoundingClientRect();
+      const i = document.querySelector(`#${hostId} .dt-drop-indicator`)!.getBoundingClientRect();
+      return { at: i.left, edge: pastMiddle ? h.right : h.left };
+    },
+    { hostId: HOST_ID, column: under.column, pastMiddle: under.pastMiddle },
+  );
+  expect(indicator.at).toBeCloseTo(indicator.edge, 0);
   await page.mouse.up();
   await settle(page);
 

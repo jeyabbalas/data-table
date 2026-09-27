@@ -43,6 +43,14 @@
   direction: ltr;
 }
 
+/* On a right-to-left page, cell values and column names still take their
+   direction from their own text, as `dir="auto"` would, rather than from the
+   grid's `ltr`. */
+.dt-grid:dir(rtl) .dt-cell,
+.dt-grid:dir(rtl) .dt-col-name {
+  unicode-bidi: plaintext;
+}
+
 /* `:focus-visible`, not `:focus` — clicking a cell bounces focus here (see
    TableContainer.handleGridFocusIn), and a ring around the whole table on
    every click reads as a glitch. Replaces `.dt-root:focus { outline: none }`,

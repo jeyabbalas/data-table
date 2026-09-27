@@ -45,17 +45,20 @@ Peak linear memory (MiB, ceiling 4,096) at 1,000 columns, random data:
 - At 200K × 1,000: rounded data (447 MiB file) fits both ways (`buffer` 3,238, `handle` 2,727); a
   single 200K-row row group fits `handle` at 3,596 (88%) but not `buffer`.
 - **The archived branch's `memory_limit = '2.5GB'` makes 200K × 1,000 fail** under `handle`.
-- **DuckDB's table costs ~11–12 bytes per cell** whatever the entropy (2,258 MiB for 200K × 1,000;
-  2,081 MiB for 5M × 40). In-memory tables are not compressed.
+- **DuckDB's table costs ~10.6–11.6 bytes per cell** whatever the entropy (`IN_MEMORY_TABLE` is
+  2,208 MiB for 200K × 1,000, random or rounded; 2,031 MiB for 5M × 40). In-memory tables are not
+  compressed.
 - `buffer`'s peak ≈ `handle`'s peak + the file size: the copy that matters is the one **inside** the
   WASM heap. The branch's zero-copy transfer removed JavaScript-heap copies, which do not count
   against this ceiling.
-- `handle`'s peak ≈ table + ~0.85 MiB per column for decoding one 122,880-row row group: ~850 MiB
-  at 1,000 columns, ~70 MiB at 40. Larger row groups raise it (a single 200K-row group: +1.3 GiB).
+- `handle`'s peak ≈ `duckdb_memory()`'s total + a decode buffer for one 122,880-row row group:
+  ~850 MiB at 1,000 columns, ~70 MiB at 40. Larger row groups raise it (a single 200K-row group:
+  +1.3 GiB).
 - 5M × 40: `buffer` peaks at 3,686 after load, `handle` at 2,154.
 
-Load time at the target shapes: `buffer` 6–8 s, `handle` 28–38 s (17 s at 100K × 1,000, 52 s at
-250K × 1,000), `handle` with `directIO = false` ~90 s, `view` under 1.1 s.
+Load time at the target shapes: `buffer` 6–8 s, plus 0.4–2.4 s to copy the file into the heap
+first (`handle` registers in 1 ms); `handle` 28–38 s (17 s at 100K × 1,000, 52 s at 250K × 1,000),
+`handle` with `directIO = false` ~90 s, `view` under 1.1 s.
 
 Query latency (ms). "Two-phase" sorts only `(key, __rowid__)` with the offset, then fetches the 128
 rows by `__rowid__`:
@@ -67,15 +70,16 @@ rows by `__rowid__`:
 | 5M × 40, table      |            15 / 5 |        273 |    **out of memory** |                   933 |           33 |            295 (150) |                121 (80) |
 | 5M × 40, view       |         267 / 223 |     14,819 |               17,188 |                15,073 |          365 |        1,005 (1,644) |               464 (852) |
 
-"Table" is `handle`; `buffer` is within a few ms of it once loaded. The sorted-mid `OFFSET` query is
+"Table" is `handle`; `buffer` is within 30 ms of it once loaded. The sorted-mid `OFFSET` query is
 main's own shape (`ORDER BY <sort>, __rowid__ LIMIT 128 OFFSET k` over every projected column): at
-5M × 40 it grew memory by 1.2 GiB beyond the 2.2 GiB table and still failed.
+5M × 40 it grew memory by 1.2 GiB beyond the 2.1 GiB peak after load (a 2.0 GiB table) and still
+failed.
 
 ## What this changes
 
 1. **Register `File` sources with `registerFileHandle` (`directIO = true`).** It removes the file
    from the WASM heap: the 1,000-column ceiling moves from ~150K to ~250K rows, and 5M × 40 drops
-   from 3.7 to 2.2 GiB. It costs load time (7 s → 35 s at 200K × 1,000), so keep `buffer` when the
+   from 3.6 to 2.1 GiB. It costs load time (7 s → 35 s at 200K × 1,000), so keep `buffer` when the
    estimated peak fits comfortably, and look at speeding up `handle` (for example an OPFS copy) as
    a follow-up. URL sources were not measured; `registerFileURL` range reads are the analogue.
 2. **Make sorted and filtered fetches two-phase.** Sort the keys and `__rowid__` only, then fetch
@@ -97,29 +101,32 @@ Measured afterwards to design the load path (#120), same setup. `prefetch` is
 `SET prefetch_all_parquet_files = true`; "cache off" adds
 `SET enable_external_file_cache = false`. Load time and peak WASM memory (MiB):
 
-| File                               | `buffer`      | `handle`     | `handle` + prefetch | `handle` + prefetch, cache off |
-| ---------------------------------- | ------------- | ------------ | ------------------- | ------------------------------ |
-| 1M × 40, 293 MB                    | 1.6 s, 805    | 5.4 s, 515   | 1.3 s, 828          | 1.3 s, 537                     |
-| 50K × 1,000, 370 MB, one row group | 2.8 s, 1,792  | 7.8 s, 1,381 | 2.3 s, 1,763        | 2.4 s, 1,762                   |
-| 200K × 1,000, 1.5 GB               | out of memory | 27 s, 3,114  | out of memory       | 9.9 s, 3,642                   |
+| File                                | `buffer`      | `handle`     | `handle` + prefetch | `handle` + prefetch, cache off |
+| ----------------------------------- | ------------- | ------------ | ------------------- | ------------------------------ |
+| 1M × 40, 293 MiB                    | 1.6 s, 805    | 5.4 s, 515   | 1.3 s, 828          | 1.3 s, 537                     |
+| 50K × 1,000, 370 MiB, one row group | 2.8 s, 1,792  | 7.8 s, 1,381 | 2.3 s, 1,763        | 2.4 s, 1,762                   |
+| 200K × 1,000, 1,464 MiB             | out of memory | 34 s, 3,114  | out of memory       | 9.9 s, 3,642                   |
 
 - **Prefetching makes lazy reads as fast as buffering, but only with the external file cache
   off.** The cache is on by default and keeps every prefetched block, so the load then costs the
   whole file again. With it off, prefetching costs at most about one row group. This replaces
   recommendation 1's "keep `buffer` when it fits".
 - **The table estimate needs block granularity.** DuckDB stores each column of each 122,880-row
-  group in whole 256 KiB blocks, plus one block for its validity mask. That matches
-  `duckdb_memory()` within 1% for every type measured and within 3–5% for the three files. The flat
-  11.5 B per cell in recommendation 4 is a third low for short, wide tables.
+  group in whole 256 KiB blocks, plus one block for its validity mask, so a short row group still
+  pays for whole blocks. The flat 11.5 B per cell in recommendation 4 is over a quarter low for
+  short, wide tables: 548 MiB against the 756 MiB measured at 50K × 1,000. How closely the block
+  model matched `duckdb_memory()`, per type and per file, was not recorded in
+  `spike/memory/results`.
 - **Do not retry after running out.** After an "Allocation failure", a lazy retry of the same file
   failed too, although new 100 MB and 1 GB tables still loaded. The estimate has to be the guard.
 - **The library's own load adds type detection.** At 200K × 1,000 it takes 2.6 s. When string
-  columns hold ISO dates, it rebuilds the whole table to convert them; with 10 such columns, that
-  second copy ran the 200K × 1,000 load out of memory. Converting in the load's single
-  `CREATE TABLE` fixes it.
+  columns hold ISO dates, it rebuilds the whole table to convert them, and on a 200K × 1,000 file
+  that rebuild failed. The spike recorded only the wrapped error ("Failed to convert columns to
+  date", at a 3,497 MiB peak); #121 measured it as out of memory with 10 such columns, and
+  converting in the load's single `CREATE TABLE` loads the same file in 12 s.
 - **In-memory compression is a possible later lever.** `ATTACH ':memory:' AS db (COMPRESS)`
-  followed by `CHECKPOINT` shrank a realistic 500K × 40 table from 209 to 42 MiB and a 3M × 40 one
-  from 1,163 to 253 MiB, with queries 2–5× slower (a block fetch went from 4 to 21 ms). Nothing is
+  followed by `CHECKPOINT` should trade query speed for a smaller table, but the trial's size and
+  latency figures were not recorded in `spike/memory/results`, so none are given here. Nothing is
   compressed until the checkpoint, though, so the load's peak is unchanged; using it would take a
   load that checkpoints in chunks. Worth a spike only if users need more than the current ceiling.
 

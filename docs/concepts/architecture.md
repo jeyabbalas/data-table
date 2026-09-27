@@ -107,6 +107,14 @@ See the [state model](./state-model.md) for the field inventory. Briefly:
 The signals are the single source of truth. Every UI component subscribes
 to what it needs and re-renders when notified.
 
+Column geometry is derived from the column layout signals in one place,
+`src/table/ColumnLayout.ts`. `getColumnLayout(state)` returns a cached,
+read-only snapshot of each visible column's width and left edge, the sticky
+offsets of the visible pinned columns, the scroll extent and the
+`aria-colindex` numbering. The header, the body rows, the pinned divider and
+keyboard scroll-into-view all read it rather than adding widths up
+themselves.
+
 ## Mutations: `StateActions`
 
 Direct signal writes are discouraged — the public API routes through

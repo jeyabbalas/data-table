@@ -48,6 +48,7 @@ import type { SQLFilterModal } from '../filters/SQLFilterModal';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
+import { getColumnLayout } from './ColumnLayout';
 import { ColumnReorder } from './ColumnReorder';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
@@ -1183,54 +1184,43 @@ export class TableContainer {
    * (which would kill any active resize operation).
    */
   private updateColumnWidths(): void {
-    const columnWidths = this.state.columnWidths.get();
+    const layout = getColumnLayout(this.state);
 
     // Update header widths
     for (const header of this.columnHeaders) {
-      const col = header.getColumn();
-      const width = columnWidths.get(col.name) ?? 150;
-      header.getElement().style.width = `${width}px`;
+      header.getElement().style.width = `${layout.widthOf(header.getColumn().name)}px`;
     }
+
+    // A pinned column's width is part of every later pinned column's offset,
+    // and of where the divider sits.
+    this.updatePinnedColumnStyles();
   }
 
   /**
    * Update sticky positioning for pinned columns (freeze pane effect)
    *
-   * Applies position:sticky and computed left offsets to both header and body
-   * cells for pinned columns. Called after render and when pinned/width state changes.
+   * Applies position:sticky and the offsets from the column layout to both
+   * header and body cells for pinned columns, and places the divider. Called
+   * after render and when pinned/width state changes.
    */
   private updatePinnedColumnStyles(): void {
-    const pinnedColumns = this.state.pinnedColumns.get();
-    const columnWidths = this.state.columnWidths.get();
+    const layout = getColumnLayout(this.state);
     const prefix = this.resolvedOptions.classPrefix;
 
     const baseZ =
-      Number(getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
-
-    // Compute cumulative left offsets for pinned columns
-    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
-    let cumulativeLeft = 0;
-
-    for (let i = 0; i < pinnedColumns.length; i++) {
-      const colName = pinnedColumns[i]!;
-      pinnedOffsets.set(colName, {
-        left: cumulativeLeft,
-        zIndex: baseZ + (pinnedColumns.length - i),
-      });
-      const width = columnWidths.get(colName) ?? 150;
-      cumulativeLeft += width;
-    }
+      layout.pinnedCount > 0
+        ? Number(getComputedStyle(this.element).getPropertyValue('--dt-z-pinned-col').trim()) || 20
+        : 20;
 
     // Apply to header elements
     for (const header of this.columnHeaders) {
-      const colName = header.getColumn().name;
       const el = header.getElement();
-      const offset = pinnedOffsets.get(colName);
+      const placement = layout.pinnedPlacement(header.getColumn().name);
 
-      if (offset) {
+      if (placement) {
         el.style.position = 'sticky';
-        el.style.left = `${offset.left}px`;
-        el.style.zIndex = String(offset.zIndex);
+        el.style.left = `${placement.left}px`;
+        el.style.zIndex = String(baseZ + placement.zOffset);
         el.classList.add(`${prefix}-col-header--pinned`);
       } else {
         el.style.position = '';
@@ -1248,12 +1238,12 @@ export class TableContainer {
       `.${prefix}-row > .${prefix}-cell[data-column]`,
     );
     for (const cell of cells) {
-      const offset = pinnedOffsets.get(cell.getAttribute('data-column')!);
+      const placement = layout.pinnedPlacement(cell.getAttribute('data-column')!);
 
-      if (offset) {
+      if (placement) {
         cell.style.position = 'sticky';
-        cell.style.left = `${offset.left}px`;
-        cell.style.zIndex = String(offset.zIndex);
+        cell.style.left = `${placement.left}px`;
+        cell.style.zIndex = String(baseZ + placement.zOffset);
         cell.classList.add(`${prefix}-cell--pinned`);
       } else {
         cell.style.position = '';
@@ -1263,14 +1253,15 @@ export class TableContainer {
       }
     }
 
-    // Manage the continuous demarcation line overlay
-    if (pinnedColumns.length > 0) {
+    // Manage the continuous demarcation line overlay. Only visible pinned
+    // columns count: with every pinned column hidden there is no pinned block.
+    if (layout.pinnedCount > 0) {
       if (!this.pinnedDemarcation) {
         this.pinnedDemarcation = document.createElement('div');
         this.pinnedDemarcation.className = `${prefix}-pinned-demarcation`;
         this.element.appendChild(this.pinnedDemarcation);
       }
-      this.pinnedDemarcation.style.left = `${cumulativeLeft}px`;
+      this.pinnedDemarcation.style.left = `${layout.pinnedWidth}px`;
       this.pinnedDemarcation.style.display = '';
     } else if (this.pinnedDemarcation) {
       this.pinnedDemarcation.style.display = 'none';
@@ -1307,8 +1298,7 @@ export class TableContainer {
     const schema = this.state.schema.get();
     const visibleColumns = this.state.visibleColumns.get();
     const tableName = this.state.tableName.get();
-    const columnWidths = this.state.columnWidths.get();
-    const columnOrder = this.state.columnOrder.get();
+    const layout = getColumnLayout(this.state);
 
     // Attach / detach the ARIA grid semantics, then refresh its dimensions.
     this.applyGridSemantics(schema.length > 0 && !!tableName);
@@ -1359,21 +1349,17 @@ export class TableContainer {
           if (colSchema) {
             // aria-colindex is a position in the *presented* table, and ARIA
             // requires the values to ascend in DOM order within a row — a MUST,
-            // not a SHOULD. `columnOrder` is the presentation order including
-            // hidden columns, and `visibleColumns` is a filter over it, so
-            // indexing into it ascends by construction while hidden columns
-            // still leave the gaps ARIA uses to signal "columns not present".
-            // Deriving from `schema` instead reported 3, 1, 2 after a reorder.
-            const orderIndex = columnOrder.indexOf(colName);
-            const colIndex =
-              orderIndex >= 0 ? orderIndex + 1 : schema.findIndex((s) => s.name === colName) + 1;
+            // not a SHOULD. The layout numbers columns through `columnOrder`,
+            // hidden ones included, which `visibleColumns` is a subsequence
+            // of. Deriving from `schema` instead reported 3, 1, 2 after a
+            // reorder.
             const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
               cellId: this.buildHeaderCellId(visibleIndex++),
               classPrefix: this.resolvedOptions.classPrefix,
               onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
               onDerivedIconClick: (column, buttonEl) =>
                 void this.handleDerivedIconClick(column, buttonEl),
-              colIndex: colIndex > 0 ? colIndex : undefined,
+              colIndex: layout.ariaColIndex(colName),
               messages: this.messages,
               showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
               annotations: this.resolvedOptions.annotations,
@@ -1383,10 +1369,8 @@ export class TableContainer {
             });
             this.columnHeaders.push(columnHeader);
 
-            // Apply dynamic width from state (default to 150px)
             const headerEl = columnHeader.getElement();
-            const width = columnWidths.get(colName) ?? 150;
-            headerEl.style.width = `${width}px`;
+            headerEl.style.width = `${layout.widthOf(colName)}px`;
 
             headerRowEl.appendChild(headerEl);
           }
@@ -1403,9 +1387,7 @@ export class TableContainer {
             colEl.setAttribute('role', 'columnheader');
             colEl.style.padding = '0.5rem';
 
-            // Apply dynamic width from state (default to 150px)
-            const width = columnWidths.get(colName) ?? 150;
-            colEl.style.width = `${width}px`;
+            colEl.style.width = `${layout.widthOf(colName)}px`;
 
             // Build the placeholder header via DOM nodes so a hostile column
             // name (e.g. from an attacker-controlled CSV header) cannot inject
@@ -1465,13 +1447,7 @@ export class TableContainer {
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
         // initialize() sets this later via async DuckDB fetch, but scrollToRightEnd()
         // may fire before that completes.
-        {
-          let totalWidth = 0;
-          for (const colName of visibleColumns) {
-            totalWidth += columnWidths.get(colName) ?? 150;
-          }
-          this.tableBody.getVirtualScroller().setContentWidth(totalWidth);
-        }
+        this.tableBody.getVirtualScroller().setContentWidth(layout.totalWidth);
 
         // Initialize table body asynchronously, but track the promise so
         // `whenBodyReady()` can resolve only after the surviving body's

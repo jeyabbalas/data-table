@@ -479,10 +479,11 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubTotalRows);
 
-    // Re-render when pinned columns change (to update sticky styles)
+    // Re-render when pinned columns change, to update the sticky styles.
+    // From the cache: pinning moves no data, so there is nothing to refetch.
     const unsubPinned = this.state.pinnedColumns.subscribe(() => {
       if (!this.destroyed) {
-        this.invalidateCacheAndRefresh();
+        this.renderVisibleRows();
       }
     });
     this.unsubscribes.push(unsubPinned);

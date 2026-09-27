@@ -269,6 +269,25 @@ describe('ModalHost — focus restore', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('gives focus back to `returnFocus`, and to the one given when opened again while open', () => {
+    const [focused, first, second] = ['focused', 'first', 'second'].map((text) => {
+      const button = document.createElement('button');
+      button.textContent = text;
+      document.body.appendChild(button);
+      return button;
+    });
+    focused!.focus();
+    const panel = makePanel();
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel, returnFocus: first });
+    // A panel switched to another column opens its host again.
+    host.open({ mode: 'panel', element: panel, returnFocus: second });
+    expect(host.isOpen).toBe(true);
+
+    host.close();
+    expect(document.activeElement).toBe(second);
+  });
+
   it('falls back gracefully when opener is removed from the DOM', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);

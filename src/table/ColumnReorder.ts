@@ -425,8 +425,6 @@ export class ColumnReorder {
    * Reset all drag state
    */
   private resetDragState(): void {
-    this.releaseHold?.();
-    this.releaseHold = null;
     document.removeEventListener('scroll', this.boundScroll, true);
     this.shadowScrollRoot?.removeEventListener('scroll', this.boundScroll, true);
     this.shadowScrollRoot = null;
@@ -444,6 +442,8 @@ export class ColumnReorder {
     this.draggedHeader = null;
     this.draggedColumn = null;
     this.dropIndex = -1;
+    this.releaseHold?.();
+    this.releaseHold = null;
   }
 
   // =========================================

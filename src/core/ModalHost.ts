@@ -54,6 +54,13 @@ export interface ModalOptions {
   /** Restore focus to the opener on close (default true). */
   restoreFocus?: boolean | undefined;
   /**
+   * Where focus goes back to on close, in place of the element focused when
+   * the host opened. Opening an open host again with another one moves it: a
+   * panel switched to another column gives focus back to that column's
+   * button.
+   */
+  returnFocus?: HTMLElement | undefined;
+  /**
    * Element to focus after open. `null` (or omitted) focuses the first
    * focusable descendant of the dialog.
    */
@@ -309,7 +316,12 @@ export class ModalHost {
   }
 
   open(opts: ModalOptions): void {
-    if (this.destroyed || this._isOpen) return;
+    if (this.destroyed) return;
+    if (this._isOpen) {
+      // Open already: only where focus goes back to can change.
+      if (opts.returnFocus) this.opener = opts.returnFocus;
+      return;
+    }
 
     this.opts = opts;
     const dialog = opts.dialog ?? opts.element;
@@ -317,7 +329,9 @@ export class ModalHost {
 
     // Capture opener for focus restore.
     const active = document.activeElement;
-    this.opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    this.opener =
+      opts.returnFocus ??
+      (active instanceof HTMLElement && active !== document.body ? active : null);
 
     // Push onto the stack and compute z-index.
     openHosts.push(this);

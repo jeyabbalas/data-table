@@ -204,8 +204,8 @@ export class ColumnWindowController {
   /** The column of the element holding DOM focus inside the grid, if any. */
   private focusColumn: string | null = null;
 
-  /** An update for a focus change is queued (see {@link updateForFocus}). */
-  private focusUpdateQueued = false;
+  /** An update is queued for a microtask (see {@link updateSoon}). */
+  private updateQueued = false;
 
   /** The columns {@link hold} keeps, and how many holds each has. */
   private readonly holds = new Map<string, number>();
@@ -548,7 +548,7 @@ export class ColumnWindowController {
       owner && this.gridElement.contains(owner) ? owner.getAttribute('data-column') : null;
     if (column === this.focusColumn) return;
     this.focusColumn = column;
-    this.updateForFocus();
+    this.updateSoon();
   };
 
   private readonly handleFocusOut = (event: FocusEvent): void => {
@@ -564,21 +564,23 @@ export class ColumnWindowController {
       if (active instanceof Node && this.gridElement.contains(active)) return;
     }
     this.focusColumn = null;
-    this.updateForFocus();
+    this.updateSoon();
   };
 
   /**
-   * {@link update} for a focus change, in a microtask rather than at once.
+   * {@link update} for a focus change or a released hold, in a microtask
+   * rather than at once.
    *
-   * Focus moves in the middle of other work: the body moves it to the grid
-   * as it removes the element holding it, part-way through a render.
-   * Publishing then would start another render inside that one.
+   * Both come in the middle of other work. The body moves focus to the grid
+   * as it removes the element holding it, part-way through a render, and a
+   * panel destroyed by a render releases its column. Publishing then would
+   * start another render inside that one.
    */
-  private updateForFocus(): void {
-    if (this.focusUpdateQueued) return;
-    this.focusUpdateQueued = true;
+  private updateSoon(): void {
+    if (this.updateQueued) return;
+    this.updateQueued = true;
     queueMicrotask(() => {
-      this.focusUpdateQueued = false;
+      this.updateQueued = false;
       this.update('kept');
     });
   }
@@ -591,8 +593,9 @@ export class ColumnWindowController {
    * wheel can scroll away mid-gesture, and the column an open panel belongs
    * to, whose close gives focus back to the header button that opened it.
    * Holds count, so a column stays until every hold on it is released, and a
-   * release does nothing the second time. A column that is not visible is
-   * held for when it is.
+   * release does nothing the second time. A hold is published at once, a
+   * release a microtask later (see {@link updateSoon}). A column that is not
+   * visible is held for when it is.
    *
    * @example
    * ```typescript
@@ -612,7 +615,7 @@ export class ColumnWindowController {
       const left = (this.holds.get(column) ?? 1) - 1;
       if (left > 0) this.holds.set(column, left);
       else this.holds.delete(column);
-      this.update('kept');
+      this.updateSoon();
     };
   }
 

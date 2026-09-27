@@ -227,6 +227,37 @@ describe('DerivedColumnEditPanel', () => {
       panel.destroy();
     });
 
+    it('reports the column it is open for, a switch, and its close', () => {
+      state.derivedColumns.set([
+        ...derivedDefs,
+        { kind: 'expression', name: 'doubled', expression: 'price * 2' },
+      ]);
+      state.schema.set([
+        ...baseSchema,
+        {
+          name: 'doubled',
+          type: 'float',
+          nullable: false,
+          originalType: 'DOUBLE',
+          isDerived: true,
+          expression: 'price * 2',
+        },
+      ]);
+      const onOpenChange = vi.fn();
+      const panel = new DerivedColumnEditPanel(state, actions, { onOpenChange });
+      rootEl.appendChild(panel.getElement());
+
+      panel.open('total', anchorEl);
+      panel.open('doubled', anchorEl);
+      panel.close();
+      expect(onOpenChange.mock.calls).toEqual([['total'], ['doubled'], [null]]);
+
+      // Destroyed while open: closed first, and reported.
+      panel.open('total', anchorEl);
+      panel.destroy();
+      expect(onOpenChange.mock.calls.slice(3)).toEqual([['total'], [null]]);
+    });
+
     it('should remove element from DOM on destroy', () => {
       const panel = createPanel();
       expect(rootEl.contains(panel.getElement())).toBe(true);

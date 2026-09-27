@@ -707,6 +707,75 @@ describe('ColumnReorder', () => {
     });
   });
 
+  describe('holding the dragged column', () => {
+    /** A `holdColumn` that records what is held right now. */
+    function holdRecorder(): {
+      holdColumn: (column: string) => () => void;
+      held: () => string[];
+    } {
+      const holds: string[] = [];
+      return {
+        holdColumn: (column) => {
+          holds.push(column);
+          return () => {
+            const at = holds.indexOf(column);
+            if (at >= 0) holds.splice(at, 1);
+          };
+        },
+        held: () => [...holds],
+      };
+    }
+
+    function press(column: string, clientX = 75): void {
+      getDragHandle(headerRow.querySelector(`[data-column="${column}"]`)!).dispatchEvent(
+        new MouseEvent('mousedown', { clientX, clientY: 16, bubbles: true, cancelable: true }),
+      );
+    }
+
+    it('holds the column from the press on its handle to the drop', () => {
+      setupHeaders(['col1', 'col2', 'col3']);
+      const recorder = holdRecorder();
+      const reorder = new ColumnReorder(headerRow, onReorder, {
+        dragThreshold: 5,
+        holdColumn: recorder.holdColumn,
+      });
+      reorder.refresh();
+
+      press('col1');
+      expect(recorder.held()).toEqual(['col1']);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 16 }));
+      expect(reorder.isDraggingNow()).toBe(true);
+      expect(recorder.held()).toEqual(['col1']);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 400, clientY: 16 }));
+      expect(onReorder).toHaveBeenCalledWith(['col2', 'col3', 'col1'], 'col1');
+      expect(recorder.held()).toEqual([]);
+
+      reorder.destroy();
+    });
+
+    it('lets go on a click that never became a drag, on a second press, and on destroy', () => {
+      setupHeaders(['col1', 'col2']);
+      const recorder = holdRecorder();
+      const reorder = new ColumnReorder(headerRow, onReorder, {
+        holdColumn: recorder.holdColumn,
+      });
+      reorder.refresh();
+
+      press('col1');
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 75, clientY: 16 }));
+      expect(recorder.held()).toEqual([]);
+
+      // A press whose release never arrived (lost outside the window), then
+      // another: one hold, on the column pressed last.
+      press('col1');
+      press('col2', 225);
+      expect(recorder.held()).toEqual(['col2']);
+
+      reorder.destroy();
+      expect(recorder.held()).toEqual([]);
+    });
+  });
+
   describe('visual feedback', () => {
     it('adds dragging class to body during drag', () => {
       setupHeaders(['col1', 'col2']);

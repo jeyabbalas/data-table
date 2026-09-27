@@ -23,7 +23,8 @@
  * which columns are near the view. {@link ColumnWindowController.mountedColumns}
  * publishes them: the pinned block, a run around the view
  * ({@link columnWindow}), and the columns the table is holding on to wherever
- * they are, which are the cursor's and the one with DOM focus.
+ * they are: the cursor's, the one with DOM focus, and the ones something in
+ * use asked to keep ({@link ColumnWindowController.hold}).
  *
  * `TableContainer` creates one and keeps it across renders: `render()`
  * replaces what is inside the scrollers, never the scrollers themselves. Not
@@ -124,6 +125,11 @@ export function revealColumnIn(scroller: HTMLElement, state: TableState, column:
   return true;
 }
 
+/** What {@link ColumnWindowController.hold} returns once the controller is gone. */
+function releaseNothing(): void {
+  // Nothing is held after destroy().
+}
+
 /** Whether two column lists hold the same names in the same order. */
 function sameColumns(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
@@ -175,8 +181,9 @@ export class ColumnWindowController {
 
   /**
    * The columns to mount, in layout order: the pinned block, the run
-   * around the view, and the cursor's column and the one holding DOM focus
-   * wherever they are. Every visible column until the body has a width.
+   * around the view, and the cursor's column, the one holding DOM focus and
+   * the ones {@link hold} keeps, wherever they are. Every visible column
+   * until the body has a width.
    *
    * A new array only when the list changes, so a subscriber hears of a
    * change, not of every scroll.
@@ -197,8 +204,11 @@ export class ColumnWindowController {
   /** The column of the element holding DOM focus inside the grid, if any. */
   private focusColumn: string | null = null;
 
-  /** An update for a focus change is queued (see {@link updateForFocus}). */
-  private focusUpdateQueued = false;
+  /** An update is queued for a microtask (see {@link updateSoon}). */
+  private updateQueued = false;
+
+  /** The columns {@link hold} keeps, and how many holds each has. */
+  private readonly holds = new Map<string, number>();
 
   constructor(options: ColumnWindowControllerOptions) {
     this.state = options.state;
@@ -510,9 +520,10 @@ export class ColumnWindowController {
     this.rangeWidth = width;
 
     // The columns held on to, where they fall outside the pinned block and
-    // the run: at most two, so a sort is nothing.
+    // the run: a handful at most, so a sort is nothing.
     const held: number[] = [];
-    for (const column of [this.state.focusedCell.get()?.column, this.focusColumn]) {
+    const holding = [this.state.focusedCell.get()?.column, this.focusColumn, ...this.holds.keys()];
+    for (const column of holding) {
       if (column === undefined || column === null) continue;
       const index = layout.indexOf(column);
       if (index < layout.pinnedCount || (index >= range.start && index < range.end)) continue;
@@ -537,7 +548,7 @@ export class ColumnWindowController {
       owner && this.gridElement.contains(owner) ? owner.getAttribute('data-column') : null;
     if (column === this.focusColumn) return;
     this.focusColumn = column;
-    this.updateForFocus();
+    this.updateSoon();
   };
 
   private readonly handleFocusOut = (event: FocusEvent): void => {
@@ -553,23 +564,59 @@ export class ColumnWindowController {
       if (active instanceof Node && this.gridElement.contains(active)) return;
     }
     this.focusColumn = null;
-    this.updateForFocus();
+    this.updateSoon();
   };
 
   /**
-   * {@link update} for a focus change, in a microtask rather than at once.
+   * {@link update} for a focus change or a released hold, in a microtask
+   * rather than at once.
    *
-   * Focus moves in the middle of other work: the body moves it to the grid
-   * as it removes the element holding it, part-way through a render.
-   * Publishing then would start another render inside that one.
+   * Both come in the middle of other work. The body moves focus to the grid
+   * as it removes the element holding it, part-way through a render, and a
+   * panel destroyed by a render releases its column. Publishing then would
+   * start another render inside that one.
    */
-  private updateForFocus(): void {
-    if (this.focusUpdateQueued) return;
-    this.focusUpdateQueued = true;
+  private updateSoon(): void {
+    if (this.updateQueued) return;
+    this.updateQueued = true;
     queueMicrotask(() => {
-      this.focusUpdateQueued = false;
+      this.updateQueued = false;
       this.update('kept');
     });
+  }
+
+  /**
+   * Keep `column` mounted, wherever it is scrolled, until the returned
+   * release is called.
+   *
+   * For a column something is using: a resize or reorder drag, which the
+   * wheel can scroll away mid-gesture, and the column an open panel belongs
+   * to, whose close gives focus back to the header button that opened it.
+   * Holds count, so a column stays until every hold on it is released, and a
+   * release does nothing the second time. A hold is published at once, a
+   * release a microtask later (see {@link updateSoon}). A column that is not
+   * visible is held for when it is.
+   *
+   * @example
+   * ```typescript
+   * const release = columnWindow.hold('price');
+   * // …the drag or the panel ends:
+   * release();
+   * ```
+   */
+  hold(column: string): () => void {
+    if (this.destroyed) return releaseNothing;
+    this.holds.set(column, (this.holds.get(column) ?? 0) + 1);
+    this.update('kept');
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const left = (this.holds.get(column) ?? 1) - 1;
+      if (left > 0) this.holds.set(column, left);
+      else this.holds.delete(column);
+      this.updateSoon();
+    };
   }
 
   // =========================================

@@ -262,6 +262,9 @@ describe('ColumnWindowController', () => {
     bodyScroll.dispatchEvent(new Event('scroll'));
     expect(headerScroll.scrollLeft).toBe(0);
     expect(controller.revealColumn('j')).toBe(false);
+    const before = controller.mountedColumns.get();
+    controller.hold('j')();
+    expect(controller.mountedColumns.get()).toBe(before);
   });
 });
 
@@ -378,6 +381,56 @@ describe('the columns to mount', () => {
     expect(heard).toEqual([]);
     await Promise.resolve();
     expect(heard).toEqual(['a b c d e f j']);
+  });
+
+  it('keep a held column mounted wherever it is, until every hold on it is released', async () => {
+    const heard: string[] = [];
+    controller.mountedColumns.subscribe((columns) => heard.push(columns.join(' ')));
+    const first = controller.hold('i');
+    // Published at once.
+    expect(heard).toEqual(['a b c d e f i']);
+    const second = controller.hold('i');
+    first();
+    // A release counts once, however often it is called.
+    first();
+    await Promise.resolve();
+    expect(mounted()).toBe('a b c d e f i');
+    second();
+    // A release is published a microtask later, as a focus change is: it
+    // comes in the middle of other work, such as a render destroying a
+    // panel.
+    expect(mounted()).toBe('a b c d e f i');
+    await Promise.resolve();
+    expect(mounted()).toBe('a b c d e f');
+    expect(heard).toEqual(['a b c d e f i', 'a b c d e f']);
+  });
+
+  it('keep a held column through scrolls and column changes, publishing only changes', async () => {
+    const heard: string[] = [];
+    controller.mountedColumns.subscribe((columns) => heard.push(columns.join(' ')));
+    const release = controller.hold('a');
+    // Already in the run: nothing to publish.
+    expect(heard).toEqual([]);
+    scrollBody(600);
+    expect(mounted()).toBe('a d e f g h i j');
+    // Hiding `b` works the run out afresh, 100px further left.
+    actions.hideColumn('b');
+    expect(mounted()).toBe('a e f g h i j');
+    release();
+    await Promise.resolve();
+    expect(mounted()).toBe('e f g h i j');
+    expect(heard).toEqual(['a d e f g h i j', 'a e f g h i j', 'e f g h i j']);
+  });
+
+  it('hold a hidden column for when it is shown', async () => {
+    actions.hideColumn('j');
+    const release = controller.hold('j');
+    expect(mounted()).toBe('a b c d e f');
+    actions.showColumn('j');
+    expect(mounted()).toBe('a b c d e f j');
+    release();
+    await Promise.resolve();
+    expect(mounted()).toBe('a b c d e f');
   });
 
   it('are worked out afresh when the columns change', () => {

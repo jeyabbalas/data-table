@@ -23,6 +23,7 @@ const mockBridge = {
 
 const schema: ColumnSchema[] = [
   { name: 'price', type: 'integer', nullable: true, originalType: 'INTEGER' },
+  { name: 'qty', type: 'integer', nullable: true, originalType: 'INTEGER' },
 ];
 
 describe('FilterPanel — panel-mode focus/escape', () => {
@@ -52,6 +53,25 @@ describe('FilterPanel — panel-mode focus/escape', () => {
     panel.destroy();
     document.body.innerHTML = '';
     __resetModalHostForTests();
+  });
+
+  it('reports the column it is open for, a switch, and its close', () => {
+    const onOpenChange = vi.fn();
+    const reporting = new FilterPanel(state, actions, { onOpenChange });
+    document.querySelector('.dt-root')!.appendChild(reporting.getElement());
+
+    reporting.open('price', anchor);
+    reporting.open('qty', anchor);
+    reporting.close();
+    expect(onOpenChange.mock.calls).toEqual([['price'], ['qty'], [null]]);
+    // A column the schema does not have opens nothing.
+    reporting.open('nope', anchor);
+    expect(onOpenChange).toHaveBeenCalledTimes(3);
+
+    // Destroyed while open: closed first, and reported.
+    reporting.open('price', anchor);
+    reporting.destroy();
+    expect(onOpenChange.mock.calls.slice(3)).toEqual([['price'], [null]]);
   });
 
   it('has role="dialog" (aria-modal omitted)', () => {

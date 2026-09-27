@@ -415,6 +415,56 @@ describe('ColumnHeader', () => {
     });
   });
 
+  describe('resize drag', () => {
+    function holdRecorder(): { holdColumn: (c: string) => () => void; held: string[] } {
+      const held: string[] = [];
+      return {
+        held,
+        holdColumn: (c) => {
+          held.push(c);
+          return () => {
+            const at = held.indexOf(c);
+            if (at >= 0) held.splice(at, 1);
+          };
+        },
+      };
+    }
+
+    function pressHandle(header: ColumnHeader): void {
+      header
+        .getElement()
+        .querySelector('.dt-col-resize-handle')!
+        .dispatchEvent(new MouseEvent('mousedown', { clientX: 100, bubbles: true }));
+    }
+
+    it('holds its column from the press to the release', () => {
+      const recorder = holdRecorder();
+      const header = new ColumnHeader(column, state, actions, { holdColumn: recorder.holdColumn });
+      header.getElement().style.width = '150px';
+      document.body.appendChild(header.getElement());
+
+      pressHandle(header);
+      expect(recorder.held).toEqual(['test_column']);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 140 }));
+      expect(state.columnWidths.get().get('test_column')).toBe(190);
+      expect(recorder.held).toEqual(['test_column']);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 140 }));
+      expect(recorder.held).toEqual([]);
+
+      header.destroy();
+    });
+
+    it('lets go when destroyed mid-drag', () => {
+      const recorder = holdRecorder();
+      const header = new ColumnHeader(column, state, actions, { holdColumn: recorder.holdColumn });
+      document.body.appendChild(header.getElement());
+
+      pressHandle(header);
+      header.destroy();
+      expect(recorder.held).toEqual([]);
+    });
+  });
+
   describe('getColumn', () => {
     it('should return the column schema', () => {
       const header = new ColumnHeader(column, state, actions);

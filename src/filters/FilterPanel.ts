@@ -52,6 +52,15 @@ export interface FilterPanelOptions {
   colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
+  /**
+   * Called with the column the panel opens for, again when it switches to
+   * another, and with `null` once it closes. `TableContainer` keeps that
+   * column mounted meanwhile, so the button focus goes back to, the one that
+   * opened the panel for it, is there.
+   *
+   * @internal
+   */
+  onOpenChange?: ((column: string | null) => void) | undefined;
 }
 
 /**
@@ -73,6 +82,7 @@ export class FilterPanel {
   private readonly prefix: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
+  private readonly onOpenChange: ((column: string | null) => void) | undefined;
 
   // Focus trap / Escape / outside-click delegated to ModalHost.
   private modalHost = new ModalHost();
@@ -88,6 +98,7 @@ export class FilterPanel {
     this.prefix = options.classPrefix ?? 'dt';
     this.colorSchemeSource = options.colorSchemeSource;
     this.messages = options.messages ?? defaultStrings;
+    this.onOpenChange = options.onOpenChange;
     this.element = this.createElement();
     this.body = this.element.querySelector(`.${this.prefix}-filter-panel-body`)!;
     this.titleEl = this.element.querySelector(`.${this.prefix}-filter-panel-title`)!;
@@ -239,6 +250,7 @@ export class FilterPanel {
     this.currentColumn = column;
     this.isOpen = true;
     this.element.style.display = '';
+    this.onOpenChange?.(column);
 
     // Update header: title, type badge, clear button
     this.titleEl.textContent = this.messages.filters.panelTitleForColumn(column);
@@ -254,6 +266,9 @@ export class FilterPanel {
       mode: 'panel',
       element: this.element,
       outsideClickIgnore: [`.${this.prefix}-col-filter-btn`],
+      // The button that opened the panel for this column, the one clicked
+      // last when the panel switched columns: the column held open.
+      returnFocus: anchorElement,
       onClose: () => this.handleHostClose(),
       colorSchemeSource: this.colorSchemeSource,
     });
@@ -276,6 +291,7 @@ export class FilterPanel {
   private handleHostClose(): void {
     this.isOpen = false;
     this.element.style.display = 'none';
+    this.onOpenChange?.(null);
   }
 
   // =========================================

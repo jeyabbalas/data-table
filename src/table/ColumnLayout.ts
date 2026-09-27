@@ -32,6 +32,9 @@ export const DEFAULT_COLUMN_WIDTH = 150;
  */
 export const MIN_COLUMN_WIDTH = 50;
 
+/** The widest a resize, by drag or by keyboard, makes a column. */
+export const MAX_COLUMN_WIDTH = 500;
+
 /**
  * The width a declared column width occupies: rounded to a whole pixel and
  * at least {@link MIN_COLUMN_WIDTH}, or {@link DEFAULT_COLUMN_WIDTH} when it

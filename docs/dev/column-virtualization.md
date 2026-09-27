@@ -56,9 +56,10 @@ column. That is the shell 4d builds.
 - **A header is a shell until its column is mounted,** in the controller's set, the one the body
   renders, with its hysteresis. A shell is the `columnheader` with its id, `aria-colindex`, label,
   sort state, width, pinned placement and its classes for the cursor, filters, annotations and
-  layout mode, and the header's boxes. Mounting adds the controls: the derived-column icon, pin,
-  hide, filter, sort, the drag handle and the resize handle. A `ColumnHeader` made outside
-  `TableContainer` stays whole.
+  layout mode, and the header's boxes. Mounting adds the controls: pin, hide, filter and sort, the
+  drag handle and the resize handle. The derived-column icon stays in the shell, since a derived
+  column's name row is as tall as the icon. A `ColumnHeader` made outside `TableContainer` stays
+  whole.
 - **The controller holds the columns in use,** so their controls stay: a resize drag's, a
   drag-reorder's, and the column an open filter panel or derived-column editor belongs to, whose
   close gives focus back to the button that opened it. The cursor's column and the one with DOM
@@ -252,3 +253,24 @@ panels and charts right across a trackpad sweep.
   `ModalHost` now takes a `returnFocus`, which an open host updates when opened again, and both
   panels pass the button that opened them. A released hold also publishes a microtask later, as a
   focus change does: a render that destroys a panel releases its column part-way through.
+- **Found building the shells (4d PR 2).**
+  - Hiding a column with its own hide button lost focus to `<body>`. The controller hears of the
+    change before `render()` does and publishes the column as unmounted, and taking its controls
+    down removed the focused button before `render()` could see that focus had been in the table,
+    so nothing put it back on the grid. A header holding focus now keeps its controls until
+    `render()` destroys it.
+  - The layout-mode axe test scanned while the charts rebuilt by the column move were rewriting
+    their stats lines, and axe could not find the background of a line that went mid-scan. Faster
+    header rebuilds moved the scan into that window. It now waits for the table to settle.
+- **Found in review of #143.** A double-click width reset animates for 250 ms under the class
+  `dt-col-resetting`, and `ColumnResizer.detach()` cancelled the cleanup that removes it. Detach
+  used to come only with a header's end, but taking a header's controls down detaches its resizer
+  while the header stays: a column scrolled away mid-reset kept the class, and so did the body
+  cells reused for other columns, which then lagged their headers through every resize. Detach now
+  finishes the cleanup at once.
+- **A flake under load, pre-existing.** `ColumnWindowController.scrollToEnd` takes the body's
+  smooth scroll to have ended once `scrollLeft` holds still for three frames, and then turns the
+  header-to-body sync back on and puts the header where the body is. On a loaded machine frames
+  stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
+  which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
+  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.

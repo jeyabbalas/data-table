@@ -154,6 +154,19 @@ queries for about a screen's worth of columns, however wide the table. On a
 a filter from 4.4 s to 0.5 s. See
 [Visualizations → Charts on wide tables](./guides/visualizations.md#charts-on-wide-tables).
 
+### Wide tables
+
+Body rows and the header render in full only the columns near the view:
+the pinned columns, the columns in view and a viewport either side, and the
+columns something is using (the keyboard cursor's, the one holding DOM
+focus, one being resized or dragged, one whose panel is open). A row holds
+cells for those only, with a spacer for each gap, and row fetches select
+those columns and some either side. Every other column keeps a header
+without its buttons, so each visible column still has its `columnheader`.
+At 1,000 columns in a 1,200 px view, a row holds about two dozen cells and
+the header about 10,500 elements, where they held 1,000 cells and 36,000
+elements.
+
 ### Derived columns
 
 - **Expression columns** cost only the VIEW creation (metadata, cheap)

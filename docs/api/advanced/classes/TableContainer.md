@@ -142,8 +142,13 @@ Returns the currently-applied color scheme.
 
 Defined in: [table/TableContainer.ts:2004](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/TableContainer.ts#L2004)
 
-Get all column header instances.
+Get all column header instances, one per visible column, in order.
 Useful for accessing visualization containers in each header.
+
+Every header has its stats and chart slots, but only the columns near the
+view have their pin, hide, filter and sort buttons and their drag and
+resize handles. The others are shells, whose `getControls()` holds at
+most a derived column's f(x) icon and a column name with a tooltip.
 
 #### Returns
 

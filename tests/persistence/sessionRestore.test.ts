@@ -249,7 +249,7 @@ describe('Session Restore on Load', () => {
     expect(state.columnOrder.get()).toEqual(['name', 'id', 'email', 'age']);
   });
 
-  it('puts a pinned column saved after an unpinned one first, and the visible columns in order', async () => {
+  it('puts a pinned column saved after an unpinned one first', async () => {
     // As a session saved before the column actions kept pinned columns
     // first could have it.
     mockDataLoad();
@@ -266,8 +266,31 @@ describe('Session Restore on Load', () => {
       sessionStore: store,
     });
 
-    expect(state.columnOrder.get()).toEqual(['id', 'name', 'age']);
-    expect(state.visibleColumns.get()).toEqual(['id', 'name', 'age']);
+    // The shown order, pinned column first.
+    expect(state.visibleColumns.get()).toEqual(['id', 'age', 'name']);
+    expect(state.columnOrder.get()).toEqual(['id', 'age', 'name']);
+  });
+
+  it('keeps the columns in the order the table showed them, with hidden ones beside their old neighbours', async () => {
+    // A session saved when showing a column did not keep `visibleColumns`
+    // in `columnOrder`: hide name, hide age, drag… the table showed
+    // [age, id] while the order said [name, age, id].
+    mockDataLoad();
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['age', 'id'],
+      columnOrder: ['name', 'age', 'id'],
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+    });
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.visibleColumns.get()).toEqual(['age', 'id']);
+    expect(state.columnOrder.get()).toEqual(['name', 'age', 'id']);
   });
 
   it('round-trips state through snapshot and restore', async () => {

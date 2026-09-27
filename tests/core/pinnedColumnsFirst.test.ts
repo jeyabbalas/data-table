@@ -175,6 +175,32 @@ describe('pinned columns stay first', () => {
     expect(state.visibleColumns.get()[0]).toBe('c');
   });
 
+  it('setColumnOrder keeps a hidden pinned column in the block when a drag passes it', () => {
+    // Pin a and b, hide b, and drag e to the front, which the drop clamps to
+    // after the visible pinned block: what the drag hands setColumnOrder.
+    actions.toggleColumnPin('a');
+    actions.toggleColumnPin('b');
+    actions.hideColumn('b');
+    actions.setColumnOrder(['a', 'e', 'c', 'd']);
+    expect(state.columnOrder.get()).toEqual(['a', 'b', 'e', 'c', 'd']);
+
+    // Pinning another column then puts it in the block, not after `e`.
+    actions.toggleColumnPin('c');
+    expect(leadingPinned(state.visibleColumns.get(), state.pinnedColumns.get())).toBe(2);
+    expect(state.visibleColumns.get()).toEqual(['a', 'c', 'e', 'd']);
+  });
+
+  it("setColumnOrder gives pinnedColumns the pinned block's new order, which a hide and show keeps", () => {
+    actions.toggleColumnPin('b');
+    actions.toggleColumnPin('d');
+    actions.setColumnOrder(['d', 'b', 'a', 'c', 'e']);
+    expect(state.pinnedColumns.get()).toEqual(['d', 'b']);
+
+    actions.hideColumn('d');
+    actions.showColumn('d');
+    expect(state.visibleColumns.get()).toEqual(['d', 'b', 'a', 'c', 'e']);
+  });
+
   it('setColumnOrder writes columnOrder and visibleColumns in one update', () => {
     const seen: boolean[] = [];
     state.columnOrder.subscribe(() => {

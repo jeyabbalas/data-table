@@ -232,6 +232,76 @@ export function pinnedColumnsFirst(order: readonly string[], pinned: readonly st
 }
 
 /**
+ * `columns` with each column of `order` that it lacks put back beside its old
+ * neighbour: before the nearest column after it in `order` that the result
+ * has, or at the end.
+ *
+ * How a new order of the visible columns keeps the hidden ones: each goes
+ * back next to the column it was next to.
+ *
+ * @example
+ * ```typescript
+ * mergeMissingColumns(['c', 'a'], ['a', 'b', 'c']); // → ['b', 'c', 'a']
+ * ```
+ */
+export function mergeMissingColumns(
+  columns: readonly string[],
+  order: readonly string[],
+): string[] {
+  const merged = [...columns];
+  const present = new Set(columns);
+  for (let k = 0; k < order.length; k++) {
+    const missing = order[k]!;
+    if (present.has(missing)) continue;
+    let at = merged.length;
+    for (let i = k + 1; i < order.length; i++) {
+      const index = merged.indexOf(order[i]!);
+      if (index !== -1) {
+        at = index;
+        break;
+      }
+    }
+    merged.splice(at, 0, missing);
+    present.add(missing);
+  }
+  return merged;
+}
+
+/**
+ * A column order, the visible columns and the pinned columns made to agree
+ * the way the column actions keep them:
+ *
+ * - the visible columns in `visible`'s order, which is what the table showed;
+ * - every other column of `order` back beside its old neighbour
+ *   ({@link mergeMissingColumns});
+ * - the pinned columns first ({@link pinnedColumnsFirst}), and
+ *   `pinnedColumns` in the order they are shown, which is the order
+ *   `showColumn` puts a pinned column back in.
+ *
+ * For state that did not come from the column actions: a restored session,
+ * and the undo and redo entries saved with it. A session saved before the
+ * actions kept pinned columns first, and visible columns in `columnOrder`,
+ * can break both rules. On state that keeps them, it changes nothing.
+ */
+export function consistentColumnOrder(
+  visible: readonly string[],
+  order: readonly string[],
+  pinned: readonly string[],
+): { columnOrder: string[]; visibleColumns: string[]; pinnedColumns: string[] } {
+  const columnOrder = pinnedColumnsFirst(mergeMissingColumns(visible, order), pinned);
+  const shown = new Set(visible);
+  const isPinned = new Set(pinned);
+  return {
+    columnOrder,
+    visibleColumns: columnOrder.filter((c) => shown.has(c)),
+    pinnedColumns: [
+      ...columnOrder.filter((c) => isPinned.has(c)),
+      ...pinned.filter((c) => !columnOrder.includes(c)),
+    ],
+  };
+}
+
+/**
  * Return true if `name` refers to a library-synthesized system column
  * (e.g. the reserved `__rowid__`).
  */

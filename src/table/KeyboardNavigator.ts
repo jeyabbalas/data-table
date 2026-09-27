@@ -504,9 +504,10 @@ export class KeyboardNavigator {
     }
     // A control that opens a popover on focus (the column's tooltip, its
     // annotations) would have it closed at once by that scroll's events,
-    // which come a frame later for the body and can come a frame after that
-    // for the header. Focus once they have passed, unless the cursor has
-    // moved on or focus has gone elsewhere in the meantime.
+    // which come a frame later. Two frames: without the table's column window
+    // controller, which scrolls the header with the body, the header's
+    // event can come a frame after the body's. Focus once they have passed,
+    // unless the cursor has moved on or focus has gone elsewhere meanwhile.
     const focusLater = (frames: number): void => {
       requestAnimationFrame(() => {
         if (frames > 1) return focusLater(frames - 1);
@@ -938,7 +939,7 @@ export class KeyboardNavigator {
 
   /**
    * Ensure the focused cell is within the visible viewport — vertically via
-   * the VirtualScroller, horizontally via {@link KeyboardNavigatorOptions.revealColumn}.
+   * the VirtualScroller, horizontally through the `revealColumn` option.
    *
    * Runs on every cursor move, and when a key acts on the cursor where it is
    * (Enter, Space, F2, Shift+F2, the layout-mode width keys, Escape after a

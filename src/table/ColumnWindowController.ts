@@ -11,6 +11,11 @@
  * they are the methods of one object, which is the only code in `src/` that
  * writes the grid's `scrollLeft` (`tests/table/scrollWriters.test.ts` checks).
  *
+ * The browser still scrolls the grid by itself, and the controller follows
+ * it like a user's scroll: a wheel, a scrollbar, and focus moving to a
+ * header button without `preventScroll`, which is how `ModalHost` brings a
+ * column back into view when its panel closes.
+ *
  * It also sizes the header's scrollbar gutter, which is part of keeping the
  * two scrollers the same width, and so the same scroll range.
  *
@@ -21,9 +26,8 @@
  * they are, which are the cursor's and the one with DOM focus.
  *
  * `TableContainer` creates one and keeps it across renders: `render()`
- * replaces what is inside the scrollers, never the scrollers themselves.
- *
- * @internal
+ * replaces what is inside the scrollers, never the scrollers themselves. Not
+ * exported from the package entry points.
  */
 
 import { type Signal, createSignal } from '../core/Signal';

@@ -55,7 +55,8 @@ export interface FilterPanelOptions {
   /**
    * Called with the column the panel opens for, again when it switches to
    * another, and with `null` once it closes. `TableContainer` keeps that
-   * column mounted meanwhile, so the button focus goes back to is there.
+   * column mounted meanwhile, so the button focus goes back to, the one that
+   * opened the panel for it, is there.
    *
    * @internal
    */
@@ -265,6 +266,9 @@ export class FilterPanel {
       mode: 'panel',
       element: this.element,
       outsideClickIgnore: [`.${this.prefix}-col-filter-btn`],
+      // The button that opened the panel for this column, the one clicked
+      // last when the panel switched columns: the column held open.
+      returnFocus: anchorElement,
       onClose: () => this.handleHostClose(),
       colorSchemeSource: this.colorSchemeSource,
     });

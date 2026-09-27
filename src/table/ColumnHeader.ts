@@ -377,14 +377,14 @@ export class ColumnHeader {
           this.releaseResizeHold = this.options.holdColumn?.(this.column.name) ?? null;
         },
         onDragEnd: () => {
-          this.releaseResizeHold?.();
-          this.releaseResizeHold = null;
           this.actions.endColumnWidthChange();
           // Announced once at drag end, not on every mousemove — a live
           // region fired at pointer rate is noise, not information.
           this.options.announce?.(
             this.messages.a11y.columnWidthAnnouncement(this.column.name, this.getWidth()),
           );
+          this.releaseResizeHold?.();
+          this.releaseResizeHold = null;
         },
         messages: this.messages,
       },

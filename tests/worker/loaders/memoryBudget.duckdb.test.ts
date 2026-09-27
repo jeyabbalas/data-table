@@ -179,37 +179,37 @@ describe('Parquet memory check (real DuckDB)', () => {
     });
   }, 60_000);
 
-  it('drops the table it built when the load then runs out of memory', async () => {
-    // ISO date strings make the loader rebuild the table to convert them,
-    // which needs a second copy. A limit of 1.35× the table fits the first
-    // copy and the estimate, but not the rebuild.
-    const numbers = Array.from({ length: 30 }, (_, i) => `random() + ${i} AS n${i}`);
+  it('drops the table it built when a later step fails', async () => {
+    // Date text converts inside the one CREATE, so nothing after it needs
+    // much memory; this fails the row count that follows it instead. The
+    // caller never learns the table's name, so the loader must drop it.
     const data = await parquet(
-      `SELECT strftime(DATE '2020-01-01' + CAST(range % 3000 AS INTEGER), '%Y-%m-%d') AS day,
-              ${numbers.join(', ')}
-       FROM range(600000)`,
+      `SELECT range AS id, ${Array.from({ length: 30 }, (_, i) => `random() + ${i} AS n${i}`).join(', ')}
+       FROM range(200000)`,
     );
-    const fileName = 'budget_dates.parquet';
-    await harness.db.registerFileBuffer(fileName, new Uint8Array(data.slice(0)));
-    const describe = (
-      await harness.conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`)
-    )
-      .toArray()
-      .map((row) => row.toJSON());
-    const footprint = await measureParquetFootprint(harness.conn, fileName, describe);
-    await harness.db.dropFile(fileName);
-
-    const limitMiB = Math.ceil((footprint.tableBytes * 1.35) / 2 ** 20);
-    await withMemoryLimit(`${limitMiB}MiB`, async () => {
-      await expect(loadParquet(data, { tableName: 'budget_dates' }, ctx())).rejects.toMatchObject({
-        code: 'LOAD_MEMORY_EXCEEDED',
-        details: { stage: 'load', duckdbMessage: expect.stringMatching(/^Out of Memory Error/) },
-      });
+    const before = await usedBytes();
+    const conn = harness.conn;
+    const failing = new Proxy(conn, {
+      get(target, prop) {
+        if (prop === 'query') {
+          return (sql: string) =>
+            /^SELECT COUNT\(\*\)/i.test(sql)
+              ? Promise.reject(new Error('count failed'))
+              : target.query(sql);
+        }
+        const value: unknown = Reflect.get(target, prop);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
     });
+
+    await expect(
+      loadParquet(data, { tableName: 'budget_after' }, { db: harness.db, conn: failing }),
+    ).rejects.toThrow('count failed');
     const tables = await harness.conn.query(
-      "SELECT count(*) AS n FROM duckdb_tables() WHERE table_name LIKE '%budget_dates%'",
+      "SELECT count(*) AS n FROM duckdb_tables() WHERE table_name = 'budget_after'",
     );
     expect(Number(tables.toArray()[0]?.toJSON().n)).toBe(0);
-    expect(await usedBytes()).toBeLessThan(footprint.tableBytes / 2);
+    // The table would hold about 50 MiB.
+    expect(await usedBytes()).toBeLessThan(before + 4 * 2 ** 20);
   }, 60_000);
 });

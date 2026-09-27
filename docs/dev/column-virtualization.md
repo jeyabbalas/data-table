@@ -29,9 +29,13 @@ main has found a bug in main: the bug gets its own PR, which adds the test.
 **Harness.** `tests/browser/helpers/table.ts` mounts a table in-page through the public API, in a
 fixed-position host whose size, column count, charts, stats panel, extra CSS and `box-sizing`
 reset a spec chooses. Every cell is a function of its row and column. Probes on `window.__dtTest`
-report where the cursor is and what `aria-activedescendant` names, where a column sits against the
-viewport that shows it, and `aria-colindex` along the header and a row. Scrolling uses real wheel
-events, including with a mouse button held.
+report where the cursor is and what `aria-activedescendant` names (on demand, or every frame of a
+scroll), where a column sits against the viewport and whether its header is mounted, and
+`aria-colindex` along the header and a row. Column order and geometry come from the table's state,
+never from the header row: a check that needs a header for every column would stop testing anything
+the moment 4c renders only some of them. Expectations do the same, so `aria-colindex` is checked
+against `columnOrder`, with a column hidden so that numbering the rendered cells from 1 would fail.
+Scrolling uses real wheel events, including with a mouse button held.
 
 **Matrix.** 300 columns; the target is near column 150, scrolled about 20,000 px away and back.
 
@@ -94,7 +98,10 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
 - **A filter change holds the body's horizontal position for a second.** `TableContainer` resets
   `scrollLeft` every frame for 1 s after `filters` changes, to undo the clamps a filter causes. It
   also undoes any scroll made in that second: a keyboard move or wheel scroll right after applying a
-  filter snaps back. Pre-existing; one of the `scrollLeft` writers 4c's controller should own.
+  filter snaps back. Pre-existing. The hold now ends at the first user input in the table. Its review
+  found no filter path in Chromium that still clamps `scrollLeft` (the body's width no longer
+  depends on its rows), so it probably protects nothing now; 4c's controller, which should own every
+  `scrollLeft` writer, can drop it once other engines agree.
 - **Header controls spill out of narrow columns.** `.dt-col-header` does not clip, and its five
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_

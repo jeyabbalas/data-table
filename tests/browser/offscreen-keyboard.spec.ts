@@ -75,7 +75,10 @@ test('the cursor keeps its cell through a wheel sweep, and the arrows bring it b
   await mountTable(page);
 
   await placeCursor(page, 2, 'c150');
+  // Every frame of the sweep, not only where it stops.
+  await probe(page, 'watchCursor');
   await wheelBy(page, 20_000);
+  expect(await probe(page, 'cursorBreaches')).toEqual([]);
   expectCursor(await probe(page, 'cursor'), 2, 'c150', { inView: false });
   await page.keyboard.press('ArrowLeft');
   await settle(page);
@@ -85,7 +88,9 @@ test('the cursor keeps its cell through a wheel sweep, and the arrows bring it b
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
   await settle(page);
   expectCursor(await probe(page, 'cursor'), HEADER, 'c149', { inView: true });
+  await probe(page, 'watchCursor');
   await wheelBy(page, -15_000);
+  expect(await probe(page, 'cursorBreaches')).toEqual([]);
   expectCursor(await probe(page, 'cursor'), HEADER, 'c149', { inView: false });
   await page.keyboard.press('ArrowRight');
   await settle(page);
@@ -172,7 +177,7 @@ test('Shift+F2 on a header scrolled away and back resizes, moves, and Escape res
   // the view.
   await wheelBy(page, 600);
 
-  const orderBefore = await probe(page, 'headerOrder');
+  const orderBefore = await probe(page, 'order');
   await page.keyboard.press('Shift+F2');
   await expect(page.locator(`#${HOST_ID} .dt-col-header--layout`)).toHaveAttribute(
     'data-column',
@@ -183,7 +188,7 @@ test('Shift+F2 on a header scrolled away and back resizes, moves, and Escape res
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Shift+ArrowRight');
   await settle(page);
-  const during = await probe(page, 'headerOrder');
+  const during = await probe(page, 'order');
   expect(during.indexOf('c150')).toBe(orderBefore.indexOf('c150') + 1);
   const header = page.locator(`#${HOST_ID} .dt-col-header[data-column="c150"]`);
   expect((await header.boundingBox())!.width).toBeCloseTo(182, 0);
@@ -191,7 +196,7 @@ test('Shift+F2 on a header scrolled away and back resizes, moves, and Escape res
 
   await page.keyboard.press('Escape');
   await settle(page);
-  expect(await probe(page, 'headerOrder')).toEqual(orderBefore);
+  expect(await probe(page, 'order')).toEqual(orderBefore);
   expect((await header.boundingBox())!.width).toBeCloseTo(150, 0);
   expectCursor(await probe(page, 'cursor'), HEADER, 'c150', { inView: true });
 });
@@ -204,7 +209,7 @@ test('Shift+F2 then Shift+End keeps the moved column in view', async ({ page }) 
   // the old scroll position back a frame after the move had scrolled to it.
   await page.keyboard.press('Shift+End');
   await settle(page);
-  const order = await probe(page, 'headerOrder');
+  const order = await probe(page, 'order');
   expect(order.at(-1)).toBe('c150');
   expectCursor(await probe(page, 'cursor'), HEADER, 'c150', { inView: true });
 

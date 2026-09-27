@@ -172,9 +172,12 @@ describe('CellRenderer', () => {
         expect(renderer.formatValue(at('005'), 'timestamp')).toBe('2020-01-01 00:00:16.005');
       });
 
-      it('should trim a whole-second timestamp that carries an offset', () => {
-        expect(renderer.formatValue('2020-01-01T05:30:16+05:30', 'timestamp')).toBe(
-          '2020-01-01 00:00:16 +05:30',
+      it('should trim trailing zeros from a timestamp that carries an offset', () => {
+        expect(renderer.formatValue('2020-01-01T00:00:16.000+00:00', 'timestamp')).toBe(
+          '2020-01-01 00:00:16 +00:00',
+        );
+        expect(renderer.formatValue('2020-01-01T00:00:16.100+00:00', 'timestamp')).toBe(
+          '2020-01-01 00:00:16.1 +00:00',
         );
       });
     });

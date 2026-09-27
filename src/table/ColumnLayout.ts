@@ -102,7 +102,9 @@ export class ColumnLayout {
       const width = resolveColumnWidth(columnWidths.get(name));
       this.widths[i] = width;
       this.lefts[i] = left;
-      this.indexByName.set(name, i);
+      // The first occurrence, as `Array.indexOf` answers: a duplicated name
+      // (only malformed state gets one) must not give two cells one id.
+      if (!this.indexByName.has(name)) this.indexByName.set(name, i);
       left += width;
       if (pinnedSet.has(name)) pinnedCount++;
     }
@@ -140,7 +142,10 @@ export class ColumnLayout {
     }
   }
 
-  /** Position of `column` in {@link ColumnLayout.columns}, or `-1` when it is not visible. */
+  /**
+   * Position of `column` in {@link ColumnLayout.columns}, or `-1` when it is
+   * not visible. The first position when the name occurs twice.
+   */
   indexOf(column: string): number {
     return this.indexByName.get(column) ?? -1;
   }

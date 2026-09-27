@@ -62,6 +62,11 @@ describe('ColumnLayout', () => {
     expect(l.indexOf('hidden')).toBe(-1);
   });
 
+  it('indexes a duplicated name at its first position, as Array.indexOf does', () => {
+    const l = layout({ visible: ['a', 'b', 'a'] });
+    expect(l.indexOf('a')).toBe(0);
+  });
+
   it('answers widthOf for a column that is not visible', () => {
     const l = layout({ visible: ['a'], widths: [['z', 99.6]] });
     expect(l.widthOf('z')).toBe(100);

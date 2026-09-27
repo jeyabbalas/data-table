@@ -7,6 +7,11 @@
  * `pinnedColumns`, hidden columns included, and were not recomputed when a
  * pinned column was resized, so both hiding and resizing left a pinned column
  * stuck part-way across its neighbour.
+ *
+ * The demo's global `box-sizing` reset is overridden back to content-box, as
+ * in `column-geometry.spec.ts`: offsets are sums of declared widths, so they
+ * only line up when the library's own stylesheet makes each column occupy
+ * exactly its width.
  */
 
 import { expect, test } from '@playwright/test';
@@ -19,6 +24,7 @@ type PinnedWindow = { __pin: import('../../src/index').DataTable };
 
 async function mountTable(page: Page): Promise<void> {
   await page.goto('./');
+  await page.addStyleTag({ content: '*, *::before, *::after { box-sizing: content-box; }' });
   await page.evaluate(async (hostId) => {
     const mod = (await import(
       /* @vite-ignore */ '/data-table/src/index.ts'
@@ -123,7 +129,8 @@ test('hiding the first pinned column closes the pinned block up', async ({ page 
   const p = await placement(page, ['c01']);
   expect(p.headers.c01!.left).toBeCloseTo(0, 0);
   expect(p.cells.c01!.left).toBeCloseTo(0, 0);
-  expect(p.divider).toBeCloseTo(150, 0);
+  expect(p.headers.c01!.right).toBeCloseTo(150, 0);
+  expect(p.divider).toBeCloseTo(p.headers.c01!.right, 0);
 });
 
 test('resizing a pinned column moves the pinned columns after it', async ({ page }) => {
@@ -141,7 +148,12 @@ test('resizing a pinned column moves the pinned columns after it', async ({ page
   const p = await placement(page, ['c00', 'c01']);
   for (const side of ['headers', 'cells'] as const) {
     expect(p[side].c00!.left, `${side} c00`).toBeCloseTo(0, 0);
-    expect(p[side].c01!.left, `${side} c01 starts where c00 ends`).toBeCloseTo(260, 0);
+    expect(p[side].c01!.left, `${side} c01 starts where c00 ends`).toBeCloseTo(
+      p[side].c00!.right,
+      0,
+    );
+    expect(p[side].c01!.left, `${side} c01`).toBeCloseTo(260, 0);
   }
+  expect(p.divider).toBeCloseTo(p.headers.c01!.right, 0);
   expect(p.divider).toBeCloseTo(410, 0);
 });

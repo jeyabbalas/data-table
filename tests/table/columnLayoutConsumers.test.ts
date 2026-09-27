@@ -220,9 +220,9 @@ describe('KeyboardNavigator scroll-into-view', () => {
 
     root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
 
-    // `e` starts at 450 and the pinned block is 150 wide, so it is fully in
-    // view right of the block at 300. Counting the hidden `a` gave 150,
-    // which leaves `e` under the pinned block.
+    // `e` starts at 450 and the pinned block is 150 wide, so it sits right
+    // against the block at scrollLeft 300. Counting the hidden `a` as part of
+    // the block gave 150, scrolling 150px further than needed.
     expect(state.focusedCell.get()).toEqual({ row: 0, column: 'e' });
     expect(bodyScroll.scrollLeft).toBe(300);
     nav.destroy();

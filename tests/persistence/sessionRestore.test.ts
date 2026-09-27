@@ -293,6 +293,57 @@ describe('Session Restore on Load', () => {
     expect(state.columnOrder.get()).toEqual(['name', 'age', 'id']);
   });
 
+  it('keeps a new system column leftmost in a session whose visible order had drifted', async () => {
+    // Saved when showing a column did not keep `visibleColumns` in
+    // `columnOrder`: shown [name, id, age] under the order [id, name, age].
+    const schemaWithRowid: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...sampleSchema,
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithRowid,
+    });
+    const snapshot = createTestSnapshot({
+      visibleColumns: ['name', 'id', 'age'],
+      columnOrder: ['id', 'name', 'age'],
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+    });
+    const store = createMockStore(snapshot);
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    expect(state.columnOrder.get()).toEqual(['__rowid__', 'name', 'id', 'age']);
+    expect(state.visibleColumns.get()).toEqual(['name', 'id', 'age']);
+  });
+
+  it('puts a new system column after the pinned columns', async () => {
+    const schemaWithRowid: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...sampleSchema,
+    ];
+    mockBridge.loadData.mockResolvedValue({
+      tableName: 'test_table',
+      rowCount: 1000,
+      schema: schemaWithRowid,
+    });
+    const store = createMockStore(createTestSnapshot());
+
+    await actions.loadData(new File([''], 'test.csv'), {
+      tableName: 'test_table',
+      sessionStore: store,
+    });
+
+    // The fixture pins `name`, which leads its order.
+    expect(state.columnOrder.get()).toEqual(['name', '__rowid__', 'id', 'age']);
+    expect(state.visibleColumns.get()).toEqual(['name', 'id']);
+  });
+
   it('round-trips state through snapshot and restore', async () => {
     mockDataLoad();
 

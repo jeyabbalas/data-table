@@ -248,22 +248,39 @@ export function mergeMissingColumns(
   columns: readonly string[],
   order: readonly string[],
 ): string[] {
-  const merged = [...columns];
+  // Linear: a restore runs this for every saved undo entry, and a quadratic
+  // merge of 900 hidden columns into 100 took 300 ms each.
   const present = new Set(columns);
+  // Each missing column's new right neighbour: the first column after it in
+  // `order` that `columns` has, or `null` for the end.
+  const before = new Map<string | null, string[]>();
+  const placed = new Set<string>();
+  let next: string | null = null;
+  const anchors: (string | null)[] = new Array<string | null>(order.length);
+  for (let k = order.length - 1; k >= 0; k--) {
+    anchors[k] = next;
+    if (present.has(order[k]!)) next = order[k]!;
+  }
   for (let k = 0; k < order.length; k++) {
     const missing = order[k]!;
-    if (present.has(missing)) continue;
-    let at = merged.length;
-    for (let i = k + 1; i < order.length; i++) {
-      const index = merged.indexOf(order[i]!);
-      if (index !== -1) {
-        at = index;
-        break;
-      }
-    }
-    merged.splice(at, 0, missing);
-    present.add(missing);
+    if (present.has(missing) || placed.has(missing)) continue;
+    placed.add(missing);
+    const anchor = anchors[k] ?? null;
+    const group = before.get(anchor);
+    if (group) group.push(missing);
+    else before.set(anchor, [missing]);
   }
+
+  const merged: string[] = [];
+  for (const column of columns) {
+    const group = before.get(column);
+    if (group) {
+      merged.push(...group);
+      before.delete(column);
+    }
+    merged.push(column);
+  }
+  merged.push(...(before.get(null) ?? []));
   return merged;
 }
 
@@ -288,15 +305,17 @@ export function consistentColumnOrder(
   order: readonly string[],
   pinned: readonly string[],
 ): { columnOrder: string[]; visibleColumns: string[]; pinnedColumns: string[] } {
-  const columnOrder = pinnedColumnsFirst(mergeMissingColumns(visible, order), pinned);
+  // A name listed twice is shown once: `ColumnLayout` guards against it too.
   const shown = new Set(visible);
+  const columnOrder = pinnedColumnsFirst(mergeMissingColumns([...shown], order), pinned);
+  const inOrder = new Set(columnOrder);
   const isPinned = new Set(pinned);
   return {
     columnOrder,
     visibleColumns: columnOrder.filter((c) => shown.has(c)),
     pinnedColumns: [
       ...columnOrder.filter((c) => isPinned.has(c)),
-      ...pinned.filter((c) => !columnOrder.includes(c)),
+      ...pinned.filter((c) => !inOrder.has(c)),
     ],
   };
 }

@@ -26,6 +26,63 @@ describe('mergeMissingColumns', () => {
   });
 });
 
+describe('mergeMissingColumns, against the quadratic merge it replaced', () => {
+  /** The merge `setColumnOrder` used to do inline: before each insert, a scan. */
+  function reference(columns: readonly string[], order: readonly string[]): string[] {
+    const merged = [...columns];
+    const present = new Set(columns);
+    for (let k = 0; k < order.length; k++) {
+      const missing = order[k]!;
+      if (present.has(missing)) continue;
+      let at = merged.length;
+      for (let i = k + 1; i < order.length; i++) {
+        const index = merged.indexOf(order[i]!);
+        if (index !== -1) {
+          at = index;
+          break;
+        }
+      }
+      merged.splice(at, 0, missing);
+      present.add(missing);
+    }
+    return merged;
+  }
+
+  /** A small deterministic generator, so a failure names its seed. */
+  function random(seed: number): () => number {
+    let s = seed;
+    return () => {
+      s = (s * 1103515245 + 12345) % 2147483648;
+      return s / 2147483648;
+    };
+  }
+
+  it('gives the same order for random shows, hides and reorders', () => {
+    for (let seed = 1; seed <= 2000; seed++) {
+      const r = random(seed);
+      const n = 1 + Math.floor(r() * 12);
+      const order = Array.from({ length: n }, (_, i) => `c${i}`).sort(() => r() - 0.5);
+      // The shown columns: a random subset, in a random order, sometimes with
+      // a name the order does not have.
+      const columns = order.filter(() => r() < 0.5).sort(() => r() - 0.5);
+      if (r() < 0.2) columns.splice(Math.floor(r() * (columns.length + 1)), 0, 'extra');
+      expect(mergeMissingColumns(columns, order), `seed ${seed}`).toEqual(
+        reference(columns, order),
+      );
+    }
+  });
+
+  it('merges 900 hidden columns into 100 in a moment', () => {
+    const order = Array.from({ length: 1000 }, (_, i) => `c${i}`);
+    const columns = order.filter((_, i) => i % 10 === 0).reverse();
+    const started = performance.now();
+    for (let i = 0; i < 50; i++) mergeMissingColumns(columns, order);
+    // Fifty merges, as a restore with fifty undo entries does. The quadratic
+    // merge took about 15 s here; generous, so a slow machine cannot fail it.
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
 describe('consistentColumnOrder', () => {
   it('keeps the shown order, puts hidden columns back and the pinned ones first', () => {
     expect(consistentColumnOrder(['c', 'a', 'b'], ['a', 'x', 'b', 'c'], ['b'])).toEqual({
@@ -40,6 +97,14 @@ describe('consistentColumnOrder', () => {
       columnOrder: ['d', 'b', 'a'],
       visibleColumns: ['d', 'b', 'a'],
       pinnedColumns: ['d', 'b', 'gone'],
+    });
+  });
+
+  it('shows a column listed twice once', () => {
+    expect(consistentColumnOrder(['a', 'b', 'a'], ['a', 'b', 'c'], [])).toEqual({
+      columnOrder: ['a', 'b', 'c'],
+      visibleColumns: ['a', 'b'],
+      pinnedColumns: [],
     });
   });
 

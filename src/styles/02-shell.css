@@ -38,6 +38,9 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* Columns are placed, pinned and scrolled by left offsets and a positive
+     scrollLeft, which a right-to-left page would flip. */
+  direction: ltr;
 }
 
 /* `:focus-visible`, not `:focus` — clicking a cell bounces focus here (see

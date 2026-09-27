@@ -10,7 +10,8 @@
  * already has every column's offset, so what is left is two binary searches
  * and the hysteresis.
  *
- * @internal
+ * It takes the pinned columns to lead the layout, as the column actions keep
+ * them. Not exported from the package entry points.
  */
 
 import type { ColumnLayout } from './ColumnLayout';

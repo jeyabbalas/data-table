@@ -396,8 +396,9 @@ export class TableContainer {
       );
     }
 
-    // Before anything that scrolls, and before the state subscriptions below,
-    // so its own subscriptions run first
+    // Before anything that scrolls, and before the state subscriptions below:
+    // it subscribes to the column state too, and has to have its column set
+    // current before `render()` and the body use it
     this.columnWindow = new ColumnWindowController({
       state: this.state,
       rootElement: this.element,

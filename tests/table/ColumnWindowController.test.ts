@@ -11,6 +11,7 @@
  * and no scroll event fires unless a test dispatches one.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { batch } from '@/core/Signal';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
@@ -327,6 +328,20 @@ describe('the columns to mount', () => {
     expect(mounted()).toBe('a b c d e f');
   });
 
+  it('keep the column holding DOM focus while the window is away, which leaves it focused', () => {
+    const cell = document.createElement('div');
+    cell.setAttribute('data-column', 'j');
+    cell.tabIndex = -1;
+    bodyScroll.appendChild(cell);
+    cell.focus();
+    expect(mounted()).toBe('a b c d e f j');
+
+    // What switching apps sends: a focusout to nowhere, focus left in place.
+    cell.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    expect(document.activeElement).toBe(cell);
+    expect(mounted()).toBe('a b c d e f j');
+  });
+
   it('keep the column holding DOM focus mounted until focus leaves the grid', () => {
     const cell = document.createElement('div');
     cell.setAttribute('data-column', 'j');
@@ -353,9 +368,50 @@ describe('the columns to mount', () => {
     // would now name other columns.
     actions.hideColumn('a');
     expect(mounted()).toBe('b c d e f g h i j');
-    actions.setColumnWidth('b', 400);
-    // b now spans 0–400: in view at 300 along with c, d.
-    expect(mounted().split(' ')).toContain('b');
+  });
+
+  it('follow new widths', () => {
+    scrollBody(600);
+    expect(mounted()).toBe('d e f g h i j');
+    // `a` 700px wide puts b–j at 700–1,600: at 600, only `a` and the next
+    // few are in reach.
+    actions.setColumnWidth('a', 700);
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('follow pinning alone, which moves no column', () => {
+    scrollBody(600);
+    expect(mounted()).toBe('d e f g h i j');
+    // `a` leads the order already, so pinning it changes nothing else, as
+    // undoing an unpin of it does.
+    state.pinnedColumns.set(['a']);
+    expect(mounted().split(' ')[0]).toBe('a');
+  });
+
+  it('are worked out from where the body can still scroll, when a change shortens the table', () => {
+    // `a` 1,000px wide: 1,900px of content, at its far right.
+    actions.setColumnWidth('a', 1000);
+    scrollBody(1600);
+    expect(mounted()).toBe('e f g h i j');
+    // Hiding `a` leaves 900px, and the body will be clamped to 600 a frame
+    // later; jsdom never clamps, which is that frame. From 1,600 the view
+    // would meet no column at all, and the set would be empty.
+    actions.hideColumn('a');
+    expect(mounted()).toBe('e f g h i j');
+  });
+
+  it('are current for a subscriber to `schema` when a batch writes it before the columns', () => {
+    // As loading data does, and `TableContainer` renders on `schema`.
+    const seen: string[] = [];
+    const unsubscribe = state.schema.subscribe(() => seen.push(mounted()));
+    const k: ColumnSchema = { name: 'k', type: 'float', nullable: false, originalType: 'DOUBLE' };
+    batch(() => {
+      state.schema.set([k, ...SCHEMA]);
+      state.columnOrder.set(['k', ...state.columnOrder.get()]);
+      state.visibleColumns.set(['k', ...state.visibleColumns.get()]);
+    });
+    unsubscribe();
+    expect(seen).toEqual(['k a b c d e']);
   });
 
   it('follow the controller’s own scrolls at once', () => {
@@ -377,5 +433,33 @@ describe('the columns to mount', () => {
     expect(mounted()).toBe('a b c d e f g h i j');
     resizeBody(100);
     expect(mounted()).toBe('a b');
+  });
+});
+
+describe('the columns to mount, on a resize', () => {
+  function resize(width: number, height: number): void {
+    viewport(bodyScroll, width);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    observer.callback(
+      [{ target: bodyScroll, contentRect: { width, height } } as unknown as ResizeObserverEntry],
+      observer,
+    );
+  }
+
+  it('keep the run through a resize that leaves the width as it was', () => {
+    bodyScroll.scrollLeft = 300;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    const before = controller.mountedColumns.get();
+    expect(before.join(' ')).toBe('a b c d e f g h i');
+    // Back to 150, where the run still covers the view: kept. A run worked
+    // out afresh here would end at `h`.
+    bodyScroll.scrollLeft = 150;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(controller.mountedColumns.get()).toBe(before);
+    resize(300, 200);
+    expect(controller.mountedColumns.get()).toBe(before);
+    // A new width is worked out afresh.
+    resize(290, 200);
+    expect(controller.mountedColumns.get().join(' ')).toBe('a b c d e f g h');
   });
 });

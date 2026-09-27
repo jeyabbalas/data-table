@@ -119,3 +119,77 @@ describe('CrossfilterCoordinator — concurrency cap', () => {
     coord.destroy();
   });
 });
+
+describe('CrossfilterCoordinator — after destroy', () => {
+  /** A bridge whose count query stays pending until the test settles it. */
+  function makeDeferredBridge(): {
+    bridge: WorkerBridge;
+    resolve: (rows: { cnt: number }[]) => void;
+    reject: (err: Error) => void;
+  } {
+    let resolve!: (rows: { cnt: number }[]) => void;
+    let reject!: (err: Error) => void;
+    const pending = new Promise<{ cnt: number }[]>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const bridge = { query: vi.fn().mockReturnValue(pending) } as unknown as WorkerBridge;
+    return { bridge, resolve, reject };
+  }
+
+  function makeFilteredState() {
+    const state = createTableState();
+    state.tableName.set('t');
+    state.totalRows.set(100);
+    state.filteredRows.set(100);
+    return state;
+  }
+
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const filter = { type: 'not-null', column: 'a' } as unknown as Filter;
+
+  it('discards a row count that resolves after destroy', async () => {
+    const state = makeFilteredState();
+    const { bridge, resolve } = makeDeferredBridge();
+    const onFilterCycleComplete = vi.fn();
+    const coord = new CrossfilterCoordinator(state, makeActions(), bridge, 4, {
+      onFilterCycleComplete,
+    });
+
+    state.filters.set([filter]);
+    expect(bridge.query).toHaveBeenCalledTimes(1);
+    coord.destroy();
+    resolve([{ cnt: 42 }]);
+    await flush();
+
+    expect(state.filteredRows.get()).toBe(100);
+    expect(onFilterCycleComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not report a row count that fails after destroy', async () => {
+    const state = makeFilteredState();
+    const { bridge, reject } = makeDeferredBridge();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const coord = new CrossfilterCoordinator(state, makeActions(), bridge);
+
+    state.filters.set([filter]);
+    coord.destroy();
+    reject(new Error('Worker terminated'));
+    await flush();
+
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('issues no query from syncExistingFilters after destroy', async () => {
+    const state = makeFilteredState();
+    state.filters.set([filter]);
+    const bridge = makeBridge();
+    const coord = new CrossfilterCoordinator(state, makeActions(), bridge);
+
+    coord.destroy();
+    await coord.syncExistingFilters();
+
+    expect(bridge.query).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,8 @@
+{
+  "mode": "pre",
+  "tag": "next",
+  "initialVersions": {
+    "@jeyabbalas/data-table": "0.8.0"
+  },
+  "changesets": []
+}

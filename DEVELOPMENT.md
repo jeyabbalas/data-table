@@ -315,6 +315,25 @@ gh release create vX.Y.Z \
 convention (`vX.Y.Z — <short summary>`) and link the corresponding
 `CHANGELOG.md` section from the notes.
 
+### Prereleases
+
+A prerelease lets users try a minor or major release before it becomes
+the default install. It uses changesets' pre mode:
+
+1. On a branch, run `npx changeset pre enter next` and merge the
+   `.changeset/pre.json` it writes.
+2. The version PR is now titled `chore: version packages (next)` and
+   bumps to `X.Y.Z-next.N`. Merging it publishes that version under the
+   `next` dist-tag. The workflow takes the tag from the version string, so
+   `npm install @jeyabbalas/data-table` still resolves to the last stable
+   release, and testers install `@jeyabbalas/data-table@next`.
+3. While pre mode is on, each version PR you merge publishes the next
+   `-next.N`. Tag it as in "Tagging the release", passing `--prerelease`
+   instead of `--latest`.
+4. To release the stable version, run `npx changeset pre exit` on a
+   branch and merge it. The next version PR bumps to `X.Y.Z` and
+   publishes under `latest`.
+
 ### Manual fallback
 
 If GitHub Actions is unavailable:

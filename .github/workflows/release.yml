@@ -10,7 +10,8 @@ name: Release
 #      publisher configured for this package. There is no long-lived
 #      `NPM_TOKEN` — nothing to leak or rotate. npm also generates a
 #      provenance attestation automatically under trusted publishing.
-#      This is the path that actually writes to npm.
+#      This is the path that actually writes to npm. A prerelease version
+#      publishes under its own dist-tag (`next`), never `latest`.
 #
 #   2. The "Version PR (changesets/action)" step opens / updates the
 #      "Version Packages" PR off any pending `.changeset/*.md` files.
@@ -81,15 +82,26 @@ jobs:
       # (no NODE_AUTH_TOKEN). Idempotent: if the current version is already
       # on the registry, it no-ops, so re-runs and unrelated pushes to main
       # don't republish or fail.
+      #
+      # A prerelease (`0.9.0-next.0`) publishes under its identifier as the
+      # dist-tag (`next`), so `npm install` keeps resolving to the last
+      # stable version. npm 11 refuses a prerelease without `--tag`.
       - name: Publish to npm (OIDC trusted publishing, with provenance)
         run: |
           set -euo pipefail
           PACKAGE_VERSION=$(node -p 'require("./package.json").version')
+          case "$PACKAGE_VERSION" in
+            *-*)
+              DIST_TAG="${PACKAGE_VERSION#*-}"
+              DIST_TAG="${DIST_TAG%%.*}"
+              ;;
+            *) DIST_TAG=latest ;;
+          esac
           if npm view "@jeyabbalas/data-table@$PACKAGE_VERSION" version --silent >/dev/null 2>&1; then
             echo "@jeyabbalas/data-table@$PACKAGE_VERSION already on registry; skipping"
           else
-            echo "Publishing @jeyabbalas/data-table@$PACKAGE_VERSION"
-            npm publish --access public --provenance
+            echo "Publishing @jeyabbalas/data-table@$PACKAGE_VERSION with tag $DIST_TAG"
+            npm publish --access public --provenance --tag "$DIST_TAG"
           fi
 
       # Version-PR creation only. No `publish:` input — see the workflow

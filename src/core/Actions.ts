@@ -1030,16 +1030,38 @@ export class StateActions {
       insertIndex = this.computeOrderBasedIndex(visible, order, column);
     }
 
+    // Pinned columns lead the row, in pin order, and their sticky offsets are
+    // summed on that assumption. The neighbours recorded at hide time know
+    // nothing of a pin made since, so an unpinned column is kept after the
+    // pinned block, and a pinned column goes back to its place in pin order
+    // within it, whatever its neighbours were.
+    const pinned = this.state.pinnedColumns.get();
+    const pinnedLead = leadingPinnedCount(visible, pinned);
+    const rank = pinned.indexOf(column);
+    if (rank >= 0) {
+      insertIndex = 0;
+      while (insertIndex < pinnedLead && pinned.indexOf(visible[insertIndex]!) < rank) {
+        insertIndex++;
+      }
+    } else {
+      insertIndex = Math.max(insertIndex, pinnedLead);
+    }
+
     const newVisible = [...visible];
     newVisible.splice(insertIndex, 0, column);
-    this.state.visibleColumns.set(newVisible);
+    const newOrder = alignOrderWithVisible(order, newVisible, column, pinned);
 
-    // Remove from hiddenColumnInfo
-    if (info) {
-      const updated = new Map(hiddenMap);
-      updated.delete(column);
-      this.state.hiddenColumnInfo.set(updated);
-    }
+    batch(() => {
+      this.state.visibleColumns.set(newVisible);
+      this.state.columnOrder.set(newOrder);
+
+      // Remove from hiddenColumnInfo
+      if (info) {
+        const updated = new Map(hiddenMap);
+        updated.delete(column);
+        this.state.hiddenColumnInfo.set(updated);
+      }
+    });
   }
 
   /**
@@ -1182,35 +1204,53 @@ export class StateActions {
    */
   toggleColumnPin(column: string): void {
     this.throwIfDestroyed('toggleColumnPin');
-    this.captureForUndo();
     const pinned = this.state.pinnedColumns.get();
     const order = this.state.columnOrder.get();
     const isPinned = pinned.includes(column);
 
-    // Suppress undo capture for the internal setColumnOrder call
+    // A name the table does not have would otherwise be pinned and spliced
+    // into `columnOrder` as a phantom column, shifting the `aria-colindex` of
+    // every column after it. One that is pinned all the same (a stale entry)
+    // is only unpinned.
+    if (!order.includes(column)) {
+      if (!isPinned) return;
+      this.captureForUndo();
+      this.state.pinnedColumns.set(pinned.filter((c) => c !== column));
+      return;
+    }
+
+    this.captureForUndo();
+
+    // Suppress undo capture for the internal setColumnOrder call. Batched so
+    // subscribers see the pinned set and the order that goes with it
+    // together: notified one write at a time, the `pinnedColumns`
+    // subscribers ran while the newly pinned column still sat outside the
+    // pinned block.
     this.suppressUndoCapture = true;
     try {
-      if (isPinned) {
-        // Unpinning: remove from pinned, move to first unpinned position
-        const newPinned = pinned.filter((c) => c !== column);
-        this.state.pinnedColumns.set(newPinned);
+      batch(() => {
+        if (isPinned) {
+          // Unpinning: remove from pinned, move to first unpinned position
+          const newPinned = pinned.filter((c) => c !== column);
+          this.state.pinnedColumns.set(newPinned);
 
-        // Reorder: place column immediately after the remaining pinned columns
-        const newOrder = order.filter((c) => c !== column);
-        const insertIndex = newPinned.length; // right after the last pinned column
-        newOrder.splice(insertIndex, 0, column);
-        this.setColumnOrder(newOrder);
-      } else {
-        // Pinning: add to pinned, move to end of pinned group
-        const newPinned = [...pinned, column];
-        this.state.pinnedColumns.set(newPinned);
+          // Reorder: place column immediately after the remaining pinned columns
+          const newOrder = order.filter((c) => c !== column);
+          const insertIndex = newPinned.length; // right after the last pinned column
+          newOrder.splice(insertIndex, 0, column);
+          this.setColumnOrder(newOrder);
+        } else {
+          // Pinning: add to pinned, move to end of pinned group
+          const newPinned = [...pinned, column];
+          this.state.pinnedColumns.set(newPinned);
 
-        // Reorder: place column after the previously-pinned columns (at end of pinned group)
-        const newOrder = order.filter((c) => c !== column);
-        const insertIndex = pinned.length; // after existing pinned columns
-        newOrder.splice(insertIndex, 0, column);
-        this.setColumnOrder(newOrder);
-      }
+          // Reorder: place column after the previously-pinned columns (at end of pinned group)
+          const newOrder = order.filter((c) => c !== column);
+          const insertIndex = pinned.length; // after existing pinned columns
+          newOrder.splice(insertIndex, 0, column);
+          this.setColumnOrder(newOrder);
+        }
+      });
     } finally {
       this.suppressUndoCapture = false;
     }
@@ -2119,6 +2159,64 @@ export class StateActions {
     this.throwIfDestroyed('clearFocusedCell');
     this.state.focusedCell.set(null);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Column-order helpers (supporting showColumn).
+// ---------------------------------------------------------------------------
+
+/** How many of `visible`'s leading columns are pinned. */
+function leadingPinnedCount(visible: readonly string[], pinned: readonly string[]): number {
+  const pinnedSet = new Set(pinned);
+  let count = 0;
+  while (count < visible.length && pinnedSet.has(visible[count]!)) count++;
+  return count;
+}
+
+/**
+ * `order` with `column` moved, only if it has to be, so that `visible` stays
+ * a subsequence of it.
+ *
+ * `aria-colindex` numbers columns by their place in `columnOrder` and has to
+ * ascend along a row, so a column shown between two neighbours must sit
+ * between them in `columnOrder` too. The restore position `showColumn` picks
+ * is where the column was when it was hidden, which a later reorder or pin
+ * may have moved in `columnOrder`. Returns `order` itself when nothing moves.
+ *
+ * A moved column goes straight before its new right neighbour. Only a column
+ * shown last goes after its left neighbour, and then past any pinned columns
+ * that follow it: `columnOrder` keeps every pinned column, hidden ones too,
+ * ahead of the rest, which `toggleColumnPin` and `showAllColumns` rely on.
+ */
+function alignOrderWithVisible(
+  order: string[],
+  visible: readonly string[],
+  column: string,
+  pinned: readonly string[],
+): string[] {
+  const at = visible.indexOf(column);
+  const prev = at > 0 ? visible[at - 1] : undefined;
+  const next = at >= 0 && at < visible.length - 1 ? visible[at + 1] : undefined;
+  const position = order.indexOf(column);
+  const prevPosition = prev === undefined ? -1 : order.indexOf(prev);
+  const nextPosition = next === undefined ? order.length : order.indexOf(next);
+  // A neighbour missing from `order` means the state was already out of
+  // step; moving `column` would not repair it.
+  if (position < 0 || (prev !== undefined && prevPosition < 0) || nextPosition < 0) return order;
+  if (prevPosition < position && position < nextPosition) return order;
+
+  const moved = order.filter((c) => c !== column);
+  let insertAt: number;
+  if (next !== undefined) {
+    insertAt = moved.indexOf(next);
+  } else {
+    insertAt = moved.indexOf(prev!) + 1;
+    if (!pinned.includes(column)) {
+      while (insertAt < moved.length && pinned.includes(moved[insertAt]!)) insertAt++;
+    }
+  }
+  moved.splice(insertAt, 0, column);
+  return moved;
 }
 
 // ---------------------------------------------------------------------------

@@ -39,7 +39,8 @@ export interface QueryPayload {
 }
 
 export interface LoadPayload {
-  data: ArrayBuffer | string;
+  /** A Blob (or File) is read lazily from disk when the format is Parquet. */
+  data: ArrayBuffer | string | Blob;
   format: 'csv' | 'json' | 'parquet';
   tableName?: string | undefined;
 }

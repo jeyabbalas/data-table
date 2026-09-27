@@ -349,9 +349,14 @@ export class WorkerBridge {
    *
    * Returns table name, row count, columns, and full schema info.
    * All metadata queries happen in the worker to avoid blocking the main thread.
+   *
+   * Pass a Parquet source as a `Blob` or `File` where you can: DuckDB then
+   * reads it from disk as it loads, instead of holding the whole file in
+   * memory next to the table. A load that would not fit in memory rejects
+   * with a `LoadError` whose code is `LOAD_MEMORY_EXCEEDED`.
    */
   async loadData(
-    source: ArrayBuffer | string,
+    source: ArrayBuffer | string | Blob,
     options: LoadOptions,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,

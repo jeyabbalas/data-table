@@ -222,9 +222,17 @@ loaded data, is what the tiers grade:
 | 10 M – 100 M rows | Scrolling stays correct; filter/sort latency and load-time memory dominate. Consider server-side aggregation; use this library for the summary layer |
 | > 100 M rows      | Don't — the loaded data outgrows browser memory long before the scroller cares                                                                       |
 
-Memory usage grows roughly linearly with row count × column count. A
-useful rule of thumb: expect ~50–100 bytes per cell in DuckDB, plus the
-CSV/JSON/Parquet raw bytes during load.
+Memory usage grows roughly linearly with row count × column count: DuckDB
+takes 5–20 bytes per value for numbers, dates, and booleans, and about 4
+bytes plus the text for strings. That memory lives in WebAssembly, which
+browsers cap at 4 GiB, and DuckDB's own `memory_limit` defaults to 3.1 GiB,
+so around 2.5 GiB of table is the practical ceiling — 200,000 rows × 1,000
+numeric columns is about 2.2 GiB. Pass large Parquet files as a `File`,
+`Blob`, or URL so DuckDB reads them from disk instead of holding the file
+next to the table; a Parquet load that will not fit rejects with
+`LOAD_MEMORY_EXCEEDED` before it starts (see
+[Large Parquet files](./guides/loading-data.md#large-parquet-files)). CSV
+and JSON are still read into memory as text first.
 
 ## Tuning levers
 

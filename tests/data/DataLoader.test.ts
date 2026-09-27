@@ -260,4 +260,74 @@ describe('DataLoader', () => {
       expect(result.tableName).toBe('t');
     });
   });
+
+  describe('load() source handoff', () => {
+    const ORIGINAL_FETCH = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = ORIGINAL_FETCH;
+    });
+
+    function recordingBridge() {
+      const loadData = vi.fn().mockResolvedValue({
+        tableName: 't',
+        rowCount: 0,
+        columns: [],
+        schema: [],
+      });
+      return { bridge: { loadData } as unknown as WorkerBridge, loadData };
+    }
+
+    // DuckDB reads a Blob from disk as it loads; reading the file into an
+    // ArrayBuffer first would hold all of it in memory next to the table.
+    it('hands a Parquet File to the worker without reading it', async () => {
+      const { bridge, loadData } = recordingBridge();
+      const file = new File([new Uint8Array([1, 2, 3])], 'data.parquet');
+      const read = vi.spyOn(file, 'arrayBuffer');
+
+      await new DataLoader(bridge).load(file);
+
+      expect(loadData).toHaveBeenCalledWith(file, expect.objectContaining({ format: 'parquet' }));
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it('hands an unnamed Blob over as Parquet', async () => {
+      const { bridge, loadData } = recordingBridge();
+      const blob = new Blob([new Uint8Array([1, 2, 3])]);
+
+      await new DataLoader(bridge).load(blob);
+
+      expect(loadData).toHaveBeenCalledWith(blob, expect.objectContaining({ format: 'parquet' }));
+    });
+
+    it('still reads CSV and JSON sources on the main thread', async () => {
+      const { bridge, loadData } = recordingBridge();
+      const loader = new DataLoader(bridge);
+
+      await loader.load(new File(['a,b\n1,2'], 'data.csv'));
+      await loader.load(new Blob(['[{"a":1}]']), { format: 'json' });
+
+      expect(loadData).toHaveBeenNthCalledWith(
+        1,
+        'a,b\n1,2',
+        expect.objectContaining({ format: 'csv' }),
+      );
+      const [jsonSource] = loadData.mock.calls[1]!;
+      expect(jsonSource).toBeInstanceOf(ArrayBuffer);
+    });
+
+    it('fetches a Parquet URL as a Blob', async () => {
+      globalThis.fetch = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+      const { bridge, loadData } = recordingBridge();
+
+      await new DataLoader(bridge).load('https://example.com/data.parquet');
+
+      const [source, options] = loadData.mock.calls[0]!;
+      expect(source).toBeInstanceOf(Blob);
+      expect((source as Blob).size).toBe(3);
+      expect(options).toMatchObject({ format: 'parquet' });
+    });
+  });
 });

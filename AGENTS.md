@@ -68,7 +68,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 Ask these **before writing integration code**, in order. The first answer often rules out later questions.
 
 1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed?
-2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency.
+2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency. The loaded table must fit in browser memory — about 2.5 GiB, or 200K rows × 1,000 numeric columns — and large Parquet files should arrive as a `File`, `Blob`, or URL, not an `ArrayBuffer` ([`docs/guides/loading-data.md#large-parquet-files`](./docs/guides/loading-data.md#large-parquet-files)).
 3. **Mount point and height.** Which `HTMLElement` does the table mount into (`container` takes an element, not a selector), and where does that element's height come from — an explicit `height`, a `flex: 1; min-height: 0` child, a grid track? It must be bounded. If the answer is "it grows with its content", fix that before writing any other integration code; see [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 4. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
 5. **SSR / CSP.** Next.js / Nuxt / Remix? A strict CSP forbidding `cdn.jsdelivr.net`? These drive code layout and `bridgeOptions`.

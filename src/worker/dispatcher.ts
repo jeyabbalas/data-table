@@ -129,6 +129,15 @@ export function isCancelRejection(error: unknown): boolean {
 }
 
 /**
+ * The CSV and JSON loaders take text or bytes. `DataLoader` reads their
+ * sources as text before posting, so a Blob only arrives here through a
+ * direct `WorkerBridge.loadData` call.
+ */
+async function readBlob(data: LoadPayload['data']): Promise<string | ArrayBuffer> {
+  return data instanceof Blob ? data.arrayBuffer() : data;
+}
+
+/**
  * Build an error payload from a caught value, preserving any `code` /
  * `details` that loaders attached to the thrown `Error`. The main-thread
  * bridge passes this payload to `reconstructError()` to materialize a
@@ -280,7 +289,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
-            result = await loadCSV(data, { tableName });
+            result = await loadCSV(await readBlob(data), { tableName });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,
@@ -292,7 +301,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
-            result = await loadJSON(data, { tableName });
+            result = await loadJSON(await readBlob(data), { tableName });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,
@@ -304,8 +313,10 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
-            const buffer = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
-            result = await loadParquet(buffer, { tableName });
+            // A Blob goes through as is: the loader registers it as a file
+            // handle, so DuckDB reads it from disk.
+            const source = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
+            result = await loadParquet(source, { tableName });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,

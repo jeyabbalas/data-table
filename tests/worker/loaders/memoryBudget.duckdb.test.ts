@@ -106,13 +106,46 @@ describe('Parquet memory check (real DuckDB)', () => {
     expect(footprint.tableBytes / actual).toBeLessThan(1.15);
   }, 60_000);
 
+  it.each([
+    [5, 3000],
+    [10_000, 3000],
+  ])(
+    'loads %d rows × %d columns, and estimates the table within 5%',
+    async (rows, columns) => {
+      // Short, wide tables: whole-block estimates put these at 1.5 GiB and
+      // refused them, where DuckDB holds 64 and 815 MiB.
+      const select = Array.from({ length: columns }, (_, i) => `random() + ${i} AS c${i}`);
+      const data = await parquet(`SELECT ${select.join(', ')} FROM range(${rows})`);
+
+      const fileName = `budget_wide_${rows}.parquet`;
+      await harness.db.registerFileBuffer(fileName, new Uint8Array(data.slice(0)));
+      const describe = (
+        await harness.conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`)
+      )
+        .toArray()
+        .map((row) => row.toJSON());
+      const footprint = await measureParquetFootprint(harness.conn, fileName, describe);
+      await harness.db.dropFile(fileName);
+
+      const before = await usedBytes();
+      const result = await loadParquet(data, { tableName: 'budget_wide' }, ctx());
+      const actual = (await usedBytes()) - before;
+      await harness.conn.query('DROP TABLE budget_wide');
+
+      expect(result.rowCount).toBe(rows);
+      expect(footprint.tableBytes / actual).toBeGreaterThan(0.95);
+      expect(footprint.tableBytes / actual).toBeLessThan(1.05);
+    },
+    120_000,
+  );
+
   it('rejects a load that cannot fit before building anything', async () => {
     // ~33 MB once loaded; the footer and DESCRIBE need well under 16 MB.
     const data = await parquet('SELECT range AS a, random() AS b FROM range(1000000)');
     await withMemoryLimit('16MB', async () => {
       await expect(loadParquet(data, { tableName: 'budget_tiny' }, ctx())).rejects.toMatchObject({
         code: 'LOAD_MEMORY_EXCEEDED',
-        details: { stage: 'estimate', rows: 1_000_000, columns: 2 },
+        details: { stage: 'estimate', check: 'table', rows: 1_000_000, columns: 2 },
       });
     });
     const tables = await harness.conn.query(
@@ -135,9 +168,48 @@ describe('Parquet memory check (real DuckDB)', () => {
     await withMemoryLimit('64MB', async () => {
       await expect(loadParquet(data, { tableName: 'budget_long' }, ctx())).rejects.toMatchObject({
         code: 'LOAD_MEMORY_EXCEEDED',
-        details: { stage: 'load', rows: ROWS, columns: 1 },
+        details: {
+          stage: 'load',
+          rows: ROWS,
+          columns: 1,
+          duckdbMessage: expect.stringMatching(/^Out of Memory Error/),
+        },
         cause: expect.objectContaining({ message: expect.stringMatching(/Out of Memory/) }),
       });
     });
+  }, 60_000);
+
+  it('drops the table it built when a later step fails', async () => {
+    // Date text converts inside the one CREATE, so nothing after it needs
+    // much memory; this fails the row count that follows it instead. The
+    // caller never learns the table's name, so the loader must drop it.
+    const data = await parquet(
+      `SELECT range AS id, ${Array.from({ length: 30 }, (_, i) => `random() + ${i} AS n${i}`).join(', ')}
+       FROM range(200000)`,
+    );
+    const before = await usedBytes();
+    const conn = harness.conn;
+    const failing = new Proxy(conn, {
+      get(target, prop) {
+        if (prop === 'query') {
+          return (sql: string) =>
+            /^SELECT COUNT\(\*\)/i.test(sql)
+              ? Promise.reject(new Error('count failed'))
+              : target.query(sql);
+        }
+        const value: unknown = Reflect.get(target, prop);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    });
+
+    await expect(
+      loadParquet(data, { tableName: 'budget_after' }, { db: harness.db, conn: failing }),
+    ).rejects.toThrow('count failed');
+    const tables = await harness.conn.query(
+      "SELECT count(*) AS n FROM duckdb_tables() WHERE table_name = 'budget_after'",
+    );
+    expect(Number(tables.toArray()[0]?.toJSON().n)).toBe(0);
+    // The table would hold about 50 MiB.
+    expect(await usedBytes()).toBeLessThan(before + 4 * 2 ** 20);
   }, 60_000);
 });

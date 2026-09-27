@@ -162,6 +162,24 @@ describe('CellRenderer', () => {
         const result = renderer.formatValue('not a date', 'timestamp');
         expect(result).toBe('not a date');
       });
+
+      it('should trim every trailing zero from the milliseconds', () => {
+        const at = (ms: string) => Date.parse(`2020-01-01T00:00:16.${ms}Z`);
+        expect(renderer.formatValue(at('000'), 'timestamp')).toBe('2020-01-01 00:00:16');
+        expect(renderer.formatValue(at('100'), 'timestamp')).toBe('2020-01-01 00:00:16.1');
+        expect(renderer.formatValue(at('120'), 'timestamp')).toBe('2020-01-01 00:00:16.12');
+        expect(renderer.formatValue(at('123'), 'timestamp')).toBe('2020-01-01 00:00:16.123');
+        expect(renderer.formatValue(at('005'), 'timestamp')).toBe('2020-01-01 00:00:16.005');
+      });
+
+      it('should trim trailing zeros from a timestamp that carries an offset', () => {
+        expect(renderer.formatValue('2020-01-01T00:00:16.000+00:00', 'timestamp')).toBe(
+          '2020-01-01 00:00:16 +00:00',
+        );
+        expect(renderer.formatValue('2020-01-01T00:00:16.100+00:00', 'timestamp')).toBe(
+          '2020-01-01 00:00:16.1 +00:00',
+        );
+      });
     });
 
     describe('time type', () => {

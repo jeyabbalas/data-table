@@ -113,9 +113,9 @@ export interface StatsPanelOptions {
  *
  * - The constructor is called with an empty `container` element (the
  *   `.dt-col-stats` slot inside a column header).
- * - {@link update} fires with `null` once on mount, then with each
- *   `ColumnStatsData` the visualization for this column emits (and on data
- *   reload). Columns without a visualization receive `update(null)` only.
+ * - {@link update} fires with `null` on mount and whenever the column's
+ *   chart is removed, and with each `ColumnStatsData` the chart emits (and on
+ *   data reload). Columns without a visualization receive `update(null)` only.
  * - {@link updateFilters} fires every time the table's active filter array
  *   changes, before any subsequent `update(stats)` call from a viz refetch.
  * - {@link setHoverStats} fires when a viz emits a hover snippet for this
@@ -139,8 +139,8 @@ export abstract class BaseStatsPanel {
 
   /**
    * Called when default stats become available or change. Receives `null`
-   * on the initial render before the visualization has fetched (or when no
-   * visualization is registered for the column).
+   * on the initial render before the visualization has fetched, when the
+   * column's chart is removed, or when no visualization is registered.
    */
   abstract update(stats: ColumnStatsData | null): void;
 

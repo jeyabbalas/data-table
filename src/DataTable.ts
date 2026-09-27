@@ -55,7 +55,7 @@ import { createTableState, resetTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import type { TableEvents } from './core/TableEvents';
-import type { Filter, SortColumn } from './core/types';
+import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
@@ -67,20 +67,25 @@ import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
 import { escapeHtml, formatStatsLine1, formatStatsLine2 } from './statistics/StatsFormatters';
 import { AnnotationPopover } from './table/AnnotationPopover';
+import type { ColumnHeader } from './table/ColumnHeader';
 import { ColumnHeaderTooltipPopover } from './table/ColumnHeaderTooltipPopover';
 import { TableContainer } from './table/TableContainer';
 import type { BaseStatsPanel, StatsPanelOptions } from './visualizations/BaseStatsPanel';
 import type { BaseVisualization } from './visualizations/BaseVisualization';
 import { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
-import { DateHistogram } from './visualizations/histogram/DateHistogram';
-import { Histogram } from './visualizations/histogram/Histogram';
-import { IntervalHistogram } from './visualizations/histogram/IntervalHistogram';
-import { TimeHistogram } from './visualizations/histogram/TimeHistogram';
-import { InteractionManager } from './visualizations/InteractionManager';
+import type { DateHistogram } from './visualizations/histogram/DateHistogram';
+import type { Histogram } from './visualizations/histogram/Histogram';
+import type { IntervalHistogram } from './visualizations/histogram/IntervalHistogram';
+import type { TimeHistogram } from './visualizations/histogram/TimeHistogram';
+import {
+  InteractionManager,
+  type InteractiveVisualization,
+} from './visualizations/InteractionManager';
+import { LazyVizController } from './visualizations/LazyVizController';
 import { StatsPanelCoordinator } from './visualizations/StatsPanelCoordinator';
 import type { StatsPanelRegistry } from './visualizations/StatsPanelRegistry';
 import { defaultStatsPanelRegistry } from './visualizations/StatsPanelRegistry';
-import { ValueCounts } from './visualizations/valuecounts/ValueCounts';
+import type { ValueCounts } from './visualizations/valuecounts/ValueCounts';
 import type { VisualizationRegistry } from './visualizations/VisualizationRegistry';
 import { defaultVisualizationRegistry } from './visualizations/VisualizationRegistry';
 
@@ -187,7 +192,14 @@ export interface CreateDataTableOptions {
    */
   derivedColumns?: boolean;
 
-  /** Enable auto-attached column header visualizations (histograms, value counts). Default: `true`. */
+  /**
+   * Enable auto-attached column header visualizations (histograms, value counts). Default: `true`.
+   *
+   * A column's chart is built when its header scrolls within 200 px of view
+   * and removed once the header is 400 px away, so a wide table runs chart
+   * queries only for the columns near the view. `loadData` waits for the
+   * charts in view to draw.
+   */
   visualizations?: boolean;
 
   /**
@@ -421,14 +433,6 @@ export interface DataTable {
 type VisualizationType =
   Histogram | DateHistogram | TimeHistogram | IntervalHistogram | ValueCounts;
 
-type BrushState = Record<string, unknown>;
-
-interface SelectionStateSnapshot {
-  selectedBin?: number | null;
-  selectedSegments?: number[];
-  selectedNull: boolean;
-}
-
 /**
  * Create a fully-wired data table mounted in `container`.
  *
@@ -630,16 +634,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       });
     },
   });
-  let activeVisualizations: BaseVisualization[] = [];
+  // Creates each column's chart while its header is in view; assigned below.
+  let vizController: LazyVizController | null = null;
   // Tracks the most recent attachVisualizations pass's initial work
-  // (each viz's first fetchData + both coordinators' syncExistingFilters).
+  // (the first fetch of each chart in view + both coordinators'
+  // syncExistingFilters).
   // loadDataImpl awaits this in parallel with whenBodyReady before resolving
   // the public load promise, mirroring TableContainer.currentBodyInit.
   // Wrapped in Promise.allSettled so individual failures (already routed
   // through options.onError → 'error' event) don't reject the public promise.
   let pendingVizInit: Promise<void> = Promise.resolve();
-  const brushStates = new Map<string, BrushState>();
-  const selectionStates = new Map<string, SelectionStateSnapshot>();
   const vizRegistry: VisualizationRegistry =
     opts.visualizationRegistry ?? defaultVisualizationRegistry;
 
@@ -667,10 +671,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     emitter.emit('error', { error: typed, source: 'stats-panel' });
   };
 
-  /** Clear saved interaction state for a single column (on filter removal). */
+  /** Drop a column's interactions from the Escape stack (on filter removal). */
   const clearVisualizationState = (column: string): void => {
-    brushStates.delete(column);
-    selectionStates.delete(column);
     interactionManager?.clearColumn(column);
   };
 
@@ -692,53 +694,200 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     actions.setOnFilterRemove(clearVisualizationState);
   }
 
+  // The live headers by column name, rebuilt by every attach pass. Every
+  // header rebuild schedules one, so it is current whenever a chart is made.
+  let headersByName = new Map<string, ColumnHeader>();
+
+  /**
+   * Holds a column's place on the Escape stack once its chart is destroyed.
+   * Escape then removes the column's filter, which is what clearing the
+   * chart's brush or selection does. Nothing else about the chart needs
+   * keeping: a new chart draws its brush or selection from the column's
+   * filter when its data lands.
+   */
+  const detachedInteraction = (columnName: string): InteractiveVisualization => {
+    const clear = (): void => coordinator.handleFilterChange(columnName, null);
+    return {
+      // Dropped from the stack once there is no filter left to clear.
+      isDestroyed: () => destroyed || !state.filters.get().some((f) => f.column === columnName),
+      clearBrush: clear,
+      clearSelection: clear,
+    };
+  };
+
+  // Per chart, puts its stats slot back once the chart is destroyed.
+  const statsSlotResets = new WeakMap<BaseVisualization, () => void>();
+
+  /**
+   * Build one column's chart. Called whenever the column comes into view,
+   * so each call makes fresh closures over the column's current header.
+   */
+  const createVizForColumn = (
+    column: ColumnSchema,
+    vizContainer: HTMLElement,
+  ): BaseVisualization | null => {
+    const tableName = state.tableName.get();
+    const header = headersByName.get(column.name);
+    // While a derived-column change waits on DuckDB, `tableName` may name a
+    // VIEW it has already dropped or replaced. The column is queued again
+    // once the change settles (see `setOnRelationSettled` below).
+    if (!tableName || !header || actions.isRelationChanging()) return null;
+    const statsEl = header.getStatsElement();
+    // A custom stats panel owns the slot. Panels are rebuilt by each attach
+    // pass, which also destroys every chart, so this one outlives the chart.
+    const panel = activeStatsPanels.get(column.name) ?? null;
+
+    // The stats slot is composed of two regions: line 1 (the row-count
+    // line, always present) and the detail region below it. Line 1 comes
+    // from the viz's default stats; the detail region shows the viz's
+    // interaction text (committed selection or transient hover) when one
+    // is active, else the default type-specific line 2. Interaction text
+    // never displaces line 1, and default-stats refreshes are never
+    // dropped while interaction text is showing.
+    let lastStats: ColumnStatsData | null = null;
+    let detailHtml: string | null = null;
+
+    const renderStatsSlot = (): void => {
+      const prefix = opts.classPrefix ?? 'dt';
+      // escapeHtml: messages.* are consumer-overridable functions whose
+      // return value lands in innerHTML.
+      const line1 = lastStats
+        ? `<span class="${prefix}-stats-line1">${escapeHtml(formatStatsLine1(lastStats, messages))}</span>`
+        : tableWideLine1Html();
+      if (detailHtml) {
+        statsEl.innerHTML = `${line1}<br>${detailHtml}`;
+        return;
+      }
+      const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
+      statsEl.innerHTML = line2
+        ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
+        : line1;
+    };
+    // Only write the placeholder fallback when there's no panel taking the slot.
+    if (!panel) renderStatsSlot();
+
+    let viz: VisualizationType | undefined;
+    const vizOptions = {
+      tableName,
+      bridge,
+      filters: state.filters.get(),
+      messages,
+      onFilterChange: (filter: Filter | null) => {
+        coordinator.handleFilterChange(column.name, filter);
+      },
+      onDefaultStatsChange: (stats: ColumnStatsData) => {
+        if (panel) {
+          try {
+            panel.update(stats);
+          } catch (err) {
+            emitStatsPanelError(err, column.name, 'update');
+          }
+          return;
+        }
+        lastStats = stats;
+        renderStatsSlot();
+      },
+      onStatsChange: (stats: string | null) => {
+        if (panel) {
+          try {
+            panel.setHoverStats(stats);
+          } catch (err) {
+            emitStatsPanelError(err, column.name, 'hover');
+          }
+          return;
+        }
+        detailHtml = stats;
+        renderStatsSlot();
+      },
+      onBrushCommit: (colName: string) => {
+        if (viz) interactionManager?.pushBrush(colName, viz);
+      },
+      onBrushClear: (colName: string) => {
+        interactionManager?.removeColumn(colName);
+      },
+      onSelectionChange: (colName: string, hasSelection: boolean) => {
+        if (!viz) return;
+        if (hasSelection) interactionManager?.pushSelection(colName, viz);
+        else interactionManager?.removeColumn(colName);
+      },
+      onError: (err: DataTableError) => {
+        emitter.emit('error', { error: err, source: 'visualization' });
+      },
+    };
+
+    const created = vizRegistry.create(vizContainer, column, vizOptions);
+    if (!created) return null;
+    viz = created as VisualizationType;
+    // Once the chart is gone, its stats must not linger: a panel goes back
+    // to its initial state, and the default slot to the table-wide count,
+    // which `refreshNonVizStats` keeps current from then on.
+    statsSlotResets.set(created, () => {
+      if (destroyed) return;
+      if (!panel) {
+        statsEl.innerHTML = tableWideLine1Html();
+        return;
+      }
+      // Replaced by a newer attach pass, whose panel now owns the slot.
+      if (panel.isDestroyed()) return;
+      try {
+        panel.update(null);
+      } catch (err) {
+        emitStatsPanelError(err, column.name, 'update');
+      }
+    });
+    return created;
+  };
+
+  if (opts.visualizations !== false) {
+    const headerScrollSelector = `.${opts.classPrefix ?? 'dt'}-header-scroll`;
+    vizController = new LazyVizController({
+      host: {
+        createViz: createVizForColumn,
+        getVizContainer: (columnName) => headersByName.get(columnName)?.getVizContainer() ?? null,
+        onVizCreated: (columnName, viz) => coordinator.register(columnName, viz),
+        onVizDestroyed: (columnName, viz) => {
+          statsSlotResets.get(viz)?.();
+          interactionManager?.replaceVisualization(columnName, detachedInteraction(columnName));
+          coordinator.unregister(columnName);
+        },
+        // A hidden or removed column leaves the Escape stack, as its chart
+        // would when the header row is rebuilt without it.
+        onColumnRemoved: (columnName) => interactionManager?.removeColumn(columnName),
+        onError: (err) => {
+          const typed =
+            err instanceof DataTableError
+              ? err
+              : new ConfigurationError(err instanceof Error ? err.message : String(err), {
+                  code: 'INVARIANT',
+                  cause: err,
+                });
+          emitter.emit('error', { error: typed, source: 'visualization' });
+        },
+      },
+      getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
+    });
+    // Build the charts skipped during a derived-column change. After a
+    // success the attach pass that follows re-syncs anyway; after a failure
+    // nothing else would. A task rather than a microtask, so it runs after
+    // the state update that follows the change and the attach pass it
+    // schedules.
+    actions.setOnRelationSettled(() => {
+      setTimeout(() => {
+        if (!destroyed) vizController?.requeueWanted();
+      }, 0);
+    });
+  }
+
   // Auto-attach/detach visualizations as the schema changes. This replaces
   // the ~200 lines of manual wiring that every consumer used to have to write.
   //
   // The crossfilter coordinator above is a singleton-per-DataTable so the
   // public `filterChange` event always emits with a fresh row count, even
-  // before the first data load. Each attach pass only registers/unregisters
-  // viz instances on it. Per-column viz creation is gated by
-  // `opts.visualizations`.
+  // before the first data load. Charts register on it as they are created,
+  // so a filter change refreshes only the charts in view.
   const attachVisualizations = (): void => {
-    const vizEnabled = opts.visualizations !== false;
     const tableName = state.tableName.get();
     if (!tableName) return;
-
-    // Save brush/selection state so it survives a schema-change reattach.
-    // (No-op when viz is disabled — `activeVisualizations` is always empty.)
-    for (const viz of activeVisualizations) {
-      const column = viz.getColumn();
-      if (
-        viz instanceof Histogram ||
-        viz instanceof DateHistogram ||
-        viz instanceof TimeHistogram ||
-        viz instanceof IntervalHistogram
-      ) {
-        const brush = viz.getBrushState();
-        if (brush) brushStates.set(column.name, brush);
-        const sel = viz.getSelectionState();
-        if (sel.selectedBin !== null || sel.selectedNull) {
-          selectionStates.set(column.name, sel);
-        }
-      } else if (viz instanceof ValueCounts) {
-        const sel = viz.getSelectionState();
-        if (sel.selectedSegments.length > 0 || sel.selectedNull) {
-          selectionStates.set(column.name, {
-            selectedSegments: sel.selectedSegments,
-            selectedNull: sel.selectedNull,
-          });
-        }
-      }
-    }
-
-    // Tear down previous visualizations and their registrations.
-    for (const viz of activeVisualizations) {
-      coordinator.unregister(viz.getColumn().name);
-    }
-    for (const viz of activeVisualizations) viz.destroy();
-    activeVisualizations = [];
-    interactionManager?.clear();
 
     // Tear down previous stats panels (run before the coordinator resets so a
     // panel's destroy hook still sees a valid registration if it queries us).
@@ -759,21 +908,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Per-column work (viz instances + custom stats panels) is gated by the
     // `visualizations` opt; the coordinator above is now wired regardless so
     // the public `filterChange` event always carries a fresh row count.
-    if (!vizEnabled) {
+    if (!vizController) {
       // No vizs created and no syncExistingFilters call below — reset
       // pendingVizInit so loadDataImpl doesn't await a stale promise from a
-      // previous (vizEnabled) attach pass.
+      // previous attach pass.
       pendingVizInit = Promise.resolve();
       return;
     }
 
-    // Collect the first-fetch promises from every viz constructor + each
-    // coordinator's filter-sync work. Surfaced via pendingVizInit so the
-    // public load promise can wait on first-paint readiness.
-    const initPromises: Promise<unknown>[] = [];
-
-    // Create a visualization per applicable column.
     const headers = tableContainer.getColumnHeaders();
+    headersByName = new Map(headers.map((header) => [header.getColumn().name, header]));
+    const vizColumns: ColumnSchema[] = [];
     for (const header of headers) {
       const column = header.getColumn();
       const statsEl = header.getStatsElement();
@@ -839,168 +984,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         continue;
       }
 
-      const vizContainer = header.getVizContainer();
-      // The stats slot is composed of two regions: line 1 (the row-count
-      // line, always present) and the detail region below it. Line 1 comes
-      // from the viz's default stats; the detail region shows the viz's
-      // interaction text (committed selection or transient hover) when one
-      // is active, else the default type-specific line 2. Interaction text
-      // never displaces line 1, and default-stats refreshes are never
-      // dropped while interaction text is showing.
-      let lastStats: ColumnStatsData | null = null;
-      let detailHtml: string | null = null;
-
-      const renderStatsSlot = (): void => {
-        const prefix = opts.classPrefix ?? 'dt';
-        // escapeHtml: messages.* are consumer-overridable functions whose
-        // return value lands in innerHTML.
-        const line1 = lastStats
-          ? `<span class="${prefix}-stats-line1">${escapeHtml(formatStatsLine1(lastStats, messages))}</span>`
-          : tableWideLine1Html();
-        if (detailHtml) {
-          statsEl.innerHTML = `${line1}<br>${detailHtml}`;
-          return;
-        }
-        const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
-        statsEl.innerHTML = line2
-          ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
-          : line1;
-      };
-      // Only write the placeholder fallback when there's no panel taking the slot.
-      if (!panel) renderStatsSlot();
-
-      let viz: VisualizationType | undefined;
-      const vizOptions = {
-        tableName,
-        bridge,
-        filters: state.filters.get(),
-        messages,
-        onFilterChange: (filter: Filter | null) => {
-          coordinator.handleFilterChange(column.name, filter);
-        },
-        onDefaultStatsChange: (stats: ColumnStatsData) => {
-          if (panel) {
-            try {
-              panel.update(stats);
-            } catch (err) {
-              emitStatsPanelError(err, column.name, 'update');
-            }
-            return;
-          }
-          lastStats = stats;
-          renderStatsSlot();
-        },
-        onStatsChange: (stats: string | null) => {
-          if (panel) {
-            try {
-              panel.setHoverStats(stats);
-            } catch (err) {
-              emitStatsPanelError(err, column.name, 'hover');
-            }
-            return;
-          }
-          detailHtml = stats;
-          renderStatsSlot();
-        },
-        onBrushCommit: (colName: string) => {
-          if (!viz) return;
-          interactionManager?.pushBrush(colName, viz);
-          if (
-            viz instanceof Histogram ||
-            viz instanceof DateHistogram ||
-            viz instanceof TimeHistogram ||
-            viz instanceof IntervalHistogram
-          ) {
-            const bs = viz.getBrushState();
-            if (bs) brushStates.set(colName, bs);
-          }
-        },
-        onBrushClear: (colName: string) => {
-          interactionManager?.removeColumn(colName);
-          brushStates.delete(colName);
-        },
-        onSelectionChange: (colName: string, hasSelection: boolean) => {
-          if (!viz) return;
-          if (hasSelection) {
-            interactionManager?.pushSelection(colName, viz);
-            if (viz instanceof ValueCounts) {
-              const sel = viz.getSelectionState();
-              selectionStates.set(colName, {
-                selectedSegments: sel.selectedSegments,
-                selectedNull: sel.selectedNull,
-              });
-            } else if (
-              viz instanceof Histogram ||
-              viz instanceof DateHistogram ||
-              viz instanceof TimeHistogram ||
-              viz instanceof IntervalHistogram
-            ) {
-              selectionStates.set(colName, viz.getSelectionState());
-            }
-          } else {
-            interactionManager?.removeColumn(colName);
-            selectionStates.delete(colName);
-          }
-        },
-        onError: (err: DataTableError) => {
-          emitter.emit('error', { error: err, source: 'visualization' });
-        },
-      };
-
-      const created = vizRegistry.create(vizContainer, column, vizOptions);
-      if (!created) continue;
-      viz = created as VisualizationType;
-      activeVisualizations.push(viz);
-      coordinator.register(column.name, viz);
-      // Track the viz's eager first fetch (kicked off in its constructor)
-      // so loadDataImpl can await it before resolving the public promise.
-      initPromises.push(viz.waitForData());
-
-      // Restore saved interaction state on the next data frame.
-      const savedBrush = brushStates.get(column.name);
-      const savedSel = selectionStates.get(column.name);
-      if (savedBrush || savedSel) {
-        void viz.waitForData().then(() => {
-          if (!viz) return;
-          if (
-            savedBrush &&
-            (viz instanceof Histogram ||
-              viz instanceof DateHistogram ||
-              viz instanceof TimeHistogram ||
-              viz instanceof IntervalHistogram)
-          ) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            viz.setBrushState(savedBrush as any);
-            interactionManager?.pushBrush(column.name, viz);
-          }
-          if (savedSel) {
-            if (viz instanceof ValueCounts && savedSel.selectedSegments !== undefined) {
-              viz.setSelectionState({
-                selectedSegments: savedSel.selectedSegments,
-                selectedNull: savedSel.selectedNull,
-              });
-              if (savedSel.selectedSegments.length > 0 || savedSel.selectedNull) {
-                interactionManager?.pushSelection(column.name, viz);
-              }
-            } else if (
-              (viz instanceof Histogram ||
-                viz instanceof DateHistogram ||
-                viz instanceof TimeHistogram ||
-                viz instanceof IntervalHistogram) &&
-              savedSel.selectedBin !== undefined
-            ) {
-              viz.setSelectionState({
-                selectedBin: savedSel.selectedBin,
-                selectedNull: savedSel.selectedNull,
-              });
-              if (savedSel.selectedBin !== null || savedSel.selectedNull) {
-                interactionManager?.pushSelection(column.name, viz);
-              }
-            }
-          }
-        });
-      }
+      vizColumns.push(column);
+      // The table-wide row count, until the column's chart exists.
+      if (!panel) statsEl.innerHTML = tableWideLine1Html();
     }
+
+    // Destroys every chart, then creates the ones in view.
+    vizController.sync(vizColumns);
 
     // Rebroadcast any filters already in state (e.g., restored from session).
     // Both coordinators now return a Promise; we feed those into pendingVizInit
@@ -1009,11 +999,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // errors already route via options.onError → 'error' event with
     // source: 'visualization'; panel errors via source: 'stats-panel'; the
     // count query in updateFilteredRowCount is best-effort.
-    initPromises.push(coordinator.syncExistingFilters());
-    // Same for stats panels — give them the current filter array up-front so
-    // panels with their own DuckDB queries don't have to wait for the next
-    // user-driven filter change.
-    initPromises.push(statsPanelCoordinator.syncExistingFilters(state.filters.get()));
+    const initPromises: Promise<unknown>[] = [
+      vizController.whenWaveSettled(),
+      coordinator.syncExistingFilters(),
+      // Same for stats panels — give them the current filter array up-front so
+      // panels with their own DuckDB queries don't have to wait for the next
+      // user-driven filter change.
+      statsPanelCoordinator.syncExistingFilters(state.filters.get()),
+    ];
 
     pendingVizInit = Promise.allSettled(initPromises).then(() => undefined);
   };
@@ -1161,19 +1154,26 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.visibleColumns.subscribe(scheduleAttach));
   unsubscribes.push(state.tableName.subscribe(scheduleAttach));
 
-  // Keep the row-count stats line live for columns without a visualization
-  // (e.g. uuid). Columns *with* a visualization refresh their own stats via
-  // the `onDefaultStatsChange` callback inside `attachVisualizations`. A
-  // column with a custom stats panel — viz-backed or not — is skipped because
-  // the panel owns the slot and receives filter updates from
-  // `StatsPanelCoordinator` directly.
+  // Keep the row-count stats line live for every column without a live
+  // chart: columns with no visualization (e.g. uuid), and chart columns out
+  // of view, whose charts do not exist. A live chart refreshes its own stats
+  // via the `onDefaultStatsChange` callback in `createVizForColumn`. A column
+  // with a custom stats panel — chart or not — is skipped because the panel
+  // owns the slot and receives filter updates from `StatsPanelCoordinator`
+  // directly.
   const refreshNonVizStats = (): void => {
     if (destroyed) return;
     if (!state.tableName.get()) return;
     const headers = tableContainer.getColumnHeaders();
     for (const header of headers) {
       const column = header.getColumn();
-      if (vizRegistry.isApplicable(column)) continue;
+      // With visualizations off, a column that would have had a chart is
+      // skipped, as it always was.
+      if (
+        vizController ? vizController.hasLiveViz(column.name) : vizRegistry.isApplicable(column)
+      ) {
+        continue;
+      }
       // Panel-owned slot? Skip — except when the panel destroyed itself
       // early. A self-destroyed panel leaves the slot frozen with whatever
       // it last wrote; that's worse than reverting to the default fallback,
@@ -1186,10 +1186,28 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       header.getStatsElement().innerHTML = tableWideLine1Html();
     }
   };
-  unsubscribes.push(state.filters.subscribe(refreshNonVizStats));
-  unsubscribes.push(state.filteredRows.subscribe(refreshNonVizStats));
+  // `filters` and `filteredRows` both change in one filter cycle, in the
+  // same turn when a filter is removed, so run one pass for both. The
+  // microtask still runs before the browser paints.
+  let nonVizStatsScheduled = false;
+  const scheduleNonVizStatsRefresh = (): void => {
+    if (nonVizStatsScheduled || destroyed) return;
+    nonVizStatsScheduled = true;
+    queueMicrotask(() => {
+      nonVizStatsScheduled = false;
+      refreshNonVizStats();
+    });
+  };
+  unsubscribes.push(state.filters.subscribe(scheduleNonVizStatsRefresh));
+  unsubscribes.push(state.filteredRows.subscribe(scheduleNonVizStatsRefresh));
 
   // -------- Public loadData --------
+  // Base tables that failed loads left behind. `actions.loadData` resets
+  // state before it loads, so after a failed load nothing points at the
+  // previous table, though DuckDB still holds it. The next successful load,
+  // or destroy() over a shared bridge, drops them.
+  const strandedTables = new Set<string>();
+
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
@@ -1200,13 +1218,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
     autoSave?.disable();
+    // Capture the previous base table NOW, before `actions.loadData`
+    // resets state. We drop it AFTER the new load resolves successfully —
+    // a failed load leaves the previous data queryable as a fallback.
+    // `state.baseTableName` takes precedence so a derived-VIEW tableName
+    // doesn't shadow the underlying physical table name.
+    const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
     try {
-      // Capture the previous base table NOW, before `actions.loadData`
-      // resets state. We drop it AFTER the new load resolves successfully —
-      // a failed load leaves the previous data queryable as a fallback.
-      // `state.baseTableName` takes precedence so a derived-VIEW tableName
-      // doesn't shadow the underlying physical table name.
-      const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
@@ -1247,7 +1265,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // `attachVisualizations()` has run; `currentBodyInit` references the
       // last (surviving) body and `pendingVizInit` references the latest
       // attach pass's collected work.
-      await Promise.all([tableContainer.whenBodyReady(), pendingVizInit]);
+      //
+      // An attach pass that runs while this waits replaces `pendingVizInit`,
+      // and settles the one it replaced without waiting for its charts, so
+      // wait again for the pass that replaced it.
+      let vizInit: Promise<void>;
+      do {
+        vizInit = pendingVizInit;
+        await Promise.all([tableContainer.whenBodyReady(), vizInit]);
+      } while (vizInit !== pendingVizInit && !destroyed);
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
@@ -1259,28 +1285,35 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // and mutate `schema` cannot corrupt the live state signal value.
         schema: [...state.schema.get()],
       });
-      // Reclaim the previous base table now that the new one is live.
-      // Skip when names match — `CREATE OR REPLACE TABLE` already
-      // replaced it atomically in the loader, and a redundant DROP would
-      // race with the live table. Best-effort: a DROP failure must not
-      // turn a successful load into a thrown error — we only leak one
-      // orphan in that worst case.
+      // Reclaim the previous base table now that the new one is live, and
+      // any that earlier failed loads left behind. Skip the new table's
+      // own name — `CREATE OR REPLACE TABLE` already replaced it
+      // atomically in the loader, and a redundant DROP would race with the
+      // live table. Best-effort: a DROP failure must not turn a successful
+      // load into a thrown error — we only leak one orphan in that worst
+      // case.
       const newBaseTableName = state.baseTableName.get() ?? state.tableName.get();
-      if (
-        previousBaseTableName &&
-        previousBaseTableName !== newBaseTableName &&
-        typeof bridge.dropTable === 'function'
-      ) {
-        try {
-          await bridge.dropTable(previousBaseTableName);
-        } catch (err) {
-          console.warn(
-            `[data-table] Failed to drop previous table "${previousBaseTableName}":`,
-            err,
-          );
+      const reclaim = [...strandedTables];
+      if (previousBaseTableName) reclaim.push(previousBaseTableName);
+      strandedTables.clear();
+      if (typeof bridge.dropTable === 'function') {
+        for (const name of new Set(reclaim)) {
+          if (name === newBaseTableName) continue;
+          try {
+            await bridge.dropTable(name);
+          } catch (err) {
+            console.warn(`[data-table] Failed to drop previous table "${name}":`, err);
+          }
         }
       }
     } catch (error) {
+      // The previous table stays in DuckDB as a fallback, but state no
+      // longer names it once `actions.loadData` has reset it. Remember it
+      // so a later load or destroy() can still drop it.
+      const currentBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+      if (previousBaseTableName && previousBaseTableName !== currentBaseTableName) {
+        strandedTables.add(previousBaseTableName);
+      }
       const typed =
         error instanceof DataTableError
           ? error
@@ -1337,8 +1370,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
     unsubscribes.length = 0;
 
-    for (const viz of activeVisualizations) viz.destroy();
-    activeVisualizations = [];
+    vizController?.destroy();
+    vizController = null;
     interactionManager?.destroy();
     coordinator.destroy();
 
@@ -1371,15 +1404,18 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // (and its DuckDB context) below, so the DROP would be wasted IPC.
     // When the bridge is shared (multi-table dashboards), the worker
     // outlives this DataTable, and the table would orphan if we didn't
-    // drop it here. Best-effort: a failure must not turn `destroy()` into
-    // a thrown error.
+    // drop it here, along with any a failed load left behind. Best-effort:
+    // a failure must not turn `destroy()` into a thrown error.
     if (!ownsBridge && typeof bridge.dropTable === 'function') {
       const baseToDrop = state.baseTableName.get() ?? state.tableName.get();
-      if (baseToDrop) {
+      const toDrop = new Set(strandedTables);
+      if (baseToDrop) toDrop.add(baseToDrop);
+      strandedTables.clear();
+      for (const name of toDrop) {
         try {
-          await bridge.dropTable(baseToDrop);
+          await bridge.dropTable(name);
         } catch (err) {
-          console.warn(`[data-table] Failed to drop base table "${baseToDrop}" on destroy:`, err);
+          console.warn(`[data-table] Failed to drop base table "${name}" on destroy:`, err);
         }
       }
     }

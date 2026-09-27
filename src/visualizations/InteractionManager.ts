@@ -95,6 +95,24 @@ export class InteractionManager {
   }
 
   /**
+   * Point a column's interactions at another visualization without moving
+   * them on the stack. The facade uses it when a column's chart is destroyed
+   * and later re-created, as the column scrolls out of view and back, so
+   * Escape still clears interactions in the order they were made.
+   *
+   * @returns whether the column had an interaction on the stack.
+   */
+  replaceVisualization(columnName: string, viz: InteractiveVisualization): boolean {
+    let found = false;
+    for (const interaction of this.stack) {
+      if (interaction.columnName !== columnName) continue;
+      interaction.visualization = viz;
+      found = true;
+    }
+    return found;
+  }
+
+  /**
    * Clear and remove all interactions for a given column.
    * Unlike removeColumn(), this also calls clearBrush/clearSelection on the visualization.
    */

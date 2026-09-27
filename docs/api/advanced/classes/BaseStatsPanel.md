@@ -15,9 +15,9 @@ default. The library guarantees:
 
 - The constructor is called with an empty `container` element (the
   `.dt-col-stats` slot inside a column header).
-- [update](#update) fires with `null` once on mount, then with each
-  `ColumnStatsData` the visualization for this column emits (and on data
-  reload). Columns without a visualization receive `update(null)` only.
+- [update](#update) fires with `null` on mount and whenever the column's
+  chart is removed, and with each `ColumnStatsData` the chart emits (and on
+  data reload). Columns without a visualization receive `update(null)` only.
 - [updateFilters](#updatefilters) fires every time the table's active filter array
   changes, before any subsequent `update(stats)` call from a viz refetch.
 - [setHoverStats](#sethoverstats) fires when a viz emits a hover snippet for this
@@ -185,8 +185,8 @@ Default implementation is a no-op so simple panels can ignore hover.
 Defined in: [visualizations/BaseStatsPanel.ts:145](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L145)
 
 Called when default stats become available or change. Receives `null`
-on the initial render before the visualization has fetched (or when no
-visualization is registered for the column).
+on the initial render before the visualization has fetched, when the
+column's chart is removed, or when no visualization is registered.
 
 #### Parameters
 

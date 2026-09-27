@@ -46,7 +46,7 @@ async function wheelBodyCorner(page: Page, dx: number): Promise<void> {
   await wheelBy(page, dx, { over: 'pointer' });
 }
 
-test('an open filter panel outlives its column scrolling away, and gives focus back', async ({
+test('a filter panel keeps focus while its column scrolls away, and Escape returns to the column', async ({
   page,
 }) => {
   await mountTable(page);
@@ -58,16 +58,21 @@ test('an open filter panel outlives its column scrolling away, and gives focus b
 
   await wheelBodyCorner(page, 8_000);
   expect((await probe(page, 'column', 'c150'))!.inView).toBe(false);
-  // Still open with focus inside, or closed with focus handed back to the
-  // grid — never dropped on <body>.
-  const where = await focusIsIn(page);
-  if (await panel.isVisible()) expect(where).toBe('panel');
-  else expect(where).toBe('grid');
+  await expect(panel).toBeVisible();
+  expect(await focusIsIn(page)).toBe('panel');
 
+  // Focus goes back to the filter button that opened the panel, which
+  // brings its column back into view.
   await page.keyboard.press('Escape');
   await settle(page);
   await expect(panel).toBeHidden();
-  expect(await focusIsIn(page)).toBe('grid');
+  const back = await page.evaluate(() => ({
+    cls: document.activeElement?.className ?? '',
+    column: document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+  }));
+  expect(back.cls).toContain('dt-col-filter-btn');
+  expect(back.column).toBe('c150');
+  expect((await probe(page, 'column', 'c150'))!.inView).toBe(true);
   // And the keyboard still drives the table from there.
   await page.keyboard.press('Escape');
   await page.keyboard.press('ArrowDown');
@@ -99,11 +104,13 @@ test('the filter panel opened from the keyboard takes focus, keeps it, and gives
   // filter; focus has to land on the next one.
   await expect.poll(() => focusIsIn(page)).toBe('panel');
 
-  // The focus trap keeps Shift+Tab and Tab inside the panel.
+  // The focus trap keeps Shift+Tab and Tab inside the panel, at every step.
   await page.keyboard.press('Shift+Tab');
   expect(await focusIsIn(page)).toBe('panel');
-  for (let i = 0; i < 8; i++) await page.keyboard.press('Tab');
-  expect(await focusIsIn(page)).toBe('panel');
+  for (let i = 1; i <= 8; i++) {
+    await page.keyboard.press('Tab');
+    expect(await focusIsIn(page), `after Tab ${i}`).toBe('panel');
+  }
 
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
@@ -115,7 +122,9 @@ test('the filter panel opened from the keyboard takes focus, keeps it, and gives
   expect(back.column).toBe('c150');
 });
 
-test('an open derived-column editor outlives its column scrolling away', async ({ page }) => {
+test('a derived-column editor keeps focus while its column scrolls away, and Escape returns to the column', async ({
+  page,
+}) => {
   await mountTable(page);
   const added = await page.evaluate(() =>
     (window as unknown as TestWindow).__dt.actions.addDerivedColumn({
@@ -135,14 +144,21 @@ test('an open derived-column editor outlives its column scrolling away', async (
 
   await wheelBodyCorner(page, -8_000);
   expect((await probe(page, 'column', 'd_sum'))!.inView).toBe(false);
-  const where = await focusIsIn(page);
-  if (await panel.isVisible()) expect(where).toBe('panel');
-  else expect(where).toBe('grid');
+  await expect(panel).toBeVisible();
+  expect(await focusIsIn(page)).toBe('panel');
 
+  // Focus goes back to the f(x) button that opened the editor, which brings
+  // its column back into view.
   await page.keyboard.press('Escape');
   await settle(page);
   await expect(panel).toBeHidden();
-  expect(await focusIsIn(page)).toBe('grid');
+  const back = await page.evaluate(() => ({
+    cls: document.activeElement?.className ?? '',
+    column: document.activeElement?.closest('[data-column]')?.getAttribute('data-column'),
+  }));
+  expect(back.cls).toContain('dt-derived-icon-btn');
+  expect(back.column).toBe('d_sum');
+  expect((await probe(page, 'column', 'd_sum'))!.inView).toBe(true);
 });
 
 test('a tooltip set on an off-screen column shows once the column scrolls in', async ({ page }) => {
@@ -202,7 +218,7 @@ test('annotations set off-screen paint when their column scrolls in, and clear t
   expect(await classes()).toEqual({ header: false, cell: false, column: false, row: false });
 });
 
-test('a custom stats panel is in place whenever its column is in view, and a wobble builds none', async ({
+test('a custom stats panel is in place whenever its column is in view, and a dither rebuilds none', async ({
   page,
 }) => {
   // Custom stats panels come with the header charts.
@@ -214,11 +230,22 @@ test('a custom stats panel is in place whenever its column is in view, and a wob
   await wheelIntoView(page, 'c150');
   await expect(slot).toHaveText('panel c150');
 
-  // A pixel back and forth, as a trackpad at rest produces.
+  // Back and forth across one column width, a few times: a panel built as
+  // its column comes into reach must not be built again on the way back.
   const before = (await log()).length;
-  for (const dx of [1, -1, 1, -1, 1, -1]) await page.mouse.wheel(dx, 0);
+  for (const dx of [150, -150, 150, -150, 150, -150]) {
+    await page.mouse.wheel(dx, 0);
+    await page.waitForTimeout(50);
+  }
   await settle(page);
-  expect((await log()).length, 'a wobble built or destroyed a panel').toBe(before);
+  const built = new Map<string, number>();
+  for (const { event, column } of (await log()).slice(before)) {
+    if (event === 'construct') built.set(column, (built.get(column) ?? 0) + 1);
+  }
+  expect(
+    [...built].filter(([, n]) => n > 1),
+    'columns whose panel the dither built twice',
+  ).toEqual([]);
 
   await wheelBy(page, 20_000);
   await wheelIntoView(page, 'c150');

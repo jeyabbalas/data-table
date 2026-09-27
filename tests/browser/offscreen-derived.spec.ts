@@ -68,15 +68,16 @@ async function changeOffScreen(
   if ((await probe(page, 'column', 'd'))?.inView) await wheelBy(page, -20_000, { stepPx: 2_000 });
   await change();
   await settle(page);
-  if (prefix === null) {
-    expect(await probe(page, 'column', 'd')).toBeNull();
-    return;
-  }
+  const inSchema = await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.state.schema.get().some((c) => c.name === 'd'),
+  );
+  expect(inSchema, 'd is a column of the table').toBe(prefix !== null);
+  if (prefix === null) return;
   await wheelIntoView(page, 'd');
   await expect.poll(() => staleCells(page, prefix)).toEqual([]);
 }
 
-test('a derived column edited, removed and restored off-screen shows current values', async ({
+test('a derived column added, edited, removed and restored off-screen shows current values', async ({
   page,
 }) => {
   await mountTable(page);
@@ -87,10 +88,12 @@ test('a derived column edited, removed and restored off-screen shows current val
   });
   expect(added.success).toBe(true);
   await settle(page);
-  expect((await probe(page, 'headerOrder')).at(-1)).toBe('d');
+  expect((await probe(page, 'order')).at(-1)).toBe('d');
   await wheelIntoView(page, 'd');
   await expect.poll(() => staleCells(page, 'a')).toEqual([]);
 
+  await changeOffScreen(page, () => act(page, 'undo'), null);
+  await changeOffScreen(page, () => act(page, 'redo'), 'a');
   const replaced = { kind: 'expression', name: 'd', expression: expression('b') };
   await changeOffScreen(page, () => act(page, 'replaceDerivedColumn', 'd', replaced), 'b');
   await changeOffScreen(page, () => act(page, 'undo'), 'a');

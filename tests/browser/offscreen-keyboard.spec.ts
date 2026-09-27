@@ -289,7 +289,7 @@ test('End right after a filter change keeps the cursor in view', async ({ page }
   expectCursor(await probe(page, 'cursor'), HEADER, 'c299', { inView: true });
 });
 
-test('a cursor set in code names its cell off-screen, and survives its column being hidden', async ({
+test('a cursor set in code names its cell off-screen, and hiding its column keeps it nearby', async ({
   page,
 }) => {
   await mountTable(page);
@@ -301,12 +301,23 @@ test('a cursor set in code names its cell off-screen, and survives its column be
   await settle(page);
   expectCursor(await probe(page, 'cursor'), 5, 'c150', { inView: false });
 
-  // Hidden while off-screen: the cursor moves to a column still shown, and
-  // aria-activedescendant names that column's ringed cell.
+  // Hidden while off-screen: the cursor moves to the column that takes its
+  // place, still naming a ringed cell.
   await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.hideColumn('c150'));
   await settle(page);
-  const after = await probe(page, 'cursor');
-  expect(after.focused?.row).toBe(5);
-  expect(after.focused?.column).not.toBe('c150');
-  expectCursor(after, 5, after.focused!.column);
+  expectCursor(await probe(page, 'cursor'), 5, 'c151');
+
+  // And through the header's own hide button, from the keyboard.
+  await page.keyboard.press('ArrowLeft');
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowUp');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c149', { inView: true });
+  await page.keyboard.press('F2');
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(
+    'dt-col-hide-btn',
+  );
+  await page.keyboard.press('Enter');
+  await settle(page);
+  expectCursor(await probe(page, 'cursor'), HEADER, 'c151', { inView: true });
 });

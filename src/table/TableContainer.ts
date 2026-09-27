@@ -58,6 +58,29 @@ import { TableBody } from './TableBody';
 const USER_SCROLL_INPUTS = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
 
 /**
+ * Where a column that is no longer shown was, as a column that still is: the
+ * first one shown after it in `previous`, else the last one shown before it,
+ * else the first column shown.
+ */
+function nearestShownColumn(
+  lost: string,
+  previous: readonly string[],
+  shown: readonly string[],
+): string {
+  const visible = new Set(shown);
+  const at = previous.indexOf(lost);
+  if (at >= 0) {
+    for (let i = at + 1; i < previous.length; i++) {
+      if (visible.has(previous[i]!)) return previous[i]!;
+    }
+    for (let i = at - 1; i >= 0; i--) {
+      if (visible.has(previous[i]!)) return previous[i]!;
+    }
+  }
+  return shown[0]!;
+}
+
+/**
  * Options for configuring the TableContainer
  */
 export interface TableContainerOptions {
@@ -197,8 +220,9 @@ export class TableContainer {
   // FLIP animation: saved column positions before pin/unpin reorder
   private savedColumnPositions: Map<string, DOMRect> | null = null;
 
-  // Track previous visible columns for restore-highlight detection
-  private previousVisibleColumns = new Set<string>();
+  // The visible columns as of the last render, in order: for the restore
+  // highlight, and for where the cursor goes when its column disappears
+  private previousVisibleOrder: readonly string[] = [];
 
   // Continuous demarcation line for pinned column boundary
   private pinnedDemarcation: HTMLElement | null = null;
@@ -1233,24 +1257,6 @@ export class TableContainer {
       }
     });
     this.unsubscribes.push(unsubFocusClamp);
-
-    // Snap focus to first visible column if focused column is hidden
-    const unsubFocusCol = this.state.visibleColumns.subscribe((cols) => {
-      if (this.destroyed) return;
-      const focusedCell = this.state.focusedCell.get();
-      if (!focusedCell) return;
-      if (!cols.includes(focusedCell.column)) {
-        if (cols.length === 0) {
-          this.actions?.clearFocusedCell();
-        } else {
-          this.actions?.setFocusedCell({
-            row: focusedCell.row,
-            column: cols[0]!,
-          });
-        }
-      }
-    });
-    this.unsubscribes.push(unsubFocusCol);
   }
 
   // =========================================
@@ -1349,7 +1355,8 @@ export class TableContainer {
   render(): void {
     if (this.destroyed) return;
 
-    const prevVisible = this.previousVisibleColumns;
+    const previousOrder = this.previousVisibleOrder;
+    const prevVisible = new Set(previousOrder);
 
     // Save scroll positions before re-rendering (both containers for robustness)
     const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
@@ -1585,8 +1592,7 @@ export class TableContainer {
       });
     }
 
-    // Track visible columns and highlight newly restored ones
-    const newVisibleSet = new Set(visibleColumns);
+    // Highlight newly restored columns
     if (prevVisible.size > 0) {
       const prefix = this.resolvedOptions.classPrefix;
       for (const header of this.columnHeaders) {
@@ -1601,12 +1607,12 @@ export class TableContainer {
         }
       }
     }
-    this.previousVisibleColumns = newVisibleSet;
+    this.previousVisibleOrder = visibleColumns;
 
     // render() rebuilt every ColumnHeader, so the cursor's target element is
-    // gone. Re-point it (dropping to the first visible column if its column
+    // gone. Re-point it (moving it to a neighbouring column if its column
     // disappeared) before anything reads aria-activedescendant.
-    this.reconcileCursorColumn(visibleColumns);
+    this.reconcileCursorColumn(visibleColumns, previousOrder);
     this.syncActiveDescendant();
     this.updateHeaderCursorStyles();
 
@@ -1648,15 +1654,27 @@ export class TableContainer {
    * Keep the cursor on a column that still exists. Hiding or removing the
    * cursor's column would otherwise leave `aria-activedescendant` pointing at
    * a destroyed header and the header ring painted on nothing.
+   *
+   * The cursor goes to the column that took the lost one's place: the first
+   * one still shown after it, or the last one before it when nothing after it
+   * is. It used to go to the first column, which sent a keyboard user who hid
+   * a column far to the right back to the start of the table, with the view
+   * still where it was.
    */
-  private reconcileCursorColumn(visibleColumns: string[]): void {
+  private reconcileCursorColumn(
+    visibleColumns: readonly string[],
+    previousOrder: readonly string[],
+  ): void {
     const focused = this.state.focusedCell.get();
     if (!focused || visibleColumns.includes(focused.column)) return;
     if (visibleColumns.length === 0) {
       this.actions?.clearFocusedCell();
       return;
     }
-    this.actions?.setFocusedCell({ row: focused.row, column: visibleColumns[0]! });
+    this.actions?.setFocusedCell({
+      row: focused.row,
+      column: nearestShownColumn(focused.column, previousOrder, visibleColumns),
+    });
   }
 
   /**

@@ -124,6 +124,16 @@ export interface TableProbes {
   watchCursor(): void;
   /** Stop {@link TableProbes.watchCursor} and return every frame that failed. */
   cursorBreaches(): string[];
+  /** The columns the column window controller publishes to mount, in order. */
+  mounted(): string[];
+  /**
+   * Check every frame until {@link TableProbes.windowReport} that each column
+   * at least partly in view is among the mounted ones, and count how often
+   * the mounted columns change.
+   */
+  watchWindow(): void;
+  /** Stop {@link TableProbes.watchWindow}: the frames that failed, and the changes seen. */
+  windowReport(): { breaches: string[]; changes: number; frames: number };
   panelLog: { event: 'construct' | 'destroy'; column: string }[];
 }
 
@@ -261,6 +271,13 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
     };
 
     let watch: { active: boolean; breaches: string[] } | null = null;
+    let windowWatch: {
+      active: boolean;
+      breaches: string[];
+      changes: number;
+      frames: number;
+      stop: () => void;
+    } | null = null;
 
     const probes: TableProbes = {
       panelLog,
@@ -384,6 +401,41 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         if (watch) watch.active = false;
         watch = null;
         return breaches;
+      },
+      mounted() {
+        return [...table.container.getColumnWindow().mountedColumns.get()];
+      },
+      watchWindow() {
+        const published = table.container.getColumnWindow().mountedColumns;
+        const state = {
+          active: true,
+          breaches: [] as string[],
+          changes: 0,
+          frames: 0,
+          stop: published.subscribe(() => state.changes++),
+        };
+        windowWatch = state;
+        const frame = () => {
+          if (!state.active) return;
+          state.frames++;
+          const mounted = new Set(published.get());
+          const missing = probes.inView().filter((c) => !mounted.has(c));
+          if (missing.length > 0 && state.breaches.length < 20) {
+            state.breaches.push(
+              `at ${q('.dt-body-scroll')!.scrollLeft}px: ${missing.join(' ')} in view, not mounted`,
+            );
+          }
+          requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      },
+      windowReport() {
+        const state = windowWatch;
+        windowWatch = null;
+        if (!state) return { breaches: [], changes: 0, frames: 0 };
+        state.active = false;
+        state.stop();
+        return { breaches: state.breaches, changes: state.changes, frames: state.frames };
       },
     };
     w.__dtTest = probes;

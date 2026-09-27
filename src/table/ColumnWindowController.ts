@@ -1,5 +1,6 @@
 /**
- * ColumnWindowController — the one owner of the table's horizontal scroll.
+ * ColumnWindowController — the one owner of the table's horizontal scroll,
+ * and of which columns are worth mounting.
  *
  * The header row and the body scroll sideways together, in two scrollers.
  * Until this class, five places wrote `scrollLeft` on their own: the sync
@@ -13,14 +14,22 @@
  * It also sizes the header's scrollbar gutter, which is part of keeping the
  * two scrollers the same width, and so the same scroll range.
  *
+ * Because every scroll passes through it, it is also where the table learns
+ * which columns are near the view. {@link ColumnWindowController.mountedColumns}
+ * publishes them: the pinned block, a run around the view
+ * ({@link columnWindow}), and the columns the table is holding on to wherever
+ * they are, which are the cursor's and the one with DOM focus.
+ *
  * `TableContainer` creates one and keeps it across renders: `render()`
  * replaces what is inside the scrollers, never the scrollers themselves.
  *
  * @internal
  */
 
+import { type Signal, createSignal } from '../core/Signal';
 import type { TableState } from '../core/State';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
+import { type ColumnRange, columnWindow } from './ColumnWindow';
 
 /** Input that means the user is about to scroll, or have the table scroll for them. */
 const USER_SCROLL_INPUTS = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
@@ -44,6 +53,11 @@ export interface ColumnWindowControllerOptions {
   scrollbarGutter: HTMLElement;
   /** `.dt-body-scroll`, which scrolls both ways. */
   bodyScroll: HTMLElement;
+  /**
+   * `.dt-grid`. While focus is on an element inside it that belongs to a
+   * column, a header button or a clicked cell, that column stays mounted.
+   */
+  gridElement: HTMLElement;
 }
 
 /** The body's scroll position, as {@link ColumnWindowController.savePosition} saw it. */
@@ -106,9 +120,16 @@ export function revealColumnIn(scroller: HTMLElement, state: TableState, column:
   return true;
 }
 
+/** Whether two column lists hold the same names in the same order. */
+function sameColumns(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /**
- * Keeps the header and body scrollers together, and makes every
- * programmatic sideways scroll of the table.
+ * Keeps the header and body scrollers together, makes every programmatic
+ * sideways scroll of the table, and publishes the columns to mount.
  *
  * @example
  * ```typescript
@@ -126,6 +147,7 @@ export class ColumnWindowController {
   private readonly headerScroll: HTMLElement;
   private readonly scrollbarGutter: HTMLElement;
   private readonly bodyScroll: HTMLElement;
+  private readonly gridElement: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
   private readonly unsubscribes: (() => void)[] = [];
   private destroyed = false;
@@ -145,6 +167,25 @@ export class ColumnWindowController {
   /** Ends the hold that follows a filter change, while one is running. */
   private releaseFilterHold: (() => void) | null = null;
 
+  private readonly mounted: Signal<readonly string[]> = createSignal<readonly string[]>([]);
+
+  /**
+   * The columns to mount, in layout order: the pinned block, the run
+   * around the view, and the cursor's column and the one holding DOM focus
+   * wherever they are. Every visible column until the body has a width.
+   *
+   * A new array only when the list changes, so a subscriber hears of a
+   * change, not of every scroll.
+   */
+  readonly mountedColumns: Pick<Signal<readonly string[]>, 'get' | 'subscribe'> = this.mounted;
+
+  /** The run {@link mountedColumns} was last built from, and over which layout. */
+  private range: ColumnRange | null = null;
+  private rangeLayout: ColumnLayout | null = null;
+
+  /** The column of the element holding DOM focus inside the grid, if any. */
+  private focusColumn: string | null = null;
+
   constructor(options: ColumnWindowControllerOptions) {
     this.state = options.state;
     this.rootElement = options.rootElement;
@@ -152,21 +193,34 @@ export class ColumnWindowController {
     this.headerScroll = options.headerScroll;
     this.scrollbarGutter = options.scrollbarGutter;
     this.bodyScroll = options.bodyScroll;
+    this.gridElement = options.gridElement;
 
     this.bodyScroll.addEventListener('scroll', this.handleBodyScroll, { passive: true });
     this.headerScroll.addEventListener('scroll', this.handleHeaderScroll, { passive: true });
+    this.gridElement.addEventListener('focusin', this.handleFocusIn);
+    this.gridElement.addEventListener('focusout', this.handleFocusOut);
 
     // The body's client width changes when its vertical scrollbar comes or
     // goes, as well as when the table is resized.
     this.resizeObserver = new ResizeObserver((entries) => {
       if (this.destroyed) return;
       for (const entry of entries) {
-        if (entry.target === this.bodyScroll) this.syncScrollbarGutter(entry);
+        if (entry.target !== this.bodyScroll) continue;
+        this.syncScrollbarGutter(entry);
+        this.update('fresh');
       }
     });
     this.resizeObserver.observe(this.bodyScroll);
 
-    this.unsubscribes.push(this.state.filters.subscribe(() => this.holdAfterFilterChange()));
+    this.unsubscribes.push(
+      this.state.filters.subscribe(() => this.holdAfterFilterChange()),
+      // What the layout is made of: a new one moves every column.
+      this.state.visibleColumns.subscribe(() => this.update('fresh')),
+      this.state.pinnedColumns.subscribe(() => this.update('fresh')),
+      this.state.columnWidths.subscribe(() => this.update('fresh')),
+      this.state.focusedCell.subscribe(() => this.update('kept')),
+    );
+    this.update('fresh');
   }
 
   // =========================================
@@ -178,6 +232,7 @@ export class ColumnWindowController {
     this.syncing = true;
     this.syncHeaderScroll();
     this.syncing = false;
+    this.update('kept');
   };
 
   private readonly handleHeaderScroll = (): void => {
@@ -188,6 +243,7 @@ export class ColumnWindowController {
     this.syncing = true;
     this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
     this.syncing = false;
+    this.update('kept');
   };
 
   /**
@@ -210,6 +266,7 @@ export class ColumnWindowController {
   private scrollBodyTo(left: number): void {
     this.bodyScroll.scrollLeft = left;
     this.syncHeaderScroll();
+    this.update('kept');
   }
 
   /**
@@ -289,6 +346,7 @@ export class ColumnWindowController {
     this.bodyScroll.scrollLeft = position.left;
     this.bodyScroll.scrollTop = position.top;
     this.syncHeaderScroll();
+    this.update('kept');
   }
 
   /**
@@ -392,6 +450,71 @@ export class ColumnWindowController {
   }
 
   // =========================================
+  // What is mounted
+  // =========================================
+
+  /**
+   * Work out the columns to mount and publish them if they changed.
+   *
+   * `'fresh'` computes the run around the view from nothing: the layout or
+   * the viewport's width has changed, and the old run's indices may name
+   * other columns. `'kept'` keeps the old run while it still covers the view
+   * (see {@link columnWindow}), for a scroll or a change to what is held.
+   */
+  private update(mode: 'fresh' | 'kept'): void {
+    if (this.destroyed) return;
+    const layout = getColumnLayout(this.state);
+    const current =
+      mode === 'kept' && this.rangeLayout === layout ? (this.range ?? undefined) : undefined;
+    const range = columnWindow(
+      layout,
+      { scrollLeft: this.bodyScroll.scrollLeft, width: this.bodyScroll.clientWidth },
+      current,
+    );
+    this.range = range;
+    this.rangeLayout = layout;
+
+    // The columns held on to, where they fall outside the pinned block and
+    // the run: at most two, so a sort is nothing.
+    const held: number[] = [];
+    for (const column of [this.state.focusedCell.get()?.column, this.focusColumn]) {
+      if (column === undefined || column === null) continue;
+      const index = layout.indexOf(column);
+      if (index < layout.pinnedCount || (index >= range.start && index < range.end)) continue;
+      if (!held.includes(index)) held.push(index);
+    }
+    held.sort((a, b) => a - b);
+
+    const next: string[] = [];
+    for (let i = 0; i < layout.pinnedCount; i++) next.push(layout.columns[i]!);
+    let h = 0;
+    while (h < held.length && held[h]! < range.start) next.push(layout.columns[held[h++]!]!);
+    for (let i = range.start; i < range.end; i++) next.push(layout.columns[i]!);
+    while (h < held.length) next.push(layout.columns[held[h++]!]!);
+
+    if (!sameColumns(next, this.mounted.get())) this.mounted.set(next);
+  }
+
+  private readonly handleFocusIn = (event: FocusEvent): void => {
+    const target = event.target;
+    const owner = target instanceof Element ? target.closest('[data-column]') : null;
+    const column =
+      owner && this.gridElement.contains(owner) ? owner.getAttribute('data-column') : null;
+    if (column === this.focusColumn) return;
+    this.focusColumn = column;
+    this.update('kept');
+  };
+
+  private readonly handleFocusOut = (event: FocusEvent): void => {
+    // Focus moving within the grid is the next focusin's to report.
+    const next = event.relatedTarget;
+    if (next instanceof Node && this.gridElement.contains(next)) return;
+    if (this.focusColumn === null) return;
+    this.focusColumn = null;
+    this.update('kept');
+  };
+
+  // =========================================
   // What is in view
   // =========================================
 
@@ -416,6 +539,8 @@ export class ColumnWindowController {
     this.resizeObserver.disconnect();
     this.bodyScroll.removeEventListener('scroll', this.handleBodyScroll);
     this.headerScroll.removeEventListener('scroll', this.handleHeaderScroll);
+    this.gridElement.removeEventListener('focusin', this.handleFocusIn);
+    this.gridElement.removeEventListener('focusout', this.handleFocusOut);
     for (const unsubscribe of this.unsubscribes) unsubscribe();
     this.unsubscribes.length = 0;
   }

@@ -2,10 +2,10 @@
  * @vitest-environment jsdom
  *
  * `ColumnWindowController` on its own: the header and body scrollers kept
- * together, and the table's programmatic sideways scrolls. The same behaviour
- * through a whole `TableContainer` (the gutter, the header's echo, the filter
- * hold, `render()`'s restore) is in `TableContainer.test.ts` and
- * `TableContainer.scroll.test.ts`.
+ * together, the table's programmatic sideways scrolls, and the columns it
+ * publishes to mount. The same scrolling through a whole `TableContainer`
+ * (the gutter, the header's echo, the filter hold, `render()`'s restore) is
+ * in `TableContainer.test.ts` and `TableContainer.scroll.test.ts`.
  *
  * jsdom does no layout: widths are stubbed, `scrollLeft` is stored as written,
  * and no scroll event fires unless a test dispatches one.
@@ -49,6 +49,7 @@ const SCHEMA: ColumnSchema[] = 'abcdefghij'
 let state: TableState;
 let actions: StateActions;
 let root: HTMLElement;
+let grid: HTMLElement;
 let headerArea: HTMLElement;
 let headerScroll: HTMLElement;
 let gutter: HTMLElement;
@@ -71,12 +72,14 @@ beforeEach(() => {
   for (const { name } of SCHEMA) actions.setColumnWidth(name, 100);
 
   root = document.createElement('div');
+  grid = document.createElement('div');
   headerArea = document.createElement('div');
   headerScroll = document.createElement('div');
   gutter = document.createElement('div');
   bodyScroll = document.createElement('div');
   headerArea.append(headerScroll, gutter);
-  root.append(headerArea, bodyScroll);
+  grid.append(headerArea, bodyScroll);
+  root.append(grid);
   document.body.appendChild(root);
   viewport(bodyScroll, 300);
 
@@ -87,6 +90,7 @@ beforeEach(() => {
     headerScroll,
     scrollbarGutter: gutter,
     bodyScroll,
+    gridElement: grid,
   });
 });
 
@@ -257,5 +261,121 @@ describe('ColumnWindowController', () => {
     bodyScroll.dispatchEvent(new Event('scroll'));
     expect(headerScroll.scrollLeft).toBe(0);
     expect(controller.revealColumn('j')).toBe(false);
+  });
+});
+
+describe('the columns to mount', () => {
+  const mounted = () => controller.mountedColumns.get().join(' ');
+
+  /** Scroll the body as a user would, which reports it with a scroll event. */
+  function scrollBody(left: number): void {
+    bodyScroll.scrollLeft = left;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+  }
+
+  function resizeBody(width: number): void {
+    viewport(bodyScroll, width);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    observer.callback(
+      [{ target: bodyScroll, contentRect: { width } } as unknown as ResizeObserverEntry],
+      observer,
+    );
+  }
+
+  it('are the columns in view and a viewport either side', () => {
+    // A 300px view at 0: a, b, c in view; d, e, f within a viewport.
+    expect(mounted()).toBe('a b c d e f');
+    scrollBody(600);
+    expect(mounted()).toBe('d e f g h i j');
+  });
+
+  it('are every visible column until the body has a width', () => {
+    resizeBody(0);
+    expect(mounted()).toBe('a b c d e f g h i j');
+    resizeBody(300);
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('stay put for a scroll that keeps half a viewport in hand, and are republished only on change', () => {
+    const heard: string[] = [];
+    controller.mountedColumns.subscribe((columns) => heard.push(columns.join(' ')));
+
+    // At 100 the view needs up to 550: `f`, which ends at 600, is enough.
+    scrollBody(100);
+    scrollBody(50);
+    expect(heard).toEqual([]);
+
+    // At 300 it needs up to 750, so `g` and `h`: recomputed around the view.
+    scrollBody(300);
+    expect(heard).toEqual(['a b c d e f g h i']);
+  });
+
+  it('always start with the pinned block, however far the view is from it', () => {
+    actions.toggleColumnPin('j');
+    scrollBody(600);
+    expect(mounted().split(' ')[0]).toBe('j');
+    expect(mounted()).toBe('j d e f g h i');
+  });
+
+  it("keep the cursor's column mounted wherever it is, in its place in the order", () => {
+    actions.setFocusedCell({ row: 3, column: 'i' });
+    expect(mounted()).toBe('a b c d e f i');
+    // A header cursor too.
+    actions.setFocusedCell({ row: -1, column: 'h' });
+    expect(mounted()).toBe('a b c d e f h');
+    actions.clearFocusedCell();
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('keep the column holding DOM focus mounted until focus leaves the grid', () => {
+    const cell = document.createElement('div');
+    cell.setAttribute('data-column', 'j');
+    cell.tabIndex = -1;
+    bodyScroll.appendChild(cell);
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+
+    cell.focus();
+    expect(mounted()).toBe('a b c d e f j');
+    // Within the grid, to an element of no column: nothing is held.
+    grid.tabIndex = 0;
+    grid.focus();
+    expect(mounted()).toBe('a b c d e f');
+    cell.focus();
+    outside.focus();
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('are worked out afresh when the columns change', () => {
+    scrollBody(300);
+    expect(mounted()).toBe('a b c d e f g h i');
+    // Hiding `a` moves every column left by 100; the old run's indices
+    // would now name other columns.
+    actions.hideColumn('a');
+    expect(mounted()).toBe('b c d e f g h i j');
+    actions.setColumnWidth('b', 400);
+    // b now spans 0–400: in view at 300 along with c, d.
+    expect(mounted().split(' ')).toContain('b');
+  });
+
+  it('follow the controller’s own scrolls at once', () => {
+    controller.revealColumn('j');
+    expect(bodyScroll.scrollLeft).toBe(700);
+    expect(mounted()).toBe('e f g h i j');
+    controller.restorePosition({ left: 0, top: 0 });
+    expect(mounted()).toBe('a b c d e f');
+  });
+
+  it('follow the header when it scrolls on its own', () => {
+    headerScroll.scrollLeft = 600;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(mounted()).toBe('d e f g h i j');
+  });
+
+  it('are recomputed when the body is resized', () => {
+    resizeBody(600);
+    expect(mounted()).toBe('a b c d e f g h i j');
+    resizeBody(100);
+    expect(mounted()).toBe('a b');
   });
 });

@@ -405,6 +405,7 @@ export class TableContainer {
       headerScroll: this.headerScroll,
       scrollbarGutter: this.scrollbarGutter,
       bodyScroll: this.bodyScroll,
+      gridElement: this.gridElement,
     });
 
     // Set up resize observer
@@ -1900,6 +1901,16 @@ export class TableContainer {
    */
   getTableBody(): TableBody | null {
     return this.tableBody;
+  }
+
+  /**
+   * The controller that makes every sideways scroll of the table and
+   * publishes the columns to mount.
+   *
+   * @internal
+   */
+  getColumnWindow(): ColumnWindowController {
+    return this.columnWindow;
   }
 
   /**

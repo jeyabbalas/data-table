@@ -97,17 +97,41 @@ describe('pinned columns stay first', () => {
     expect(isSubsequence(state.visibleColumns.get(), state.columnOrder.get())).toBe(true);
   });
 
-  it('showing a pinned column keeps it inside the pinned block', () => {
+  it('showing a pinned column puts it back in pin order', () => {
+    // `a`'s neighbours at hide time say "before b", which would put it after
+    // `c`, pinned since. Pin order says first.
     actions.toggleColumnPin('a');
     actions.hideColumn('a');
     actions.toggleColumnPin('c');
+    const order = state.columnOrder.get();
 
     actions.showColumn('a');
 
-    const visible = state.visibleColumns.get();
-    expect(leadingPinned(visible, state.pinnedColumns.get())).toBe(2);
-    expect(visible.slice(0, 2).sort()).toEqual(['a', 'c']);
-    expect(isSubsequence(visible, state.columnOrder.get())).toBe(true);
+    expect(state.pinnedColumns.get()).toEqual(['a', 'c']);
+    expect(state.visibleColumns.get()).toEqual(['a', 'c', 'b', 'd', 'e']);
+    expect(state.columnOrder.get()).toBe(order);
+  });
+
+  it('never moves a column into the pinned columns at the front of columnOrder', () => {
+    // `b` is pinned and hidden, so `columnOrder` starts with a, b while only
+    // `a` shows. Showing `c` right after `a` must not file it before `b`:
+    // `toggleColumnPin` and `showAllColumns` both take the pinned columns to
+    // lead `columnOrder`.
+    actions.toggleColumnPin('a');
+    actions.toggleColumnPin('b');
+    actions.hideColumn('c');
+    actions.hideColumn('b');
+    actions.toggleColumnPin('d');
+    actions.toggleColumnPin('d');
+
+    actions.showColumn('c');
+    expect(state.visibleColumns.get()).toEqual(['a', 'c', 'd', 'e']);
+    expect(state.columnOrder.get().slice(0, 2)).toEqual(['a', 'b']);
+
+    actions.toggleColumnPin('e');
+    expect(leadingPinned(state.visibleColumns.get(), state.pinnedColumns.get())).toBe(2);
+    actions.showAllColumns();
+    expect(state.visibleColumns.get()).toEqual(['a', 'b', 'e', 'c', 'd']);
   });
 
   it('showing a column keeps visibleColumns in columnOrder after a reorder', () => {
@@ -136,12 +160,14 @@ describe('pinned columns stay first', () => {
   it('undoes a show that moved the column in columnOrder in one step', async () => {
     const undoManager = new UndoManager();
     const undoActions = new StateActions(state, mockBridge(), undoManager);
-    undoActions.hideColumn('a');
-    undoActions.toggleColumnPin('b');
+    undoActions.hideColumn('b');
+    undoActions.hideColumn('c');
+    undoActions.setColumnOrder(['d', 'a', 'e']);
     const before = { visible: state.visibleColumns.get(), order: state.columnOrder.get() };
     const depth = undoManager.undoDepth;
 
-    undoActions.showColumn('a');
+    undoActions.showColumn('b');
+    expect(state.columnOrder.get()).not.toEqual(before.order);
     expect(undoManager.undoDepth).toBe(depth + 1);
     await undoActions.undo();
 

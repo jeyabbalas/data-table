@@ -1030,19 +1030,26 @@ export class StateActions {
       insertIndex = this.computeOrderBasedIndex(visible, order, column);
     }
 
-    // Pinned columns lead the row, and their sticky offsets are summed on
-    // that assumption. The neighbours recorded at hide time know nothing of
-    // a pin made since, so an unpinned column is kept after the pinned block
-    // and a pinned one inside it.
+    // Pinned columns lead the row, in pin order, and their sticky offsets are
+    // summed on that assumption. The neighbours recorded at hide time know
+    // nothing of a pin made since, so an unpinned column is kept after the
+    // pinned block, and a pinned column goes back to its place in pin order
+    // within it, whatever its neighbours were.
     const pinned = this.state.pinnedColumns.get();
     const pinnedLead = leadingPinnedCount(visible, pinned);
-    insertIndex = pinned.includes(column)
-      ? Math.min(insertIndex, pinnedLead)
-      : Math.max(insertIndex, pinnedLead);
+    const rank = pinned.indexOf(column);
+    if (rank >= 0) {
+      insertIndex = 0;
+      while (insertIndex < pinnedLead && pinned.indexOf(visible[insertIndex]!) < rank) {
+        insertIndex++;
+      }
+    } else {
+      insertIndex = Math.max(insertIndex, pinnedLead);
+    }
 
     const newVisible = [...visible];
     newVisible.splice(insertIndex, 0, column);
-    const newOrder = alignOrderWithVisible(order, newVisible, column);
+    const newOrder = alignOrderWithVisible(order, newVisible, column, pinned);
 
     batch(() => {
       this.state.visibleColumns.set(newVisible);
@@ -2163,11 +2170,17 @@ function leadingPinnedCount(visible: readonly string[], pinned: readonly string[
  * between them in `columnOrder` too. The restore position `showColumn` picks
  * is where the column was when it was hidden, which a later reorder or pin
  * may have moved in `columnOrder`. Returns `order` itself when nothing moves.
+ *
+ * A moved column goes straight before its new right neighbour. Only a column
+ * shown last goes after its left neighbour, and then past any pinned columns
+ * that follow it: `columnOrder` keeps every pinned column, hidden ones too,
+ * ahead of the rest, which `toggleColumnPin` and `showAllColumns` rely on.
  */
 function alignOrderWithVisible(
   order: string[],
   visible: readonly string[],
   column: string,
+  pinned: readonly string[],
 ): string[] {
   const at = visible.indexOf(column);
   const prev = at > 0 ? visible[at - 1] : undefined;
@@ -2181,7 +2194,15 @@ function alignOrderWithVisible(
   if (prevPosition < position && position < nextPosition) return order;
 
   const moved = order.filter((c) => c !== column);
-  const insertAt = prev === undefined ? moved.indexOf(next!) : moved.indexOf(prev) + 1;
+  let insertAt: number;
+  if (next !== undefined) {
+    insertAt = moved.indexOf(next);
+  } else {
+    insertAt = moved.indexOf(prev!) + 1;
+    if (!pinned.includes(column)) {
+      while (insertAt < moved.length && pinned.includes(moved[insertAt]!)) insertAt++;
+    }
+  }
   moved.splice(insertAt, 0, column);
   return moved;
 }

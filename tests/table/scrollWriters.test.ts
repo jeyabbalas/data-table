@@ -56,7 +56,10 @@ function accessedName(node: ts.Node): string | undefined {
   return undefined;
 }
 
-/** Every assignment to `scrollLeft` and every call of a scrolling method, as `line: text`. */
+/**
+ * Every assignment to `scrollLeft`, increment or decrement of it, and call of
+ * a scrolling method, as `line: text`.
+ */
 function scrollWrites(file: string, text: string): string[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
@@ -70,6 +73,13 @@ function scrollWrites(file: string, text: string): string[] {
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
       node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
       accessedName(node.left) === 'scrollLeft'
+    ) {
+      note(node);
+    } else if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken) &&
+      accessedName(node.operand) === 'scrollLeft'
     ) {
       note(node);
     } else if (
@@ -111,12 +121,14 @@ describe('horizontal scroll writers', () => {
         "el['scrollLeft'] = 1;",
         'el.scroll({ left: 1 });',
         'el.scrollIntoViewIfNeeded();',
+        'el.scrollLeft++;',
+        '--el.scrollLeft;',
         'const x = el.scrollLeft === 1;',
         'el.scrollToRow(1);',
         '// el.scrollLeft = 1;',
         "const s = 'el.scrollTo(0, 0)';",
       ].join('\n'),
     ).map((write) => Number(write.split(':')[0]));
-    expect(found).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(found).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });

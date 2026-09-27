@@ -178,3 +178,40 @@ test('row fetches select the columns near the view, not all 1,000', async ({ pag
   expect(later.length).toBeGreaterThan(0);
   expect(Math.max(...later)).toBeLessThanOrEqual(96);
 });
+
+test('on a right-to-left page the grid scrolls left to right, and cells keep their own text direction', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 300 });
+  await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+  const styles = await page.evaluate((hostId) => {
+    const host = document.getElementById(hostId)!;
+    const style = (selector: string) => getComputedStyle(host.querySelector(selector)!);
+    return {
+      grid: style('.dt-grid').direction,
+      cell: style('.dt-body .dt-cell').unicodeBidi,
+      name: style('.dt-col-name').unicodeBidi,
+    };
+  }, HOST_ID);
+  expect(styles).toEqual({ grid: 'ltr', cell: 'plaintext', name: 'plaintext' });
+
+  await wheelBy(page, 20_000);
+  await expect.poll(() => probe(page, 'wrongCellsInView')).toEqual([]);
+  // What is on screen, found by position rather than from state: under the
+  // middle of each header in view, a cell of the same column.
+  const mismatches = await page.evaluate((hostId) => {
+    const host = document.getElementById(hostId)!;
+    const body = host.querySelector('.dt-body-scroll')!.getBoundingClientRect();
+    const header = host.querySelector('.dt-header-scroll')!.getBoundingClientRect();
+    const out: string[] = [];
+    for (let x = body.left + 40; x < body.right - 40; x += 75) {
+      const h = document.elementFromPoint(x, header.top + 10)?.closest('.dt-col-header');
+      const c = document.elementFromPoint(x, body.top + 50)?.closest('.dt-cell');
+      const hc = h?.getAttribute('data-column') ?? null;
+      const cc = c?.getAttribute('data-column') ?? null;
+      if (hc === null || hc !== cc) out.push(`${Math.round(x)}: header ${hc}, cell ${cc}`);
+    }
+    return out;
+  }, HOST_ID);
+  expect(mismatches).toEqual([]);
+});

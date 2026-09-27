@@ -15,6 +15,7 @@ import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '.
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
+import { getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
 import { buildRowQuery } from './rowQuery';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
@@ -217,8 +218,9 @@ export class TableBody {
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
-  // Cached column name -> 1-based presented index for aria-colindex
-  private colIndexMap = new Map<string, number>();
+  // `--dt-z-pinned-col`, read at most once per render pass: reading it
+  // forces a style recalculation, and `updateRowContent` runs per row.
+  private pinnedZBaseCache: number | null = null;
 
   // Last observed visibleColumns, so a write can be classified as a reorder
   // (same set, new order — re-render) or a real change (re-fetch).
@@ -306,8 +308,6 @@ export class TableBody {
   async initialize(): Promise<void> {
     if (this.destroyed) return;
 
-    // Build initial column index map for aria-colindex
-    this.rebuildColIndexMap();
     this.lastVisibleColumns = [...this.state.visibleColumns.get()];
 
     // Set total rows (use filteredRows when filters are active)
@@ -350,55 +350,9 @@ export class TableBody {
   // =========================================
 
   /**
-   * Rebuild the column name -> 1-based `aria-colindex` map.
-   *
-   * Numbered from `columnOrder` — the presented order, including hidden
-   * columns — and not from `schema`. ARIA requires `aria-colindex` to ascend
-   * in DOM order within a row (a MUST), and rows render in `visibleColumns`
-   * order, which is a filter over `columnOrder`. Numbering from the schema
-   * made a reordered row report `3, 1, 2`. Keeping the hidden columns in the
-   * numbering is deliberate: the gaps are what tell assistive tech that
-   * columns are missing rather than renumbered.
-   *
-   * Falls back to the schema position for any column `columnOrder` does not
-   * know about, so a header still carries an index during the window between
-   * a schema write and the column-order write that follows it.
-   */
-  private rebuildColIndexMap(): void {
-    this.colIndexMap.clear();
-    const columnOrder = this.state.columnOrder.get();
-    for (let i = 0; i < columnOrder.length; i++) {
-      this.colIndexMap.set(columnOrder[i]!, i + 1);
-    }
-    const schema = this.state.schema.get();
-    for (let i = 0; i < schema.length; i++) {
-      const name = schema[i]!.name;
-      if (!this.colIndexMap.has(name)) this.colIndexMap.set(name, i + 1);
-    }
-  }
-
-  /**
    * Subscribe to state signals that require re-render
    */
   private subscribeToState(): void {
-    // Rebuild column index map when schema changes
-    const unsubSchema = this.state.schema.subscribe(() => {
-      if (!this.destroyed) {
-        this.rebuildColIndexMap();
-      }
-    });
-    this.unsubscribes.push(unsubSchema);
-
-    // …and when the presentation order changes, which is what aria-colindex
-    // is numbered from. A reorder leaves the schema untouched, so without
-    // this the indices stay frozen at the pre-reorder positions.
-    const unsubColumnOrder = this.state.columnOrder.subscribe(() => {
-      if (!this.destroyed) {
-        this.rebuildColIndexMap();
-      }
-    });
-    this.unsubscribes.push(unsubColumnOrder);
-
     // Re-fetch when the visible column *set* changes.
     //
     // A write that only permutes the set is a reorder, and rows are keyed by
@@ -1009,6 +963,7 @@ export class TableBody {
    */
   private renderVisibleRows(): void {
     if (this.destroyed) return;
+    this.pinnedZBaseCache = null;
 
     const viewport = this.virtualScroller.getViewportContainer();
     const schema = this.state.schema.get();
@@ -1127,13 +1082,7 @@ export class TableBody {
     // which DOM element currently has the focus class after a rebuild.
     this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
 
-    // Calculate total width from actual column widths
-    const columnWidths = this.state.columnWidths.get();
-    let totalWidth = 0;
-    for (const colName of visibleColumns) {
-      const width = columnWidths.get(colName) ?? 150;
-      totalWidth += width;
-    }
+    const totalWidth = getColumnLayout(this.state).totalWidth;
 
     // Set width for horizontal scrolling
     // Uses a width spacer element in normal flow to force correct scrollWidth
@@ -1304,6 +1253,40 @@ export class TableBody {
   }
 
   /**
+   * Make a cell sticky at its pinned column's offset, or undo that.
+   *
+   * Only a cell that was pinned carries sticky styles to clear (a pooled row
+   * keeps its classes and styles together), so an unpinned cell without the
+   * class is left untouched: this runs for every cell on every resize step.
+   */
+  private applyPinnedCellStyle(cellEl: HTMLElement, column: string): void {
+    const placement = getColumnLayout(this.state).pinnedPlacement(column);
+    const pinnedClass = `${this.classPrefix}-cell--pinned`;
+    if (placement) {
+      cellEl.style.position = 'sticky';
+      cellEl.style.left = `${placement.left}px`;
+      cellEl.style.zIndex = String(this.pinnedZBase() + placement.zOffset);
+      cellEl.classList.add(pinnedClass);
+    } else if (cellEl.classList.contains(pinnedClass)) {
+      cellEl.style.position = '';
+      cellEl.style.left = '';
+      cellEl.style.zIndex = '';
+      cellEl.classList.remove(pinnedClass);
+    }
+  }
+
+  /** `--dt-z-pinned-col` from the table root, cached for the render pass. */
+  private pinnedZBase(): number {
+    if (this.pinnedZBaseCache === null) {
+      const root =
+        this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
+      this.pinnedZBaseCache =
+        Number(getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
+    }
+    return this.pinnedZBaseCache;
+  }
+
+  /**
    * Update the content of an existing row element
    */
   private updateRowContent(
@@ -1347,24 +1330,7 @@ export class TableBody {
     // annotations; cell / column annotations stay local.
     this.applyRowAnnotationClasses(rowEl, rowId);
 
-    const columnWidths = this.state.columnWidths.get();
-    const pinnedColumns = this.state.pinnedColumns.get();
-
-    const root =
-      this.container.closest<HTMLElement>('.' + this.classPrefix + '-root') ?? this.container;
-    const baseZ = Number(getComputedStyle(root).getPropertyValue('--dt-z-pinned-col').trim()) || 20;
-
-    // Compute pinned offsets
-    const pinnedOffsets = new Map<string, { left: number; zIndex: number }>();
-    let cumulativeLeft = 0;
-    for (let i = 0; i < pinnedColumns.length; i++) {
-      const pCol = pinnedColumns[i]!;
-      pinnedOffsets.set(pCol, {
-        left: cumulativeLeft,
-        zIndex: baseZ + (pinnedColumns.length - i),
-      });
-      cumulativeLeft += columnWidths.get(pCol) ?? 150;
-    }
+    const layout = getColumnLayout(this.state);
 
     const cells = rowEl.children;
     for (let i = 0; i < columns.length && i < cells.length; i++) {
@@ -1374,15 +1340,17 @@ export class TableBody {
       const cellEl = cells[i] as HTMLElement;
 
       // Stable id so `aria-activedescendant` on `.dt-grid` can name this
-      // cell. Keyed by absolute row index + visible column index, and
-      // rewritten on every reuse, so a pooled element never carries a
-      // stale id.
+      // cell. Keyed by absolute row index + the column's position among the
+      // visible columns (not the cell's position in the row, which only
+      // coincides while a row holds every visible column), and rewritten on
+      // every reuse, so a pooled element never carries a stale id.
       if (this.instanceId) {
-        cellEl.id = this.buildCellId(index, i);
+        cellEl.id = this.buildCellId(index, layout.indexOf(colName));
       }
 
-      // ARIA: 1-based column index in full schema
-      const ariaColIdx = this.colIndexMap.get(colName);
+      // ARIA: 1-based position in the presented order, hidden columns
+      // included — see `ColumnLayout.ariaColIndex`.
+      const ariaColIdx = layout.ariaColIndex(colName);
       if (ariaColIdx !== undefined) {
         cellEl.setAttribute('aria-colindex', String(ariaColIdx));
       }
@@ -1392,23 +1360,8 @@ export class TableBody {
       // sibling indices.
       cellEl.setAttribute('data-column', colName);
 
-      // Apply dynamic width
-      const width = columnWidths.get(colName) ?? 150;
-      cellEl.style.width = `${width}px`;
-
-      // Apply pinned cell styles
-      const offset = pinnedOffsets.get(colName);
-      if (offset) {
-        cellEl.style.position = 'sticky';
-        cellEl.style.left = `${offset.left}px`;
-        cellEl.style.zIndex = String(offset.zIndex);
-        cellEl.classList.add(`${this.classPrefix}-cell--pinned`);
-      } else {
-        cellEl.style.position = '';
-        cellEl.style.left = '';
-        cellEl.style.zIndex = '';
-        cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
-      }
+      cellEl.style.width = `${layout.widthOf(colName)}px`;
+      this.applyPinnedCellStyle(cellEl, colName);
 
       // Apply derived cell styling (after pinned logic so both classes can coexist)
       if (colSchema?.isDerived) {
@@ -1909,25 +1862,22 @@ export class TableBody {
    * Update cell widths when column widths change
    */
   private updateCellWidths(): void {
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnWidths = this.state.columnWidths.get();
+    const layout = getColumnLayout(this.state);
+    this.pinnedZBaseCache = null;
 
-    // Update cell widths for all visible rows
+    // Update cell widths for all visible rows. A pinned column's width also
+    // moves every later pinned column's sticky offset.
     for (const [, rowEl] of this.rowElementMap) {
       for (const cell of rowEl.children) {
         const colName = cell.getAttribute('data-column');
         if (colName === null) continue;
-        const width = columnWidths.get(colName) ?? 150;
-        (cell as HTMLElement).style.width = `${width}px`;
+        (cell as HTMLElement).style.width = `${layout.widthOf(colName)}px`;
+        this.applyPinnedCellStyle(cell as HTMLElement, colName);
       }
     }
 
     // Update total content width
-    let totalWidth = 0;
-    for (const colName of visibleColumns) {
-      const width = columnWidths.get(colName) ?? 150;
-      totalWidth += width;
-    }
+    const totalWidth = layout.totalWidth;
     this.virtualScroller.setContentWidth(totalWidth);
 
     // Update header row width

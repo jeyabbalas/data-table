@@ -19,6 +19,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
 import type { AnnotationPopover } from './AnnotationPopover';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
+import { resolveColumnWidth } from './ColumnLayout';
 import { ColumnResizer } from './ColumnResizer';
 
 /**
@@ -862,12 +863,13 @@ export class ColumnHeader {
    * The current width of this column, in pixels.
    *
    * Reads `columnWidths` rather than the element, so it reports the state the
-   * next resize step will build on even before layout has flushed. Falls back
-   * to the 150px default the renderer uses when the column has never been
-   * sized.
+   * next resize step will build on even before layout has flushed. Resolved
+   * the way the renderer resolves it: rounded to a whole pixel, and 150px when
+   * the column has never been sized or its stored width is not a finite,
+   * non-negative number.
    */
   getWidth(): number {
-    return this.state.columnWidths.get().get(this.column.name) ?? 150;
+    return resolveColumnWidth(this.state.columnWidths.get().get(this.column.name));
   }
 
   /**

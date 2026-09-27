@@ -12,6 +12,7 @@
  */
 
 import { type Strings, defaultStrings } from '../core/Strings';
+import { DEFAULT_COLUMN_WIDTH } from './ColumnLayout';
 
 /**
  * Options for configuring the ColumnResizer
@@ -279,7 +280,7 @@ export class ColumnResizer {
     cells.forEach((cell) => cell.classList.add(resettingClass));
 
     // Animate to default width
-    this.header.style.width = '150px';
+    this.header.style.width = `${DEFAULT_COLUMN_WIDTH}px`;
 
     // Call reset callback to update state (cells get new width)
     if (this.onReset) {

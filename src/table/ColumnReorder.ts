@@ -41,10 +41,10 @@ export type ReorderCallback = (newOrder: string[], movedColumn: string) => void;
  * pinned block.
  *
  * Pinned columns are assumed to occupy the leading positions of the presented
- * order — `TableContainer.updatePinnedColumnStyles` and
- * `TableBody.updateRowContent` both compute sticky `left` offsets by walking
- * `pinnedColumns` in order, so dropping an unpinned column at index 0 of a
- * table with two pinned columns desyncs every offset after it.
+ * order — the sticky `left` offsets (`ColumnLayout.pinnedPlacement`) are the
+ * widths of the pinned columns before each one, which is where it sits only
+ * while nothing unpinned comes between them. Dropping an unpinned column at
+ * index 0 of a table with two pinned columns would put it under both.
  *
  * @param index - Desired insertion index into `columns`.
  * @param columns - The presented order the column will be spliced into, with

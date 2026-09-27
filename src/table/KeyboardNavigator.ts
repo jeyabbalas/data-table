@@ -45,6 +45,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
 import type { ColumnHeader } from './ColumnHeader';
+import { DEFAULT_COLUMN_WIDTH, getColumnLayout } from './ColumnLayout';
 import { clampUnpinnedIndex } from './ColumnReorder';
 import type { TableBody } from './TableBody';
 
@@ -699,7 +700,10 @@ export class KeyboardNavigator {
         this.actions.resetColumnWidth(layout.column);
         const header = this.findHeader(layout.column);
         this.announce(
-          this.messages.a11y.columnWidthAnnouncement(layout.column, header?.getWidth() ?? 150),
+          this.messages.a11y.columnWidthAnnouncement(
+            layout.column,
+            header?.getWidth() ?? DEFAULT_COLUMN_WIDTH,
+          ),
         );
         return true;
       }
@@ -913,25 +917,16 @@ export class KeyboardNavigator {
       }
     }
 
-    // Horizontal (skip for pinned columns — always visible)
-    const pinnedColumns = this.state.pinnedColumns.get();
-    if (pinnedColumns.includes(column)) return;
+    // Horizontal (skip for pinned columns — always visible). The pinned
+    // block covers the left edge of the viewport, so a column counts as in
+    // view only right of it.
+    const layout = getColumnLayout(this.state);
+    const index = layout.indexOf(column);
+    if (index < 0 || layout.pinnedPlacement(column)) return;
 
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnWidths = this.state.columnWidths.get();
-
-    let colLeft = 0;
-    for (const colName of visibleColumns) {
-      if (colName === column) break;
-      colLeft += columnWidths.get(colName) ?? 150;
-    }
-    const colWidth = columnWidths.get(column) ?? 150;
-    const colRight = colLeft + colWidth;
-
-    let pinnedWidth = 0;
-    for (const pinned of pinnedColumns) {
-      pinnedWidth += columnWidths.get(pinned) ?? 150;
-    }
+    const colLeft = layout.leftAt(index);
+    const colRight = colLeft + layout.widthAt(index);
+    const pinnedWidth = layout.pinnedWidth;
 
     const scrollLeft = this.bodyScroll.scrollLeft;
     const viewportWidth = this.bodyScroll.clientWidth;

@@ -502,6 +502,29 @@ test('a hide, a show and a move at 1,000 columns keep every other header and the
   expect(slid).toBeLessThanOrEqual((await probe(page, 'mounted')).length);
 });
 
+test('a column change after a scroll slides no header in from where it was at load', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 300 });
+  await wheelBy(page, 20_000);
+  const column = (await probe(page, 'inView'))[3]!;
+  const slid = await page.evaluate(
+    ({ hostId, c }) =>
+      new Promise<string[]>((resolve) => {
+        (window as unknown as TestWindow).__dt.actions.hideColumn(c);
+        requestAnimationFrame(() =>
+          resolve(
+            Array.from(document.querySelectorAll<HTMLElement>(`#${hostId} .dt-col-header`))
+              .filter((h) => h.style.transform !== '')
+              .map((h) => h.getAttribute('data-column')!),
+          ),
+        );
+      }),
+    { hostId: HOST_ID, c: column },
+  );
+  expect(slid).toEqual([]);
+});
+
 test('a column moved across the header holding focus leaves that header, and focus, in place', async ({
   page,
 }) => {

@@ -274,3 +274,10 @@ panels and charts right across a trackpad sweep.
   stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
   which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
   failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.
+- **Found building 4d PR 4, on main too.** Pinning slides headers from their old places to their
+  new ones (FLIP), from positions saved when `pinnedColumns` changes. Loading data writes
+  `pinnedColumns` after the columns in one batch, so the positions were saved after the render
+  that load causes and kept until the next one: the first hide, show or move after a scroll slid
+  every header in from where it was at load. With 299 headers translated, the create observer
+  saw charts 20,000 px away as in reach and built them. Saved positions now last to the end of the
+  task that saved them.

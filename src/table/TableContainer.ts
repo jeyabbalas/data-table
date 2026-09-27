@@ -1045,14 +1045,20 @@ export class TableContainer {
         // Animating a thousand headers nobody can see costs a thousand
         // layout reads and transitions.
         if (this.columnHeaders.length > 0) {
-          this.savedColumnPositions = new Map();
+          const positions = new Map<string, DOMRect>();
           for (const header of this.columnHeaders) {
             if (!header.hasControls()) continue;
-            this.savedColumnPositions.set(
-              header.getColumn().name,
-              header.getElement().getBoundingClientRect(),
-            );
+            positions.set(header.getColumn().name, header.getElement().getBoundingClientRect());
           }
+          this.savedColumnPositions = positions;
+          // For the render the same change causes, which runs in this task.
+          // Loading data writes `pinnedColumns` after the columns, once that
+          // render has run, and positions left over from then slid every
+          // header in from where it was at load on the first column change
+          // after a scroll.
+          queueMicrotask(() => {
+            if (this.savedColumnPositions === positions) this.savedColumnPositions = null;
+          });
         }
         this.updatePinnedColumnStyles();
       }

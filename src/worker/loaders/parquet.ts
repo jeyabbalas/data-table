@@ -16,12 +16,11 @@ import {
   type LoaderContext,
 } from './common';
 import {
+  fitParquetRead,
   isOutOfMemoryError,
   measureParquetFootprint,
   memoryExceededError,
-  planParquetRead,
   readMemoryBudget,
-  type MemoryShortfall,
 } from './memoryBudget';
 import type { LoadResult, ParquetLoadOptions } from './types';
 
@@ -109,6 +108,10 @@ export async function loadParquet(
     await db.registerFileBuffer(fileName, new Uint8Array(data));
   }
 
+  const tbl = quoteIdentifier(tableName);
+  // Set once the CREATE succeeds: from then on a failure has to drop the
+  // table, or it stays in DuckDB holding memory that nothing will release.
+  let created = false;
   try {
     // Reject explicit column lists that include the reserved __rowid__ name.
     if (options.columns?.includes(ROWID_COLUMN)) {
@@ -135,28 +138,23 @@ export async function loadParquet(
 
     const footprint = await measureParquetFootprint(conn, fileName, probeRows);
     const budget = await readMemoryBudget(conn);
-    const shortfall = (stage: MemoryShortfall['stage']): MemoryShortfall => ({
-      footprint,
-      budget,
-      stage,
-      buffered: !fromFile,
-    });
-    const mode = planParquetRead(footprint, budget, fromFile);
-    if (mode === null) {
-      throw memoryExceededError(shortfall('estimate'));
+    const context = { footprint, budget, buffered: !fromFile };
+    const plan = fitParquetRead(footprint, budget, fromFile);
+    if (plan.mode === null) {
+      throw memoryExceededError({ ...context, stage: 'estimate', failure: plan.failure });
     }
 
     // Inject a synthetic __rowid__ as the first column of a new table.
-    const tbl = quoteIdentifier(tableName);
     // Always cast __rowid__ to BIGINT — see the matching note in csv.ts for
     // the rationale (single typed-array shape on read, symmetry across
     // loaders). The reserved-name guard above is case-sensitive.
     const createSql = `CREATE OR REPLACE TABLE ${tbl} AS SELECT CAST(row_number() OVER () - 1 AS BIGINT) AS ${quoteIdentifier(ROWID_COLUMN)}, ${columnSelect} FROM read_parquet('${fileName}')`;
-    const prefetching = mode === 'prefetch' && (await enablePrefetch(conn));
+    const prefetching = plan.mode === 'prefetch' && (await enablePrefetch(conn));
     try {
       await conn.query(createSql);
+      created = true;
     } catch (err) {
-      if (isOutOfMemoryError(err)) throw memoryExceededError(shortfall('load'), err);
+      if (isOutOfMemoryError(err)) throw memoryExceededError({ ...context, stage: 'load' }, err);
       throw wrapReservedColumnError(err);
     } finally {
       if (prefetching) await resetPrefetch(conn);
@@ -176,7 +174,7 @@ export async function loadParquet(
     try {
       describeRows = await enhanceSchemaTypes(conn, tableName, describeRows);
     } catch (err) {
-      if (isOutOfMemoryError(err)) throw memoryExceededError(shortfall('load'), err);
+      if (isOutOfMemoryError(err)) throw memoryExceededError({ ...context, stage: 'load' }, err);
       throw err;
     }
 
@@ -194,6 +192,17 @@ export async function loadParquet(
     });
 
     return { tableName, rowCount, columns, schema };
+  } catch (err) {
+    // The caller never learns this table's name when the load fails, so
+    // nothing else could drop it. Best effort: the load's own error wins.
+    if (created) {
+      try {
+        await conn.query(`DROP TABLE IF EXISTS ${tbl}`);
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+    throw err;
   } finally {
     // Clean up virtual file
     await dropSourceFile(db, fileName);

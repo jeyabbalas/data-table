@@ -106,13 +106,46 @@ describe('Parquet memory check (real DuckDB)', () => {
     expect(footprint.tableBytes / actual).toBeLessThan(1.15);
   }, 60_000);
 
+  it.each([
+    [5, 3000],
+    [10_000, 3000],
+  ])(
+    'loads %d rows × %d columns, and estimates the table within 5%',
+    async (rows, columns) => {
+      // Short, wide tables: whole-block estimates put these at 1.5 GiB and
+      // refused them, where DuckDB holds 64 and 815 MiB.
+      const select = Array.from({ length: columns }, (_, i) => `random() + ${i} AS c${i}`);
+      const data = await parquet(`SELECT ${select.join(', ')} FROM range(${rows})`);
+
+      const fileName = `budget_wide_${rows}.parquet`;
+      await harness.db.registerFileBuffer(fileName, new Uint8Array(data.slice(0)));
+      const describe = (
+        await harness.conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`)
+      )
+        .toArray()
+        .map((row) => row.toJSON());
+      const footprint = await measureParquetFootprint(harness.conn, fileName, describe);
+      await harness.db.dropFile(fileName);
+
+      const before = await usedBytes();
+      const result = await loadParquet(data, { tableName: 'budget_wide' }, ctx());
+      const actual = (await usedBytes()) - before;
+      await harness.conn.query('DROP TABLE budget_wide');
+
+      expect(result.rowCount).toBe(rows);
+      expect(footprint.tableBytes / actual).toBeGreaterThan(0.95);
+      expect(footprint.tableBytes / actual).toBeLessThan(1.05);
+    },
+    120_000,
+  );
+
   it('rejects a load that cannot fit before building anything', async () => {
     // ~33 MB once loaded; the footer and DESCRIBE need well under 16 MB.
     const data = await parquet('SELECT range AS a, random() AS b FROM range(1000000)');
     await withMemoryLimit('16MB', async () => {
       await expect(loadParquet(data, { tableName: 'budget_tiny' }, ctx())).rejects.toMatchObject({
         code: 'LOAD_MEMORY_EXCEEDED',
-        details: { stage: 'estimate', rows: 1_000_000, columns: 2 },
+        details: { stage: 'estimate', check: 'table', rows: 1_000_000, columns: 2 },
       });
     });
     const tables = await harness.conn.query(
@@ -135,9 +168,48 @@ describe('Parquet memory check (real DuckDB)', () => {
     await withMemoryLimit('64MB', async () => {
       await expect(loadParquet(data, { tableName: 'budget_long' }, ctx())).rejects.toMatchObject({
         code: 'LOAD_MEMORY_EXCEEDED',
-        details: { stage: 'load', rows: ROWS, columns: 1 },
+        details: {
+          stage: 'load',
+          rows: ROWS,
+          columns: 1,
+          duckdbMessage: expect.stringMatching(/^Out of Memory Error/),
+        },
         cause: expect.objectContaining({ message: expect.stringMatching(/Out of Memory/) }),
       });
     });
+  }, 60_000);
+
+  it('drops the table it built when the load then runs out of memory', async () => {
+    // ISO date strings make the loader rebuild the table to convert them,
+    // which needs a second copy. A limit of 1.35× the table fits the first
+    // copy and the estimate, but not the rebuild.
+    const numbers = Array.from({ length: 30 }, (_, i) => `random() + ${i} AS n${i}`);
+    const data = await parquet(
+      `SELECT strftime(DATE '2020-01-01' + CAST(range % 3000 AS INTEGER), '%Y-%m-%d') AS day,
+              ${numbers.join(', ')}
+       FROM range(600000)`,
+    );
+    const fileName = 'budget_dates.parquet';
+    await harness.db.registerFileBuffer(fileName, new Uint8Array(data.slice(0)));
+    const describe = (
+      await harness.conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`)
+    )
+      .toArray()
+      .map((row) => row.toJSON());
+    const footprint = await measureParquetFootprint(harness.conn, fileName, describe);
+    await harness.db.dropFile(fileName);
+
+    const limitMiB = Math.ceil((footprint.tableBytes * 1.35) / 2 ** 20);
+    await withMemoryLimit(`${limitMiB}MiB`, async () => {
+      await expect(loadParquet(data, { tableName: 'budget_dates' }, ctx())).rejects.toMatchObject({
+        code: 'LOAD_MEMORY_EXCEEDED',
+        details: { stage: 'load', duckdbMessage: expect.stringMatching(/^Out of Memory Error/) },
+      });
+    });
+    const tables = await harness.conn.query(
+      "SELECT count(*) AS n FROM duckdb_tables() WHERE table_name LIKE '%budget_dates%'",
+    );
+    expect(Number(tables.toArray()[0]?.toJSON().n)).toBe(0);
+    expect(await usedBytes()).toBeLessThan(footprint.tableBytes / 2);
   }, 60_000);
 });

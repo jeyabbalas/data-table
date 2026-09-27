@@ -1190,6 +1190,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.filteredRows.subscribe(refreshNonVizStats));
 
   // -------- Public loadData --------
+  // Base tables that failed loads left behind. `actions.loadData` resets
+  // state before it loads, so after a failed load nothing points at the
+  // previous table, though DuckDB still holds it. The next successful load,
+  // or destroy() over a shared bridge, drops them.
+  const strandedTables = new Set<string>();
+
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
@@ -1200,13 +1206,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
     autoSave?.disable();
+    // Capture the previous base table NOW, before `actions.loadData`
+    // resets state. We drop it AFTER the new load resolves successfully —
+    // a failed load leaves the previous data queryable as a fallback.
+    // `state.baseTableName` takes precedence so a derived-VIEW tableName
+    // doesn't shadow the underlying physical table name.
+    const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
     try {
-      // Capture the previous base table NOW, before `actions.loadData`
-      // resets state. We drop it AFTER the new load resolves successfully —
-      // a failed load leaves the previous data queryable as a fallback.
-      // `state.baseTableName` takes precedence so a derived-VIEW tableName
-      // doesn't shadow the underlying physical table name.
-      const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
@@ -1259,28 +1265,35 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // and mutate `schema` cannot corrupt the live state signal value.
         schema: [...state.schema.get()],
       });
-      // Reclaim the previous base table now that the new one is live.
-      // Skip when names match — `CREATE OR REPLACE TABLE` already
-      // replaced it atomically in the loader, and a redundant DROP would
-      // race with the live table. Best-effort: a DROP failure must not
-      // turn a successful load into a thrown error — we only leak one
-      // orphan in that worst case.
+      // Reclaim the previous base table now that the new one is live, and
+      // any that earlier failed loads left behind. Skip the new table's
+      // own name — `CREATE OR REPLACE TABLE` already replaced it
+      // atomically in the loader, and a redundant DROP would race with the
+      // live table. Best-effort: a DROP failure must not turn a successful
+      // load into a thrown error — we only leak one orphan in that worst
+      // case.
       const newBaseTableName = state.baseTableName.get() ?? state.tableName.get();
-      if (
-        previousBaseTableName &&
-        previousBaseTableName !== newBaseTableName &&
-        typeof bridge.dropTable === 'function'
-      ) {
-        try {
-          await bridge.dropTable(previousBaseTableName);
-        } catch (err) {
-          console.warn(
-            `[data-table] Failed to drop previous table "${previousBaseTableName}":`,
-            err,
-          );
+      const reclaim = [...strandedTables];
+      if (previousBaseTableName) reclaim.push(previousBaseTableName);
+      strandedTables.clear();
+      if (typeof bridge.dropTable === 'function') {
+        for (const name of new Set(reclaim)) {
+          if (name === newBaseTableName) continue;
+          try {
+            await bridge.dropTable(name);
+          } catch (err) {
+            console.warn(`[data-table] Failed to drop previous table "${name}":`, err);
+          }
         }
       }
     } catch (error) {
+      // The previous table stays in DuckDB as a fallback, but state no
+      // longer names it once `actions.loadData` has reset it. Remember it
+      // so a later load or destroy() can still drop it.
+      const currentBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+      if (previousBaseTableName && previousBaseTableName !== currentBaseTableName) {
+        strandedTables.add(previousBaseTableName);
+      }
       const typed =
         error instanceof DataTableError
           ? error
@@ -1371,15 +1384,18 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // (and its DuckDB context) below, so the DROP would be wasted IPC.
     // When the bridge is shared (multi-table dashboards), the worker
     // outlives this DataTable, and the table would orphan if we didn't
-    // drop it here. Best-effort: a failure must not turn `destroy()` into
-    // a thrown error.
+    // drop it here, along with any a failed load left behind. Best-effort:
+    // a failure must not turn `destroy()` into a thrown error.
     if (!ownsBridge && typeof bridge.dropTable === 'function') {
       const baseToDrop = state.baseTableName.get() ?? state.tableName.get();
-      if (baseToDrop) {
+      const toDrop = new Set(strandedTables);
+      if (baseToDrop) toDrop.add(baseToDrop);
+      strandedTables.clear();
+      for (const name of toDrop) {
         try {
-          await bridge.dropTable(baseToDrop);
+          await bridge.dropTable(name);
         } catch (err) {
-          console.warn(`[data-table] Failed to drop base table "${baseToDrop}" on destroy:`, err);
+          console.warn(`[data-table] Failed to drop base table "${name}" on destroy:`, err);
         }
       }
     }

@@ -194,13 +194,18 @@ of its text columns, and picks how to read the file:
   columns of random doubles loads this way in about 35 seconds.
 
 A load that will not fit rejects with `LoadError` code
-`LOAD_MEMORY_EXCEEDED` before anything is loaded, and the current table
-stays in DuckDB:
+`LOAD_MEMORY_EXCEEDED` before anything is loaded. The message names the
+limit it hit — the table's share of DuckDB's free memory, or the load's peak
+against the 4 GiB — with the numbers compared, which `error.details` also
+carries as `check`, `neededBytes`, and `availableBytes`. If DuckDB runs out
+partway through anyway, the error has `details.stage === 'load'` and
+DuckDB's own message in `details.duckdbMessage`. Either way the table
+loaded before stays in DuckDB until the next successful load replaces it:
 
 ```ts
 table.on('loadError', ({ error }) => {
   if (error instanceof LoadError && error.code === 'LOAD_MEMORY_EXCEEDED') {
-    // error.message explains what would fit; error.details has the numbers.
+    // error.message says which limit the load hit; error.details has the numbers.
     showMessage(error.message);
   }
 });

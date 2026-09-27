@@ -21,6 +21,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDataTable, type DataTable } from '@/index';
+import { LoadError } from '@/core/errors';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { SessionStore } from '@/persistence/SessionStore';
@@ -176,6 +177,60 @@ describe('loadData / destroy — drops previous base table', () => {
 
     expect(bridge.dropTable).not.toHaveBeenCalled();
     await table.destroy();
+  });
+
+  it('drops the table a failed load left behind once a later load succeeds', async () => {
+    // A rejected load resets state, so nothing names A afterwards; the
+    // next successful load must still reclaim it.
+    const { table, bridge } = await makeTable({ tableName: 'A' });
+    (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();
+
+    (
+      bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }
+    ).mockRejectedValueOnce(new LoadError('too big', { code: 'LOAD_MEMORY_EXCEEDED' }));
+    await expect(table.loadData(new File([''], 'b.parquet'))).rejects.toThrow('too big');
+    expect(bridge.dropTable).not.toHaveBeenCalled();
+
+    (bridge.loadData as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue({
+      tableName: 'C',
+      rowCount: 0,
+      columns: ['sku', 'qty'],
+      schema: schemaB,
+    });
+    await table.loadData(new File([''], 'c.csv'), { tableName: 'C' });
+
+    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
+    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    await table.destroy();
+  });
+
+  it('keeps the table a failed load left behind when the next load reuses its name', async () => {
+    const { table, bridge } = await makeTable({ tableName: 'A' });
+    (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();
+
+    (
+      bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }
+    ).mockRejectedValueOnce(new Error('boom'));
+    await expect(table.loadData(new File([''], 'b.csv'), { tableName: 'B' })).rejects.toThrow();
+    // CREATE OR REPLACE rebuilt A in place; it is the live table now.
+    await table.loadData(new File([''], 'a-again.csv'), { tableName: 'A' });
+
+    expect(bridge.dropTable).not.toHaveBeenCalled();
+    await table.destroy();
+  });
+
+  it('drops the table a failed load left behind on destroy() when the bridge is shared', async () => {
+    const { table, bridge } = await makeTable({ tableName: 'A' });
+    (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();
+
+    (
+      bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }
+    ).mockRejectedValueOnce(new LoadError('too big', { code: 'LOAD_MEMORY_EXCEEDED' }));
+    await expect(table.loadData(new File([''], 'b.parquet'))).rejects.toThrow('too big');
+    await table.destroy();
+
+    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
+    expect(bridge.dropTable).toHaveBeenCalledWith('A');
   });
 
   it('drops the base table on destroy() when the bridge is shared', async () => {

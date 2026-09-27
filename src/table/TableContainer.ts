@@ -217,6 +217,10 @@ export class TableContainer {
   // Suppress header→body scroll sync during programmatic smooth scrolling
   private suppressReverseScrollSync = false;
 
+  // Where the header stopped short of the body on the last sync, until the
+  // header's scroll event for it arrives (see syncHeaderScroll)
+  private headerEcho: number | null = null;
+
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
   private announceRegion: HTMLElement | null = null;
@@ -624,7 +628,9 @@ export class TableContainer {
   // =========================================
 
   /**
-   * Set up ResizeObserver to track container size changes
+   * Set up ResizeObserver to track container size changes, and the body
+   * scroller's, whose client width changes when its vertical scrollbar comes
+   * or goes
    */
   private setupResizeObserver(): ResizeObserver {
     const observer = new ResizeObserver((entries) => {
@@ -632,6 +638,7 @@ export class TableContainer {
     });
 
     observer.observe(this.element);
+    observer.observe(this.bodyScroll);
     return observer;
   }
 
@@ -642,6 +649,10 @@ export class TableContainer {
     if (this.destroyed) return;
 
     for (const entry of entries) {
+      if (entry.target === this.bodyScroll) {
+        this.syncScrollbarGutter(entry);
+        continue;
+      }
       const { width, height } = entry.contentRect;
 
       // Only notify if dimensions actually changed
@@ -654,6 +665,38 @@ export class TableContainer {
         }
       }
     }
+  }
+
+  /**
+   * Make the header's scrollbar gutter as wide as the body's vertical
+   * scrollbar.
+   *
+   * The header scrolls in step with the body, so its viewport has to be
+   * exactly as wide as the body's. A fixed 17 px gutter was right for one
+   * scrollbar only: overlay scrollbars take no width, and neither does a body
+   * with too few rows to scroll, so at the far right the last header was cut
+   * off by up to 17 px, and keyboard navigation left a header cursor at the
+   * right edge partly out of view.
+   *
+   * The scrollbar's width is the body's border box less its content box, which
+   * keeps the fraction of a pixel `clientWidth` rounds away at some zoom
+   * levels.
+   *
+   * Until this runs, a scrollbar that has just appeared leaves the gutter too
+   * narrow and the header stopped short of a body scrolled to its far right,
+   * so the header is put back where the body is whenever the width changes.
+   */
+  private syncScrollbarGutter(entry: ResizeObserverEntry): void {
+    const border = entry.borderBoxSize?.[0]?.inlineSize;
+    const content = entry.contentBoxSize?.[0]?.inlineSize;
+    const scrollbar =
+      border !== undefined && content !== undefined
+        ? border - content
+        : this.headerArea.clientWidth - this.bodyScroll.clientWidth;
+    const width = `${Math.max(0, Math.round(scrollbar * 100) / 100)}px`;
+    if (this.scrollbarGutter.style.width === width) return;
+    this.scrollbarGutter.style.width = width;
+    this.syncHeaderScroll();
   }
 
   /**
@@ -691,12 +734,15 @@ export class TableContainer {
     this.boundBodyScrollHandler = () => {
       if (isScrolling) return;
       isScrolling = true;
-      this.headerScroll.scrollLeft = this.bodyScroll.scrollLeft;
+      this.syncHeaderScroll();
       isScrolling = false;
     };
 
     this.boundHeaderScrollHandler = () => {
+      const echo = this.headerEcho;
+      this.headerEcho = null;
       if (isScrolling || this.suppressReverseScrollSync) return;
+      if (this.headerScroll.scrollLeft === echo) return;
       isScrolling = true;
       this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
       isScrolling = false;
@@ -704,6 +750,22 @@ export class TableContainer {
 
     this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
     this.headerScroll.addEventListener('scroll', this.boundHeaderScrollHandler, { passive: true });
+  }
+
+  /**
+   * Scroll the header to where the body is.
+   *
+   * The header can stop short: its viewport is wider than the body's for the
+   * frame between a vertical scrollbar appearing and the gutter being measured
+   * to match. Its scroll event then carries the shorter position, and syncing
+   * that back would pull the body away from its far right, so the header
+   * handler drops that one event.
+   */
+  private syncHeaderScroll(): void {
+    const left = this.bodyScroll.scrollLeft;
+    this.headerScroll.scrollLeft = left;
+    const landed = this.headerScroll.scrollLeft;
+    this.headerEcho = landed === left ? null : landed;
   }
 
   // =========================================

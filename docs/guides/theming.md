@@ -197,7 +197,7 @@ all derivatives automatically — you don't need to redeclare them.
 | `--dt-header-height`   | `120px` | Column header area height. **Set via the `headerHeight` option.** |
 | `--dt-row-height`      |  `32px` | Virtual-scroller row height. **Set via the `rowHeight` option.**  |
 | `--dt-col-width`       | `200px` | Width of a loading row's placeholder cell. Not the column width.  |
-| `--dt-scrollbar-width` |  `17px` | Reserved gutter for the body's vertical scrollbar.                |
+| `--dt-scrollbar-width` |  `17px` | No visible effect: the table measures the body's scrollbar.       |
 | `--dt-panel-width`     | `320px` | Floating-panel (filter / preset / derived-edit) width.            |
 | `--dt-radius`          |   `8px` | Default border radius.                                            |
 | `--dt-radius-sm`       |   `4px` | Small border radius (buttons, chips).                             |

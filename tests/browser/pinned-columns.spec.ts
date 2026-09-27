@@ -17,42 +17,10 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { settle } from './helpers/demo';
+import { HOST_ID, type TestWindow, mountTable } from './helpers/table';
 
-const HOST_ID = 'pinned-host';
-
-type PinnedWindow = { __pin: import('../../src/index').DataTable };
-
-async function mountTable(page: Page): Promise<void> {
-  await page.goto('./');
-  await page.addStyleTag({ content: '*, *::before, *::after { box-sizing: content-box; }' });
-  await page.evaluate(async (hostId) => {
-    const mod = (await import(
-      /* @vite-ignore */ '/data-table/src/index.ts'
-    )) as typeof import('../../src/index');
-    const host = document.createElement('div');
-    host.id = hostId;
-    host.style.cssText =
-      'position: fixed; left: 0; top: 0; width: 900px; height: 420px; z-index: 10000; background: white;';
-    document.body.appendChild(host);
-    const names = Array.from({ length: 30 }, (_, i) => `c${String(i).padStart(2, '0')}`);
-    const lines = [names.join(',')];
-    for (let r = 0; r < 40; r++) lines.push(names.map((_, i) => (r + i) % 50).join(','));
-    const table = await mod.createDataTable({
-      container: host,
-      tableName: 'pinned',
-      persistence: false,
-      visualizations: false,
-    });
-    (window as unknown as PinnedWindow).__pin = table;
-    await table.loadData(new File([lines.join('\n')], 'pinned.csv', { type: 'text/csv' }));
-  }, HOST_ID);
-  await page.waitForFunction(
-    (hostId) =>
-      document.querySelectorAll(`#${hostId} .dt-body .dt-row:not([data-placeholder])`).length > 0,
-    HOST_ID,
-    { timeout: 90_000 },
-  );
-  await settle(page);
+function mountPinnedTable(page: Page): Promise<void> {
+  return mountTable(page, { columns: 30, rows: 40, width: 900, height: 420, contentBox: true });
 }
 
 type Call = [method: 'toggleColumnPin' | 'hideColumn' | 'setColumnWidth', ...args: unknown[]];
@@ -61,7 +29,7 @@ type Call = [method: 'toggleColumnPin' | 'hideColumn' | 'setColumnWidth', ...arg
 async function act(page: Page, calls: Call[], scrollLeft: number): Promise<void> {
   await page.evaluate(
     ({ calls, scrollLeft, hostId }) => {
-      const actions = (window as unknown as PinnedWindow).__pin.actions as unknown as Record<
+      const actions = (window as unknown as TestWindow).__dt.actions as unknown as Record<
         string,
         (...args: unknown[]) => void
       >;
@@ -115,7 +83,7 @@ function placement(page: Page, columns: string[]): Promise<Placement> {
 }
 
 test('hiding the first pinned column closes the pinned block up', async ({ page }) => {
-  await mountTable(page);
+  await mountPinnedTable(page);
   await act(
     page,
     [
@@ -134,7 +102,7 @@ test('hiding the first pinned column closes the pinned block up', async ({ page 
 });
 
 test('resizing a pinned column moves the pinned columns after it', async ({ page }) => {
-  await mountTable(page);
+  await mountPinnedTable(page);
   await act(
     page,
     [

@@ -1208,7 +1208,7 @@ export class TableContainer {
         if (this.destroyed || !held) return;
         if (this.bodyScroll.scrollLeft !== savedLeft) {
           this.bodyScroll.scrollLeft = savedLeft;
-          this.headerScroll.scrollLeft = savedLeft;
+          this.syncHeaderScroll();
         }
         if (performance.now() < deadline) {
           requestAnimationFrame(correct);
@@ -1358,10 +1358,9 @@ export class TableContainer {
     const previousOrder = this.previousVisibleOrder;
     const prevVisible = new Set(previousOrder);
 
-    // Save scroll positions before re-rendering (both containers for robustness)
+    // Save the body's scroll position before re-rendering; the header follows it
     const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
     const savedBodyScrollTop = this.bodyScroll.scrollTop;
-    const savedHeaderScrollLeft = this.headerScroll.scrollLeft;
 
     // Remember the *specific* element focus sits on before render destroys DOM
     // elements. Actions like pin/hide remove the focused button, dropping focus
@@ -1624,7 +1623,7 @@ export class TableContainer {
     // that back instead.
     this.bodyScroll.scrollLeft = savedBodyScrollLeft;
     this.bodyScroll.scrollTop = savedBodyScrollTop;
-    this.headerScroll.scrollLeft = savedHeaderScrollLeft;
+    this.syncHeaderScroll();
 
     requestAnimationFrame(() => {
       if (!this.destroyed) {

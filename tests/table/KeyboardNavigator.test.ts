@@ -1293,13 +1293,14 @@ describe('KeyboardNavigator — keys that act on the cursor bring it into view',
     // As TableContainer does: a new column order rebuilds the header row.
     const unsubscribe = state.visibleColumns.subscribe(renderHeaders);
 
+    const body = makeStubBody();
     const nav = new KeyboardNavigator({
       rootElement: root,
       gridElement: grid,
       bodyScroll,
       state,
       actions,
-      getTableBody: () => makeStubBody(),
+      getTableBody: () => body,
       getColumnHeaders: () => headers,
     });
     grid.focus();
@@ -1309,8 +1310,11 @@ describe('KeyboardNavigator — keys that act on the cursor bring it into view',
       nav.destroy();
       for (const h of headers) h.destroy();
     };
-    return { state, root, bodyScroll, cleanup };
+    return { state, root, grid, bodyScroll, body, getHeaders: () => headers, cleanup };
   }
+
+  const twoFrames = (): Promise<void> =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
   it.each([
     ['F2', {}],
@@ -1325,17 +1329,64 @@ describe('KeyboardNavigator — keys that act on the cursor bring it into view',
     cleanup();
   });
 
-  it('Enter on a header scrolled out of view, and on a body cell', () => {
-    const { state, root, bodyScroll, cleanup } = setup();
+  it('F2 that had to scroll focuses the control once the scroll has passed', async () => {
+    const { state, root, grid, bodyScroll, getHeaders, cleanup } = setup();
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+
+    keydown(root, { key: 'F2' });
+    expect(bodyScroll.scrollLeft).toBe(250);
+    // Not yet: the scroll's events, which close a popover the control
+    // opens on focus, are still to come.
+    expect(document.activeElement).toBe(grid);
+    await twoFrames();
+    expect(document.activeElement).toBe(getHeaders()[2]!.getControls()[0]);
+    cleanup();
+  });
+
+  it('Enter on a header scrolled out of view, and on a body cell out of view', () => {
+    const { state, root, bodyScroll, body, cleanup } = setup();
     state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
     keydown(root, { key: 'Enter' });
     expect(state.sortColumns.get()).toEqual([{ column: 'c', direction: 'asc' }]);
     expect(bodyScroll.scrollLeft).toBe(250);
 
+    // Ten rows fit; row 50 is well below them.
     bodyScroll.scrollLeft = 0;
-    state.focusedCell.set({ row: 4, column: 'c' });
+    state.focusedCell.set({ row: 50, column: 'c' });
     keydown(root, { key: 'Enter' });
-    expect(state.selectedRows.get().has(4)).toBe(true);
+    expect(state.selectedRows.get().has(50)).toBe(true);
+    expect(bodyScroll.scrollLeft).toBe(250);
+    expect(body.getVirtualScroller().scrollToRow).toHaveBeenCalledWith(50, 'end');
+    cleanup();
+  });
+
+  it('a column wider than the view shows its start, and stays put once it fills the view', () => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    state.columnWidths.set(new Map([['b', 500]]));
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'b' });
+
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(150);
+    // Filling the view from 150 to 350: another key must not flip it to
+    // show the column's end instead.
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(150);
+    bodyScroll.scrollLeft = 200;
+    keydown(root, { key: 'Enter' });
+    expect(bodyScroll.scrollLeft).toBe(200);
+    cleanup();
+  });
+
+  it('Backspace in layout mode follows a column that grows back at the right edge', () => {
+    const { state, root, bodyScroll, cleanup } = setup();
+    // `c` is 50px, 300–350, at the right edge of a view from 150 to 350.
+    state.columnWidths.set(new Map([['c', 50]]));
+    bodyScroll.scrollLeft = 150;
+    state.focusedCell.set({ row: HEADER_ROW_INDEX, column: 'c' });
+    keydown(root, { key: 'F2', shiftKey: true });
+
+    keydown(root, { key: 'Backspace' });
+    expect(state.columnWidths.get().has('c')).toBe(false);
     expect(bodyScroll.scrollLeft).toBe(250);
     cleanup();
   });

@@ -14,6 +14,7 @@ import { settle } from './helpers/demo';
 import {
   HOST_ID,
   type TestWindow,
+  expectAriaColIndexes,
   mountTable,
   probe,
   wheelBy,
@@ -24,25 +25,27 @@ function header(page: Page, column: string) {
   return page.locator(`#${HOST_ID} .dt-col-header[data-column="${column}"]`);
 }
 
-/** Header and first-row cell of `column`: left edge and width. */
+/** Header and first-row cell of `column`: where they are, and whether either is sticky. */
 function boxes(page: Page, column: string) {
   return page.evaluate(
     ({ hostId, column }) => {
       const host = document.getElementById(hostId)!;
-      const h = host.querySelector(`.dt-col-header[data-column="${column}"]`)!;
-      const c = host.querySelector(
+      const h = host.querySelector<HTMLElement>(`.dt-col-header[data-column="${column}"]`)!;
+      const c = host.querySelector<HTMLElement>(
         `.dt-body .dt-row:not([data-placeholder]) .dt-cell[data-column="${column}"]`,
       )!;
       const hr = h.getBoundingClientRect();
       const cr = c.getBoundingClientRect();
-      return { headerLeft: hr.left, headerWidth: hr.width, cellLeft: cr.left, cellWidth: cr.width };
+      return {
+        headerLeft: hr.left,
+        headerWidth: hr.width,
+        cellLeft: cr.left,
+        cellWidth: cr.width,
+        sticky: [h, c].some((el) => getComputedStyle(el).position === 'sticky'),
+      };
     },
     { hostId: HOST_ID, column },
   );
-}
-
-function ascending(values: number[]): boolean {
-  return values.every((v, i) => i === 0 || v > values[i - 1]!);
 }
 
 test('a drag-reorder lands where the pointer is after the wheel scrolls mid-drag', async ({
@@ -66,33 +69,31 @@ test('a drag-reorder lands where the pointer is after the wheel scrolls mid-drag
   x += 2;
   await page.mouse.move(x, y);
 
-  // Where the pointer is now: before the header under it, or after it if the
-  // pointer is past its middle.
-  const expected = await page.evaluate(
+  // Where the pointer is now: before the column under it, or after it if the
+  // pointer is past its middle. The header under the pointer is in view; the
+  // order around it comes from state.
+  const before = await probe(page, 'order');
+  const under = await page.evaluate(
     ({ hostId, x }) => {
-      const headers = Array.from(
+      const header = Array.from(
         document.querySelectorAll<HTMLElement>(`#${hostId} .dt-col-header[data-column]`),
-      );
-      const i = headers.findIndex((h) => {
+      ).find((h) => {
         const r = h.getBoundingClientRect();
         return x >= r.left && x < r.right;
-      });
-      const r = headers[i]!.getBoundingClientRect();
-      const names = headers.map((h) => h.dataset.column!);
-      const drop = x < r.left + r.width / 2 ? i : i + 1;
-      const moved = names.filter((n) => n !== 'c150');
-      moved.splice(drop - (names.indexOf('c150') < drop ? 1 : 0), 0, 'c150');
-      return moved;
+      })!;
+      const r = header.getBoundingClientRect();
+      return { column: header.dataset.column!, pastMiddle: x >= r.left + r.width / 2 };
     },
     { hostId: HOST_ID, x },
   );
+  expect(under.column, 'the wheel moved the pointer onto another column').not.toBe('c150');
+  const drop = before.indexOf(under.column) + (under.pastMiddle ? 1 : 0);
+  const expected = before.filter((c) => c !== 'c150');
+  expected.splice(drop - (before.indexOf('c150') < drop ? 1 : 0), 0, 'c150');
   await page.mouse.up();
   await settle(page);
 
-  expect(await probe(page, 'headerOrder')).toEqual(expected);
-  expect(
-    await page.evaluate(() => (window as unknown as TestWindow).__dt.state.visibleColumns.get()),
-  ).toEqual(expected);
+  expect(await probe(page, 'order')).toEqual(expected);
   await expect(page.locator(`#${HOST_ID} .dt-root`)).not.toHaveClass(/dt-column-dragging/);
   const c150 = await boxes(page, 'c150');
   expect(c150.headerLeft, 'c150 over its cells').toBeCloseTo(c150.cellLeft, 0);
@@ -125,6 +126,8 @@ test('a column scrolled away and back resizes by drag and resets on double-click
     ),
   ).toBe(190);
 
+  // The column grew past the right edge; bring its handle back into view.
+  await wheelIntoView(page, 'c150');
   const after = (await resize.boundingBox())!;
   await page.mouse.dblclick(after.x + after.width / 2, after.y + after.height / 2);
   await settle(page);
@@ -138,36 +141,42 @@ test('pinning a far-right column, and hide → pin → show, keep columns over t
   page,
 }) => {
   await mountTable(page);
+  // Hidden throughout, so `aria-colindex` has a gap that numbering the
+  // rendered columns from 1 would not.
+  await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.hideColumn('c005'));
   await wheelIntoView(page, 'c250');
 
   await header(page, 'c250').locator('.dt-col-pin-btn').click();
   await settle(page);
-  let order = await probe(page, 'headerOrder');
-  expect(order[0]).toBe('c250');
+  expect((await probe(page, 'order'))[0]).toBe('c250');
   let view = (await probe(page, 'column', 'c250'))!;
   expect(view.pinned).toBe(true);
   expect(view.inView).toBe(true);
-  expect(ascending(await probe(page, 'headerColIndexes'))).toBe(true);
-  expect(ascending(await probe(page, 'cellColIndexes'))).toBe(true);
+  await expectAriaColIndexes(page);
 
   // Pinned, it stays at the left edge wherever the table scrolls.
   await wheelBy(page, 5_000);
   view = (await probe(page, 'column', 'c250'))!;
   expect(view.left).toBeCloseTo(view.viewLeft, 0);
   let b = await boxes(page, 'c250');
-  expect(b.headerLeft).toBeCloseTo(b.cellLeft, 0);
+  expect(b.headerLeft).toBeCloseTo(view.left, 0);
+  expect(b.cellLeft).toBeCloseTo(view.left, 0);
 
-  // Unpinning puts it first among the unpinned columns.
+  // Unpinning puts it first among the unpinned columns, with no sticky
+  // styles left behind.
   await header(page, 'c250').locator('.dt-col-pin-btn').click();
   await settle(page);
-  order = await probe(page, 'headerOrder');
-  expect(order[0]).toBe('c250');
+  expect((await probe(page, 'order'))[0]).toBe('c250');
   expect((await probe(page, 'column', 'c250'))!.pinned).toBe(false);
-  expect(ascending(await probe(page, 'headerColIndexes'))).toBe(true);
-  expect(ascending(await probe(page, 'cellColIndexes'))).toBe(true);
+  await expectAriaColIndexes(page);
+  await wheelIntoView(page, 'c250');
+  b = await boxes(page, 'c250');
+  expect(b.headerLeft).toBeCloseTo((await probe(page, 'column', 'c250'))!.left, 0);
+  expect(b.cellLeft).toBeCloseTo(b.headerLeft, 0);
+  expect(b.sticky).toBe(false);
 
   // Hide → pin → show, far from the view: the shown column goes after the
-  // pinned block, and the numbering still ascends.
+  // pinned block, and every column keeps its number.
   await page.evaluate(() => {
     const { actions } = (window as unknown as TestWindow).__dt;
     actions.hideColumn('c010');
@@ -175,11 +184,10 @@ test('pinning a far-right column, and hide → pin → show, keep columns over t
     actions.showColumn('c010');
   });
   await settle(page);
-  order = await probe(page, 'headerOrder');
+  const order = await probe(page, 'order');
   expect(order[0]).toBe('c011');
   expect(order.indexOf('c010')).toBeGreaterThan(0);
-  expect(ascending(await probe(page, 'headerColIndexes'))).toBe(true);
-  expect(ascending(await probe(page, 'cellColIndexes'))).toBe(true);
+  await expectAriaColIndexes(page);
   b = await boxes(page, 'c011');
   expect(b.headerLeft).toBeCloseTo(b.cellLeft, 0);
 });

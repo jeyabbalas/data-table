@@ -485,8 +485,27 @@ export class KeyboardNavigator {
     if (!first) return false;
     // The header first: focus moves without scrolling, so a cursor the user
     // had wheeled away from put focus on a button nobody could see.
-    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column);
-    first.focus({ preventScroll: true });
+    if (!this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column)) {
+      first.focus({ preventScroll: true });
+      return true;
+    }
+    // A control that opens a popover on focus (the column's tooltip, its
+    // annotations) would have it closed at once by that scroll's events,
+    // which come a frame later for the body and can come a frame after that
+    // for the header. Focus once they have passed, unless the cursor has
+    // moved on or focus has gone elsewhere in the meantime.
+    const focusLater = (frames: number): void => {
+      requestAnimationFrame(() => {
+        if (frames > 1) return focusLater(frames - 1);
+        const cursor = this.state.focusedCell.get();
+        if (this.destroyed || cursor?.row !== HEADER_ROW_INDEX || cursor.column !== column) {
+          return;
+        }
+        if (document.activeElement !== this.gridElement) return;
+        first.focus({ preventScroll: true });
+      });
+    };
+    focusLater(2);
     return true;
   }
 
@@ -909,13 +928,17 @@ export class KeyboardNavigator {
    * (via VirtualScroller) and horizontally (via bodyScroll), skipping pinned
    * columns which are always visible via sticky positioning.
    *
-   * Runs on every cursor move, and before any key acts on the cursor where it
-   * is (Enter, Space, F2, Shift+F2, the layout-mode keys): the user may have
-   * wheeled away from it, and should see what the key did.
+   * Runs on every cursor move, and when a key acts on the cursor where it is
+   * (Enter, Space, F2, Shift+F2, the layout-mode width keys, Escape after a
+   * move): the user may have wheeled away from it, and should see what the
+   * key did.
+   *
+   * @returns whether anything scrolled.
    */
-  private scrollFocusedCellIntoView(row: number, column: string): void {
+  private scrollFocusedCellIntoView(row: number, column: string): boolean {
     const body = this.getTableBody();
-    if (!body) return;
+    if (!body) return false;
+    let scrolled = false;
 
     // Vertical — the header row is sticky chrome above the scroll container,
     // so a header cursor needs the horizontal pass only.
@@ -929,33 +952,44 @@ export class KeyboardNavigator {
 
       if (rowTop < scrollTop) {
         vs.scrollToRow(row, 'start');
+        scrolled = true;
       } else if (rowBottom > scrollTop + viewportHeight) {
         vs.scrollToRow(row, 'end');
+        scrolled = true;
       }
     }
 
     // Horizontal (skip for pinned columns — always visible). The pinned
     // block covers the left edge of the viewport, so a column counts as in
-    // view only right of it.
+    // view only right of it. A viewport with no width (not laid out, or not
+    // shown) has nothing to scroll into.
     const layout = getColumnLayout(this.state);
     const index = layout.indexOf(column);
-    if (index < 0 || layout.pinnedPlacement(column)) return;
+    const viewportWidth = this.bodyScroll.clientWidth;
+    if (index < 0 || layout.pinnedPlacement(column) || viewportWidth <= 0) return scrolled;
 
     const colLeft = layout.leftAt(index);
     const colRight = colLeft + layout.widthAt(index);
     const pinnedWidth = layout.pinnedWidth;
 
     const scrollLeft = this.bodyScroll.scrollLeft;
-    const viewportWidth = this.bodyScroll.clientWidth;
-
     const effectiveLeft = scrollLeft + pinnedWidth;
     const effectiveRight = scrollLeft + viewportWidth;
 
-    if (colLeft < effectiveLeft) {
-      this.bodyScroll.scrollLeft = colLeft - pinnedWidth;
+    let target = scrollLeft;
+    if (colRight - colLeft > effectiveRight - effectiveLeft) {
+      // Wider than the view, so only part of it fits: its start, unless it
+      // already fills the view. Aligning whichever edge was out of view
+      // flipped between the two on every key.
+      if (colLeft > effectiveLeft || colRight < effectiveRight) target = colLeft - pinnedWidth;
+    } else if (colLeft < effectiveLeft) {
+      target = colLeft - pinnedWidth;
     } else if (colRight > effectiveRight) {
-      this.bodyScroll.scrollLeft = colRight - viewportWidth;
+      target = colRight - viewportWidth;
     }
+    if (target === scrollLeft) return scrolled;
+    this.bodyScroll.scrollLeft = target;
+    return true;
   }
 
   private async copySelectedRows(): Promise<void> {

@@ -101,14 +101,14 @@ describe('the scroll hold after a filter change', () => {
     },
   );
 
-  it('starts over on the next filter change, from where the table is then', () => {
+  it('ends on the next filter change, which starts its own from where the table is then', () => {
     bodyScroll().scrollLeft = 500;
     actions.addFilter({ type: 'range', column: 'score', min: 0, max: 1 });
-    table.getGridElement().dispatchEvent(new Event('wheel', { bubbles: true }));
-    bodyScroll().scrollLeft = 900;
-
-    actions.addFilter({ type: 'range', column: 'id', min: 0, max: 1 });
+    // At 0 when the second change comes: that change starts no hold of its
+    // own, and the first one, had it kept running, would put back 500.
     bodyScroll().scrollLeft = 0;
+    actions.addFilter({ type: 'range', column: 'id', min: 0, max: 1 });
+    bodyScroll().scrollLeft = 900;
     vi.advanceTimersByTime(20);
     expect(bodyScroll().scrollLeft).toBe(900);
   });

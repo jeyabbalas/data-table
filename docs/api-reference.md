@@ -629,11 +629,11 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 
 ### Column visibility
 
-| Method           | Signature                  | Notes                                             |
-| ---------------- | -------------------------- | ------------------------------------------------- |
-| `hideColumn`     | `(column: string) => void` | Records neighbors for intelligent restore.        |
-| `showColumn`     | `(column: string) => void` | Re-inserts next to original neighbor if possible. |
-| `showAllColumns` | `() => void`               |                                                   |
+| Method           | Signature                  | Notes                                                                                                                     |
+| ---------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `hideColumn`     | `(column: string) => void` | Records neighbors for intelligent restore.                                                                                |
+| `showColumn`     | `(column: string) => void` | Re-inserts next to original neighbor if possible, never among pinned columns unless pinned itself; `columnOrder` follows. |
+| `showAllColumns` | `() => void`               |                                                                                                                           |
 
 ### Column order / pin / width
 

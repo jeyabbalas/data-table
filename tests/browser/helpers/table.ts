@@ -72,9 +72,11 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
 
     const host = document.createElement('div');
     host.id = o.hostId;
+    // Above the demo's own content, which sets no z-index, and below
+    // everything the table portals to <body>: popovers from 55, modals 1000.
     host.style.cssText =
       `position: fixed; left: 0; top: 0; width: ${o.width}px; height: ${o.height}px;` +
-      ' z-index: 10000; background: white;';
+      ' z-index: 1; background: white;';
     document.body.appendChild(host);
 
     const digits = String(o.columns - 1).length;

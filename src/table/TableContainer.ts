@@ -739,9 +739,9 @@ export class TableContainer {
     };
 
     this.boundHeaderScrollHandler = () => {
-      if (isScrolling || this.suppressReverseScrollSync) return;
       const echo = this.headerEcho;
       this.headerEcho = null;
+      if (isScrolling || this.suppressReverseScrollSync) return;
       if (this.headerScroll.scrollLeft === echo) return;
       isScrolling = true;
       this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;

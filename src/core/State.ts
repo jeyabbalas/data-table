@@ -212,6 +212,115 @@ export function initializeColumnsFromSchema(state: TableState, schema: ColumnSch
 }
 
 /**
+ * `order` with the pinned columns moved to its front, each group kept in its
+ * own order.
+ *
+ * The table assumes the pinned columns lead: their sticky offsets are the
+ * widths of the pinned columns before each one, and the body mounts them as
+ * the leading block wherever it is scrolled. `toggleColumnPin` and
+ * `showColumn` keep them first as they go; this is for the paths that take a
+ * whole order from outside, `setColumnOrder` and a restored session.
+ *
+ * @example
+ * ```typescript
+ * pinnedColumnsFirst(['a', 'b', 'c'], ['c']); // → ['c', 'a', 'b']
+ * ```
+ */
+export function pinnedColumnsFirst(order: readonly string[], pinned: readonly string[]): string[] {
+  const set = new Set(pinned);
+  return [...order.filter((c) => set.has(c)), ...order.filter((c) => !set.has(c))];
+}
+
+/**
+ * `columns` with each column of `order` that it lacks put back beside its old
+ * neighbour: before the nearest column after it in `order` that the result
+ * has, or at the end.
+ *
+ * How a new order of the visible columns keeps the hidden ones: each goes
+ * back next to the column it was next to.
+ *
+ * @example
+ * ```typescript
+ * mergeMissingColumns(['c', 'a'], ['a', 'b', 'c']); // → ['b', 'c', 'a']
+ * ```
+ */
+export function mergeMissingColumns(
+  columns: readonly string[],
+  order: readonly string[],
+): string[] {
+  // Linear: a restore runs this for every saved undo entry, and a quadratic
+  // merge of 900 hidden columns into 100 took 300 ms each.
+  const present = new Set(columns);
+  // Each missing column's new right neighbour: the first column after it in
+  // `order` that `columns` has, or `null` for the end.
+  const before = new Map<string | null, string[]>();
+  const placed = new Set<string>();
+  let next: string | null = null;
+  const anchors: (string | null)[] = new Array<string | null>(order.length);
+  for (let k = order.length - 1; k >= 0; k--) {
+    anchors[k] = next;
+    if (present.has(order[k]!)) next = order[k]!;
+  }
+  for (let k = 0; k < order.length; k++) {
+    const missing = order[k]!;
+    if (present.has(missing) || placed.has(missing)) continue;
+    placed.add(missing);
+    const anchor = anchors[k] ?? null;
+    const group = before.get(anchor);
+    if (group) group.push(missing);
+    else before.set(anchor, [missing]);
+  }
+
+  const merged: string[] = [];
+  for (const column of columns) {
+    const group = before.get(column);
+    if (group) {
+      merged.push(...group);
+      before.delete(column);
+    }
+    merged.push(column);
+  }
+  merged.push(...(before.get(null) ?? []));
+  return merged;
+}
+
+/**
+ * A column order, the visible columns and the pinned columns made to agree
+ * the way the column actions keep them:
+ *
+ * - the visible columns in `visible`'s order, which is what the table showed;
+ * - every other column of `order` back beside its old neighbour
+ *   ({@link mergeMissingColumns});
+ * - the pinned columns first ({@link pinnedColumnsFirst}), and
+ *   `pinnedColumns` in the order they are shown, which is the order
+ *   `showColumn` puts a pinned column back in.
+ *
+ * For state that did not come from the column actions: a restored session,
+ * and the undo and redo entries saved with it. A session saved before the
+ * actions kept pinned columns first, and visible columns in `columnOrder`,
+ * can break both rules. On state that keeps them, it changes nothing.
+ */
+export function consistentColumnOrder(
+  visible: readonly string[],
+  order: readonly string[],
+  pinned: readonly string[],
+): { columnOrder: string[]; visibleColumns: string[]; pinnedColumns: string[] } {
+  // A name listed twice is shown once: `ColumnLayout` guards against it too.
+  const shown = new Set(visible);
+  const columnOrder = pinnedColumnsFirst(mergeMissingColumns([...shown], order), pinned);
+  const inOrder = new Set(columnOrder);
+  const isPinned = new Set(pinned);
+  return {
+    columnOrder,
+    visibleColumns: columnOrder.filter((c) => shown.has(c)),
+    pinnedColumns: [
+      ...columnOrder.filter((c) => isPinned.has(c)),
+      ...pinned.filter((c) => !inOrder.has(c)),
+    ],
+  };
+}
+
+/**
  * Return true if `name` refers to a library-synthesized system column
  * (e.g. the reserved `__rowid__`).
  */

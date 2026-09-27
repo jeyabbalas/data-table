@@ -639,7 +639,7 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 
 | Method             | Signature                                 | Notes                                                 |
 | ------------------ | ----------------------------------------- | ----------------------------------------------------- |
-| `setColumnOrder`   | `(columns: string[]) => void`             |                                                       |
+| `setColumnOrder`   | `(columns: string[]) => void`             | Pinned columns are kept first.                        |
 | `toggleColumnPin`  | `(column: string) => void`                | Moves to / from the pinned group.                     |
 | `setColumnWidth`   | `(column: string, width: number) => void` | Padding and border included; drawn at 50 px at least. |
 | `resetColumnWidth` | `(column: string) => void`                |                                                       |

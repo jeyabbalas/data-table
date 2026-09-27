@@ -9,13 +9,14 @@ import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { maxSeverity } from '../annotations/severity';
 import type { Annotation } from '../annotations/types';
 import type { StateActions } from '../core/Actions';
+import type { Signal } from '../core/Signal';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { CellRenderer } from './Cell';
-import { getColumnLayout } from './ColumnLayout';
+import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
 import { buildRowQuery } from './rowQuery';
 import { VirtualScroller, type VisibleRange } from './VirtualScroller';
@@ -55,6 +56,16 @@ export interface TableBodyOptions {
    * instead of creating its own scroll container.
    */
   scrollContainer?: HTMLElement | undefined;
+  /**
+   * The columns to render in each row, when not every visible one:
+   * `TableContainer` passes its column window controller's mounted columns.
+   * A row then holds a cell for each of them, and a spacer as wide as each
+   * run of columns between two of them. Without it, every row holds every
+   * visible column.
+   *
+   * @internal
+   */
+  mountedColumns?: Pick<Signal<readonly string[]>, 'get' | 'subscribe'> | undefined;
   /**
    * Shared annotation store. When provided, the body applies
    * `dt-row--annotated` / `dt-cell--annotated` classes at render time and
@@ -118,6 +129,26 @@ function sameColumnSet(a: readonly string[], b: readonly string[]): boolean {
     if (!seen.has(name)) return false;
   }
   return true;
+}
+
+/**
+ * What a data row holds, left to right: a cell for each column it renders,
+ * and a spacer as wide as each run of columns between two of them, or after
+ * the last. Built once per render pass and shared by every row built from it,
+ * so a row that already has it needs nothing done.
+ */
+interface RowShape {
+  /** The layout its offsets come from. */
+  readonly layout: ColumnLayout;
+  /** The column list it was built from: the mounted columns, or `visibleColumns`. */
+  readonly source: readonly string[];
+  /** Each child's slot: a column's name for a cell, a width in px for a spacer. */
+  readonly slots: readonly (string | number)[];
+  /**
+   * The slots without the spacers' widths. Two shapes with the same structure
+   * differ only in spacer widths, which a column resize changes.
+   */
+  readonly structure: string;
 }
 
 /**
@@ -215,6 +246,14 @@ export class TableBody {
   // DOM element pooling for efficient rendering
   private rowPool: HTMLElement[] = [];
   private rowElementMap = new Map<number, HTMLElement>();
+
+  // Which columns rows render, and the shape each data row was last built to.
+  // The shape is rebuilt when the columns or the layout change, and a row
+  // whose shape differs is reconciled to the new one (see shapeRow).
+  private readonly mountedColumns: Pick<Signal<readonly string[]>, 'get' | 'subscribe'> | null;
+  private cachedShape: RowShape | null = null;
+  private renderedShape: RowShape | null = null;
+  private readonly rowShapes = new WeakMap<HTMLElement, RowShape>();
   private previousHoveredRow: number | null = null;
   private previousFocusedCell: { row: number; column: string } | null = null;
 
@@ -266,6 +305,7 @@ export class TableBody {
     this.instanceId = options.instanceId ?? '';
     this.onRowsRendered = options.onRowsRendered ?? null;
     this.gridElement = options.gridElement ?? null;
+    this.mountedColumns = options.mountedColumns ?? null;
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
     this.messages = options.messages ?? defaultStrings;
@@ -449,6 +489,17 @@ export class TableBody {
       }
     });
     this.unsubscribes.push(unsubWidths);
+
+    // Re-render when the columns to render change. From the cache: rows hold
+    // every visible column's value, so a scroll needs no fetch.
+    if (this.mountedColumns) {
+      const unsubMounted = this.mountedColumns.subscribe(() => {
+        if (!this.destroyed) {
+          this.renderVisibleRows();
+        }
+      });
+      this.unsubscribes.push(unsubMounted);
+    }
 
     // Update selection styling
     const unsubSelected = this.state.selectedRows.subscribe(() => {
@@ -967,7 +1018,8 @@ export class TableBody {
 
     const viewport = this.virtualScroller.getViewportContainer();
     const schema = this.state.schema.get();
-    const visibleColumns = this.state.visibleColumns.get();
+    const shape = this.rowShape();
+    this.renderedShape = shape;
     const selectedRows = this.state.selectedRows.get();
     const hoveredRow = this.state.hoveredRow.get();
     const focusedCell = this.state.focusedCell.get();
@@ -999,8 +1051,9 @@ export class TableBody {
       if (!rowEl) {
         // Need a new row - get from pool or create
         if (rowData) {
-          rowEl = this.getOrCreateRow(visibleColumns.length);
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          rowEl = this.getOrCreateRow();
+          this.shapeRow(rowEl, shape);
+          this.updateRowContent(rowEl, i, rowData, schemaMap);
           this.attachRowEventListeners(rowEl, i);
         } else {
           // Data not yet loaded - create placeholder
@@ -1009,30 +1062,30 @@ export class TableBody {
         this.rowElementMap.set(i, rowEl);
         this.insertRowInOrder(viewport, rowEl, i);
       } else if (rowData) {
-        // The map can hold either a data row (visibleColumns.length cells,
+        // The map can hold either a data row (a cell per rendered column,
         // listeners attached) or a placeholder (1 cell, no listeners,
-        // `data-placeholder` marker). updateRowContent's loop is bounded by
-        // min(columns, cells), so calling it on a placeholder would leave
-        // columns 1..N-1 unrendered AND the row inert — the partial-render
-        // bug. The marker is the durable signal — unlike the historical
-        // cell-count comparison it stays unambiguous for single-column
-        // tables, which are now replaced from the pool like everything else
-        // instead of being promoted in place. The count check remains as a
-        // second trigger so a data row with a stale cell shape is also
-        // rebuilt rather than partially updated.
-        if (this.isPlaceholderRow(rowEl) || rowEl.children.length !== visibleColumns.length) {
+        // `data-placeholder` marker). A placeholder is replaced from the pool,
+        // never filled in place: it has no listeners, and its one cell is the
+        // loading label. The marker is the durable signal — unlike the
+        // historical cell-count comparison it stays unambiguous for
+        // single-column tables.
+        if (this.isPlaceholderRow(rowEl)) {
           // Bypasses `returnRowToPool` entirely, so the focus rescue has to be
           // spelled out here as well.
           this.moveFocusToGridBeforeRemoval(rowEl);
           rowEl.remove();
-          rowEl = this.getOrCreateRow(visibleColumns.length);
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          rowEl = this.getOrCreateRow();
+          this.shapeRow(rowEl, shape);
+          this.updateRowContent(rowEl, i, rowData, schemaMap);
           this.attachRowEventListeners(rowEl, i);
           this.rowElementMap.set(i, rowEl);
           this.insertRowInOrder(viewport, rowEl, i);
         } else {
-          // Row exists, update content if needed (e.g., after sort)
-          this.updateRowContent(rowEl, i, rowData, visibleColumns, schemaMap);
+          // A data row built for other columns is reshaped in place, which
+          // keeps the cells of the columns it still renders, and so the one
+          // holding focus. Then its content is refreshed (e.g., after sort).
+          this.shapeRow(rowEl, shape);
+          this.updateRowContent(rowEl, i, rowData, schemaMap);
         }
       } else if (!this.isPlaceholderRow(rowEl)) {
         // Data row whose cache entry is gone (evicted or invalidated while
@@ -1124,29 +1177,13 @@ export class TableBody {
   }
 
   /**
-   * Get a row element from the pool or create a new one
+   * Get a row element from the pool or create a new one. A pooled row keeps
+   * its cells, for {@link shapeRow} to reuse; a new one has none.
    */
-  private getOrCreateRow(columnCount: number): HTMLElement {
+  private getOrCreateRow(): HTMLElement {
     let rowEl = this.rowPool.pop();
 
     if (rowEl) {
-      // Reuse pooled row - ensure it has the right number of cells
-      const currentCells = rowEl.children.length;
-      if (currentCells < columnCount) {
-        // Add missing cells
-        for (let i = currentCells; i < columnCount; i++) {
-          rowEl.appendChild(this.createCell());
-        }
-      } else if (currentCells > columnCount) {
-        // Remove extra cells. The row itself survives, so `returnRowToPool`
-        // never sees these cells — the focus rescue belongs here.
-        while (rowEl.children.length > columnCount) {
-          const surplus = rowEl.lastChild!;
-          this.moveFocusToGridBeforeRemoval(surplus);
-          rowEl.removeChild(surplus);
-        }
-      }
-
       // Clear any stale classes and ARIA attributes
       rowEl.classList.remove(
         `${this.classPrefix}-row--selected`,
@@ -1162,14 +1199,142 @@ export class TableBody {
       rowEl.setAttribute('role', 'row');
       rowEl.setAttribute('aria-selected', 'false');
       rowEl.style.height = `${this.rowHeight}px`;
-
-      // Create cells
-      for (let i = 0; i < columnCount; i++) {
-        rowEl.appendChild(this.createCell());
-      }
     }
 
     return rowEl;
+  }
+
+  /**
+   * The shape data rows take in this render pass: a cell for each column to
+   * render, in layout order, with a spacer standing in for each run of
+   * columns between two of them and after the last.
+   *
+   * The columns are the mounted ones when a column window controller supplies
+   * them, and every visible column otherwise. A trailing spacer keeps the
+   * last cell a row renders from being its last child unless its column is
+   * the last one: `.dt-cell:last-child` drops the right border.
+   */
+  private rowShape(): RowShape {
+    const layout = getColumnLayout(this.state);
+    const source = this.mountedColumns?.get() ?? this.state.visibleColumns.get();
+    const cached = this.cachedShape;
+    if (cached && cached.layout === layout && cached.source === source) return cached;
+
+    // By layout index, so the order is the layout's whatever `source` says,
+    // and a column that is no longer visible is left out.
+    const indices: number[] = [];
+    for (const column of source) {
+      const index = layout.indexOf(column);
+      if (index >= 0) indices.push(index);
+    }
+    indices.sort((a, b) => a - b);
+
+    const slots: (string | number)[] = [];
+    let x = 0;
+    let previous = -1;
+    for (const index of indices) {
+      if (index === previous) continue;
+      previous = index;
+      const left = layout.leftAt(index);
+      if (left > x) slots.push(left - x);
+      slots.push(layout.columns[index]!);
+      x = left + layout.widthAt(index);
+    }
+    if (layout.totalWidth > x) slots.push(layout.totalWidth - x);
+
+    const shape: RowShape = {
+      layout,
+      source,
+      slots,
+      structure: JSON.stringify(slots.map((slot) => (typeof slot === 'number' ? 0 : slot))),
+    };
+    this.cachedShape = shape;
+    return shape;
+  }
+
+  /**
+   * Make a data row's children match `shape`: a cell for each of its columns
+   * and a spacer for each gap, in order.
+   *
+   * A cell keeps its column. Cells of columns the shape still has stay where
+   * they are, in place, and everything else is built or taken out around
+   * them, so a scroll never detaches a cell that stays mounted: detaching
+   * the one holding focus would drop focus to `<body>`. Only a new column
+   * order moves cells. Cells of columns the shape no longer has, and spacers,
+   * are reused for the new ones; {@link updateRowContent} then fills them.
+   */
+  private shapeRow(rowEl: HTMLElement, shape: RowShape): void {
+    const built = this.rowShapes.get(rowEl);
+    if (built === shape) return;
+    this.rowShapes.set(rowEl, shape);
+
+    const children = Array.from(rowEl.children) as HTMLElement[];
+    if (built?.structure === shape.structure && children.length === shape.slots.length) {
+      // The same cells in the same places: only spacer widths can differ.
+      for (let i = 0; i < children.length; i++) {
+        const slot = shape.slots[i]!;
+        if (typeof slot === 'number') children[i]!.style.width = `${slot}px`;
+      }
+      return;
+    }
+
+    const wanted = new Set<string>();
+    for (const slot of shape.slots) if (typeof slot === 'string') wanted.add(slot);
+    const kept = new Map<string, HTMLElement>();
+    const freeCells: HTMLElement[] = [];
+    const freeSpacers: HTMLElement[] = [];
+    for (const child of children) {
+      const column = this.isSpacer(child) ? null : child.getAttribute('data-column');
+      if (column !== null && wanted.has(column) && !kept.has(column)) {
+        kept.set(column, child);
+        continue;
+      }
+      this.moveFocusToGridBeforeRemoval(child);
+      child.remove();
+      if (this.isSpacer(child)) freeSpacers.push(child);
+      else freeCells.push(child);
+    }
+
+    // Only the kept cells are left, in their old order. Walk the shape and
+    // put each child before the first kept cell not yet placed.
+    let next = rowEl.firstElementChild as HTMLElement | null;
+    for (const slot of shape.slots) {
+      if (typeof slot === 'number') {
+        const spacer = freeSpacers.pop() ?? this.createSpacer();
+        spacer.style.width = `${slot}px`;
+        rowEl.insertBefore(spacer, next);
+        continue;
+      }
+      const cell = kept.get(slot);
+      if (cell === next && cell) {
+        next = cell.nextElementSibling as HTMLElement | null;
+        continue;
+      }
+      if (cell) {
+        // Out of order: the columns were reordered.
+        rowEl.insertBefore(cell, next);
+        continue;
+      }
+      const fresh = freeCells.pop() ?? this.createCell();
+      fresh.setAttribute('data-column', slot);
+      rowEl.insertBefore(fresh, next);
+    }
+  }
+
+  /**
+   * A spacer: as wide as the columns between two cells a row renders, which
+   * it stands in for. Hidden from assistive tech, which learns where each
+   * cell is from its `aria-colindex`.
+   */
+  private createSpacer(): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `${this.classPrefix}-col-spacer`;
+    el.setAttribute('aria-hidden', 'true');
+    return el;
+  }
+
+  private isSpacer(el: Element): boolean {
+    return el.classList.contains(`${this.classPrefix}-col-spacer`);
   }
 
   /**
@@ -1212,12 +1377,11 @@ export class TableBody {
    */
   private returnRowToPool(rowEl: HTMLElement): void {
     // Skip placeholder rows (marked `data-placeholder`, one cell carrying
-    // dt-cell--placeholder). Pooling them lets `getOrCreateRow` later append
-    // blank cells alongside the placeholder cell — the appended cells are
-    // fine, but the original placeholder cell keeps its dt-cell--placeholder
-    // class and would render its column's data in tertiary text colour. GC
-    // overhead is trivial: placeholders are cheap to recreate when the data
-    // hasn't arrived yet.
+    // dt-cell--placeholder). Pooling them would let `shapeRow` later reuse
+    // the placeholder cell for a column, and it keeps its
+    // dt-cell--placeholder class, which would render its column's data in
+    // tertiary text colour. GC overhead is trivial: placeholders are cheap to
+    // recreate when the data hasn't arrived yet.
     if (this.isPlaceholderRow(rowEl)) {
       return;
     }
@@ -1293,7 +1457,6 @@ export class TableBody {
     rowEl: HTMLElement,
     index: number,
     data: RowData,
-    columns: string[],
     schemaMap: Map<string, ColumnSchema>,
   ): void {
     rowEl.setAttribute('data-row-index', String(index));
@@ -1332,12 +1495,14 @@ export class TableBody {
 
     const layout = getColumnLayout(this.state);
 
-    const cells = rowEl.children;
-    for (let i = 0; i < columns.length && i < cells.length; i++) {
-      const colName = columns[i]!;
+    // Each cell's column is its `data-column`, which `shapeRow` set; spacers
+    // have none.
+    for (const child of rowEl.children) {
+      const colName = child.getAttribute('data-column');
+      if (colName === null) continue;
       const colSchema = schemaMap.get(colName);
       const value = data[colName];
-      const cellEl = cells[i] as HTMLElement;
+      const cellEl = child as HTMLElement;
 
       // Stable id so `aria-activedescendant` on `.dt-grid` can name this
       // cell. Keyed by absolute row index + the column's position among the
@@ -1354,11 +1519,6 @@ export class TableBody {
       if (ariaColIdx !== undefined) {
         cellEl.setAttribute('aria-colindex', String(ariaColIdx));
       }
-
-      // `data-column` gives the delegated pointer/focus handler a cheap
-      // way to resolve a cell back to its column name without iterating
-      // sibling indices.
-      cellEl.setAttribute('data-column', colName);
 
       cellEl.style.width = `${layout.widthOf(colName)}px`;
       this.applyPinnedCellStyle(cellEl, colName);
@@ -1860,14 +2020,26 @@ export class TableBody {
 
   /**
    * Update cell widths when column widths change
+   *
+   * In place, without re-rendering content: this runs on every step of a
+   * resize drag. A width moves every column after it, so spacers are resized
+   * too, and a change in which columns rows render is a render.
    */
   private updateCellWidths(): void {
     const layout = getColumnLayout(this.state);
     this.pinnedZBaseCache = null;
 
+    const shape = this.rowShape();
+    if (this.renderedShape && shape.structure !== this.renderedShape.structure) {
+      this.renderVisibleRows();
+      return;
+    }
+    this.renderedShape = shape;
+
     // Update cell widths for all visible rows. A pinned column's width also
     // moves every later pinned column's sticky offset.
     for (const [, rowEl] of this.rowElementMap) {
+      if (!this.isPlaceholderRow(rowEl)) this.shapeRow(rowEl, shape);
       for (const cell of rowEl.children) {
         const colName = cell.getAttribute('data-column');
         if (colName === null) continue;

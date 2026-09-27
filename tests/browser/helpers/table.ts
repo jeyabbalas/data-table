@@ -128,12 +128,26 @@ export interface TableProbes {
   mounted(): string[];
   /**
    * Check every frame until {@link TableProbes.windowReport} that each column
-   * at least partly in view is among the mounted ones, and count how often
-   * the mounted columns change.
+   * at least partly in view is among the mounted ones, and that every body
+   * row with data holds a cell for exactly the mounted columns, in order.
+   * Count how often the mounted columns change.
    */
   watchWindow(): void;
   /** Stop {@link TableProbes.watchWindow}: the frames that failed, and the changes seen. */
   windowReport(): { breaches: string[]; changes: number; frames: number };
+  /** Body rows with data, and the cells in them. */
+  bodyCells(): { rows: number; cells: number };
+  /**
+   * Every cell of a column in view, in every body row with data, checked
+   * against the value generated for it: missing cells and wrong values, as
+   * `row/column: what was there`.
+   */
+  wrongCellsInView(): string[];
+  /**
+   * How far each cell of the first body row with data sits from its column's
+   * header, horizontally: the largest gap, in px, and the column it is in.
+   */
+  cellHeaderMisalignment(): { px: number; column: string | null };
   panelLog: { event: 'construct' | 'destroy'; column: string }[];
 }
 
@@ -271,6 +285,13 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
     };
 
     let watch: { active: boolean; breaches: string[] } | null = null;
+    const dataRows = () =>
+      Array.from(host.querySelectorAll<HTMLElement>('.dt-body .dt-row:not([data-placeholder])'));
+    /** The value `mountTable` generated for row `r` of the column named `name`. */
+    const generated = (r: number, name: string): string | number => {
+      const i = Number(name.slice(1));
+      return i % 3 === 1 ? `k${(r + i) % 7}` : ((r * 31 + i * 17) % 1000) / 10;
+    };
     let windowWatch: {
       active: boolean;
       breaches: string[];
@@ -356,10 +377,28 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         return [...table.state.visibleColumns.get()];
       },
       inView() {
-        return table.state.visibleColumns.get().filter((name) => {
-          const c = probes.column(name)!;
-          return c.right > c.viewLeft && c.left < c.viewRight;
-        });
+        // One pass: `column()` walks every column, and this runs every frame
+        // of a watch, so calling it per column made a 1,000-column frame take
+        // seconds.
+        const visible = table.state.visibleColumns.get();
+        const pinnedSet = new Set(table.state.pinnedColumns.get());
+        let pinnedWidth = 0;
+        for (const c of visible) if (pinnedSet.has(c)) pinnedWidth += widthOf(c);
+        const body = q('.dt-body-scroll')!;
+        const scrollLeft = body.scrollLeft;
+        const width = body.clientWidth;
+        const shown: string[] = [];
+        let x = 0;
+        for (const name of visible) {
+          const w = widthOf(name);
+          // In content coordinates: a pinned column is always at the left.
+          const pinned = pinnedSet.has(name);
+          const left = pinned ? x + scrollLeft : x;
+          const viewLeft = pinned ? scrollLeft : scrollLeft + pinnedWidth;
+          if (left + w > viewLeft && left < scrollLeft + width) shown.push(name);
+          x += w;
+        }
+        return shown;
       },
       ariaColIndexes() {
         const read = (els: Iterable<Element>): [string, number][] =>
@@ -418,12 +457,23 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         const frame = () => {
           if (!state.active) return;
           state.frames++;
-          const mounted = new Set(published.get());
+          const at = `at ${q('.dt-body-scroll')!.scrollLeft}px`;
+          const list = published.get();
+          const mounted = new Set(list);
           const missing = probes.inView().filter((c) => !mounted.has(c));
           if (missing.length > 0 && state.breaches.length < 20) {
-            state.breaches.push(
-              `at ${q('.dt-body-scroll')!.scrollLeft}px: ${missing.join(' ')} in view, not mounted`,
-            );
+            state.breaches.push(`${at}: ${missing.join(' ')} in view, not mounted`);
+          }
+          const expected = list.join(' ');
+          for (const row of dataRows()) {
+            const cells = Array.from(row.querySelectorAll('.dt-cell[data-column]'), (cell) =>
+              cell.getAttribute('data-column'),
+            ).join(' ');
+            if (cells !== expected && state.breaches.length < 20) {
+              state.breaches.push(
+                `${at}: row ${row.getAttribute('data-row-index')} holds [${cells}], not [${expected}]`,
+              );
+            }
           }
           requestAnimationFrame(frame);
         };
@@ -436,6 +486,45 @@ export async function mountTable(page: Page, options: MountOptions = {}): Promis
         state.active = false;
         state.stop();
         return { breaches: state.breaches, changes: state.changes, frames: state.frames };
+      },
+      bodyCells() {
+        const rows = dataRows();
+        return {
+          rows: rows.length,
+          cells: rows.reduce((n, row) => n + row.querySelectorAll('.dt-cell').length, 0),
+        };
+      },
+      wrongCellsInView() {
+        const wrong: string[] = [];
+        const columns = probes.inView();
+        for (const row of dataRows()) {
+          const r = Number(row.getAttribute('data-row-index'));
+          for (const column of columns) {
+            const cell = row.querySelector(`.dt-cell[data-column="${column}"]`);
+            const want = generated(r, column);
+            const text = cell?.textContent ?? null;
+            const right =
+              text !== null &&
+              (typeof want === 'number' ? Number(text.replace(/,/g, '')) === want : text === want);
+            if (!right && wrong.length < 20) wrong.push(`${r}/${column}: ${text ?? 'no cell'}`);
+          }
+        }
+        return wrong;
+      },
+      cellHeaderMisalignment() {
+        let worst = { px: 0, column: null as string | null };
+        const row = dataRows()[0];
+        if (!row) return worst;
+        for (const cell of row.querySelectorAll<HTMLElement>('.dt-cell[data-column]')) {
+          const column = cell.getAttribute('data-column')!;
+          const header = headerOf(column);
+          if (!header) continue;
+          const px = Math.abs(
+            cell.getBoundingClientRect().left - header.getBoundingClientRect().left,
+          );
+          if (px > worst.px) worst = { px, column };
+        }
+        return worst;
       },
     };
     w.__dtTest = probes;

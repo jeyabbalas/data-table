@@ -1341,6 +1341,7 @@ export class TableContainer {
           classPrefix: this.resolvedOptions.classPrefix,
           instanceId: this.resolvedOptions.instanceId,
           scrollContainer: this.bodyScroll,
+          mountedColumns: this.columnWindow.mountedColumns,
           // headerHeight no longer needed - body scroll only contains body
           annotations: this.resolvedOptions.annotations,
           annotationPopover: this.resolvedOptions.annotationPopover,

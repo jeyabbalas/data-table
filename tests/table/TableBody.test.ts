@@ -129,19 +129,24 @@ describe('TableBody', () => {
   });
 
   describe('row/cell ARIA', () => {
+    /** The construction path `renderVisibleRows` takes, without a materialized viewport. */
+    function internals(tableBody: TableBody) {
+      return tableBody as unknown as {
+        getOrCreateRow(): HTMLElement;
+        rowShape(): unknown;
+        shapeRow(rowEl: HTMLElement, shape: unknown): void;
+        returnRowToPool(el: HTMLElement): void;
+      };
+    }
+
     it('newly-created rows have role="row" and cells have role="gridcell" with tabindex="-1"', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
-      // getOrCreateRow is internal; exercise it through the private accessor
-      // so we can verify the attributes on the construction path used during
-      // render without needing a materialized viewport.
-      const rowEl = (
-        tableBody as unknown as {
-          getOrCreateRow(n: number): HTMLElement;
-        }
-      ).getOrCreateRow(5);
+      const internal = internals(tableBody);
+      const rowEl = internal.getOrCreateRow();
+      internal.shapeRow(rowEl, internal.rowShape());
 
       expect(rowEl.getAttribute('role')).toBe('row');
-      expect(rowEl.children.length).toBe(5);
+      expect(rowEl.children.length).toBe(state.visibleColumns.get().length);
       for (const cell of Array.from(rowEl.children) as HTMLElement[]) {
         // `gridcell`, not `cell` — `cell` is only valid inside role="table",
         // and the owning element is role="grid".
@@ -154,20 +159,20 @@ describe('TableBody', () => {
 
     it('pooled rows keep role=gridcell and tabindex=-1, and shed stale ids', () => {
       const tableBody = new TableBody(container, state, mockBridge as any, actions);
-      const internal = tableBody as unknown as {
-        getOrCreateRow(n: number): HTMLElement;
-        returnRowToPool(el: HTMLElement): void;
-      };
+      const internal = internals(tableBody);
 
       // Simulate a row in use: the cursor ring plus the per-(row, column)
       // id that `updateRowContent` writes for aria-activedescendant.
-      const rowEl = internal.getOrCreateRow(3);
+      const rowEl = internal.getOrCreateRow();
+      internal.shapeRow(rowEl, internal.rowShape());
       (rowEl.children[1] as HTMLElement).id = 'dt-t1-cell-7-1';
       (rowEl.children[1] as HTMLElement).classList.add('dt-cell--focused');
 
       // Return to pool and pull back out
       internal.returnRowToPool(rowEl);
-      const reused = internal.getOrCreateRow(3);
+      const reused = internal.getOrCreateRow();
+      internal.shapeRow(reused, internal.rowShape());
+      expect(reused.children.length).toBe(state.visibleColumns.get().length);
 
       for (const cell of Array.from(reused.children) as HTMLElement[]) {
         expect(cell.getAttribute('role')).toBe('gridcell');
@@ -189,7 +194,6 @@ describe('TableBody', () => {
           rowEl: HTMLElement,
           index: number,
           data: Record<string, unknown>,
-          columns: string[],
           schemaMap: Map<string, unknown>,
         ): void;
       };
@@ -203,10 +207,10 @@ describe('TableBody', () => {
       expect(placeholder.getAttribute('aria-busy')).toBe('true');
       expect(placeholder.children.length).toBe(1);
 
-      // A single-column grid promotes a placeholder in place (cell counts
-      // match), so the marker has to come off there or the row stays busy
-      // forever.
-      internal.updateRowContent(placeholder, 7, { id: 1 }, ['id'], new Map());
+      // A placeholder is replaced from the pool rather than filled in place,
+      // but `updateRowContent` takes the marker off whatever row it is given,
+      // so no path can leave a data row busy forever.
+      internal.updateRowContent(placeholder, 7, { id: 1 }, new Map());
       expect(placeholder.hasAttribute('aria-busy')).toBe(false);
 
       tableBody.destroy();

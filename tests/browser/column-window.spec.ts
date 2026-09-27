@@ -1,11 +1,12 @@
 /**
- * The columns `ColumnWindowController` publishes to mount, against real
- * layout and real wheel scrolling.
+ * The columns `ColumnWindowController` publishes to mount, and the body rows
+ * that render only those, against real layout and real wheel scrolling.
  *
- * Nothing renders from them yet: the body still has every column. These pin
- * down what the body will rely on. Whatever is in view is mounted, in every
- * frame of a sweep. The set stays a few viewports wide. A small scroll leaves
- * it alone. And the cursor's column is in it wherever the view goes.
+ * Whatever is in view is mounted, in every frame of a sweep, and every row
+ * holds exactly the mounted columns. The set stays a few viewports wide. A
+ * small scroll leaves it alone. The cursor's column is in it wherever the view
+ * goes. And what a sweep leaves in view shows the right values, lined up
+ * under the right headers.
  */
 
 import { expect, test } from '@playwright/test';
@@ -78,4 +79,45 @@ test("the cursor's column stays mounted wherever the view goes, and so does a fo
     column,
   );
   expect(await probe(page, 'mounted')).toEqual(expect.arrayContaining(['c299', column]));
+});
+
+test('body rows hold only the mounted columns through a sweep of 1,000 columns, and show the right values', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 1000, rows: 60 });
+  await probe(page, 'watchWindow');
+  for (const dx of [40_000, -25_000, 150_000, -60_000]) {
+    await wheelBy(page, dx);
+    expect(await probe(page, 'wrongCellsInView'), `after a wheel of ${dx}px`).toEqual([]);
+    const misaligned = await probe(page, 'cellHeaderMisalignment');
+    expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
+  }
+  const report = await probe(page, 'windowReport');
+  expect(report.frames).toBeGreaterThan(10);
+  expect(report.breaches).toEqual([]);
+
+  // A row renders the eight columns in view, a viewport either side, and
+  // nothing else: some two dozen cells, not a thousand.
+  const mounted = await probe(page, 'mounted');
+  expect(mounted.length).toBeLessThanOrEqual(8 * 3 + 2);
+  const { rows, cells } = await probe(page, 'bodyCells');
+  expect(rows).toBeGreaterThan(10);
+  expect(cells).toBe(rows * mounted.length);
+});
+
+test('a pinned column keeps its cells at the left edge however far the rows scroll', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 400 });
+  await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.toggleColumnPin('c200'));
+  await wheelBy(page, 30_000);
+  expect((await probe(page, 'mounted'))[0]).toBe('c200');
+  expect(await probe(page, 'wrongCellsInView')).toEqual([]);
+  const misaligned = await probe(page, 'cellHeaderMisalignment');
+  expect(misaligned.px, `cell of ${misaligned.column} under its header`).toBeLessThan(1);
+  const pinned = await page
+    .locator(`#${HOST_ID} .dt-row[data-row-index="0"] .dt-cell[data-column="c200"]`)
+    .boundingBox();
+  const body = await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox();
+  expect(pinned!.x).toBe(body!.x);
 });

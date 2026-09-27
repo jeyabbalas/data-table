@@ -36,33 +36,52 @@ interface ColumnBox {
   cellWidth: number;
 }
 
-/** Header and first-row cell boxes for every column, in presented order. */
-function columnBoxes(page: Page): Promise<ColumnBox[]> {
+/**
+ * Header and cell boxes for every column the first body row renders, in
+ * presented order, and where that row and the header row end. A row renders
+ * only the columns near the view, with spacers for the rest, so its end is
+ * where the spacers' arithmetic shows.
+ */
+function columnBoxes(
+  page: Page,
+): Promise<{ boxes: ColumnBox[]; rowEnd: number; headerEnd: number }> {
   return page.evaluate((hostId) => {
     const host = document.getElementById(hostId)!;
     const row = host.querySelector('.dt-body .dt-row:not([data-placeholder])')!;
-    return Array.from(host.querySelectorAll<HTMLElement>('.dt-col-header[data-column]')).map(
-      (header) => {
-        const column = header.dataset.column!;
-        const cell = Array.from(row.children).find(
-          (c) => c.getAttribute('data-column') === column,
-        )!;
-        const h = header.getBoundingClientRect();
-        const c = cell.getBoundingClientRect();
-        return {
-          column,
-          headerLeft: h.left,
-          headerWidth: h.width,
-          cellLeft: c.left,
-          cellWidth: c.width,
-        };
-      },
-    );
+    const headers = host.querySelectorAll<HTMLElement>('.dt-col-header[data-column]');
+    const boxes = Array.from(row.querySelectorAll<HTMLElement>('.dt-cell[data-column]'), (cell) => {
+      const column = cell.dataset.column!;
+      const header = Array.from(headers).find((h) => h.dataset.column === column)!;
+      const h = header.getBoundingClientRect();
+      const c = cell.getBoundingClientRect();
+      return {
+        column,
+        headerLeft: h.left,
+        headerWidth: h.width,
+        cellLeft: c.left,
+        cellWidth: c.width,
+      };
+    });
+    return {
+      boxes,
+      rowEnd: row.lastElementChild!.getBoundingClientRect().right,
+      headerEnd: headers[headers.length - 1]!.getBoundingClientRect().right,
+    };
   }, HOST_ID);
 }
 
-function expectAligned(boxes: ColumnBox[]): void {
-  expect(boxes).toHaveLength(COLUMNS);
+function expectAligned({
+  boxes,
+  rowEnd,
+  headerEnd,
+}: {
+  boxes: ColumnBox[];
+  rowEnd: number;
+  headerEnd: number;
+}): void {
+  // The view and a viewport either side, at the least.
+  expect(boxes.length).toBeGreaterThanOrEqual(6);
+  expect(rowEnd, 'the row ends where the header row does').toBeCloseTo(headerEnd, 0);
   for (const box of boxes) {
     expect(box.headerWidth, `${box.column} header width`).toBeCloseTo(DECLARED_WIDTH, 0);
     expect(box.cellWidth, `${box.column} cell width`).toBeCloseTo(DECLARED_WIDTH, 0);

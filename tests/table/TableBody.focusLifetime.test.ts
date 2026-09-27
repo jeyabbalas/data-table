@@ -8,7 +8,7 @@
  * published via `aria-activedescendant` rather than by moving focus. But a
  * *click* still lands real focus on the clicked cell, and that cell lives in a
  * pooled row. The moment scrolling recycles that row (or a refresh, a
- * cell-count mismatch, or `destroy()` detaches it), the browser drops focus to
+ * reshape that drops its column, or `destroy()` detaches it), the browser drops focus to
  * `<body>` — and because `KeyboardNavigator` listens on `.dt-root`, keydowns
  * aimed at `<body>` never reach it. Arrows do nothing until the user tabs back
  * in. Confirmed in a real browser.
@@ -22,6 +22,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableBody } from '@/table/TableBody';
 import { StateActions } from '@/core/Actions';
+import { createSignal } from '@/core/Signal';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
@@ -52,7 +53,9 @@ interface Internals {
   rowDataCache: Map<number, Record<string, unknown>>;
   rowPool: HTMLElement[];
   currentRange: { start: number; end: number; offsetY: number };
-  getOrCreateRow(columnCount: number): HTMLElement;
+  getOrCreateRow(): HTMLElement;
+  rowShape(): unknown;
+  shapeRow(rowEl: HTMLElement, shape: unknown): void;
   renderVisibleRows(): void;
 }
 
@@ -63,6 +66,8 @@ interface Internals {
  * they always are).
  */
 function setup(rowCount = 40) {
+  // The columns rows render: both, until a test says otherwise.
+  const mounted = createSignal<readonly string[]>(['id', 'tag']);
   const root = document.createElement('div');
   root.className = 'dt-root';
   const gridElement = document.createElement('div');
@@ -102,7 +107,7 @@ function setup(rowCount = 40) {
     state,
     bridge as unknown as Parameters<typeof TableBody>[2],
     actions,
-    { gridElement },
+    { gridElement, mountedColumns: mounted },
   );
 
   // JSDOM reports a zero-height viewport, so nothing would ever materialize.
@@ -112,7 +117,7 @@ function setup(rowCount = 40) {
   });
 
   const internal = body as unknown as Internals;
-  return { body, state, gridElement, container, internal };
+  return { body, state, gridElement, container, internal, mounted };
 }
 
 /** Materialize rows and put real DOM focus on a cell, the way a click does. */
@@ -154,42 +159,47 @@ describe('TableBody — focus never outlives the element holding it', () => {
     harness.body.destroy();
   });
 
-  it('site 3: the cell-count-mismatch replacement hands focus to the grid', async () => {
+  it('site 3: a reshape keeps a focused cell whose column stays, and hands focus on when it goes', async () => {
     const harness = setup();
-    const { rowEl } = await focusACell(harness, 0);
+    const { rowEl, cell } = await focusACell(harness, 0);
+    expect(cell.getAttribute('data-column')).toBe('id');
 
-    // Shape the row like a placeholder (fewer cells than columns) so
-    // renderVisibleRows takes the replace-from-pool branch, which detaches the
-    // row without going through returnRowToPool.
-    rowEl.removeChild(rowEl.lastElementChild!);
-    expect(rowEl.children.length).not.toBe(harness.state.visibleColumns.get().length);
+    // The row now renders only `id`: its cell is kept in place, never
+    // detached, so focus stays on it.
+    harness.mounted.set(['id']);
+    expect(harness.internal.rowElementMap.get(0)).toBe(rowEl);
+    expect(cell.isConnected).toBe(true);
+    expect(document.activeElement).toBe(cell);
 
-    harness.internal.renderVisibleRows();
-
-    expect(harness.internal.rowElementMap.get(0)).not.toBe(rowEl);
+    // Now only `tag`: the focused cell's column is gone.
+    harness.mounted.set(['tag']);
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();
   });
 
-  it('site 4: dropping surplus cells off a reused row hands focus to the grid', async () => {
-    // Defensive path: rows in the pool are detached clones today, so a surplus
-    // cell cannot hold focus in practice. Exercised with an attached row in
-    // the pool so the guard itself is covered — a future change that pools
-    // live rows must not silently reopen the hole.
+  it('site 4: dropping a cell off a reused row hands focus to the grid', async () => {
+    // Defensive path: rows in the pool are detached clones today, so a cell
+    // being dropped cannot hold focus in practice. Exercised with an attached
+    // row in the pool so the guard itself is covered — a future change that
+    // pools live rows must not silently reopen the hole.
     const harness = setup();
     await harness.body.initialize();
 
-    const pooled = harness.internal.getOrCreateRow(2);
+    const pooled = harness.internal.getOrCreateRow();
+    harness.internal.shapeRow(pooled, harness.internal.rowShape());
     harness.container.appendChild(pooled);
-    const surplus = pooled.children[1] as HTMLElement;
+    const surplus = pooled.querySelector<HTMLElement>('[data-column="tag"]')!;
     surplus.focus();
     expect(document.activeElement).toBe(surplus);
 
     harness.internal.rowPool.push(pooled);
-    harness.internal.getOrCreateRow(1);
+    harness.mounted.set(['id']);
+    const reused = harness.internal.getOrCreateRow();
+    harness.internal.shapeRow(reused, harness.internal.rowShape());
 
-    expect(pooled.children.length).toBe(1);
+    expect(reused).toBe(pooled);
+    expect(pooled.querySelector('[data-column="tag"]')).toBeNull();
     expect(document.activeElement).toBe(harness.gridElement);
 
     harness.body.destroy();

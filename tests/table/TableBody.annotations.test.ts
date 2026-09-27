@@ -93,6 +93,18 @@ function createMockBridge(rows: Record<string, unknown>[]) {
 // Tests
 // =========================================
 
+/** A row from the pool, shaped for the body's columns, as `renderVisibleRows` makes one. */
+function shapedRow(body: TableBody): HTMLElement {
+  const internal = body as unknown as {
+    getOrCreateRow(): HTMLElement;
+    rowShape(): unknown;
+    shapeRow(rowEl: HTMLElement, shape: unknown): void;
+  };
+  const rowEl = internal.getOrCreateRow();
+  internal.shapeRow(rowEl, internal.rowShape());
+  return rowEl;
+}
+
 describe('TableBody — annotation overlay', () => {
   let container: HTMLElement;
   let state: TableState;
@@ -181,17 +193,15 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 42, rows[3], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 42, rows[3], schemaMap);
 
     expect(rowEl.getAttribute('data-row-id')).toBe('3');
     const cells = Array.from(rowEl.children) as HTMLElement[];
@@ -217,17 +227,15 @@ describe('TableBody — annotation overlay', () => {
     store.add({ scope: 'row', rowId: 2, severity: 'warning', message: 'row-warn' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
 
     // Row-element markers.
     expect(rowEl.classList.contains('dt-row--annotated')).toBe(true);
@@ -260,17 +268,15 @@ describe('TableBody — annotation overlay', () => {
     store.add({ scope: 'column', column: 'price', severity: 'error', message: 'col-err' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 1, rows[1], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 1, rows[1], schemaMap);
 
     const priceIdx = visibleColumns.indexOf('price');
     const priceCell = rowEl.children[priceIdx] as HTMLElement;
@@ -308,17 +314,15 @@ describe('TableBody — annotation overlay', () => {
     store.add({ scope: 'row', rowId: 4, severity: 'warning', message: 'row-warn' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 4, rows[4], schemaMap);
 
     // Row tint marker set correctly.
     expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(true);
@@ -355,17 +359,15 @@ describe('TableBody — annotation overlay', () => {
     });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
 
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
     expect(priceCell.classList.contains('dt-cell--annotated')).toBe(true);
@@ -410,17 +412,15 @@ describe('TableBody — annotation overlay', () => {
     });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 4, rows[4], schemaMap);
 
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
     // All three class families present at the intersection. CSS cascade
@@ -465,17 +465,15 @@ describe('TableBody — annotation overlay', () => {
     store.add({ scope: 'column', column: 'price', severity: 'error', message: 'col' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 1, rows[1], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 1, rows[1], schemaMap);
 
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
     expect(priceCell.classList.contains('dt-cell--row-annotated')).toBe(true);
@@ -508,17 +506,15 @@ describe('TableBody — annotation overlay', () => {
     });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
 
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
     expect(priceCell.classList.contains('dt-cell--row-annotated')).toBe(true);
@@ -547,19 +543,17 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
+    const rowEl = shapedRow(body);
 
     // First render: unannotated cell shows the formatted value as native title.
-    internal.updateRowContent(rowEl, 3, rows[3], visibleColumns, schemaMap);
+    internal.updateRowContent(rowEl, 3, rows[3], schemaMap);
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
     const formattedTitle = priceCell.title;
     expect(formattedTitle.length).toBeGreaterThan(0);
@@ -573,12 +567,12 @@ describe('TableBody — annotation overlay', () => {
       severity: 'error',
       message: 'value exceeds limit',
     });
-    internal.updateRowContent(rowEl, 3, rows[3], visibleColumns, schemaMap);
+    internal.updateRowContent(rowEl, 3, rows[3], schemaMap);
     expect(priceCell.title).toBe('');
 
     // Remove it; re-render; formatted title restored.
     store.remove(ann.id);
-    internal.updateRowContent(rowEl, 3, rows[3], visibleColumns, schemaMap);
+    internal.updateRowContent(rowEl, 3, rows[3], schemaMap);
     expect(priceCell.title).toBe(formattedTitle);
 
     body.destroy();
@@ -598,26 +592,24 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
 
     // Row-only case.
     store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'r' });
-    const rowA = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowA, 0, rows[0], visibleColumns, schemaMap);
+    const rowA = shapedRow(body);
+    internal.updateRowContent(rowA, 0, rows[0], schemaMap);
     for (const cell of Array.from(rowA.children) as HTMLElement[]) {
       expect(cell.title).toBe('');
     }
     // Unannotated row still shows formatted titles.
-    const rowB = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowB, 2, rows[2], visibleColumns, schemaMap);
+    const rowB = shapedRow(body);
+    internal.updateRowContent(rowB, 2, rows[2], schemaMap);
     for (const cell of Array.from(rowB.children) as HTMLElement[]) {
       expect(cell.title.length).toBeGreaterThan(0);
     }
@@ -625,8 +617,8 @@ describe('TableBody — annotation overlay', () => {
     // Column-only case.
     store.clear('all');
     store.add({ scope: 'column', column: 'price', severity: 'warning', message: 'c' });
-    const rowC = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowC, 0, rows[0], visibleColumns, schemaMap);
+    const rowC = shapedRow(body);
+    internal.updateRowContent(rowC, 0, rows[0], schemaMap);
     const priceCell = rowC.children[visibleColumns.indexOf('price')] as HTMLElement;
     const idCell = rowC.children[visibleColumns.indexOf('id')] as HTMLElement;
     expect(priceCell.title).toBe('');
@@ -650,12 +642,10 @@ describe('TableBody — annotation overlay', () => {
 
     // Seed the row-data cache + rowElementMap as if rendered.
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
       rowDataCache: Map<number, Record<string, unknown>>;
@@ -665,8 +655,8 @@ describe('TableBody — annotation overlay', () => {
     await body.initialize();
     const beforeQueries = queries.length;
 
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 0, rows[0], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 0, rows[0], schemaMap);
     internal.rowDataCache.set(0, rows[0]);
     internal.rowElementMap.set(0, rowEl);
 
@@ -697,12 +687,10 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
       rowDataCache: Map<number, Record<string, unknown>>;
@@ -711,8 +699,8 @@ describe('TableBody — annotation overlay', () => {
     await body.initialize();
 
     // Render row 0 and capture the formatted title before any annotation exists.
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 0, rows[0], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 0, rows[0], schemaMap);
     internal.rowDataCache.set(0, rows[0]);
     internal.rowElementMap.set(0, rowEl);
     const priceCell = rowEl.children[visibleColumns.indexOf('price')] as HTMLElement;
@@ -750,17 +738,15 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 0, rows[0], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 0, rows[0], schemaMap);
     // data-row-id is set regardless of annotation wiring; data-column too.
     expect(rowEl.getAttribute('data-row-id')).toBe('0');
     expect(rowEl.classList.contains('dt-row--annotated')).toBe(false);
@@ -787,19 +773,17 @@ describe('TableBody — annotation overlay', () => {
     store.add({ scope: 'cell', rowId: 1, column: 'price', severity: 'info', message: 'x' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
       returnRowToPool(el: HTMLElement): void;
     };
 
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 1, rows[1], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 1, rows[1], schemaMap);
     expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);
     const priceIdx = visibleColumns.indexOf('price');
     const pricedOld = rowEl.children[priceIdx] as HTMLElement;
@@ -808,10 +792,10 @@ describe('TableBody — annotation overlay', () => {
     expect(pricedOld.classList.contains('dt-cell--annotated')).toBe(true);
 
     internal.returnRowToPool(rowEl);
-    const reused = internal.getOrCreateRow(visibleColumns.length);
+    const reused = shapedRow(body);
     // Clear all seeded anns so the repurposed row has nothing to inherit.
     store.clear('all');
-    internal.updateRowContent(reused, 2, rows[2], visibleColumns, schemaMap);
+    internal.updateRowContent(reused, 2, rows[2], schemaMap);
     expect(reused.classList.contains('dt-row--annotated')).toBe(false);
     expect(reused.classList.contains('dt-row--annotation-error')).toBe(false);
     for (const cell of Array.from(reused.children) as HTMLElement[]) {
@@ -847,17 +831,15 @@ describe('TableBody — annotation overlay', () => {
     const rowAnn = store.add({ scope: 'row', rowId: 2, severity: 'info', message: 'row-only' });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
     container.appendChild(rowEl);
 
     const showSpy = vi.spyOn(popover, 'show');
@@ -905,23 +887,21 @@ describe('TableBody — annotation overlay', () => {
     });
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
 
     // Render row 1 (col-only — should NOT see the cell-scope ann).
-    const rowA = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowA, 1, rows[1], visibleColumns, schemaMap);
+    const rowA = shapedRow(body);
+    internal.updateRowContent(rowA, 1, rows[1], schemaMap);
     container.appendChild(rowA);
     // Render row 3 (intersection — should see both col and cell).
-    const rowB = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowB, 3, rows[3], visibleColumns, schemaMap);
+    const rowB = shapedRow(body);
+    internal.updateRowContent(rowB, 3, rows[3], schemaMap);
     container.appendChild(rowB);
 
     const showSpy = vi.spyOn(popover, 'show');
@@ -992,17 +972,15 @@ describe('TableBody — annotation overlay', () => {
     }
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 5, rows[5], schemaMap);
     container.appendChild(rowEl);
 
     // Cell carries all three class families.
@@ -1067,12 +1045,10 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
@@ -1081,8 +1057,8 @@ describe('TableBody — annotation overlay', () => {
     for (const sev of ['info', 'warning', 'error'] as const) {
       store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
     }
-    const rowA = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowA, 5, rows[5], visibleColumns, schemaMap);
+    const rowA = shapedRow(body);
+    internal.updateRowContent(rowA, 5, rows[5], schemaMap);
     let priceCell = rowA.children[visibleColumns.indexOf('price')] as HTMLElement;
     expect(priceCell.classList.contains('dt-cell--annotated')).toBe(true);
     expect(priceCell.classList.contains('dt-cell--annotation-error')).toBe(true);
@@ -1095,8 +1071,8 @@ describe('TableBody — annotation overlay', () => {
     for (const sev of ['error', 'info', 'warning'] as const) {
       store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
     }
-    const rowB = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowB, 5, rows[5], visibleColumns, schemaMap);
+    const rowB = shapedRow(body);
+    internal.updateRowContent(rowB, 5, rows[5], schemaMap);
     priceCell = rowB.children[visibleColumns.indexOf('price')] as HTMLElement;
     expect(priceCell.classList.contains('dt-cell--annotation-error')).toBe(true);
     expect(priceCell.classList.contains('dt-cell--annotation-warning')).toBe(false);
@@ -1120,12 +1096,10 @@ describe('TableBody — annotation overlay', () => {
     for (const c of testSchema) schemaMap.set(c.name, c);
 
     const internal = body as unknown as {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
@@ -1134,8 +1108,8 @@ describe('TableBody — annotation overlay', () => {
     for (const sev of ['warning', 'error', 'info'] as const) {
       store.add({ scope: 'row', rowId: 4, severity: sev, message: `r-${sev}` });
     }
-    const rowEl = internal.getOrCreateRow(visibleColumns.length);
-    internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+    const rowEl = shapedRow(body);
+    internal.updateRowContent(rowEl, 4, rows[4], schemaMap);
 
     expect(rowEl.classList.contains('dt-row--annotated')).toBe(true);
     expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(true);
@@ -1153,12 +1127,10 @@ describe('TableBody — annotation overlay', () => {
 
   describe('severity-filter fallback', () => {
     type Internal = {
-      getOrCreateRow(n: number): HTMLElement;
       updateRowContent(
         rowEl: HTMLElement,
         index: number,
         data: Record<string, unknown>,
-        columns: string[],
         schemaMap: Map<string, ColumnSchema>,
       ): void;
     };
@@ -1183,8 +1155,8 @@ describe('TableBody — annotation overlay', () => {
       for (const sev of ['error', 'warning', 'info'] as const) {
         store.add({ scope: 'cell', rowId: 5, column: 'price', severity: sev, message: `c-${sev}` });
       }
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 5, rows[5], schemaMap);
       const priceIdx = visibleColumns.indexOf('price');
       const cell = rowEl.children[priceIdx] as HTMLElement;
 
@@ -1197,7 +1169,7 @@ describe('TableBody — annotation overlay', () => {
 
       // Hide error — warning falls through.
       store.setSeverityFilter({ error: false });
-      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 5, rows[5], schemaMap);
       expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
@@ -1206,7 +1178,7 @@ describe('TableBody — annotation overlay', () => {
 
       // Hide warning too — info falls through.
       store.setSeverityFilter({ warning: false });
-      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 5, rows[5], schemaMap);
       expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
@@ -1215,7 +1187,7 @@ describe('TableBody — annotation overlay', () => {
 
       // Hide info too — only the marker class remains so the popover still anchors.
       store.setSeverityFilter({ info: false });
-      internal.updateRowContent(rowEl, 5, rows[5], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 5, rows[5], schemaMap);
       expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(false);
@@ -1230,11 +1202,11 @@ describe('TableBody — annotation overlay', () => {
       for (const sev of ['error', 'warning', 'info'] as const) {
         store.add({ scope: 'row', rowId: 4, severity: sev, message: `r-${sev}` });
       }
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 4, rows[4], schemaMap);
 
       store.setSeverityFilter({ error: false });
-      internal.updateRowContent(rowEl, 4, rows[4], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 4, rows[4], schemaMap);
       expect(rowEl.classList.contains('dt-row--annotated')).toBe(true);
       expect(rowEl.classList.contains('dt-row--annotation-warning')).toBe(true);
       expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(false);
@@ -1259,8 +1231,8 @@ describe('TableBody — annotation overlay', () => {
         message: 'cell-info',
       });
 
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 7, rows[7], schemaMap);
       const priceIdx = visibleColumns.indexOf('price');
       const cell = rowEl.children[priceIdx] as HTMLElement;
 
@@ -1272,7 +1244,7 @@ describe('TableBody — annotation overlay', () => {
       // Hide info — cell scope loses its severity class but keeps the marker;
       // col warning + row error are untouched.
       store.setSeverityFilter({ info: false });
-      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 7, rows[7], schemaMap);
       expect(cell.classList.contains('dt-cell--annotated')).toBe(true);
       expect(cell.classList.contains('dt-cell--annotation-info')).toBe(false);
       expect(cell.classList.contains('dt-cell--col-annotation-warning')).toBe(true);
@@ -1280,7 +1252,7 @@ describe('TableBody — annotation overlay', () => {
 
       // Hide warning too — col scope loses its severity class; row error remains.
       store.setSeverityFilter({ warning: false });
-      internal.updateRowContent(rowEl, 7, rows[7], visibleColumns, schemaMap);
+      internal.updateRowContent(rowEl, 7, rows[7], schemaMap);
       expect(cell.classList.contains('dt-cell--col-annotated')).toBe(true);
       expect(cell.classList.contains('dt-cell--col-annotation-warning')).toBe(false);
       expect(cell.classList.contains('dt-cell--row-annotation-error')).toBe(true);
@@ -1292,8 +1264,8 @@ describe('TableBody — annotation overlay', () => {
       const { body, rows, visibleColumns, schemaMap, internal } = setup();
       store.add({ scope: 'cell', rowId: 2, column: 'price', severity: 'error', message: 'm' });
       store.setSeverityFilter({ error: false, warning: false, info: false });
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 2, rows[2], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
       const priceIdx = visibleColumns.indexOf('price');
       const cell = rowEl.children[priceIdx] as HTMLElement;
 
@@ -1311,8 +1283,8 @@ describe('TableBody — annotation overlay', () => {
       store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'error', message: 'e' });
       store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'warning', message: 'w' });
 
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 3, rows[3], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 3, rows[3], schemaMap);
       const priceIdx = visibleColumns.indexOf('price');
       const cell = rowEl.children[priceIdx] as HTMLElement;
 
@@ -1347,8 +1319,8 @@ describe('TableBody — annotation overlay', () => {
       store.add({ scope: 'row', rowId: 6, severity: 'error', message: 'e' });
 
       // Render row 6 and seed the body's caches so the change handler can find it.
-      const rowEl = internal.getOrCreateRow(visibleColumns.length);
-      internal.updateRowContent(rowEl, 6, rows[6], visibleColumns, schemaMap);
+      const rowEl = shapedRow(body);
+      internal.updateRowContent(rowEl, 6, rows[6], schemaMap);
       (body as unknown as { rowElementMap: Map<number, HTMLElement> }).rowElementMap.set(6, rowEl);
       (body as unknown as { rowDataCache: Map<number, Record<string, unknown>> }).rowDataCache.set(
         6,

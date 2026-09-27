@@ -158,6 +158,23 @@ function isTimeFormat(value: string): boolean {
 /** DuckDB type a text column of dates or times converts to. */
 export type TemporalType = 'TIMESTAMP' | 'TIMESTAMPTZ' | 'DATE' | 'TIME';
 
+/**
+ * The exact form a value needs to convert unchanged, as RE2 patterns for
+ * `regexp_full_match`. DuckDB's casts are lenient: a DATE cast keeps a valid
+ * date prefix and drops the rest (`2024-03-15 to 2024-04-01`,
+ * `2024-03-15 14:30:00`), a TIME cast drops `PM`, and TIMESTAMP and TIME keep
+ * six fractional digits. So a value converts only if it matches in full, with
+ * at most six fractional digits.
+ */
+const EXACT_TIMESTAMP_PATTERN =
+  '^\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:?\\d{2})?$';
+const EXACT_TEMPORAL_PATTERNS: Record<TemporalType, string> = {
+  DATE: '^\\d{4}-\\d{2}-\\d{2}$',
+  TIME: '^\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?$',
+  TIMESTAMP: EXACT_TIMESTAMP_PATTERN,
+  TIMESTAMPTZ: EXACT_TIMESTAMP_PATTERN,
+};
+
 /** Leading rows sampled to guess which text columns hold dates or times. */
 const TEMPORAL_SAMPLE_ROWS = 2048;
 /** Distinct values per column the guess looks at. */
@@ -192,9 +209,12 @@ async function firstRow(
  * every VARCHAR column and matches them against the ISO formats, most
  * specific first. The second reads the matching columns in full and counts
  * the values a conversion would lose: a value that does not cast would become
- * NULL, so its column stays text. A timestamp column whose values carry a UTC
- * offset becomes TIMESTAMPTZ, because casting to TIMESTAMP drops the offset;
- * offsets that match the session time zone lose nothing and stay TIMESTAMP.
+ * NULL, and one not in the exact format would cast but change (see
+ * {@link EXACT_TEMPORAL_PATTERNS}), so either keeps its column as text. Blank
+ * values are missing and become NULL. A timestamp column whose values carry
+ * a UTC offset becomes TIMESTAMPTZ, because casting to TIMESTAMP drops the
+ * offset; offsets that match the session time zone lose nothing and stay
+ * TIMESTAMP.
  *
  * Both queries are best effort: if either fails, the columns stay text.
  *
@@ -221,7 +241,7 @@ export async function detectTemporalColumns(
       `SELECT ${textColumns
         .map((name, i) => {
           const col = quoteIdentifier(name);
-          return `(list(DISTINCT left(${col}, ${TEMPORAL_SAMPLE_CHARS})) FILTER (WHERE ${col} IS NOT NULL))[1:${TEMPORAL_SAMPLE_VALUES}] AS "${i}"`;
+          return `(list(DISTINCT left(${col}, ${TEMPORAL_SAMPLE_CHARS})) FILTER (WHERE trim(${col}) <> ''))[1:${TEMPORAL_SAMPLE_VALUES}] AS "${i}"`;
         })
         .join(', ')}
        FROM (SELECT ${textColumns.map(quoteIdentifier).join(', ')}
@@ -248,8 +268,10 @@ export async function detectTemporalColumns(
       `SELECT ${candidates
         .flatMap(({ name, type }, i) => {
           const col = quoteIdentifier(name);
+          // Blank text is missing, not lost: it becomes NULL, as the CSV
+          // reader already reads an empty field.
           const lost = (target: TemporalType) =>
-            `count(*) FILTER (WHERE ${col} IS NOT NULL AND TRY_CAST(${col} AS ${target}) IS NULL)`;
+            `count(*) FILTER (WHERE trim(${col}) <> '' AND (NOT regexp_full_match(trim(${col}), '${EXACT_TEMPORAL_PATTERNS[target]}') OR TRY_CAST(${col} AS ${target}) IS NULL))`;
           const checks = [`${lost(type)} AS "lost_${i}"`];
           if (type === 'TIMESTAMP') {
             // A value reads differently as TIMESTAMPTZ when it names an

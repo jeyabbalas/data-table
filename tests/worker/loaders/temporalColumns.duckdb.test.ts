@@ -4,9 +4,10 @@
  * The loaders convert such columns to DATE / TIMESTAMP / TIME. These tests
  * pin down the two properties the conversion must keep:
  *
- * - No value is lost. A value that does not cast would become NULL, so its
- *   whole column stays text, and a UTC offset is kept as TIMESTAMPTZ rather
- *   than dropped by a cast to TIMESTAMP.
+ * - No value is lost. A value that does not cast would become NULL, and one
+ *   that casts but changes would be altered, so either keeps its whole
+ *   column as text. A UTC offset is kept as TIMESTAMPTZ rather than dropped
+ *   by a cast to TIMESTAMP. Blank text is missing and becomes NULL.
  * - The table is never copied. Parquet casts while it reads the file; CSV
  *   and JSON convert each column in place. Rebuilding the table needed a
  *   second copy of it in memory, which ran the 200K × 1,000 target out.
@@ -142,6 +143,66 @@ describe('text columns of dates and times (real DuckDB)', () => {
       expect(check).toMatchObject({ invalid: '2020-02-30', unknown: 'unknown' });
       expect(Number(check?.days)).toBe(ROWS);
       expect(Number(check?.dues)).toBe(ROWS);
+    });
+
+    it('keeps a column as text when a value would convert but change', async () => {
+      // DuckDB's casts keep a valid prefix and drop the rest, so none of
+      // row 4000's values would turn into NULL; each would silently change.
+      const date = `strftime(DATE '2020-01-01' + CAST(range % 900 AS INTEGER), '%Y-%m-%d')`;
+      const clock = `strftime(TIMESTAMP '2020-01-01' + to_seconds(range * 17), '%H:%M:%S')`;
+      const data = await write(
+        `SELECT CASE WHEN range = 4000 THEN '2020-03-15 to 2020-04-01' ELSE ${date} END AS span,
+                CASE WHEN range = 4000 THEN '2020-03-15 14:30:00' ELSE ${date} END AS mixed,
+                CASE WHEN range = 4000 THEN '02:30:00 PM' ELSE ${clock} END AS clock,
+                CASE WHEN range = 4000 THEN '2020-03-15' ELSE ${clock} END AS clock2,
+                strftime(TIMESTAMP '2020-01-01' + to_seconds(range * 61), '%Y-%m-%dT%H:%M:%S') || '.123456789' AS nanos,
+                strftime(TIMESTAMP '2020-01-01' + to_seconds(range * 61), '%Y-%m-%dT%H:%M:%S') || '.123456' AS micros
+         FROM range(${ROWS})`,
+        'parquet',
+      );
+      const table = nextTable();
+      const result = await loadParquet(data, { tableName: table }, ctx());
+
+      expect(types(result)).toMatchObject({
+        span: 'VARCHAR',
+        mixed: 'VARCHAR',
+        clock: 'VARCHAR',
+        clock2: 'VARCHAR',
+        nanos: 'VARCHAR',
+        // Six fractional digits fit a TIMESTAMP exactly.
+        micros: 'TIMESTAMP',
+      });
+      const [check] = await rows(
+        `SELECT span, mixed, clock, clock2, nanos FROM "${table}" WHERE "__rowid__" = 4000`,
+      );
+      expect(check).toEqual({
+        span: '2020-03-15 to 2020-04-01',
+        mixed: '2020-03-15 14:30:00',
+        clock: '02:30:00 PM',
+        clock2: '2020-03-15',
+        nanos: '2020-01-03T19:46:40.123456789',
+      });
+    });
+
+    it('treats blank text as missing, so a date column with blanks converts', async () => {
+      const data = await write(
+        `SELECT CASE WHEN range % 50 = 0 THEN '' WHEN range % 50 = 1 THEN '   '
+                     ELSE strftime(DATE '2020-01-01' + CAST(range % 900 AS INTEGER), '%Y-%m-%d') END AS day
+         FROM range(${ROWS})`,
+        'parquet',
+      );
+      const table = nextTable();
+      const result = await loadParquet(data, { tableName: table }, ctx());
+
+      expect(types(result)['day']).toBe('DATE');
+      const [check] = await rows(
+        `SELECT count(day) AS days,
+                count(*) FILTER (WHERE day IS NOT NULL
+                                 AND day <> DATE '2020-01-01' + CAST("__rowid__" % 900 AS INTEGER)) AS wrong
+         FROM "${table}"`,
+      );
+      expect(Number(check?.days)).toBe(ROWS - (2 * ROWS) / 50);
+      expect(Number(check?.wrong)).toBe(0);
     });
 
     it('keeps UTC offsets by loading them as TIMESTAMPTZ', async () => {

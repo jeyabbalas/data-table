@@ -315,6 +315,7 @@ export class KeyboardNavigator {
       this.claimGridFocus();
       const header = this.findHeader(focused.column);
       if (header) {
+        this.scrollFocusedCellIntoView(focused.row, focused.column);
         header.activateSort(e.shiftKey || e.metaKey || e.ctrlKey);
       }
       return;
@@ -326,6 +327,7 @@ export class KeyboardNavigator {
       if (focused) {
         e.preventDefault();
         this.claimGridFocus();
+        this.scrollFocusedCellIntoView(focused.row, focused.column);
         this.actions.selectRow(focused.row, 'toggle');
       }
       return;
@@ -481,6 +483,9 @@ export class KeyboardNavigator {
     const controls = header?.getControls() ?? [];
     const first = controls[0];
     if (!first) return false;
+    // The header first: focus moves without scrolling, so a cursor the user
+    // had wheeled away from put focus on a button nobody could see.
+    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column);
     first.focus({ preventScroll: true });
     return true;
   }
@@ -577,6 +582,7 @@ export class KeyboardNavigator {
     this.actions.beginColumnLayoutChange();
     this.layout = { column };
     this.syncLayoutAffordance();
+    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column);
     this.announce(this.messages.a11y.columnLayoutModeEntered(column));
     return true;
   }
@@ -647,6 +653,9 @@ export class KeyboardNavigator {
         e.preventDefault();
         e.stopPropagation();
         this.exitLayoutMode('cancel');
+        // Cancelling puts the column back where the gesture found it, which
+        // may be well away from where the moves took the view.
+        this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
         return true;
 
       case 'Enter':
@@ -698,6 +707,7 @@ export class KeyboardNavigator {
         e.preventDefault();
         this.claimGridFocus();
         this.actions.resetColumnWidth(layout.column);
+        this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
         const header = this.findHeader(layout.column);
         this.announce(
           this.messages.a11y.columnWidthAnnouncement(
@@ -722,6 +732,9 @@ export class KeyboardNavigator {
     const { min, max } = header.getWidthBounds();
     const a = this.messages.a11y;
     const column = header.getColumn().name;
+    // A column at the right edge grows out of the view otherwise, taking the
+    // outline that marks the gesture with it.
+    this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column);
     this.announce(
       applied <= min
         ? a.columnWidthAtMinimum(column, applied)
@@ -895,6 +908,10 @@ export class KeyboardNavigator {
    * Ensure the focused cell is within the visible viewport — both vertically
    * (via VirtualScroller) and horizontally (via bodyScroll), skipping pinned
    * columns which are always visible via sticky positioning.
+   *
+   * Runs on every cursor move, and before any key acts on the cursor where it
+   * is (Enter, Space, F2, Shift+F2, the layout-mode keys): the user may have
+   * wheeled away from it, and should see what the key did.
    */
   private scrollFocusedCellIntoView(row: number, column: string): void {
     const body = this.getTableBody();

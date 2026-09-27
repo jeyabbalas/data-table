@@ -60,6 +60,11 @@ four others the table contributes — and then:
 | `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)          |
 | `Ctrl` + `C` / `Cmd` + `C`                             | Copy selected rows (defers to native copy behavior)          |
 
+Every key that moves the cursor or acts on it scrolls the cursor's cell into
+view first. A cursor the user has scrolled away from with the mouse comes
+back into sight on `Enter`, `F2` or `Shift+F2`, and in layout mode the column
+stays in view as it grows, moves, or goes back on `Escape`.
+
 When any modal is open (export dialog, SQL filter editor, derived-column
 editor, preset panel), the grid keyboard shortcuts are disabled — the
 modal owns input until dismissed.

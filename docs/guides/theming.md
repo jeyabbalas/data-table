@@ -230,9 +230,10 @@ row's height and `rowHeight`. Restyling the padding of `.dt-cell` or
 `.dt-col-header` changes how much text fits, not where columns fall. Don't set
 their `box-sizing` back to `content-box`: the header, the body, pinned columns
 and keyboard navigation all place columns by adding widths up, and they only
-agree while each column takes exactly its width. A column can't be narrower
-than its padding and border (25 px at the default font size); a smaller width
-set through `setColumnWidth` still takes that much.
+agree while each column takes exactly its width. A column is never drawn
+narrower than 50 px, the resize minimum, which leaves room for its padding and
+border (25 px at the default font size); a smaller width set through
+`setColumnWidth` is drawn 50 px wide.
 
 These tokens size the table's _contents_. They are not how you size the table
 itself: the mount container's height comes from your own CSS, is mandatory,

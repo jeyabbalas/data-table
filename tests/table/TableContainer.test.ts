@@ -52,6 +52,11 @@ class MockResizeObserver implements ResizeObserver {
     return MockResizeObserver.instances[MockResizeObserver.instances.length - 1];
   }
 
+  /** The observer watching `element`: the body scroller has its own. */
+  static observing(element: Element): MockResizeObserver | undefined {
+    return MockResizeObserver.instances.find((o) => o.observedElements.has(element));
+  }
+
   static clearInstances(): void {
     MockResizeObserver.instances = [];
   }
@@ -465,13 +470,13 @@ describe('TableContainer', () => {
 
     it("sizes the header's scrollbar gutter to the body's vertical scrollbar", () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance()!;
       const root = tableContainer.getElement();
       const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
       const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
       const resizeCallback = vi.fn();
       tableContainer.onResize(resizeCallback);
-      expect(mockInstance.getObservedElements().has(body)).toBe(true);
+      const mockInstance = MockResizeObserver.observing(body)!;
+      expect(mockInstance).toBeDefined();
 
       const measure = (border: number, content: number): void => {
         mockInstance.triggerResize([
@@ -501,10 +506,10 @@ describe('TableContainer', () => {
 
     it('falls back to client widths, and puts the header back where the body is', () => {
       const tableContainer = new TableContainer(container, state);
-      const mockInstance = MockResizeObserver.getLastInstance()!;
       const root = tableContainer.getElement();
       const headerArea = root.querySelector<HTMLElement>('.dt-header-area')!;
       const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const mockInstance = MockResizeObserver.observing(body)!;
       const headerScroll = root.querySelector<HTMLElement>('.dt-header-scroll')!;
       const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
 

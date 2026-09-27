@@ -50,12 +50,10 @@ import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { getColumnLayout } from './ColumnLayout';
 import { ColumnReorder } from './ColumnReorder';
+import { ColumnWindowController } from './ColumnWindowController';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
-
-/** Input that means the user is about to scroll, or have the table scroll for them. */
-const USER_SCROLL_INPUTS = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
 
 /**
  * Options for configuring the TableContainer
@@ -214,20 +212,8 @@ export class TableContainer {
   // and the counts are meaningless without the role).
   private gridSemanticsActive = false;
 
-  // Scroll synchronization handlers
-  private boundBodyScrollHandler: (() => void) | null = null;
-  private boundHeaderScrollHandler: (() => void) | null = null;
-
-  // Suppress header→body scroll sync during programmatic smooth scrolling
-  private suppressReverseScrollSync = false;
-
-  // Where the header stopped short of the body on the last sync, until the
-  // header's scroll event for it arrives (see syncHeaderScroll)
-  private headerEcho: number | null = null;
-
-  // Ends the horizontal-scroll hold that follows a filter change, while one
-  // is running
-  private releaseFilterScrollHold: (() => void) | null = null;
+  // Every sideways scroll of the header and body, and the sync between them
+  private readonly columnWindow: ColumnWindowController;
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
@@ -410,6 +396,17 @@ export class TableContainer {
       );
     }
 
+    // Before anything that scrolls, and before the state subscriptions below,
+    // so its own subscriptions run first
+    this.columnWindow = new ColumnWindowController({
+      state: this.state,
+      rootElement: this.element,
+      headerArea: this.headerArea,
+      headerScroll: this.headerScroll,
+      scrollbarGutter: this.scrollbarGutter,
+      bodyScroll: this.bodyScroll,
+    });
+
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
 
@@ -428,9 +425,6 @@ export class TableContainer {
       );
     }
 
-    // Set up scroll synchronization between header and body
-    this.setupScrollSync();
-
     // Install keyboard navigation + shortcuts. The listener stays on
     // `.dt-root` so keydowns bubbling out of the grid, the filter bar and the
     // hidden-columns gutter all reach it; `.dt-grid` is where focus lives.
@@ -443,6 +437,7 @@ export class TableContainer {
         actions: this.actions,
         getTableBody: () => this.tableBody,
         getColumnHeaders: () => this.columnHeaders,
+        revealColumn: (column) => this.columnWindow.revealColumn(column),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
@@ -636,9 +631,7 @@ export class TableContainer {
   // =========================================
 
   /**
-   * Set up ResizeObserver to track container size changes, and the body
-   * scroller's, whose client width changes when its vertical scrollbar comes
-   * or goes
+   * Set up ResizeObserver to track container size changes
    */
   private setupResizeObserver(): ResizeObserver {
     const observer = new ResizeObserver((entries) => {
@@ -646,7 +639,6 @@ export class TableContainer {
     });
 
     observer.observe(this.element);
-    observer.observe(this.bodyScroll);
     return observer;
   }
 
@@ -657,10 +649,6 @@ export class TableContainer {
     if (this.destroyed) return;
 
     for (const entry of entries) {
-      if (entry.target === this.bodyScroll) {
-        this.syncScrollbarGutter(entry);
-        continue;
-      }
       const { width, height } = entry.contentRect;
 
       // Only notify if dimensions actually changed
@@ -673,38 +661,6 @@ export class TableContainer {
         }
       }
     }
-  }
-
-  /**
-   * Make the header's scrollbar gutter as wide as the body's vertical
-   * scrollbar.
-   *
-   * The header scrolls in step with the body, so its viewport has to be
-   * exactly as wide as the body's. A fixed 17 px gutter was right for one
-   * scrollbar only: overlay scrollbars take no width, and neither does a body
-   * with too few rows to scroll, so at the far right the last header was cut
-   * off by up to 17 px, and keyboard navigation left a header cursor at the
-   * right edge partly out of view.
-   *
-   * The scrollbar's width is the body's border box less its content box, which
-   * keeps the fraction of a pixel `clientWidth` rounds away at some zoom
-   * levels.
-   *
-   * Until this runs, a scrollbar that has just appeared leaves the gutter too
-   * narrow and the header stopped short of a body scrolled to its far right,
-   * so the header is put back where the body is whenever the width changes.
-   */
-  private syncScrollbarGutter(entry: ResizeObserverEntry): void {
-    const border = entry.borderBoxSize?.[0]?.inlineSize;
-    const content = entry.contentBoxSize?.[0]?.inlineSize;
-    const scrollbar =
-      border !== undefined && content !== undefined
-        ? border - content
-        : this.headerArea.clientWidth - this.bodyScroll.clientWidth;
-    const width = `${Math.max(0, Math.round(scrollbar * 100) / 100)}px`;
-    if (this.scrollbarGutter.style.width === width) return;
-    this.scrollbarGutter.style.width = width;
-    this.syncHeaderScroll();
   }
 
   /**
@@ -724,56 +680,6 @@ export class TableContainer {
     return () => {
       this.resizeCallbacks.delete(callback);
     };
-  }
-
-  // =========================================
-  // Scroll Synchronization
-  // =========================================
-
-  /**
-   * Set up bidirectional scroll synchronization between header and body
-   *
-   * This ensures the header stays aligned with the body when scrolling horizontally.
-   * Uses a flag to prevent infinite scroll loops.
-   */
-  private setupScrollSync(): void {
-    let isScrolling = false;
-
-    this.boundBodyScrollHandler = () => {
-      if (isScrolling) return;
-      isScrolling = true;
-      this.syncHeaderScroll();
-      isScrolling = false;
-    };
-
-    this.boundHeaderScrollHandler = () => {
-      const echo = this.headerEcho;
-      this.headerEcho = null;
-      if (isScrolling || this.suppressReverseScrollSync) return;
-      if (this.headerScroll.scrollLeft === echo) return;
-      isScrolling = true;
-      this.bodyScroll.scrollLeft = this.headerScroll.scrollLeft;
-      isScrolling = false;
-    };
-
-    this.bodyScroll.addEventListener('scroll', this.boundBodyScrollHandler, { passive: true });
-    this.headerScroll.addEventListener('scroll', this.boundHeaderScrollHandler, { passive: true });
-  }
-
-  /**
-   * Scroll the header to where the body is.
-   *
-   * The header can stop short: its viewport is wider than the body's for the
-   * frame between a vertical scrollbar appearing and the gutter being measured
-   * to match. Its scroll event then carries the shorter position, and syncing
-   * that back would pull the body away from its far right, so the header
-   * handler drops that one event.
-   */
-  private syncHeaderScroll(): void {
-    const left = this.bodyScroll.scrollLeft;
-    this.headerScroll.scrollLeft = left;
-    const landed = this.headerScroll.scrollLeft;
-    this.headerEcho = landed === left ? null : landed;
   }
 
   // =========================================
@@ -1147,56 +1053,6 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubLiveFilters);
 
-    // Preserve horizontal scroll position through filter changes. Filter
-    // add/remove triggers row re-fetch, the FilterBar max-height reveal
-    // or collapse, and visualization re-renders — any of which can
-    // transiently clamp scrollLeft to 0. Pin scrollLeft to its pre-change
-    // value for 1s, correcting any drift each animation frame. Covers
-    // the 300ms smooth scroll-to-top, the 200ms bar transition (in both
-    // directions — reveal on add, collapse on remove), plus async row
-    // and viz re-fetches.
-    //
-    // The first wheel, key, pointer press or touch in the table ends the
-    // hold early. A scroll the user makes in that second, or the keyboard
-    // makes for them, is not drift: undoing it snapped a sideways wheel
-    // after a chart brush straight back, and left a cursor moved with End
-    // out of view.
-    const unsubFilterScroll = this.state.filters.subscribe(() => {
-      if (this.destroyed) return;
-      this.releaseFilterScrollHold?.();
-      const savedLeft = this.bodyScroll.scrollLeft;
-      if (savedLeft === 0) return;
-
-      const deadline = performance.now() + 1000;
-      let held = true;
-      const release = (): void => {
-        held = false;
-        for (const type of USER_SCROLL_INPUTS) {
-          this.element.removeEventListener(type, release, true);
-        }
-        if (this.releaseFilterScrollHold === release) this.releaseFilterScrollHold = null;
-      };
-      for (const type of USER_SCROLL_INPUTS) {
-        this.element.addEventListener(type, release, { capture: true, passive: true });
-      }
-      this.releaseFilterScrollHold = release;
-
-      const correct = () => {
-        if (this.destroyed || !held) return;
-        if (this.bodyScroll.scrollLeft !== savedLeft) {
-          this.bodyScroll.scrollLeft = savedLeft;
-          this.syncHeaderScroll();
-        }
-        if (performance.now() < deadline) {
-          requestAnimationFrame(correct);
-        } else {
-          release();
-        }
-      };
-      requestAnimationFrame(correct);
-    });
-    this.unsubscribes.push(unsubFilterScroll);
-
     const unsubLiveFilteredRows = this.state.filteredRows.subscribe(() => {
       if (!this.destroyed) {
         this.scheduleLiveRegionUpdate();
@@ -1336,8 +1192,7 @@ export class TableContainer {
     const prevVisible = new Set(previousOrder);
 
     // Save the body's scroll position before re-rendering; the header follows it
-    const savedBodyScrollLeft = this.bodyScroll.scrollLeft;
-    const savedBodyScrollTop = this.bodyScroll.scrollTop;
+    const savedPosition = this.columnWindow.savePosition();
 
     // Remember the *specific* element focus sits on before render destroys DOM
     // elements. Actions like pin/hide remove the focused button, dropping focus
@@ -1500,7 +1355,7 @@ export class TableContainer {
         });
 
         // Eagerly set content width so scrollWidth is correct for auto-scroll.
-        // initialize() sets this later via async DuckDB fetch, but scrollToRightEnd()
+        // initialize() sets this later via async DuckDB fetch, but scrollToEnd()
         // may fire before that completes.
         this.tableBody.getVirtualScroller().setContentWidth(layout.totalWidth);
 
@@ -1585,15 +1440,10 @@ export class TableContainer {
     }
     this.previousVisibleOrder = visibleColumns;
 
-    // Put the scroll positions back now. Emptying the scrollers clamped them
-    // to 0 as soon as the rebuild read layout; the new body has its full size
-    // again by here. A frame later was too late: it undid any scroll made
-    // right after this render (the keyboard bringing a moved column into
-    // view), and a second render before then saved the clamped 0 and put
-    // that back instead.
-    this.bodyScroll.scrollLeft = savedBodyScrollLeft;
-    this.bodyScroll.scrollTop = savedBodyScrollTop;
-    this.syncHeaderScroll();
+    // Put the scroll positions back now: emptying the scrollers clamped them
+    // to 0 as soon as the rebuild read layout, and the new body has its full
+    // size again by here.
+    this.columnWindow.restorePosition(savedPosition);
 
     // render() rebuilt every ColumnHeader, so the cursor's target element is
     // gone. Re-point it (to the column in its place if its column
@@ -1690,20 +1540,10 @@ export class TableContainer {
     // `hideColumn` leaves a hidden column in `pinnedColumns`.
     const pinned = new Set(this.state.pinnedColumns.get());
     if (pinned.has(lost)) {
-      const column = nearest((c) => pinned.has(c)) ?? this.firstUnpinnedColumnInView();
+      const column = nearest((c) => pinned.has(c)) ?? this.columnWindow.firstUnpinnedColumnInView();
       if (column) return column;
     }
     return nearest(() => true) ?? shown[0]!;
-  }
-
-  /** The first column at least partly in view right of the pinned block. */
-  private firstUnpinnedColumnInView(): string | undefined {
-    const layout = getColumnLayout(this.state);
-    const edge = this.bodyScroll.scrollLeft + layout.pinnedWidth;
-    for (let i = layout.pinnedCount; i < layout.columns.length; i++) {
-      if (layout.leftAt(i) + layout.widthAt(i) > edge) return layout.columns[i];
-    }
-    return undefined;
   }
 
   /**
@@ -1815,7 +1655,7 @@ export class TableContainer {
           classPrefix: this.resolvedOptions.classPrefix,
           instanceId: this.resolvedOptions.instanceId,
           editorFactory: this.resolvedOptions.editorFactory,
-          onCreated: () => this.scrollToRightEnd(),
+          onCreated: () => this.columnWindow.scrollToEnd(),
           colorSchemeSource: this.element,
           messages: this.messages,
         });
@@ -1941,60 +1781,6 @@ export class TableContainer {
    */
   public getPortalTarget(): HTMLElement {
     return this.resolvedOptions.portalTarget ?? document.body;
-  }
-
-  /**
-   * Smooth-scroll the body to the right end so the newly created column is visible.
-   * Deferred with requestAnimationFrame to wait for the render cycle to add the column.
-   */
-  private scrollToRightEnd(): void {
-    // Wait for the re-render triggered by the new column
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const targetLeft = this.bodyScroll.scrollWidth;
-
-        // Suppress header→body sync so the smooth scroll animation isn't
-        // cancelled by stale scrollLeft values bouncing back from headerScroll.
-        this.suppressReverseScrollSync = true;
-
-        // Scroll header instantly to the target, then smooth-scroll the body.
-        this.headerScroll.scrollLeft = targetLeft;
-        this.bodyScroll.scrollTo({
-          left: targetLeft,
-          behavior: 'smooth',
-        });
-
-        // Re-enable sync once the body has stopped, and align both
-        // containers: on `scrollend`, or where there is none, once the
-        // position has held for a few frames. Not after a fixed time: a wide
-        // table outlasted the 600ms that used to end this, and the header's
-        // position, synced back into the still-moving body, stopped it short
-        // of the column just added.
-        let ended = false;
-        const onEnd = (): void => {
-          if (ended) return;
-          ended = true;
-          this.bodyScroll.removeEventListener('scrollend', onEnd);
-          if (this.destroyed) return;
-          this.suppressReverseScrollSync = false;
-          this.syncHeaderScroll();
-        };
-        this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
-        const started = performance.now();
-        let last = Number.NaN;
-        let still = 0;
-        const watch = (): void => {
-          if (ended || this.destroyed) return;
-          const left = this.bodyScroll.scrollLeft;
-          still = left === last ? still + 1 : 0;
-          last = left;
-          // The time floor covers a smooth scroll that has not started yet.
-          if (still >= 3 && performance.now() - started > 100) onEnd();
-          else requestAnimationFrame(watch);
-        };
-        requestAnimationFrame(watch);
-      });
-    });
   }
 
   /**
@@ -2217,8 +2003,6 @@ export class TableContainer {
     // Disconnect resize observer
     this.resizeObserver.disconnect();
 
-    this.releaseFilterScrollHold?.();
-
     // Clear resize callbacks
     this.resizeCallbacks.clear();
 
@@ -2228,15 +2012,8 @@ export class TableContainer {
       this.keyboardNavigator = null;
     }
 
-    // Clean up scroll sync listeners
-    if (this.boundBodyScrollHandler) {
-      this.bodyScroll.removeEventListener('scroll', this.boundBodyScrollHandler);
-      this.boundBodyScrollHandler = null;
-    }
-    if (this.boundHeaderScrollHandler) {
-      this.headerScroll.removeEventListener('scroll', this.boundHeaderScrollHandler);
-      this.boundHeaderScrollHandler = null;
-    }
+    // Stop syncing and scrolling the header and body
+    this.columnWindow.destroy();
 
     // Unsubscribe from all state subscriptions
     for (const unsub of this.unsubscribes) {

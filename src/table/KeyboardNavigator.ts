@@ -45,8 +45,9 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
 import type { ColumnHeader } from './ColumnHeader';
-import { DEFAULT_COLUMN_WIDTH, getColumnLayout } from './ColumnLayout';
+import { DEFAULT_COLUMN_WIDTH } from './ColumnLayout';
 import { clampUnpinnedIndex } from './ColumnReorder';
+import { revealColumnIn } from './ColumnWindowController';
 import type { TableBody } from './TableBody';
 
 /**
@@ -94,6 +95,15 @@ export interface KeyboardNavigatorOptions {
    * Without it, header-row navigation and F2 controls mode are inert.
    */
   getColumnHeaders?: (() => ColumnHeader[]) | undefined;
+  /**
+   * Scroll sideways so a column is in view, and say whether anything moved.
+   * `TableContainer` passes its column window controller's, which makes every
+   * sideways scroll of the table. Without it, `bodyScroll` is scrolled the
+   * same way.
+   *
+   * @internal
+   */
+  revealColumn?: ((column: string) => boolean) | undefined;
   /** Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op. */
   getBridge?: () => WorkerBridge | undefined;
   /**
@@ -122,6 +132,7 @@ export class KeyboardNavigator {
   private readonly actions: StateActions;
   private readonly getTableBody: () => TableBody | null;
   private readonly getColumnHeaders: (() => ColumnHeader[]) | undefined;
+  private readonly revealColumn: (column: string) => boolean;
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
   private readonly announceMessage: ((message: string) => void) | undefined;
   private readonly messages: Strings;
@@ -151,6 +162,8 @@ export class KeyboardNavigator {
     this.actions = opts.actions;
     this.getTableBody = opts.getTableBody;
     this.getColumnHeaders = opts.getColumnHeaders;
+    this.revealColumn =
+      opts.revealColumn ?? ((column) => revealColumnIn(this.bodyScroll, this.state, column));
     this.getBridge = opts.getBridge;
     this.announceMessage = opts.announce;
     this.messages = opts.messages ?? defaultStrings;
@@ -924,9 +937,8 @@ export class KeyboardNavigator {
   }
 
   /**
-   * Ensure the focused cell is within the visible viewport — both vertically
-   * (via VirtualScroller) and horizontally (via bodyScroll), skipping pinned
-   * columns which are always visible via sticky positioning.
+   * Ensure the focused cell is within the visible viewport — vertically via
+   * the VirtualScroller, horizontally via {@link KeyboardNavigatorOptions.revealColumn}.
    *
    * Runs on every cursor move, and when a key acts on the cursor where it is
    * (Enter, Space, F2, Shift+F2, the layout-mode width keys, Escape after a
@@ -959,37 +971,9 @@ export class KeyboardNavigator {
       }
     }
 
-    // Horizontal (skip for pinned columns — always visible). The pinned
-    // block covers the left edge of the viewport, so a column counts as in
-    // view only right of it. A viewport with no width (not laid out, or not
-    // shown) has nothing to scroll into.
-    const layout = getColumnLayout(this.state);
-    const index = layout.indexOf(column);
-    const viewportWidth = this.bodyScroll.clientWidth;
-    if (index < 0 || layout.pinnedPlacement(column) || viewportWidth <= 0) return scrolled;
-
-    const colLeft = layout.leftAt(index);
-    const colRight = colLeft + layout.widthAt(index);
-    const pinnedWidth = layout.pinnedWidth;
-
-    const scrollLeft = this.bodyScroll.scrollLeft;
-    const effectiveLeft = scrollLeft + pinnedWidth;
-    const effectiveRight = scrollLeft + viewportWidth;
-
-    let target = scrollLeft;
-    if (colRight - colLeft > effectiveRight - effectiveLeft) {
-      // Wider than the view, so only part of it fits: its start, unless it
-      // already fills the view. Aligning whichever edge was out of view
-      // flipped between the two on every key.
-      if (colLeft > effectiveLeft || colRight < effectiveRight) target = colLeft - pinnedWidth;
-    } else if (colLeft < effectiveLeft) {
-      target = colLeft - pinnedWidth;
-    } else if (colRight > effectiveRight) {
-      target = colRight - viewportWidth;
-    }
-    if (target === scrollLeft) return scrolled;
-    this.bodyScroll.scrollLeft = target;
-    return true;
+    // Horizontal. A pinned column is always in view, and a viewport with no
+    // width (not laid out, or not shown) has nothing to scroll into.
+    return this.revealColumn(column) || scrolled;
   }
 
   private async copySelectedRows(): Promise<void> {

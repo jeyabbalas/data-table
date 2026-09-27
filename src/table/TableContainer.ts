@@ -1201,7 +1201,6 @@ export class TableContainer {
    */
   private updatePinnedColumnStyles(): void {
     const pinnedColumns = this.state.pinnedColumns.get();
-    const visibleColumns = this.state.visibleColumns.get();
     const columnWidths = this.state.columnWidths.get();
     const prefix = this.resolvedOptions.classPrefix;
 
@@ -1241,27 +1240,26 @@ export class TableContainer {
       }
     }
 
-    // Apply to body cells
+    // Apply to body cells, matched by column name: a placeholder row's one
+    // cell names no column, and position says nothing about which column a
+    // cell shows once the visible order has changed under the rendered rows.
     const bodyContainer = this.bodyContainer;
-    const rows = bodyContainer.querySelectorAll(`.${prefix}-row`);
-    for (const row of rows) {
-      const cells = row.children;
-      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i]!;
-        const cell = cells[i] as HTMLElement;
-        const offset = pinnedOffsets.get(colName);
+    const cells = bodyContainer.querySelectorAll<HTMLElement>(
+      `.${prefix}-row > .${prefix}-cell[data-column]`,
+    );
+    for (const cell of cells) {
+      const offset = pinnedOffsets.get(cell.getAttribute('data-column')!);
 
-        if (offset) {
-          cell.style.position = 'sticky';
-          cell.style.left = `${offset.left}px`;
-          cell.style.zIndex = String(offset.zIndex);
-          cell.classList.add(`${prefix}-cell--pinned`);
-        } else {
-          cell.style.position = '';
-          cell.style.left = '';
-          cell.style.zIndex = '';
-          cell.classList.remove(`${prefix}-cell--pinned`);
-        }
+      if (offset) {
+        cell.style.position = 'sticky';
+        cell.style.left = `${offset.left}px`;
+        cell.style.zIndex = String(offset.zIndex);
+        cell.classList.add(`${prefix}-cell--pinned`);
+      } else {
+        cell.style.position = '';
+        cell.style.left = '';
+        cell.style.zIndex = '';
+        cell.classList.remove(`${prefix}-cell--pinned`);
       }
     }
 

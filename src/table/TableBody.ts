@@ -1112,10 +1112,12 @@ export class TableBody {
         // not by moving DOM focus, because a recycled row would take real
         // focus with it into the pool.
         const focusClass = `${this.classPrefix}-cell--focused`;
-        const focusColIdx =
-          focusedCell && focusedCell.row === i ? visibleColumns.indexOf(focusedCell.column) : -1;
-        for (let c = 0; c < rowEl.children.length; c++) {
-          (rowEl.children[c] as HTMLElement).classList.toggle(focusClass, c === focusColIdx);
+        const focusColumn = focusedCell && focusedCell.row === i ? focusedCell.column : null;
+        for (const cell of rowEl.children) {
+          cell.classList.toggle(
+            focusClass,
+            focusColumn !== null && cell.getAttribute('data-column') === focusColumn,
+          );
         }
       }
     }
@@ -1574,7 +1576,6 @@ export class TableBody {
    */
   private reapplyAnnotationsToVisibleRows(): void {
     if (this.destroyed || !this.annotations) return;
-    const visibleColumns = this.state.visibleColumns.get();
     const schema = this.state.schema.get();
     const schemaMap = new Map<string, ColumnSchema>();
     for (const col of schema) schemaMap.set(col.name, col);
@@ -1589,10 +1590,10 @@ export class TableBody {
             ? rawRowId
             : null;
       this.applyRowAnnotationClasses(rowEl, rowId);
-      const cells = rowEl.children;
-      for (let c = 0; c < visibleColumns.length && c < cells.length; c++) {
-        const cellEl = cells[c] as HTMLElement;
-        const colName = visibleColumns[c]!;
+      for (const cell of rowEl.children) {
+        const colName = cell.getAttribute('data-column');
+        if (colName === null) continue;
+        const cellEl = cell as HTMLElement;
         this.cellRenderer.render(cellEl, rowData[colName], schemaMap.get(colName));
         this.applyCellAnnotationClasses(cellEl, rowId, colName);
       }
@@ -1657,15 +1658,9 @@ export class TableBody {
       // Set focused cell from clicked cell
       if (this.actions && !this.destroyed) {
         const cellEl = (event.target as HTMLElement).closest(`.${this.classPrefix}-cell`);
-        if (cellEl && rowEl.contains(cellEl)) {
-          const cellIndex = Array.from(rowEl.children).indexOf(cellEl);
-          const visibleColumns = this.state.visibleColumns.get();
-          if (cellIndex >= 0 && cellIndex < visibleColumns.length) {
-            this.actions.setFocusedCell({
-              row: index,
-              column: visibleColumns[cellIndex]!,
-            });
-          }
+        const column = cellEl && rowEl.contains(cellEl) ? cellEl.getAttribute('data-column') : null;
+        if (column !== null && this.state.visibleColumns.get().includes(column)) {
+          this.actions.setFocusedCell({ row: index, column });
         }
       }
     });
@@ -1876,16 +1871,12 @@ export class TableBody {
   private updateFocusStyles(): void {
     const focusedCell = this.state.focusedCell.get();
     const focusClass = `${this.classPrefix}-cell--focused`;
-    const visibleColumns = this.state.visibleColumns.get();
 
     // Remove from previous
     if (this.previousFocusedCell) {
       const prevRowEl = this.rowElementMap.get(this.previousFocusedCell.row);
       if (prevRowEl) {
-        const prevColIdx = visibleColumns.indexOf(this.previousFocusedCell.column);
-        if (prevColIdx >= 0 && prevColIdx < prevRowEl.children.length) {
-          (prevRowEl.children[prevColIdx] as HTMLElement).classList.remove(focusClass);
-        }
+        this.cellFor(prevRowEl, this.previousFocusedCell.column)?.classList.remove(focusClass);
       }
     }
 
@@ -1893,14 +1884,24 @@ export class TableBody {
     if (focusedCell) {
       const rowEl = this.rowElementMap.get(focusedCell.row);
       if (rowEl) {
-        const colIdx = visibleColumns.indexOf(focusedCell.column);
-        if (colIdx >= 0 && colIdx < rowEl.children.length) {
-          (rowEl.children[colIdx] as HTMLElement).classList.add(focusClass);
-        }
+        this.cellFor(rowEl, focusedCell.column)?.classList.add(focusClass);
       }
     }
 
     this.previousFocusedCell = focusedCell ? { ...focusedCell } : null;
+  }
+
+  /**
+   * The cell showing `column` in a rendered row, found by its `data-column`
+   * rather than its position: nothing outside `updateRowContent` may assume
+   * a row holds every visible column, in order. `null` for a placeholder row,
+   * whose one cell belongs to no column.
+   */
+  private cellFor(rowEl: HTMLElement, column: string): HTMLElement | null {
+    for (const cell of rowEl.children) {
+      if (cell.getAttribute('data-column') === column) return cell as HTMLElement;
+    }
+    return null;
   }
 
   /**
@@ -1912,11 +1913,11 @@ export class TableBody {
 
     // Update cell widths for all visible rows
     for (const [, rowEl] of this.rowElementMap) {
-      const cells = rowEl.children;
-      for (let i = 0; i < visibleColumns.length && i < cells.length; i++) {
-        const colName = visibleColumns[i]!;
+      for (const cell of rowEl.children) {
+        const colName = cell.getAttribute('data-column');
+        if (colName === null) continue;
         const width = columnWidths.get(colName) ?? 150;
-        (cells[i] as HTMLElement).style.width = `${width}px`;
+        (cell as HTMLElement).style.width = `${width}px`;
       }
     }
 

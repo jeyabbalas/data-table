@@ -715,18 +715,18 @@ export class ColumnHeader {
    * Get all cells in this column for transition animations
    */
   private getColumnCells(): HTMLElement[] {
-    const visibleColumns = this.state.visibleColumns.get();
-    const columnIndex = visibleColumns.indexOf(this.column.name);
-    if (columnIndex === -1) return [];
-
     const root = this.element.closest(`.${this.classPrefix}-root`);
     if (!root) return [];
 
-    // Query all cells at this column index (nth-child is 1-based)
-    const cells = root.querySelectorAll(
-      `.${this.classPrefix}-row > .${this.classPrefix}-cell:nth-child(${columnIndex + 1})`,
+    // By `data-column`, not by position: a cell's index in its row is not a
+    // column identity. Compared as an attribute rather than interpolated
+    // into the selector, so a column name needs no escaping.
+    const cells = root.querySelectorAll<HTMLElement>(
+      `.${this.classPrefix}-row > .${this.classPrefix}-cell[data-column]`,
     );
-    return Array.from(cells) as HTMLElement[];
+    return Array.from(cells).filter(
+      (cell) => cell.getAttribute('data-column') === this.column.name,
+    );
   }
 
   // =========================================

@@ -20,7 +20,7 @@
  * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
  * inlined the shared ModalHost code into each modal consumer and shifted some
  * helper code into VisualizationRegistry):
- *   root entry · ESM                7.65 kB   →   8.1 kB cap (5.9 %)
+ *   root entry · ESM                8.80 kB   →   9.3 kB cap (5.7 %)
  *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
  *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
  *   lazy ExportDialog chunk        69.91 kB   →  74 kB   cap (5.8 %)
@@ -29,6 +29,13 @@
  *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
  *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *
+ * Root entry history. It measured 7.68 kB until the column charts became
+ * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
+ * reachable from `createDataTable`, so it lands in the root entry, and
+ * `visualizations: false` pays for it too. The shared chunk
+ * the root entry imports is loaded up front as well, so moving the
+ * controller there would not change what a page downloads.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -60,7 +67,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '8.1 kB',
+    limit: '9.3 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',

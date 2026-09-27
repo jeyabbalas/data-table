@@ -144,6 +144,16 @@ exists to serve. The same options object carries
 `priority: 'high' | 'normal'`: viewport fetches go out at `'high'` and
 jump queued stats/histogram work in the worker's serial dispatch queue.
 
+### Column charts
+
+A column's chart is built only while its header is in view or within
+200 px of it, and removed once the header is 400 px away. Loading, filter
+changes and header rebuilds (hide, show, pin, reorder) therefore run chart
+queries for about a screen's worth of columns, however wide the table. On a
+50,000-row × 1,000-column table, `loadData` dropped from 20.4 s to 6.2 s and
+a filter from 4.4 s to 0.5 s. See
+[Visualizations → Charts on wide tables](./guides/visualizations.md#charts-on-wide-tables).
+
 ### Derived columns
 
 - **Expression columns** cost only the VIEW creation (metadata, cheap)
@@ -442,8 +452,9 @@ mount-once-reload-many pattern.
 
 ### Visualizations refetching on every filter
 
-`BaseVisualization.updateFilters()` is called on every filter change,
-even filters unrelated to the viz's own column. Custom visualizations
+`BaseVisualization.updateFilters()` is called on every filter change for
+every chart in or near view, even filters unrelated to the viz's own
+column. Custom visualizations
 doing expensive `fetchData()` should compare incoming filters against a
 cached signature before re-querying.
 

@@ -9,6 +9,7 @@ column type.
 ## You'll learn how to
 
 - Understand which built-in visualization applies to which column type
+- Know when a column's chart is built, and what that means on wide tables
 - Register a custom visualization class
 - Override a built-in for specific columns
 - Share a single registry across multiple tables, or scope per-table
@@ -43,6 +44,49 @@ await createDataTable({ container, source, visualizations: false });
 
 With visualizations off, column headers still show column stats but no
 chart.
+
+## Charts on wide tables
+
+A column's chart exists only while its header is in view or close to it.
+It is built when the header scrolls within 200 px of the visible header
+row, and removed once the header is 400 px away. The gap between the two
+means a small scroll back and forth rebuilds nothing.
+
+This ties the cost of charts to the viewport, not the column count. Each
+chart runs two to four queries when it is built and about two on every
+filter change. On a 50,000-row × 1,000-column Parquet file in Chrome:
+
+|                           | Chart for every column (0.8) | Charts near the view |
+| ------------------------- | ---------------------------- | -------------------- |
+| `loadData`                | 20.4 s                       | 6.2 s                |
+| Queries during `loadData` | 2,004                        | 22                   |
+| One filter                | 4.4 s, 2,002 queries         | 0.5 s, 20 queries    |
+| Hiding a column, filtered | 20.6 s, 3,998 queries        | 2.2 s, 38 queries    |
+
+What to expect:
+
+- **Loading.** `loadData`, and `await createDataTable({ source })`, wait
+  for the charts in view to draw their first data, not for every column's.
+- **Filtering.** A filter change refreshes only the charts that exist. A
+  column scrolled into view later gets its chart built with the filters in
+  force then, so it is correct when it appears. Until then its stats show
+  the table-wide row count.
+- **Brushes and selections.** A rebuilt chart draws its brush or selection
+  from the column's filter, so it matches the filter however that changed
+  while the column was out of view. Escape still clears the most recent
+  one, even when its column has scrolled out of view.
+- **Hide, show, pin, reorder.** These rebuild the header row, which
+  rebuilds the charts in view and no others.
+- **Background tabs.** A hidden page has nothing in view, so `loadData`
+  does not wait for charts; they are built when the page is shown. A page
+  the browser is not rendering, such as a hidden iframe, gets the same
+  treatment after one second.
+- **Without `IntersectionObserver`** (jsdom, for example), every column's
+  chart is built at once, as before.
+
+A custom visualization is constructed each time its column comes within
+reach and destroyed when the column leaves. Keep its constructor cheap, and
+keep nothing in the instance that has to survive scrolling away.
 
 ## Reading the column stats
 
@@ -266,8 +310,8 @@ filter back and forth and the brush follows).
 
 ### Reactive updates
 
-The library calls `updateFilters(newFilters)` on every visualization when the
-active filter set changes. Subclasses usually don't need to override this —
+The library calls `updateFilters(newFilters)` on every visualization that
+exists — the charts in or near view — when the active filter set changes. Subclasses usually don't need to override this —
 the default implementation triggers `fetchData()` + `render()` on any change.
 Override it if you want to skip re-renders when the filter is unrelated to
 your column.
@@ -338,9 +382,9 @@ registry.unregister('date-histogram');
 
 - **Shared `defaultVisualizationRegistry` is global.** A registration done without a per-instance registry affects every subsequent table on the page. Use a dedicated `VisualizationRegistry` if you need scoped behavior.
 - **Priority ties pick the first-registered.** Two registrations with the same priority are iterated in registration order. Be explicit about priority.
-- **`updateFilters` is called on _every_ filter change.** Including filters on other columns. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
+- **`updateFilters` is called on _every_ filter change.** Including filters on other columns, on every chart in or near view. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
 - **Don't call `this.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
-- **`BaseVisualization.destroy()` is called by the library on table destroy.** Override it to clean up your own resources, but always call `super.destroy()`.
+- **`BaseVisualization.destroy()` is called by the library whenever a chart goes away:** when its column scrolls out of reach, when the header row is rebuilt, and on table destroy. Override it to clean up your own resources, but always call `super.destroy()`.
 - **Canvas size can't be set directly.** Use `this.width` / `this.height`; the library recomputes them on resize. If you must override, do it inside `render()` and respect the DPR scaling.
 
 ## Related

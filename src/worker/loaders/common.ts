@@ -27,6 +27,33 @@ export function quoteIdentifier(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
+let sourceFileCounter = 0;
+
+/**
+ * Name under which a loader registers its source buffer in DuckDB's virtual
+ * filesystem.
+ *
+ * Generated rather than derived from the table name: the file name is
+ * spliced into a `read_xxx('…')` string literal, and a caller-supplied table
+ * name may contain a quote or a path separator. Same pattern as the export
+ * path's `__export_<id>` files.
+ */
+export function sourceFileName(extension: 'csv' | 'json' | 'parquet'): string {
+  return `__dt_source_${++sourceFileCounter}.${extension}`;
+}
+
+/**
+ * Unregister a loader's source file without letting a cleanup failure
+ * replace the load's own error, or fail a load that succeeded.
+ */
+export async function dropSourceFile(db: AsyncDuckDB, fileName: string): Promise<void> {
+  try {
+    await db.dropFile(fileName);
+  } catch {
+    // Ignore cleanup errors, as the export path does.
+  }
+}
+
 /**
  * Build the canonical LOAD_RESERVED_COLUMN_NAME LoadError for a source that
  * already contains a `__rowid__` column.

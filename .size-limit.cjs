@@ -17,16 +17,17 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, captured under Vite 8.0.13 / rolldown 1.0.1, which
- * inlined the shared ModalHost code into each modal consumer and shifted some
- * helper code into VisualizationRegistry):
- *   root entry · ESM                8.80 kB   →   9.3 kB cap (5.7 %)
- *   advanced entry · ESM            2.41 kB   →   2.6 kB cap (7.9 %)
- *   stylesheet                     18.66 kB   →  19.6 kB cap (5.0 %)
- *   lazy ExportDialog chunk        74.04 kB   →  78 kB   cap (5.3 %)
+ * Current baseline (brotli, re-measured with the scrollbar-gutter change on
+ * top of 0.9.0-next.0, under Vite 8.0.13 / rolldown 1.0.1, which inlined the
+ * shared ModalHost code into each modal consumer and shifted some helper code
+ * into VisualizationRegistry):
+ *   root entry · ESM                9.00 kB   →   9.3 kB cap (3.3 %)
+ *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
+ *   stylesheet                     19.45 kB   →  20.4 kB cap (4.9 %)
+ *   lazy ExportDialog chunk        74.03 kB   →  78 kB   cap (5.4 %)
  *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
- *   lazy DerivedColumnModal         3.60 kB   →   3.8 kB cap (5.5 %)
- *   lazy DerivedColumnEditPanel     2.97 kB   →   3.1 kB cap (4.5 %)
+ *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.8 %)
+ *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
  *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *
@@ -41,7 +42,9 @@
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
  * body, keyboard navigation. It measured 69.91 kB until the column-geometry
  * work (the one column layout, the pinned-column fixes, the measured
- * scrollbar gutter) took it to 74.04 kB.
+ * scrollbar gutter) took it to 74.03 kB. The same work took the stylesheet
+ * from 18.66 to 19.45 kB, mostly in comments (see below), and its cap from
+ * 19.6 to 20.4 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -83,7 +86,7 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '19.6 kB',
+    limit: '20.4 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',

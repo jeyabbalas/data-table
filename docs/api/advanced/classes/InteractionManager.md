@@ -174,3 +174,32 @@ Remove all interactions for a given column (does not clear the visualizations).
 #### Returns
 
 `void`
+
+***
+
+### replaceVisualization()
+
+> **replaceVisualization**(`columnName`, `viz`): `boolean`
+
+Defined in: [visualizations/InteractionManager.ts:105](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/InteractionManager.ts#L105)
+
+Point a column's interactions at another visualization without moving
+them on the stack. The facade uses it when a column's chart is destroyed
+and later re-created, as the column scrolls out of view and back, so
+Escape still clears interactions in the order they were made.
+
+#### Parameters
+
+##### columnName
+
+`string`
+
+##### viz
+
+[`InteractiveVisualization`](../type-aliases/InteractiveVisualization.md)
+
+#### Returns
+
+`boolean`
+
+whether the column had an interaction on the stack.

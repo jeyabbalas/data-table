@@ -167,6 +167,11 @@ At 1,000 columns in a 1,200 px view, a row holds about two dozen cells and
 the header about 11,000 elements, where they held 1,000 cells and 36,000
 elements.
 
+Hiding, showing, moving or pinning a column updates both in place: the other
+columns keep their headers, and the rows keep what they fetched, so a hide or
+a move fetches no rows and a column shown is read by itself. On a
+50,000-row × 1,000-column table a hide takes about 25 ms.
+
 ### Derived columns
 
 - **Expression columns** cost only the VIEW creation (metadata, cheap)

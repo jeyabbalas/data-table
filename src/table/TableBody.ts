@@ -116,22 +116,6 @@ export interface TableBodyOptions {
 export type RowData = Record<string, unknown>;
 
 /**
- * Whether two column lists hold the same names, ignoring order.
- *
- * Used to tell a reorder (same set) from a show / hide / derived-column change
- * (different set). Rows are keyed by column name, so the former needs a
- * re-render and the latter needs a re-fetch.
- */
-function sameColumnSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  const seen = new Set(a);
-  for (const name of b) {
-    if (!seen.has(name)) return false;
-  }
-  return true;
-}
-
-/**
  * What a data row holds, left to right: a cell for each column it renders,
  * and a spacer as wide as each run of columns between two of them, or after
  * the last. Built once per render pass and shared by every row built from it,
@@ -297,10 +281,6 @@ export class TableBody {
   // forces a style recalculation, and `updateRowContent` runs per row.
   private pinnedZBaseCache: number | null = null;
 
-  // Last observed visibleColumns, so a write can be classified as a reorder
-  // (same set, new order — re-render) or a real change (re-fetch).
-  private lastVisibleColumns: string[] = [];
-
   private readonly rowHeight: number;
   private readonly classPrefix: string;
   private readonly instanceId: string;
@@ -384,8 +364,6 @@ export class TableBody {
   async initialize(): Promise<void> {
     if (this.destroyed) return;
 
-    this.lastVisibleColumns = [...this.state.visibleColumns.get()];
-
     // Set total rows (use filteredRows when filters are active)
     const filters = this.state.filters.get();
     const effectiveTotal =
@@ -429,31 +407,18 @@ export class TableBody {
    * Subscribe to state signals that require re-render
    */
   private subscribeToState(): void {
-    // Re-fetch when the visible column *set* changes.
-    //
-    // A write that only permutes the set is a reorder, and rows are keyed by
-    // column name — every value fetched is still right, so a re-render is
-    // enough, and the in-flight `initialize()` fetch is not dropped by a
-    // `fetchSequence` bump it did not need. Columns a reorder brings near the
-    // view come as a new set of mounted columns, which fetches what the rows
-    // lack.
-    //
-    // Measured honestly: through `TableContainer` this changes no query count.
-    // `render()` destroys and recreates the whole `TableBody` on any
-    // `visibleColumns` write, so one keyboard column move at 266 columns costs
-    // 534 DuckDB queries with or without this branch — all of them column-header
-    // stats and plot queries from rebuilding 266 headers, none of them row
-    // fetches. It earns its keep where a `TableBody` is driven directly, which
-    // is a supported `/advanced` entry point.
-    const unsubVisibleCols = this.state.visibleColumns.subscribe((columns) => {
+    // Re-render when the visible columns change, and read only what the rows
+    // now lack. Rows are keyed by column name, so every value fetched stays
+    // right through a hide, a show or a move, and the rows already cached
+    // read a column shown by `__rowid__` (see `fetchBlock`) rather than
+    // fetching again, which on a sorted or filtered table would sort or
+    // filter it all again. A change that brings a new relation (a derived
+    // column added, edited or removed) changes `tableName` too, which
+    // refetches everything.
+    const unsubVisibleCols = this.state.visibleColumns.subscribe(() => {
       if (this.destroyed) return;
-      const orderOnly = sameColumnSet(this.lastVisibleColumns, columns);
-      this.lastVisibleColumns = [...columns];
-      if (orderOnly) {
-        this.renderVisibleRows();
-      } else {
-        this.invalidateCacheAndRefresh();
-      }
+      this.renderVisibleRows();
+      if (!this.isAnimatingScroll) void this.ensureFetched();
     });
     this.unsubscribes.push(unsubVisibleCols);
 
@@ -2425,8 +2390,8 @@ export class TableBody {
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,
     // so a cell holding real focus (from a click) has to be rescued first —
-    // `TableContainer.render()` destroys and rebuilds the body on every
-    // schema / visibleColumns change, and dropping focus to `<body>` there
+    // `TableContainer.render()` destroys and rebuilds the body when the
+    // schema or the table changes, and dropping focus to `<body>` there
     // would silently kill the keyboard layer.
     this.moveFocusToGridBeforeRemoval(this.virtualScroller.getViewportContainer());
     this.virtualScroller.destroy();

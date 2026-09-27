@@ -34,6 +34,7 @@ import type { StateActions } from '../core/Actions';
 import { resolveInstanceId } from '../core/instanceId';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import type { ColumnSchema } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
@@ -48,7 +49,7 @@ import type { SQLFilterModal } from '../filters/SQLFilterModal';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
-import { getColumnLayout } from './ColumnLayout';
+import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { ColumnReorder } from './ColumnReorder';
 import { ColumnWindowController } from './ColumnWindowController';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
@@ -174,7 +175,17 @@ export class TableContainer {
   private resizeCallbacks = new Set<ResizeCallback>();
   private currentDimensions: { width: number; height: number } = { width: 0, height: 0 };
   private columnHeaders: ColumnHeader[] = [];
+  // The same headers by column, and the row element that holds them. Both
+  // outlive a render: a header is rebuilt only when its column's schema entry
+  // changes (see reconcileColumnHeaders).
+  private headersByColumn = new Map<string, ColumnHeader>();
+  private headerRowElement: HTMLElement | null = null;
   private tableBody: TableBody | null = null;
+  // The schema and table name the body was built for. A render with the same
+  // ones keeps it: its rows are keyed by column, and it reads a column shown
+  // on its own.
+  private bodySchema: readonly ColumnSchema[] | null = null;
+  private bodyTableName: string | null = null;
   // Tracks the surviving TableBody's `initialize()` so the public
   // `loadDataImpl` can await first paint before resolving. Each `render()`
   // reassigns this; state setters fan out synchronously, so by the time
@@ -1029,10 +1040,14 @@ export class TableContainer {
     // so we capture header positions here for FLIP animation.
     const unsubPinned = this.state.pinnedColumns.subscribe(() => {
       if (!this.destroyed) {
-        // Capture current header positions for FLIP animation
+        // Capture current header positions for FLIP animation: of the
+        // headers with their controls, which are the ones in or near view.
+        // Animating a thousand headers nobody can see costs a thousand
+        // layout reads and transitions.
         if (this.columnHeaders.length > 0) {
           this.savedColumnPositions = new Map();
           for (const header of this.columnHeaders) {
+            if (!header.hasControls()) continue;
             this.savedColumnPositions.set(
               header.getColumn().name,
               header.getElement().getBoundingClientRect(),
@@ -1131,6 +1146,134 @@ export class TableContainer {
       header.destroy();
     }
     this.columnHeaders = [];
+    this.headersByColumn.clear();
+    this.headerRowElement?.remove();
+    this.headerRowElement = null;
+  }
+
+  /** Destroy the table body, and empty what it rendered into. */
+  private destroyTableBody(): void {
+    this.tableBody?.destroy();
+    this.tableBody = null;
+    this.bodySchema = null;
+    this.bodyTableName = null;
+    this.bodyContainer.innerHTML = '';
+  }
+
+  /**
+   * Bring the header row up to date with the visible columns, keeping every
+   * header whose column is still shown.
+   *
+   * A column change used to destroy and rebuild every header. At 1,000
+   * columns that cost more than a frame for a single hide or move, and it
+   * destroyed whatever the headers held: DOM focus on a button, a chart, a
+   * stats panel. Now a header is built for a column shown or added and
+   * rebuilt for a column whose schema entry changed (a derived column
+   * edited, new data), and the others keep theirs. Their ids and
+   * `aria-colindex` follow their new places.
+   */
+  private reconcileColumnHeaders(
+    schema: readonly ColumnSchema[],
+    visibleColumns: readonly string[],
+    layout: ColumnLayout,
+    actions: StateActions,
+  ): void {
+    const byName = new Map(schema.map((column) => [column.name, column]));
+    const mounted = new Set(this.columnWindow.mountedColumns.get());
+    const headers: ColumnHeader[] = [];
+    const byColumn = new Map<string, ColumnHeader>();
+    for (const colName of visibleColumns) {
+      const colSchema = byName.get(colName);
+      // A name listed twice gets one header, as it gets one place in the layout.
+      if (!colSchema || byColumn.has(colName)) continue;
+      // aria-colindex is a position in the *presented* table, and ARIA
+      // requires the values to ascend in DOM order within a row — a MUST,
+      // not a SHOULD. The layout numbers columns through `columnOrder`,
+      // hidden ones included, which `visibleColumns` is a subsequence of.
+      // Deriving from `schema` instead reported 3, 1, 2 after a reorder.
+      const cellId = this.buildHeaderCellId(headers.length);
+      const colIndex = layout.ariaColIndex(colName);
+      let header = this.headersByColumn.get(colName);
+      if (header && header.getColumn() === colSchema) {
+        header.setPosition(cellId, colIndex);
+      } else {
+        header = new ColumnHeader(colSchema, this.state, actions, {
+          cellId,
+          classPrefix: this.resolvedOptions.classPrefix,
+          onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
+          onDerivedIconClick: (column, buttonEl) =>
+            void this.handleDerivedIconClick(column, buttonEl),
+          colIndex,
+          messages: this.messages,
+          showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
+          annotations: this.resolvedOptions.annotations,
+          annotationPopover: this.resolvedOptions.annotationPopover,
+          columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
+          announce: (message) => this.announce(message),
+          holdColumn: (column) => this.columnWindow.hold(column),
+          controls: mounted.has(colName),
+        });
+        header.getElement().style.width = `${layout.widthOf(colName)}px`;
+      }
+      headers.push(header);
+      byColumn.set(colName, header);
+    }
+    for (const [colName, header] of this.headersByColumn) {
+      if (byColumn.get(colName) !== header) header.destroy();
+    }
+    this.columnHeaders = headers;
+    this.headersByColumn = byColumn;
+
+    // Only mount the row once it actually owns column headers. A childless
+    // `role="row"` is a critical `aria-required-children` violation, and an
+    // empty visible set is reachable both permanently (`setColumnOrder([])`,
+    // `stripDerivedColumnRefs` — neither guards the way `hideColumn` does)
+    // and transiently, whenever `schema` and `visibleColumns` land as
+    // separate signal writes and the schema write renders first.
+    if (headers.length === 0) {
+      this.headerRowElement?.remove();
+      return;
+    }
+    if (!this.headerRowElement) {
+      const row = document.createElement('div');
+      row.className = `${this.resolvedOptions.classPrefix}-header-row`;
+      row.setAttribute('role', 'row');
+      // Row 1 of the grid — body rows start at 2 (see updateGridCounts).
+      row.setAttribute('aria-rowindex', '1');
+      this.headerRowElement = row;
+    }
+    const row = this.headerRowElement;
+    if (row.parentNode !== this.headerRow) this.headerRow.appendChild(row);
+    this.orderHeaderRow(
+      row,
+      headers.map((header) => header.getElement()),
+    );
+  }
+
+  /**
+   * Put the header elements in `row` in the order given, working out from one
+   * that stays where it is: the header holding focus, or else the first one
+   * already in the row. A header already beside its neighbour is not touched,
+   * so a move moves the headers it has to and a hide moves none. The one
+   * holding focus never moves: moving an element blurs it. The same as body
+   * rows do with their cells.
+   */
+  private orderHeaderRow(row: HTMLElement, elements: HTMLElement[]): void {
+    const focused = this.activeElementInRoot();
+    let anchor = focused ? elements.findIndex((el) => el.contains(focused)) : -1;
+    if (anchor < 0) anchor = elements.findIndex((el) => el.parentNode === row);
+    if (anchor < 0) {
+      row.append(...elements);
+      return;
+    }
+    if (elements[anchor]!.parentNode !== row) row.appendChild(elements[anchor]!);
+    for (let i = anchor - 1; i >= 0; i--) {
+      if (elements[i]!.nextSibling !== elements[i + 1]) row.insertBefore(elements[i]!, elements[i + 1]!);
+    }
+    for (let i = anchor + 1; i < elements.length; i++) {
+      const previous = elements[i - 1]!;
+      if (previous.nextSibling !== elements[i]) row.insertBefore(elements[i]!, previous.nextSibling);
+    }
   }
 
   /**
@@ -1259,65 +1402,26 @@ export class TableContainer {
       this.derivedEditPanel = null;
     }
 
-    // Clear existing column headers
-    this.destroyColumnHeaders();
-    this.headerRow.innerHTML = '';
-    this.bodyContainer.innerHTML = '';
-
     if (schema.length === 0 || !tableName) {
       // No data loaded - show placeholder
+      this.destroyColumnHeaders();
+      this.headerRow.innerHTML = '';
+      this.destroyTableBody();
       const placeholder = document.createElement('div');
       placeholder.className = `${this.resolvedOptions.classPrefix}-placeholder`;
       placeholder.textContent = 'Load data to see the table';
       this.bodyContainer.appendChild(placeholder);
     } else {
-      // Create header row container
-      const headerRowEl = document.createElement('div');
-      headerRowEl.className = `${this.resolvedOptions.classPrefix}-header-row`;
-      headerRowEl.setAttribute('role', 'row');
-      // Row 1 of the grid — body rows start at 2 (see updateGridCounts).
-      headerRowEl.setAttribute('aria-rowindex', '1');
-
-      // Create column headers: with their controls for the columns the
-      // controller mounts, shells for the rest
       if (this.actions) {
-        const mounted = new Set(this.columnWindow.mountedColumns.get());
-        let visibleIndex = 0;
-        for (const colName of visibleColumns) {
-          const colSchema = schema.find((s) => s.name === colName);
-          if (colSchema) {
-            // aria-colindex is a position in the *presented* table, and ARIA
-            // requires the values to ascend in DOM order within a row — a MUST,
-            // not a SHOULD. The layout numbers columns through `columnOrder`,
-            // hidden ones included, which `visibleColumns` is a subsequence
-            // of. Deriving from `schema` instead reported 3, 1, 2 after a
-            // reorder.
-            const columnHeader = new ColumnHeader(colSchema, this.state, this.actions, {
-              cellId: this.buildHeaderCellId(visibleIndex++),
-              classPrefix: this.resolvedOptions.classPrefix,
-              onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
-              onDerivedIconClick: (column, buttonEl) =>
-                void this.handleDerivedIconClick(column, buttonEl),
-              colIndex: layout.ariaColIndex(colName),
-              messages: this.messages,
-              showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
-              annotations: this.resolvedOptions.annotations,
-              annotationPopover: this.resolvedOptions.annotationPopover,
-              columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
-              announce: (message) => this.announce(message),
-              holdColumn: (column) => this.columnWindow.hold(column),
-              controls: mounted.has(colName),
-            });
-            this.columnHeaders.push(columnHeader);
-
-            const headerEl = columnHeader.getElement();
-            headerEl.style.width = `${layout.widthOf(colName)}px`;
-
-            headerRowEl.appendChild(headerEl);
-          }
-        }
+        this.reconcileColumnHeaders(schema, visibleColumns, layout, this.actions);
       } else {
-        // Fallback if no actions provided - show simple placeholders
+        // Fallback if no actions provided - show simple placeholders, rebuilt
+        // on every render
+        this.headerRow.innerHTML = '';
+        const headerRowEl = document.createElement('div');
+        headerRowEl.className = `${this.resolvedOptions.classPrefix}-header-row`;
+        headerRowEl.setAttribute('role', 'row');
+        headerRowEl.setAttribute('aria-rowindex', '1');
         for (const colName of visibleColumns) {
           const colSchema = schema.find((s) => s.name === colName);
           if (colSchema) {
@@ -1342,68 +1446,73 @@ export class TableContainer {
             headerRowEl.appendChild(colEl);
           }
         }
+        // A childless `role="row"` fails aria-required-children.
+        if (headerRowEl.childElementCount > 0) {
+          this.headerRow.appendChild(headerRowEl);
+        }
       }
 
-      // Only mount the row once it actually owns column headers. A childless
-      // `role="row"` is a critical `aria-required-children` violation, and an
-      // empty visible set is reachable both permanently (`setColumnOrder([])`,
-      // `stripDerivedColumnRefs` — neither guards the way `hideColumn` does)
-      // and transiently, whenever `schema` and `visibleColumns` land as
-      // separate signal writes and the schema write renders first.
-      if (headerRowEl.childElementCount > 0) {
-        this.headerRow.appendChild(headerRowEl);
-      }
-
-      // Refresh column reorder handlers for new headers
+      // Mark new headers for column reorder, whose handler is on the row
       this.columnReorder?.refresh();
 
-      // Create or update TableBody
+      // Create or keep the TableBody
       if (this.bridge && this.actions) {
-        // Destroy existing table body if present
-        if (this.tableBody) {
-          this.tableBody.destroy();
-          this.tableBody = null;
+        if (this.tableBody && this.bodySchema === schema && this.bodyTableName === tableName) {
+          // Kept: it follows the column change itself. The scroll width
+          // follows the new columns here, as it does for a new body.
+          this.tableBody.getVirtualScroller().setContentWidth(layout.totalWidth);
+        } else {
+          this.destroyTableBody();
+
+          // Create new table body
+          this.tableBody = new TableBody(
+            this.bodyContainer,
+            this.state,
+            this.bridge,
+            this.actions,
+            {
+              rowHeight: this.resolvedOptions.rowHeight,
+              classPrefix: this.resolvedOptions.classPrefix,
+              instanceId: this.resolvedOptions.instanceId,
+              scrollContainer: this.bodyScroll,
+              mountedColumns: this.columnWindow.mountedColumns,
+              // headerHeight no longer needed - body scroll only contains body
+              annotations: this.resolvedOptions.annotations,
+              annotationPopover: this.resolvedOptions.annotationPopover,
+              messages: this.messages,
+              fetchBlockSize: this.resolvedOptions.fetchBlockSize,
+              rowCacheRows: this.resolvedOptions.rowCacheRows,
+              prefetch: this.resolvedOptions.prefetch,
+              onRowsRendered: () => this.syncActiveDescendant(),
+              // Where the body parks real DOM focus when it is about to detach the
+              // row holding it. Passed explicitly rather than rediscovered with
+              // `closest('.dt-grid')` so the dependency is visible at the wiring.
+              gridElement: this.gridElement,
+            },
+          );
+          this.bodySchema = schema;
+          this.bodyTableName = tableName;
+
+          // Eagerly set content width so scrollWidth is correct for auto-scroll.
+          // initialize() sets this later via async DuckDB fetch, but scrollToEnd()
+          // may fire before that completes.
+          this.tableBody.getVirtualScroller().setContentWidth(layout.totalWidth);
+
+          // Initialize table body asynchronously, but track the promise so
+          // `whenBodyReady()` can resolve only after the surviving body's
+          // first SELECT settles. The `.catch` swallows so a transient init
+          // error never rejects the public `await createDataTable(...)` /
+          // `await table.loadData(...)` promise — current behavior is to log
+          // and continue, which we preserve.
+          this.currentBodyInit = this.tableBody.initialize().catch((error) => {
+            console.error('Error initializing table body:', error);
+          });
         }
-
-        // Create new table body
-        this.tableBody = new TableBody(this.bodyContainer, this.state, this.bridge, this.actions, {
-          rowHeight: this.resolvedOptions.rowHeight,
-          classPrefix: this.resolvedOptions.classPrefix,
-          instanceId: this.resolvedOptions.instanceId,
-          scrollContainer: this.bodyScroll,
-          mountedColumns: this.columnWindow.mountedColumns,
-          // headerHeight no longer needed - body scroll only contains body
-          annotations: this.resolvedOptions.annotations,
-          annotationPopover: this.resolvedOptions.annotationPopover,
-          messages: this.messages,
-          fetchBlockSize: this.resolvedOptions.fetchBlockSize,
-          rowCacheRows: this.resolvedOptions.rowCacheRows,
-          prefetch: this.resolvedOptions.prefetch,
-          onRowsRendered: () => this.syncActiveDescendant(),
-          // Where the body parks real DOM focus when it is about to detach the
-          // row holding it. Passed explicitly rather than rediscovered with
-          // `closest('.dt-grid')` so the dependency is visible at the wiring.
-          gridElement: this.gridElement,
-        });
-
-        // Eagerly set content width so scrollWidth is correct for auto-scroll.
-        // initialize() sets this later via async DuckDB fetch, but scrollToEnd()
-        // may fire before that completes.
-        this.tableBody.getVirtualScroller().setContentWidth(layout.totalWidth);
-
-        // Initialize table body asynchronously, but track the promise so
-        // `whenBodyReady()` can resolve only after the surviving body's
-        // first SELECT settles. The `.catch` swallows so a transient init
-        // error never rejects the public `await createDataTable(...)` /
-        // `await table.loadData(...)` promise — current behavior is to log
-        // and continue, which we preserve.
-        this.currentBodyInit = this.tableBody.initialize().catch((error) => {
-          console.error('Error initializing table body:', error);
-        });
       } else {
         // Fallback: show row count if no bridge/actions. Wrapped in a
         // row/gridcell pair because `.dt-body-scroll` is the body rowgroup
         // once grid semantics are on, and a rowgroup may only own rows.
+        this.bodyContainer.innerHTML = '';
         const placeholderRow = document.createElement('div');
         // Its own class, not `.dt-row`: that would impose the 32px row
         // height, the row border and the pointer cursor on a centred block

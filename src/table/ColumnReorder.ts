@@ -87,7 +87,7 @@ export function clampUnpinnedIndex(
  *   { classPrefix: 'dt' }
  * );
  *
- * // After headers are created/refreshed:
+ * // After headers are added:
  * reorder.refresh();
  *
  * // Later, clean up
@@ -116,14 +116,12 @@ export class ColumnReorder {
   private releaseHold: (() => void) | null = null;
 
   // Bound event handlers for proper cleanup
+  private readonly boundMouseDown: (e: MouseEvent) => void;
   private readonly boundMouseMove: (e: MouseEvent) => void;
   private readonly boundMouseUp: (e: MouseEvent) => void;
   private readonly boundScroll: (e: Event) => void;
   /** The shadow root the table is in, while a drag listens to its scrolls. */
   private shadowScrollRoot: ShadowRoot | null = null;
-
-  // Map of header elements to their mousedown handlers
-  private headerHandlers = new Map<HTMLElement, (e: MouseEvent) => void>();
 
   // Resolved at drag start so we can scope the drag classes to the table
   // root instead of polluting <body>.
@@ -140,12 +138,18 @@ export class ColumnReorder {
     this.holdColumn = options.holdColumn;
 
     // Bind document-level handlers
+    this.boundMouseDown = this.handleMouseDown.bind(this);
     this.boundMouseMove = this.handleMouseMove.bind(this);
     this.boundMouseUp = this.handleMouseUp.bind(this);
     this.boundScroll = this.handleScroll.bind(this);
 
     // Create drop indicator element
     this.createDropIndicator();
+
+    // One listener on the row for every header, present and future: headers
+    // come and go with the columns, and a drag handle with its column's
+    // controls.
+    this.headerRow.addEventListener('mousedown', this.boundMouseDown);
   }
 
   /**
@@ -200,6 +204,10 @@ export class ColumnReorder {
   private hideDropIndicator(): void {
     if (this.dropIndicator) {
       this.dropIndicator.style.display = 'none';
+      // Out of the row too. The row outlives renders, and left in it the
+      // indicator would be its last child, the place
+      // `.dt-col-header:last-child` expects the last header in.
+      this.dropIndicator.remove();
     }
   }
 
@@ -462,36 +470,6 @@ export class ColumnReorder {
     return Array.from(container.querySelectorAll(`.${this.classPrefix}-col-header`));
   }
 
-  /**
-   * Attach mousedown handlers to headers
-   */
-  private attachHandlers(): void {
-    const headers = this.getHeaderElements();
-
-    for (const header of headers) {
-      // Skip if already attached
-      if (this.headerHandlers.has(header)) continue;
-
-      // Create handler for this header
-      const handler = (e: MouseEvent) => this.handleMouseDown(e);
-      header.addEventListener('mousedown', handler);
-      this.headerHandlers.set(header, handler);
-
-      // Disable native drag
-      header.setAttribute('draggable', 'false');
-    }
-  }
-
-  /**
-   * Detach mousedown handlers from headers
-   */
-  private detachHandlers(): void {
-    for (const [header, handler] of this.headerHandlers) {
-      header.removeEventListener('mousedown', handler);
-    }
-    this.headerHandlers.clear();
-  }
-
   // =========================================
   // Public API
   // =========================================
@@ -502,7 +480,6 @@ export class ColumnReorder {
   enable(): void {
     if (this.destroyed) return;
     this.enabled = true;
-    this.attachHandlers();
   }
 
   /**
@@ -510,22 +487,18 @@ export class ColumnReorder {
    */
   disable(): void {
     this.enabled = false;
-    this.detachHandlers();
     this.resetDragState();
   }
 
   /**
-   * Refresh handlers after headers are recreated
+   * Mark headers added since the last call as not natively draggable. The
+   * press that starts a drag is heard on the header row, so a new header
+   * needs nothing else.
    */
   refresh(): void {
     if (this.destroyed) return;
-
-    // Detach old handlers
-    this.detachHandlers();
-
-    // Attach to new headers if enabled
-    if (this.enabled) {
-      this.attachHandlers();
+    for (const header of this.getHeaderElements()) {
+      if (!header.hasAttribute('draggable')) header.setAttribute('draggable', 'false');
     }
   }
 
@@ -556,9 +529,7 @@ export class ColumnReorder {
     // Remove document listeners
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-
-    // Detach all handlers
-    this.detachHandlers();
+    this.headerRow.removeEventListener('mousedown', this.boundMouseDown);
 
     // Remove drop indicator
     if (this.dropIndicator && this.dropIndicator.parentNode) {

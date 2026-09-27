@@ -960,6 +960,24 @@ export class ColumnHeader {
   }
 
   /**
+   * Give the header a new `id` and `aria-colindex`, for a new place in the
+   * row: `TableContainer` keeps a column's header when others are shown,
+   * hidden or moved around it, and both follow the column's position.
+   *
+   * @internal
+   */
+  setPosition(cellId: string | undefined, colIndex: number | undefined): void {
+    if (this.destroyed) return;
+    const el = this.element;
+    if (cellId === undefined) el.removeAttribute('id');
+    else if (el.id !== cellId) el.id = cellId;
+    const index = colIndex === undefined ? null : String(colIndex);
+    if (el.getAttribute('aria-colindex') === index) return;
+    if (index === null) el.removeAttribute('aria-colindex');
+    else el.setAttribute('aria-colindex', index);
+  }
+
+  /**
    * Whether the controls are built (see {@link ColumnHeader.setControlsMounted}).
    *
    * @internal

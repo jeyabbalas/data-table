@@ -164,7 +164,7 @@ cells for those only, with a spacer for each gap, and row fetches select
 those columns and some either side. Every other column keeps a header
 without its buttons, so each visible column still has its `columnheader`.
 At 1,000 columns in a 1,200 px view, a row holds about two dozen cells and
-the header about 11,000 elements, where they held 1,000 cells and 36,000
+the header about 10,500 elements, where they held 1,000 cells and 36,000
 elements.
 
 ### Derived columns

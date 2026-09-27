@@ -1964,8 +1964,9 @@ export class TableContainer {
    * Useful for accessing visualization containers in each header.
    *
    * Every header has its stats and chart slots, but only the columns near the
-   * view have their buttons and handles: the others are shells, whose
-   * `getControls()` is empty.
+   * view have their pin, hide, filter and sort buttons and their drag and
+   * resize handles. The others are shells, whose `getControls()` holds at
+   * most a derived column's f(x) icon and a column name with a tooltip.
    */
   getColumnHeaders(): ColumnHeader[] {
     return [...this.columnHeaders];

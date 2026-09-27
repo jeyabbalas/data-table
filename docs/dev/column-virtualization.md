@@ -262,3 +262,15 @@ panels and charts right across a trackpad sweep.
   - The layout-mode axe test scanned while the charts rebuilt by the column move were rewriting
     their stats lines, and axe could not find the background of a line that went mid-scan. Faster
     header rebuilds moved the scan into that window. It now waits for the table to settle.
+- **Found in review of #143.** A double-click width reset animates for 250 ms under the class
+  `dt-col-resetting`, and `ColumnResizer.detach()` cancelled the cleanup that removes it. Detach
+  used to come only with a header's end, but taking a header's controls down detaches its resizer
+  while the header stays: a column scrolled away mid-reset kept the class, and so did the body
+  cells reused for other columns, which then lagged their headers through every resize. Detach now
+  finishes the cleanup at once.
+- **A flake under load, pre-existing.** `ColumnWindowController.scrollToEnd` takes the body's
+  smooth scroll to have ended once `scrollLeft` holds still for three frames, and then turns the
+  header-to-body sync back on and puts the header where the body is. On a loaded machine frames
+  stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
+  which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
+  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.

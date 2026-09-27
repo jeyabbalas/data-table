@@ -144,17 +144,11 @@ export class ColumnResizer {
     if (this.detached) return;
     this.detached = true;
 
-    // Cancel any in-flight reset-animation cleanup so the setTimeout
-    // fallback doesn't touch the DOM after detach, and remove its
-    // transitionend listener.
-    if (this.resetFallback !== null) {
-      clearTimeout(this.resetFallback);
-      this.resetFallback = null;
-    }
-    if (this.resetCleanup) {
-      this.header.removeEventListener('transitionend', this.resetCleanup);
-      this.resetCleanup = null;
-    }
+    // Finish a reset animation in flight now, rather than cancelling its
+    // cleanup: nothing touches the DOM after detach, and the header, which
+    // outlives the handle when its controls are taken down as its column
+    // leaves the view, does not keep the class that animates its width.
+    this.resetCleanup?.();
 
     // Stop any in-progress drag
     if (this.isDragging) {

@@ -67,8 +67,10 @@ docs, and was reviewed by a separate agent before merging.
 - **The header's scrollbar gutter is a fixed 17 px** (`--dt-scrollbar-width`), whatever the body's
   vertical scrollbar measures: 0 with overlay scrollbars (macOS default), 0 when the body has too few
   rows to scroll, 15 px for classic macOS scrollbars. Scroll sync copies `scrollLeft` one to one, so
-  at the far right the header is clipped by the difference. Not fixed in 4a; the window controller
-  in 4c should size the gutter from `offsetWidth - clientWidth` of the body scroller.
+  at the far right the header is clipped by the difference. Fixed at the start of 4b, where the
+  keyboard tests hit it: `TableContainer` sizes the gutter to the header area's width minus the
+  body's client width whenever the body scroller resizes, which includes its scrollbar coming or
+  going.
 - **Header controls spill out of narrow columns.** `.dt-col-header` does not clip, and its five
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_

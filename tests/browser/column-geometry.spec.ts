@@ -26,13 +26,13 @@ type GeometryWindow = { __geo: import('../../src/index').DataTable };
  * Mount a 40-column table in a fixed-position host `width` px wide, on a page
  * whose reset has been overridden back to content-box.
  */
-async function mountWithoutReset(page: Page, width: number): Promise<void> {
+async function mountWithoutReset(page: Page, width: number, rows = 60): Promise<void> {
   await page.goto('./');
   // Same specificity as the demo's `*` reset and later in the cascade, so it
   // wins everywhere the library does not declare box-sizing itself.
   await page.addStyleTag({ content: '*, *::before, *::after { box-sizing: content-box; }' });
   await page.evaluate(
-    async ({ columns, width, hostId }) => {
+    async ({ columns, width, rows, hostId }) => {
       const mod = (await import(
         /* @vite-ignore */ '/data-table/src/index.ts'
       )) as typeof import('../../src/index');
@@ -45,7 +45,7 @@ async function mountWithoutReset(page: Page, width: number): Promise<void> {
 
       const names = Array.from({ length: columns }, (_, i) => `c${String(i).padStart(2, '0')}`);
       const lines = [names.join(',')];
-      for (let r = 0; r < 60; r++) lines.push(names.map((_, i) => (r * 7 + i) % 97).join(','));
+      for (let r = 0; r < rows; r++) lines.push(names.map((_, i) => (r * 7 + i) % 97).join(','));
 
       const table = await mod.createDataTable({
         container: host,
@@ -56,7 +56,7 @@ async function mountWithoutReset(page: Page, width: number): Promise<void> {
       (window as unknown as GeometryWindow).__geo = table;
       await table.loadData(new File([lines.join('\n')], 'geometry.csv', { type: 'text/csv' }));
     },
-    { columns: COLUMNS, width, hostId: HOST_ID },
+    { columns: COLUMNS, width, rows, hostId: HOST_ID },
   );
   await page.waitForFunction(
     (hostId) =>
@@ -191,6 +191,54 @@ test('End scrolls the last column fully into view', async ({ page }) => {
   expect(view.left).toBeGreaterThanOrEqual(0);
   expect(view.right).toBeLessThanOrEqual(view.width + 0.5);
 });
+
+for (const [rows, scrollbar] of [
+  [60, 'a vertical scrollbar'],
+  [5, 'no vertical scrollbar'],
+] as const) {
+  test(`at the far right the last header sits over its cells, with ${scrollbar}`, async ({
+    page,
+  }) => {
+    // The header's scrollbar gutter was a fixed 17px, whatever the body's
+    // scrollbar took: nothing with overlay scrollbars or with too few rows to
+    // scroll. The header viewport was then narrower than the body's, and at
+    // the far right the last header was cut off by the difference.
+    await mountWithoutReset(page, 1200, rows);
+    await page.locator(`#${HOST_ID} .dt-grid`).focus();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('End');
+    await settle(page);
+
+    const edge = await page.evaluate(
+      ({ hostId, last }) => {
+        const host = document.getElementById(hostId)!;
+        const body = host.querySelector<HTMLElement>('.dt-body-scroll')!;
+        const headerScroll = host.querySelector<HTMLElement>('.dt-header-scroll')!;
+        const header = host.querySelector(`.dt-col-header[data-column="${last}"]`)!;
+        const cell = host.querySelector(
+          `.dt-body .dt-row:not([data-placeholder]) .dt-cell[data-column="${last}"]`,
+        )!;
+        return {
+          cursor: header.classList.contains('dt-col-header--focused'),
+          header: header.getBoundingClientRect().right,
+          cell: cell.getBoundingClientRect().right,
+          headerView: headerScroll.getBoundingClientRect().left + headerScroll.clientWidth,
+          bodyView: body.getBoundingClientRect().left + body.clientWidth,
+        };
+      },
+      { hostId: HOST_ID, last: `c${COLUMNS - 1}` },
+    );
+    expect(edge.cursor).toBe(true);
+    expect(edge.header, 'the last header is wholly in view').toBeLessThanOrEqual(
+      edge.headerView + 0.5,
+    );
+    expect(edge.header, 'the last header sits over its cells').toBeCloseTo(edge.cell, 0);
+    expect(edge.headerView, 'the header viewport is as wide as the body').toBeCloseTo(
+      edge.bodyView,
+      0,
+    );
+  });
+}
 
 test('a resize drag grows the column from its declared width', async ({ page }) => {
   await mountWithoutReset(page, 1200);

@@ -624,7 +624,9 @@ export class TableContainer {
   // =========================================
 
   /**
-   * Set up ResizeObserver to track container size changes
+   * Set up ResizeObserver to track container size changes, and the body
+   * scroller's, whose client width changes when its vertical scrollbar comes
+   * or goes
    */
   private setupResizeObserver(): ResizeObserver {
     const observer = new ResizeObserver((entries) => {
@@ -632,6 +634,7 @@ export class TableContainer {
     });
 
     observer.observe(this.element);
+    observer.observe(this.bodyScroll);
     return observer;
   }
 
@@ -642,6 +645,10 @@ export class TableContainer {
     if (this.destroyed) return;
 
     for (const entry of entries) {
+      if (entry.target === this.bodyScroll) {
+        this.syncScrollbarGutter();
+        continue;
+      }
       const { width, height } = entry.contentRect;
 
       // Only notify if dimensions actually changed
@@ -654,6 +661,22 @@ export class TableContainer {
         }
       }
     }
+  }
+
+  /**
+   * Make the header's scrollbar gutter as wide as the body's vertical
+   * scrollbar.
+   *
+   * The header scrolls in step with the body, so its viewport has to be
+   * exactly as wide as the body's. A fixed 17 px gutter was right for one
+   * scrollbar only: overlay scrollbars take no width, and neither does a body
+   * with too few rows to scroll, so at the far right the last header was cut
+   * off by up to 17 px, and keyboard navigation left a header cursor at the
+   * right edge partly out of view.
+   */
+  private syncScrollbarGutter(): void {
+    const width = `${Math.max(0, this.headerArea.clientWidth - this.bodyScroll.clientWidth)}px`;
+    if (this.scrollbarGutter.style.width !== width) this.scrollbarGutter.style.width = width;
   }
 
   /**

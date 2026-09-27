@@ -463,6 +463,37 @@ describe('TableContainer', () => {
       tableContainer.destroy();
     });
 
+    it("sizes the header's scrollbar gutter to the body's vertical scrollbar", () => {
+      const tableContainer = new TableContainer(container, state);
+      const mockInstance = MockResizeObserver.getLastInstance()!;
+      const root = tableContainer.getElement();
+      const headerArea = root.querySelector<HTMLElement>('.dt-header-area')!;
+      const body = root.querySelector<HTMLElement>('.dt-body-scroll')!;
+      const gutter = root.querySelector<HTMLElement>('.dt-scrollbar-gutter')!;
+      const resizeCallback = vi.fn();
+      tableContainer.onResize(resizeCallback);
+      expect(mockInstance.getObservedElements().has(body)).toBe(true);
+
+      const measure = (bodyClientWidth: number): void => {
+        Object.defineProperty(headerArea, 'clientWidth', { configurable: true, value: 800 });
+        Object.defineProperty(body, 'clientWidth', { configurable: true, value: bodyClientWidth });
+        mockInstance.triggerResize([
+          { contentRect: { width: bodyClientWidth, height: 400 } as DOMRectReadOnly, target: body },
+        ]);
+      };
+
+      // A classic 15px scrollbar.
+      measure(785);
+      expect(gutter.style.width).toBe('15px');
+      // Overlay scrollbars, or too few rows to scroll.
+      measure(800);
+      expect(gutter.style.width).toBe('0px');
+      // The body is not the container: its resizes are not reported as such.
+      expect(resizeCallback).not.toHaveBeenCalled();
+
+      tableContainer.destroy();
+    });
+
     it('should allow unsubscribing from resize events', () => {
       const tableContainer = new TableContainer(container, state);
       const mockInstance = MockResizeObserver.getLastInstance();

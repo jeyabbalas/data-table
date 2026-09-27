@@ -197,6 +197,9 @@ export class ColumnWindowController {
   /** The column of the element holding DOM focus inside the grid, if any. */
   private focusColumn: string | null = null;
 
+  /** An update for a focus change is queued (see {@link updateForFocus}). */
+  private focusUpdateQueued = false;
+
   constructor(options: ColumnWindowControllerOptions) {
     this.state = options.state;
     this.rootElement = options.rootElement;
@@ -534,7 +537,7 @@ export class ColumnWindowController {
       owner && this.gridElement.contains(owner) ? owner.getAttribute('data-column') : null;
     if (column === this.focusColumn) return;
     this.focusColumn = column;
-    this.update('kept');
+    this.updateForFocus();
   };
 
   private readonly handleFocusOut = (event: FocusEvent): void => {
@@ -550,8 +553,24 @@ export class ColumnWindowController {
       if (active instanceof Node && this.gridElement.contains(active)) return;
     }
     this.focusColumn = null;
-    this.update('kept');
+    this.updateForFocus();
   };
+
+  /**
+   * {@link update} for a focus change, in a microtask rather than at once.
+   *
+   * Focus moves in the middle of other work: the body moves it to the grid
+   * as it removes the element holding it, part-way through a render.
+   * Publishing then would start another render inside that one.
+   */
+  private updateForFocus(): void {
+    if (this.focusUpdateQueued) return;
+    this.focusUpdateQueued = true;
+    queueMicrotask(() => {
+      this.focusUpdateQueued = false;
+      this.update('kept');
+    });
+  }
 
   // =========================================
   // What is in view

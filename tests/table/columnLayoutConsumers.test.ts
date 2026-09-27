@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StateActions } from '@/core/Actions';
+import { createSignal } from '@/core/Signal';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import { KeyboardNavigator } from '@/table/KeyboardNavigator';
@@ -157,7 +158,10 @@ describe('TableBody pinned and sized cells', () => {
   });
 
   it('clears the sticky styles of a cell reused for an unpinned column', async () => {
-    const harness = setupTableBody();
+    // Rows render only `id` at first; then only `tag`, which takes over the
+    // element that showed the pinned `id`.
+    const mounted = createSignal<readonly string[]>(['id']);
+    const harness = setupTableBody({ body: { mountedColumns: mounted } });
     harness.state.pinnedColumns.set(['id']);
     await renderRows(harness);
     const first = harness.container.querySelector<HTMLElement>(
@@ -166,9 +170,7 @@ describe('TableBody pinned and sized cells', () => {
     expect(first.getAttribute('data-column')).toBe('id');
     expect(first.style.position).toBe('sticky');
 
-    // A reorder re-renders the rows from the cache, so the element that
-    // showed the pinned `id` now shows the unpinned `tag`.
-    harness.state.visibleColumns.set(['tag', 'id']);
+    mounted.set(['tag']);
 
     expect(first.getAttribute('data-column')).toBe('tag');
     expect(first.style.position).toBe('');

@@ -235,6 +235,13 @@
   border-right: none;
 }
 
+/* Stands in for the columns between two cells a row renders; its width is
+   theirs. A row renders only the columns near the view (see TableBody). */
+.dt-col-spacer {
+  flex: none;
+  align-self: stretch;
+}
+
 .dt-cell.dt-col-resetting {
   transition: width 0.2s ease-out;
 }

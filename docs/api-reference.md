@@ -637,12 +637,12 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 
 ### Column order / pin / width
 
-| Method             | Signature                                 | Notes                             |
-| ------------------ | ----------------------------------------- | --------------------------------- |
-| `setColumnOrder`   | `(columns: string[]) => void`             | Pinned columns are kept first.    |
-| `toggleColumnPin`  | `(column: string) => void`                | Moves to / from the pinned group. |
-| `setColumnWidth`   | `(column: string, width: number) => void` | Padding and border included.      |
-| `resetColumnWidth` | `(column: string) => void`                |                                   |
+| Method             | Signature                                 | Notes                                                 |
+| ------------------ | ----------------------------------------- | ----------------------------------------------------- |
+| `setColumnOrder`   | `(columns: string[]) => void`             | Pinned columns are kept first.                        |
+| `toggleColumnPin`  | `(column: string) => void`                | Moves to / from the pinned group.                     |
+| `setColumnWidth`   | `(column: string, width: number) => void` | Padding and border included; drawn at 50 px at least. |
+| `resetColumnWidth` | `(column: string) => void`                |                                                       |
 
 ### Derived columns
 

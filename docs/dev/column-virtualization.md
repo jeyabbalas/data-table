@@ -51,8 +51,10 @@ start to depend on the set. Until then they are all in the header, which 4c neve
 
 1. **The controller owns horizontal scrolling.** No windowing. The sync and its echo guard, the gutter
    measurement, the restore, the filter hold, the smooth scroll and the keyboard's reveal move into
-   it unchanged, with `revealColumn(column)` the one way to scroll a column into view. The 4b matrix
-   is the regression suite.
+   it, with `revealColumn(column)` the one way to scroll a column into view. Only one thing changes:
+   the header now moves with the body in the same task when the keyboard reveals a column. The 4b
+   matrix is the regression suite. The browser's own scrolls are not writes and stay: a wheel, and
+   `ModalHost` focusing a header button as its panel closes, which scrolls the header.
 2. **It publishes the columns to mount.** The window arithmetic from the archive's `ColumnWindow.ts`,
    on `ColumnLayout`'s offsets instead of prefix sums of its own, plus the hysteresis and the keep
    set, unit-tested against a stubbed viewport and exposed to the browser probes. Nothing renders
@@ -145,11 +147,16 @@ trackpad sweep.
 - **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
   header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
   scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and
-  lost it across two renders in a row, and `scrollToRightEnd` stopped its smooth scroll after a fixed
-  600 ms. A panel whose first control is hidden by CSS never took focus (#133). Keys that act on the
+  lost it across two renders in a row, and the smooth scroll to a new column (`scrollToRightEnd`,
+  now the controller's `scrollToEnd`) stopped after a fixed 600 ms. A panel whose first control is hidden by CSS never took focus (#133). Keys that act on the
   cursor left an off-screen cursor off-screen (#134). Hiding the cursor's column sent the cursor to
   the first column (#135). A drag dropped where the last pointer move said, whatever a wheel had done
   since (#136).
+- **A file-header `@internal` breaks the emitted declarations.** With `stripInternal`, TypeScript
+  attaches a tag in the file's opening comment to the first statement, usually an import, and drops
+  it: `dist/visualizations/LazyVizController.d.ts` loses its `ColumnSchema` import and fails to
+  type-check. Nothing public reaches that file, so no consumer breaks. Found in review of #137, which
+  keeps the tag off `ColumnWindowController.ts`; `LazyVizController.ts` is not fixed.
 - **Drag-reorder hit-testing is by header rects in DOM order.** With the pointer over the right half
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the

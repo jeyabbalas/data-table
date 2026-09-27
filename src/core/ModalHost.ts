@@ -202,9 +202,44 @@ function focusableDescendants(root: HTMLElement): HTMLElement[] {
       }
     }
     if (hidden) continue;
+    // Hidden by a stylesheet, which the checks above cannot see. `focus()` on
+    // such an element silently does nothing: the filter panel's Clear button
+    // is `display: none` until its column has a filter, and as the panel's
+    // first control it kept focus from ever entering the panel, and let
+    // Shift+Tab walk out of it. jsdom has no `checkVisibility`, and no
+    // stylesheet to apply either.
+    if (
+      typeof el.checkVisibility === 'function' &&
+      !el.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true })
+    ) {
+      continue;
+    }
     result.push(el);
   }
-  return result;
+  return oneStopPerRadioGroup(result);
+}
+
+/**
+ * Keep one radio of each named group: the checked one, or the first when none
+ * is checked. Sequential focus navigation stops on a radio group once, so a
+ * list with every radio in it names stops that Tab never lands on. The filter
+ * panel ends with a three-radio group, and because the trap waited for focus
+ * on its last radio, Tab from the group walked out of the panel.
+ */
+function oneStopPerRadioGroup(elements: HTMLElement[]): HTMLElement[] {
+  const isGroupedRadio = (el: HTMLElement): el is HTMLInputElement =>
+    el instanceof HTMLInputElement && el.type === 'radio' && el.name !== '';
+  const groups = new Map<string, HTMLInputElement[]>();
+  for (const el of elements) {
+    if (!isGroupedRadio(el)) continue;
+    const group = groups.get(el.name);
+    if (group) group.push(el);
+    else groups.set(el.name, [el]);
+  }
+  if (groups.size === 0) return elements;
+  const stops = new Set<HTMLElement>();
+  for (const group of groups.values()) stops.add(group.find((r) => r.checked) ?? group[0]!);
+  return elements.filter((el) => !isGroupedRadio(el) || stops.has(el));
 }
 
 // ---------------------------------------------------------------------------

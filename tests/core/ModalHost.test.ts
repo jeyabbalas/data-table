@@ -469,3 +469,84 @@ describe('ModalHost — onAnyModalOpened', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('ModalHost — controls hidden by a stylesheet', () => {
+  /**
+   * What a browser reports for an element a stylesheet hides. jsdom applies
+   * no stylesheet and has no `checkVisibility`, so the test supplies it.
+   */
+  function hideByStylesheet(el: HTMLElement): void {
+    Object.defineProperty(el, 'checkVisibility', { configurable: true, value: () => false });
+  }
+
+  it('gives initial focus to the first control no stylesheet hides', async () => {
+    const { backdrop, dialog } = makeModalPair();
+    const buttons = Array.from(dialog.querySelectorAll('button'));
+    hideByStylesheet(buttons[0]!);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(document.activeElement).toBe(buttons[1]);
+    host.close();
+  });
+
+  it('wraps Shift+Tab from the first control no stylesheet hides', () => {
+    const { backdrop, dialog } = makeModalPair();
+    const buttons = Array.from(dialog.querySelectorAll('button'));
+    hideByStylesheet(buttons[0]!);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    buttons[1]!.focus();
+    dialog.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }),
+    );
+    expect(document.activeElement).toBe(buttons[2]);
+    host.close();
+  });
+});
+
+describe('ModalHost — a radio group at the end of the dialog', () => {
+  function dialogEndingInRadios(checked: number | null) {
+    const { backdrop, dialog } = makeModalPair();
+    const radios = ['any', 'null', 'not-null'].map((value, i) => {
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'nulls';
+      radio.value = value;
+      radio.checked = i === checked;
+      dialog.appendChild(radio);
+      return radio;
+    });
+    return { backdrop, dialog, buttons: Array.from(dialog.querySelectorAll('button')), radios };
+  }
+
+  it.each([
+    ['the checked radio', 1],
+    ['the first radio when none is checked', null],
+  ] as const)('wraps Tab to the first control from %s', (_label, checked) => {
+    const { backdrop, dialog, buttons, radios } = dialogEndingInRadios(checked);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    // The group's one tab stop: where Tab into the group lands.
+    radios[checked ?? 0]!.focus();
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement).toBe(buttons[0]);
+    host.close();
+  });
+
+  it("wraps Shift+Tab from the first control to the group's stop", () => {
+    const { backdrop, dialog, buttons, radios } = dialogEndingInRadios(2);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    buttons[0]!.focus();
+    dialog.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }),
+    );
+    expect(document.activeElement).toBe(radios[2]);
+    host.close();
+  });
+});

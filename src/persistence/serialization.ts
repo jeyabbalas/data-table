@@ -8,7 +8,12 @@
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
 import { batch } from '../core/Signal';
-import type { TableState, HiddenColumnInfo } from '../core/State';
+import {
+  type TableState,
+  type HiddenColumnInfo,
+  consistentColumnOrder,
+  pinnedColumnsFirst,
+} from '../core/State';
 import type { ColumnHeaderTooltipContent } from '../core/types';
 import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { VectorColumnDef } from '../derived/types';
@@ -71,19 +76,23 @@ export function deserializeStateSnapshot(
 
   const sortColumns = s.sortColumns.filter((sc) => effectiveValid.has(sc.column));
 
-  let visibleColumns = s.visibleColumns.filter((c) => effectiveValid.has(c));
-  if (visibleColumns.length === 0) {
-    visibleColumns = [...effectiveValid];
+  let savedVisible = s.visibleColumns.filter((c) => effectiveValid.has(c));
+  if (savedVisible.length === 0) {
+    savedVisible = [...effectiveValid];
   }
 
-  const columnOrder = s.columnOrder.filter((c) => effectiveValid.has(c));
+  // Undoing to an entry saved before the column actions kept pinned columns
+  // first, and visible columns in `columnOrder`, would bring that back.
+  const { columnOrder, visibleColumns, pinnedColumns } = consistentColumnOrder(
+    savedVisible,
+    s.columnOrder.filter((c) => effectiveValid.has(c)),
+    s.pinnedColumns.filter((c) => effectiveValid.has(c)),
+  );
 
   const columnWidths = new Map<string, number>();
   for (const [col, width] of Object.entries(s.columnWidths)) {
     if (effectiveValid.has(col)) columnWidths.set(col, width);
   }
-
-  const pinnedColumns = s.pinnedColumns.filter((c) => effectiveValid.has(c));
 
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();
   for (const [col, info] of Object.entries(s.hiddenColumnInfo)) {
@@ -257,8 +266,12 @@ export function snapshotFromState(
  * Restore TableState from a SessionSnapshot.
  *
  * Validates all snapshot data against the current schema — columns that no
- * longer exist are silently dropped. New schema columns not present in the
- * snapshot are appended to columnOrder.
+ * longer exist are silently dropped. The snapshot's column order is made
+ * consistent ({@link consistentColumnOrder}): the visible columns as the
+ * table showed them, the hidden ones beside their old neighbours, the pinned
+ * ones first. New schema columns not present in the snapshot then go into
+ * columnOrder at their schema index, after any pinned columns, hidden. The
+ * undo and redo entries saved with the session are made consistent too.
  *
  * Does NOT restore tableName (it comes from data loading, not the snapshot).
  */
@@ -293,27 +306,36 @@ export function restoreStateFromSnapshot(
   // Sort: drop stale column references
   const sortColumns = snapshot.sortColumns.filter((s) => validColumns.has(s.column));
 
-  // Visible columns: filter to valid; fallback to all if empty
-  let visibleColumns = snapshot.visibleColumns.filter((c) => validColumns.has(c));
-  if (visibleColumns.length === 0) {
-    visibleColumns = allColumnNames;
-  }
+  // The snapshot's own columns first. A session saved before the column
+  // actions kept pinned columns first, and visible columns in `columnOrder`,
+  // or edited by hand, can break both, which `consistentColumnOrder` mends.
+  // With no visible column left, every column is shown.
+  const snapshotOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
+  const savedVisible = snapshot.visibleColumns.filter((c) => validColumns.has(c));
+  const showAll = savedVisible.length === 0;
+  const consistent = consistentColumnOrder(
+    showAll ? snapshotOrder : savedVisible,
+    snapshotOrder,
+    snapshot.pinnedColumns.filter((c) => validColumns.has(c)),
+  );
+  const pinnedColumns = consistent.pinnedColumns;
 
-  // Column order: filter to valid, then insert any schema columns that
-  // weren't in the snapshot at their schema index (rather than always
-  // appending to the end). This keeps system columns like __rowid__ —
-  // which live at schema index 0 — at the leftmost position when a
-  // pre-Phase-1 snapshot restores against a post-Phase-1 schema.
-  const restoredOrder = snapshot.columnOrder.filter((c) => validColumns.has(c));
-  const orderSet = new Set(restoredOrder);
+  // Then any schema column the snapshot does not have, at its schema index
+  // rather than at the end, hidden. This keeps system columns like
+  // __rowid__ — which live at schema index 0 — at the leftmost position when
+  // a pre-Phase-1 snapshot restores against a post-Phase-1 schema: after the
+  // pinned columns, if any, which stay first.
+  const withNew = [...consistent.columnOrder];
+  const orderSet = new Set(withNew);
   for (let i = 0; i < allColumnNames.length; i++) {
     // Bounds-checked by `i < allColumnNames.length`.
     const col = allColumnNames[i]!;
     if (orderSet.has(col)) continue;
-    const insertAt = Math.min(i, restoredOrder.length);
-    restoredOrder.splice(insertAt, 0, col);
+    withNew.splice(Math.min(i, withNew.length), 0, col);
     orderSet.add(col);
   }
+  const restoredOrder = pinnedColumnsFirst(withNew, pinnedColumns);
+  const visibleColumns = showAll ? restoredOrder : consistent.visibleColumns;
 
   // Column widths: Record → Map, skip stale columns
   const columnWidths = new Map<string, number>();
@@ -335,9 +357,6 @@ export function restoreStateFromSnapshot(
       if (normalized !== null) columnHeaderTooltips.set(col, normalized);
     }
   }
-
-  // Pinned columns: filter to valid
-  const pinnedColumns = snapshot.pinnedColumns.filter((c) => validColumns.has(c));
 
   // Hidden column info: Record → Map, skip stale columns, nullify dangling neighbors
   const hiddenColumnInfo = new Map<string, HiddenColumnInfo>();

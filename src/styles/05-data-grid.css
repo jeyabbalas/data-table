@@ -205,6 +205,15 @@
    =========================================== */
 
 .dt-cell {
+  /* The width a column is given is the width it occupies. Everything that
+     places columns adds their widths up — header against body, pinned
+     offsets, keyboard scroll-into-view, the scroll extent — and only
+     border-box makes that sum true. Under content-box the 0.75rem padding and
+     the border sat outside the width, so every column took 25px more than
+     the arithmetic said, and at narrow container widths the header's smaller
+     padding moved it off its cells. Hosts with a global box-sizing reset
+     already had this. */
+  box-sizing: border-box;
   padding: 0 0.75rem;
   width: var(--dt-col-width);
   flex-shrink: 0;

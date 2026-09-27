@@ -9,6 +9,9 @@
    =========================================== */
 
 .dt-col-header {
+  /* The width a column is given is the width it occupies, padding and border
+     included, whatever the host page's own box-sizing. See `.dt-cell`. */
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   position: relative; /* For absolute positioning of resize handle */

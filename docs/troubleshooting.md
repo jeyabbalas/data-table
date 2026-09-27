@@ -652,6 +652,14 @@ Cause: the loader converts a text column to a date, timestamp, or time only when
 
 Fix: find the values that keep a date column as text with a raw SQL filter such as `trim(due) <> '' AND (NOT regexp_full_match(trim(due), '^\d{4}-\d{2}-\d{2}$') OR TRY_CAST(due AS DATE) IS NULL)`. Then either clean them upstream and reload, or add a derived column `TRY_CAST(due AS DATE)` and use it in place of the text column; the values that do not convert become `null` there, and DuckDB keeps the date part of the rest.
 
+### 29. Columns are narrower after upgrading to 0.9
+
+Symptom: every column is 25 px narrower than it was in 0.8, so text truncates sooner. Only pages without a global `box-sizing: border-box` reset see this; with a reset (Tailwind, Bootstrap and most design systems have one), nothing changed.
+
+Cause: header and body cells are now `box-sizing: border-box`, so a column's width includes its 0.75rem side padding and its border. Before, those went on top of the width on pages without a reset, and every calculation that places columns (header against body, pinned columns, keyboard scrolling, the scroll extent) was off by that much per column. See [Theming → Sizing](./guides/theming.md#sizing).
+
+Fix: give the columns the width you want them to occupy, for example `table.actions.setColumnWidth('name', 175)` for the old default look. Don't set `box-sizing: content-box` on `.dt-cell` or `.dt-col-header`; that brings the misplacement back.
+
 ---
 
 ## Browser support quick reference

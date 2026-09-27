@@ -191,6 +191,23 @@ describe('ColumnResizer', () => {
       resizer.detach();
     });
 
+    it('grows from the declared width when the header occupies more than it', () => {
+      // A host stylesheet forcing content-box: the header is declared 150px
+      // but occupies 175px with its padding and border. A 1px drag is 151.
+      Object.defineProperty(header, 'offsetWidth', { value: 175, configurable: true });
+      const resizer = new ColumnResizer(header, onResize);
+      const handle = resizer.getHandle()!;
+
+      handle.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 200, bubbles: true, cancelable: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 201, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 201, bubbles: true }));
+
+      expect(onResize).toHaveBeenLastCalledWith(151);
+      resizer.detach();
+    });
+
     it('enforces minimum width', () => {
       const resizer = new ColumnResizer(header, onResize, undefined, undefined, { minWidth: 80 });
       const handle = resizer.getHandle()!;

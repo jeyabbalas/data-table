@@ -156,6 +156,27 @@ describe('TableBody pinned and sized cells', () => {
     harness.body.destroy();
   });
 
+  it('clears the sticky styles of a cell reused for an unpinned column', async () => {
+    const harness = setupTableBody();
+    harness.state.pinnedColumns.set(['id']);
+    await renderRows(harness);
+    const first = harness.container.querySelector<HTMLElement>(
+      '.dt-row[data-row-index="0"] .dt-cell',
+    )!;
+    expect(first.getAttribute('data-column')).toBe('id');
+    expect(first.style.position).toBe('sticky');
+
+    // A reorder re-renders the rows from the cache, so the element that
+    // showed the pinned `id` now shows the unpinned `tag`.
+    harness.state.visibleColumns.set(['tag', 'id']);
+
+    expect(first.getAttribute('data-column')).toBe('tag');
+    expect(first.style.position).toBe('');
+    expect(first.style.left).toBe('');
+    expect(first.classList.contains('dt-cell--pinned')).toBe(false);
+    harness.body.destroy();
+  });
+
   it('gives a cell with an unusable stored width the default width', async () => {
     const harness = setupTableBody();
     harness.state.columnWidths.set(new Map([['tag', -40]]));

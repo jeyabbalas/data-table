@@ -1199,9 +1199,11 @@ export class TableContainer {
   /**
    * Update sticky positioning for pinned columns (freeze pane effect)
    *
-   * Applies position:sticky and the offsets from the column layout to both
-   * header and body cells for pinned columns, and places the divider. Called
-   * after render and when pinned/width state changes.
+   * Applies position:sticky and the offsets from the column layout to the
+   * pinned column headers, and places the divider. Called after render and
+   * when pinned/width state changes. Body cells are `TableBody`'s: it styles
+   * each row it renders, and restyles its rows when the pinned set or a width
+   * changes.
    */
   private updatePinnedColumnStyles(): void {
     const layout = getColumnLayout(this.state);
@@ -1222,34 +1224,13 @@ export class TableContainer {
         el.style.left = `${placement.left}px`;
         el.style.zIndex = String(baseZ + placement.zOffset);
         el.classList.add(`${prefix}-col-header--pinned`);
-      } else {
+      } else if (el.classList.contains(`${prefix}-col-header--pinned`)) {
+        // Only a header that was pinned carries sticky styles to clear. This
+        // runs on every resize step, over every header.
         el.style.position = '';
         el.style.left = '';
         el.style.zIndex = '';
         el.classList.remove(`${prefix}-col-header--pinned`);
-      }
-    }
-
-    // Apply to body cells, matched by column name: a placeholder row's one
-    // cell names no column, and position says nothing about which column a
-    // cell shows once the visible order has changed under the rendered rows.
-    const bodyContainer = this.bodyContainer;
-    const cells = bodyContainer.querySelectorAll<HTMLElement>(
-      `.${prefix}-row > .${prefix}-cell[data-column]`,
-    );
-    for (const cell of cells) {
-      const placement = layout.pinnedPlacement(cell.getAttribute('data-column')!);
-
-      if (placement) {
-        cell.style.position = 'sticky';
-        cell.style.left = `${placement.left}px`;
-        cell.style.zIndex = String(baseZ + placement.zOffset);
-        cell.classList.add(`${prefix}-cell--pinned`);
-      } else {
-        cell.style.position = '';
-        cell.style.left = '';
-        cell.style.zIndex = '';
-        cell.classList.remove(`${prefix}-cell--pinned`);
       }
     }
 

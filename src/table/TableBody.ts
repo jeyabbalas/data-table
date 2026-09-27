@@ -1253,19 +1253,24 @@ export class TableBody {
 
   /**
    * Make a cell sticky at its pinned column's offset, or undo that.
+   *
+   * Only a cell that was pinned carries sticky styles to clear (a pooled row
+   * keeps its classes and styles together), so an unpinned cell without the
+   * class is left untouched: this runs for every cell on every resize step.
    */
   private applyPinnedCellStyle(cellEl: HTMLElement, column: string): void {
     const placement = getColumnLayout(this.state).pinnedPlacement(column);
+    const pinnedClass = `${this.classPrefix}-cell--pinned`;
     if (placement) {
       cellEl.style.position = 'sticky';
       cellEl.style.left = `${placement.left}px`;
       cellEl.style.zIndex = String(this.pinnedZBase() + placement.zOffset);
-      cellEl.classList.add(`${this.classPrefix}-cell--pinned`);
-    } else {
+      cellEl.classList.add(pinnedClass);
+    } else if (cellEl.classList.contains(pinnedClass)) {
       cellEl.style.position = '';
       cellEl.style.left = '';
       cellEl.style.zIndex = '';
-      cellEl.classList.remove(`${this.classPrefix}-cell--pinned`);
+      cellEl.classList.remove(pinnedClass);
     }
   }
 
@@ -1334,11 +1339,12 @@ export class TableBody {
       const cellEl = cells[i] as HTMLElement;
 
       // Stable id so `aria-activedescendant` on `.dt-grid` can name this
-      // cell. Keyed by absolute row index + visible column index, and
-      // rewritten on every reuse, so a pooled element never carries a
-      // stale id.
+      // cell. Keyed by absolute row index + the column's position among the
+      // visible columns (not the cell's position in the row, which only
+      // coincides while a row holds every visible column), and rewritten on
+      // every reuse, so a pooled element never carries a stale id.
       if (this.instanceId) {
-        cellEl.id = this.buildCellId(index, i);
+        cellEl.id = this.buildCellId(index, layout.indexOf(colName));
       }
 
       // ARIA: 1-based position in the presented order, hidden columns

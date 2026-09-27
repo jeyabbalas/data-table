@@ -6,8 +6,8 @@
  *
  * Only `TableBody.updateRowContent` decides which column a cell shows.
  * Everything else that reaches for "the cell of column X" — the cursor ring,
- * a click, a width change, an annotation, the pinned styles, the resize-reset
- * animation — has to land on the same cell whatever order the row's children
+ * a click, a width change, an annotation, the resize-reset animation — has to
+ * land on the same cell whatever order the row's children
  * are in. With column windowing a row holds a subset of the visible columns
  * and the two stop coinciding; these tests get there without windowing by
  * reversing a rendered row's cells.
@@ -131,7 +131,7 @@ describe('TableBody finds cells by column', () => {
   });
 });
 
-describe('TableContainer and ColumnHeader find cells by column', () => {
+describe('ColumnHeader finds cells by column', () => {
   const SCHEMA: ColumnSchema[] = [
     { name: 'a', type: 'integer', nullable: false, originalType: 'INTEGER' },
     { name: 'b', type: 'string', nullable: true, originalType: 'VARCHAR' },
@@ -166,18 +166,6 @@ describe('TableContainer and ColumnHeader find cells by column', () => {
     container.getBodyContainer().appendChild(row);
     return { state, container, row };
   }
-
-  it('makes the pinned column’s cells sticky, and only those', () => {
-    const { state, container, row } = setup();
-
-    state.pinnedColumns.set(['b']);
-
-    expect(cellOf(row, 'b').style.position).toBe('sticky');
-    expect(cellOf(row, 'b').classList.contains('dt-cell--pinned')).toBe(true);
-    expect(cellOf(row, 'a').style.position).toBe('');
-    expect(cellOf(row, 'a').classList.contains('dt-cell--pinned')).toBe(false);
-    container.destroy();
-  });
 
   it('animates a width reset on the reset column’s cells', () => {
     const { container, row } = setup();

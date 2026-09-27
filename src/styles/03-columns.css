@@ -837,6 +837,7 @@
 
 /* Flex wrapper: table root + add-column button side by side */
 .dt-table-wrapper {
+  box-sizing: border-box; /* See `.dt-root`: the border sits inside the 100% */
   display: flex;
   flex-direction: row;
   height: 100%;

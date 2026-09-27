@@ -654,11 +654,11 @@ Fix: find the values that keep a date column as text with a raw SQL filter such 
 
 ### 29. Columns are narrower after upgrading to 0.9
 
-Symptom: every column is 25 px narrower than it was in 0.8, so text truncates sooner. Only pages without a global `box-sizing: border-box` reset see this; with a reset (Tailwind, Bootstrap and most design systems have one), nothing changed.
+Symptom: every column is narrower than it was in 0.8, by 25 px at the default 16 px root font size, so text truncates sooner. Only pages without a global `box-sizing: border-box` reset see this; with a reset (Tailwind, Bootstrap and most design systems have one), nothing changed.
 
-Cause: header and body cells are now `box-sizing: border-box`, so a column's width includes its 0.75rem side padding and its border. Before, those went on top of the width on pages without a reset, and every calculation that places columns (header against body, pinned columns, keyboard scrolling, the scroll extent) was off by that much per column. See [Theming → Sizing](./guides/theming.md#sizing).
+Cause: header and body cells are now `box-sizing: border-box`, so a column's width includes its 0.75rem side padding and its 1 px border. Before, those went on top of the width on pages without a reset, and every calculation that places columns (header against body, pinned columns, keyboard scrolling, the scroll extent) was off by that much per column. See [Theming → Sizing](./guides/theming.md#sizing).
 
-Fix: give the columns the width you want them to occupy, for example `table.actions.setColumnWidth('name', 175)` for the old default look. Don't set `box-sizing: content-box` on `.dt-cell` or `.dt-col-header`; that brings the misplacement back.
+Fix: give the columns the width you want them to occupy, for example `table.actions.setColumnWidth('name', 175)` for the old default look at a 16 px root font size. Don't set `box-sizing: content-box` on `.dt-cell`, `.dt-col-header` or `.dt-row`; that brings the misplacement back.
 
 ---
 

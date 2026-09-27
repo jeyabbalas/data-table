@@ -57,6 +57,9 @@ Each has tests that fail on the old code, a changeset and docs.
   put c00 before the pinned c01, and `aria-colindex` read 3, 1, 4. With a filter matching no rows,
   the body scroll width was 6,000 px against a 6,999 px header, so the last six headers could not be
   scrolled into view. At a 500 px container the fourth header sat 24 px left of its cells.
+- **Rows had the same bug.** `.dt-row` took `rowHeight` plus its 1 px bottom border without a reset,
+  so rows drifted 1 px per row from where the scroller put them, and `.dt-root` / `.dt-table-wrapper`
+  (`height: 100%` plus a border) overflowed the container by 2 px. Fixed with the columns.
 - **The browser suite could not see any of it.** Every spec runs on the demo, whose global
   `* { box-sizing: border-box }` reset hid the content-box arithmetic.
   `tests/browser/column-geometry.spec.ts` mounts a table with the reset overridden.
@@ -65,6 +68,14 @@ Each has tests that fail on the old code, a changeset and docs.
   rows to scroll, 15 px for classic macOS scrollbars. Scroll sync copies `scrollLeft` one to one, so
   at the far right the header is clipped by the difference. Not fixed in 4a; the window controller
   in 4c should size the gutter from `offsetWidth - clientWidth` of the body scroller.
+- **Header controls spill out of narrow columns.** `.dt-col-header` does not clip, and its five
+  22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
+  and border) lets them overflow into the next header, which paints over them. A narrow _pinned_
+  column is worse: its sticky header sits on top, and its buttons take clicks meant for the first
+  unpinned header. Pre-existing; the resize minimum is 50 px.
+- **A width under the padding and border (25 px at a 16 px root) still occupies that much.** Only
+  `setColumnWidth` can set one; the resize paths clamp to 50–500 px. The layout would then disagree
+  with the DOM by the difference.
 - **`--dt-col-width` sizes nothing but loading placeholders.** Every header and cell gets an inline
   width from `columnWidths` (150 px default), which wins over the variable. The theming guide and the
   state-model page said it was the default column width.

@@ -172,6 +172,11 @@
    =========================================== */
 
 .dt-row {
+  /* The row height is the scroller's unit: rows are placed at multiples of
+     it. Border-box keeps the bottom border inside it; under content-box every
+     row took 1px more and the rows drifted from where the scroller put
+     them. */
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   height: var(--dt-row-height);
@@ -209,10 +214,11 @@
      places columns adds their widths up — header against body, pinned
      offsets, keyboard scroll-into-view, the scroll extent — and only
      border-box makes that sum true. Under content-box the 0.75rem padding and
-     the border sat outside the width, so every column took 25px more than
-     the arithmetic said, and at narrow container widths the header's smaller
-     padding moved it off its cells. Hosts with a global box-sizing reset
-     already had this. */
+     the border sat outside the width, so every column took 25px more (at a
+     16px root) than the arithmetic said, and in a narrow table the header's
+     smaller padding moved it off its cells. Hosts with a global box-sizing
+     reset already had this. A width smaller than the padding and border
+     still takes that much. */
   box-sizing: border-box;
   padding: 0 0.75rem;
   width: var(--dt-col-width);

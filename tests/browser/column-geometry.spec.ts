@@ -114,13 +114,12 @@ test('a column occupies its declared width, and its header sits over its cells',
 }) => {
   await mountWithoutReset(page, 1200);
   expectAligned(await columnBoxes(page));
+});
 
+test('headers stay over their cells in a table narrower than 550px', async ({ page }) => {
   // Below 550px the header's padding shrinks and the cells' does not. Under
   // content-box that moved every header 8px further left of its cells.
-  await page.evaluate((hostId) => {
-    document.getElementById(hostId)!.style.width = '500px';
-  }, HOST_ID);
-  await settle(page);
+  await mountWithoutReset(page, 500);
   expect(
     await page.evaluate(
       (hostId) =>
@@ -129,6 +128,43 @@ test('a column occupies its declared width, and its header sits over its cells',
     ),
   ).toBe('8px');
   expectAligned(await columnBoxes(page));
+});
+
+test('rows sit at multiples of the row height, and the table fits its container', async ({
+  page,
+}) => {
+  await mountWithoutReset(page, 1200);
+  const rows = await page.evaluate((hostId) => {
+    const host = document.getElementById(hostId)!;
+    const tops = Array.from(
+      host.querySelectorAll('.dt-body .dt-row:not([data-placeholder])'),
+      (row) => row.getBoundingClientRect(),
+    );
+    return {
+      offsets: tops.slice(0, 12).map((r) => r.top - tops[0]!.top),
+      heights: tops.slice(0, 12).map((r) => r.height),
+      table: host.querySelector('.dt-table-wrapper')!.getBoundingClientRect().height,
+      host: host.getBoundingClientRect().height,
+    };
+  }, HOST_ID);
+  rows.offsets.forEach((offset, k) => expect(offset, `row ${k}`).toBeCloseTo(k * 32, 0));
+  rows.heights.forEach((height, k) => expect(height, `row ${k}`).toBeCloseTo(32, 0));
+  expect(rows.table).toBeCloseTo(rows.host, 0);
+
+  // Walking the cursor down past the viewport has to keep its row in view:
+  // the scroller aims at row * rowHeight, which is where the row now is.
+  await page.locator(`#${HOST_ID} .dt-grid`).focus();
+  for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowDown');
+  await settle(page);
+  const cursor = await page.evaluate((hostId) => {
+    const host = document.getElementById(hostId)!;
+    const scroller = host.querySelector<HTMLElement>('.dt-body-scroll')!;
+    const box = host.querySelector('.dt-cell--focused')!.getBoundingClientRect();
+    const top = scroller.getBoundingClientRect().top;
+    return { top: box.top - top, bottom: box.bottom - top, height: scroller.clientHeight };
+  }, HOST_ID);
+  expect(cursor.top).toBeGreaterThanOrEqual(-0.5);
+  expect(cursor.bottom).toBeLessThanOrEqual(cursor.height + 0.5);
 });
 
 test('End scrolls the last column fully into view', async ({ page }) => {

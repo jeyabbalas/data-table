@@ -1,14 +1,17 @@
 /**
- * A column's declared width must be the width it occupies.
+ * A declared size must be the size an element occupies.
  *
  * Header, body, pinned offsets, keyboard scroll-into-view and the scroll
- * extent all place columns by adding up `columnWidths`. That sum is only true
- * when header cells and body cells are `box-sizing: border-box`; under
- * content-box each column takes its padding and border on top. The library
- * has to say so itself, because a host page's global reset (the demo has
- * one) is not something it can count on. jsdom loads no stylesheet, so this
- * is asserted against the CSS source; `tests/browser/column-geometry.spec.ts`
- * checks the same thing in a real layout.
+ * extent all place columns by adding up `columnWidths`; the virtual scroller
+ * places rows at multiples of `rowHeight`; the table root fills its container
+ * with `height: 100%`. Those sums are only true when the elements are
+ * `box-sizing: border-box`. Under content-box each column takes its padding
+ * and border on top of its width, each row its bottom border on top of its
+ * height, and the root its border on top of 100%. The library has to say so
+ * itself, because a host page's global reset (the demo has one) is not
+ * something it can count on. jsdom loads no stylesheet, so this is asserted
+ * against the CSS source; `tests/browser/column-geometry.spec.ts` checks the
+ * same thing in a real layout.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -32,18 +35,20 @@ function boxSizing(body: string): string | null {
   return /(?:^|;)\s*box-sizing\s*:\s*([^;]+)/.exec(body)?.[1]?.trim() ?? null;
 }
 
-describe('column geometry', () => {
-  it.each(['.dt-cell', '.dt-col-header'])('%s declares box-sizing: border-box', (selector) => {
+const SIZED = ['.dt-cell', '.dt-col-header', '.dt-row', '.dt-root', '.dt-table-wrapper'];
+
+describe('grid geometry', () => {
+  it.each(SIZED)('%s declares box-sizing: border-box', (selector) => {
     const own = rules().filter((r) => r.selectors.includes(selector));
     expect(own.length, `no rule for ${selector}`).toBeGreaterThan(0);
     expect(own.map((r) => boxSizing(r.body)).filter(Boolean)).toContain('border-box');
   });
 
-  it('no rule switches a header or body cell back to content-box', () => {
+  it('no rule switches one of them back to content-box', () => {
     const offenders = rules()
       .filter((r) => boxSizing(r.body) === 'content-box')
       .flatMap((r) => r.selectors)
-      .filter((s) => /\.dt-(cell|col-header)\b/.test(s));
+      .filter((s) => /\.dt-(cell|col-header|row|root|table-wrapper)\b/.test(s));
     expect(offenders).toEqual([]);
   });
 });

@@ -538,7 +538,8 @@ describe('ModalHost — a radio group at the end of the dialog', () => {
   });
 
   it("wraps Shift+Tab from the first control to the group's stop", () => {
-    const { backdrop, dialog, buttons, radios } = dialogEndingInRadios(2);
+    // Checked in the middle: the last radio is not the stop.
+    const { backdrop, dialog, buttons, radios } = dialogEndingInRadios(1);
     const host = new ModalHost();
     host.open({ mode: 'modal', element: backdrop, dialog });
 
@@ -546,7 +547,86 @@ describe('ModalHost — a radio group at the end of the dialog', () => {
     dialog.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }),
     );
-    expect(document.activeElement).toBe(radios[2]);
+    expect(document.activeElement).toBe(radios[1]);
     host.close();
+  });
+
+  it('gives no stop to a group whose checked radio is outside the dialog', () => {
+    const { backdrop, dialog, buttons } = dialogEndingInRadios(null);
+    const outside = document.createElement('input');
+    outside.type = 'radio';
+    outside.name = 'nulls';
+    outside.checked = true;
+    document.body.appendChild(outside);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    // Tab passes over the dialog's radios, so the last button is the end.
+    buttons[2]!.focus();
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement).toBe(buttons[0]);
+    host.close();
+  });
+});
+
+describe('ModalHost — a radio group at the start of the dialog', () => {
+  it('wraps Shift+Tab from whichever radio of the group has focus', () => {
+    const { backdrop, dialog } = makeModalPair();
+    const buttons = Array.from(dialog.querySelectorAll('button'));
+    const radios = ['a', 'b', 'c'].map((value) => {
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'mode';
+      radio.value = value;
+      return radio;
+    });
+    dialog.prepend(...radios);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    // Shift+Tab into a group with nothing checked lands on its last radio.
+    radios[2]!.focus();
+    dialog.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }),
+    );
+    expect(document.activeElement).toBe(buttons[2]);
+    host.close();
+  });
+});
+
+describe('ModalHost — controls the browser skips', () => {
+  it('skips controls in a disabled fieldset', () => {
+    const { backdrop, dialog } = makeModalPair();
+    const buttons = Array.from(dialog.querySelectorAll('button'));
+    const fieldset = document.createElement('fieldset');
+    fieldset.disabled = true;
+    fieldset.appendChild(document.createElement('input'));
+    dialog.appendChild(fieldset);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+
+    buttons[2]!.focus();
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement).toBe(buttons[0]);
+    host.close();
+  });
+
+  it('reads a stylesheet where there is no checkVisibility', async () => {
+    const style = document.createElement('style');
+    style.textContent = '.gone { display: none; }';
+    document.head.appendChild(style);
+    const { backdrop, dialog } = makeModalPair();
+    const buttons = Array.from(dialog.querySelectorAll('button'));
+    const wrapper = document.createElement('div');
+    wrapper.className = 'gone';
+    dialog.insertBefore(wrapper, buttons[0]!);
+    wrapper.appendChild(buttons[0]!);
+    const host = new ModalHost();
+    host.open({ mode: 'modal', element: backdrop, dialog });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(document.activeElement).toBe(buttons[1]);
+    host.close();
+    style.remove();
   });
 });

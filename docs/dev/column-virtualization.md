@@ -123,3 +123,7 @@ That charts appear during a smooth wheel sweep is `lazy-charts.spec.ts`.
   that it always names the ringed cell. `TableBody.renderVisibleRows` still rebuilds any row whose
   cell count differs from `visibleColumns.length`, which a windowed row always does. `ColumnReorder`
   takes the drop index and the new order from the header DOM, which will hold only mounted headers.
+- **Found in review, outside this work, not fixed.** The SQL filter modal's Remove section never
+  shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
+  export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
+  with two tables on a page the first table's export dialog opens with no format or scope checked.

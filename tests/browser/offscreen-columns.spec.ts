@@ -202,3 +202,144 @@ test('pinning a far-right column, and hide → pin → show, keep columns over t
   b = await boxes(page, 'c011');
   expect(b.headerLeft).toBeCloseTo(b.cellLeft, 0);
 });
+
+/**
+ * Pin c000 and c001 and widen c001 to 500 px, so the right half of its header
+ * lies over 250 px of unpinned headers once the rest scroll beneath it, and
+ * scroll c150 into view.
+ */
+async function pinWideBlock(page: Page): Promise<void> {
+  await mountTable(page);
+  await page.evaluate(() => {
+    const { actions } = (window as unknown as TestWindow).__dt;
+    actions.toggleColumnPin('c000');
+    actions.toggleColumnPin('c001');
+    actions.setColumnWidth('c001', 500);
+  });
+  await settle(page);
+  await wheelIntoView(page, 'c150');
+}
+
+/**
+ * On screen: the pinned block's right edge; the vertical middle of the
+ * header row; a pointer over the right half of c001 that is just short of
+ * the middle of `beneath`, an unpinned header wholly under the pinned block;
+ * and `first`, the first unpinned column at least partly in view.
+ */
+function pinnedGeometry(page: Page) {
+  return page.evaluate((hostId) => {
+    const host = document.getElementById(hostId)!;
+    const headers = Array.from(host.querySelectorAll<HTMLElement>('.dt-col-header[data-column]'));
+    const isPinned = (h: HTMLElement) => h.classList.contains('dt-col-header--pinned');
+    const box = (h: HTMLElement) => h.getBoundingClientRect();
+    const edge = Math.max(...headers.filter(isPinned).map((h) => box(h).right));
+    const c001 = box(headers.find((h) => h.dataset.column === 'c001')!);
+    const half = c001.left + c001.width / 2;
+    const unpinned = headers.filter((h) => !isPinned(h));
+    const middle = (h: HTMLElement) => box(h).left + box(h).width / 2;
+    const beneath = unpinned.find((h) => middle(h) > half + 10 && box(h).right <= edge)!;
+    const first = unpinned.find((h) => box(h).right > edge)!;
+    return {
+      edge,
+      y: c001.top + c001.height / 2,
+      pointer: middle(beneath) - 5,
+      beneath: beneath.dataset.column!,
+      first: first.dataset.column!,
+    };
+  }, HOST_ID);
+}
+
+/** Press `column`'s drag handle and drag it to `x`, `y` on screen. */
+async function dragTo(page: Page, column: string, x: number, y: number): Promise<void> {
+  const handle = (await header(page, column).locator('.dt-col-drag-handle').boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 8 });
+  await expect(page.locator(`#${HOST_ID} .dt-root`)).toHaveClass(/dt-column-dragging/);
+}
+
+function indicatorLeft(page: Page): Promise<number> {
+  return page.evaluate(
+    (hostId) =>
+      document.querySelector(`#${hostId} .dt-drop-indicator`)!.getBoundingClientRect().left,
+    HOST_ID,
+  );
+}
+
+test('a column let go on the pinned block lands beside it, not among the headers beneath it', async ({
+  page,
+}) => {
+  await pinWideBlock(page);
+  const g = await pinnedGeometry(page);
+  expect(g.beneath, 'a header wholly beneath the pinned block').not.toBe(g.first);
+  const before = await probe(page, 'order');
+
+  await dragTo(page, 'c150', g.pointer, g.y);
+  // The indicator marks the pinned block's edge, where the column will land.
+  expect(await indicatorLeft(page)).toBeCloseTo(g.edge, 0);
+  await page.mouse.up();
+  await settle(page);
+
+  // Before the first unpinned column in view, and not before `beneath`,
+  // whose header's middle was just past the pointer.
+  const expected = before.filter((c) => c !== 'c150');
+  expected.splice(expected.indexOf(g.first), 0, 'c150');
+  expect(await probe(page, 'order')).toEqual(expected);
+  const c150 = await boxes(page, 'c150');
+  expect(c150.headerLeft + c150.headerWidth, 'c150 at least partly in view').toBeGreaterThan(
+    g.edge,
+  );
+  expect(c150.headerLeft, 'c150 over its cells').toBeCloseTo(c150.cellLeft, 0);
+  await expectAriaColIndexes(page);
+});
+
+test('a drag whose release is lost ends at the next move, without a drop', async ({ page }) => {
+  await mountTable(page, { columns: 40 });
+  const before = await probe(page, 'order');
+  const root = page.locator(`#${HOST_ID} .dt-root`);
+  const handle = (await header(page, 'c02').locator('.dt-col-drag-handle').boundingBox())!;
+  const y = handle.y + handle.height / 2;
+  await dragTo(page, 'c02', handle.x + 300, y);
+
+  // The button came up in another window, after an alt-tab. Back in this
+  // one, the pointer's first move reports no button held, and no mouseup
+  // ever arrived.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: handle.x + 320,
+    y,
+    button: 'none',
+    buttons: 0,
+  });
+  await expect(root).not.toHaveClass(/dt-column-dragging/);
+  await expect(page.locator(`#${HOST_ID} .dt-drop-indicator`)).toHaveCount(0);
+
+  // Playwright still holds the button: letting it go now is a stray mouseup.
+  await page.mouse.up();
+  await settle(page);
+  expect(await probe(page, 'order')).toEqual(before);
+});
+
+test('a drag ends without a drop, and lets go of its column, when the window loses focus', async ({
+  page,
+}) => {
+  await mountTable(page);
+  await wheelIntoView(page, 'c150');
+  const before = await probe(page, 'order');
+  const root = page.locator(`#${HOST_ID} .dt-root`);
+  const handle = (await header(page, 'c150').locator('.dt-col-drag-handle').boundingBox())!;
+  await dragTo(page, 'c150', handle.x + 20, handle.y + handle.height / 2);
+  // Held while dragged, however far the wheel takes it.
+  await wheelBy(page, 3_000, { over: 'pointer' });
+  expect(await probe(page, 'mounted')).toContain('c150');
+
+  // What an alt-tab does to the page.
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(root).not.toHaveClass(/dt-column-dragging/);
+  await expect.poll(() => probe(page, 'mounted')).not.toContain('c150');
+
+  await page.mouse.up();
+  await settle(page);
+  expect(await probe(page, 'order')).toEqual(before);
+});

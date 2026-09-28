@@ -10,6 +10,8 @@
  * - Works alongside resize handles (doesn't conflict)
  */
 
+import type { ColumnLayout } from './ColumnLayout';
+
 /**
  * Options for configuring the ColumnReorder
  */
@@ -32,6 +34,16 @@ export interface ColumnReorderOptions {
    * @internal
    */
   holdColumn?: ((column: string) => () => void) | undefined;
+  /**
+   * Late-bound accessor for the table's column layout. With it, a drop is
+   * found from the layout and the header scroll rather than from header
+   * rects: a pinned header is sticky, and the unpinned headers scrolled
+   * beneath it have rects under the pointer too, later in DOM order.
+   * `TableContainer` passes its own; without one, drops go by header rects.
+   *
+   * @internal
+   */
+  getLayout?: (() => ColumnLayout) | undefined;
 }
 
 /**
@@ -112,6 +124,7 @@ export class ColumnReorder {
   private readonly dragThreshold: number;
   private readonly getPinnedColumns: (() => readonly string[]) | undefined;
   private readonly holdColumn: ((column: string) => () => void) | undefined;
+  private readonly getLayout: (() => ColumnLayout) | undefined;
   /** Releases the hold on the dragged column, from the press to the drop. */
   private releaseHold: (() => void) | null = null;
 
@@ -120,6 +133,8 @@ export class ColumnReorder {
   private readonly boundMouseMove: (e: MouseEvent) => void;
   private readonly boundMouseUp: (e: MouseEvent) => void;
   private readonly boundScroll: (e: Event) => void;
+  private readonly boundCancel: () => void;
+  private readonly boundVisibilityChange: () => void;
   /** The shadow root the table is in, while a drag listens to its scrolls. */
   private shadowScrollRoot: ShadowRoot | null = null;
 
@@ -136,12 +151,19 @@ export class ColumnReorder {
     this.dragThreshold = options.dragThreshold ?? 5;
     this.getPinnedColumns = options.getPinnedColumns;
     this.holdColumn = options.holdColumn;
+    this.getLayout = options.getLayout;
 
     // Bind document-level handlers
     this.boundMouseDown = this.handleMouseDown.bind(this);
     this.boundMouseMove = this.handleMouseMove.bind(this);
     this.boundMouseUp = this.handleMouseUp.bind(this);
     this.boundScroll = this.handleScroll.bind(this);
+    this.boundCancel = () => {
+      if (!this.destroyed) this.cancelDrag();
+    };
+    this.boundVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') this.boundCancel();
+    };
 
     // Create drop indicator element
     this.createDropIndicator();
@@ -254,6 +276,31 @@ export class ColumnReorder {
     // Add document-level listeners
     document.addEventListener('mousemove', this.boundMouseMove);
     document.addEventListener('mouseup', this.boundMouseUp);
+    // A release this document never hears, made after an alt-tab in another
+    // window, would leave the drag alive until the next press anywhere
+    // dropped the column. Losing the window, the page or the pointer ends the
+    // drag instead, without a drop.
+    window.addEventListener('blur', this.boundCancel);
+    document.addEventListener('visibilitychange', this.boundVisibilityChange);
+    document.addEventListener('pointercancel', this.boundCancel);
+  }
+
+  /** Remove the listeners a press adds, the drag's included. */
+  private stopListening(): void {
+    document.removeEventListener('mousemove', this.boundMouseMove);
+    document.removeEventListener('mouseup', this.boundMouseUp);
+    window.removeEventListener('blur', this.boundCancel);
+    document.removeEventListener('visibilitychange', this.boundVisibilityChange);
+    document.removeEventListener('pointercancel', this.boundCancel);
+  }
+
+  /**
+   * End a press or a drag without a drop: the order stays as it was, and the
+   * dragged column's hold is let go.
+   */
+  private cancelDrag(): void {
+    this.stopListening();
+    this.resetDragState();
   }
 
   /**
@@ -261,6 +308,13 @@ export class ColumnReorder {
    */
   private handleMouseMove(event: MouseEvent): void {
     if (this.destroyed) return;
+
+    // No button held: it was let go where this document could not hear it,
+    // in another window after an alt-tab. Nothing was dropped.
+    if (event.buttons === 0) {
+      this.cancelDrag();
+      return;
+    }
 
     event.preventDefault();
     this.lastClientX = event.clientX;
@@ -328,34 +382,92 @@ export class ColumnReorder {
   private updateDropPosition(clientX: number): void {
     if (!this.headerRow || !this.draggedColumn) return;
 
-    const headers = this.getHeaderElements();
-    if (headers.length === 0) return;
-
-    // Find the drop position
-    let dropX = 0;
-    let newDropIndex = 0;
-
-    for (let i = 0; i < headers.length; i++) {
-      const header = headers[i]!;
-      const rect = header.getBoundingClientRect();
-      const midpoint = rect.left + rect.width / 2;
-
-      if (clientX < midpoint) {
-        dropX = rect.left;
-        newDropIndex = i;
-        break;
-      }
-
-      // After the last column
-      if (i === headers.length - 1) {
-        dropX = rect.right;
-        newDropIndex = headers.length;
-      }
-    }
+    const layout = this.getLayout?.();
+    const drop = layout ? this.dropFromLayout(clientX, layout) : this.dropFromHeaders(clientX);
+    if (!drop) return;
 
     // Update drop indicator
-    this.dropIndex = newDropIndex;
-    this.showDropIndicator(dropX);
+    this.dropIndex = drop.index;
+    this.showDropIndicator(drop.x);
+  }
+
+  /**
+   * The gap before the first header whose middle is past the pointer, in DOM
+   * order, and its x: a header's left edge, or the last one's right edge.
+   */
+  private dropFromHeaders(clientX: number): { index: number; x: number } | null {
+    const headers = this.getHeaderElements();
+    if (headers.length === 0) return null;
+
+    for (let i = 0; i < headers.length; i++) {
+      const rect = headers[i]!.getBoundingClientRect();
+      if (clientX < rect.left + rect.width / 2) return { index: i, x: rect.left };
+      // After the last column
+      if (i === headers.length - 1) return { index: headers.length, x: rect.right };
+    }
+    return null;
+  }
+
+  /**
+   * The gap to drop into, as an index into the layout's columns, and where
+   * it is on screen, from the layout and the header scroll.
+   *
+   * The pinned block stays at the left edge of the header viewport however
+   * far the rest has scrolled, and a pinned column drops between pinned
+   * columns, by the pointer's offset into the viewport. An unpinned column
+   * drops before or after the column under the pointer, in layout
+   * coordinates, and never before the first unpinned column still in view:
+   * let go on the pinned block, it lands at the block's edge, not among the
+   * columns scrolled out of view beneath it. The pointer counts only inside
+   * the viewport, and the gap is drawn where the column will land, or at the
+   * block's edge for a column there that the block half covers.
+   */
+  private dropFromLayout(
+    clientX: number,
+    layout: ColumnLayout,
+  ): { index: number; x: number } | null {
+    const count = layout.columns.length;
+    const dragged = layout.indexOf(this.draggedColumn!);
+    if (count === 0 || dragged === -1) return null;
+
+    const scroller = this.headerRow.closest<HTMLElement>(`.${this.classPrefix}-header-scroll`);
+    const scrollLeft = scroller?.scrollLeft ?? 0;
+    const viewWidth = scroller ? scroller.clientWidth : Infinity;
+    // Where layout x = 0 is on screen, and where the viewport starts.
+    const rowLeft = this.getRowContainer().getBoundingClientRect().left;
+    const viewLeft = rowLeft + scrollLeft;
+    const x = Math.min(Math.max(clientX - viewLeft, 0), viewWidth);
+    const { pinnedCount, pinnedWidth } = layout;
+
+    /** The gap nearest `at` among the columns `[from, to)`, by their middles. */
+    const gapAt = (at: number, from: number, to: number): number => {
+      for (let i = from; i < to; i++) {
+        if (at < layout.leftAt(i) + layout.widthAt(i) / 2) return i;
+      }
+      return to;
+    };
+
+    if (dragged < pinnedCount) {
+      const index = gapAt(x, 0, pinnedCount);
+      return { index, x: viewLeft + layout.leftAt(index) };
+    }
+
+    // The first unpinned column not wholly beneath the pinned block.
+    let first = pinnedCount;
+    while (
+      first < count &&
+      layout.leftAt(first) + layout.widthAt(first) <= pinnedWidth + scrollLeft
+    ) {
+      first++;
+    }
+    const index = Math.max(gapAt(x + scrollLeft, pinnedCount, count), first);
+    return {
+      index,
+      x: Math.min(
+        Math.max(rowLeft + layout.leftAt(index), viewLeft + pinnedWidth),
+        viewLeft + viewWidth,
+      ),
+    };
   }
 
   /**
@@ -367,8 +479,7 @@ export class ColumnReorder {
     event.preventDefault();
 
     // Remove document listeners
-    document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('mouseup', this.boundMouseUp);
+    this.stopListening();
 
     if (this.isDragging) {
       // Once more, against the headers as they are now: they may have moved
@@ -390,9 +501,13 @@ export class ColumnReorder {
       return;
     }
 
-    // Get current column order
-    const headers = this.getHeaderElements();
-    const currentOrder = headers.map((h) => h.getAttribute('data-column')!).filter(Boolean);
+    // Get current column order: the one the drop index was taken against.
+    const layout = this.getLayout?.();
+    const currentOrder = layout
+      ? [...layout.columns]
+      : this.getHeaderElements()
+          .map((h) => h.getAttribute('data-column')!)
+          .filter(Boolean);
 
     // Calculate new order
     const draggedIndex = currentOrder.indexOf(this.draggedColumn);
@@ -463,11 +578,14 @@ export class ColumnReorder {
    */
   private getHeaderElements(): HTMLElement[] {
     if (!this.headerRow) return [];
+    return Array.from(this.getRowContainer().querySelectorAll(`.${this.classPrefix}-col-header`));
+  }
 
-    const headerRowInner = this.headerRow.querySelector(`.${this.classPrefix}-header-row`);
-    const container = headerRowInner ?? this.headerRow;
-
-    return Array.from(container.querySelectorAll(`.${this.classPrefix}-col-header`));
+  /** The element the headers are laid out in: the header row, when there is one. */
+  private getRowContainer(): HTMLElement {
+    return (
+      this.headerRow.querySelector<HTMLElement>(`.${this.classPrefix}-header-row`) ?? this.headerRow
+    );
   }
 
   // =========================================
@@ -487,7 +605,7 @@ export class ColumnReorder {
    */
   disable(): void {
     this.enabled = false;
-    this.resetDragState();
+    this.cancelDrag();
   }
 
   /**
@@ -523,12 +641,8 @@ export class ColumnReorder {
     if (this.destroyed) return;
     this.destroyed = true;
 
-    // End any in-progress drag
-    this.resetDragState();
-
-    // Remove document listeners
-    document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('mouseup', this.boundMouseUp);
+    // End any in-progress drag, and remove document listeners
+    this.cancelDrag();
     this.headerRow.removeEventListener('mousedown', this.boundMouseDown);
 
     // Remove drop indicator

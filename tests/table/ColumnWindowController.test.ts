@@ -61,6 +61,25 @@ function viewport(el: HTMLElement, width: number): void {
   Object.defineProperty(el, 'clientWidth', { configurable: true, value: width });
 }
 
+/**
+ * Give `el` a `scrollLeft` that reads back what was written until the
+ * returned `settle()` moves it to the nearest half pixel, as Chrome at a
+ * device pixel ratio of 2 can settle a scroller once it is drawn.
+ */
+function settlingScrollLeft(el: HTMLElement): () => void {
+  let left = 0;
+  Object.defineProperty(el, 'scrollLeft', {
+    configurable: true,
+    get: () => left,
+    set: (v: number) => {
+      left = v;
+    },
+  });
+  return () => {
+    left = Math.round(left * 2) / 2;
+  };
+}
+
 beforeEach(() => {
   MockResizeObserver.instances = [];
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -203,6 +222,69 @@ describe('ColumnWindowController', () => {
     bodyScroll.scrollLeft = 100;
     bodyScroll.dispatchEvent(new Event('scroll'));
     expect(headerScroll.scrollLeft).toBe(100);
+  });
+
+  it('takes positions less than a pixel apart for the same one', () => {
+    const settleHeader = settlingScrollLeft(headerScroll);
+    const settleBody = settlingScrollLeft(bodyScroll);
+
+    // A smooth scroll of the body. The header's echo reads where the header
+    // settled, a fraction from where it was written, and is still dropped.
+    bodyScroll.scrollLeft = 100.3;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100.3);
+    settleHeader();
+    bodyScroll.scrollLeft = 112.7;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(112.7);
+
+    // An animated scroll of the header. The body's echo, the same.
+    headerScroll.scrollLeft = 150.3;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150.3);
+    settleBody();
+    headerScroll.scrollLeft = 160.2;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(160.2);
+  });
+
+  it('lets the body land a fraction of a pixel from the header, and passes on a whole pixel', () => {
+    // A body that settles on the half pixel as it is written.
+    let bodyLeft = 0;
+    Object.defineProperty(bodyScroll, 'scrollLeft', {
+      configurable: true,
+      get: () => bodyLeft,
+      set: (v: number) => {
+        bodyLeft = Math.round(v * 2) / 2;
+      },
+    });
+    headerScroll.scrollLeft = 150.3;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150.5);
+    // Not pulled back to the body: writing the header would stop an animated
+    // scroll of it.
+    expect(headerScroll.scrollLeft).toBe(150.3);
+
+    // A header a fraction of a pixel from the body is where the body is.
+    bodyLeft = 171.8;
+    headerScroll.scrollLeft = 172;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(171.8);
+
+    // A whole pixel from both is a scroll of the header's own.
+    bodyLeft = 172;
+    headerScroll.scrollLeft = 173;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(173);
+  });
+
+  it('keeps the header on a body that scrolls a fraction of a pixel at a time', () => {
+    const steps = [100, 100.5, 101, 101.5];
+    for (const left of steps) {
+      bodyScroll.scrollLeft = left;
+      bodyScroll.dispatchEvent(new Event('scroll'));
+      expect(headerScroll.scrollLeft).toBe(left);
+    }
   });
 
   it('pulls the header back to a body that cannot scroll as far', () => {

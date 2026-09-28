@@ -102,7 +102,7 @@ test.describe('at device pixel ratio 2', () => {
 test("an animated scroll of the header goes the whole way when the body's echo comes late", async ({
   page,
 }) => {
-  // Keyboard scrolling in the focused header and a fling over it animate the
+  // A fling over the header, or a host's `scrollTo` on it, animates the
   // header, and the body follows it frame by frame.
   await mountTable(page);
   await deliverLate(page, 'body');

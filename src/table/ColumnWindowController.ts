@@ -138,6 +138,17 @@ function sameColumns(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
+ * Whether two scroll positions are the same one. Chrome at a fractional
+ * device pixel ratio reports offsets in fractions of a pixel, and can read a
+ * scroller back a fraction away from where it was written, so positions less
+ * than a pixel apart count as one. A header that stops short of the body
+ * (see `ColumnWindowController.syncHeaderScroll`) stops a scrollbar short.
+ */
+function samePosition(a: number | null, b: number): boolean {
+  return a !== null && Math.abs(a - b) < 1;
+}
+
+/**
  * Keeps the header and body scrollers together, makes every programmatic
  * sideways scroll of the table, and publishes the columns to mount.
  *
@@ -166,10 +177,11 @@ export class ColumnWindowController {
   private syncing = false;
 
   /**
-   * Where the controller last left each scroller: where a sync put it, or
-   * where it was when its own scroll moved the other. A scroll event that
-   * finds a scroller there is the echo of that sync, and has nothing to
-   * pass on (see {@link handleHeaderScroll}).
+   * Where the controller last left the header, and where a scroll of the
+   * header's own last put the body. A scroll event that finds a scroller
+   * there is the echo of that write, and has nothing to pass on (see
+   * {@link handleHeaderScroll}). The body's is cleared by a sync from the
+   * body, whose own scrolls always take the header along.
    */
   private headerAt: number | null = null;
   private bodyAt: number | null = null;
@@ -260,10 +272,10 @@ export class ColumnWindowController {
 
   private readonly handleBodyScroll = (): void => {
     if (this.destroyed || this.syncing) return;
-    // A body still where the controller last left it has nothing to pass
-    // on: this is the echo of the header's own scroll, or a scroll straight
-    // down. Syncing then would pull back a header that has moved on.
-    if (this.bodyScroll.scrollLeft !== this.bodyAt) {
+    // A body still where a scroll of the header's put it is echoing that
+    // scroll, or scrolling straight down, and the header may have moved on
+    // since: syncing it then would pull it back.
+    if (!samePosition(this.bodyAt, this.bodyScroll.scrollLeft)) {
       this.syncing = true;
       this.syncHeaderScroll();
       this.syncing = false;
@@ -280,19 +292,20 @@ export class ColumnWindowController {
    * ratio of 2 was seen firing it a frame late, in the middle of a smooth
    * scroll of the body. Passing on the header's older position then pulled
    * the body back, which stopped the scroll a pixel or two in. So the echo is
-   * dropped for where it finds the header, whatever the body is doing. The
-   * same goes for a sync the header could not follow, which leaves it short
-   * of the body (see {@link syncHeaderScroll}).
+   * dropped for where it finds the header, to within a pixel, whatever the
+   * body is doing. The same goes for a sync the header could not follow,
+   * which leaves it short of the body (see {@link syncHeaderScroll}).
    */
   private readonly handleHeaderScroll = (): void => {
     if (this.destroyed || this.syncing) return;
     const left = this.headerScroll.scrollLeft;
-    if (left === this.headerAt || left === this.bodyScroll.scrollLeft) return;
+    if (samePosition(this.headerAt, left) || samePosition(this.bodyScroll.scrollLeft, left)) return;
     this.syncing = true;
     this.bodyScroll.scrollLeft = left;
-    if (this.bodyScroll.scrollLeft === left) {
+    const landed = this.bodyScroll.scrollLeft;
+    if (samePosition(landed, left)) {
       this.headerAt = left;
-      this.bodyAt = left;
+      this.bodyAt = landed;
     } else {
       // A body that cannot scroll as far takes the header back with it.
       this.syncHeaderScroll();
@@ -314,7 +327,7 @@ export class ColumnWindowController {
     const left = this.bodyScroll.scrollLeft;
     this.headerScroll.scrollLeft = left;
     this.headerAt = this.headerScroll.scrollLeft;
-    this.bodyAt = left;
+    this.bodyAt = null;
   }
 
   /** Scroll the body, and the header with it, to `left`. */

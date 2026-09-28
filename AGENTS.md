@@ -637,7 +637,7 @@ createDataTable(opts)
   ├─ TableContainer (FilterBar, Header, Body, Modals, ...)
   ├─ VisualizationRegistry wiring            ← if visualizations
   ├─ emit('ready')
-  ├─ [if opts.source] await loadData         ← blocks resolution; a failure rejects
+  ├─ [if opts.source] await loadData         ← blocks resolution; a failure tears down, rejects
   └─ await createDataTable() resolves        ← first row and chart fetches settled
 
 // After resolution:
@@ -650,7 +650,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 `ready` is replayed in a microtask to listeners subscribing after init (src/DataTable.ts, `on('ready', …)` path). No other event is: the initial load's `loadStart` / `loadComplete` / `loadError` fire before `createDataTable()` resolves, so no consumer listener sees them.
 
-If the initial load fails, `createDataTable()` rejects with the load's error (a `DataTableError`, usually `LoadError`) and does not tear down what it built: the table stays mounted in `container`, and a worker or session store it created stays open, with no handle to `destroy()` them. To watch the initial load, or to keep a handle when it fails, omit `source` and call `await table.loadData(source, { tableName, sourceFormat })` after subscribing, inside `try`. The `tableName` and `sourceFormat` given to `createDataTable` apply to `source` only; a load without a `tableName` gets a generated one, so no saved session is restored.
+If the initial load fails, `createDataTable()` first tears down what it built, as `destroy()` would: its DOM and listeners, and a worker or session store it created (a `bridge` or `sessionStore` you passed in stays open). Then it rejects with the load's error (a `DataTableError`, usually `LoadError`). The container is left as it was, ready for another `createDataTable()`. To watch the initial load, or to keep the table through a failed load and retry, omit `source` and call `await table.loadData(source, { tableName, sourceFormat })` after subscribing, inside `try`. The `tableName` and `sourceFormat` given to `createDataTable` apply to `source` only; a load without a `tableName` gets a generated one, so no saved session is restored.
 
 ---
 

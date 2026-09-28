@@ -48,7 +48,9 @@ rows that fit; an unbounded container silently defeats virtualization. See
 double-invokes it) before the Promise resolves, the cleanup function runs
 first — there's no `instance` to destroy yet. When the Promise finally
 resolves, `cancelled === true` tells us to destroy immediately so we don't
-leak a table instance.
+leak a table instance. A `createDataTable` whose load fails has already
+removed what it mounted when its Promise rejects, so there is nothing to
+destroy then; add a `.catch` to show the error.
 
 ## Strict Mode
 

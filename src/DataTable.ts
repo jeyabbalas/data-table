@@ -460,10 +460,10 @@ type VisualizationType =
  * `loadData()`. With `source`, it also awaits that first load, and the first
  * fetches of its rows and of the charts in view, so `state.schema` is
  * populated on return. Those fetches are awaited, not required: one that
- * fails is logged and leaves placeholders. If the load fails, the promise
- * rejects with its error and the table, already mounted, is not torn down:
- * omit `source` and call `loadData(source, { tableName, sourceFormat })` to
- * keep a handle on it.
+ * fails is logged and leaves placeholders. If the load fails, the table tears
+ * itself down as `destroy()` would, and the promise rejects with the load's
+ * error: omit `source` and call `loadData(source, { tableName, sourceFormat })`
+ * to keep the table through a failed load.
  *
  * @remarks Size the container before calling this. The table virtualizes
  * against the container's height, and an unbounded one silently renders every
@@ -1541,15 +1541,27 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   readyPayload = { bridgeReady: true };
   emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
-    // Awaited, so createDataTable resolves with the table loaded and its
-    // first rows fetched, and rejects with the load's error if it fails.
-    // The load's events fire before any consumer can subscribe; a consumer
-    // that needs them omits `source` and calls `loadData` itself, with the
-    // `tableName` and `sourceFormat` it would have passed here.
-    await loadDataImpl(opts.source, {
-      tableName: opts.tableName,
-      sourceFormat: opts.sourceFormat,
-    });
+    // Awaited, so createDataTable resolves with the table loaded and the
+    // fetch of its first rows settled. The load's events fire before any
+    // consumer can subscribe; a consumer that needs them omits `source` and
+    // calls `loadData` itself, with the `tableName` and `sourceFormat` it
+    // would have passed here.
+    try {
+      await loadDataImpl(opts.source, {
+        tableName: opts.tableName,
+        sourceFormat: opts.sourceFormat,
+      });
+    } catch (error) {
+      // The caller never gets this table, so nothing else could destroy it:
+      // tear it down here, then reject with the load's own error, not one
+      // the teardown ran into.
+      try {
+        await destroy();
+      } catch (teardownError) {
+        console.warn('[data-table] Cleanup after a failed initial load failed:', teardownError);
+      }
+      throw error;
+    }
   }
 
   // -------- destroy --------

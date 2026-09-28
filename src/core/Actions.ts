@@ -157,6 +157,7 @@ export class StateActions {
   /** Those of them that can leave the relation unreadable meanwhile: all but adds. */
   private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
+  private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
   /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
@@ -251,6 +252,20 @@ export class StateActions {
   setOnRelationSettled(callback: () => void): void {
     this.throwIfDestroyed('setOnRelationSettled');
     this.onRelationSettledCallback = callback;
+  }
+
+  /**
+   * Set a callback told the name of each base table that a load or a clear
+   * leaves behind: the one in state as a load's turn begins, unless the load
+   * makes a table of that name again, and the one a clear empties. Nothing in
+   * the table names it after that. The facade drops it once the next load
+   * has landed, or on destroy.
+   *
+   * @internal
+   */
+  setOnBaseTableReplaced(callback: (tableName: string) => void): void {
+    this.throwIfDestroyed('setOnBaseTableReplaced');
+    this.onBaseTableReplacedCallback = callback;
   }
 
   /**
@@ -796,6 +811,7 @@ export class StateActions {
     return this.inTurn(async () => {
       this.throwIfDestroyed('clearData');
       const baseTableName = this.state.baseTableName.get() ?? this.state.tableName.get();
+      if (baseTableName) this.onBaseTableReplacedCallback?.(baseTableName);
       const hadDerived = this.state.derivedColumns.get().length > 0;
       resetTableState(this.state);
       this.undoManager?.clear();
@@ -847,19 +863,47 @@ export class StateActions {
     return this.loadEpoch;
   }
 
+  /**
+   * Throw `DestroyedError` if the table was destroyed while a load ran,
+   * dropping first the base table the load made: nothing names it, and on a
+   * shared bridge it would outlive the table.
+   */
+  private async abandonIfDestroyed(tableName: string): Promise<void> {
+    if (!this.destroyed) return;
+    try {
+      await this.bridge.dropTable(tableName);
+    } catch {
+      // Best-effort: a terminated worker took it with it.
+    }
+    this.throwIfDestroyed('loadData');
+  }
+
   /** The turn of {@link loadData}. */
   private async loadDataInTurn(
     source: File | Blob | string | ArrayBuffer,
     options: LoadDataOptions,
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
+    // The table this load replaces is left behind, for the facade to drop
+    // once a load has landed, or on destroy even if none does: unless the
+    // load makes a table of the same name, which replaces it in place, and
+    // is left behind only if the load fails.
+    const replaced = this.state.baseTableName.get() ?? this.state.tableName.get();
+    const replacedInPlace = replaced !== null && replaced === options.tableName;
+    if (replaced && !replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
     // Reset state for new data
     resetTableState(this.state);
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
-    const result = await this.loader.load(source, options);
-    this.throwIfDestroyed('loadData');
+    let result: Awaited<ReturnType<DataLoader['load']>>;
+    try {
+      result = await this.loader.load(source, options);
+    } catch (err) {
+      if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+      throw err;
+    }
+    await this.abandonIfDestroyed(result.tableName);
 
     // Clean up any previous derived column manager. Awaited, so that its
     // DROPs land before a restore below creates the new manager's tables:
@@ -873,7 +917,7 @@ export class StateActions {
       } catch {
         // Swallow — the previous manager is being replaced.
       }
-      this.throwIfDestroyed('loadData');
+      await this.abandonIfDestroyed(result.tableName);
     }
 
     // Update state with schema from loader result
@@ -964,6 +1008,8 @@ export class StateActions {
               });
             }
           } catch (err) {
+            // Destroyed during the rebuild: nothing to restore any more.
+            if (err instanceof DestroyedError) throw err;
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state
             const derivedNames = new Set(snapshot.derivedColumns.map((d) => d.name));

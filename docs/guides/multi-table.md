@@ -89,7 +89,10 @@ bridge keep their tables and continue working.
 
 - **Distinct `tableName` per table.** DuckDB creates one table per call;
   reusing a name replaces the previous one's data. `tableName: 'trips'` and
-  `tableName: 'users'` stay separate inside one DuckDB database.
+  `tableName: 'users'` stay separate inside one DuckDB database. Never give
+  a table a name another table on the bridge has had, even after that one
+  cleared its session or loaded other data: it drops the tables it left
+  behind by name when it next loads or is destroyed.
 - **Derived columns are already namespaced per table.** The VIEW is
   `__dt_view_<tableName>__`
   ([`src/derived/DerivedColumnManager.ts:79`](../../src/derived/DerivedColumnManager.ts)),

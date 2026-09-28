@@ -377,7 +377,10 @@ export interface DataTable {
 
   /**
    * Load a new data source into the table. Re-uses the existing worker.
-   * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
+   * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`:
+   * at most one of the two for each `loadStart`. A load that a newer
+   * `loadData()` or {@link clearSession} supersedes before it ends emits
+   * neither; its promise resolves, or rejects if the load itself failed.
    */
   loadData(
     source: File | string | ArrayBuffer | Blob,
@@ -1395,11 +1398,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.filteredRows.subscribe(scheduleNonVizStatsRefresh));
 
   // -------- Public loadData --------
-  // Base tables that failed loads left behind. `actions.loadData` resets
-  // state before it loads, so after a failed load nothing points at the
-  // previous table, though DuckDB still holds it. The next successful load,
-  // or destroy() over a shared bridge, drops them.
+  // Base tables nothing names any more: the one each load replaces, which
+  // `actions` reports as the load's turn begins, and the one a clear
+  // empties. DuckDB still holds them. The next successful load, or
+  // destroy() over a shared bridge, drops them, whether the load that left
+  // one behind landed, failed or was superseded.
   const strandedTables = new Set<string>();
+  actions.setOnBaseTableReplaced((tableName) => strandedTables.add(tableName));
+  // The table names loads in flight are making. A reclaim leaves them alone:
+  // a stranded table of the same name is being replaced in place.
+  const loadingTableNames: string[] = [];
 
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
@@ -1411,12 +1419,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
     autoSave?.disable();
-    // Capture the previous base table NOW, before `actions.loadData`
-    // resets state. We drop it AFTER the new load resolves successfully —
-    // a failed load leaves the previous data queryable as a fallback.
-    // `state.baseTableName` takes precedence so a derived-VIEW tableName
-    // doesn't shadow the underlying physical table name.
-    const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+    const targetTableName = loadOpts?.tableName;
+    if (targetTableName) loadingTableNames.push(targetTableName);
+    // `getLoadEpoch()` counts loads and clears: one asked for after this
+    // load, while it runs, supersedes it, and it then emits no more events.
+    let loadEpoch: number | null = null;
+    const superseded = (): boolean => loadEpoch !== null && actions.getLoadEpoch() !== loadEpoch;
     try {
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
@@ -1440,16 +1448,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         annotationStore,
       };
       const loading = actions.loadData(source, mergedOpts);
-      // `getLoadEpoch()` counts loads and clears: one asked for after this
-      // load, while it runs, supersedes it.
-      const loadEpoch = actions.getLoadEpoch();
+      loadEpoch = actions.getLoadEpoch();
       await loading;
       if (destroyed) {
         // Tearing down — skip the loadComplete emit on a dead emitter and
         // surface a destroy error so consumers know the load was aborted.
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      const superseded = (): boolean => actions.getLoadEpoch() !== loadEpoch;
       // Wait in parallel for the body's first SELECT and the per-column
       // visualization/stats-panel initial fetches + filter-sync queries.
       // Both promises swallow internally (whenBodyReady catches body-init
@@ -1488,20 +1493,24 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           schema: [...state.schema.get()],
         });
       }
-      // Reclaim the previous base table now that the new one is live, and
-      // any that earlier failed loads left behind. Skip the new table's
-      // own name — `CREATE OR REPLACE TABLE` already replaced it
-      // atomically in the loader, and a redundant DROP would race with the
-      // live table. Best-effort: a DROP failure must not turn a successful
-      // load into a thrown error — we only leak one orphan in that worst
-      // case.
+      // Reclaim the base table the load replaced now that the new one is
+      // live, and any other left behind (see `strandedTables`), a
+      // superseded load's own included. Skip the live table's own name —
+      // `CREATE OR REPLACE TABLE` already replaced it atomically in the
+      // loader, and a redundant DROP would race with the live table — and
+      // any a load still in flight is making. Best-effort: a DROP failure
+      // must not turn a successful load into a thrown error — we only leak
+      // one orphan in that worst case.
       const newBaseTableName = state.baseTableName.get() ?? state.tableName.get();
       const reclaim = [...strandedTables];
-      if (previousBaseTableName) reclaim.push(previousBaseTableName);
       strandedTables.clear();
       if (typeof bridge.dropTable === 'function') {
-        for (const name of new Set(reclaim)) {
+        for (const name of reclaim) {
           if (name === newBaseTableName) continue;
+          if (loadingTableNames.includes(name) && name !== targetTableName) {
+            strandedTables.add(name);
+            continue;
+          }
           try {
             await bridge.dropTable(name);
           } catch (err) {
@@ -1510,13 +1519,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         }
       }
     } catch (error) {
-      // The previous table stays in DuckDB as a fallback, but state no
-      // longer names it once `actions.loadData` has reset it. Remember it
-      // so a later load or destroy() can still drop it.
-      const currentBaseTableName = state.baseTableName.get() ?? state.tableName.get();
-      if (previousBaseTableName && previousBaseTableName !== currentBaseTableName) {
-        strandedTables.add(previousBaseTableName);
-      }
+      // The table the load replaced is stranded already (see
+      // `strandedTables`): nothing names it after a failed load.
       const typed =
         error instanceof DataTableError
           ? error
@@ -1525,13 +1529,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
               cause: error,
             });
       // Skip event emission on a dead emitter — destroy() has already cleared
-      // the listener map and consumers no longer expect notifications.
-      if (!destroyed) {
+      // the listener map and consumers no longer expect notifications — and
+      // for a superseded load, whose failure the caller's promise still
+      // reports: events describe the load the table shows.
+      if (!destroyed && !superseded()) {
         emitter.emit('loadError', { error: typed });
         emitter.emit('error', { error: typed, source: 'load' });
       }
       throw typed;
     } finally {
+      if (targetTableName) loadingTableNames.splice(loadingTableNames.indexOf(targetTableName), 1);
       if (!destroyed) autoSave?.enable();
     }
   }
@@ -1669,8 +1676,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       annotationStore.clear('all');
       bridge.clearQueryCache();
       // The emptied table stays queryable until the next load or destroy()
-      // drops it, as a failed load's does: nothing names it any more.
-      if (cleared) strandedTables.add(cleared);
+      // drops it: `actions` reported it as stranded.
     } finally {
       if (!destroyed) autoSave?.enable();
     }

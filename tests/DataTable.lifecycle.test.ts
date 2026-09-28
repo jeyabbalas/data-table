@@ -211,6 +211,46 @@ describe('DataTable — lifecycle (Phase 2)', () => {
       await table.destroy();
     });
 
+    it('reports a superseded load that fails only through its promise', async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const bridge = makeBridge();
+      let fail!: () => void;
+      vi.mocked(bridge.loadData)
+        .mockImplementationOnce(
+          () => new Promise((_, reject) => (fail = () => reject(new Error('boom')))),
+        )
+        .mockResolvedValueOnce({
+          tableName: 'b',
+          rowCount: 3,
+          columns: ['id'],
+          schema: [{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }],
+        } as never);
+      const table = await createDataTable({
+        container,
+        bridge,
+        persistence: false,
+        presets: false,
+        expressionFilter: false,
+        visualizations: false,
+        exportDialog: false,
+      });
+      const events: string[] = [];
+      table.on('loadStart', () => events.push('loadStart'));
+      table.on('loadComplete', ({ tableName }) => events.push(`loadComplete ${tableName}`));
+      table.on('loadError', () => events.push('loadError'));
+      table.on('error', () => events.push('error'));
+
+      const first = table.loadData('id\n1', { tableName: 'a' });
+      const second = table.loadData('id\n1', { tableName: 'b' });
+      await Promise.resolve();
+      fail();
+      await expect(first).rejects.toThrow('boom');
+      await second;
+      expect(events).toEqual(['loadStart', 'loadStart', 'loadComplete b']);
+      await table.destroy();
+    });
+
     it('empties the table a load in flight lands, and drops it and its snapshot', async () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
@@ -266,11 +306,12 @@ describe('DataTable — lifecycle (Phase 2)', () => {
       expect(events).toEqual([]);
       expect(table.state.tableName.get()).toBeNull();
       expect(vi.mocked(store.delete)).toHaveBeenCalledWith('new');
-      // The load drops the table it replaced; the one it made stays
-      // queryable until the table is destroyed, or loads again.
-      expect(dropTable.mock.calls.map(([name]) => name)).toEqual(['old']);
+      // Nothing names the table the load replaced, nor the one it made:
+      // both are dropped, the latter by the load or on destroy at the
+      // latest, and each once.
+      expect(dropTable.mock.calls.map(([name]) => name)).toContain('old');
       await table.destroy();
-      expect(dropTable.mock.calls.map(([name]) => name)).toEqual(['old', 'new']);
+      expect(dropTable.mock.calls.map(([name]) => name).sort()).toEqual(['new', 'old']);
     });
   });
 

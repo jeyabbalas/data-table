@@ -9,6 +9,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
 import type { SessionStore } from '@/persistence/SessionStore';
+import { SNAPSHOT_VERSION } from '@/persistence/types';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from './helpers/duckdbNode';
 import { makeNodeBridge } from './helpers/nodeBridge';
@@ -59,13 +60,15 @@ async function objects(): Promise<string[]> {
 }
 
 /**
- * A bridge the tables share, whose loads each make a table `lt<n>`, and
- * whose queries `hold` can stop until released.
+ * A bridge the tables share, whose loads each make the table they name, or
+ * `lt<n>`, and whose queries `hold`, and loads `holdLoads`, can stop until
+ * released.
  */
 function sharedBridge() {
   const base = makeNodeBridge(harness.conn);
   let loads = 0;
   let gate: { match: (sql: string) => boolean; waiting: (() => void)[] } | null = null;
+  let loadGate: { waiting: (() => void)[] } | null = null;
   const bridge = {
     ...base,
     query: async (sql: string) => {
@@ -76,10 +79,11 @@ function sharedBridge() {
     isInitialized: () => true,
     clearQueryCache: () => {},
     terminate: () => {},
-    loadData: async () => {
-      const name = `lt${++loads}`;
+    loadData: async (_data: unknown, options?: { tableName?: string }) => {
+      if (loadGate) await new Promise<void>((resolve) => loadGate!.waiting.push(resolve));
+      const name = options?.tableName ?? `lt${++loads}`;
       await harness.conn.query(
-        `CREATE OR REPLACE TABLE ${name} AS SELECT range::INTEGER AS id, range AS __rowid__ FROM range(3)`,
+        `CREATE OR REPLACE TABLE "${name}" AS SELECT range::INTEGER AS id, range AS __rowid__ FROM range(3)`,
       );
       return {
         tableName: name,
@@ -103,7 +107,18 @@ function sharedBridge() {
       },
     };
   };
-  return { bridge, hold };
+  const holdLoads = () => {
+    const g = { waiting: [] as (() => void)[] };
+    loadGate = g;
+    return {
+      held: () => g.waiting.length,
+      release: () => {
+        loadGate = null;
+        for (const resolve of g.waiting.splice(0)) resolve();
+      },
+    };
+  };
+  return { bridge, hold, holdLoads };
 }
 
 async function tableOn(bridge: ReturnType<typeof makeNodeBridge>): Promise<DataTable> {
@@ -194,6 +209,105 @@ describe('a table on a shared bridge leaves nothing behind', () => {
     expect(rows.map((row) => row.v)).toEqual([7, 8, 9]);
 
     await second.destroy();
+    expect(await objects()).toEqual([]);
+  });
+
+  it('when a load supersedes one it did not wait for, and when destroyed after', async () => {
+    const { bridge } = sharedBridge();
+    const table = await tableOn(bridge);
+    const events: string[] = [];
+    table.on('loadComplete', ({ tableName }) => events.push(tableName));
+    const first = table.loadData('id\n1', { tableName: 'lt_a', sourceFormat: 'csv' });
+    const second = table.loadData('id\n1', { tableName: 'lt_b', sourceFormat: 'csv' });
+    await Promise.all([first, second]);
+
+    // The first load's table goes once the second has landed, as does the
+    // one before it; only the second completes.
+    expect(events).toEqual(['lt_b']);
+    expect(table.state.tableName.get()).toBe('lt_b');
+    expect(await objects()).toEqual(['lt_b']);
+    await table.destroy();
+    expect(await objects()).toEqual([]);
+  });
+
+  it('when destroyed while a load is in flight, with an add waiting behind it', async () => {
+    const { bridge, holdLoads } = sharedBridge();
+    const table = await tableOn(bridge);
+    const loads = holdLoads();
+    const loading = table
+      .loadData('id\n1', { tableName: 'lt_new', sourceFormat: 'csv' })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(loads.held()).toBe(1));
+    const add = table.actions.addDerivedColumn(vector);
+
+    // destroy() does not wait for the load; the table it replaces goes now,
+    await table.destroy();
+    expect(await objects()).toEqual([]);
+    // and the one it makes once it lands, which then rejects.
+    loads.release();
+    expect(await loading).toMatchObject({ name: 'DestroyedError' });
+    await expect(add).resolves.toEqual({ success: false, error: 'DataTable is destroyed' });
+    expect(await objects()).toEqual([]);
+  });
+
+  it('when it loads the same name again, keeping the table it makes', async () => {
+    const { bridge } = sharedBridge();
+    const table = await tableOn(bridge);
+    await table.loadData('id\n1', { tableName: 'lt_same', sourceFormat: 'csv' });
+    const first = table.loadData('id\n1', { tableName: 'lt_same', sourceFormat: 'csv' });
+    const second = table.loadData('id\n1', { tableName: 'lt_same', sourceFormat: 'csv' });
+    await Promise.all([first, second]);
+    expect(await objects()).toEqual(['lt_same']);
+    const rows = await bridge.query<{ n: number }>('SELECT count(*)::INT AS n FROM "lt_same"');
+    expect(rows[0]!.n).toBe(3);
+    await table.destroy();
+    expect(await objects()).toEqual([]);
+  });
+
+  it('when destroyed during a session restore, without calling it a failed restore', async () => {
+    const { bridge, hold } = sharedBridge();
+    const store = sessionStore();
+    vi.mocked(store.load).mockResolvedValue({
+      version: SNAPSHOT_VERSION,
+      timestamp: 1,
+      tableName: 'lt_restore',
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['id', 'v'],
+      columnOrder: ['id', 'v'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [vector],
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const table = await createDataTable({
+      container,
+      bridge,
+      persistence: { sessionStore: store },
+      presets: false,
+      expressionFilter: false,
+      visualizations: false,
+      exportDialog: false,
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const insert = hold((sql) => sql.startsWith('INSERT INTO'));
+      const loading = table
+        .loadData('id\n1', { tableName: 'lt_restore', sourceFormat: 'csv' })
+        .catch((error: unknown) => error);
+      await vi.waitFor(() => expect(insert.held()).toBe(1));
+      const destroying = table.destroy();
+      insert.release();
+      await destroying;
+      expect(await loading).toMatchObject({ name: 'DestroyedError' });
+      expect(warn.mock.calls.map(([first]) => String(first))).not.toContain(
+        'Failed to restore derived columns:',
+      );
+    } finally {
+      warn.mockRestore();
+    }
     expect(await objects()).toEqual([]);
   });
 });

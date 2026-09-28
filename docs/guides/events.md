@@ -52,8 +52,9 @@ Every event is strongly typed. The full map lives at
 `on` returns an unsubscribe function; `off` works too and accepts the original
 handler reference.
 
-A load that a newer `loadData()` or `clearSession()` supersedes before it
-completes fires no `loadComplete`. `derivedChange` with `kind: 'updated'` and
+Each `loadStart` is followed by at most one `loadComplete` or `loadError`. A
+load that a newer `loadData()` or `clearSession()` supersedes before it ends
+fires neither; its promise resolves, or rejects if the load itself failed. `derivedChange` with `kind: 'updated'` and
 no `columnName` also fires when an undo or redo, `resetToInitial()` or
 `clearSession()` changes the derived columns all at once.
 

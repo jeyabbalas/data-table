@@ -219,6 +219,59 @@ describe('loadData / destroy — drops previous base table', () => {
     await table.destroy();
   });
 
+  it('drops the table a failed reload of its own name left behind once a later load succeeds', async () => {
+    const { table, bridge } = await makeTable({ tableName: 'A' });
+    (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();
+
+    (
+      bridge.loadData as unknown as { mockRejectedValueOnce: (v: unknown) => void }
+    ).mockRejectedValueOnce(new Error('boom'));
+    await expect(table.loadData(new File([''], 'a.csv'), { tableName: 'A' })).rejects.toThrow();
+    expect(bridge.dropTable).not.toHaveBeenCalled();
+
+    (bridge.loadData as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue({
+      tableName: 'C',
+      rowCount: 0,
+      columns: ['sku', 'qty'],
+      schema: schemaB,
+    });
+    await table.loadData(new File([''], 'c.csv'), { tableName: 'C' });
+    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
+    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    await table.destroy();
+  });
+
+  it('keeps a table left behind whose name a load still in flight is making', async () => {
+    const { table, bridge } = await makeTable({ tableName: 'A' });
+    await table.clearSession();
+    (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();
+    const loaded = (tableName: string) => ({
+      tableName,
+      rowCount: 0,
+      columns: ['id', 'name'],
+      schema: schemaA,
+    });
+    let finishA!: () => void;
+    vi.mocked(bridge.loadData)
+      .mockResolvedValueOnce(loaded('Y') as never)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (finishA = () => resolve(loaded('A') as never))),
+      );
+
+    // A, which the clear left behind, is being made again when the load of
+    // Y, which the load of A supersedes, reclaims what is left behind.
+    const first = table.loadData(new File([''], 'y.csv'), { tableName: 'Y' });
+    const second = table.loadData(new File([''], 'a.csv'), { tableName: 'A' });
+    await first;
+    expect(bridge.dropTable).not.toHaveBeenCalledWith('A');
+    await vi.waitFor(() => expect(finishA).toBeTypeOf('function'));
+    finishA();
+    await second;
+    expect(table.state.tableName.get()).toBe('A');
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['Y']]);
+    await table.destroy();
+  });
+
   it('drops the table a failed load left behind on destroy() when the bridge is shared', async () => {
     const { table, bridge } = await makeTable({ tableName: 'A' });
     (bridge.dropTable as ReturnType<typeof vi.fn>).mockClear();

@@ -176,7 +176,8 @@ When a filter changes:
 1. `state.filters` signal fires
 2. `CrossfilterCoordinator` is subscribed; it receives the new filter list
 3. The coordinator recomputes `filteredRowCount` by querying DuckDB with
-   the updated WHERE clause
+   the updated WHERE clause, once any derived-column change that can drop
+   or rebuild the relation has settled
 4. Each visualization receives the updated filter set via its
    `updateFilters(filters)` method and re-renders itself
 5. The `filterChange` event fires on the event bus
@@ -334,20 +335,28 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:155-190`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:226-267`](../../src/table/TableBody.ts).
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:699-772`](../../src/table/TableBody.ts)) keeps
+([`src/table/TableBody.ts:910-1019`](../../src/table/TableBody.ts)) keeps
 at most 2 block fetches in flight — the worker executes serially, so
 that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
 by one block on each side are aborted mid-flight, and an epoch counter
 bumped on every filter/sort/data change makes late results from a
 previous state drop instead of landing in the cache. Aborted fetches
-settle silently as cancellations. When nothing visible is missing or in
+settle silently as cancellations. A fetch that fails, or comes back
+short, is not issued again at once: the same fetch waits 250 ms, then
+twice as long after each failure in a row, up to 8 s, while a fetch of
+other columns or rows goes ahead, and a filter, sort or data change
+starts afresh. No fetch starts while a derived-column change can drop
+or rebuild the relation the rows come from, which every change but an
+add can (an add swaps its VIEW in with one statement, keeping every
+column); the reconciler runs again from the live range once it settles.
+When nothing visible is missing or in
 flight, one speculative block beyond the viewport in the current scroll
 direction is prefetched (`prefetch`, default true) at `'normal'` worker
 priority, so visible-block fetches (`'high'`) always jump ahead of it.
@@ -356,7 +365,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:929-962`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1272-1306`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -411,7 +420,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1009`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1357`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was
@@ -606,7 +615,7 @@ User drags a histogram brush:
 2. Brush emits a `range` filter via `onFilterChange` callback (→ `CrossfilterCoordinator`)
 3. Coordinator calls `state.filters.set(updatedList)`
 4. Subscribers fire:
-   - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause → sets `filteredRows`
+   - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause, after any derived-column change that can break reads has settled → sets `filteredRows`
    - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE → re-renders
    - `AutoSave` → debounce → save snapshot to IDB
    - `filterChange` event → notifies the facade → runs host-app handlers

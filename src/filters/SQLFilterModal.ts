@@ -52,7 +52,6 @@ export class SQLFilterModal {
   private validateBtn!: HTMLButtonElement;
   private previewEl!: HTMLElement;
   private applyBtn!: HTMLButtonElement;
-  private removeSection!: HTMLElement;
   private removeBtn!: HTMLButtonElement;
   private removeConfirmDiv!: HTMLElement;
 
@@ -199,9 +198,9 @@ export class SQLFilterModal {
     actionsRow.appendChild(this.previewEl);
     body.appendChild(actionsRow);
 
-    // — Remove section (visible only in edit mode)
-    this.removeSection = document.createElement('div');
-    this.removeSection.className = `${p}-sql-filter-modal-remove-section`;
+    // — Remove section: shown by the stylesheet in edit mode only (`--edit` on the dialog)
+    const removeSection = document.createElement('div');
+    removeSection.className = `${p}-sql-filter-modal-remove-section`;
 
     const divider = document.createElement('hr');
     divider.className = `${p}-sql-filter-modal-divider`;
@@ -213,10 +212,6 @@ export class SQLFilterModal {
     this.removeBtn.className = `${p}-sql-filter-modal-remove`;
     this.removeBtn.type = 'button';
     this.removeBtn.textContent = this.messages.filters.sqlFilter.removeButton;
-    this.removeBtn.addEventListener('click', () => {
-      this.removeBtn.style.display = 'none';
-      this.removeConfirmDiv.style.display = 'flex';
-    });
 
     this.removeConfirmDiv = document.createElement('div');
     this.removeConfirmDiv.className = `${p}-sql-filter-modal-remove-confirm`;
@@ -234,9 +229,20 @@ export class SQLFilterModal {
     cancelBtn.className = `${p}-sql-filter-modal-remove-confirm-btn ${p}-sql-filter-modal-remove-confirm-no`;
     cancelBtn.type = 'button';
     cancelBtn.textContent = this.messages.common.cancel;
+
+    // Each step hides the button that was clicked, which takes focus out of
+    // the dialog, and with it the focus trap and Escape. The confirmation
+    // puts focus on its Cancel, the choice that changes nothing, and Cancel
+    // puts it back on Remove.
+    this.removeBtn.addEventListener('click', () => {
+      this.removeBtn.style.display = 'none';
+      this.removeConfirmDiv.style.display = 'flex';
+      cancelBtn.focus();
+    });
     cancelBtn.addEventListener('click', () => {
       this.removeConfirmDiv.style.display = 'none';
       this.removeBtn.style.display = '';
+      this.removeBtn.focus();
     });
 
     this.removeConfirmDiv.appendChild(confirmText);
@@ -246,9 +252,9 @@ export class SQLFilterModal {
     dangerZone.appendChild(this.removeBtn);
     dangerZone.appendChild(this.removeConfirmDiv);
 
-    this.removeSection.appendChild(divider);
-    this.removeSection.appendChild(dangerZone);
-    body.appendChild(this.removeSection);
+    removeSection.appendChild(divider);
+    removeSection.appendChild(dangerZone);
+    body.appendChild(removeSection);
 
     return body;
   }
@@ -450,7 +456,7 @@ export class SQLFilterModal {
     this.currentFilterId = null;
     this.titleEl.textContent = this.messages.filters.sqlFilter.createTitle;
     this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
-    this.removeSection.style.display = 'none';
+    this.dialogEl.classList.remove(`${this.prefix}-sql-filter-modal-dialog--edit`);
 
     this.showModal(this.labelInput);
   }
@@ -470,7 +476,9 @@ export class SQLFilterModal {
     this.currentFilterId = filterId;
     this.titleEl.textContent = this.messages.filters.sqlFilter.editTitle;
     this.applyBtn.textContent = this.messages.filters.sqlFilter.updateButton;
-    this.removeSection.style.display = '';
+    // The stylesheet shows the Remove section only under this class. Clearing
+    // an inline `display` could not: the stylesheet hides the section.
+    this.dialogEl.classList.add(`${this.prefix}-sql-filter-modal-dialog--edit`);
 
     // Reset remove confirmation state
     this.removeBtn.style.display = '';

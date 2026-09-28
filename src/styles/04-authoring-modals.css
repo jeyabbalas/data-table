@@ -465,9 +465,15 @@
   margin: 0;
 }
 
-/* Remove section (danger zone) */
+/* Remove section (danger zone): editing an existing filter only */
 .dt-sql-filter-modal-remove-section {
   display: none;
+}
+
+.dt-sql-filter-modal-dialog--edit .dt-sql-filter-modal-remove-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .dt-sql-filter-modal-danger-zone {

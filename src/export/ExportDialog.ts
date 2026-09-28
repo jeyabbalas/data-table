@@ -18,6 +18,7 @@
  * dialog.open();
  */
 
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -68,10 +69,11 @@ export interface ExportDialogOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
   /**
-   * Unique per-instance identifier mixed into element IDs so two tables on
-   * the same page don't collide on `aria-labelledby` targets. Normally
-   * supplied by `createDataTable()`; defaults to `''` for standalone/test
-   * construction.
+   * Unique per-instance identifier mixed into element IDs and radio group
+   * names, so two tables on the same page don't collide on
+   * `aria-labelledby` targets or share a checked radio. Normally supplied
+   * by `createDataTable()`; defaults to `''` for standalone/test
+   * construction, and the radio groups then get a generated name.
    */
   instanceId?: string | undefined;
   /**
@@ -95,6 +97,12 @@ export class ExportDialog {
   private isOpen = false;
   private readonly prefix: string;
   private readonly instanceId: string;
+  /**
+   * Start of this dialog's radio group names. Radios that share a name and
+   * have no form are one group across the whole document, so it is per
+   * instance, like the element ids.
+   */
+  private readonly radioGroup: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
 
@@ -115,6 +123,8 @@ export class ExportDialog {
   private selectedOption!: HTMLLabelElement;
   private selectedRadio!: HTMLInputElement;
   private allRadio!: HTMLInputElement;
+  private formatRadios: HTMLInputElement[] = [];
+  private scopeRadios: HTMLInputElement[] = [];
   private csvOptionsEl!: HTMLElement;
   private jsonOptionsEl!: HTMLElement;
   private copyBtn!: HTMLButtonElement;
@@ -144,6 +154,10 @@ export class ExportDialog {
   ) {
     this.prefix = options.classPrefix ?? 'dt';
     this.instanceId = options.instanceId ?? '';
+    // Named per prefix, two tables' format and scope radios were one group
+    // each: the second table's dialog, added with its defaults checked,
+    // unchecked the first's. A dialog without an `instanceId` gets its own.
+    this.radioGroup = `${this.prefix}-${this.instanceId || nextInstanceId()}`;
     this.colorSchemeSource = options.colorSchemeSource;
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
@@ -251,9 +265,10 @@ export class ExportDialog {
 
       const radio = document.createElement('input');
       radio.type = 'radio';
-      radio.name = `${p}-export-format`;
+      radio.name = `${this.radioGroup}-export-format`;
       radio.value = fmt.value;
       if (fmt.value === 'csv') radio.checked = true;
+      this.formatRadios.push(radio);
 
       radio.addEventListener('change', () => this.onFormatChange(fmt.value));
 
@@ -279,7 +294,7 @@ export class ExportDialog {
     allLabel.className = `${p}-export-option`;
     this.allRadio = document.createElement('input');
     this.allRadio.type = 'radio';
-    this.allRadio.name = `${p}-export-scope`;
+    this.allRadio.name = `${this.radioGroup}-export-scope`;
     this.allRadio.value = 'all';
     this.allRadio.checked = true;
     this.allCountEl = document.createElement('span');
@@ -294,7 +309,7 @@ export class ExportDialog {
     filteredLabel.className = `${p}-export-option`;
     const filteredRadio = document.createElement('input');
     filteredRadio.type = 'radio';
-    filteredRadio.name = `${p}-export-scope`;
+    filteredRadio.name = `${this.radioGroup}-export-scope`;
     filteredRadio.value = 'filtered';
     this.filteredCountEl = document.createElement('span');
     this.filteredCountEl.className = `${p}-export-count`;
@@ -308,7 +323,7 @@ export class ExportDialog {
     this.selectedOption.className = `${p}-export-option`;
     this.selectedRadio = document.createElement('input');
     this.selectedRadio.type = 'radio';
-    this.selectedRadio.name = `${p}-export-scope`;
+    this.selectedRadio.name = `${this.radioGroup}-export-scope`;
     this.selectedRadio.value = 'selected';
     this.selectedCountEl = document.createElement('span');
     this.selectedCountEl.className = `${p}-export-count`;
@@ -319,6 +334,7 @@ export class ExportDialog {
     this.selectedOption.appendChild(this.selectedCountEl);
     fieldset.appendChild(this.selectedOption);
 
+    this.scopeRadios = [this.allRadio, filteredRadio, this.selectedRadio];
     return fieldset;
   }
 
@@ -589,17 +605,13 @@ export class ExportDialog {
   // =========================================
 
   private getFormat(): ExportFormat {
-    const checked = this.element.querySelector(
-      `input[name="${this.prefix}-export-format"]:checked`,
-    ) as HTMLInputElement | null;
-    return (checked?.value as ExportFormat) ?? 'csv';
+    const checked = this.formatRadios.find((radio) => radio.checked);
+    return (checked?.value as ExportFormat | undefined) ?? 'csv';
   }
 
   private getScope(): ExportScope {
-    const checked = this.element.querySelector(
-      `input[name="${this.prefix}-export-scope"]:checked`,
-    ) as HTMLInputElement | null;
-    return (checked?.value as ExportScope) ?? 'all';
+    const checked = this.scopeRadios.find((radio) => radio.checked);
+    return (checked?.value as ExportScope | undefined) ?? 'all';
   }
 
   // =========================================

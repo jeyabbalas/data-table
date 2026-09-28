@@ -7,6 +7,8 @@ import { createTableState } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { StateActions } from '@/core/Actions';
 import type { RawSQLFilter } from '@/filters/FilterTypes';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // CodeMirror requires DOM APIs that jsdom may not fully support
 beforeAll(() => {
@@ -106,14 +108,6 @@ describe('SQLFilterModal', () => {
       expect(applyBtn?.disabled).toBe(true);
     });
 
-    it('hides remove section', () => {
-      modal.open();
-      const removeSection = modal
-        .getElement()
-        .querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
-      expect(removeSection?.style.display).toBe('none');
-    });
-
     it('sets isOpen to true', () => {
       expect(modal.getIsOpen()).toBe(false);
       modal.open();
@@ -150,14 +144,6 @@ describe('SQLFilterModal', () => {
         .getElement()
         .querySelector('[class$="sql-filter-modal-apply"]') as HTMLButtonElement;
       expect(applyBtn?.textContent).toBe('Update');
-    });
-
-    it('shows remove section', () => {
-      modal.openForEdit('test-123');
-      const removeSection = modal
-        .getElement()
-        .querySelector('[class$="sql-filter-modal-remove-section"]') as HTMLElement;
-      expect(removeSection?.style.display).not.toBe('none');
     });
 
     it('pre-populates label input', () => {
@@ -505,6 +491,61 @@ describe('SQLFilterModal', () => {
     });
   });
 
+  // The Remove section's visibility is the stylesheet's to decide, so these
+  // load the library's own rules: an inline style says nothing about it.
+  describe('remove section, against the library stylesheet', () => {
+    const filter: RawSQLFilter = {
+      type: 'raw-sql',
+      column: '__raw_sql_vis-1__',
+      sql: 'age > 30',
+      id: 'vis-1',
+    };
+    let sheet: HTMLStyleElement;
+
+    beforeEach(() => {
+      sheet = document.createElement('style');
+      sheet.textContent = readFileSync(
+        resolve(__dirname, '../../src/styles/04-authoring-modals.css'),
+        'utf8',
+      );
+      document.head.appendChild(sheet);
+      state.filters.set([filter]);
+    });
+
+    afterEach(() => {
+      sheet.remove();
+    });
+
+    /** Whether the Remove button renders: no ancestor inside the modal is `display: none`. */
+    function removeButtonShown(): boolean {
+      const removeBtn = modal
+        .getElement()
+        .querySelector<HTMLElement>('.dt-sql-filter-modal-remove')!;
+      for (let el: HTMLElement | null = removeBtn; el; el = el.parentElement) {
+        if (getComputedStyle(el).display === 'none') return false;
+        if (el === modal.getElement()) break;
+      }
+      return true;
+    }
+
+    it('shows the Remove section when editing a filter', () => {
+      modal.openForEdit('vis-1');
+      expect(removeButtonShown()).toBe(true);
+    });
+
+    it('hides it when creating one', () => {
+      modal.open();
+      expect(removeButtonShown()).toBe(false);
+    });
+
+    it('hides it again when a create follows an edit', () => {
+      modal.openForEdit('vis-1');
+      modal.close();
+      modal.open();
+      expect(removeButtonShown()).toBe(false);
+    });
+  });
+
   describe('remove (edit mode)', () => {
     it('shows confirmation on Remove Filter click', () => {
       const filter: RawSQLFilter = {
@@ -549,6 +590,32 @@ describe('SQLFilterModal', () => {
 
       expect(actions.removeRawSQLFilter).toHaveBeenCalledWith('rm-2');
       expect(modal.getIsOpen()).toBe(false);
+    });
+
+    // Each step hides the button it was taken on, which would drop focus out
+    // of the dialog, and with it the focus trap and Escape.
+    it('keeps focus in the dialog through the confirmation', () => {
+      const filter: RawSQLFilter = {
+        type: 'raw-sql',
+        column: '__raw_sql_rm-3__',
+        sql: 'x',
+        id: 'rm-3',
+      };
+      state.filters.set([filter]);
+      modal.openForEdit('rm-3');
+      const el = modal.getElement();
+      const removeBtn = el.querySelector<HTMLButtonElement>('.dt-sql-filter-modal-remove')!;
+      const cancelBtn = el.querySelector<HTMLButtonElement>(
+        '.dt-sql-filter-modal-remove-confirm-no',
+      )!;
+
+      removeBtn.focus();
+      removeBtn.click();
+      expect(document.activeElement).toBe(cancelBtn);
+
+      cancelBtn.click();
+      expect(document.activeElement).toBe(removeBtn);
+      expect(removeBtn.style.display).toBe('');
     });
   });
 

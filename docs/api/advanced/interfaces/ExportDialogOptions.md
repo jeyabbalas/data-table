@@ -40,10 +40,11 @@ pass the `.dt-root` element here to keep it theme-synced.
 
 Defined in: [export/ExportDialog.ts:76](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L76)
 
-Unique per-instance identifier mixed into element IDs so two tables on
-the same page don't collide on `aria-labelledby` targets. Normally
-supplied by `createDataTable()`; defaults to `''` for standalone/test
-construction.
+Unique per-instance identifier mixed into element IDs and radio group
+names, so two tables on the same page don't collide on
+`aria-labelledby` targets or share a checked radio. Normally supplied
+by `createDataTable()`; defaults to `''` for standalone/test
+construction, and the radio groups then get a generated name.
 
 ***
 

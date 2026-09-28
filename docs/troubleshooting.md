@@ -668,6 +668,14 @@ Cause: the query for a block of rows failed. The body logs the failure and tries
 
 Fix: hide the derived column, find the values its expression fails on with a raw SQL filter (while the column is shown, the rows that filter selects are the very rows whose fetch fails), then write the expression so that it does not fail on them, for example with `TRY_CAST`, which gives `null` where `CAST` fails, or clean the data upstream.
 
+### 31. "too small to be a Parquet file", or "Prefetch registered for bytes outside file … file size: 0"
+
+Symptom: after a few large loads in one page, or while DuckDB holds a lot of data, loading a Parquet file fails with `Invalid Input Error: File '__dt_source_N.parquet' too small to be a Parquet file`, or `Invalid Error: Prefetch registered for bytes outside file: __dt_source_N.parquet, … file size: 0`, and so does every load after it.
+
+Cause: duckdb-wasm's browser runtime tells DuckDB a file's size by writing it through a signed shift of an address. Once DuckDB's memory has grown past 2 GiB, that address can be above 2 GiB, and the write is lost: DuckDB reads the file as 0 bytes.
+
+Fix: the library corrects this in DuckDB's worker, for the `mvp` and `eh` bundles it uses by default and for self-hosted ones. A `coi` bundle's pthread workers load their own script and are not corrected, so a cross-origin-isolated page that self-hosts `coi` can still see these errors: reload the page to start DuckDB afresh, or load less into it. If the DuckDB worker's console says `[data-table] DuckDB runs without the fix for files opened past 2 GiB of memory`, the duckdb-wasm build in use could not be corrected; report it with that build's version.
+
 ---
 
 ## Browser support quick reference

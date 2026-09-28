@@ -192,6 +192,51 @@ describe('createDataTable — a failed initial load cleans up', () => {
     expect(sessionStore.delete).not.toHaveBeenCalled();
   });
 
+  it('leaves the saved session unwritten when a restore fails after its undo stacks', async () => {
+    const container = mount();
+    const bridge = makeBridge(() => Promise.resolve(LOADED));
+    const entry = {
+      filters: [],
+      sortColumns: [],
+      visibleColumns: ['a'],
+      columnOrder: ['a'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+    };
+    const sessionStore = makeSessionStore({
+      load: vi.fn().mockResolvedValue({
+        version: 5,
+        tableName: 'dt_loaded',
+        timestamp: Date.now(),
+        ...entry,
+        undoStack: [entry],
+        redoStack: [],
+        // Not an array: the restore throws here, after it has loaded the
+        // undo stacks, which AutoSave saves as soon as it is enabled.
+        filterPresets: 'broken',
+      }),
+    });
+
+    await expect(
+      createDataTable({
+        container,
+        bridge,
+        source: CSV,
+        ...baseOpts,
+        persistence: { sessionStore },
+        presets: true,
+        undoRedo: true,
+      }),
+    ).rejects.toMatchObject({ name: 'LoadError' });
+    // Past AutoSave's 1 s debounce, so a save it scheduled would have run.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+
+    expect(container.childElementCount).toBe(0);
+    expect(sessionStore.saveSync).not.toHaveBeenCalled();
+    expect(sessionStore.save).not.toHaveBeenCalled();
+  });
+
   it('emits loadError and error before it tears down', async () => {
     const container = mount();
     const emitted: string[] = [];
@@ -287,5 +332,26 @@ describe('createDataTable — the container after a failed initial load', () => 
     expect(roots).toHaveLength(1);
     expect(roots[0]).toBe(second.container.getElement());
     await second.destroy();
+  });
+});
+
+describe('createDataTable — a successful initial load', () => {
+  it('still turns AutoSave back on', async () => {
+    const container = mount();
+    const sessionStore = makeSessionStore();
+    const table = await createDataTable({
+      container,
+      bridge: makeBridge(() => Promise.resolve(LOADED)),
+      source: CSV,
+      ...baseOpts,
+      persistence: { sessionStore },
+    });
+
+    table.actions.addFilter({ type: 'not-null', column: 'a' });
+    // Past AutoSave's 1 s debounce.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+
+    expect(sessionStore.save).toHaveBeenCalled();
+    await table.destroy();
   });
 });

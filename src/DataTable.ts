@@ -1415,6 +1415,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
+    { initial = false }: { initial?: boolean } = {},
   ): Promise<void> {
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
@@ -1428,6 +1429,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // `state.baseTableName` takes precedence so a derived-VIEW tableName
     // doesn't shadow the underlying physical table name.
     const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+    let failed = false;
     try {
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
@@ -1511,6 +1513,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         }
       }
     } catch (error) {
+      failed = true;
       // The previous table stays in DuckDB as a fallback, but state no
       // longer names it once `actions.loadData` has reset it. Remember it
       // so a later load or destroy() can still drop it.
@@ -1533,7 +1536,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       }
       throw typed;
     } finally {
-      if (!destroyed) autoSave?.enable();
+      // A failed initial load is followed by destroy(). Enabling AutoSave
+      // first would have it save a restore's undo stacks, and destroy()
+      // flushes that save: the half-restored state over the stored session.
+      if (!destroyed && !(initial && failed)) autoSave?.enable();
     }
   }
 
@@ -1547,10 +1553,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // calls `loadData` itself, with the `tableName` and `sourceFormat` it
     // would have passed here.
     try {
-      await loadDataImpl(opts.source, {
-        tableName: opts.tableName,
-        sourceFormat: opts.sourceFormat,
-      });
+      await loadDataImpl(
+        opts.source,
+        { tableName: opts.tableName, sourceFormat: opts.sourceFormat },
+        { initial: true },
+      );
     } catch (error) {
       // The caller never gets this table, so nothing else could destroy it:
       // tear it down here, then reject with the load's own error, not one

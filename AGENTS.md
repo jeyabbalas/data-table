@@ -564,7 +564,7 @@ All values source `src/DataTable.ts:136-345`.
    }, 500);
    ```
 
-5. **Sharing a `SessionStore` with colliding `tableName`s.** Snapshots are keyed by table name. Two tables with the same (auto-generated) name clobber each other. Always pass distinct `tableName`s when sharing a store.
+5. **Sharing a `SessionStore` with colliding `tableName`s.** Snapshots are keyed by table name. Two tables with the same (auto-generated) name clobber each other. Always pass distinct `tableName`s when sharing a store. The same holds for a shared `bridge`: `destroy()`, which a failed initial load now runs too, drops the table's DuckDB table by name, so two tables sharing a bridge and a name lose each other's data.
 
 6. **React Strict Mode double-invocation.** In dev, effects run twice. Without the cancel-flag pattern you'll mount two tables into the same container. See [snippet (g)](#g-destroy-on-unmount).
 

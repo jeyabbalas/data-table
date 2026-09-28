@@ -19,13 +19,18 @@ export function Table({ source }: { source: File | string }) {
     let cancelled = false;
     let instance: DataTable | undefined;
 
-    void createDataTable({ container: hostRef.current, source }).then((t) => {
-      if (cancelled) {
-        void t.destroy();
-        return;
-      }
-      instance = t;
-    });
+    void createDataTable({ container: hostRef.current, source })
+      .then((t) => {
+        if (cancelled) {
+          void t.destroy();
+          return;
+        }
+        instance = t;
+      })
+      .catch((error: unknown) => {
+        // A failed load has already removed the table; report it.
+        if (!cancelled) console.error(error);
+      });
 
     return () => {
       cancelled = true;
@@ -50,7 +55,8 @@ first — there's no `instance` to destroy yet. When the Promise finally
 resolves, `cancelled === true` tells us to destroy immediately so we don't
 leak a table instance. A `createDataTable` whose load fails has already
 removed what it mounted when its Promise rejects, so there is nothing to
-destroy then; add a `.catch` to show the error.
+destroy then; the `.catch` only reports the error, which would otherwise be
+an unhandled rejection.
 
 ## Strict Mode
 

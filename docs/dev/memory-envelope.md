@@ -129,6 +129,13 @@ Measured afterwards to design the load path (#120), same setup. `prefetch` is
   latency figures were not recorded in `spike/memory/results`, so none are given here. Nothing is
   compressed until the checkpoint, though, so the load's peak is unchanged; using it would take a
   load that checkpoints in chunks. Worth a spike only if users need more than the current ceiling.
+- **Past 2 GiB of heap, duckdb-wasm lost the size of each file it opened.** Its runtime answers an
+  open in 24 bytes it allocates, written through `HEAPF64[(ptr >> 3) + i]`: a signed shift, so for
+  an address above 2 GiB the writes went nowhere and DuckDB read the file as 0 bytes ("too small
+  to be a Parquet file", or "Prefetch registered for bytes outside file … file size: 0"). The 50K
+  × 1,000 file loaded twice into one table and then failed on every load, and so did any load
+  while a 2.2 GB table was held. `src/worker/openFileFix.ts` puts those writes where they belong,
+  in DuckDB's worker; duckdb-wasm's main branch shifts the same way.
 
 ## Caveats
 

@@ -147,8 +147,10 @@ export class CrossfilterCoordinator {
 
   /**
    * Refetch the charts that were live when the filters changed and still
-   * are, once the relation they query can be read. Only the latest filter
-   * cycle refetches after a wait: a chart held through several filter changes
+   * are, each once the relation it queries can be read. That is checked as
+   * each refetch goes out: a cycle runs a few at a time, and a change can
+   * start while the rest wait their turn. Only the latest filter cycle
+   * refetches after a wait: a chart held through several filter changes
    * refetches once, with the filters in force.
    */
   private async updateVisualizations(
@@ -156,15 +158,11 @@ export class CrossfilterCoordinator {
     filters: Filter[],
     seq: number,
   ): Promise<void> {
-    if (!this.actions.isRelationReadable() && !(await this.waitForReadableRelation(seq))) return;
-    const vizTasks = charts
-      .filter(([columnName, viz]) => this.visualizations.get(columnName) === viz)
-      .filter(([, viz]) => !viz.isDestroyed())
-      .map(
-        ([, viz]) =>
-          () =>
-            viz.updateFilters(filters),
-      );
+    const vizTasks = charts.map(([columnName, viz]) => async () => {
+      if (!this.actions.isRelationReadable() && !(await this.waitForReadableRelation(seq))) return;
+      if (this.visualizations.get(columnName) !== viz || viz.isDestroyed()) return;
+      await viz.updateFilters(filters);
+    });
     await this.runLimited(vizTasks);
   }
 

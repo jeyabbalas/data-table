@@ -127,17 +127,11 @@ export class StatsPanelCoordinator {
     const seq = ++this.filterSequence;
     // The panels to update are the ones registered now: a panel made from
     // here on is made with these filters.
-    const panels = [...this.panels.entries()];
-    if (this.actions && !this.actions.isRelationReadable()) {
-      if (!(await this.waitForReadableRelation(this.actions, seq))) return;
-    }
-    const tasks = panels
-      .filter(([columnName, p]) => this.panels.get(columnName) === p && !p.isDestroyed())
-      .map(
-        ([, p]) =>
-          () =>
-            this.callUpdateFilters(p, filters, seq),
-      );
+    const tasks = [...this.panels.entries()].map(
+      ([columnName, p]) =>
+        () =>
+          this.callUpdateFilters(columnName, p, filters, seq),
+    );
 
     await this.runLimited(tasks);
   }
@@ -159,13 +153,19 @@ export class StatsPanelCoordinator {
   }
 
   private async callUpdateFilters(
+    columnName: string,
     panel: BaseStatsPanel,
     filters: Filter[],
     seq: number,
   ): Promise<void> {
+    // Checked as each update goes out: a broadcast runs a few at a time, and
+    // a derived-column change can start while the rest wait their turn.
+    if (this.actions && !this.actions.isRelationReadable()) {
+      if (!(await this.waitForReadableRelation(this.actions, seq))) return;
+    }
     if (this.destroyed) return;
     if (seq !== this.filterSequence) return;
-    if (panel.isDestroyed()) return;
+    if (this.panels.get(columnName) !== panel || panel.isDestroyed()) return;
     try {
       await panel.updateFilters(filters);
     } catch {

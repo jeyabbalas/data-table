@@ -22,7 +22,12 @@ import type { BaseVisualization } from '@/visualizations/BaseVisualization';
 import { CrossfilterCoordinator } from '@/visualizations/CrossfilterCoordinator';
 import { StatsPanelCoordinator } from '@/visualizations/StatsPanelCoordinator';
 
-import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
+import {
+  deferred,
+  makeRowFetchBridge,
+  type CapturedQuery,
+  type Deferred,
+} from '../helpers/rowFetchBridge';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -349,6 +354,84 @@ describe('Charts during a derived-column change', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(chart.updates).toEqual([]);
     expect(counts(queries)).toEqual([]);
+  });
+});
+
+/**
+ * A chart or panel whose update is held until the test settles it, and which
+ * logs, as each one goes out, whether the relation could be read then.
+ */
+function slowUpdater(log: string[], name: string, readable: () => boolean) {
+  const pending: Deferred<void>[] = [];
+  return {
+    pending,
+    updateFilters: (_filters: Filter[]): Promise<void> => {
+      log.push(`${name}:${readable() ? 'readable' : 'UNREADABLE'}`);
+      const d = deferred<void>();
+      pending.push(d);
+      return d.promise;
+    },
+    isDestroyed: () => false,
+  };
+}
+
+describe('Updates queued behind the concurrency cap when a change starts', () => {
+  /**
+   * A filter added while the relation is readable starts four updates, and
+   * queues four. A removal starts; the first four land.
+   */
+  async function queueEightThenRemove(
+    harness: ReturnType<typeof setup>,
+    register: (name: string, updater: ReturnType<typeof slowUpdater>) => void,
+  ) {
+    const { actions } = harness;
+    await landDerivedColumn(harness);
+    const log: string[] = [];
+    const updaters = Array.from({ length: 8 }, (_, i) =>
+      slowUpdater(log, `c${i}`, () => actions.isRelationReadable()),
+    );
+    updaters.forEach((updater, i) => register(`c${i}`, updater));
+
+    actions.addFilter(FILTER);
+    await drain();
+    expect(log).toEqual(['c0', 'c1', 'c2', 'c3'].map((name) => `${name}:readable`));
+
+    const { removal, drop } = await startRemoval(harness);
+    for (const updater of updaters.slice(0, 4)) updater.pending[0]!.resolve();
+    await drain();
+    await vi.advanceTimersByTimeAsync(1_000);
+    return { log, removal, drop };
+  }
+
+  it('sends none of the queued chart refetches until the removal settles', async () => {
+    const harness = setup();
+    const { coordinator } = harness;
+    const { log, removal, drop } = await queueEightThenRemove(harness, (name, updater) =>
+      coordinator.register(name, updater as unknown as BaseVisualization),
+    );
+    expect(log).toHaveLength(4);
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(log.slice(4).sort()).toEqual(['c4', 'c5', 'c6', 'c7'].map((name) => `${name}:readable`));
+    coordinator.destroy();
+  });
+
+  it('sends none of the queued panel updates until the removal settles', async () => {
+    const harness = setup();
+    const coord = new StatsPanelCoordinator(harness.state, undefined, harness.actions);
+    const { log, removal, drop } = await queueEightThenRemove(harness, (name, updater) =>
+      coord.register(name, updater as unknown as BaseStatsPanel),
+    );
+    expect(log).toHaveLength(4);
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(log.slice(4).sort()).toEqual(['c4', 'c5', 'c6', 'c7'].map((name) => `${name}:readable`));
+    coord.destroy();
+    harness.coordinator.destroy();
   });
 });
 

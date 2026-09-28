@@ -58,6 +58,7 @@ import type { TableEvents } from './core/TableEvents';
 import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
+import type { SourceOptions } from './data/sourceOptions';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
@@ -160,6 +161,13 @@ export interface CreateDataTableOptions {
   source?: File | string | ArrayBuffer | Blob;
   /** Override the format detected from the source (e.g., if URL has no extension). */
   sourceFormat?: DataFormat;
+  /**
+   * How `source` is read, per format: a CSV delimiter, header or null
+   * strings, the rows sampled to detect types, the Parquet columns to load,
+   * DuckDB's time zone. `table.loadData()` takes the same object. See
+   * {@link SourceOptions}.
+   */
+  sourceOptions?: SourceOptions;
   /** Table name used inside DuckDB. Auto-generated if omitted. */
   tableName?: string;
 
@@ -378,6 +386,8 @@ export interface DataTable {
   /**
    * Load a new data source into the table. Re-uses the existing worker.
    * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
+   * `opts.sourceOptions` says how the source is read, as `sourceOptions`
+   * does for `createDataTable()`.
    */
   loadData(
     source: File | string | ArrayBuffer | Blob,
@@ -1432,6 +1442,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         sessionStore: loadOpts?.sessionStore ?? sessionStore ?? undefined,
         presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
+        // The worker's progress messages, between loadStart and loadComplete
+        // or loadError.
+        onProgress: (info) => {
+          if (!destroyed) emitter.emit('loadProgress', info);
+          loadOpts?.onProgress?.(info);
+        },
       };
       await actions.loadData(source, mergedOpts);
       if (destroyed) {
@@ -1531,6 +1547,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     await loadDataImpl(opts.source, {
       tableName: opts.tableName,
       sourceFormat: opts.sourceFormat,
+      sourceOptions: opts.sourceOptions,
     });
   }
 

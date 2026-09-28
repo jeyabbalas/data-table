@@ -11,6 +11,8 @@ import {
   wrapReservedColumnError,
   makeReservedColumnError,
   dropSourceFile,
+  invalidOptionError,
+  setSessionTimeZone,
   sourceFileName,
   type LoaderContext,
 } from './common';
@@ -23,6 +25,11 @@ let tableCounter = 0;
  */
 function generateTableName(): string {
   return `table_${++tableCounter}_${Date.now()}`;
+}
+
+/** A SQL string literal holding `value`. */
+function sqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 /**
@@ -46,15 +53,8 @@ export async function loadCSV(
   const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
-  // Set timezone for TIMESTAMPTZ columns (default: UTC)
-  const timezone = options.timezone ?? 'UTC';
-  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
-      code: 'LOAD_INVALID_TIMEZONE',
-      details: { timezone },
-    });
-  }
-  await conn.query(`SET TimeZone = '${timezone}'`);
+  // DuckDB's session time zone, UTC unless given; see SourceOptions.timezone.
+  await setSessionTimeZone(conn, options.timezone);
 
   // Convert to Uint8Array for DuckDB's file system
   const content =
@@ -70,25 +70,22 @@ export async function loadCSV(
 
     if (options.delimiter) {
       if (options.delimiter.length !== 1) {
-        throw Object.assign(new Error('CSV delimiter must be a single character'), {
-          code: 'LOAD_INVALID_OPTIONS',
-          details: { option: 'delimiter' },
-        });
+        throw invalidOptionError('csv.delimiter', 'CSV delimiter must be a single character');
       }
-      csvOptions.push(`delim = '${options.delimiter.replace(/'/g, "''")}'`);
+      csvOptions.push(`delim = ${sqlString(options.delimiter)}`);
     }
 
     if (options.header !== undefined) {
       csvOptions.push(`header = ${Boolean(options.header)}`);
     }
 
-    if (options.sampleSize) {
+    if (options.sampleSize !== undefined) {
       const n = Number(options.sampleSize);
-      if (!Number.isInteger(n) || n <= 0) {
-        throw Object.assign(new Error('CSV sampleSize must be a positive integer'), {
-          code: 'LOAD_INVALID_OPTIONS',
-          details: { option: 'sampleSize' },
-        });
+      if (!Number.isInteger(n) || (n <= 0 && n !== -1)) {
+        throw invalidOptionError(
+          'csv.sampleSize',
+          'CSV sampleSize must be a positive integer or -1',
+        );
       }
       csvOptions.push(`sample_size = ${n}`);
     }
@@ -96,12 +93,22 @@ export async function loadCSV(
     if (options.skip) {
       const n = Number(options.skip);
       if (!Number.isInteger(n) || n < 0) {
-        throw Object.assign(new Error('CSV skip must be a non-negative integer'), {
-          code: 'LOAD_INVALID_OPTIONS',
-          details: { option: 'skip' },
-        });
+        throw invalidOptionError('csv.skip', 'CSV skip must be a non-negative integer');
       }
       csvOptions.push(`skip = ${n}`);
+    }
+
+    if (options.nullValues !== undefined) {
+      const values: readonly unknown[] = Array.isArray(options.nullValues)
+        ? options.nullValues
+        : [];
+      if (values.length === 0 || values.some((v) => typeof v !== 'string')) {
+        throw invalidOptionError(
+          'csv.nullValues',
+          'CSV nullValues must be a non-empty array of strings',
+        );
+      }
+      csvOptions.push(`nullstr = [${values.map((v) => sqlString(v as string)).join(', ')}]`);
     }
 
     // Inject a synthetic __rowid__ as the first column of a new table.

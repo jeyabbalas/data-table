@@ -11,6 +11,8 @@ import {
   wrapReservedColumnError,
   makeReservedColumnError,
   dropSourceFile,
+  invalidOptionError,
+  setSessionTimeZone,
   sourceFileName,
   type LoaderContext,
 } from './common';
@@ -64,15 +66,8 @@ export async function loadJSON(
   const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
-  // Set timezone for TIMESTAMPTZ columns (default: UTC)
-  const timezone = options.timezone ?? 'UTC';
-  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
-      code: 'LOAD_INVALID_TIMEZONE',
-      details: { timezone },
-    });
-  }
-  await conn.query(`SET TimeZone = '${timezone}'`);
+  // DuckDB's session time zone, UTC unless given; see SourceOptions.timezone.
+  await setSessionTimeZone(conn, options.timezone);
 
   // Convert ArrayBuffer to string if needed
   const jsonString = data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data;
@@ -101,13 +96,13 @@ export async function loadJSON(
     // Enable auto-detection of types
     jsonOptions.push('auto_detect = true');
 
-    if (options.sampleSize) {
+    if (options.sampleSize !== undefined) {
       const n = Number(options.sampleSize);
-      if (!Number.isInteger(n) || n <= 0) {
-        throw Object.assign(new Error('JSON sampleSize must be a positive integer'), {
-          code: 'LOAD_INVALID_OPTIONS',
-          details: { option: 'sampleSize' },
-        });
+      if (!Number.isInteger(n) || (n <= 0 && n !== -1)) {
+        throw invalidOptionError(
+          'json.sampleSize',
+          'JSON sampleSize must be a positive integer or -1',
+        );
       }
       jsonOptions.push(`sample_size = ${n}`);
     }
@@ -115,10 +110,7 @@ export async function loadJSON(
     if (options.maxDepth) {
       const n = Number(options.maxDepth);
       if (!Number.isInteger(n) || n <= 0) {
-        throw Object.assign(new Error('JSON maxDepth must be a positive integer'), {
-          code: 'LOAD_INVALID_OPTIONS',
-          details: { option: 'maxDepth' },
-        });
+        throw invalidOptionError('json.maxDepth', 'JSON maxDepth must be a positive integer');
       }
       jsonOptions.push(`maximum_depth = ${n}`);
     }

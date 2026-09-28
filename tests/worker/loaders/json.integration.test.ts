@@ -136,9 +136,18 @@ describe('JSON loader — fixture integration', () => {
       }
     });
 
+    it('accepts a sampleSize of -1, which reads every object for types', async () => {
+      const result = await loadJSON(
+        '[{"a":1},{"a":"x"}]',
+        { tableName: tableName('allss'), sampleSize: -1 },
+        ctx(),
+      );
+      expect(result.rowCount).toBe(2);
+    });
+
     it('rejects invalid sampleSize with LOAD_INVALID_OPTIONS', async () => {
       try {
-        await loadJSON('[{"a":1}]', { tableName: tableName('badss'), sampleSize: -1 }, ctx());
+        await loadJSON('[{"a":1}]', { tableName: tableName('badss'), sampleSize: -2 }, ctx());
         throw new Error('should have thrown');
       } catch (err) {
         expect((err as { code?: string; details?: { option?: string } }).code).toBe(

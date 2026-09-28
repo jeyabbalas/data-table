@@ -14,7 +14,8 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { measureParquetFootprint } from '@/worker/loaders/memoryBudget';
+import { quoteIdentifier } from '@/worker/loaders/common';
+import { measureParquetFootprint, scanBytesPerColumn } from '@/worker/loaders/memoryBudget';
 import { loadParquet } from '@/worker/loaders/parquet';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../../helpers/duckdbNode';
@@ -138,6 +139,94 @@ describe('Parquet memory check (real DuckDB)', () => {
     },
     120_000,
   );
+
+  describe('with a projection', () => {
+    // A struct (two leaf columns), a name holding the ", " parquet_metadata
+    // joins path parts with, and twenty columns of random doubles the
+    // projections leave out. Four row groups.
+    const WIDE = Array.from({ length: 20 }, (_, i) => `random() + ${i} AS w${i}`).join(', ');
+    const fileName = 'budget_projection.parquet';
+    let meta: Record<string, unknown>[];
+
+    async function footprint(projection?: string[]) {
+      const relation = projection
+        ? `(SELECT ${projection.map(quoteIdentifier).join(', ')} FROM read_parquet('${fileName}'))`
+        : `read_parquet('${fileName}')`;
+      const describe = (await harness.conn.query(`DESCRIBE SELECT * FROM ${relation}`))
+        .toArray()
+        .map((row) => row.toJSON());
+      return measureParquetFootprint(harness.conn, fileName, describe, projection);
+    }
+
+    beforeAll(async () => {
+      const data = await parquet(
+        `SELECT range AS id, {'x': range, 'y': random()} AS s, random() AS "a, b", ${WIDE}
+         FROM range(${ROWS})`,
+        50_000,
+      );
+      await harness.db.registerFileBuffer(fileName, new Uint8Array(data));
+      meta = (
+        await harness.conn.query(
+          `SELECT row_group_id, path_in_schema, total_compressed_size, total_uncompressed_size
+           FROM parquet_metadata('${fileName}')`,
+        )
+      )
+        .toArray()
+        .map((row) => row.toJSON() as Record<string, unknown>);
+    });
+
+    afterAll(async () => {
+      await harness.db.dropFile(fileName);
+    });
+
+    it('counts only its columns in the scan and prefetch estimates', async () => {
+      const leaves = meta.filter((m) =>
+        ['s, x', 's, y', 'a, b'].includes(String(m['path_in_schema'])),
+      );
+      expect(leaves).toHaveLength(12); // three leaves in each of four row groups
+      const groups = new Map<number, number>();
+      const chunks = new Map<string, number>();
+      for (const m of leaves) {
+        const group = Number(m['row_group_id']);
+        groups.set(group, (groups.get(group) ?? 0) + Number(m['total_compressed_size']));
+        const path = String(m['path_in_schema']);
+        chunks.set(path, Math.max(chunks.get(path) ?? 0, Number(m['total_uncompressed_size'])));
+      }
+
+      const projected = await footprint(['s', 'a, b']);
+      const whole = await footprint();
+
+      expect(projected.largestRowGroupBytes).toBe(Math.max(...groups.values()));
+      expect(projected.scanBytes).toBe(
+        [...chunks.values()].reduce((sum, bytes) => sum + scanBytesPerColumn(bytes), 0),
+      );
+      expect(projected.largestRowGroupBytes).toBeLessThan(whole.largestRowGroupBytes / 5);
+      expect(projected.scanBytes).toBeLessThan(whole.scanBytes / 5);
+      expect(projected.columns).toBe(3);
+    });
+
+    it('counts a whole row group once its columns are nearly all of it', async () => {
+      // Everything but the id, which compresses to almost nothing: DuckDB
+      // prefetches the whole group.
+      const allButId = ['s', 'a, b', ...Array.from({ length: 20 }, (_, i) => `w${i}`)];
+      const projected = await footprint(allButId);
+      const whole = await footprint();
+      expect(projected.largestRowGroupBytes).toBe(whole.largestRowGroupBytes);
+      expect(projected.scanBytes).toBeLessThan(whole.scanBytes);
+    });
+
+    it('counts every column when the schema does not name a projected column', async () => {
+      const whole = await footprint();
+      const describe = (
+        await harness.conn.query(`DESCRIBE SELECT * FROM read_parquet('${fileName}')`)
+      )
+        .toArray()
+        .map((row) => row.toJSON());
+      const unmatched = await measureParquetFootprint(harness.conn, fileName, describe, ['nope']);
+      expect(unmatched.scanBytes).toBe(whole.scanBytes);
+      expect(unmatched.largestRowGroupBytes).toBe(whole.largestRowGroupBytes);
+    });
+  });
 
   it('rejects a load that cannot fit before building anything', async () => {
     // ~33 MB once loaded; the footer and DESCRIBE need well under 16 MB.

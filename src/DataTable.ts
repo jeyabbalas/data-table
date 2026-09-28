@@ -679,6 +679,23 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     emitter.emit('error', { error: typed, source: 'stats-panel' });
   };
 
+  /**
+   * Put the column a chart error came from on the error's `details`, and the
+   * stage that failed when the chart says, as stats-panel errors carry
+   * theirs: only some of the charts' queries name the column themselves.
+   * `details` is declared readonly on DataTableError; this is the deliberate
+   * write-through site, as in the stats panels' `onError`.
+   */
+  const withChartContext = (
+    err: DataTableError,
+    column: string,
+    stage?: 'fetch' | 'render' | 'filter',
+  ): DataTableError => {
+    const target = err as { details?: Record<string, unknown> };
+    target.details = { ...(target.details ?? {}), column, ...(stage ? { stage } : {}) };
+    return err;
+  };
+
   /** Drop a column's interactions from the Escape stack (on filter removal). */
   const clearVisualizationState = (column: string): void => {
     interactionManager?.clearColumn(column);
@@ -860,8 +877,30 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         if (hasSelection) interactionManager?.pushSelection(colName, viz);
         else interactionManager?.removeColumn(colName);
       },
-      onError: (err: DataTableError) => {
-        emitter.emit('error', { error: err, source: 'visualization' });
+      onError: (
+        err: DataTableError,
+        context: { columnName?: string; stage: 'fetch' | 'render' | 'filter' },
+      ) => {
+        // A fetch that failed leaves the chart nothing to describe: the
+        // stats it reported before are for the filters then.
+        if (context.stage !== 'render') {
+          lastStats = null;
+          latestStats.delete(column.name);
+          const panel = panelOf();
+          if (panel) {
+            try {
+              panel.update(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'update');
+            }
+          } else if (!panelComing()) {
+            renderStatsSlot();
+          }
+        }
+        emitter.emit('error', {
+          error: withChartContext(err, context.columnName ?? column.name, context.stage),
+          source: 'visualization',
+        });
       },
     };
 
@@ -907,7 +946,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // A hidden or removed column leaves the Escape stack, as its chart
         // would when the header row is rebuilt without it.
         onColumnRemoved: (columnName) => interactionManager?.removeColumn(columnName),
-        onError: (err) => {
+        onError: (err, columnName) => {
           const typed =
             err instanceof DataTableError
               ? err
@@ -915,7 +954,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
                   code: 'INVARIANT',
                   cause: err,
                 });
-          emitter.emit('error', { error: typed, source: 'visualization' });
+          emitter.emit('error', {
+            error: withChartContext(typed, columnName),
+            source: 'visualization',
+          });
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),

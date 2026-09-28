@@ -134,8 +134,13 @@ table.on('error', ({ error, source }) => {
 ```
 
 `source` values: `'load' | 'query' | 'export' | 'persistence' |
-'visualization' | 'sql-validation' | 'derived-column' | 'listener' |
-'unknown'`.
+'visualization' | 'stats-panel' | 'sql-validation' | 'derived-column' |
+'listener' | 'unknown'`.
+
+A `'visualization'` error names its column in `error.details.column`, and,
+when the chart reported it, the stage that failed in `error.details.stage`
+(`'fetch'`, `'render'` or `'filter'`). A `'stats-panel'` error names its
+column and `phase` the same way.
 
 `loadError` is a strict subset of `error` — both fire for the same underlying
 failure. Handle one or the other, not both, unless you specifically want

@@ -17,6 +17,7 @@ import {
   VisualizationRegistry,
   type CreateDataTableOptions,
   type DataTable,
+  type DataTableError,
 } from '@/index';
 import { STATS_PANEL_SETTLE_MS } from '@/DataTable';
 import { initializeColumnsFromSchema } from '@/core/State';
@@ -150,6 +151,8 @@ interface Mounted {
     match: (sql: string) => boolean,
     afterRun?: boolean,
   ) => { held: () => number; release: () => void };
+  /** Fail the queries `match` accepts, without running them, until `stop()`. */
+  fail: (match: (sql: string) => boolean) => { stop: () => void };
 }
 
 interface Gate {
@@ -165,12 +168,14 @@ async function mount(options: Partial<CreateDataTableOptions> = {}): Promise<Mou
 
   const queries: string[] = [];
   let gate: Gate | null = null;
+  let failing: ((sql: string) => boolean) | null = null;
   const wait = (g: Gate): Promise<void> => new Promise((resolve) => g.waiting.push(resolve));
   const base = makeNodeBridge(harness!.conn);
   const bridge = {
     ...base,
     query: async (sql: string, ...rest: unknown[]) => {
       queries.push(sql);
+      if (failing?.(sql)) throw new Error('Out of Memory Error: could not allocate block');
       const held = gate?.match(sql) ? gate : null;
       if (held && !held.afterRun) await wait(held);
       const result = await (base.query as (...args: unknown[]) => Promise<unknown>)(sql, ...rest);
@@ -221,6 +226,14 @@ async function mount(options: Partial<CreateDataTableOptions> = {}): Promise<Mou
         release: () => {
           if (gate === g) gate = null;
           for (const resolve of g.waiting.splice(0)) resolve();
+        },
+      };
+    },
+    fail: (match) => {
+      failing = match;
+      return {
+        stop: () => {
+          if (failing === match) failing = null;
         },
       };
     },
@@ -312,6 +325,15 @@ class ThrowingChart extends BaseVisualization {
   protected handleMouseDown(): void {}
   protected handleMouseUp(): void {}
   protected handleKeyDown(): void {}
+}
+
+/** The `error` events with `source: 'visualization'`. */
+function collectVizErrorEvents(table: DataTable): DataTableError[] {
+  const errors: DataTableError[] = [];
+  table.on('error', ({ error, source }) => {
+    if (source === 'visualization') errors.push(error);
+  });
+  return errors;
 }
 
 /** Messages of the `error` events with `source: 'visualization'`. */
@@ -673,6 +695,61 @@ describe('lazy column charts (real DuckDB)', () => {
     await vi.waitFor(() => expect(RecordingPanel.built).toEqual(['c3@lazy_viz']), {
       timeout: 5000,
     });
+    await m.table.destroy();
+  }, 20_000);
+
+  it('shows a chart whose refetch fails as failed, without the stats or detail it had', async () => {
+    const m = await mount();
+    const errors = collectVizErrorEvents(m.table);
+    await waitForSlot(m, 'c0', /^20 rows/);
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    m.table.actions.addFilter({ type: 'range', column: 'c1', min: 1, max: 4, maxInclusive: true });
+    await waitForSlot(m, 'c0', 'Category: US');
+    await waitForSlot(m, 'c1', 'Bin:');
+    const failed = (column: string): boolean =>
+      m.container
+        .querySelector(`.dt-col-header[data-column="${column}"] .dt-col-viz canvas`)!
+        .hasAttribute('data-fetch-failed');
+
+    // Every chart query fails; the count and the rows (which read c5) do not.
+    const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
+    m.table.actions.addFilter({ type: 'range', column: 'c3', min: 1, max: 20, maxInclusive: true });
+    await vi.waitFor(() => expect(failed('c0') && failed('c1')).toBe(true), { timeout: 5000 });
+
+    // The table-wide count, and nothing from before the failure.
+    expect(m.slot('c0')).toBe('4 / 20 rows');
+    expect(m.slot('c1')).toBe('4 / 20 rows');
+    const columns = errors.map((error) => error.details?.column);
+    expect(columns).toEqual(expect.arrayContaining(['c0', 'c1']));
+    expect(columns.every((column) => typeof column === 'string')).toBe(true);
+    expect(errors.find((error) => error.details?.column === 'c1')!.details).toMatchObject({
+      stage: 'fetch',
+    });
+
+    // The next refetch lands, and brings back each selection's detail.
+    failing.stop();
+    m.table.actions.removeFilter('c3');
+    await waitForSlot(m, 'c0', 'Category: US');
+    await waitForSlot(m, 'c1', 'Bin:');
+    expect(failed('c0') || failed('c1')).toBe(false);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('names the column of a chart that throws in its constructor', async () => {
+    const visualizationRegistry = new VisualizationRegistry();
+    visualizationRegistry.register({
+      name: 'throwing',
+      isApplicable: () => true,
+      constructor: ThrowingChart,
+      priority: 100,
+    });
+    const m = await mount({ visualizationRegistry });
+    const errors = collectVizErrorEvents(m.table);
+    scrollTo(900);
+    await vi.waitFor(() => expect(errors.length).toBeGreaterThan(0), { timeout: 5000 });
+    for (const error of errors) {
+      expect(error.message).toBe(`cannot chart ${error.details?.column as string}`);
+    }
     await m.table.destroy();
   }, 20_000);
 

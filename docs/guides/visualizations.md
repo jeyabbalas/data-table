@@ -338,13 +338,20 @@ per page, no matter how many visualizations are on screen.
 
 If `fetchData()` or `render()` throws, the library catches it, routes it to
 the table's `error` event with `source: 'visualization'`, and keeps rendering
-the other visualizations. A built-in chart whose query fails stays blank.
-Subscribe to handle gracefully:
+the other visualizations. The error names the column in `error.details.column`,
+and the stage that failed, when the chart reported it, in `error.details.stage`.
+
+A built-in chart whose query fails draws "Failed to load"
+(`messages.statistics.chartFailed`) where its bars would be, and its
+`<canvas>` carries a `data-fetch-failed` attribute. Its stats slot drops what
+the chart reported before, and any hover or selection detail, and shows the
+table-wide row count, until a later fetch lands. Subscribe to handle
+gracefully:
 
 ```ts
 table.on('error', ({ error, source }) => {
   if (source === 'visualization') {
-    console.warn('Visualization failed:', error);
+    console.warn(`Chart for ${String(error.details?.column)} failed:`, error);
   }
 });
 ```

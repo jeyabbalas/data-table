@@ -8,6 +8,10 @@
  * A chart's resize observer renders it as soon as it is laid out, which is
  * before its first fetch lands. Histograms drew "No data" there, so every
  * chart created as its column scrolled into view flashed it.
+ *
+ * A chart whose fetch failed says so, and marks its canvas, until a fetch
+ * lands: it looked like one still loading. With nothing drawn, it keeps no
+ * hover, and no detail of a bar, a brush or a selection in the stats slot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -107,6 +111,7 @@ vi.mock('../../src/visualizations/valuecounts/ValueCountsData', async (importAct
   fetchValueCountsData: deferredFetch,
 }));
 
+import { defaultStrings } from '../../src/core/Strings';
 import type { ColumnSchema } from '../../src/core/types';
 import type {
   BaseVisualization,
@@ -272,18 +277,34 @@ const CHARTS: ChartCase[] = [
     Chart: ValueCounts,
     column: column('string', 'VARCHAR'),
     empty: { segments: [], nullCount: 0, distinctCount: 0, total: 0, isAllUnique: false },
+    values: {
+      segments: [
+        { value: 'a', count: 3, isOther: false },
+        { value: 'b', count: 1, isOther: false },
+      ],
+      nullCount: 0,
+      distinctCount: 2,
+      total: 4,
+      isAllUnique: false,
+    },
   },
 ];
 
 let container: HTMLElement;
 let onError: ReturnType<typeof vi.fn>;
+let onStatsChange: ReturnType<typeof vi.fn>;
 
-function create({ Chart, column }: ChartCase): BaseVisualization {
+function create(
+  { Chart, column }: ChartCase,
+  options: Partial<VisualizationOptions> = {},
+): BaseVisualization {
   return new Chart(container, column, {
     tableName: 't',
     bridge: { query: vi.fn() } as unknown as VisualizationOptions['bridge'],
     filters: [],
     onError,
+    onStatsChange,
+    ...options,
   });
 }
 
@@ -291,11 +312,51 @@ function drewNoData(): boolean {
   return mockContext.fillText.mock.calls.some(([text]) => text === 'No data');
 }
 
+function drewFailed(text = 'Failed to load'): boolean {
+  return mockContext.fillText.mock.calls.some(([drawn]) => drawn === text);
+}
+
+function markedFailed(chart: BaseVisualization): boolean {
+  const canvas = (chart as unknown as { canvas: HTMLCanvasElement }).canvas;
+  return canvas.hasAttribute('data-fetch-failed');
+}
+
+/** The detail the chart last put in the stats slot: `null` once cleared. */
+function lastDetail(): unknown {
+  return onStatsChange.mock.calls.at(-1)?.[0];
+}
+
+/** Protected members the tests drive, as a pointer would. */
+interface Pointer {
+  handleMouseMove(x: number, y: number): void;
+  handleMouseLeave(): void;
+  handleClick(x: number, y: number): void;
+}
+const pointer = (chart: BaseVisualization) => chart as unknown as Pointer;
+
+/** Where the chart drew its first bar or segment, to point at it. */
+function firstSlotX(chart: BaseVisualization): number {
+  const layout = chart as unknown as {
+    barPositions?: { x: number; width: number }[];
+    segmentPositions?: { x: number; width: number }[];
+  };
+  const slot = (layout.barPositions ?? layout.segmentPositions)![0]!;
+  return slot.x + slot.width / 2;
+}
+
+/** A refetch for a filter change (which keeps a selection), failing. */
+async function failRefetch(chart: BaseVisualization): Promise<void> {
+  const refetch = chart.updateFilters([]);
+  fetches.at(-1)!.reject(new Error('Out of Memory Error'));
+  await refetch;
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   fetches.length = 0;
   resizeCallbacks.length = 0;
   onError = vi.fn();
+  onStatsChange = vi.fn();
   container = document.createElement('div');
   vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
     width: 120,
@@ -323,9 +384,11 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
 
     reportLayout();
 
-    // It rendered, and drew no "No data".
+    // It rendered, and drew no "No data", and no failure.
     expect(mockContext.clearRect).toHaveBeenCalled();
     expect(drewNoData()).toBe(false);
+    expect(drewFailed()).toBe(false);
+    expect(markedFailed(chart)).toBe(false);
     chart.destroy();
   });
 
@@ -340,7 +403,7 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
     chart.destroy();
   });
 
-  it('draws nothing after its fetch fails', async () => {
+  it('says its fetch failed, and marks its canvas, after its fetch fails', async () => {
     const chart = create(chartCase);
     reportLayout();
 
@@ -353,6 +416,81 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
     });
     reportLayout();
     expect(drewNoData()).toBe(false);
+    expect(drewFailed()).toBe(true);
+    expect(markedFailed(chart)).toBe(true);
+    chart.destroy();
+  });
+
+  it('says so in the messages given', async () => {
+    const messages = {
+      ...defaultStrings,
+      statistics: { ...defaultStrings.statistics, chartFailed: 'Échec du chargement' },
+    };
+    const chart = create(chartCase, { messages });
+    reportLayout();
+
+    fetches[0]!.reject(new Error('Conversion Error'));
+    await chart.waitForData();
+
+    expect(drewFailed('Échec du chargement')).toBe(true);
+    expect(drewFailed()).toBe(false);
+    chart.destroy();
+  });
+
+  it('is no longer failed once a later fetch lands', async () => {
+    const chart = create(chartCase);
+    reportLayout();
+    fetches[0]!.reject(new Error('Conversion Error'));
+    await chart.waitForData();
+    expect(markedFailed(chart)).toBe(true);
+
+    const refetch = chart.fetchData();
+    fetches[1]!.resolve(chartCase.values ?? chartCase.empty);
+    await refetch;
+    mockContext.fillText.mockClear();
+    reportLayout();
+
+    expect(markedFailed(chart)).toBe(false);
+    expect(drewFailed()).toBe(false);
+    chart.destroy();
+  });
+});
+
+describe.each(CHARTS)('$name detail once a refetch fails', (chartCase) => {
+  it('clears the detail of the bar or segment under the pointer, and hovers nothing', async () => {
+    const chart = create(chartCase);
+    fetches[0]!.resolve(chartCase.values);
+    await chart.waitForData();
+    reportLayout();
+    const x = firstSlotX(chart);
+    pointer(chart).handleMouseMove(x, 20);
+    expect(lastDetail()).toEqual(expect.stringContaining('stats-label'));
+
+    await failRefetch(chart);
+    expect(lastDetail()).toBeNull();
+    const hover = chart as unknown as Record<string, unknown>;
+    expect('hoveredBin' in hover ? hover.hoveredBin : hover.hoveredSegment).toBeNull();
+
+    // Over the blank chart, and off it: nothing brings the detail back.
+    pointer(chart).handleMouseMove(x, 20);
+    pointer(chart).handleMouseLeave();
+    expect(onStatsChange.mock.calls.filter(([detail]) => detail !== null).length).toBe(1);
+    expect(lastDetail()).toBeNull();
+    chart.destroy();
+  });
+
+  it('clears the detail of its selection', async () => {
+    const chart = create(chartCase);
+    fetches[0]!.resolve(chartCase.values);
+    await chart.waitForData();
+    reportLayout();
+    pointer(chart).handleClick(firstSlotX(chart), 20);
+    expect(lastDetail()).toEqual(expect.stringContaining('stats-label'));
+
+    await failRefetch(chart);
+    expect(lastDetail()).toBeNull();
+    pointer(chart).handleMouseLeave();
+    expect(lastDetail()).toBeNull();
     chart.destroy();
   });
 });

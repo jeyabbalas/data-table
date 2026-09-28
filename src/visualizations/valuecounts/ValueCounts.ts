@@ -153,6 +153,12 @@ export class ValueCounts extends BaseVisualization {
   private data: ValueCountsData | null = null;
   private backgroundData: ValueCountsData | null = null;
 
+  /**
+   * Whether the latest fetch to settle failed. Read only while there is no
+   * data, which a fetch that settles leaves only by failing.
+   */
+  private fetchFailed = false;
+
   // Fetch sequence counter for stale result protection
   private fetchSequence = 0;
 
@@ -312,8 +318,14 @@ export class ValueCounts extends BaseVisualization {
         columnName: this.column.name,
         stage: 'fetch',
       });
+      // No segments are drawn now, and so none is hovered. A selection stays,
+      // as the column's filter does, and its detail comes back with the next
+      // fetch that lands.
       this.data = null;
       this.backgroundData = null;
+      this.fetchFailed = true;
+      this.hoveredSegment = null;
+      this.canvas.style.cursor = 'default';
     }
 
     // Emit column stats for default stats display
@@ -369,6 +381,9 @@ export class ValueCounts extends BaseVisualization {
    */
   render(): void {
     if (this.destroyed) return;
+    // Tells a chart whose fetch failed from one whose first fetch is still
+    // in flight, both of which draw no segments.
+    this.canvas.toggleAttribute('data-fetch-failed', !this.data && this.fetchFailed);
 
     this.clear();
 
@@ -377,6 +392,7 @@ export class ValueCounts extends BaseVisualization {
     this.colors = getValueCountsColors(this.canvas);
 
     if (!this.data) {
+      if (this.fetchFailed) this.drawFailedState();
       return;
     }
 
@@ -1149,6 +1165,17 @@ export class ValueCounts extends BaseVisualization {
     ctx.fillText('No data', this.width / 2, this.height / 2);
   }
 
+  /** Say that the chart's data failed to load, where its segments would be. */
+  private drawFailedState(): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = this.colors.axisText;
+    ctx.font = FONTS.axis;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const text = truncateText(ctx, this.statsMessages.chartFailed, this.width - 8);
+    ctx.fillText(text, this.width / 2, this.height / 2);
+  }
+
   /**
    * Draw special state when all values are unique
    */
@@ -1659,7 +1686,12 @@ export class ValueCounts extends BaseVisualization {
    * round-tripped yet.)
    */
   private emitSelectionDetail(): void {
-    if (this.selectedSegments.size > 0 && this.canCountCommittedDetail(this.ownFilter())) {
+    // Without data nothing is drawn, so no detail describes it.
+    if (
+      this.data &&
+      this.selectedSegments.size > 0 &&
+      this.canCountCommittedDetail(this.ownFilter())
+    ) {
       this.updateSelectedStats();
     } else {
       this.options.onStatsChange?.(null);

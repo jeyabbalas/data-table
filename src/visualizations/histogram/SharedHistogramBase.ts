@@ -135,6 +135,12 @@ export abstract class SharedHistogramBase<
   protected data: TData | null = null;
   protected backgroundData: TData | null = null;
 
+  /**
+   * Whether the latest fetch to settle failed. Read only while there is no
+   * data, which a fetch that settles leaves only by failing.
+   */
+  protected fetchFailed = false;
+
   // Fetch sequence counter for stale result protection
   protected fetchSequence = 0;
 
@@ -213,7 +219,11 @@ export abstract class SharedHistogramBase<
    * Main render method - draws the complete histogram
    */
   render(): void {
-    if (this.destroyed || this.width === 0 || this.height === 0) return;
+    if (this.destroyed) return;
+    // Tells a chart whose fetch failed from one whose first fetch is still
+    // in flight, both of which draw no bars.
+    this.canvas.toggleAttribute('data-fetch-failed', !this.data && this.fetchFailed);
+    if (this.width === 0 || this.height === 0) return;
 
     this.clear();
 
@@ -231,11 +241,12 @@ export abstract class SharedHistogramBase<
 
     this.isAllNullState = false;
 
-    // Nothing to draw before the first fetch lands, or after one fails. The
-    // resize observer renders a new chart before its data arrives, and "No
-    // data" there would say the column is empty.
+    // No bars before the first fetch lands, or after one fails. The resize
+    // observer renders a new chart before its data arrives, and "No data"
+    // there would say the column is empty.
     if (!this.data) {
       this.clearLayout();
+      if (this.fetchFailed) this.drawFailedState();
       return;
     }
 
@@ -736,6 +747,35 @@ export abstract class SharedHistogramBase<
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('No data', this.width / 2, this.height / 2);
+  }
+
+  /** Say that the chart's data failed to load, where its bars would be. */
+  private drawFailedState(): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = this.colors.axisText;
+    ctx.font = FONTS.axis;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const text = truncateText(ctx, this.statsMessages.chartFailed, this.width - 8);
+    ctx.fillText(text, this.width / 2, this.height / 2);
+  }
+
+  /**
+   * Show a fetch that failed, once the error is reported: no bars, and so
+   * nothing hovered and no detail describing a bar, a brush or a selection.
+   * The brush and the selection stay, as the column's filter does, and their
+   * detail comes back with the next fetch that lands.
+   */
+  protected showFetchFailed(): void {
+    this.data = null;
+    this.backgroundData = null;
+    this.fetchFailed = true;
+    this.hoveredBin = null;
+    this.hoveredNull = false;
+    this.allNullHovered = false;
+    this.canvas.style.cursor = 'default';
+    this.emitRestingStats();
+    this.render();
   }
 
   /**
@@ -1527,7 +1567,10 @@ export abstract class SharedHistogramBase<
    * region when it has no selection. The resting state of the slot.
    */
   private emitRestingStats(): void {
-    if (this.brushState.committed) {
+    // Without data nothing is drawn, so no detail describes it.
+    if (!this.data) {
+      this.options.onStatsChange?.(null);
+    } else if (this.brushState.committed) {
       this.updateBrushStats();
     } else if (this.selectedBin !== null || this.selectedNull) {
       this.updateSelectedStats();

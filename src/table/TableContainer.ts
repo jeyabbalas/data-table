@@ -418,6 +418,10 @@ export class TableContainer {
       scrollbarGutter: this.scrollbarGutter,
       bodyScroll: this.bodyScroll,
       gridElement: this.gridElement,
+      // The row range is read from the body's height, which changes with the
+      // container's and with what sits above the body, such as a filter bar
+      // that wraps. Nothing else re-reads it until the next scroll.
+      onBodyResize: () => this.tableBody?.getVirtualScroller().refresh(),
     });
 
     // Set up resize observer

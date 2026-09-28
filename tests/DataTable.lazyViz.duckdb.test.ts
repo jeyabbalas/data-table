@@ -1004,6 +1004,24 @@ describe('lazy column charts (real DuckDB)', () => {
     await m.table.destroy();
   }, 20_000);
 
+  it("leaves a built-in chart's slot to its own stats before its first fetch lands", async () => {
+    const m = await mount();
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    // c9's first fetch, and its refetch for the filter, wait.
+    const gate = m.hold((sql) => sql.includes('"c9"') && !sql.includes('"c5"'));
+    scrollTo(900);
+    await vi.waitFor(() => expect(gate.held()).toBeGreaterThan(0), { timeout: 5000 });
+    expect(m.slot('c9')).toBe('20 rows');
+    m.table.actions.addFilter({ type: 'range', column: 'c1', min: 1, max: 4, maxInclusive: true });
+    await waitForSlot(m, 'c11', '4 / 20 rows');
+    // Its own count comes with its stats, which a test waiting on the count
+    // expects to find with it.
+    expect(m.slot('c9')).toBe('20 rows');
+    gate.release();
+    await waitForSlot(m, 'c9', /^4 \/ 20 rows\S/);
+    await m.table.destroy();
+  }, 20_000);
+
   it('says a built-in chart whose first fetch fails failed', async () => {
     const m = await mount();
     await waitForSlot(m, 'c1', /^20 rows\S/);

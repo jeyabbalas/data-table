@@ -759,10 +759,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // slot, for a slot a panel was to take and did not.
   const chartStatsRenderers = new Map<string, () => void>();
 
-  // Per column whose live chart has no stats of its own, redraws its slot:
-  // before the chart's first stats land, after a fetch of it failed, and for
-  // a custom chart that reports none. The slot shows the table-wide count,
-  // which `refreshNonVizStats` keeps current.
+  // Per column whose live chart has no stats of its own to show, redraws
+  // its slot: after a fetch of the chart failed, and for a chart that does
+  // not report stats each time a fetch lands until it has. The slot shows
+  // the table-wide count, which `refreshNonVizStats` keeps current. A chart
+  // that does report them each time, as the built-in ones do, shows its own
+  // count once its first fetch lands.
   const chartsWithoutStats = new Map<string, () => void>();
 
   // Columns whose custom stats panel threw while being built. As with a chart
@@ -964,7 +966,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (!created) return null;
     viz = created as VisualizationType;
     chartStatsRenderers.set(column.name, renderStatsSlot);
-    chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
+    if (!created.reportsDefaultStats) chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
     // Once the chart is gone, its stats must not linger: a panel goes back
     // to its initial state, and the default slot to the table-wide count,
     // which `refreshNonVizStats` keeps current from then on.

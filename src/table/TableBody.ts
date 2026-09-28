@@ -244,12 +244,13 @@ export class TableBody {
   //   block aborted: rejection swallowed; deregistered in `finally`; the
   //     reconciler may legitimately re-issue the same block later as a
   //     fresh query.
-  //   derived-column change in flight: the reconciler starts nothing, and
-  //     runs again a task after the change settles.
+  //   derived-column change in flight that can break reads (all but an
+  //     add): the reconciler aborts out-of-window blocks but starts nothing,
+  //     and runs again a task after the change settles, from the live range.
   //   invalidation mid-fetch: epoch++ → abort all → clear caches → re-read
   //     the live range → placeholders → reconcile. (The filter-change
-  //     scroll animation is unchanged: cache-only renders during the 300 ms
-  //     animation, invalidation fires at its end.)
+  //     scroll animation: cache-only renders during the 300 ms animation,
+  //     no reconcile starts anything, invalidation fires at its end.)
   //   destroy mid-fetch: guards drop late resolutions; aborts are silent.
   //   worker mirror: abort → the bridge rejects locally + posts `cancel` →
   //     the dispatcher dequeues (zero DuckDB work) or interrupts the
@@ -766,13 +767,17 @@ export class TableBody {
   private missingBlocks(range: VisibleRange, columns: readonly string[]): number[] {
     const blocks: number[] = [];
     const start = Math.max(0, range.start);
+    // A range read before the row count dropped reaches past the rows there
+    // are, where a block has nothing to fetch: `fetchBlock` returns at once,
+    // and the reconcile in its `finally` asked again, in the same call stack.
+    const rangeEnd = Math.min(range.end, this.virtualScroller.getTotalRows());
     for (
       let blockStart = this.blockStartOf(start);
-      blockStart < range.end;
+      blockStart < rangeEnd;
       blockStart += this.fetchBlockSize
     ) {
       let complete = holdsAll(this.blockColumns.get(blockStart), columns);
-      const end = Math.min(range.end, blockStart + this.fetchBlockSize);
+      const end = Math.min(rangeEnd, blockStart + this.fetchBlockSize);
       for (let i = Math.max(start, blockStart); complete && i < end; i++) {
         if (!this.rowDataCache.has(i)) complete = false;
       }
@@ -906,22 +911,11 @@ export class TableBody {
     if (this.destroyed) return;
     if (!this.state.tableName.get()) return;
     if (this.state.visibleColumns.get().length === 0) return;
-
-    // A derived-column change is replacing the relation `state.tableName`
-    // names: until it settles, a read of it fails, or reads columns the
-    // change drops. Reconcile once it has, a task later, when the state
-    // update that follows a successful change has landed.
-    const actions = this.actions;
-    if (actions?.isRelationChanging()) {
-      this.relationWait ??= actions
-        .whenRelationSettled()
-        .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
-        .then(() => {
-          this.relationWait = null;
-          return this.ensureFetched();
-        });
-      return this.relationWait;
-    }
+    // During the filter-change scroll animation, fetch nothing: invalidation
+    // fires at its end and reconciles from row 0. Scrolls skip this call
+    // then; a fetch ending, a retry's wait ending or a derived-column change
+    // settling do not.
+    if (this.isAnimatingScroll) return;
 
     // The columns rows render, and the ones a fetch started now selects.
     const rendered = this.fetchableRenderedColumns();
@@ -958,6 +952,28 @@ export class TableBody {
         this.prefetch.controller.abort();
         this.prefetch = null;
       }
+    }
+
+    // A derived-column change can be dropping or rebuilding the relation
+    // `state.tableName` names: until it settles, a read of it fails, or reads
+    // columns the change drops. Start nothing, and reconcile once it has, a
+    // task later, when the state update that follows a successful change has
+    // landed. An add leaves the relation readable, and reads go on.
+    const actions = this.actions;
+    if (actions && !actions.isRelationReadable()) {
+      this.relationWait ??= actions
+        .whenRelationReadable()
+        .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+        .then(() => {
+          this.relationWait = null;
+          if (this.destroyed) return;
+          // Read where the scroller is now: a body built during the change
+          // does not follow it until its first fetch has landed.
+          this.currentRange = this.virtualScroller.getVisibleRange();
+          this.renderVisibleRows();
+          return this.ensureFetched();
+        });
+      return this.relationWait;
     }
 
     // Top up visible-block fetches. An in-flight block is never re-issued,

@@ -220,7 +220,8 @@ test('rows scrolled to while a derived-column change runs are read once it lands
     for (const resolve of (window as unknown as HoldWindow).__held.splice(0)) resolve();
   });
   await settle(page);
-  // Each used to be issued again as soon as the last failed: 2,756 here.
+  // Each used to be issued again as soon as the last failed: thousands of
+  // times here, as many as the machine answered.
   expect(failedWhileHeld).toBe(0);
   await expect
     .poll(() =>
@@ -233,5 +234,87 @@ test('rows scrolled to while a derived-column change runs are read once it lands
       ),
     )
     .toBe(0);
+  expect(errors.filter((e) => e.includes('Error fetching rows'))).toEqual([]);
+});
+
+test('rows scrolled to and sorted while a derived column is being added load at once', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  const ROWS = 5_000;
+  await mountTable(page, { columns: 40, rows: ROWS });
+  await settle(page);
+
+  // Add a vector column, and hold DuckDB's answer to the first INSERT into
+  // its helper table. The add is in flight, and the table the rows come from
+  // untouched: an add changes it with one CREATE OR REPLACE VIEW at its end.
+  type HoldWindow = TestWindow & {
+    __held: (() => void)[];
+    __add: Promise<{ success: boolean }>;
+  };
+  await page.evaluate((rows) => {
+    const w = window as unknown as HoldWindow;
+    w.__held = [];
+    let held = false;
+    const query = w.__dt.bridge.query.bind(w.__dt.bridge);
+    w.__dt.bridge.query = (async (sql: string, ...rest: unknown[]) => {
+      const result = await (query as (...a: unknown[]) => Promise<unknown>)(sql, ...rest);
+      if (!held && /^INSERT INTO "__dt_vec_/.test(sql)) {
+        held = true;
+        await new Promise<void>((resolve) => w.__held.push(resolve));
+      }
+      return result;
+    }) as typeof w.__dt.bridge.query;
+    w.__add = w.__dt.actions.addDerivedColumn({
+      kind: 'vector',
+      name: 'v',
+      vectorType: 'float',
+      values: Array.from({ length: rows }, (_, i) => i / 10),
+    });
+  }, ROWS);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as HoldWindow).__held.length))
+    .toBe(1);
+
+  const unloaded = () =>
+    page.evaluate(
+      (hostId) =>
+        document.querySelectorAll(
+          `#${hostId} .dt-body .dt-row[data-placeholder], #${hostId} .dt-body .dt-cell--pending`,
+        ).length,
+      HOST_ID,
+    );
+
+  // Down, to rows no block holds yet: they load while the add runs.
+  const box = (await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 40_000);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (hostId) => document.querySelector(`#${hostId} .dt-body-scroll`)!.scrollTop,
+        HOST_ID,
+      ),
+    )
+    .toBeGreaterThan(10_000);
+  await expect.poll(unloaded).toBe(0);
+
+  // Sorted: the rows in view are read again, sorted, while the add runs.
+  await page.evaluate(() =>
+    (window as unknown as TestWindow).__dt.actions.setSort([{ column: 'c00', direction: 'desc' }]),
+  );
+  await expect.poll(unloaded).toBe(0);
+  expect(await page.evaluate(() => (window as unknown as HoldWindow).__held.length)).toBe(1);
+
+  const added = await page.evaluate(() => {
+    const w = window as unknown as HoldWindow;
+    for (const resolve of w.__held.splice(0)) resolve();
+    return w.__add;
+  });
+  expect(added.success).toBe(true);
+  await settle(page);
   expect(errors.filter((e) => e.includes('Error fetching rows'))).toEqual([]);
 });

@@ -133,9 +133,13 @@ export class StateActions {
   private derivedManager: DerivedColumnManager | null = null;
   /** Derived-column changes awaiting DuckDB; see {@link changeRelation}. */
   private relationChanges = 0;
+  /** Those of them that can leave the relation unreadable meanwhile: all but adds. */
+  private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
-  /** Callers of {@link whenRelationSettled} waiting on the changes in flight. */
-  private relationWaiters: (() => void)[] = [];
+  /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
+  private readableWaiters: (() => void)[] = [];
+  /** Names of the derived columns being added, not yet in the schema. */
+  private derivedNamesBeingAdded = new Set<string>();
   private destroyed = false;
 
   constructor(
@@ -208,28 +212,53 @@ export class StateActions {
   }
 
   /**
-   * Resolves once no derived-column change is waiting on DuckDB, at once when
-   * none is. Like the callback of {@link setOnRelationSettled}, it settles
-   * before the state update that follows a successful change: a caller that
-   * reads the state waits a task more.
+   * Whether the relation `state.tableName` names can be read as `state.schema`
+   * describes it. Not while a derived-column change that can drop or rebuild
+   * what those reads select from is waiting on DuckDB: a removal, an edit or
+   * a replacement, an undo or redo, a reset, a restore. An add can not, and
+   * the relation stays readable while one runs.
    *
    * @internal
    */
-  whenRelationSettled(): Promise<void> {
-    if (this.relationChanges === 0) return Promise.resolve();
-    return new Promise((resolve) => this.relationWaiters.push(resolve));
+  isRelationReadable(): boolean {
+    return this.unreadableRelationChanges === 0;
   }
 
-  /** Run a DuckDB change to the derived-column relation, counted for {@link isRelationChanging}. */
-  private async changeRelation<T>(change: () => Promise<T>): Promise<T> {
+  /**
+   * Resolves once {@link isRelationReadable} holds, at once when it does. Like
+   * the callback of {@link setOnRelationSettled}, it settles before the state
+   * update that follows a successful change: a caller that reads the state
+   * waits a task more.
+   *
+   * @internal
+   */
+  whenRelationReadable(): Promise<void> {
+    if (this.unreadableRelationChanges === 0) return Promise.resolve();
+    return new Promise((resolve) => this.readableWaiters.push(resolve));
+  }
+
+  /**
+   * Run a DuckDB change to the derived-column relation, counted for
+   * {@link isRelationChanging} and, unless the relation `state.tableName`
+   * names stays readable throughout, for {@link isRelationReadable}.
+   */
+  private async changeRelation<T>(
+    change: () => Promise<T>,
+    { staysReadable = false }: { staysReadable?: boolean } = {},
+  ): Promise<T> {
     this.relationChanges++;
+    if (!staysReadable) this.unreadableRelationChanges++;
     try {
       return await change();
     } finally {
       this.relationChanges--;
-      if (this.relationChanges === 0) {
-        this.onRelationSettledCallback?.();
-        for (const resolve of this.relationWaiters.splice(0)) resolve();
+      if (!staysReadable) this.unreadableRelationChanges--;
+      try {
+        if (this.relationChanges === 0) this.onRelationSettledCallback?.();
+      } finally {
+        if (this.unreadableRelationChanges === 0) {
+          for (const resolve of this.readableWaiters.splice(0)) resolve();
+        }
       }
     }
   }
@@ -1474,6 +1503,11 @@ export class StateActions {
     if (allColumnNames.includes(def.name)) {
       return { success: false, error: `Column name "${def.name}" already exists` };
     }
+    // And against the columns being added: two adds of one vector column
+    // would share its helper table, each dropping the other's.
+    if (this.derivedNamesBeingAdded.has(def.name)) {
+      return { success: false, error: `Column name "${def.name}" is already being added` };
+    }
 
     if (!def.name.trim()) {
       return { success: false, error: 'Column name cannot be empty' };
@@ -1483,9 +1517,16 @@ export class StateActions {
     const preSnapshot =
       this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
 
+    this.derivedNamesBeingAdded.add(def.name);
     try {
       const manager = this.ensureDerivedManager();
-      const info = await this.changeRelation(() => manager.addColumn(def));
+      // An add builds a vector column's helper table under a name of its
+      // own, and leaves the relation in force alone until one CREATE OR
+      // REPLACE VIEW puts one with every column it had in its place: reads
+      // of it go on meanwhile.
+      const info = await this.changeRelation(() => manager.addColumn(def), {
+        staysReadable: true,
+      });
 
       // Drop the result if the table was destroyed during the await — do not
       // touch state and do not push to the undo stack.
@@ -1529,6 +1570,8 @@ export class StateActions {
         success: false,
         error: err instanceof Error ? err.message : String(err),
       };
+    } finally {
+      this.derivedNamesBeingAdded.delete(def.name);
     }
   }
 

@@ -15,6 +15,7 @@ import { StateActions } from '@/core/Actions';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
+import type { UndoManager } from '@/core/UndoManager';
 import { TableBody, type TableBodyOptions } from '@/table/TableBody';
 
 import {
@@ -58,6 +59,8 @@ export interface TableBodyHarnessOptions {
   body?: TableBodyOptions;
   /** Options for the deferred mock bridge. */
   bridge?: RowFetchBridgeOptions;
+  /** Undo history for the body's actions (default none). */
+  undoManager?: UndoManager;
 }
 
 export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBodyHarness {
@@ -73,7 +76,11 @@ export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBody
   state.filteredRows.set(totalRows);
 
   const { bridge, queries } = makeRowFetchBridge(options.bridge);
-  const actions = new StateActions(state, bridge as unknown as Parameters<typeof StateActions>[1]);
+  const actions = new StateActions(
+    state,
+    bridge as unknown as Parameters<typeof StateActions>[1],
+    options.undoManager,
+  );
 
   const body = new TableBody(
     container,

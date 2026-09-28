@@ -339,6 +339,27 @@ panels and charts right across a trackpad sweep.
   read fails: about 1,750 failed queries, each logged to the console, while a test held the DROP's
   reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
   test double, the loop never yields. Fixed after 4d: the same fetch now waits 250 ms, doubling up
-  to 8 s, before it is tried again, and no body fetch starts while a derived-column change is in
-  flight. The browser test that holds the DROP's reply saw 2,756 failed fetches on main, and none
-  with the fix.
+  to 8 s, before it is tried again, and no body fetch starts while a derived-column change that
+  can break reads is in flight. The browser test that holds the DROP's reply saw thousands of
+  failed fetches on main (2,756 and 2,699 on two runs), and none with the fix.
+- **Found in review of the retry fix.**
+  - The first version held back row fetches during every derived-column change, adds included. An
+    add leaves the relation in force alone until one `CREATE OR REPLACE VIEW` that keeps every
+    column, so the rows scrolled to during a slow vector add stayed placeholders until it ended:
+    for 0.9 s after the scroll at 200K rows and 5.1 s at 1M, in the review's measurements, where
+    they had loaded within 10 ms. Only the changes that can break reads hold them back now: a
+    removal, an edit or a replacement, an undo or redo, a reset, a restore. Charts and stats
+    panels still wait out every change: one built during an add is rebuilt for the new relation as
+    soon as it lands. Two adds of the same name in flight at once, which would share a vector
+    column's helper table, are refused.
+  - The filtered-row count had the same hazard, and is gated the same way. A filter added while a
+    removal held its DROP failed to count, kept the count from before it, and left the rows past
+    the true count as placeholders for good.
+  - Pre-existing: a body whose row count drops below the rows in view during its first fetch
+    asked for the same empty block again from the fetch's own reconcile, in one call stack, until
+    the stack overflowed. The body reads its range only from the scroller, and follows it only
+    once the first fetch has landed; a body built during a change waited the whole change. Blocks
+    past the row count are no longer asked for, and the range is read again when a change settles.
+  - A fetch left out of reach as the view moved during a change was not aborted, and the retry
+    and relation waits reconciled during the filter-change scroll animation, reading rows it was
+    about to scroll away from. Both fixed.

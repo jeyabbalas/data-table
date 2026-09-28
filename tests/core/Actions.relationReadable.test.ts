@@ -1,0 +1,248 @@
+/**
+ * `StateActions.isRelationReadable` and `whenRelationReadable`: what the
+ * table body's row fetches and the filtered-row count wait for while a
+ * derived-column change can drop or rebuild the relation they read. A
+ * removal, a replacement, an undo can; an add can not, and reads go on
+ * while one runs.
+ */
+import { describe, expect, it } from 'vitest';
+import { StateActions } from '@/core/Actions';
+import { createTableState, initializeColumnsFromSchema } from '@/core/State';
+import { UndoManager } from '@/core/UndoManager';
+
+import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
+
+function setup(undoManager?: UndoManager) {
+  const state = createTableState();
+  state.tableName.set('t');
+  state.baseTableName.set('t');
+  initializeColumnsFromSchema(state, [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+  ]);
+  const { bridge, queries } = makeRowFetchBridge();
+  const actions = new StateActions(
+    state,
+    bridge as unknown as ConstructorParameters<typeof StateActions>[1],
+    undoManager,
+  );
+  return { state, actions, queries };
+}
+
+async function drain(): Promise<void> {
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+}
+
+/** Answer the last query DuckDB was sent. */
+async function answer(queries: CapturedQuery[], rows: unknown[] = []): Promise<CapturedQuery> {
+  const last = queries.at(-1)!;
+  last.deferred.resolve(rows);
+  await drain();
+  return last;
+}
+
+/** Add `x2 = id * 2` and let it land: validation, type detection, the VIEW. */
+async function landDerivedColumn({ actions, queries }: ReturnType<typeof setup>): Promise<void> {
+  const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
+  await drain();
+  await answer(queries);
+  await answer(queries, [{ t: 'INTEGER' }]);
+  await answer(queries);
+  await expect(add).resolves.toEqual({ success: true });
+}
+
+/** Whether a `whenRelationReadable()` made now has resolved. */
+function watchReadable(actions: StateActions): { resolved: boolean } {
+  const watch = { resolved: false };
+  void actions.whenRelationReadable().then(() => (watch.resolved = true));
+  return watch;
+}
+
+describe('StateActions.whenRelationReadable', () => {
+  it('resolves at once when no derived-column change is in flight', async () => {
+    const { actions } = setup();
+    expect(actions.isRelationReadable()).toBe(true);
+    const readable = watchReadable(actions);
+    await Promise.resolve();
+    expect(readable.resolved).toBe(true);
+  });
+
+  it('holds while a removal drops the VIEW, and resolves before the state update', async () => {
+    const harness = setup();
+    const { state, actions, queries } = harness;
+    await landDerivedColumn(harness);
+    expect(state.tableName.get()).toBe('__dt_view_t__');
+
+    const removal = actions.removeDerivedColumn('x2');
+    await drain();
+    expect(queries.at(-1)!.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
+    expect(actions.isRelationReadable()).toBe(false);
+    let tableNameWhenReadable: string | null = null;
+    void actions.whenRelationReadable().then(() => (tableNameWhenReadable = state.tableName.get()));
+    await drain();
+    expect(tableNameWhenReadable).toBeNull();
+
+    queries.at(-1)!.deferred.resolve([]);
+    await removal;
+    expect(tableNameWhenReadable).toBe('__dt_view_t__');
+    expect(state.tableName.get()).toBe('t');
+    expect(actions.isRelationReadable()).toBe(true);
+  });
+
+  it('holds while a replacement rebuilds the VIEW, and resolves when it fails', async () => {
+    const harness = setup();
+    const { actions, queries } = harness;
+    await landDerivedColumn(harness);
+
+    const replace = actions.replaceDerivedColumn('x2', {
+      kind: 'expression',
+      name: 'x2',
+      expression: 'nope * 3',
+    });
+    await drain();
+    expect(actions.isRelationReadable()).toBe(false);
+    const readable = watchReadable(actions);
+    await drain();
+    expect(readable.resolved).toBe(false);
+
+    queries.at(-1)!.deferred.reject(new Error('Binder Error: Referenced column "nope" not found'));
+    await expect(replace).resolves.toMatchObject({ success: false });
+    await drain();
+    expect(readable.resolved).toBe(true);
+  });
+
+  it('holds while an undo reconciles the VIEW', async () => {
+    const harness = setup(new UndoManager());
+    const { state, actions, queries } = harness;
+    await landDerivedColumn(harness);
+
+    const undo = actions.undo();
+    await drain();
+    expect(queries.at(-1)!.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
+    expect(actions.isRelationReadable()).toBe(false);
+    const readable = watchReadable(actions);
+    await drain();
+    expect(readable.resolved).toBe(false);
+
+    queries.at(-1)!.deferred.resolve([]);
+    await expect(undo).resolves.toBe(true);
+    expect(readable.resolved).toBe(true);
+    expect(state.tableName.get()).toBe('t');
+  });
+
+  it('waits for the last of two changes in flight that break reads', async () => {
+    const harness = setup();
+    const { actions, queries } = harness;
+    await landDerivedColumn(harness);
+
+    const first = actions.replaceDerivedColumn('x2', {
+      kind: 'expression',
+      name: 'x2',
+      expression: 'nope * 3',
+    });
+    await drain();
+    const firstValidation = queries.at(-1)!;
+    const second = actions.removeDerivedColumn('x2');
+    await drain();
+    const drop = queries.at(-1)!;
+    expect(drop.sql).toMatch(/^DROP VIEW IF EXISTS/);
+    const readable = watchReadable(actions);
+
+    firstValidation.deferred.reject(new Error('Binder Error'));
+    await expect(first).resolves.toMatchObject({ success: false });
+    await drain();
+    expect(readable.resolved).toBe(false);
+
+    drop.deferred.resolve([]);
+    await second;
+    await drain();
+    expect(readable.resolved).toBe(true);
+  });
+
+  it('does not hold for an add: the relation in force stays readable while it runs', async () => {
+    const { actions, queries } = setup();
+    const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
+    await drain();
+
+    expect(actions.isRelationChanging()).toBe(true);
+    expect(actions.isRelationReadable()).toBe(true);
+    const readable = watchReadable(actions);
+    await drain();
+    expect(readable.resolved).toBe(true);
+
+    await answer(queries);
+    await answer(queries, [{ t: 'INTEGER' }]);
+    await answer(queries);
+    await expect(add).resolves.toEqual({ success: true });
+    expect(actions.isRelationChanging()).toBe(false);
+  });
+
+  it('resolves once a change that breaks reads settles, with an add still in flight', async () => {
+    const harness = setup();
+    const { actions, queries } = harness;
+    await landDerivedColumn(harness);
+
+    const add = actions.addDerivedColumn({ kind: 'expression', name: 'x3', expression: 'id * 3' });
+    await drain();
+    const addValidation = queries.at(-1)!;
+    const replace = actions.replaceDerivedColumn('x2', {
+      kind: 'expression',
+      name: 'x2',
+      expression: 'nope',
+    });
+    await drain();
+    const readable = watchReadable(actions);
+
+    queries.at(-1)!.deferred.reject(new Error('Binder Error'));
+    await replace;
+    await drain();
+    expect(readable.resolved).toBe(true);
+    expect(actions.isRelationChanging()).toBe(true);
+
+    addValidation.deferred.reject(new Error('Binder Error'));
+    await expect(add).resolves.toMatchObject({ success: false });
+    expect(actions.isRelationChanging()).toBe(false);
+  });
+
+  it('resolves its callers even when the settled callback throws', async () => {
+    const harness = setup();
+    const { actions, queries } = harness;
+    await landDerivedColumn(harness);
+    actions.setOnRelationSettled(() => {
+      throw new Error('settled callback');
+    });
+
+    const removal = actions.removeDerivedColumn('x2');
+    await drain();
+    const readable = watchReadable(actions);
+    queries.at(-1)!.deferred.resolve([]);
+    await expect(removal).rejects.toThrow('settled callback');
+    await drain();
+    expect(readable.resolved).toBe(true);
+  });
+});
+
+describe('StateActions.addDerivedColumn with an add of the same name in flight', () => {
+  it('refuses the second: two adds of one vector column would share its helper table', async () => {
+    const { actions, queries } = setup();
+    const values = [1, 2, 3];
+    const vector = { kind: 'vector', name: 'v', vectorType: 'float', values } as const;
+    const first = actions.addDerivedColumn(vector);
+    await drain();
+    let second: unknown = null;
+    void actions.addDerivedColumn(vector).then((result) => (second = result));
+    await drain();
+    expect(second).toEqual({ success: false, error: 'Column name "v" is already being added' });
+    // Only the first add's statements went out.
+    expect(queries.map((q) => q.sql)).toEqual([expect.stringMatching(/^DROP TABLE IF EXISTS/)]);
+
+    queries.at(-1)!.deferred.reject(new Error('Out of Memory'));
+    await expect(first).resolves.toMatchObject({ success: false });
+    // Once it has failed, the name is free again.
+    const again = actions.addDerivedColumn(vector);
+    await drain();
+    expect(queries).toHaveLength(2);
+    expect(queries[1]!.sql).toMatch(/^DROP TABLE IF EXISTS/);
+    queries[1]!.deferred.reject(new Error('Out of Memory'));
+    await again;
+  });
+});

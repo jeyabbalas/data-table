@@ -40,7 +40,7 @@ function makeBridge(): WorkerBridge {
 }
 
 function makeActions(): StateActions {
-  return {} as unknown as StateActions;
+  return { isRelationReadable: () => true } as unknown as StateActions;
 }
 
 describe('CrossfilterCoordinator — concurrency cap', () => {

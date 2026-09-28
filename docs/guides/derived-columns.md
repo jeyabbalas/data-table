@@ -67,7 +67,9 @@ expression works, including:
 ### Validation
 
 - **Name uniqueness.** Duplicating an existing column name returns
-  `{ success: false, error: 'Column name "X" already exists' }`.
+  `{ success: false, error: 'Column name "X" already exists' }`, and adding
+  a column while another of the same name is still being added returns
+  `{ success: false, error: 'Column name "X" is already being added' }`.
 - **Empty name.** Returns `{ success: false, error: 'Column name cannot be empty' }`.
 - **Syntax errors.** The library runs the VIEW creation and surfaces DuckDB's
   parse or type-inference error in the `error` string.

@@ -22,7 +22,9 @@ documentation.
    publishes the columns to mount), #139 (body rows render only those), #141 (row fetches select
    only those) and #140 (pinned columns first in every column order).
 4. **4d: persistent header shells,** with the heavy parts built lazily, and column changes that
-   update the grid in place.
+   update the grid in place. Merged: #142 (the columns a drag or an open panel uses stay mounted),
+   #143 (header controls only for the columns near the view), #144 (column changes update the
+   header row and body in place) and #145 (charts and stats panels kept through column changes).
 
 ## 4d plan
 
@@ -336,5 +338,44 @@ panels and charts right across a trackpad sweep.
   change a sideways scroll makes the body read columns from the VIEW the change dropped, and every
   read fails: about 1,750 failed queries, each logged to the console, while a test held the DROP's
   reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
-  test double, the loop never yields. Not fixed here: body fetches should wait out a
-  derived-column change, and a failed fetch should back off.
+  test double, the loop never yields. Fixed after 4d: the same fetch now waits 250 ms, doubling up
+  to 8 s, before it is tried again, and no body fetch starts while a derived-column change that
+  can break reads is in flight. The browser test that holds the DROP's reply saw thousands of
+  failed fetches on main (2,756 and 2,699 on two runs), and none with the fix.
+- **Found in review of the retry fix.**
+  - The first version held back row fetches during every derived-column change, adds included. An
+    add leaves the relation in force alone until one `CREATE OR REPLACE VIEW` that keeps every
+    column, so the rows scrolled to during a slow vector add stayed placeholders until it ended:
+    for 0.9 s after the scroll at 200K rows and 5.1 s at 1M, in the review's measurements, where
+    they had loaded within 10 ms. Only the changes that can break reads hold them back now: a
+    removal, an edit or a replacement, an undo or redo, a reset, a restore. Charts and stats
+    panels still wait out every change: one built during an add is rebuilt for the new relation as
+    soon as it lands. Two adds of the same name in flight at once, which would share a vector
+    column's helper table, are refused.
+  - The filtered-row count had the same hazard, and is gated the same way. A filter added while a
+    removal held its DROP failed to count, kept the count from before it, and left the rows past
+    the true count as placeholders for good.
+  - Pre-existing: a body whose row count drops below the rows in view during its first fetch
+    asked for the same empty block again from the fetch's own reconcile, in one call stack, until
+    the stack overflowed. The body reads its range only from the scroller, and follows it only
+    once the first fetch has landed; a body built during a change waited the whole change. Blocks
+    past the row count are no longer asked for, and the range is read again when a change settles.
+  - A fetch left out of reach as the view moved during a change was not aborted, and the retry
+    and relation waits reconciled during the filter-change scroll animation, reading rows it was
+    about to scroll away from. Both fixed.
+- **Found in the second review of #151, not fixed.** Each is rare, bounded, and at least partly
+  pre-existing.
+  - Derived-column changes are not serialized, and they share the manager's list of columns. A
+    removal of the only derived column, landing while a vector add of another is at its last
+    `INSERT`, settles with `tableName` naming the VIEW the add has yet to create, and the relation
+    reported readable; the body's first reads fail until the add lands, backing off meanwhile.
+    The same lets an undo during an add rebuild the VIEW from a destroyed manager. Fix: run
+    derived-column changes one at a time, which would also make the same-name refusal and the
+    rename caveat unnecessary.
+  - A session restore applies its filters and sort before its derived columns are rebuilt, so
+    the reads and the count they start are not held back. The count fails if a filter names a
+    derived column, and with visualizations off nothing counts again, so rows past the true count
+    stay placeholders. Fix: restore the filters, sort and derived columns in one change.
+  - A chart's refetch for a filter change is not held back during a removal: every live chart
+    queries the dropped VIEW and reports an error, as on main. Fix: hold the charts' refetches as
+    the count is held.

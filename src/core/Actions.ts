@@ -159,6 +159,8 @@ export class StateActions {
   private onRelationSettledCallback?: (() => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
+  /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
+  private idleWaiters: (() => void)[] = [];
   /** Turns requested and not yet ended, the running one included; see {@link inTurn}. */
   private openTurns = 0;
   /** Turns requested and not yet started. */
@@ -301,6 +303,9 @@ export class StateActions {
       } finally {
         if (this.unreadableRelationChanges === 0) {
           for (const resolve of this.readableWaiters.splice(0)) resolve();
+        }
+        if (this.relationChanges === 0) {
+          for (const resolve of this.idleWaiters.splice(0)) resolve();
         }
       }
     }
@@ -691,6 +696,7 @@ export class StateActions {
       if (epoch !== this.loadEpoch || !initialSnapshot) return false;
       this.suppressUndoCapture = true;
       const prevFilters = this.state.filters.get();
+      const hadDerived = this.state.derivedColumns.get().length > 0;
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
       const manager = this.derivedManager;
@@ -732,6 +738,7 @@ export class StateActions {
 
       this.notifyRemovedFilters(prevFilters, this.state.filters.get());
       this.undoManager?.clear();
+      if (hadDerived) this.emitDerivedChange('updated');
 
       return true;
     } finally {
@@ -777,15 +784,19 @@ export class StateActions {
    * derived-column change running now, if any, has ended, and, as for a load,
    * without applying the changes asked for before the call. Resets the state
    * and the undo stacks, forgets the initial state, and drops the derived
-   * columns' VIEW and helper tables.
+   * columns' VIEW and helper tables, emitting `derivedChange` when there
+   * were any. Resolves with the name of the base table it emptied, which a
+   * load in flight at the call may have made after it: `null` when none.
    *
    * @internal
    */
-  async clearData(): Promise<void> {
+  async clearData(): Promise<string | null> {
     this.throwIfDestroyed('clearData');
     this.loadEpoch++;
     return this.inTurn(async () => {
       this.throwIfDestroyed('clearData');
+      const baseTableName = this.state.baseTableName.get() ?? this.state.tableName.get();
+      const hadDerived = this.state.derivedColumns.get().length > 0;
       resetTableState(this.state);
       this.undoManager?.clear();
       this.initialSnapshot = null;
@@ -798,7 +809,42 @@ export class StateActions {
           // Swallow — nothing reads its tables any more.
         }
       }
+      if (hadDerived) this.emitDerivedChange('updated');
+      return baseTableName;
     });
+  }
+
+  /**
+   * Drop the derived columns' VIEW and helper tables, once a change at work
+   * on them in DuckDB has ended, so that it cannot build one again after the
+   * DROP. For a table destroyed on a bridge that outlives it; called after
+   * {@link markDestroyed}, which turns away every change still in line and
+   * stops a load in flight before it touches them. It does not wait for that
+   * load, which may take seconds more.
+   *
+   * @internal
+   */
+  async dropDerived(): Promise<void> {
+    while (this.relationChanges > 0) {
+      await new Promise<void>((resolve) => this.idleWaiters.push(resolve));
+    }
+    const manager = this.derivedManager;
+    this.derivedManager = null;
+    try {
+      await manager?.destroy();
+    } catch {
+      // Best-effort: the table is going.
+    }
+  }
+
+  /**
+   * The count of loads and clears asked for so far. A load that finds it
+   * changed once it has ended was superseded by a newer load or a clear.
+   *
+   * @internal
+   */
+  getLoadEpoch(): number {
+    return this.loadEpoch;
   }
 
   /** The turn of {@link loadData}. */

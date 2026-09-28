@@ -52,6 +52,11 @@ Every event is strongly typed. The full map lives at
 `on` returns an unsubscribe function; `off` works too and accepts the original
 handler reference.
 
+A load that a newer `loadData()` or `clearSession()` supersedes before it
+completes fires no `loadComplete`. `derivedChange` with `kind: 'updated'` and
+no `columnName` also fires when an undo or redo, `resetToInitial()` or
+`clearSession()` changes the derived columns all at once.
+
 ### Annotation events (separate channel)
 
 Annotation mutations don't flow through the main event bus — they live on `table.annotations.on('change', handler)`. The payload is `{ kind: 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'; ids: string[] }`. Subscribe there for fine-grained reactions:

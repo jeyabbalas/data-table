@@ -400,7 +400,11 @@ export interface DataTable {
    * to populate it again. Safe to call when persistence is disabled (only the
    * IndexedDB delete is skipped). It empties the table once a derived-column
    * change running then has ended; a change asked for before the call does
-   * not apply, as with {@link loadData}.
+   * not apply, as with {@link loadData}. A load in flight lands first: its
+   * table is the one emptied and its snapshot the one deleted, and it fires
+   * no `loadComplete`. The derived columns' VIEW and helper tables are
+   * dropped, with a `derivedChange` when there were any; the base table
+   * stays queryable until the next load or `destroy()`.
    */
   clearSession(): Promise<void>;
 
@@ -1435,12 +1439,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
       };
-      await actions.loadData(source, mergedOpts);
+      const loading = actions.loadData(source, mergedOpts);
+      // `getLoadEpoch()` counts loads and clears: one asked for after this
+      // load, while it runs, supersedes it.
+      const loadEpoch = actions.getLoadEpoch();
+      await loading;
       if (destroyed) {
         // Tearing down — skip the loadComplete emit on a dead emitter and
         // surface a destroy error so consumers know the load was aborted.
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      const superseded = (): boolean => actions.getLoadEpoch() !== loadEpoch;
       // Wait in parallel for the body's first SELECT and the per-column
       // visualization/stats-panel initial fetches + filter-sync queries.
       // Both promises swallow internally (whenBodyReady catches body-init
@@ -1458,22 +1467,27 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // An attach pass that runs while this waits replaces `pendingVizInit`,
       // and settles the one it replaced without waiting for its charts, so
       // wait again for the pass that replaced it.
-      let vizInit: Promise<void>;
-      do {
-        vizInit = pendingVizInit;
+      //
+      // A load superseded by a newer load or a clear waits for none of it,
+      // and fires no `loadComplete`: the data it loaded is already going.
+      while (!superseded()) {
+        const vizInit = pendingVizInit;
         await Promise.all([tableContainer.whenBodyReady(), vizInit]);
-      } while (vizInit !== pendingVizInit && !destroyed);
+        if (vizInit === pendingVizInit || destroyed) break;
+      }
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      emitter.emit('loadComplete', {
-        tableName: state.tableName.get() ?? '',
-        rowCount: state.totalRows.get(),
-        // Defensive shallow clone — same contract as filterChange/sortChange/
-        // selectionChange/columnChange (Phase 8). Handlers that destructure
-        // and mutate `schema` cannot corrupt the live state signal value.
-        schema: [...state.schema.get()],
-      });
+      if (!superseded()) {
+        emitter.emit('loadComplete', {
+          tableName: state.tableName.get() ?? '',
+          rowCount: state.totalRows.get(),
+          // Defensive shallow clone — same contract as filterChange/sortChange/
+          // selectionChange/columnChange (Phase 8). Handlers that destructure
+          // and mutate `schema` cannot corrupt the live state signal value.
+          schema: [...state.schema.get()],
+        });
+      }
       // Reclaim the previous base table now that the new one is live, and
       // any that earlier failed loads left behind. Skip the new table's
       // own name — `CREATE OR REPLACE TABLE` already replaced it
@@ -1598,6 +1612,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // outlives this DataTable, and the table would orphan if we didn't
     // drop it here, along with any a failed load left behind. Best-effort:
     // a failure must not turn `destroy()` into a thrown error.
+    if (!ownsBridge) {
+      // First the derived columns' VIEW and helper tables, which read the
+      // base table: once a derived-column change running now has ended, so
+      // that it cannot build one again after the DROP.
+      await actions.dropDerived();
+    }
     if (!ownsBridge && typeof bridge.dropTable === 'function') {
       const baseToDrop = state.baseTableName.get() ?? state.tableName.get();
       const toDrop = new Set(strandedTables);
@@ -1628,10 +1648,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function clearSession(): Promise<void> {
     autoSave?.disable();
     try {
-      if (sessionStore) {
-        const key = state.baseTableName.get() ?? state.tableName.get();
-        if (key) await sessionStore.delete(key);
-      }
+      const key = state.baseTableName.get() ?? state.tableName.get();
+      if (sessionStore && key) await sessionStore.delete(key);
       // If destroy() raced ahead while we were awaiting the IDB delete, drop
       // the in-memory reset — the state slices are about to be torn down and
       // mutating them now would emit on a dying emitter.
@@ -1639,8 +1657,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
       // In its turn, after a derived-column change running now, which then
-      // writes nothing into the emptied table.
-      await actions.clearData();
+      // writes nothing into the emptied table. A load in flight lands first,
+      // and it is its table that is emptied, whose snapshot goes too.
+      const cleared = await actions.clearData();
+      if (sessionStore && cleared && cleared !== key) await sessionStore.delete(cleared);
       // Only clear presets we own. A user-supplied shared
       // `FilterPresetManager` (multi-table dashboards) outlives any
       // single table's session — clearing it here would wipe other
@@ -1648,6 +1668,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (ownsPresetManager) presetManager?.presets.set([]);
       annotationStore.clear('all');
       bridge.clearQueryCache();
+      // The emptied table stays queryable until the next load or destroy()
+      // drops it, as a failed load's does: nothing names it any more.
+      if (cleared) strandedTables.add(cleared);
     } finally {
       if (!destroyed) autoSave?.enable();
     }

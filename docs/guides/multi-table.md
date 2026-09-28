@@ -74,15 +74,16 @@ one IndexedDB handle.
 Pass one initialized `WorkerBridge` to each `createDataTable()` via the
 `bridge` option. The library honours `ownsBridge` semantics: only the
 caller-owned bridge is terminated when a table's `destroy()` runs
-([`src/DataTable.ts:473-475,:1613`](../../src/DataTable.ts)). A bridge you
+([`src/DataTable.ts:479-480,:1635`](../../src/DataTable.ts)). A bridge you
 constructed yourself survives every table's destruction — call
 `bridge.terminate()` when you're done with the page.
 
 Each table also drops its own base table from the shared bridge when
-`destroy()` runs, so unmounting one of N tables in a multi-table
-dashboard reclaims that table's DuckDB memory without touching the
-others. Sibling tables on the bridge keep their tables and continue
-working.
+`destroy()` runs, and its derived columns' VIEW and vector helper tables
+first, so unmounting one of N tables in a multi-table dashboard reclaims
+that table's DuckDB memory without touching the others. A derived-column
+change still running is let finish before the drops. Sibling tables on the
+bridge keep their tables and continue working.
 
 **Requirements when sharing:**
 
@@ -218,11 +219,12 @@ sharedStore.close();
 ```
 
 Tables skip `bridge.terminate()` when they don't own the bridge
-(`ownsBridge` in `src/DataTable.ts:473,:1613`), so a shared bridge survives
+(`ownsBridge` in `src/DataTable.ts:479,:1635`), so a shared bridge survives
 both `destroy()` calls and must be terminated explicitly. Each table
-does drop its own base table from the bridge before exiting, so the
-bridge's DuckDB catalog stays clean even when you destroy tables one
-at a time without ever calling `terminate()`.
+does drop its own base table from the bridge before exiting, with its
+derived columns' VIEW and helper tables, so the bridge's DuckDB catalog
+stays clean even when you destroy tables one at a time without ever
+calling `terminate()`.
 
 Closing the store before destroying tables is benign (auto-save may skip a
 final flush) but not fatal — `SessionStore.saveSync()` silently no-ops on a

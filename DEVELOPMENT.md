@@ -180,7 +180,7 @@ src/
   export/               # export dialog, CSV/JSON/Parquet writers
   styles/               # modular CSS (source of --dt-* variable truth)
 tests/                  # vitest suites mirroring src/
-examples/               # 9 runnable single-feature examples
+examples/               # 14 runnable single-feature examples
 docs/                   # API reference, guides, concepts, integrations, troubleshooting
 demo/                   # integrated showcase app
 scripts/                # build-support scripts (check-css-vars.mjs, check-dts.mjs)

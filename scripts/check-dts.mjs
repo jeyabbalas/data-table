@@ -19,7 +19,7 @@
  *   node scripts/check-dts.mjs
  */
 
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,7 +38,7 @@ function declarationFiles(dir) {
   return files;
 }
 
-const files = declarationFiles(distDir);
+const files = existsSync(distDir) ? declarationFiles(distDir) : [];
 if (files.length === 0) {
   console.error(`check-dts: no declarations under ${distDir}; build them first.`);
   process.exit(1);
@@ -55,11 +55,13 @@ const program = ts.createProgram(files, {
   types: [],
 });
 
-// Compare with TypeScript's own spelling of the path, forward slashes.
+// Compare with TypeScript's own spelling of the path, forward slashes. A
+// diagnostic with no file (a bad option, a missing lib) is kept: it means
+// nothing was checked as intended.
 const distPrefix = ts.sys.resolvePath(distDir).replace(/\\/g, '/') + '/';
 const errors = ts
   .getPreEmitDiagnostics(program)
-  .filter((d) => d.file && d.file.fileName.replace(/\\/g, '/').startsWith(distPrefix));
+  .filter((d) => !d.file || d.file.fileName.replace(/\\/g, '/').startsWith(distPrefix));
 
 if (errors.length > 0) {
   const host = {

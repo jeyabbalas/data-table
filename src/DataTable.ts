@@ -622,17 +622,22 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   let destroyed = false;
 
   // -------- Worker failure --------
-  // A failed worker fails every query after it, and makes none it would
-  // answer. The table reports the failure once, when the bridge tells of it,
-  // with `source: 'query'`, and drops the same error from each chart, panel
-  // or load that fails after it. A load that lands on a new worker has the
-  // next failure reported again.
-  let workerFailureReported = false;
+  // A failed worker fails every query after it. The table reports the
+  // failure once, when the bridge tells of it, with `source: 'query'`, and
+  // drops every error that follows from it: a chart's, a panel's or a load's,
+  // however it was wrapped. Each carries, in its `cause` chain, the error the
+  // bridge failed with, the deepest one whose code is `WORKER_CRASHED`. A new
+  // worker's failure is a new error, and is reported in its turn.
+  const reportedFailures = new WeakSet<object>();
   const emitError = (payload: TableEvents['error']): void => {
-    if (payload.error.code === 'WORKER_CRASHED') {
-      if (workerFailureReported) return;
-      workerFailureReported = true;
+    let failure: object | null = null;
+    let link: unknown = payload.error;
+    for (let depth = 0; depth < 8 && typeof link === 'object' && link !== null; depth++) {
+      if (reportedFailures.has(link)) return;
+      if ((link as { code?: unknown }).code === 'WORKER_CRASHED') failure = link;
+      link = (link as { cause?: unknown }).cause;
     }
+    if (failure) reportedFailures.add(failure);
     emitter.emit('error', payload);
   };
   const offWorkerFailure =
@@ -1483,7 +1488,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      workerFailureReported = false;
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),

@@ -140,9 +140,11 @@ table.on('error', ({ error, source }) => {
 A DuckDB worker that fails is reported once per table, as it happens: an
 `error` event whose `error.code` is `WORKER_CRASHED`, with `source: 'query'`.
 Every query after it fails the same way, so the table stops fetching rows and
-drops that error from the charts, panels and loads that fail after it; a
-failed load still rejects and fires `loadError`. The data is gone with the
-worker: destroy the table and create it again, which starts a new one.
+drops the errors that follow from it: those of the charts, panels and loads
+that fail after it, which carry the failure in their `cause` chain. A failed
+load still rejects and fires `loadError`. The data is gone with the worker:
+destroy the table and create it again, which starts a new one, whose own
+failure would be reported in turn.
 
 `loadError` is a strict subset of `error` — both fire for the same underlying
 failure. Handle one or the other, not both, unless you specifically want

@@ -141,6 +141,9 @@ export abstract class SharedHistogramBase<
    */
   protected fetchFailed = false;
 
+  /** A histogram reports its stats each time a fetch lands. */
+  override readonly reportsDefaultStats: boolean = true;
+
   // Fetch sequence counter for stale result protection
   protected fetchSequence = 0;
 

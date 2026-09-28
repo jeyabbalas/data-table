@@ -159,6 +159,9 @@ export class ValueCounts extends BaseVisualization {
    */
   private fetchFailed = false;
 
+  /** Value counts report their stats each time a fetch lands. */
+  override readonly reportsDefaultStats: boolean = true;
+
   // Fetch sequence counter for stale result protection
   private fetchSequence = 0;
 

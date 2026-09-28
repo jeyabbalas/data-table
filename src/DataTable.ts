@@ -935,9 +935,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
           // The slot says the chart failed until it reports stats again, so
           // only for a chart that reports them: one that has before, or that
-          // reports its own failed fetches, as the built-in charts do and
-          // report stats once one lands.
-          if (reportedStats || context.stage === 'fetch') fetchFailed = true;
+          // says it does each time a fetch lands, as the built-in charts do.
+          if (reportedStats || viz?.reportsDefaultStats) fetchFailed = true;
           const panel = panelOf();
           if (panel) {
             try {

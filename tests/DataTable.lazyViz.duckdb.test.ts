@@ -352,8 +352,10 @@ class ThrowingChart extends BaseVisualization {
  * A custom chart whose fetches for c1 follow `script`, one step each:
  * `ok:<n>` reports stats with `n` rows through the filters (0 for none),
  * `detail:<n>` reports them and a hover detail too, `wait` parks the fetch
- * until the test settles it, `fail` throws. With `silent`, a fetch that
- * does not throw reports nothing, as a chart without stats of its own does.
+ * until the test settles it, `fail` throws, and `report` reports a failed
+ * fetch itself, with stage `'fetch'`, as the built-in charts do. With
+ * `silent`, a fetch that does not fail reports nothing, as a chart without
+ * stats of its own does.
  */
 class ScriptedChart extends BaseVisualization {
   static script: string[] = [];
@@ -389,6 +391,13 @@ class ScriptedChart extends BaseVisualization {
       return;
     }
     if (step === 'fail') throw new Error('scripted failure');
+    if (step === 'report') {
+      this.options.onError?.(new QueryError('reported failure', { code: 'QUERY_RUNTIME' }), {
+        columnName: this.column.name,
+        stage: 'fetch',
+      });
+      return;
+    }
     if (ScriptedChart.silent) return;
     const filtered = Number(step.split(':')[1]);
     if (step.startsWith('detail:')) this.options.onStatsChange?.('<b>Hovered</b> bar');
@@ -979,12 +988,30 @@ describe('lazy column charts (real DuckDB)', () => {
     await m.table.destroy();
   }, 20_000);
 
+  it('does not say a custom chart without stats that reports its own failure failed', async () => {
+    const m = await mount({ visualizationRegistry: ScriptedChart.reset([], { silent: true }) });
+    const errors = collectVizErrorEvents(m.table);
+    await waitForSlot(m, 'c1', /^20 rows$/);
+    ScriptedChart.script = ['report'];
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await vi.waitFor(() => expect(errors).toHaveLength(1), { timeout: 5000 });
+    await waitForSlot(m, 'c1', /^8 \/ 20 rows$/);
+
+    ScriptedChart.script = ['ok'];
+    m.table.actions.addFilter({ type: 'range', column: 'c3', min: 1, max: 4, maxInclusive: true });
+    await waitForSlot(m, 'c1', /^4 \/ 20 rows$/);
+    expect(errors.map((error) => error.details)).toEqual([{ column: 'c1', stage: 'fetch' }]);
+    await m.table.destroy();
+  }, 20_000);
+
   it('says a built-in chart whose first fetch fails failed', async () => {
     const m = await mount();
     await waitForSlot(m, 'c1', /^20 rows\S/);
     const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
     scrollTo(900);
+    // A histogram, and value counts.
     await waitForSlot(m, 'c9', '20 rowsFailed to load');
+    await waitForSlot(m, 'c10', '20 rowsFailed to load');
     failing.stop();
     await m.table.destroy();
   }, 20_000);

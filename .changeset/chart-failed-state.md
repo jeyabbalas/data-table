@@ -11,5 +11,6 @@
 
 ### Added
 
-- A chart whose data failed to load no longer looks like one still loading. Its stats slot says "Failed to load" (`messages.statistics.chartFailed`) beneath the row count until the chart reports stats again, and a built-in chart's `<canvas>` carries a `data-fetch-failed` attribute until a fetch lands.
+- A chart whose data failed to load no longer looks like one still loading. Its stats slot says "Failed to load" (`messages.statistics.chartFailed`) beneath the row count until the chart reports stats again, for a chart that reports them, and a built-in chart's `<canvas>` carries a `data-fetch-failed` attribute until a fetch lands.
 - `VisualizationOptions.onError`'s context has `superseded: true` for a filter update that failed after a newer one had started.
+- `BaseVisualization.reportsDefaultStats`, true for the built-in charts, says a chart reports its stats through `onDefaultStatsChange` each time a fetch lands. The stats slot says a chart's fetch failed only for a chart that reports stats, since only new stats take the line back. A custom chart that reports its stats after every fetch can set it, so that a failure of its first fetch is said too.

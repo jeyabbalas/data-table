@@ -436,6 +436,20 @@ Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabba
 
 ***
 
+### reportsDefaultStats
+
+> `readonly` **reportsDefaultStats**: `boolean` = `true`
+
+Defined in: visualizations/histogram/SharedHistogramBase.ts
+
+A histogram reports its stats each time a fetch lands.
+
+#### Inherited from
+
+`SharedHistogramBase.reportsDefaultStats`
+
+***
+
 ### selectedBin
 
 > `protected` **selectedBin**: `number` \| `null` = `null`

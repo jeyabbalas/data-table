@@ -169,6 +169,20 @@ Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabba
 
 ***
 
+### reportsDefaultStats
+
+> `readonly` **reportsDefaultStats**: `boolean` = `true`
+
+Defined in: visualizations/valuecounts/ValueCounts.ts
+
+Value counts report their stats each time a fetch lands.
+
+#### Overrides
+
+[`BaseVisualization`](BaseVisualization.md).[`reportsDefaultStats`](BaseVisualization.md#reportsdefaultstats)
+
+***
+
 ### width
 
 > `protected` **width**: `number` = `0`

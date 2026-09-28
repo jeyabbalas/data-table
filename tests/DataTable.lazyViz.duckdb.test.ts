@@ -18,6 +18,7 @@ import {
   type CreateDataTableOptions,
   type DataTable,
 } from '@/index';
+import { STATS_PANEL_SETTLE_MS } from '@/DataTable';
 import { initializeColumnsFromSchema } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { SessionStore } from '@/persistence/SessionStore';
@@ -606,6 +607,8 @@ describe('lazy column charts (real DuckDB)', () => {
     });
     m.table.actions.hideColumn('c3');
     await afterRebuild();
+    // Past the build that follows the mounted columns holding still.
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
     expect(m.slot('c1')).toBe('20 rows');
     await m.table.destroy();
   }, 20_000);
@@ -630,7 +633,8 @@ describe('lazy column charts (real DuckDB)', () => {
     await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
     m.table.actions.showColumn('c3');
     await afterRebuild();
-    await sleep(50);
+    // Past the time panels wait for the mounted columns to hold still.
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
     expect(RecordingPanel.built).toEqual([]);
 
     gate.release();
@@ -659,7 +663,8 @@ describe('lazy column charts (real DuckDB)', () => {
     await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
     m.table.actions.showColumn('c3');
     await afterRebuild();
-    await sleep(50);
+    // Past the time panels wait for the mounted columns to hold still.
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
     expect(RecordingPanel.built).toEqual([]);
 
     // No header rebuild follows a failed change; the panel comes anyway.

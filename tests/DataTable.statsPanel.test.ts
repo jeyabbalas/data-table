@@ -18,6 +18,7 @@ import {
   defaultStatsPanelRegistry,
   type DataTable,
 } from '@/index';
+import { STATS_PANEL_SETTLE_MS } from '@/DataTable';
 import { BaseStatsPanel, type StatsPanelOptions } from '@/visualizations/BaseStatsPanel';
 import { BaseVisualization, type VisualizationOptions } from '@/visualizations/BaseVisualization';
 import { initializeColumnsFromSchema } from '@/core/State';
@@ -636,6 +637,8 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     table.actions.showColumn('name');
     await Promise.resolve();
     await Promise.resolve();
+    // Past the build that follows the mounted columns holding still.
+    await new Promise((resolve) => setTimeout(resolve, STATS_PANEL_SETTLE_MS));
     expect(amountAttempts()).toBe(1);
     expect(errors).toEqual([]);
     expect(statsSlot(container, 'amount')).toBe(shown);
@@ -666,6 +669,8 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     table.actions.hideColumn('name');
     await Promise.resolve();
     await Promise.resolve();
+    // Tried once the mounted columns have held still.
+    await new Promise((resolve) => setTimeout(resolve, STATS_PANEL_SETTLE_MS));
     expect(amountAttempts()).toBe(1);
     expect(statsSlot(container, 'amount')).toBe(shown);
     await table.destroy();

@@ -427,7 +427,7 @@ Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, bui
 
 ## `CreateDataTableOptions`
 
-Source: `src/DataTable.ts:123-325`.
+Source: `src/DataTable.ts:136-345`.
 
 ### Mounting
 
@@ -494,7 +494,7 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 
 ## `DataTable` interface
 
-Returned by `createDataTable()`. Source: `src/DataTable.ts:330-419`.
+Returned by `createDataTable()`. Source: `src/DataTable.ts:350-439`.
 
 ### Properties
 
@@ -1119,12 +1119,12 @@ abstract class BaseStatsPanel {
 
 ### Lifecycle ordering guarantees
 
-Quoted from `src/visualizations/BaseStatsPanel.ts:108-132`:
+Quoted from `src/visualizations/BaseStatsPanel.ts:108-136`:
 
-- The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header), when the column comes within about a viewport of the view. A panel lives while its column is near the view, through hides, shows and moves of other columns.
+- The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header), when the column comes within about a viewport of the view and the columns there have held still for 150 ms: a scroll builds no panel for the columns it passes. Those near the view on load, new data or a derived-column change, and a column just shown, get theirs at once. A panel lives while its column is near the view, through hides, shows and moves of other columns.
 - `update()` fires on mount, with the stats the column's chart last emitted if it has one, `null` otherwise; with `null` whenever the chart is removed; and with each `ColumnStatsData` the chart emits (and on data reload). Columns without a visualization receive `update(null)` only.
 - `updateFilters(filters)` fires every time the table's active filter array changes, before any subsequent `update(stats)` call from a viz refetch.
-- `setHoverStats(html | null)` fires when the column's visualization emits a hover snippet (and again with `null` to clear). Columns without a viz never trigger this.
+- `setHoverStats(html | null)` fires when the column's visualization emits a hover snippet (and again with `null` to clear), and on mount with the snippet its chart shows then, if any. Columns without a viz never trigger this.
 - `destroy()` is called exactly once: when the column moves away from the view or is hidden, before the container is reused for a freshly-constructed panel (new data, a derived column changed), or when the table is destroyed.
 
 ### Options and error surface

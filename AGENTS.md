@@ -26,7 +26,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 ### SUPPORTS
 
-- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:147).
+- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:160).
 - Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–63).
 - Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
 - Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`) (src/core/types.ts, src/core/Actions.ts).
@@ -441,7 +441,7 @@ statsPanelRegistry.register({
 const table = await createDataTable({ container, source: '/data.csv', statsPanelRegistry });
 ```
 
-The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:133-217` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
+The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:137-221` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
 
 ### (n) Standalone SQL editor — host-app embedded, schema-aware
 
@@ -508,7 +508,7 @@ table.on('derivedChange', refresh);
 
 ## 4. Default config cheat-sheet
 
-All values source `src/DataTable.ts:123-325`.
+All values source `src/DataTable.ts:136-345`.
 
 | Option               | Default         | Notes                                                                                            |
 | -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
@@ -693,6 +693,6 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 **Source-of-truth (prefer these over the docs when they disagree)**
 
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
-- **Options definition** — `src/DataTable.ts:123-325`
+- **Options definition** — `src/DataTable.ts:136-345`
 - **Event payloads** — `src/core/TableEvents.ts`
 - **Action methods** — `src/core/Actions.ts`

@@ -399,3 +399,32 @@ panels and charts right across a trackpad sweep.
     `createVizForColumn` drops the `columnName` the chart reports, and only the unfiltered fetch
     helpers put the column on the error. Fix: pass the column through, and consider marking a
     failed chart's container.
+- **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, on #145.** Stats panels
+  followed the mounted columns frame by frame, unlike charts. Adding a derived column with +
+  from the far left smooth-scrolls to it, which mounts nearly every column on the way: 533
+  panels built and 530 destroyed at 50K rows, 537 panel queries within 1.5 s against 30 chart
+  queries, and the charts at the new column done 14.1 s later (10.7 s at 200K). Fixed: a column
+  that leaves loses its panel at once, as before, but one that arrives gets its panel once the
+  mounted columns have held still for `STATS_PANEL_SETTLE_MS`, 150 ms. Meanwhile its chart keeps
+  its stats for the panel instead of writing them into the slot first. A browser test counts the
+  panels a smooth scroll across 300 columns builds: 187 to 189 on main, 14 to 31 with the fix.
+- **Found building and reviewing #153.**
+  - A chart reports a committed brush or selection's detail once, as its data lands, and a panel
+    built after that never got it: its stats were handed over, its detail was not. A panel now
+    gets both.
+  - A column scrolled back into view showed an empty slot until its new panel was built, or the
+    destroyed panel's old numbers if it did not clear them. A panel that goes now leaves the slot
+    as it is without one: the chart's stats, or the table-wide count.
+  - Two tests of panels that throw asserted a few microtasks after the columns changed, before
+    the deferred build ran, and passed with the checks they were written for removed. They wait
+    for the build now.
+- **2026-09-28, checking #153 in Chrome at device pixel ratio 2, pre-existing (4c).** A
+  programmatic smooth scroll of the body stops after a pixel or two. The header's scroll event
+  arrives with the position the last sync gave it, by which time the body has moved on, and
+  `ColumnWindowController.handleHeaderScroll`, finding the two apart, writes that older position
+  back into the body, which cancels the animation. `scrollToEnd` turns the header-to-body sync
+  off for its own scroll, and wheel, trackpad and keyboard scrolling were unaffected, as was a
+  smooth scroll at device pixel ratio 1 in headless Chromium, so what stalls is host code calling
+  `scrollTo({ behavior: 'smooth' })` on the body. Not fixed here: a header event at the position
+  the controller itself last wrote is its own echo, whatever the body is doing, and could be
+  dropped as such.

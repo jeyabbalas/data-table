@@ -74,7 +74,7 @@ one IndexedDB handle.
 Pass one initialized `WorkerBridge` to each `createDataTable()` via the
 `bridge` option. The library honours `ownsBridge` semantics: only the
 caller-owned bridge is terminated when a table's `destroy()` runs
-([`src/DataTable.ts:372-374,:956`](../../src/DataTable.ts)). A bridge you
+([`src/DataTable.ts:473-475,:1613`](../../src/DataTable.ts)). A bridge you
 constructed yourself survives every table's destruction — call
 `bridge.terminate()` when you're done with the page.
 
@@ -215,7 +215,7 @@ sharedStore.close();
 ```
 
 Tables skip `bridge.terminate()` when they don't own the bridge
-(`ownsBridge` in `src/DataTable.ts:372,:956`), so a shared bridge survives
+(`ownsBridge` in `src/DataTable.ts:473,:1613`), so a shared bridge survives
 both `destroy()` calls and must be terminated explicitly. Each table
 does drop its own base table from the bridge before exiting, so the
 bridge's DuckDB catalog stays clean even when you destroy tables one

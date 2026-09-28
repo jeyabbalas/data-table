@@ -363,3 +363,19 @@ panels and charts right across a trackpad sweep.
   - A fetch left out of reach as the view moved during a change was not aborted, and the retry
     and relation waits reconciled during the filter-change scroll animation, reading rows it was
     about to scroll away from. Both fixed.
+- **Found in the second review of #151, not fixed.** Each is rare, bounded, and at least partly
+  pre-existing.
+  - Derived-column changes are not serialized, and they share the manager's list of columns. A
+    removal of the only derived column, landing while a vector add of another is at its last
+    `INSERT`, settles with `tableName` naming the VIEW the add has yet to create, and the relation
+    reported readable; the body's first reads fail until the add lands, backing off meanwhile.
+    The same lets an undo during an add rebuild the VIEW from a destroyed manager. Fix: run
+    derived-column changes one at a time, which would also make the same-name refusal and the
+    rename caveat unnecessary.
+  - A session restore applies its filters and sort before its derived columns are rebuilt, so
+    the reads and the count they start are not held back. The count fails if a filter names a
+    derived column, and with visualizations off nothing counts again, so rows past the true count
+    stay placeholders. Fix: restore the filters, sort and derived columns in one change.
+  - A chart's refetch for a filter change is not held back during a removal: every live chart
+    queries the dropped VIEW and reports an error, as on main. Fix: hold the charts' refetches as
+    the count is held.

@@ -189,9 +189,11 @@ export class StateActions {
   }
 
   /**
-   * Whether a derived-column change is waiting on DuckDB. Until it settles,
-   * `state.tableName` and `state.schema` may name a VIEW or a column that
-   * DuckDB has already dropped or replaced.
+   * Whether a derived-column change is waiting on DuckDB, an add included.
+   * Charts and stats panels are built only when none is: one built meanwhile
+   * would be built again for the relation the change leaves. Whether reads of
+   * the relation `state.tableName` names can fail meanwhile is
+   * {@link isRelationReadable}.
    *
    * @internal
    */

@@ -666,7 +666,7 @@ Symptom: the console logs `Error fetching rows:` with a DuckDB error, and some r
 
 Cause: the query for a block of rows failed. The body logs the failure and tries the same query again after 250 ms, then twice as long after each failure in a row, up to every 8 s. It tries at once when the query changes: a column hidden or shown, or a scroll sideways far enough to read other columns (the columns a fetch reads move in steps of 16). It starts afresh after a filter, sort or data change. The usual cause is a derived column whose expression fails on some rows only, such as `CAST(code AS INTEGER)` over text with a few values that are not numbers: adding the column only checks that the expression binds, and evaluates it on no row, so a value it fails on shows up when a block that holds it is fetched.
 
-Fix: find the values the expression fails on with a raw SQL filter, then write the expression so that it does not fail on them, for example with `TRY_CAST`, which gives `null` where `CAST` fails, or clean the data upstream.
+Fix: hide the derived column, find the values its expression fails on with a raw SQL filter (while the column is shown, the rows that filter selects are the very rows whose fetch fails), then write the expression so that it does not fail on them, for example with `TRY_CAST`, which gives `null` where `CAST` fails, or clean the data upstream.
 
 ---
 

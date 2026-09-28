@@ -176,7 +176,8 @@ When a filter changes:
 1. `state.filters` signal fires
 2. `CrossfilterCoordinator` is subscribed; it receives the new filter list
 3. The coordinator recomputes `filteredRowCount` by querying DuckDB with
-   the updated WHERE clause
+   the updated WHERE clause, once any derived-column change that can drop
+   or rebuild the relation has settled
 4. Each visualization receives the updated filter set via its
    `updateFilters(filters)` method and re-renders itself
 5. The `filterChange` event fires on the event bus
@@ -614,7 +615,7 @@ User drags a histogram brush:
 2. Brush emits a `range` filter via `onFilterChange` callback (→ `CrossfilterCoordinator`)
 3. Coordinator calls `state.filters.set(updatedList)`
 4. Subscribers fire:
-   - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause → sets `filteredRows`
+   - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause, after any derived-column change that can break reads has settled → sets `filteredRows`
    - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE → re-renders
    - `AutoSave` → debounce → save snapshot to IDB
    - `filterChange` event → notifies the facade → runs host-app handlers

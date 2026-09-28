@@ -309,6 +309,21 @@ Defined in: [visualizations/BaseVisualization.ts:152](https://github.com/jeyabba
 
 ***
 
+### fetchFailed
+
+> `protected` **fetchFailed**: `boolean` = `false`
+
+Defined in: visualizations/histogram/SharedHistogramBase.ts
+
+Whether the latest fetch to settle failed. Read only while there is no
+data, which a fetch that settles leaves only by failing.
+
+#### Inherited from
+
+[`DateHistogram`](DateHistogram.md).[`fetchFailed`](DateHistogram.md#fetchfailed)
+
+***
+
 ### fetchSequence
 
 > `protected` **fetchSequence**: `number` = `0`
@@ -518,6 +533,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 > **categoryLabel**: `string`
 
 Bold label prefix for a single selected category detail line.
+
+###### chartFailed
+
+> **chartFailed**: `string`
+
+Drawn in a header chart whose data failed to load.
 
 ###### filteredRowCount
 
@@ -1572,6 +1593,27 @@ Call after data is loaded (fetchData completed)
 #### Inherited from
 
 `SharedHistogramBase.setSelectionState`
+
+***
+
+### showFetchFailed()
+
+> `protected` **showFetchFailed**(): `void`
+
+Defined in: visualizations/histogram/SharedHistogramBase.ts
+
+Show a fetch that failed, once the error is reported: no bars, and so
+nothing hovered and no detail describing a bar, a brush or a selection.
+The brush and the selection stay, as the column's filter does, and their
+detail comes back with the next fetch that lands.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+`SharedHistogramBase.showFetchFailed`
 
 ***
 

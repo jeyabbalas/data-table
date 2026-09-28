@@ -495,6 +495,27 @@ describe.each(CHARTS)('$name detail once a refetch fails', (chartCase) => {
   });
 });
 
+describe.each(HISTOGRAMS)('$name null bar once a refetch fails', (chartCase) => {
+  it("clears the null bar's hover detail, and hovers nothing", async () => {
+    const chart = create(chartCase);
+    const values = chartCase.values as { nullCount: number; total: number };
+    fetches[0]!.resolve({ ...values, nullCount: 2, total: values.total + 2 });
+    await chart.waitForData();
+    reportLayout();
+    const area = (chart as unknown as { nullBarArea: { x: number; width: number } }).nullBarArea;
+    const x = area.x + area.width / 2;
+    pointer(chart).handleMouseMove(x, 20);
+    const state = chart as unknown as { hoveredNull: boolean };
+    expect(state.hoveredNull).toBe(true);
+    expect(lastDetail()).toEqual(expect.stringContaining('stats-label'));
+
+    await failRefetch(chart);
+    expect(state.hoveredNull).toBe(false);
+    expect(lastDetail()).toBeNull();
+    chart.destroy();
+  });
+});
+
 describe.each(HISTOGRAMS)('$name after a fetch fails', (chartCase) => {
   it('drops the bars it drew once a later fetch fails', async () => {
     const chart = create(chartCase);

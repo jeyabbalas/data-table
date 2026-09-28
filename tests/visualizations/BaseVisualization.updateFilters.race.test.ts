@@ -297,14 +297,18 @@ describe('BaseVisualization.updateFilters — shared-flag race', () => {
     const u1 = viz.updateFilters(F1);
     const u2 = viz.updateFilters(F2);
 
-    // F1 errors. Its catch runs (routing to onError with stage='filter'),
-    // then its finally runs — and must NOT clear the flag because seq is
-    // stale.
+    // F1 errors. Its catch runs (routing to onError with stage='filter',
+    // marked superseded: F2 is what the chart will show), then its finally
+    // runs — and must NOT clear the flag because seq is stale.
     d1.reject(new Error('upstream filter failure'));
     await u1;
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]![1]).toEqual({ columnName: 'c', stage: 'filter' });
+    expect(onError.mock.calls[0]![1]).toEqual({
+      columnName: 'c',
+      stage: 'filter',
+      superseded: true,
+    });
 
     // F2 is still pending — flag must remain true.
     expect((viz as unknown as { isFilterUpdate: boolean }).isFilterUpdate).toBe(true);

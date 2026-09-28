@@ -243,6 +243,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 
 Bold label prefix for a single selected category detail line.
 
+###### chartFailed
+
+> **chartFailed**: `string`
+
+Drawn in a header chart whose data failed to load.
+
 ###### filteredRowCount
 
 > **filteredRowCount**: (`filtered`, `total`) => `string`

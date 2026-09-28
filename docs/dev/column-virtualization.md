@@ -400,7 +400,8 @@ panels and charts right across a trackpad sweep.
     helpers put the column on the error. Fix: pass the column through, and consider marking a
     failed chart's container. Both fixed as proposed, value counts too. A failed chart draws
     `statistics.chartFailed` and marks its canvas `data-fetch-failed`, and its slot drops the
-    stats it reported before, until a fetch lands.
+    stats it reported before and says it failed, until a fetch lands; a failure of a superseded
+    refetch, or of a destroyed chart, leaves the slot alone.
 - **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, on #145.** Stats panels
   followed the mounted columns frame by frame, unlike charts. Adding a derived column with +
   from the far left smooth-scrolls to it, which mounts nearly every column on the way: 533

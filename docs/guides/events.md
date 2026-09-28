@@ -138,9 +138,11 @@ table.on('error', ({ error, source }) => {
 'listener' | 'unknown'`.
 
 A `'visualization'` error names its column in `error.details.column`, and,
-when the chart reported it, the stage that failed in `error.details.stage`
-(`'fetch'`, `'render'` or `'filter'`). A `'stats-panel'` error names its
-column and `phase` the same way.
+when the chart reported it, the stage that failed in `error.details.stage`:
+`'fetch'` for a built-in chart's query, `'filter'` for a custom chart's
+`fetchData()` that threw during a filter update, or whatever a custom chart
+reports itself. A `'stats-panel'` error names its column and `phase` the same
+way.
 
 `loadError` is a strict subset of `error` — both fire for the same underlying
 failure. Handle one or the other, not both, unless you specifically want

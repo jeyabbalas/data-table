@@ -45,6 +45,12 @@ export interface MockWorkerHandle {
   posted: WorkerMessage[];
   /** Push a synthetic reply from the worker side. */
   sendFromWorker: (response: WorkerResponse) => void;
+  /** Push any value as a message from the worker side, well-formed or not. */
+  sendRaw: (data: unknown) => void;
+  /** Fire the worker's `error` event, as an exception it did not catch would. */
+  emitError: (message?: string) => void;
+  /** Fire the worker's `messageerror` event, as a reply that failed to deserialize would. */
+  emitMessageError: () => void;
   /** Helper: build and send a `result` response keyed off a posted message. */
   reply: (forMessageMatching: (m: WorkerMessage) => boolean, payload: unknown) => void;
   /** Drop all queued responses and stop accepting new ones (simulates terminate). */
@@ -177,10 +183,22 @@ export function createMockWorker(options: MockWorkerOptions = {}): MockWorkerHan
     });
   }
 
+  // Real `Worker` fires both the `on<type>` property and every listener.
+  const fire = (type: 'error' | 'messageerror', event: Event): void => {
+    if (terminated) return;
+    const handler = (worker as unknown as Record<string, unknown>)[`on${type}`];
+    if (typeof handler === 'function') (handler as (ev: Event) => void)(event);
+    for (const fn of type === 'error' ? [...errorListeners] : []) fn(event as ErrorEvent);
+  };
+
   return {
     worker,
     posted,
     sendFromWorker: dispatchMessage,
+    sendRaw: (data) => dispatchMessage(data as WorkerResponse),
+    emitError: (message = 'Uncaught Error: boom') =>
+      fire('error', { type: 'error', message } as unknown as ErrorEvent),
+    emitMessageError: () => fire('messageerror', { type: 'messageerror' } as unknown as Event),
     reply(matcher, payload) {
       const found = posted.find(matcher);
       if (!found) {

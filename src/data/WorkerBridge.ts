@@ -158,6 +158,8 @@ export class WorkerBridge {
   private workerFactory?: (() => Worker) | undefined;
   private workerUrl?: string | URL | undefined;
   private duckdbBundles?: DuckDBBundles | undefined;
+  /** Why the worker failed, until `initialize()` starts another; see {@link failWorker}. */
+  private workerFailure: WorkerInitError | null = null;
 
   constructor(options?: WorkerBridgeOptions) {
     this.queryCache = new QueryCache(options?.cache);
@@ -216,6 +218,11 @@ export class WorkerBridge {
    *
    * Rejects with a descriptive error if the worker fails to signal ready
    * or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
+   *
+   * If the worker fails later, with an error it does not catch, every
+   * pending request rejects with a `WorkerInitError` whose code is
+   * `WORKER_CRASHED`, and so does every later call, until `initialize()` is
+   * called again: it starts a new worker, with an empty database.
    */
   async initialize(): Promise<void> {
     if (this.initPromise) {
@@ -230,15 +237,20 @@ export class WorkerBridge {
         clearTimeout(timeoutHandle);
         fn();
       };
+      // The worker this call creates. Its handlers act only while it is
+      // still the bridge's: a worker terminated, or replaced by a later
+      // initialize(), has nothing left to fail.
+      let worker: Worker | null = null;
+      const isCurrent = (): boolean => worker !== null && this.worker === worker;
 
       const timeoutHandle = setTimeout(() => {
         settle(() => {
           // Tear down the half-initialized worker so a later retry can rebuild.
-          if (this.worker) {
-            this.worker.terminate();
+          if (isCurrent()) {
+            worker!.terminate();
             this.worker = null;
+            this.initPromise = null;
           }
-          this.initPromise = null;
           reject(
             new WorkerInitError(
               `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms ` +
@@ -254,24 +266,32 @@ export class WorkerBridge {
       }, this.initializeTimeoutMs);
 
       try {
-        this.worker = this.createWorker();
+        this.workerFailure = null;
+        worker = this.createWorker();
+        this.worker = worker;
 
-        this.worker.onmessage = this.handleMessage.bind(this);
-        this.worker.onerror = (error) => {
-          settle(() =>
-            reject(
-              new WorkerInitError(`Worker error: ${error.message}`, {
-                code: 'WORKER_CRASHED',
-                cause: error,
-              }),
-            ),
-          );
+        worker.onmessage = this.handleMessage.bind(this);
+        // An error event is an exception the worker did not catch, or a
+        // script that failed to load, during init or at any time after.
+        worker.onerror = (event) => {
+          const error = new WorkerInitError(`Worker error: ${event.message}`, {
+            code: 'WORKER_CRASHED',
+            cause: event,
+          });
+          settle(() => reject(error));
+          if (isCurrent()) this.failWorker(error);
+        };
+        worker.onmessageerror = () => {
+          if (!isCurrent()) return;
+          this.rejectUnattributedReply('A message from the worker could not be deserialized', {
+            reason: 'messageerror',
+          });
         };
 
         // Wait for worker ready signal
         const readyHandler = (event: MessageEvent<WorkerResponse>) => {
-          if (event.data.id === '__ready__') {
-            this.worker!.removeEventListener('message', readyHandler);
+          if ((event.data as { id?: unknown } | null)?.id === '__ready__') {
+            worker!.removeEventListener('message', readyHandler);
             // Now initialize DuckDB — forward optional bundles override.
             const initPayload: InitPayload = this.duckdbBundles
               ? { bundles: this.duckdbBundles }
@@ -281,7 +301,7 @@ export class WorkerBridge {
               .catch((err) => settle(() => reject(err)));
           }
         };
-        this.worker.addEventListener('message', readyHandler);
+        worker.addEventListener('message', readyHandler);
       } catch (error) {
         settle(() => reject(error));
       }
@@ -401,21 +421,13 @@ export class WorkerBridge {
    * Terminate the worker
    */
   terminate(): void {
+    this.workerFailure = null;
     if (!this.worker) return;
     this.worker.terminate();
     this.worker = null;
     this.initPromise = null;
 
-    // Reject all pending requests, releasing their abort listeners so that
-    // long-lived AbortSignals reused by the embedder don't accumulate
-    // handlers across bridge lifetimes.
-    const ids = Array.from(this.pendingRequests.keys());
-    for (const id of ids) {
-      const request = this.pendingRequests.get(id);
-      if (!request) continue;
-      request.reject(new WorkerTerminatedError('Worker terminated'));
-      this.cleanupRequest(id);
-    }
+    this.rejectPending(() => new WorkerTerminatedError('Worker terminated'));
     this.queryCache.clear();
   }
 
@@ -451,11 +463,72 @@ export class WorkerBridge {
   }
 
   private ensureInitialized(): void {
+    if (this.workerFailure) {
+      throw new WorkerInitError(
+        `The DuckDB worker failed (${this.workerFailure.message}): every table loaded ` +
+          'through this bridge is gone. Call initialize() to start a new worker.',
+        { code: 'WORKER_CRASHED', cause: this.workerFailure },
+      );
+    }
     if (!this.worker) {
       throw new ConfigurationError('WorkerBridge not initialized. Call initialize() first.', {
         code: 'BRIDGE_NOT_READY',
       });
     }
+  }
+
+  /**
+   * The worker failed. It may have stopped, or it may run on without the
+   * reply it owed some request, so it is terminated and every pending
+   * request rejected with `error`. Later calls reject at once, until
+   * `initialize()` starts a new worker.
+   */
+  private failWorker(error: WorkerInitError): void {
+    this.workerFailure = error;
+    this.worker?.terminate();
+    this.worker = null;
+    this.initPromise = null;
+    this.rejectPending(() => error);
+    this.queryCache.clear();
+  }
+
+  /**
+   * A reply was lost, with no telling whose: a message that could not be
+   * deserialized, or one without a string id. Every pending request is
+   * rejected, and cancelled in the worker, rather than one of them left
+   * waiting for good. The worker itself carries on.
+   */
+  private rejectUnattributedReply(message: string, details: Record<string, unknown>): void {
+    const ids = this.rejectPending(
+      () => new WorkerInitError(message, { code: 'WORKER_PROTOCOL_VIOLATION', details }),
+    );
+    for (const id of ids) this.postCancel(id);
+  }
+
+  /**
+   * Reject every pending request, releasing their abort listeners so that
+   * long-lived AbortSignals reused by the embedder don't accumulate
+   * handlers across bridge lifetimes. Returns the ids rejected.
+   */
+  private rejectPending(makeError: () => Error): string[] {
+    const ids = Array.from(this.pendingRequests.keys());
+    for (const id of ids) {
+      const request = this.pendingRequests.get(id);
+      if (!request) continue;
+      this.cleanupRequest(id);
+      request.reject(makeError());
+    }
+    return ids;
+  }
+
+  /** Ask the worker to drop the request `targetId`, queued or running. */
+  private postCancel(targetId: string): void {
+    const cancelMessage: WorkerMessage = {
+      id: this.generateId(),
+      type: 'cancel',
+      payload: { targetId },
+    };
+    this.worker?.postMessage(cancelMessage);
   }
 
   private isCacheable(sql: string): boolean {
@@ -488,13 +561,7 @@ export class WorkerBridge {
           // preventing handler leaks when the same AbortSignal is reused
           // across many aborted requests.
           this.cleanupRequest(id);
-          // Send cancel message to worker
-          const cancelMessage: WorkerMessage = {
-            id: this.generateId(),
-            type: 'cancel',
-            payload: { targetId: id },
-          };
-          this.worker?.postMessage(cancelMessage);
+          this.postCancel(id);
           reject(new QueryError('Operation aborted', { code: 'QUERY_ABORTED' }));
         };
         signal.addEventListener('abort', abortHandler);
@@ -509,7 +576,14 @@ export class WorkerBridge {
       });
 
       const message: WorkerMessage = { id, type, payload };
-      this.worker!.postMessage(message);
+      try {
+        this.worker!.postMessage(message);
+      } catch (error) {
+        // A payload that cannot be cloned (a detached ArrayBuffer, say)
+        // never reaches the worker, so no reply will come for it.
+        this.cleanupRequest(id);
+        reject(error);
+      }
     });
   }
 
@@ -527,9 +601,12 @@ export class WorkerBridge {
     // workerFactory / cross-origin worker could deliver malformed messages.
     // Reject anything that doesn't match the expected `{ id, type, payload }`
     // shape rather than blindly trusting `event.data`.
+    // A message without a string id may have been some request's reply,
+    // so it fails every pending request rather than leave one hanging.
     const data = event.data as unknown;
     if (typeof data !== 'object' || data === null) {
       console.warn('[WorkerBridge] dropping non-object worker message');
+      this.rejectUnattributedReply('Worker sent a non-object message', { reason: 'non-object' });
       return;
     }
     const id = (data as { id?: unknown }).id;
@@ -537,6 +614,9 @@ export class WorkerBridge {
     const payload = (data as { payload?: unknown }).payload;
     if (typeof id !== 'string') {
       console.warn('[WorkerBridge] dropping worker message with non-string id');
+      this.rejectUnattributedReply('Worker sent a message without a string id', {
+        reason: 'non-string-id',
+      });
       return;
     }
 
@@ -549,6 +629,15 @@ export class WorkerBridge {
     switch (type) {
       case 'result':
         this.cleanupRequest(id);
+        if (typeof payload !== 'object' || payload === null) {
+          request.reject(
+            new WorkerInitError('Worker result response missing payload', {
+              code: 'WORKER_PROTOCOL_VIOLATION',
+              details: { id, type },
+            }),
+          );
+          break;
+        }
         request.resolve(payload);
         break;
 

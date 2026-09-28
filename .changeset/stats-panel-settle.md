@@ -8,4 +8,5 @@
 
 ### Changed
 
-- While a column's panel waits to be built, its chart keeps its stats out of the stats slot. The panel's first `update()` receives them, and `setHoverStats()` the detail the chart shows then, such as a committed selection's. The slot no longer shows the chart's stats just before the panel replaces them.
+- While a column's panel waits to be built, its stats slot shows the table-wide row count, and its chart keeps its stats out of the slot. The panel's first `update()` receives them, and `setHoverStats()` the detail the chart shows then, such as a committed selection's. The slot no longer shows the chart's stats just before the panel replaces them.
+- A column that leaves the view's reach gets its stats slot back as it is without a panel, its chart's stats or the table-wide count, instead of whatever the destroyed panel left.

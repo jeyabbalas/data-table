@@ -637,6 +637,8 @@ describe('DataTable + StatsPanelRegistry — integration', () => {
     table.actions.showColumn('name');
     await Promise.resolve();
     await Promise.resolve();
+    // Past the build that follows the mounted columns holding still.
+    await new Promise((resolve) => setTimeout(resolve, STATS_PANEL_SETTLE_MS));
     expect(amountAttempts()).toBe(1);
     expect(errors).toEqual([]);
     expect(statsSlot(container, 'amount')).toBe(shown);

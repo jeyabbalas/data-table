@@ -347,6 +347,16 @@ panels and charts right across a trackpad sweep.
   mounted columns have held still for `STATS_PANEL_SETTLE_MS`, 150 ms. Meanwhile its chart keeps
   its stats for the panel instead of writing them into the slot first. A browser test counts the
   panels a smooth scroll across 300 columns builds: 187 to 189 on main, 14 to 31 with the fix.
+- **Found building and reviewing #153.**
+  - A chart reports a committed brush or selection's detail once, as its data lands, and a panel
+    built after that never got it: its stats were handed over, its detail was not. A panel now
+    gets both.
+  - A column scrolled back into view showed an empty slot until its new panel was built, or the
+    destroyed panel's old numbers if it did not clear them. A panel that goes now leaves the slot
+    as it is without one: the chart's stats, or the table-wide count.
+  - Two tests of panels that throw asserted a few microtasks after the columns changed, before
+    the deferred build ran, and passed with the checks they were written for removed. They wait
+    for the build now.
 - **2026-09-28, checking #153 in Chrome at device pixel ratio 2, pre-existing (4c).** A
   programmatic smooth scroll of the body stops after a pixel or two. The header's scroll event
   arrives with the position the last sync gave it, by which time the body has moved on, and

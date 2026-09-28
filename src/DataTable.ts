@@ -923,6 +923,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   }
 
   /**
+   * Put a column's stats slot as it is without a panel: the stats of the
+   * column's chart while it lives (it reports them again only on its next
+   * fetch), and otherwise the table-wide count, until a chart writes its own.
+   */
+  const resetStatsSlot = (header: ColumnHeader): void => {
+    const renderChartStats = chartStatsRenderers.get(header.getColumn().name);
+    if (renderChartStats) renderChartStats();
+    else header.getStatsElement().innerHTML = tableWideLine1Html();
+  };
+
+  /**
    * Build a column's custom stats panel into its stats slot, when the
    * registry has one for it. A panel lives while its column is mounted (see
    * `syncStatsPanels` below).
@@ -968,12 +979,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       emitStatsPanelError(err, column.name, 'construct');
     }
     if (!panel) {
-      // The slot as it is without a panel: the stats of the column's chart
-      // while it lives (it reports them again only on its next fetch), and
-      // otherwise the table-wide count, until a chart writes its own.
-      const renderChartStats = chartStatsRenderers.get(column.name);
-      if (renderChartStats) renderChartStats();
-      else statsEl.innerHTML = tableWideLine1Html();
+      resetStatsSlot(header);
       return;
     }
     activeStatsPanels.set(column.name, panel);
@@ -1278,6 +1284,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       const header = headersByName.get(columnName);
       if (header && !activeStatsPanels.has(columnName)) createStatsPanel(header, tableName);
     }
+    // A chart whose column got no panel shows the stats it held back for one:
+    // the column left, or the registry no longer has a panel for it.
+    for (const [columnName, renderChartStats] of chartStatsRenderers) {
+      if (!activeStatsPanels.has(columnName)) renderChartStats();
+    }
   };
 
   /**
@@ -1302,7 +1313,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (!attachedTable()) return;
     const mounted = new Set(columns);
     for (const columnName of [...activeStatsPanels.keys()]) {
-      if (!mounted.has(columnName)) destroyStatsPanel(columnName);
+      if (mounted.has(columnName)) continue;
+      destroyStatsPanel(columnName);
+      // The panel leaves its slot empty, or as it last drew it, and the
+      // column may be back in view before its next panel is built.
+      const header = headersByName.get(columnName);
+      if (header) resetStatsSlot(header);
     }
     if (statsPanelTimer !== null) clearTimeout(statsPanelTimer);
     statsPanelTimer = setTimeout(buildMountedStatsPanels, STATS_PANEL_SETTLE_MS);

@@ -218,7 +218,7 @@ test('annotations set off-screen paint when their column scrolls in, and clear t
   expect(await classes()).toEqual({ header: false, cell: false, column: false, row: false });
 });
 
-test('a custom stats panel is in place whenever its column is in view, and a dither rebuilds none', async ({
+test('a custom stats panel is in place once its column is in view and still, and a dither rebuilds none', async ({
   page,
 }) => {
   // Custom stats panels come with the header charts.

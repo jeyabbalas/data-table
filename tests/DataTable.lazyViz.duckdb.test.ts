@@ -607,6 +607,8 @@ describe('lazy column charts (real DuckDB)', () => {
     });
     m.table.actions.hideColumn('c3');
     await afterRebuild();
+    // Past the build that follows the mounted columns holding still.
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
     expect(m.slot('c1')).toBe('20 rows');
     await m.table.destroy();
   }, 20_000);

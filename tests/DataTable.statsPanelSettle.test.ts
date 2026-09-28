@@ -63,8 +63,10 @@ class LoggingPanel extends BaseStatsPanel {
   override setHoverStats(text: string | null): void {
     log.push(`detail ${this.column.name} ${text}`);
   }
+  /** Clears its slot, as the guide asks of every panel. */
   override destroy(): void {
     log.push(`destroy ${this.column.name}`);
+    this.container.replaceChildren();
     super.destroy();
   }
 }
@@ -368,6 +370,9 @@ describe('custom stats panels and lazy charts', () => {
     const { table, slot, before } = await jumpWithCharts();
     expect(StubChart.live.has('c28')).toBe(true);
     expect(log).not.toContain('panel c28');
+    // Its panel was destroyed as the view left it at load, and the slot put
+    // back to the table-wide count: not blank, nor the old panel's numbers.
+    expect(before.get('c28')).toBe('20 rows');
     expect(slot('c28')).toBe(before.get('c28'));
 
     // Its data lands, and with it the detail of a selection drawn from the
@@ -431,6 +436,33 @@ describe('custom stats panels and lazy charts', () => {
   it('writes its stats into the slot of a column no panel applies to', async () => {
     const { table, slot } = await jumpWithCharts({ panels: false });
     StubChart.live.get('c28')!.reportStats(15);
+    expect(slot('c28')).toMatch(/5 null/);
+    await table.destroy();
+  });
+
+  it('shows its stats in the slot of a column that leaves, as the panel goes', async () => {
+    const { table, scrollTo, slot } = await jumpWithCharts();
+    vi.advanceTimersByTime(STATS_PANEL_SETTLE_MS);
+    StubChart.live.get('c28')!.reportStats(15);
+    expect(slot('c28')).toBe('panel c28');
+
+    // The view moves on and c28 unmounts; its chart stays, as in a table
+    // narrower than the charts' reach.
+    scrollTo(5400);
+    expect(log).toContain('destroy c28');
+    expect(StubChart.live.has('c28')).toBe(true);
+    expect(slot('c28')).toMatch(/5 null/);
+    await table.destroy();
+  });
+
+  it('shows the stats its chart held back once no panel applies to the column', async () => {
+    const { table, statsPanelRegistry, slot } = await jumpWithCharts();
+    StubChart.live.get('c28')!.reportStats(15);
+    expect(slot('c28')).not.toMatch(/5 null/);
+
+    statsPanelRegistry.unregister('logging');
+    vi.advanceTimersByTime(STATS_PANEL_SETTLE_MS);
+    expect(log).not.toContain('panel c28');
     expect(slot('c28')).toMatch(/5 null/);
     await table.destroy();
   });

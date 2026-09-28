@@ -8,4 +8,4 @@
 
 ### Changed
 
-- While a column's panel waits to be built, its chart keeps its stats out of the stats slot, and the panel's first `update()` receives them. The slot no longer shows the chart's stats just before the panel replaces them.
+- While a column's panel waits to be built, its chart keeps its stats out of the stats slot. The panel's first `update()` receives them, and `setHoverStats()` the detail the chart shows then, such as a committed selection's. The slot no longer shows the chart's stats just before the panel replaces them.

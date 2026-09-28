@@ -124,8 +124,9 @@ export interface StatsPanelOptions {
  * - {@link updateFilters} fires every time the table's active filter array
  *   changes, before any subsequent `update(stats)` call from a viz refetch.
  * - {@link setHoverStats} fires when a viz emits a hover snippet for this
- *   column (and again with `null` to clear). Columns without a viz never
- *   trigger this.
+ *   column (and again with `null` to clear), and as the panel is built, with
+ *   the snippet its column's chart shows then, if any. Columns without a viz
+ *   never trigger this.
  * - {@link destroy} is called exactly once: when the column moves away from
  *   the view or is hidden, before the container is reused for a
  *   freshly-constructed panel (new data, a derived column changed), or when

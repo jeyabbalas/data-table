@@ -347,3 +347,13 @@ panels and charts right across a trackpad sweep.
   mounted columns have held still for `STATS_PANEL_SETTLE_MS`, 150 ms. Meanwhile its chart keeps
   its stats for the panel instead of writing them into the slot first. A browser test counts the
   panels a smooth scroll across 300 columns builds: 187 to 189 on main, 14 to 31 with the fix.
+- **2026-09-28, checking #153 in Chrome at device pixel ratio 2, pre-existing (4c).** A
+  programmatic smooth scroll of the body stops after a pixel or two. The header's scroll event
+  arrives with the position the last sync gave it, by which time the body has moved on, and
+  `ColumnWindowController.handleHeaderScroll`, finding the two apart, writes that older position
+  back into the body, which cancels the animation. `scrollToEnd` turns the header-to-body sync
+  off for its own scroll, and wheel, trackpad and keyboard scrolling were unaffected, as was a
+  smooth scroll at device pixel ratio 1 in headless Chromium, so what stalls is host code calling
+  `scrollTo({ behavior: 'smooth' })` on the body. Not fixed here: a header event at the position
+  the controller itself last wrote is its own echo, whatever the body is doing, and could be
+  dropped as such.

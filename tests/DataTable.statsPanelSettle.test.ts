@@ -60,6 +60,9 @@ class LoggingPanel extends BaseStatsPanel {
   update(stats: ColumnStatsData | null): void {
     log.push(`update ${this.column.name} ${stats ? stats.nonNullCount : 'null'}`);
   }
+  override setHoverStats(text: string | null): void {
+    log.push(`detail ${this.column.name} ${text}`);
+  }
   override destroy(): void {
     log.push(`destroy ${this.column.name}`);
     super.destroy();
@@ -89,8 +92,8 @@ class StubChart extends BaseVisualization {
       distinctCount: nonNullCount,
     });
   }
-  /** Report hover text, as a chart does under the pointer. */
-  reportHover(text: string): void {
+  /** Report detail text, as a chart does for a selection or under the pointer. */
+  reportHover(text: string | null): void {
     this.options.onStatsChange?.(text);
   }
   override destroy(): void {
@@ -296,6 +299,18 @@ describe('custom stats panels during a scroll', () => {
     await table.destroy();
   });
 
+  it('gives a panel built for new data no detail from the chart the data replaced', async () => {
+    const { table } = await mount();
+    StubChart.live.get('c1')!.reportHover('3 of 20 selected');
+    log = [];
+    table.state.tableName.set('t2');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(log).toContain('panel c1');
+    expect(log.filter((e) => e.startsWith('detail c1'))).toEqual([]);
+    await table.destroy();
+  });
+
   it('builds nothing once the table is destroyed', async () => {
     const { table, scrollTo } = await mount();
     log = [];
@@ -355,14 +370,39 @@ describe('custom stats panels and lazy charts', () => {
     expect(log).not.toContain('panel c28');
     expect(slot('c28')).toBe(before.get('c28'));
 
+    // Its data lands, and with it the detail of a selection drawn from the
+    // column's filter.
     StubChart.live.get('c28')!.reportStats(15);
-    StubChart.live.get('c28')!.reportHover('hovered');
+    StubChart.live.get('c28')!.reportHover('3 of 20 selected');
     expect(slot('c28')).toBe(before.get('c28'));
 
     vi.advanceTimersByTime(STATS_PANEL_SETTLE_MS);
-    expect(log).toEqual(expect.arrayContaining(['panel c28', 'update c28 15']));
-    expect(log.indexOf('update c28 15')).toBeGreaterThan(log.indexOf('panel c28'));
+    const panelLog = log.slice(log.indexOf('panel c28')).filter((e) => e.includes('c28'));
+    expect(panelLog).toEqual(['panel c28', 'update c28 15', 'detail c28 3 of 20 selected']);
     expect(slot('c28')).toBe('panel c28');
+    await table.destroy();
+  });
+
+  it('gives a panel no detail its chart has since cleared', async () => {
+    const { table } = await jumpWithCharts();
+    StubChart.live.get('c28')!.reportHover('bin 1–5');
+    StubChart.live.get('c28')!.reportHover(null);
+    vi.advanceTimersByTime(STATS_PANEL_SETTLE_MS);
+    expect(log).toContain('panel c28');
+    expect(log.filter((e) => e.startsWith('detail c28'))).toEqual([]);
+    await table.destroy();
+  });
+
+  it('gives a panel no detail from a chart that is gone', async () => {
+    const { table } = await jumpWithCharts();
+    StubChart.live.get('c28')!.reportHover('3 of 20 selected');
+    // The charts' reach moves on and c28's chart goes; c28 stays mounted,
+    // as in a table narrower than the charts' reach.
+    world.scrollTo(3000);
+    expect(StubChart.live.has('c28')).toBe(false);
+    vi.advanceTimersByTime(STATS_PANEL_SETTLE_MS);
+    expect(log).toContain('panel c28');
+    expect(log.filter((e) => e.startsWith('detail c28'))).toEqual([]);
     await table.destroy();
   });
 

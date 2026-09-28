@@ -717,6 +717,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // while its column's chart is live.
   const latestStats = new Map<string, ColumnStatsData>();
 
+  // Likewise its detail text: a committed brush or selection's, or a hover's.
+  const latestDetail = new Map<string, string>();
+
   // Per column with a live chart, draws the chart's stats into the stats
   // slot, for a slot a panel was to take and did not.
   const chartStatsRenderers = new Map<string, () => void>();
@@ -833,6 +836,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       },
       onStatsChange: (stats: string | null) => {
         detailHtml = stats;
+        if (stats === null) latestDetail.delete(column.name);
+        else latestDetail.set(column.name, stats);
         const panel = panelOf();
         if (panel) {
           try {
@@ -871,6 +876,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       chartStatsRenderers.delete(column.name);
       if (destroyed) return;
       latestStats.delete(column.name);
+      latestDetail.delete(column.name);
       const panel = panelOf();
       if (!panel) {
         statsEl.innerHTML = tableWideLine1Html();
@@ -979,6 +985,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     } catch (err) {
       emitStatsPanelError(err, column.name, 'update');
     }
+    // And its detail text. A chart reports a committed selection's once, as
+    // its data lands, which can be before the panel is built.
+    const detail = latestDetail.get(column.name);
+    if (detail === undefined) return;
+    try {
+      panel.setHoverStats(detail);
+    } catch (err) {
+      emitStatsPanelError(err, column.name, 'hover');
+    }
   };
 
   /** Destroy a column's stats panel, if it has one. */
@@ -1028,6 +1043,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     }
     for (const columnName of [...latestStats.keys()]) {
       if (!kept(columnName)) latestStats.delete(columnName);
+    }
+    for (const columnName of [...latestDetail.keys()]) {
+      if (!kept(columnName)) latestDetail.delete(columnName);
     }
     for (const columnName of [...failedStatsPanels]) {
       if (!kept(columnName)) failedStatsPanels.delete(columnName);

@@ -845,14 +845,37 @@ export class StateActions {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
       if (snapshot) {
-        const restoreState = (): void =>
-          restoreStateFromSnapshot(
-            this.state,
-            snapshot,
-            this.undoManager,
-            options.presetManager,
-            options.annotationStore,
-          );
+        // What the load set up, to go back to if the snapshot cannot be read.
+        const loaded = captureSnapshot(this.state);
+        const loadedTooltips = this.state.columnHeaderTooltips.get();
+        // Restore the snapshot's state. One that cannot be read (a store
+        // handing back a malformed snapshot) is warned about and dropped,
+        // with whatever part of it was written: it must not keep the data
+        // from loading. Returns whether the snapshot was restored.
+        const restoreState = (): boolean => {
+          try {
+            restoreStateFromSnapshot(
+              this.state,
+              snapshot,
+              this.undoManager,
+              options.presetManager,
+              options.annotationStore,
+            );
+            return true;
+          } catch (err) {
+            console.warn(
+              '[data-table] Could not restore the saved session; loading without it:',
+              err,
+            );
+            batch(() => {
+              applySnapshot(this.state, loaded);
+              this.state.derivedColumns.set([]);
+              this.state.columnHeaderTooltips.set(loadedTooltips);
+            });
+            this.undoManager?.clear();
+            return false;
+          }
+        };
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
         if (!snapshot.derivedColumns || snapshot.derivedColumns.length === 0) {
@@ -864,33 +887,36 @@ export class StateActions {
             // snapshot restores can name its derived columns, and the reads
             // and the filtered count they start wait for the VIEW that brings
             // those back, as for any change that rebuilds it.
-            const restoredSchemas = await this.changeRelation(() => {
-              restoreState();
-              return manager.restoreColumns(this.state.derivedColumns.get());
-            });
+            const restoredSchemas = await this.changeRelation(async () =>
+              restoreState() ? manager.restoreColumns(this.state.derivedColumns.get()) : null,
+            );
             this.throwIfDestroyed('loadData');
 
-            // Compute values needed for the batch
-            const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
-            const restoredNames = new Set(restoredSchemas.map((s) => s.name));
-            const allSnapshotDerived = new Set(snapshot.derivedColumns.map((d) => d.name));
-            const failedNames = new Set(
-              [...allSnapshotDerived].filter((n) => !restoredNames.has(n)),
-            );
-
-            // Batch all state mutations so render() sees fully settled state.
-            // Without this, schema.set triggers render() before tableName
-            // points to the VIEW, causing the initial fetch to fail. Also when
-            // no column came back: the filters, sort and columns restored
-            // above name them all.
-            batch(() => {
-              this.state.schema.set([...baseSchema, ...restoredSchemas]);
-              this.state.tableName.set(manager.getEffectiveTableName());
-              this.state.derivedColumns.set(
-                this.state.derivedColumns.get().filter((d) => restoredNames.has(d.name)),
+            // With the snapshot unread, no column was rebuilt, and the
+            // state is the load's already.
+            if (restoredSchemas) {
+              // Compute values needed for the batch
+              const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
+              const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+              const allSnapshotDerived = new Set(snapshot.derivedColumns.map((d) => d.name));
+              const failedNames = new Set(
+                [...allSnapshotDerived].filter((n) => !restoredNames.has(n)),
               );
-              this.stripDerivedColumnRefs(failedNames);
-            });
+
+              // Batch all state mutations so render() sees fully settled state.
+              // Without this, schema.set triggers render() before tableName
+              // points to the VIEW, causing the initial fetch to fail. Also
+              // when no column came back: the filters, sort and columns
+              // restored above name them all.
+              batch(() => {
+                this.state.schema.set([...baseSchema, ...restoredSchemas]);
+                this.state.tableName.set(manager.getEffectiveTableName());
+                this.state.derivedColumns.set(
+                  this.state.derivedColumns.get().filter((d) => restoredNames.has(d.name)),
+                );
+                this.stripDerivedColumnRefs(failedNames);
+              });
+            }
           } catch (err) {
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state
@@ -1570,7 +1596,8 @@ export class StateActions {
   // =========================================
 
   /**
-   * Remove all state references to the given column names.
+   * Remove all state references to the given column names, their header
+   * tooltips included: a later column of the same name would show them.
    * Used when derived columns fail to restore or are reset.
    * Caller must handle derivedColumns signal and schema separately.
    */
@@ -1600,6 +1627,10 @@ export class StateActions {
       }
       this.state.columnWidths.set(widths);
       this.state.hiddenColumnInfo.set(hidden);
+      const tooltips = new Map(this.state.columnHeaderTooltips.get());
+      let tooltipRemoved = false;
+      for (const name of names) tooltipRemoved = tooltips.delete(name) || tooltipRemoved;
+      if (tooltipRemoved) this.state.columnHeaderTooltips.set(tooltips);
     });
   }
 

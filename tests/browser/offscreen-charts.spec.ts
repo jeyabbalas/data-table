@@ -179,3 +179,35 @@ test('a growing container shows the columns it brings into view, with their char
   );
   expect(misaligned).toEqual([]);
 });
+
+test('no chart draws "No data" at load or on scroll when every column has values', async ({
+  page,
+}) => {
+  // Record every "No data" a canvas draws, from before the table exists. A
+  // chart is laid out, and so rendered, before its first fetch lands: at load,
+  // and as its column scrolls into view.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __noData: string[] };
+    w.__noData = [];
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) {
+      if (text === 'No data') {
+        w.__noData.push(this.canvas.closest('[data-column]')?.getAttribute('data-column') ?? '?');
+      }
+      return fillText.call(this, text, ...rest);
+    };
+  });
+  await mountTable(page, { visualizations: true });
+  await expect.poll(() => columnsWithoutCharts(page)).toEqual([]);
+
+  // Every column has values, so no chart has reason to draw "No data".
+  await wheelBy(page, 6_000);
+  await expect.poll(() => columnsWithoutCharts(page), { timeout: 10_000 }).toEqual([]);
+  await wheelBy(page, 6_000, { stepPx: 150 });
+  await expect.poll(() => columnsWithoutCharts(page), { timeout: 10_000 }).toEqual([]);
+
+  expect(
+    await page.evaluate(() => (window as unknown as { __noData: string[] }).__noData),
+    'columns whose chart drew "No data"',
+  ).toEqual([]);
+});

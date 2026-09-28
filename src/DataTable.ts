@@ -1062,7 +1062,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // independent of the viz one.
     if (relationChanged || !statsPanelCoordinator) {
       statsPanelCoordinator?.destroy();
-      statsPanelCoordinator = new StatsPanelCoordinator(state);
+      statsPanelCoordinator = new StatsPanelCoordinator(state, undefined, actions);
     }
 
     // Per-column work (viz instances + custom stats panels) is gated by the

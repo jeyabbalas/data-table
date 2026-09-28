@@ -8,12 +8,19 @@
  * stayed placeholders. It waits for the change to settle now, and counts the
  * relation the change leaves. An add leaves the relation readable, and the
  * count goes ahead.
+ *
+ * The charts' refetches, and the stats panels' filter updates, query the
+ * relation too, and are held back the same way: a chart refetched at once
+ * queried the dropped VIEW and reported an error.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StateActions } from '@/core/Actions';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { Filter } from '@/core/types';
+import type { BaseStatsPanel } from '@/visualizations/BaseStatsPanel';
+import type { BaseVisualization } from '@/visualizations/BaseVisualization';
 import { CrossfilterCoordinator } from '@/visualizations/CrossfilterCoordinator';
+import { StatsPanelCoordinator } from '@/visualizations/StatsPanelCoordinator';
 
 import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
 
@@ -194,6 +201,252 @@ describe('CrossfilterCoordinator during a derived-column change', () => {
     const all = counts(queries);
     expect(all).toHaveLength(1);
     expect(all[0]!.sql).toContain('20');
+    coordinator.destroy();
+  });
+});
+
+/** A chart, or a stats panel, that records the filters of each update. */
+interface Recorder {
+  updates: Filter[][];
+  destroyed: boolean;
+  updateFilters: (filters: Filter[]) => Promise<void>;
+  isDestroyed: () => boolean;
+}
+
+function recorder(): Recorder {
+  const r: Recorder = {
+    updates: [],
+    destroyed: false,
+    updateFilters: async (filters) => {
+      r.updates.push(filters);
+    },
+    isDestroyed: () => r.destroyed,
+  };
+  return r;
+}
+
+const asChart = (r: Recorder) => r as unknown as BaseVisualization;
+const asPanel = (r: Recorder) => r as unknown as BaseStatsPanel;
+
+const WIDER: Filter = { type: 'range', column: 'id', min: 0, max: 20, maxInclusive: true };
+
+/** Start removing `x2`, and return its DROP, held, with the removal. */
+async function startRemoval({ actions, queries }: ReturnType<typeof setup>) {
+  const removal = actions.removeDerivedColumn('x2');
+  await drain();
+  const drop = queries.at(-1)!;
+  expect(drop.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
+  return { removal, drop };
+}
+
+describe('Charts during a derived-column change', () => {
+  it('refetches no chart while a removal runs, and each once after it, with the filters then', async () => {
+    const harness = setup();
+    const { actions, coordinator } = harness;
+    await landDerivedColumn(harness);
+    const [a, b] = [recorder(), recorder()];
+    coordinator.register('id', asChart(a));
+    coordinator.register('x2', asChart(b));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    actions.addFilter(WIDER);
+    await drain();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(a.updates).toEqual([]);
+    expect(b.updates).toEqual([]);
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(a.updates).toEqual([[WIDER]]);
+    expect(b.updates).toEqual([[WIDER]]);
+    coordinator.destroy();
+  });
+
+  it('refetches no chart destroyed or replaced while it waited', async () => {
+    const harness = setup();
+    const { actions, coordinator } = harness;
+    await landDerivedColumn(harness);
+    const [gone, replaced, kept] = [recorder(), recorder(), recorder()];
+    coordinator.register('a', asChart(gone));
+    coordinator.register('b', asChart(replaced));
+    coordinator.register('c', asChart(kept));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    gone.destroyed = true;
+    // Made after the filter change, and so with its filters.
+    const successor = recorder();
+    coordinator.register('b', asChart(successor));
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gone.updates).toEqual([]);
+    expect(replaced.updates).toEqual([]);
+    expect(successor.updates).toEqual([]);
+    expect(kept.updates).toEqual([[FILTER]]);
+    coordinator.destroy();
+  });
+
+  it('refetches the charts once a change that failed has settled', async () => {
+    const harness = setup();
+    const { actions, coordinator, queries } = harness;
+    await landDerivedColumn(harness);
+    const chart = recorder();
+    coordinator.register('id', asChart(chart));
+
+    const replace = actions.replaceDerivedColumn('x2', {
+      kind: 'expression',
+      name: 'x2',
+      expression: 'nope',
+    });
+    await drain();
+    const validation = queries.at(-1)!;
+    actions.addFilter(FILTER);
+    await drain();
+    expect(chart.updates).toEqual([]);
+
+    validation.deferred.reject(new Error('Binder Error'));
+    await expect(replace).resolves.toMatchObject({ success: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chart.updates).toEqual([[FILTER]]);
+    coordinator.destroy();
+  });
+
+  it('refetches the charts at once during an add', async () => {
+    const { actions, coordinator, queries } = setup();
+    const chart = recorder();
+    coordinator.register('id', asChart(chart));
+    const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
+    await drain();
+
+    actions.addFilter(FILTER);
+    expect(chart.updates).toEqual([[FILTER]]);
+
+    queries.find((q) => / LIMIT 0$/.test(q.sql))!.deferred.reject(new Error('Binder Error'));
+    await add;
+    coordinator.destroy();
+  });
+
+  it('refetches and counts nothing once destroyed while it waited', async () => {
+    const harness = setup();
+    const { actions, coordinator, queries } = harness;
+    await landDerivedColumn(harness);
+    const chart = recorder();
+    coordinator.register('id', asChart(chart));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    coordinator.destroy();
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chart.updates).toEqual([]);
+    expect(counts(queries)).toEqual([]);
+  });
+});
+
+describe('Stats panels during a derived-column change', () => {
+  function panels(harness: ReturnType<typeof setup>): StatsPanelCoordinator {
+    return new StatsPanelCoordinator(harness.state, undefined, harness.actions);
+  }
+
+  it('updates no panel while a removal runs, and each once after it, with the filters then', async () => {
+    const harness = setup();
+    const { actions, coordinator } = harness;
+    await landDerivedColumn(harness);
+    const coord = panels(harness);
+    const [a, b] = [recorder(), recorder()];
+    coord.register('id', asPanel(a));
+    coord.register('x2', asPanel(b));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    actions.addFilter(WIDER);
+    await drain();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(a.updates).toEqual([]);
+    expect(b.updates).toEqual([]);
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(a.updates).toEqual([[WIDER]]);
+    expect(b.updates).toEqual([[WIDER]]);
+    coord.destroy();
+    coordinator.destroy();
+  });
+
+  it('updates no panel destroyed or replaced while it waited', async () => {
+    const harness = setup();
+    const { actions, coordinator } = harness;
+    await landDerivedColumn(harness);
+    const coord = panels(harness);
+    const [gone, replaced, kept] = [recorder(), recorder(), recorder()];
+    coord.register('a', asPanel(gone));
+    coord.register('b', asPanel(replaced));
+    coord.register('c', asPanel(kept));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    gone.destroyed = true;
+    const successor = recorder();
+    coord.register('b', asPanel(successor));
+
+    drop.deferred.resolve([]);
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gone.updates).toEqual([]);
+    expect(replaced.updates).toEqual([]);
+    expect(successor.updates).toEqual([]);
+    expect(kept.updates).toEqual([[FILTER]]);
+    coord.destroy();
+    coordinator.destroy();
+  });
+
+  it('updates the panels at once during an add', async () => {
+    const harness = setup();
+    const { actions, coordinator, queries } = harness;
+    const coord = panels(harness);
+    const panel = recorder();
+    coord.register('id', asPanel(panel));
+    const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
+    await drain();
+
+    actions.addFilter(FILTER);
+    await drain();
+    expect(panel.updates).toEqual([[FILTER]]);
+
+    queries.find((q) => / LIMIT 0$/.test(q.sql))!.deferred.reject(new Error('Binder Error'));
+    await add;
+    coord.destroy();
+    coordinator.destroy();
+  });
+
+  it('updates the panels at once, change or not, without the actions', async () => {
+    const harness = setup();
+    const { actions, coordinator, state } = harness;
+    await landDerivedColumn(harness);
+    const coord = new StatsPanelCoordinator(state);
+    const panel = recorder();
+    coord.register('id', asPanel(panel));
+
+    const { removal, drop } = await startRemoval(harness);
+    actions.addFilter(FILTER);
+    await drain();
+    expect(panel.updates).toEqual([[FILTER]]);
+
+    drop.deferred.resolve([]);
+    await removal;
+    coord.destroy();
     coordinator.destroy();
   });
 });

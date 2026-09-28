@@ -316,7 +316,12 @@ filter back and forth and the brush follows).
 ### Reactive updates
 
 The library calls `updateFilters(newFilters)` on every visualization that
-exists — the charts in or near view — when the active filter set changes. Subclasses usually don't need to override this —
+exists — the charts in or near view — when the active filter set changes.
+While a derived-column change that can drop or rebuild the table's relation
+runs (a removal, an edit or a replacement, an undo or redo, a reset or a
+restore), the call waits for the change to settle, and a chart whose filters
+changed more than once meanwhile gets one call, with the filters then in
+force. Subclasses usually don't need to override this —
 the default implementation triggers `fetchData()` + `render()` on any change.
 Override it if you want to skip re-renders when the filter is unrelated to
 your column.

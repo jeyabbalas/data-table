@@ -179,7 +179,9 @@ When a filter changes:
    the updated WHERE clause, once any derived-column change that can drop
    or rebuild the relation has settled
 4. Each visualization receives the updated filter set via its
-   `updateFilters(filters)` method and re-renders itself
+   `updateFilters(filters)` method and re-renders itself, also once any
+   such change has settled: a chart that saw several filter changes during
+   one refetches once, with the filters then in force
 5. The `filterChange` event fires on the event bus
 
 The coordinator batches rapid-fire filter changes (histogram brushes can
@@ -583,7 +585,11 @@ without this guard the base-class default's last-write-wins on
 filter set F2's broadcast had already completed. The same race-guard
 pattern lives on `CrossfilterCoordinator`; the two coordinators stay in
 sync deliberately. The rationale is captured in
-[`StatsPanelCoordinator.ts:42–57`](../../src/visualizations/StatsPanelCoordinator.ts).
+[`StatsPanelCoordinator.ts:57–66`](../../src/visualizations/StatsPanelCoordinator.ts).
+Given the table's actions, as the facade gives them, a broadcast also
+waits out a derived-column change that can drop or rebuild the relation,
+as chart refetches and the filtered-row count do, and then goes once to
+the panels still registered, with the filters in force then.
 
 Fan-out is bounded — `DEFAULT_PANEL_CONCURRENCY = 4` — sized
 independently of the visualization fan-out cap because a panel may issue
@@ -616,7 +622,7 @@ User drags a histogram brush:
 3. Coordinator calls `state.filters.set(updatedList)`
 4. Subscribers fire:
    - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause, after any derived-column change that can break reads has settled → sets `filteredRows`
-   - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE → re-renders
+   - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE, after any such change has settled → re-renders
    - `AutoSave` → debounce → save snapshot to IDB
    - `filterChange` event → notifies the facade → runs host-app handlers
    - `UndoManager` (via `captureForUndo()` _before_ the set) → records undoable snapshot

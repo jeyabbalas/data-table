@@ -181,7 +181,10 @@ panels and charts right across a trackpad sweep.
   attaches a tag in the file's opening comment to the first statement, usually an import, and drops
   it: `dist/visualizations/LazyVizController.d.ts` loses its `ColumnSchema` import and fails to
   type-check. Nothing public reaches that file, so no consumer breaks. Found in review of #137, which
-  keeps the tag off `ColumnWindowController.ts`; `LazyVizController.ts` is not fixed.
+  keeps the tag off `ColumnWindowController.ts`. Fixed in `LazyVizController.ts` too. The tag's text
+  anywhere in that comment strips the import, even in prose, so the comment avoids it. The build
+  now type-checks every emitted declaration file (`scripts/check-dts.mjs`), which fails on the old
+  header.
 - **Found in review of #138.**
   - A change that shortens the table (hiding a wide column at the far right) reached the controller
     before the browser clamped `scrollLeft`, a frame later, and the set it worked out from the old

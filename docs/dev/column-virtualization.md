@@ -371,7 +371,9 @@ panels and charts right across a trackpad sweep.
     reported readable; the body's first reads fail until the add lands, backing off meanwhile.
     The same lets an undo during an add rebuild the VIEW from a destroyed manager. Fix: run
     derived-column changes one at a time, which would also make the same-name refusal and the
-    rename caveat unnecessary.
+    rename caveat unnecessary. **Fixed:** derived-column changes, undo, redo, reset and loads
+    take turns (`StateActions.inTurn`), each validating against the state the one before it left,
+    so the same-name refusal is gone; a change asked for before a load does not apply.
   - A session restore applies its filters and sort before its derived columns are rebuilt, so
     the reads and the count they start are not held back. The count fails if a filter names a
     derived column, and with visualizations off nothing counts again, so rows past the true count

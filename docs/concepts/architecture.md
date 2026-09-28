@@ -521,6 +521,17 @@ Derived-column changes add a wrinkle: the VIEW must be rebuilt before the
 snapshot's `visibleColumns` apply. `undo()` and `redo()` are `async`
 specifically to await that reconciliation.
 
+Derived-column changes, `undo()`, `redo()`, `resetToInitial()` and
+`loadData()` take turns: they run one at a time, in call order, and each
+reads and validates the state in its own turn, after the one before has
+written its changes. Two changes running together would share the
+`DerivedColumnManager`'s column list and the VIEW. An undo called while an
+add runs therefore waits for the add, which by then has pushed its undo
+entry, and undoes it. A derived-column change pushes its undo entry once its
+DuckDB work has succeeded, just before its state update, so an edit made
+meanwhile keeps its own entry. `loadData()` turns away the changes asked for
+before it: they were meant for the data it replaces.
+
 ## Annotation overlay (`AnnotationStore`)
 
 [`AnnotationStore`](../../src/annotations/AnnotationStore.ts) holds

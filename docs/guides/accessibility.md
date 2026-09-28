@@ -170,10 +170,14 @@ the first one, `←` / `→` cycle them, `↑` / `↓` leave and move the cursor
 
 A column narrower than its buttons (about 135 px at the default padding; a
 column can be 50 px) shows the buttons that fit and clips the rest at its
-edge, so none lies over the next header. The bar shows all of them while the
-pointer is on it or keyboard focus is in it, running on over the next header's
-bar: the pointer reaches the others along the bar, and a button `F2` focuses is
-always in view.
+edge, so none lies over the next header. The bar shows all of them, running on
+over the next header's bar, once the pointer has rested on it for 200 ms, and
+at once when keyboard focus is in it. The pointer reaches the others along the
+bar; a pointer passing along the row of bars reveals nothing, so a click lands
+on the button under it. While a bar is shown, it covers the next header's first
+buttons, visibly, until the pointer leaves it. `F2` scrolls the table so the
+button it focuses is always in view, and the last column's bar runs on
+leftward, over its own header.
 
 Clicking parks real focus on whatever it hit — a cell, a scroll region — which
 would leave `aria-activedescendant` describing a cursor the focused element

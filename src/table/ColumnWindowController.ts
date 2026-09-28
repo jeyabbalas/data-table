@@ -125,6 +125,9 @@ export function revealColumnIn(scroller: HTMLElement, state: TableState, column:
   return true;
 }
 
+/** Room left beside an element scrolled into view, for its focus outline and offset. */
+const FOCUS_RING_ROOM = 3;
+
 /** What {@link ColumnWindowController.hold} returns once the controller is gone. */
 function releaseNothing(): void {
   // Nothing is held after destroy().
@@ -356,6 +359,38 @@ export class ColumnWindowController {
     );
     if (target === null) return false;
     this.scrollBodyTo(target);
+    return true;
+  }
+
+  /**
+   * Scroll sideways so `element`, part of an unpinned column's header, is in
+   * view right of the pinned block, with room for its focus ring: a control
+   * in a narrow column's action bar, which runs on past its header while it
+   * holds focus. A pinned column's header is always in view.
+   *
+   * @returns whether it scrolled.
+   */
+  revealHeaderElement(element: HTMLElement): boolean {
+    if (this.destroyed || !this.headerScroll.contains(element)) return false;
+    const column = element.closest('[data-column]')?.getAttribute('data-column');
+    const layout = getColumnLayout(this.state);
+    if (!column || layout.pinnedPlacement(column)) return false;
+    // Rects are in screen pixels, scaled by any transform or zoom above the
+    // table; the scroll position is not.
+    const view = this.headerScroll.getBoundingClientRect();
+    const scale =
+      view.width > 0 && this.headerScroll.offsetWidth > 0
+        ? view.width / this.headerScroll.offsetWidth
+        : 1;
+    const box = element.getBoundingClientRect();
+    const origin = view.left + this.headerScroll.clientLeft * scale;
+    const left = (box.left - origin) / scale - FOCUS_RING_ROOM;
+    const right = (box.right - origin) / scale + FOCUS_RING_ROOM;
+    let delta = 0;
+    if (right > this.headerScroll.clientWidth) delta = right - this.headerScroll.clientWidth;
+    else if (left < layout.pinnedWidth) delta = left - layout.pinnedWidth;
+    if (delta === 0) return false;
+    this.scrollBodyTo(this.bodyScroll.scrollLeft + delta);
     return true;
   }
 

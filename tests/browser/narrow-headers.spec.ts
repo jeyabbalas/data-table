@@ -11,7 +11,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { settle } from './helpers/demo';
-import { HOST_ID, type TestWindow, mountTable } from './helpers/table';
+import { HOST_ID, type TestWindow, mountTable, probe } from './helpers/table';
 
 /** The action bar's controls, in order, drag handle last. */
 const CONTROLS = [
@@ -154,7 +154,8 @@ test('pointed at, a narrow column’s bar shows every control, and each one work
   await narrow(page, { c03: 60 });
 
   const { y } = await pointAtBar(page, 'c03');
-  expect(await unreachable(page, 'c03')).toEqual([]);
+  // After a moment's pause: a pointer passing along the row reveals nothing.
+  await expect.poll(() => unreachable(page, 'c03')).toEqual([]);
   // On a backing of the header's own colour, wide enough for all of them.
   const backing = await page.evaluate((hostId) => {
     const h = document.querySelector<HTMLElement>(`#${hostId} .dt-col-header[data-column="c03"]`)!;
@@ -182,6 +183,7 @@ test('pointed at, a narrow column’s bar shows every control, and each one work
 
   // The drag handle, the bar's last control, starts a drag.
   await pointAtBar(page, 'c03');
+  await expect.poll(() => unreachable(page, 'c03')).toEqual([]);
   const handle = (await header(page, 'c03').locator('.dt-col-drag-handle').boundingBox())!;
   await page.mouse.move(handle.x + handle.width / 2, y, { steps: 6 });
   await page.mouse.down();
@@ -243,4 +245,184 @@ test('F2 on a narrow column shows each control it focuses', async ({ page }) => 
   expect(
     await page.evaluate(() => (window as unknown as TestWindow).__dt.state.sortColumns.get()),
   ).toEqual([{ column: 'c03', direction: 'asc' }]);
+});
+
+/** Put the cursor on `column`'s header with one ArrowRight from the column before it. */
+async function cursorOnHeader(page: Page, column: string, before: string): Promise<void> {
+  await page.locator(`#${HOST_ID} .dt-grid`).focus();
+  await page.evaluate(
+    (column) => (window as unknown as TestWindow).__dt.actions.setFocusedCell({ row: -1, column }),
+    before,
+  );
+  await page.keyboard.press('ArrowRight');
+  await settle(page);
+  await expect(page.locator(`#${HOST_ID} .dt-col-header--focused`)).toHaveAttribute(
+    'data-column',
+    column,
+  );
+}
+
+/**
+ * How far the focused control's focus ring runs past its bar's clip, left
+ * and right. The bar clips sideways at its padding box.
+ */
+function ringClipped(page: Page): Promise<{ control: string; left: number; right: number }> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement;
+    const bar = el.closest<HTMLElement>('.dt-col-action-panel')!;
+    const style = getComputedStyle(el);
+    const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    const b = el.getBoundingClientRect();
+    const clip = bar.getBoundingClientRect();
+    return {
+      control: el.className,
+      left: Math.max(0, Math.round((clip.left - (b.left - ring)) * 10) / 10),
+      right: Math.max(0, Math.round((b.right + ring - clip.right) * 10) / 10),
+    };
+  });
+}
+
+test('F2 shows each control’s whole focus ring, in a wide column and a narrow one', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await narrow(page, { c03: 60 });
+  await pointerAway(page);
+
+  for (const [column, before] of [
+    ['c05', 'c04'],
+    ['c03', 'c02'],
+  ] as const) {
+    await cursorOnHeader(page, column, before);
+    await page.keyboard.press('F2');
+    for (let i = 0; i < 4; i++) {
+      const ring = await ringClipped(page);
+      expect(ring, `${column}: ${ring.control}`).toMatchObject({ left: 0, right: 0 });
+      await page.keyboard.press('ArrowRight');
+    }
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('F2 scrolls each control into view on a narrow column at the right edge', async ({ page }) => {
+  await mountTable(page, { columns: 40 });
+  await narrow(page, { c09: 60 });
+  await pointerAway(page);
+  // ArrowRight onto c09 from off-screen c08 brings it in flush with the right edge.
+  await cursorOnHeader(page, 'c09', 'c08');
+  const view = (await page.locator(`#${HOST_ID} .dt-header-scroll`).boundingBox())!;
+  const c09 = (await header(page, 'c09').boundingBox())!;
+  expect(c09.x + c09.width).toBeCloseTo(view.x + view.width, 0);
+
+  await page.keyboard.press('F2');
+  for (const cls of CONTROLS.slice(0, 4)) {
+    expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(cls);
+    await expect
+      .poll(() => unreachable(page, 'c09', [cls]), `${cls} focused but out of view`)
+      .toEqual([]);
+    const { left, max } = await probe(page, 'scroll');
+    expect(left).toBeLessThanOrEqual(max);
+    const header = await page.evaluate(
+      (hostId) => document.querySelector<HTMLElement>(`#${hostId} .dt-header-scroll`)!.scrollLeft,
+      HOST_ID,
+    );
+    expect(header, 'the header scrolled with the body').toBe(left);
+    await page.keyboard.press('ArrowRight');
+  }
+});
+
+test('keyboard focus shows the bar at once, even while the pointer’s pause runs', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await narrow(page, { c03: 60 });
+  await pointerAway(page);
+  await cursorOnHeader(page, 'c03', 'c02');
+  await pointAtBar(page, 'c03');
+  // F2 to the filter button, the first past the column's edge, well inside
+  // the 200 ms a pointer waits.
+  await page.keyboard.press('F2');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => document.activeElement?.className ?? '')).toContain(
+    'dt-col-filter-btn',
+  );
+  expect(await unreachable(page, 'c03', ['dt-col-filter-btn'])).toEqual([]);
+});
+
+test('a pointer passing along the bar row reveals nothing, and clicks the button under it', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await narrow(page, { c03: 60 });
+  const from = (await header(page, 'c02').locator('.dt-col-action-panel').boundingBox())!;
+  const pin = (await header(page, 'c04').locator('.dt-col-pin-btn').boundingBox())!;
+  const y = pin.y + pin.height / 2;
+  await page.mouse.move(from.x + from.width / 2, y);
+  // Across c03's bar onto c04's pin, and click at once.
+  await page.mouse.move(pin.x + pin.width / 2, y, { steps: 4 });
+  await page.mouse.down();
+  await page.mouse.up();
+  await settle(page);
+
+  const state = await page.evaluate(() => {
+    const { state } = (window as unknown as TestWindow).__dt;
+    return {
+      pinned: state.pinnedColumns.get(),
+      sort: state.sortColumns.get(),
+      hidden: state.columnOrder
+        .get()
+        .filter((c) => c !== '__rowid__' && !state.visibleColumns.get().includes(c)),
+    };
+  });
+  expect(state).toEqual({ pinned: ['c04'], sort: [], hidden: [] });
+  await expect(page.locator('.dt-filter-panel')).toHaveCount(0);
+});
+
+test('the last column’s bar shows its buttons leftward, in view, without growing the scroll range', async ({
+  page,
+}) => {
+  await mountTable(page, { columns: 40 });
+  await narrow(page, { c39: 60 });
+  await page.evaluate((hostId) => {
+    const body = document.querySelector<HTMLElement>(`#${hostId} .dt-body-scroll`)!;
+    body.scrollLeft = body.scrollWidth;
+  }, HOST_ID);
+  await settle(page);
+  const scrollWidth = () =>
+    page.evaluate(
+      (hostId) => document.querySelector<HTMLElement>(`#${hostId} .dt-header-scroll`)!.scrollWidth,
+      HOST_ID,
+    );
+  const before = await scrollWidth();
+
+  const bar = (await header(page, 'c39').locator('.dt-col-action-panel').boundingBox())!;
+  await page.mouse.move(bar.x + bar.width - 6, bar.y + bar.height / 2);
+  await expect.poll(() => unreachable(page, 'c39')).toEqual([]);
+  expect(await scrollWidth()).toBe(before);
+
+  // At its full width, pointed at for as long, its buttons stay put.
+  await pointerAway(page);
+  await narrow(page, { c39: 150 });
+  await page.evaluate((hostId) => {
+    const body = document.querySelector<HTMLElement>(`#${hostId} .dt-body-scroll`)!;
+    body.scrollLeft = body.scrollWidth;
+  }, HOST_ID);
+  await settle(page);
+  const pins = () =>
+    page.evaluate(
+      (hostId) =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(
+            `#${hostId} .dt-col-header[data-column="c39"] .dt-col-action-panel > *`,
+          ),
+          (el) => Math.round(el.getBoundingClientRect().left),
+        ),
+      HOST_ID,
+    );
+  const atRest = await pins();
+  const wide = (await header(page, 'c39').locator('.dt-col-action-panel').boundingBox())!;
+  await page.mouse.move(wide.x + 30, wide.y + wide.height / 2);
+  await page.waitForTimeout(400);
+  expect(await pins()).toEqual(atRest);
 });

@@ -180,7 +180,9 @@ with a `LoadError` whose code is `LOAD_MEMORY_EXCEEDED`.
 
 How the source is read (`timezone`, `csv`, `json`, `parquet`) is checked
 before anything is sent: a bad value rejects with a `LoadError` whose
-code is `LOAD_INVALID_OPTIONS` or `LOAD_INVALID_TIMEZONE`.
+code is `LOAD_INVALID_OPTIONS` or `LOAD_INVALID_TIMEZONE`. Each format's
+options go in its own entry, `{ format: 'csv', csv: { delimiter: ';' } }`:
+any other key here, such as a `delimiter` next to `format`, is ignored.
 
 #### Parameters
 

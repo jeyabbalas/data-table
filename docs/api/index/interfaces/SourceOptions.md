@@ -15,7 +15,8 @@ source's format and ignores the others, so one object can go with sources
 of any format. Every entry is checked before the load starts: a value of
 the wrong type or out of range, or an unknown key, rejects the load with a
 `LoadError` whose code is `LOAD_INVALID_OPTIONS` (or
-`LOAD_INVALID_TIMEZONE`), and `details.option` names it.
+`LOAD_INVALID_TIMEZONE`), and `details.option` names it. The table keeps
+the data it had.
 
 ## Extended by
 

@@ -18,7 +18,8 @@ How a CSV source is read. DuckDB detects whatever is left out.
 
 Defined in: [data/sourceOptions.ts:11](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/sourceOptions.ts#L11)
 
-The character between fields. Default: detected.
+The character between fields: one character (one UTF-16 code unit),
+not a line break or NUL. Default: detected.
 
 ***
 
@@ -39,7 +40,8 @@ Whether the first row holds the column names. Default: detected.
 Defined in: [data/sourceOptions.ts:26](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/sourceOptions.ts#L26)
 
 Field values read as NULL. They replace DuckDB's default, under which
-only an empty field is NULL: include `''` to keep that.
+only an empty field is NULL: include `''` to keep that. None may hold a
+NUL character.
 
 ***
 

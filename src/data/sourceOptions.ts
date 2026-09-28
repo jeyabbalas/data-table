@@ -4,10 +4,14 @@
  */
 
 import { LoadError } from '../core/errors';
+import { ROWID_COLUMN } from '../core/types';
 
 /** How a CSV source is read. DuckDB detects whatever is left out. */
 export interface CSVSourceOptions {
-  /** The character between fields. Default: detected. */
+  /**
+   * The character between fields: one character (one UTF-16 code unit),
+   * not a line break or NUL. Default: detected.
+   */
   delimiter?: string | undefined;
   /** Whether the first row holds the column names. Default: detected. */
   header?: boolean | undefined;
@@ -21,7 +25,8 @@ export interface CSVSourceOptions {
   skip?: number | undefined;
   /**
    * Field values read as NULL. They replace DuckDB's default, under which
-   * only an empty field is NULL: include `''` to keep that.
+   * only an empty field is NULL: include `''` to keep that. None may hold a
+   * NUL character.
    */
   nullValues?: readonly string[] | undefined;
 }
@@ -50,7 +55,8 @@ export interface ParquetSourceOptions {
   /**
    * The columns to load, by their names in the file (case-sensitive), in
    * this order. Default: every column. The others are never read, and the
-   * memory check before the load counts only these.
+   * memory check before the load counts only these. Leave out
+   * `__rowid__`: the table adds that column itself.
    */
   columns?: readonly string[] | undefined;
 }
@@ -63,7 +69,8 @@ export interface ParquetSourceOptions {
  * of any format. Every entry is checked before the load starts: a value of
  * the wrong type or out of range, or an unknown key, rejects the load with a
  * `LoadError` whose code is `LOAD_INVALID_OPTIONS` (or
- * `LOAD_INVALID_TIMEZONE`), and `details.option` names it.
+ * `LOAD_INVALID_TIMEZONE`), and `details.option` names it. The table keeps
+ * the data it had.
  */
 export interface SourceOptions {
   /**
@@ -187,8 +194,15 @@ export function validateSourceOptions(options: unknown): void {
   const csv = checkObject(top['csv'], 'csv', KEYS.csv);
   if (csv) {
     const { delimiter, header } = csv;
-    if (delimiter !== undefined && (typeof delimiter !== 'string' || delimiter.length !== 1)) {
-      throw invalid('csv.delimiter', 'expected a single character', delimiter);
+    if (
+      delimiter !== undefined &&
+      (typeof delimiter !== 'string' || delimiter.length !== 1 || /[\n\r\0]/.test(delimiter))
+    ) {
+      throw invalid(
+        'csv.delimiter',
+        'expected a single character, not a line break or NUL',
+        delimiter,
+      );
     }
     if (header !== undefined && typeof header !== 'boolean') {
       throw invalid('csv.header', 'expected true or false', header);
@@ -196,6 +210,9 @@ export function validateSourceOptions(options: unknown): void {
     checkCount(csv['sampleSize'], 'csv.sampleSize', { min: 1, allowAll: true });
     checkCount(csv['skip'], 'csv.skip', { min: 0 });
     checkStrings(csv['nullValues'], 'csv.nullValues', { unique: false });
+    if ((csv['nullValues'] as string[] | undefined)?.some((v) => v.includes('\0'))) {
+      throw invalid('csv.nullValues', 'a value holds a NUL character', csv['nullValues']);
+    }
   }
 
   const json = checkObject(top['json'], 'json', KEYS.json);
@@ -211,5 +228,12 @@ export function validateSourceOptions(options: unknown): void {
   const parquet = checkObject(top['parquet'], 'parquet', KEYS.parquet);
   if (parquet) {
     checkStrings(parquet['columns'], 'parquet.columns', { unique: true });
+    if ((parquet['columns'] as string[] | undefined)?.includes(ROWID_COLUMN)) {
+      throw invalid(
+        'parquet.columns',
+        `leave out ${ROWID_COLUMN}: the table adds that column itself`,
+        parquet['columns'],
+      );
+    }
   }
 }

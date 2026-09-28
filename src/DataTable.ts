@@ -58,7 +58,7 @@ import type { TableEvents } from './core/TableEvents';
 import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
-import type { SourceOptions } from './data/sourceOptions';
+import { validateSourceOptions, type SourceOptions } from './data/sourceOptions';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
@@ -1422,6 +1422,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // doesn't shadow the underlying physical table name.
     const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
     try {
+      // A bad source option fails the load here, as loadError, and leaves
+      // the table as it was: everything below clears it for the new data.
+      validateSourceOptions(loadOpts?.sourceOptions);
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will

@@ -10,5 +10,5 @@
 
 ### Fixed
 
-- `LOAD_INVALID_OPTIONS` and `LOAD_INVALID_TIMEZONE`, documented but unreachable, now reject a bad `sourceOptions` value before the source is read, with `details.option` naming it. A time zone DuckDB does not know rejects as `LOAD_INVALID_TIMEZONE`, listing the zones it suggests, and Parquet `columns` the file lacks as `LOAD_INVALID_OPTIONS`, naming them.
+- `LOAD_INVALID_OPTIONS` and `LOAD_INVALID_TIMEZONE`, documented but unreachable, now reject a bad `sourceOptions` value before the source is read, with `details.option` naming it, and the table keeps the data it had. A time zone DuckDB does not know rejects as `LOAD_INVALID_TIMEZONE`, listing the zones it suggests, and Parquet `columns` the file lacks as `LOAD_INVALID_OPTIONS`, naming them.
 - `loadProgress` never fired: nothing passed the worker's progress messages on. The table now emits one per message, between `loadStart` and `loadComplete` or `loadError`, for the initial `source` load and for `table.loadData()`. An `onProgress` passed to `table.loadData()` or `actions.loadData()` is called with them too.

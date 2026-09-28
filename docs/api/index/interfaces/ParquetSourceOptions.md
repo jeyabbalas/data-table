@@ -20,4 +20,5 @@ Defined in: [data/sourceOptions.ts:55](https://github.com/jeyabbalas/data-table/
 
 The columns to load, by their names in the file (case-sensitive), in
 this order. Default: every column. The others are never read, and the
-memory check before the load counts only these.
+memory check before the load counts only these. Leave out
+`__rowid__`: the table adds that column itself.

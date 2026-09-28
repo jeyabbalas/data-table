@@ -194,11 +194,11 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 
 ### Progress
 
-| Symbol             | Kind | Purpose                                                           |
-| ------------------ | ---- | ----------------------------------------------------------------- |
-| `ProgressInfo`     | type | `{ stage, bytesLoaded?, totalBytes?, percent? }`.                 |
-| `ProgressCallback` | type | `(info: ProgressInfo) => void`.                                   |
-| `ProgressStage`    | type | `'download' \| 'decode' \| 'register' \| 'ingest' \| 'finalize'`. |
+| Symbol             | Kind | Purpose                                                                                                                    |
+| ------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ProgressInfo`     | type | `{ stage, percent, cancelable, loaded?, total?, estimatedRemaining? }`; `percent` runs 0–100.                              |
+| `ProgressCallback` | type | `(info: ProgressInfo) => void`.                                                                                            |
+| `ProgressStage`    | type | `'reading' \| 'parsing' \| 'indexing' \| 'analyzing'`. A load sends the first three; `analyzing` is declared but not sent. |
 
 ### i18n
 

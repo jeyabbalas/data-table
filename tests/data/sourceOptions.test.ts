@@ -43,6 +43,15 @@ describe('validateSourceOptions', () => {
     ['an unknown csv key', { csv: { delimeter: ';' } }, 'csv.delimeter'],
     ['a two-character delimiter', { csv: { delimiter: ',,' } }, 'csv.delimiter'],
     ['an empty delimiter', { csv: { delimiter: '' } }, 'csv.delimiter'],
+    ['a line feed delimiter', { csv: { delimiter: '\n' } }, 'csv.delimiter'],
+    ['a carriage return delimiter', { csv: { delimiter: '\r' } }, 'csv.delimiter'],
+    ['a NUL delimiter', { csv: { delimiter: '\0' } }, 'csv.delimiter'],
+    ['a null value holding NUL', { csv: { nullValues: ['NA', 'x\0'] } }, 'csv.nullValues'],
+    [
+      '__rowid__ among the Parquet columns',
+      { parquet: { columns: ['a', '__rowid__'] } },
+      'parquet.columns',
+    ],
     ['a header that is not a boolean', { csv: { header: 'yes' } }, 'csv.header'],
     ['a zero sample size', { csv: { sampleSize: 0 } }, 'csv.sampleSize'],
     ['a fractional sample size', { csv: { sampleSize: 1.5 } }, 'csv.sampleSize'],
@@ -65,6 +74,12 @@ describe('validateSourceOptions', () => {
     expect(error.code).toBe('LOAD_INVALID_OPTIONS');
     expect(error.details).toMatchObject({ option });
     expect(error.message).toContain(option);
+  });
+
+  it('says why __rowid__ cannot be among the Parquet columns', () => {
+    expect(rejection({ parquet: { columns: ['__rowid__'] } }).message).toBe(
+      'Invalid load option parquet.columns: leave out __rowid__: the table adds that column itself',
+    );
   });
 
   it.each([['inva!id;tz'], [''], [5], ["UTC'; DROP TABLE t; --"]])(

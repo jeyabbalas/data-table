@@ -120,25 +120,27 @@ await table.loadData(file, {
 A load reads the entry for its source's format and ignores the others, so
 one object can go with sources of any format.
 
-| Option            | Default      | What it does                                                                                     |
-| ----------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| `csv.delimiter`   | detected     | The one character between fields.                                                                |
-| `csv.header`      | detected     | Whether the first row names the columns. Without one, columns are `column0`, `column1`, …        |
-| `csv.skip`        | `0`          | Lines to skip before the header, such as a title line.                                           |
-| `csv.nullValues`  | `['']`       | Field values read as `null`. They replace the default: include `''` to keep empty fields `null`. |
-| `csv.sampleSize`  | 20,480       | Rows DuckDB reads to detect the dialect and the column types; `-1` reads every row.              |
-| `json.format`     | detected     | `'array'` for a JSON array of objects, `'ndjson'` for one object per line.                       |
-| `json.sampleSize` | 20,480       | Objects DuckDB reads to detect the column types; `-1` reads every one.                           |
-| `json.maxDepth`   | no limit     | Levels of nested objects that get types of their own. Deeper values load as JSON text.           |
-| `parquet.columns` | every column | The columns to load, by their names in the file (case-sensitive), in this order.                 |
-| `timezone`        | `'UTC'`      | The time zone DuckDB works in. See below.                                                        |
+| Option            | Default      | What it does                                                                                                                          |
+| ----------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `csv.delimiter`   | detected     | The one character between fields; not a line break or NUL.                                                                            |
+| `csv.header`      | detected     | Whether the first row names the columns. Without one, they are `column0`, `column1`, …, or `column00`, `column01`, … from 10 columns. |
+| `csv.skip`        | `0`          | Lines to skip before the header, such as a title line.                                                                                |
+| `csv.nullValues`  | `['']`       | Field values read as `null`. They replace the default: include `''` to keep empty fields `null`.                                      |
+| `csv.sampleSize`  | 20,480       | Rows DuckDB reads to detect the dialect and the column types; `-1` reads every row.                                                   |
+| `json.format`     | detected     | `'array'` for a JSON array of objects, `'ndjson'` for one object per line.                                                            |
+| `json.sampleSize` | 20,480       | Objects DuckDB reads to detect the column types; `-1` reads every one.                                                                |
+| `json.maxDepth`   | no limit     | Levels of nested objects that get types of their own. Deeper values load as JSON text.                                                |
+| `parquet.columns` | every column | The columns to load, by their names in the file (case-sensitive), in this order.                                                      |
+| `timezone`        | `'UTC'`      | The time zone DuckDB works in. See below.                                                                                             |
 
 A value of the wrong type or out of range, or a key the reader does not
 know, rejects the load before the source is read, with `LoadError` code
 `LOAD_INVALID_OPTIONS` and the option in `error.details.option`, such as
-`'csv.delimiter'`. A Parquet column the file lacks rejects the same way,
-with the names in `error.details.missing`; the message gives the file's own
-spelling when only the case differs.
+`'csv.delimiter'`. The table keeps the data it had: its rows, filters and
+annotations stay as they were. A Parquet column the file lacks rejects the
+same way once the file is opened, with the names in
+`error.details.missing`; the message gives the file's own spelling when only
+the case differs.
 
 - **Types come from a sample.** DuckDB types CSV and JSON columns from the
   first 20,480 rows it reads. A later value that does not fit, text in a

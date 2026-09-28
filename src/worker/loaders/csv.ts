@@ -69,8 +69,11 @@ export async function loadCSV(
     const csvOptions: string[] = [];
 
     if (options.delimiter) {
-      if (options.delimiter.length !== 1) {
-        throw invalidOptionError('csv.delimiter', 'CSV delimiter must be a single character');
+      if (options.delimiter.length !== 1 || /[\n\r\0]/.test(options.delimiter)) {
+        throw invalidOptionError(
+          'csv.delimiter',
+          'CSV delimiter must be a single character, not a line break or NUL',
+        );
       }
       csvOptions.push(`delim = ${sqlString(options.delimiter)}`);
     }
@@ -102,10 +105,10 @@ export async function loadCSV(
       const values: readonly unknown[] = Array.isArray(options.nullValues)
         ? options.nullValues
         : [];
-      if (values.length === 0 || values.some((v) => typeof v !== 'string')) {
+      if (values.length === 0 || values.some((v) => typeof v !== 'string' || v.includes('\0'))) {
         throw invalidOptionError(
           'csv.nullValues',
-          'CSV nullValues must be a non-empty array of strings',
+          'CSV nullValues must be a non-empty array of strings without NUL characters',
         );
       }
       csvOptions.push(`nullstr = [${values.map((v) => sqlString(v as string)).join(', ')}]`);

@@ -378,6 +378,9 @@ panels and charts right across a trackpad sweep.
     the reads and the count they start are not held back. The count fails if a filter names a
     derived column, and with visualizations off nothing counts again, so rows past the true count
     stay placeholders. Fix: restore the filters, sort and derived columns in one change.
+    **Fixed:** the restore writes them inside the change that rebuilds the derived columns, so
+    the reads and the count wait for the VIEW; a snapshot none of whose derived columns come
+    back no longer keeps filters, sort and columns naming them.
   - A chart's refetch for a filter change is not held back during a removal: every live chart
     queries the dropped VIEW and reports an error, as on main. Fix: hold the charts' refetches as
     the count is held.

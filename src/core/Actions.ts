@@ -802,44 +802,52 @@ export class StateActions {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
       if (snapshot) {
-        restoreStateFromSnapshot(
-          this.state,
-          snapshot,
-          this.undoManager,
-          options.presetManager,
-          options.annotationStore,
-        );
+        const restoreState = (): void =>
+          restoreStateFromSnapshot(
+            this.state,
+            snapshot,
+            this.undoManager,
+            options.presetManager,
+            options.annotationStore,
+          );
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
-        if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
+        if (!snapshot.derivedColumns || snapshot.derivedColumns.length === 0) {
+          restoreState();
+        } else {
           try {
             const manager = this.ensureDerivedManager();
-            const restoredSchemas = await this.changeRelation(() =>
-              manager.restoreColumns(this.state.derivedColumns.get()),
-            );
+            // One change with the rebuild: the filters, sort and columns the
+            // snapshot restores can name its derived columns, and the reads
+            // and the filtered count they start wait for the VIEW that brings
+            // those back, as for any change that rebuilds it.
+            const restoredSchemas = await this.changeRelation(() => {
+              restoreState();
+              return manager.restoreColumns(this.state.derivedColumns.get());
+            });
             this.throwIfDestroyed('loadData');
 
-            if (restoredSchemas.length > 0) {
-              // Compute values needed for the batch
-              const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
-              const restoredNames = new Set(restoredSchemas.map((s) => s.name));
-              const allSnapshotDerived = new Set(snapshot.derivedColumns.map((d) => d.name));
-              const failedNames = new Set(
-                [...allSnapshotDerived].filter((n) => !restoredNames.has(n)),
-              );
+            // Compute values needed for the batch
+            const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
+            const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+            const allSnapshotDerived = new Set(snapshot.derivedColumns.map((d) => d.name));
+            const failedNames = new Set(
+              [...allSnapshotDerived].filter((n) => !restoredNames.has(n)),
+            );
 
-              // Batch all state mutations so render() sees fully settled state.
-              // Without this, schema.set triggers render() before tableName
-              // points to the VIEW, causing the initial fetch to fail.
-              batch(() => {
-                this.state.schema.set([...baseSchema, ...restoredSchemas]);
-                this.state.tableName.set(manager.getEffectiveTableName());
-                this.state.derivedColumns.set(
-                  this.state.derivedColumns.get().filter((d) => restoredNames.has(d.name)),
-                );
-                this.stripDerivedColumnRefs(failedNames);
-              });
-            }
+            // Batch all state mutations so render() sees fully settled state.
+            // Without this, schema.set triggers render() before tableName
+            // points to the VIEW, causing the initial fetch to fail. Also when
+            // no column came back: the filters, sort and columns restored
+            // above name them all.
+            batch(() => {
+              this.state.schema.set([...baseSchema, ...restoredSchemas]);
+              this.state.tableName.set(manager.getEffectiveTableName());
+              this.state.derivedColumns.set(
+                this.state.derivedColumns.get().filter((d) => restoredNames.has(d.name)),
+              );
+              this.stripDerivedColumnRefs(failedNames);
+            });
           } catch (err) {
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state

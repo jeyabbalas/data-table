@@ -60,7 +60,11 @@ On mount:
 
 1. Open IndexedDB database `dt-sessions`
 2. Look up a snapshot by `tableName` (here, `'trips'`)
-3. If one exists, restore filters/sort/columns/derived after data load
+3. If one exists, restore filters/sort/columns/derived after data load. With
+   derived columns, the filters, sort and columns are restored in one change
+   with them: a filter or sort that names a derived column is read and
+   counted once the VIEW that has the column is back, and one whose derived
+   column does not come back (its expression no longer binds) is dropped
 4. Subsequent mutations auto-save on a debounced timer
 
 On unmount (call `table.destroy()`): the auto-save flushes a final snapshot.

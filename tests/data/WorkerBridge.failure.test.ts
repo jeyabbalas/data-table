@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { StateActions } from '@/core/Actions';
-import { WorkerInitError } from '@/core/errors';
+import { WorkerInitError, WorkerTerminatedError } from '@/core/errors';
 import { createTableState } from '@/core/State';
 import { WorkerBridge } from '@/data/WorkerBridge';
 
@@ -203,7 +203,7 @@ describe('WorkerBridge — events from a worker it no longer uses', () => {
     expect(await settledWithin(query)).toEqual({ status: 'resolved', value: [{ x: 1 }] });
   });
 
-  it('the init timeout of a terminated worker does not tear down its successor', async () => {
+  it('terminate() before the ready signal rejects initialize() at once, timeout or no', async () => {
     const stuck = createMockWorker({ inert: true, autoReady: false });
     const fresh = createMockWorker();
     const workers = [stuck, fresh];
@@ -212,16 +212,125 @@ describe('WorkerBridge — events from a worker it no longer uses', () => {
       initializeTimeoutMs: 50,
     });
     const first = bridge.initialize();
-    first.catch(() => undefined);
     bridge.terminate();
-    await bridge.initialize();
 
-    await expect(first).rejects.toMatchObject({ code: 'WORKER_INIT_TIMEOUT' });
+    const settled = await settledWithin(first, 20);
+    expect(settled.status === 'rejected' && settled.reason).toBeInstanceOf(WorkerTerminatedError);
+    expect(codeOf(settled)).toBe('WORKER_TERMINATED');
+
+    // The first init's timeout, had it been left running, would fire by now
+    // and take down the worker the bridge has then.
+    await bridge.initialize();
+    await new Promise((resolve) => setTimeout(resolve, 80));
     expect(bridge.isInitialized()).toBe(true);
     const query = bridge.query<{ x: number }>('SELECT 1 AS x', undefined, { cache: false });
     await fresh.waitForPosts(2);
     fresh.reply((m) => m.type === 'query', { rows: [{ x: 1 }] });
     expect(await settledWithin(query)).toEqual({ status: 'resolved', value: [{ x: 1 }] });
+  });
+
+  it('terminate() while the init message awaits its reply rejects initialize() at once', async () => {
+    const mock = createMockWorker({ autoInit: false });
+    const bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    const init = bridge.initialize();
+    await mock.waitForPosts(1);
+
+    bridge.terminate();
+
+    expect(codeOf(await settledWithin(init, 20))).toBe('WORKER_TERMINATED');
+  });
+});
+
+describe('WorkerBridge — a worker script that fails to load', () => {
+  it('says so, rather than "Worker error: undefined"', async () => {
+    const mock = createMockWorker({ autoReady: false });
+    const bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    const init = bridge.initialize();
+
+    mock.emitError(null);
+
+    await expect(init).rejects.toMatchObject({
+      code: 'WORKER_CRASHED',
+      message: 'The worker script failed to load',
+    });
+  });
+
+  it('names the script when the bridge was given its URL', async () => {
+    const original = globalThis.Worker;
+    const created: { worker?: { onerror: ((event: unknown) => void) | null } } = {};
+    (globalThis as { Worker: unknown }).Worker = function FakeWorker(
+      this: Record<string, unknown>,
+    ) {
+      Object.assign(this, {
+        postMessage: vi.fn(),
+        terminate: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        onmessage: null,
+        onerror: null,
+        onmessageerror: null,
+      });
+      created.worker = this as unknown as { onerror: ((event: unknown) => void) | null };
+    };
+    try {
+      const bridge = new WorkerBridge({ workerUrl: '/assets/dt-worker.js' });
+      const init = bridge.initialize();
+
+      created.worker!.onerror!({ type: 'error' });
+
+      await expect(init).rejects.toMatchObject({
+        code: 'WORKER_CRASHED',
+        message: 'The worker script failed to load (/assets/dt-worker.js)',
+      });
+    } finally {
+      globalThis.Worker = original;
+    }
+  });
+});
+
+describe('WorkerBridge — onWorkerFailure', () => {
+  it('tells each listener once, with the error pending requests reject with', async () => {
+    const { bridge, mock } = await initialized();
+    const heard: unknown[] = [];
+    bridge.onWorkerFailure((error) => heard.push(error));
+    const off = bridge.onWorkerFailure(() => heard.push('removed'));
+    off();
+    const query = bridge.query('SELECT 1');
+    await mock.waitForPosts(2);
+
+    mock.emitError();
+
+    const settled = await settledWithin(query);
+    expect(codeOf(settled)).toBe('WORKER_CRASHED');
+    expect(heard).toEqual([(settled as { reason: unknown }).reason]);
+  });
+
+  it('tells the others when one listener throws', async () => {
+    const { bridge, mock } = await initialized();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const heard: string[] = [];
+    bridge.onWorkerFailure(() => {
+      throw new Error('listener bug');
+    });
+    bridge.onWorkerFailure(() => heard.push('second'));
+
+    mock.emitError();
+
+    expect(heard).toEqual(['second']);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(codeOf(await settledWithin(bridge.query('SELECT 1')))).toBe('WORKER_CRASHED');
+    error.mockRestore();
+  });
+
+  it('tells nothing of a messageerror or a terminate()', async () => {
+    const { bridge, mock } = await initialized();
+    const heard: unknown[] = [];
+    bridge.onWorkerFailure((error) => heard.push(error));
+
+    mock.emitMessageError();
+    bridge.terminate();
+
+    expect(heard).toEqual([]);
   });
 });
 

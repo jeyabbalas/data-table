@@ -621,6 +621,25 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // sits further down where the unsubscribe array is built. --------
   let destroyed = false;
 
+  // -------- Worker failure --------
+  // A failed worker fails every query after it, and makes none it would
+  // answer. The table reports the failure once, when the bridge tells of it,
+  // with `source: 'query'`, and drops the same error from each chart, panel
+  // or load that fails after it. A load that lands on a new worker has the
+  // next failure reported again.
+  let workerFailureReported = false;
+  const emitError = (payload: TableEvents['error']): void => {
+    if (payload.error.code === 'WORKER_CRASHED') {
+      if (workerFailureReported) return;
+      workerFailureReported = true;
+    }
+    emitter.emit('error', payload);
+  };
+  const offWorkerFailure =
+    typeof bridge.onWorkerFailure === 'function'
+      ? bridge.onWorkerFailure((error) => emitError({ error, source: 'query' }))
+      : () => undefined;
+
   // -------- Visualizations (auto-attach) --------
   const interactionManager = opts.visualizations === false ? null : new InteractionManager();
   // The crossfilter coordinator is the single source of `filterChange`
@@ -676,7 +695,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             cause: err,
             details: { column, phase },
           });
-    emitter.emit('error', { error: typed, source: 'stats-panel' });
+    emitError({ error: typed, source: 'stats-panel' });
   };
 
   /** Drop a column's interactions from the Escape stack (on filter removal). */
@@ -861,7 +880,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         else interactionManager?.removeColumn(colName);
       },
       onError: (err: DataTableError) => {
-        emitter.emit('error', { error: err, source: 'visualization' });
+        emitError({ error: err, source: 'visualization' });
       },
     };
 
@@ -915,7 +934,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
                   code: 'INVARIANT',
                   cause: err,
                 });
-          emitter.emit('error', { error: typed, source: 'visualization' });
+          emitError({ error: typed, source: 'visualization' });
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
@@ -965,7 +984,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           column: ctx.column,
           phase: ctx.phase,
         };
-        emitter.emit('error', { error: err, source: 'stats-panel' });
+        emitError({ error: err, source: 'stats-panel' });
       },
     };
     let panel: BaseStatsPanel | null = null;
@@ -1464,6 +1483,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
+      workerFailureReported = false;
       emitter.emit('loadComplete', {
         tableName: state.tableName.get() ?? '',
         rowCount: state.totalRows.get(),
@@ -1512,7 +1532,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // the listener map and consumers no longer expect notifications.
       if (!destroyed) {
         emitter.emit('loadError', { error: typed });
-        emitter.emit('error', { error: typed, source: 'load' });
+        emitError({ error: typed, source: 'load' });
       }
       throw typed;
     } finally {
@@ -1538,6 +1558,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function destroy(): Promise<void> {
     if (destroyed) return;
     destroyed = true;
+    offWorkerFailure();
     // Mark the action layer destroyed first so any in-flight async action
     // (e.g. addDerivedColumn awaiting the worker) drops its post-await state
     // mutation rather than writing into the dead table.

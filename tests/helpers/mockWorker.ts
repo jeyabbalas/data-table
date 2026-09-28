@@ -47,8 +47,11 @@ export interface MockWorkerHandle {
   sendFromWorker: (response: WorkerResponse) => void;
   /** Push any value as a message from the worker side, well-formed or not. */
   sendRaw: (data: unknown) => void;
-  /** Fire the worker's `error` event, as an exception it did not catch would. */
-  emitError: (message?: string) => void;
+  /**
+   * Fire the worker's `error` event, as an exception it did not catch would.
+   * `null` fires one without a message, as a script that failed to load does.
+   */
+  emitError: (message?: string | null) => void;
   /** Fire the worker's `messageerror` event, as a reply that failed to deserialize would. */
   emitMessageError: () => void;
   /** Helper: build and send a `result` response keyed off a posted message. */
@@ -196,8 +199,11 @@ export function createMockWorker(options: MockWorkerOptions = {}): MockWorkerHan
     posted,
     sendFromWorker: dispatchMessage,
     sendRaw: (data) => dispatchMessage(data as WorkerResponse),
-    emitError: (message = 'Uncaught Error: boom') =>
-      fire('error', { type: 'error', message } as unknown as ErrorEvent),
+    emitError: (message: string | null = 'Uncaught Error: boom') =>
+      fire(
+        'error',
+        (message === null ? { type: 'error' } : { type: 'error', message }) as ErrorEvent,
+      ),
     emitMessageError: () => fire('messageerror', { type: 'messageerror' } as unknown as Event),
     reply(matcher, payload) {
       const found = posted.find(matcher);

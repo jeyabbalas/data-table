@@ -160,6 +160,10 @@ export class WorkerBridge {
   private duckdbBundles?: DuckDBBundles | undefined;
   /** Why the worker failed, until `initialize()` starts another; see {@link failWorker}. */
   private workerFailure: WorkerInitError | null = null;
+  /** Rejects the `initialize()` still waiting for its worker, if any. */
+  private rejectInit: ((error: Error) => void) | null = null;
+  /** Told when the worker fails; see {@link onWorkerFailure}. */
+  private readonly failureListeners = new Set<(error: WorkerInitError) => void>();
 
   constructor(options?: WorkerBridgeOptions) {
     this.queryCache = new QueryCache(options?.cache);
@@ -235,8 +239,13 @@ export class WorkerBridge {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        if (this.rejectInit === rejectThis) this.rejectInit = null;
         fn();
       };
+      // For terminate(), so an init it cuts short settles now, not at its
+      // timeout.
+      const rejectThis = (error: Error) => settle(() => reject(error));
+      this.rejectInit = rejectThis;
       // The worker this call creates. Its handlers act only while it is
       // still the bridge's: a worker terminated, or replaced by a later
       // initialize(), has nothing left to fail.
@@ -274,7 +283,11 @@ export class WorkerBridge {
         // An error event is an exception the worker did not catch, or a
         // script that failed to load, during init or at any time after.
         worker.onerror = (event) => {
-          const error = new WorkerInitError(`Worker error: ${event.message}`, {
+          // A script that fails to load fires a plain Event, with no message.
+          const message = event.message
+            ? `Worker error: ${event.message}`
+            : `The worker script failed to load${this.workerFactory || this.workerUrl === undefined ? '' : ` (${String(this.workerUrl)})`}`;
+          const error = new WorkerInitError(message, {
             code: 'WORKER_CRASHED',
             cause: event,
           });
@@ -427,8 +440,24 @@ export class WorkerBridge {
     this.worker = null;
     this.initPromise = null;
 
+    this.rejectInit?.(new WorkerTerminatedError('Worker terminated during initialization'));
     this.rejectPending(() => new WorkerTerminatedError('Worker terminated'));
     this.queryCache.clear();
+  }
+
+  /**
+   * Call `listener` when the worker fails, with the error every pending and
+   * later request then rejects with, whose code is `WORKER_CRASHED`. A table
+   * reports the failure once this way, rather than once for each query that
+   * fails after it. Returns a function that removes the listener.
+   *
+   * @internal
+   */
+  onWorkerFailure(listener: (error: WorkerInitError) => void): () => void {
+    this.failureListeners.add(listener);
+    return () => {
+      this.failureListeners.delete(listener);
+    };
   }
 
   /**
@@ -490,6 +519,13 @@ export class WorkerBridge {
     this.initPromise = null;
     this.rejectPending(() => error);
     this.queryCache.clear();
+    for (const listener of [...this.failureListeners]) {
+      try {
+        listener(error);
+      } catch (listenerError) {
+        console.error('[WorkerBridge] a worker-failure listener threw:', listenerError);
+      }
+    }
   }
 
   /**

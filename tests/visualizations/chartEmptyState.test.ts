@@ -358,7 +358,7 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
 });
 
 describe.each(HISTOGRAMS)('$name after a fetch fails', (chartCase) => {
-  it('keeps no bars to hover once a later fetch fails', async () => {
+  it('drops the bars it drew once a later fetch fails', async () => {
     const chart = create(chartCase);
     reportLayout();
     fetches[0]!.resolve(chartCase.values);
@@ -370,7 +370,7 @@ describe.each(HISTOGRAMS)('$name after a fetch fails', (chartCase) => {
     fetches[1]!.reject(new Error('Conversion Error'));
     await refetch;
 
-    // Nothing is drawn, so nothing is there to hover or click.
+    // Nothing is drawn, so no bar is left for hit-testing to find.
     expect(layout.barPositions).toEqual([]);
     expect(drewNoData()).toBe(false);
     chart.destroy();

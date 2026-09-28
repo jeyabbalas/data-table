@@ -344,6 +344,17 @@ panels and charts right across a trackpad sweep.
   chart's resize observer renders it as soon as it is laid out. Lazy charts made this visible on
   every scroll, for seconds at 200K rows while chart fetches queued. Value counts already drew
   nothing without data. Fixed: a histogram draws nothing until a fetch lands, and "No data" only
-  for a fetch that returned no values; one whose fetch fails draws nothing, as value counts do. A
-  browser test counts the "No data" draws in a sideways sweep: 46 in one run on main, none with the
-  fix.
+  for a fetch that returned no values and no nulls; one whose fetch fails draws nothing, as value
+  counts do. A browser test counts the "No data" draws at load and in two sideways sweeps: about
+  45 to 55 on main, in each of 10 runs, and none with the fix.
+- **Found in review of #152, not fixed (pre-existing).**
+  - A histogram whose refetch fails keeps the detail of the bar under the pointer, or of its
+    brush or selection, in the stats slot: the emitters that would replace it return early
+    without data, so moving over the blank chart or leaving it changes nothing. Its hover state
+    stays set too. Fix: reset the hover state when there is no data, and have
+    `emitRestingStats` clear the detail then.
+  - A failed chart now looks like a loading one: a blank canvas and the table-wide count (before,
+    both showed "No data"). The `error` event does not say which column failed:
+    `createVizForColumn` drops the `columnName` the chart reports, and only the unfiltered fetch
+    helpers put the column on the error. Fix: pass the column through, and consider marking a
+    failed chart's container.

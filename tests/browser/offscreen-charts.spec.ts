@@ -180,7 +180,9 @@ test('a growing container shows the columns it brings into view, with their char
   expect(misaligned).toEqual([]);
 });
 
-test('a chart draws nothing until its data lands, and never "No data"', async ({ page }) => {
+test('no chart draws "No data" at load or on scroll when every column has values', async ({
+  page,
+}) => {
   // Record every "No data" a canvas draws, from before the table exists. A
   // chart is laid out, and so rendered, before its first fetch lands: at load,
   // and as its column scrolls into view.

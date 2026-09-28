@@ -67,9 +67,9 @@ What to expect:
 
 - **Loading.** `loadData`, and `await createDataTable({ source })`, wait
   for the charts in view to draw their first data, not for every column's.
-- **Before its data.** A new chart stays blank until its first query
-  returns, at load and when its column scrolls into view. "No data" means
-  the column has no values.
+- **Before its data.** A new chart stays blank until its data arrives, at
+  load and when its column scrolls into view. "No data" means the column
+  has no values and no nulls.
 - **Filtering.** A filter change refreshes only the charts that exist. A
   column scrolled into view later gets its chart built with the filters in
   force then, so it is correct when it appears. Until then its stats show

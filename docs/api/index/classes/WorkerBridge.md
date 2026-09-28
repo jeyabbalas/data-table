@@ -178,6 +178,10 @@ reads it from disk as it loads, instead of holding the whole file in
 memory next to the table. A load that would not fit in memory rejects
 with a `LoadError` whose code is `LOAD_MEMORY_EXCEEDED`.
 
+How the source is read (`timezone`, `csv`, `json`, `parquet`) is checked
+before anything is sent: a bad value rejects with a `LoadError` whose
+code is `LOAD_INVALID_OPTIONS` or `LOAD_INVALID_TIMEZONE`.
+
 #### Parameters
 
 ##### source

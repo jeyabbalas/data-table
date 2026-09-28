@@ -104,10 +104,14 @@ describe('WorkerBridge.loadData — source options end to end', () => {
   });
 
   describe('CSV', () => {
-    it('reads a file without a header when told so', async () => {
-      const result = await load('1,2\n3,4\n', { format: 'csv', csv: { header: false } });
+    it('reads the first row as data when told there is no header', async () => {
+      // Detected, `a,b` is a header over one row of numbers.
+      const result = await load('a,b\n1,2\n', { format: 'csv', csv: { header: false } });
       expect(result.columns).toEqual(['__rowid__', 'column0', 'column1']);
-      expect(result.rowCount).toBe(2);
+      expect(await rows(result.tableName)).toEqual([
+        { column0: 'a', column1: 'b' },
+        { column0: '1', column1: '2' },
+      ]);
     });
 
     it('splits on the delimiter given, not the one detected', async () => {
@@ -123,13 +127,14 @@ describe('WorkerBridge.loadData — source options end to end', () => {
       ]);
     });
 
-    it('skips lines before the header', async () => {
-      const result = await load('exported 2024-01-01\nsecond note\nx,y\n1,2\n', {
-        format: 'csv',
-        csv: { skip: 2 },
-      });
-      expect(result.columns).toEqual(['__rowid__', 'x', 'y']);
-      expect(await rows(result.tableName)).toEqual([{ x: 1, y: 2 }]);
+    it('skips the lines given', async () => {
+      // Skipping the header line leaves rows of numbers, which have none.
+      const result = await load('x,y\n1,2\n3,4\n', { format: 'csv', csv: { skip: 1 } });
+      expect(result.columns).toEqual(['__rowid__', 'column0', 'column1']);
+      expect(await rows(result.tableName)).toEqual([
+        { column0: 1, column1: 2 },
+        { column0: 3, column1: 4 },
+      ]);
     });
 
     it('reads the null values given as NULL, so a column of numbers stays numeric', async () => {

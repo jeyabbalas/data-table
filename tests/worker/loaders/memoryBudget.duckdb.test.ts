@@ -141,9 +141,10 @@ describe('Parquet memory check (real DuckDB)', () => {
   );
 
   describe('with a projection', () => {
-    // A struct (two leaf columns), a name holding the ", " parquet_metadata
-    // joins path parts with, and twenty columns of random doubles the
-    // projections leave out. Four row groups.
+    // A struct holding a struct (three leaf columns, two a level down), a
+    // name holding the ", " parquet_metadata joins path parts with, and
+    // twenty columns of random doubles the projections leave out. Four row
+    // groups.
     const WIDE = Array.from({ length: 20 }, (_, i) => `random() + ${i} AS w${i}`).join(', ');
     const fileName = 'budget_projection.parquet';
     let meta: Record<string, unknown>[];
@@ -160,7 +161,8 @@ describe('Parquet memory check (real DuckDB)', () => {
 
     beforeAll(async () => {
       const data = await parquet(
-        `SELECT range AS id, {'x': range, 'y': random()} AS s, random() AS "a, b", ${WIDE}
+        `SELECT range AS id, {'x': range, 'y': {'p': random(), 'q': random()}} AS s,
+                random() AS "a, b", ${WIDE}
          FROM range(${ROWS})`,
         50_000,
       );
@@ -181,9 +183,9 @@ describe('Parquet memory check (real DuckDB)', () => {
 
     it('counts only its columns in the scan and prefetch estimates', async () => {
       const leaves = meta.filter((m) =>
-        ['s, x', 's, y', 'a, b'].includes(String(m['path_in_schema'])),
+        ['s, x', 's, y, p', 's, y, q', 'a, b'].includes(String(m['path_in_schema'])),
       );
-      expect(leaves).toHaveLength(12); // three leaves in each of four row groups
+      expect(leaves).toHaveLength(16); // four leaves in each of four row groups
       const groups = new Map<number, number>();
       const chunks = new Map<string, number>();
       for (const m of leaves) {

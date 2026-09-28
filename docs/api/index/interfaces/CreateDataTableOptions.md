@@ -1530,6 +1530,19 @@ Override the format detected from the source (e.g., if URL has no extension).
 
 ***
 
+### sourceOptions?
+
+> `optional` **sourceOptions?**: [`SourceOptions`](SourceOptions.md)
+
+Defined in: [DataTable.ts:170](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/DataTable.ts#L170)
+
+How `source` is read, per format: a CSV delimiter, header or null
+strings, the rows sampled to detect types, the Parquet columns to load,
+DuckDB's time zone. `table.loadData()` takes the same object. See
+[SourceOptions](SourceOptions.md).
+
+***
+
 ### statsPanelRegistry?
 
 > `optional` **statsPanelRegistry?**: [`StatsPanelRegistry`](../classes/StatsPanelRegistry.md)

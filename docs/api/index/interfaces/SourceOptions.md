@@ -2,21 +2,24 @@
 
 ***
 
-[@jeyabbalas/data-table](../../README.md) / [index](../README.md) / LoadOptions
+[@jeyabbalas/data-table](../../README.md) / [index](../README.md) / SourceOptions
 
-# Interface: LoadOptions
+# Interface: SourceOptions
 
-Defined in: [data/WorkerBridge.ts:31](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L31)
+Defined in: [data/sourceOptions.ts:68](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/sourceOptions.ts#L68)
 
-Low-level options accepted by [WorkerBridge.loadData](../classes/WorkerBridge.md#loaddata): the format,
-the table name, and how the source is read, per format (the fields of
-[SourceOptions](SourceOptions.md)). Most consumers use the higher-level
-`table.loadData(source, opts?)` facade instead, which builds these from a
-`File` / URL / Blob input and its `sourceOptions`.
+How a source is read: passed as `sourceOptions` to `createDataTable()`,
+`table.loadData()` and `actions.loadData()`, and spread into
+`WorkerBridge.loadData()`'s options. A load reads the entry for its
+source's format and ignores the others, so one object can go with sources
+of any format. Every entry is checked before the load starts: a value of
+the wrong type or out of range, or an unknown key, rejects the load with a
+`LoadError` whose code is `LOAD_INVALID_OPTIONS` (or
+`LOAD_INVALID_TIMEZONE`), and `details.option` names it.
 
-## Extends
+## Extended by
 
-- [`SourceOptions`](SourceOptions.md)
+- [`LoadOptions`](LoadOptions.md)
 
 ## Properties
 
@@ -28,18 +31,6 @@ Defined in: [data/sourceOptions.ts:84](https://github.com/jeyabbalas/data-table/
 
 Read by a CSV load.
 
-#### Inherited from
-
-[`SourceOptions`](SourceOptions.md).[`csv`](SourceOptions.md#csv)
-
-***
-
-### format
-
-> **format**: `"csv"` \| `"json"` \| `"parquet"`
-
-Defined in: [data/WorkerBridge.ts:32](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L32)
-
 ***
 
 ### json?
@@ -50,10 +41,6 @@ Defined in: [data/sourceOptions.ts:86](https://github.com/jeyabbalas/data-table/
 
 Read by a JSON load.
 
-#### Inherited from
-
-[`SourceOptions`](SourceOptions.md).[`json`](SourceOptions.md#json)
-
 ***
 
 ### parquet?
@@ -63,18 +50,6 @@ Read by a JSON load.
 Defined in: [data/sourceOptions.ts:88](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/sourceOptions.ts#L88)
 
 Read by a Parquet load.
-
-#### Inherited from
-
-[`SourceOptions`](SourceOptions.md).[`parquet`](SourceOptions.md#parquet)
-
-***
-
-### tableName?
-
-> `optional` **tableName?**: `string`
-
-Defined in: [data/WorkerBridge.ts:33](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L33)
 
 ***
 
@@ -95,7 +70,3 @@ UTC either way. It is a setting of the worker's DuckDB connection, so it
 holds for every table on one `WorkerBridge`, and every load sets it: to
 UTC unless given. Default: `'UTC'`. A name DuckDB does not know rejects
 the load with `LOAD_INVALID_TIMEZONE`.
-
-#### Inherited from
-
-[`SourceOptions`](SourceOptions.md).[`timezone`](SourceOptions.md#timezone)

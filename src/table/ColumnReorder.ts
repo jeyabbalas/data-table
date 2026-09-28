@@ -200,23 +200,21 @@ export class ColumnReorder {
   }
 
   /**
-   * Show the drop indicator at a position
+   * Show the drop indicator `left` px from the start of the header row, in
+   * the row's own pixels.
    */
-  private showDropIndicator(x: number): void {
+  private showDropIndicator(left: number): void {
     if (!this.dropIndicator || !this.headerRow) return;
 
-    // Find the header-row element (the direct container of column headers)
-    const headerRowInner = this.headerRow.querySelector(`.${this.classPrefix}-header-row`);
-    const container = headerRowInner ?? this.headerRow;
+    // The header-row element (the direct container of column headers)
+    const container = this.getRowContainer();
 
     // Ensure indicator is in the correct container
     if (this.dropIndicator.parentNode !== container) {
       container.appendChild(this.dropIndicator);
     }
 
-    // Position relative to the container
-    const containerRect = container.getBoundingClientRect();
-    this.dropIndicator.style.left = `${x - containerRect.left}px`;
+    this.dropIndicator.style.left = `${left}px`;
     this.dropIndicator.style.display = 'block';
   }
 
@@ -309,9 +307,11 @@ export class ColumnReorder {
   private handleMouseMove(event: MouseEvent): void {
     if (this.destroyed) return;
 
-    // No button held: it was let go where this document could not hear it,
-    // in another window after an alt-tab. Nothing was dropped.
-    if (event.buttons === 0) {
+    // No button held on a real move: it was let go where this document could
+    // not hear it, in another window after an alt-tab. Nothing was dropped.
+    // A synthetic move, as a host's test harness sends, says nothing about
+    // the button: its `buttons` is 0 unless set.
+    if (event.isTrusted && event.buttons === 0) {
       this.cancelDrag();
       return;
     }
@@ -388,56 +388,72 @@ export class ColumnReorder {
 
     // Update drop indicator
     this.dropIndex = drop.index;
-    this.showDropIndicator(drop.x);
+    this.showDropIndicator(drop.left);
+  }
+
+  /**
+   * How many screen pixels one of the header row's own pixels takes: 1 unless
+   * an ancestor is scaled, by a `transform` or CSS `zoom`. Rects are scaled;
+   * offsets, scroll positions and the layout's widths are not.
+   */
+  private rowScale(row: HTMLElement, rect: DOMRect): number {
+    return row.offsetWidth > 0 && rect.width > 0 ? rect.width / row.offsetWidth : 1;
   }
 
   /**
    * The gap before the first header whose middle is past the pointer, in DOM
-   * order, and its x: a header's left edge, or the last one's right edge.
+   * order, and where it is in the row: a header's left edge, or the last
+   * one's right edge.
    */
-  private dropFromHeaders(clientX: number): { index: number; x: number } | null {
+  private dropFromHeaders(clientX: number): { index: number; left: number } | null {
     const headers = this.getHeaderElements();
     if (headers.length === 0) return null;
+    const row = this.getRowContainer();
+    const rowRect = row.getBoundingClientRect();
+    const toRow = (x: number) => (x - rowRect.left) / this.rowScale(row, rowRect);
 
     for (let i = 0; i < headers.length; i++) {
       const rect = headers[i]!.getBoundingClientRect();
-      if (clientX < rect.left + rect.width / 2) return { index: i, x: rect.left };
+      if (clientX < rect.left + rect.width / 2) return { index: i, left: toRow(rect.left) };
       // After the last column
-      if (i === headers.length - 1) return { index: headers.length, x: rect.right };
+      if (i === headers.length - 1) return { index: headers.length, left: toRow(rect.right) };
     }
     return null;
   }
 
   /**
-   * The gap to drop into, as an index into the layout's columns, and where
-   * it is on screen, from the layout and the header scroll.
+   * The gap to drop into, as an index into the layout's columns, and where it
+   * is in the header row, from the layout and the header scroll.
    *
-   * The pinned block stays at the left edge of the header viewport however
-   * far the rest has scrolled, and a pinned column drops between pinned
-   * columns, by the pointer's offset into the viewport. An unpinned column
-   * drops before or after the column under the pointer, in layout
-   * coordinates, and never before the first unpinned column still in view:
-   * let go on the pinned block, it lands at the block's edge, not among the
-   * columns scrolled out of view beneath it. The pointer counts only inside
-   * the viewport, and the gap is drawn where the column will land, or at the
-   * block's edge for a column there that the block half covers.
+   * An unpinned column drops before or after the column under the pointer,
+   * in layout coordinates, and never before the first unpinned column still
+   * in view: let go on the pinned block, which stays at the left edge of the
+   * viewport however far the rest has scrolled, it lands at the block's
+   * edge, not among the columns scrolled out of view beneath it. The pointer
+   * counts only inside the viewport, and the indicator shows where the
+   * column will land, or the block's edge for a column the block half
+   * covers. Pinned columns do not move, as in `endDrag`: no gap for them.
    */
   private dropFromLayout(
     clientX: number,
     layout: ColumnLayout,
-  ): { index: number; x: number } | null {
+  ): { index: number; left: number } | null {
     const count = layout.columns.length;
     const dragged = layout.indexOf(this.draggedColumn!);
-    if (count === 0 || dragged === -1) return null;
+    const { pinnedCount, pinnedWidth } = layout;
+    if (count === 0 || dragged === -1 || dragged < pinnedCount) return null;
 
+    const row = this.getRowContainer();
+    const rowRect = row.getBoundingClientRect();
+    const scale = this.rowScale(row, rowRect);
     const scroller = this.headerRow.closest<HTMLElement>(`.${this.classPrefix}-header-scroll`);
     const scrollLeft = scroller?.scrollLeft ?? 0;
     const viewWidth = scroller ? scroller.clientWidth : Infinity;
-    // Where layout x = 0 is on screen, and where the viewport starts.
-    const rowLeft = this.getRowContainer().getBoundingClientRect().left;
-    const viewLeft = rowLeft + scrollLeft;
-    const x = Math.min(Math.max(clientX - viewLeft, 0), viewWidth);
-    const { pinnedCount, pinnedWidth } = layout;
+    // The pointer's offset into the header viewport, in the layout's pixels.
+    const viewLeft = scroller
+      ? scroller.getBoundingClientRect().left + scroller.clientLeft * scale
+      : rowRect.left;
+    const x = Math.min(Math.max((clientX - viewLeft) / scale, 0), viewWidth);
 
     /** The gap nearest `at` among the columns `[from, to)`, by their middles. */
     const gapAt = (at: number, from: number, to: number): number => {
@@ -446,11 +462,6 @@ export class ColumnReorder {
       }
       return to;
     };
-
-    if (dragged < pinnedCount) {
-      const index = gapAt(x, 0, pinnedCount);
-      return { index, x: viewLeft + layout.leftAt(index) };
-    }
 
     // The first unpinned column not wholly beneath the pinned block.
     let first = pinnedCount;
@@ -463,9 +474,9 @@ export class ColumnReorder {
     const index = Math.max(gapAt(x + scrollLeft, pinnedCount, count), first);
     return {
       index,
-      x: Math.min(
-        Math.max(rowLeft + layout.leftAt(index), viewLeft + pinnedWidth),
-        viewLeft + viewWidth,
+      left: Math.min(
+        Math.max(layout.leftAt(index), scrollLeft + pinnedWidth),
+        scrollLeft + viewWidth,
       ),
     };
   }

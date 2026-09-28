@@ -343,3 +343,33 @@ test('a drag ends without a drop, and lets go of its column, when the window los
   await settle(page);
   expect(await probe(page, 'order')).toEqual(before);
 });
+
+for (const scaling of ['transform: scale(0.8); transform-origin: 0 0;', 'zoom: 1.25;']) {
+  test(`a drop lands before the header under the pointer in a host with ${scaling.split(';')[0]}`, async ({
+    page,
+  }) => {
+    // Scaled, rects are in screen pixels and scroll positions and the
+    // layout's widths are not.
+    await mountTable(page, {
+      css: `#${HOST_ID} { ${scaling} }`,
+      width: scaling.includes('1.25') ? 900 : 1200,
+    });
+    await wheelIntoView(page, 'c150');
+    const inView = await probe(page, 'inView');
+    const target = inView[inView.indexOf('c150') - 4]!;
+    const before = await probe(page, 'order');
+
+    const t = (await header(page, target).boundingBox())!;
+    await dragTo(page, 'c150', t.x + t.width / 4, t.y + t.height / 2);
+    expect(await indicatorLeft(page), 'the indicator at the target header’s left edge').toBeCloseTo(
+      t.x,
+      0,
+    );
+    await page.mouse.up();
+    await settle(page);
+
+    const expected = before.filter((c) => c !== 'c150');
+    expected.splice(expected.indexOf(target), 0, 'c150');
+    expect(await probe(page, 'order')).toEqual(expected);
+  });
+}

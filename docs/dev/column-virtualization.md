@@ -363,7 +363,7 @@ panels and charts right across a trackpad sweep.
   - A fetch left out of reach as the view moved during a change was not aborted, and the retry
     and relation waits reconciled during the filter-change scroll animation, reading rows it was
     about to scroll away from. Both fixed.
-- **Found in the second review of #151, not fixed.** Each is rare, bounded, and at least partly
+- **Found in the second review of #151, since fixed.** Each is rare, bounded, and at least partly
   pre-existing.
   - Derived-column changes are not serialized, and they share the manager's list of columns. A
     removal of the only derived column, landing while a vector add of another is at its last

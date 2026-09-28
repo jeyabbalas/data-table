@@ -425,7 +425,7 @@ describe('a load while derived-column changes wait or run', () => {
     load.finish();
     await drain();
     const dropHelper = pending(h)[0]!;
-    expect(dropHelper.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_v_0__"/);
+    expect(dropHelper.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_0_v_0__"/);
     // A derived column added to the new data next would build a helper table
     // of the same name, which a DROP landing late would take away.
     expect(loaded).toBe(false);

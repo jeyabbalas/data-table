@@ -340,7 +340,7 @@ if (!existing.includes('revenue_per_user')) {
 - **Type changes drop filters on that column.** If a derived column's detected type changes (e.g., a rewrite turns `INTEGER` into `VARCHAR`), the old filter doesn't survive.
 - **Undo/redo for derived changes is async.** `await` the result if you need to observe post-reconciliation state.
 - **Vector columns stay in memory (and IDB snapshots).** Large vectors — hundreds of thousands of entries — cost memory and enlarge session snapshots. Prefer expression columns whenever the derivation can be expressed as SQL.
-- **Removing a non-derived column via `removeDerivedColumn` is a no-op.** It only touches columns marked `isDerived`. To hide a base column, use `hideColumn()`.
+- **`removeDerivedColumn` on a non-derived column rejects with `NOT_FOUND`.** It only removes columns marked `isDerived`, and leaves the table as it was. To hide a base column, use `hideColumn()`.
 
 ## Related
 

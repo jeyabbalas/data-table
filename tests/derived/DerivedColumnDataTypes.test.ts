@@ -293,7 +293,7 @@ describe('VIEW SQL structure', () => {
     // Phase 1: join on the explicit __rowid__ column synthesized at load,
     // not the implicit DuckDB `rowid` pseudo-column (which is reassigned on
     // table rewrites such as CREATE TABLE AS SELECT).
-    expect(view).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
+    expect(view).toContain('LEFT JOIN "__dt_vec_0_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
     expect(view).not.toMatch(/ON\s+t\.rowid\s*=/);
   });
 
@@ -318,7 +318,9 @@ describe('VIEW SQL structure', () => {
     expect(lastView).toContain('(price * 2) AS "doubled"');
     // Vector JOIN on explicit __rowid__ (Phase 1).
     expect(lastView).toContain('h1."scores"');
-    expect(lastView).toContain('LEFT JOIN "__dt_vec_scores_0__" h1 ON t.__rowid__ = h1.__rowid__');
+    expect(lastView).toContain(
+      'LEFT JOIN "__dt_vec_0_scores_0__" h1 ON t.__rowid__ = h1.__rowid__',
+    );
   });
 });
 

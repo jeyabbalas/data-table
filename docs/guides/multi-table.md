@@ -89,9 +89,12 @@ working.
 - **Distinct `tableName` per table.** DuckDB creates one table per call;
   reusing a name replaces the previous one's data. `tableName: 'trips'` and
   `tableName: 'users'` stay separate inside one DuckDB database.
-- **Derived-column VIEWs are already namespaced** as `__dt_view_<tableName>__`
-  ([`src/derived/DerivedColumnManager.ts:61`](../../src/derived/DerivedColumnManager.ts)),
-  so adding a derived column on one table doesn't alter the other's schema.
+- **Derived columns are already namespaced per table.** The VIEW is
+  `__dt_view_<tableName>__`
+  ([`src/derived/DerivedColumnManager.ts:79`](../../src/derived/DerivedColumnManager.ts)),
+  and each table's vector columns get helper tables of their own, so adding,
+  editing or removing a derived column on one table leaves the other's alone,
+  even when both have a vector column of the same name.
 
 **Caveats (honest):**
 

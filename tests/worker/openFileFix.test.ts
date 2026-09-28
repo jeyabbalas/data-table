@@ -224,6 +224,76 @@ describe('openFileFixScript', () => {
     expect(runtime.opened).toBe(1);
     expect(answer(mod, 4096)).toEqual([SIZE, 0, 1]);
   });
+
+  it('says once that it runs without the fix when the module’s heap cannot be redefined', () => {
+    const warnings: string[] = [];
+    const scope = workerScope({
+      console: { warn: (...args: unknown[]) => warnings.push(args.map(String).join(' ')) },
+    });
+    publish(scope, fakeRuntime());
+    const frozen = () =>
+      Object.preventExtensions(
+        Object.create(
+          { HEAPF64: fakeHeap() },
+          { _malloc: { value: () => 4096, enumerable: true } },
+        ) as FakeModule,
+      );
+
+    open(scope, frozen());
+    open(scope, frozen());
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      '[data-table] DuckDB runs without the fix for files opened past 2 GiB of memory',
+    );
+  });
+
+  it('puts an accessor HEAPF64 back as it was, and hands it a heap the call grew', () => {
+    const scope = workerScope();
+    publish(scope, fakeRuntime());
+    const grown = fakeHeap();
+    let current = fakeHeap();
+    let sets = 0;
+    const get = () => current;
+    const set = (next: Heap) => {
+      current = next;
+      sets++;
+    };
+    const mod = {
+      _malloc(this: FakeModule) {
+        // Emscripten replaces its views when malloc grows the heap.
+        this.HEAPF64 = grown;
+        return ABOVE_2_GIB;
+      },
+    } as FakeModule;
+    Object.defineProperty(mod, 'HEAPF64', { get, set, configurable: true, enumerable: false });
+
+    open(scope, mod);
+
+    expect(Object.getOwnPropertyDescriptor(mod, 'HEAPF64')).toEqual({
+      get,
+      set,
+      configurable: true,
+      enumerable: false,
+    });
+    expect(sets).toBe(1);
+    expect(current).toBe(grown);
+    expect(answer(mod, ABOVE_2_GIB)).toEqual([SIZE, 0, 1]);
+  });
+
+  it('leaves an inherited heap inherited', () => {
+    const scope = workerScope();
+    publish(scope, fakeRuntime());
+    const mod = Object.create(
+      { HEAPF64: fakeHeap() },
+      { _malloc: { value: () => ABOVE_2_GIB, enumerable: true } },
+    ) as FakeModule;
+
+    open(scope, mod);
+
+    expect(Object.getOwnPropertyDescriptor(mod, 'HEAPF64')).toBeUndefined();
+    expect(answer(mod, ABOVE_2_GIB)).toEqual([SIZE, 0, 1]);
+  });
 });
 
 describe('duckdbWorkerSource', () => {

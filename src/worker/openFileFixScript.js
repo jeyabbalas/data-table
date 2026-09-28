@@ -6,8 +6,11 @@
  * It wraps the `openFile` of duckdb-wasm's runtime. For the call, the
  * module's `HEAPF64` is a view that moves a write at a negative index to that
  * index plus 2^29, which is where `(ptr >> 3) + i` wrapped from for a pointer
- * past 2 GiB; if the call grows the heap, the view follows the new one. A
- * `HEAPF64` it cannot redefine leaves the call to duckdb-wasm as it is.
+ * past 2 GiB; if the call grows the heap, the view follows the new one.
+ * After the call the module's own `HEAPF64` is put back as it was, and a
+ * heap the call grew is handed to it as Emscripten would have. A `HEAPF64`
+ * it cannot redefine leaves the call to duckdb-wasm as it is, and the
+ * worker's console says so, once.
  *
  * The runtime is published as `DUCKDB_RUNTIME` when the WebAssembly module is
  * instantiated, after the worker's script has run, so the assignment is
@@ -16,6 +19,7 @@
  */
 (function installOpenFileFix(scope) {
   const fixed = new WeakSet();
+  let warned = false;
 
   const fix = (runtime) => {
     if (!runtime || typeof runtime.openFile !== 'function' || fixed.has(runtime)) return;
@@ -23,7 +27,8 @@
     const openFile = runtime.openFile;
     runtime.openFile = (mod, ...args) => {
       const own = Object.getOwnPropertyDescriptor(mod, 'HEAPF64');
-      let heap = mod.HEAPF64;
+      const initial = mod.HEAPF64;
+      let heap = initial;
       // `(ptr >> 3) + i` for a pointer in [2^31, 2^32) is `(ptr >>> 3) + i - 2^29`.
       const unwrapped = (key) => {
         if (typeof key !== 'string') return null;
@@ -47,29 +52,33 @@
           },
         },
       );
-      const enumerable = own ? own.enumerable : true;
       try {
         Object.defineProperty(mod, 'HEAPF64', {
           configurable: true,
-          enumerable,
+          enumerable: own ? own.enumerable : true,
           get: () => view,
           // Emscripten replaces its views when the heap grows.
           set: (next) => {
             heap = next;
           },
         });
-      } catch {
+      } catch (error) {
+        if (!warned && scope.console) {
+          warned = true;
+          scope.console.warn(
+            '[data-table] DuckDB runs without the fix for files opened past 2 GiB of memory: ' +
+              "its module's HEAPF64 cannot be redefined.",
+            error,
+          );
+        }
         return openFile.apply(runtime, [mod, ...args]);
       }
       try {
         return openFile.apply(runtime, [mod, ...args]);
       } finally {
-        Object.defineProperty(mod, 'HEAPF64', {
-          configurable: true,
-          enumerable,
-          writable: true,
-          value: heap,
-        });
+        if (own) Object.defineProperty(mod, 'HEAPF64', own);
+        else delete mod.HEAPF64;
+        if (heap !== initial) mod.HEAPF64 = heap;
       }
     };
   };

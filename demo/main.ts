@@ -392,10 +392,20 @@ function formatSize(bytes: number): string {
   return `${Math.ceil(bytes / 2 ** 10)} KB`;
 }
 
-/** How long the last load took, for the info bar. */
+/** How long the last load took, for the info bar; null while one runs. */
 let lastLoadSeconds: number | null = null;
+/**
+ * The info bar's text while a load runs. A load changes the table's state
+ * as it goes, and the counts that `updateTableInfo` would show meanwhile are
+ * the old dataset's or none.
+ */
+let loadingMessage: string | null = null;
 
 function updateTableInfo(): void {
+  if (loadingMessage !== null) {
+    updateInfo(loadingMessage);
+    return;
+  }
   if (!table) return;
   const { state } = table;
   const tableName = state.tableName.get();
@@ -482,11 +492,19 @@ async function cacheLoadedSource(
 }
 
 async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promise<void> {
-  updateInfo(
+  lastLoadSeconds = null;
+  loadingMessage =
     `Loading <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
-      `(${formatSize(prepared.file.size)})...`,
-  );
+    `(${formatSize(prepared.file.size)})...`;
+  updateInfo(loadingMessage);
+  try {
+    await loadPreparedNow(prepared, opts);
+  } finally {
+    loadingMessage = null;
+  }
+}
 
+async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Promise<void> {
   // tableName policy:
   // - knownTableName wins (boot-time restore paths pass the stored ID).
   // - File upload → unique per-click ID, so re-uploading the same file
@@ -525,12 +543,12 @@ async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promis
         /* localStorage unavailable */
       }
       setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null);
+      loadingMessage = null;
       updateTableInfo();
       return;
     }
   }
 
-  const started = performance.now();
   try {
     if (!table) {
       // Mount first, then load. `createDataTable` with a `source` rejects
@@ -553,12 +571,15 @@ async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promis
       // nothing changed mid-flight.
       table.setColorScheme(currentScheme);
     }
+    // Timed from here: the first load's figure leaves out DuckDB's start-up.
+    const started = performance.now();
     await table.loadData(prepared.file, {
       tableName,
       sourceFormat: prepared.format,
     });
 
     lastLoadSeconds = (performance.now() - started) / 1000;
+    loadingMessage = null;
     updateTableInfo();
 
     // Persist the localStorage pointer AFTER the load resolves — a failed
@@ -626,7 +647,28 @@ async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promis
       updateInfo('Cached session was stale and has been cleared. Load a file or URL to continue.');
       return;
     }
-    updateInfo(`Error: ${escapeHtml(error instanceof Error ? error.message : 'Unknown error')}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    // A restore from the cache that fails would fail on every refresh after
+    // it: forget the cached dataset, as above.
+    if (opts.skipCache) {
+      try {
+        await clearCachedData(tableName);
+      } catch {
+        /* ignore */
+      }
+      try {
+        localStorage.removeItem(LAST_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+      updateInfo(
+        `Could not restore <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
+          `from this browser's cache, which has been cleared: ${escapeHtml(message)}. ` +
+          `Load a file or URL to continue.`,
+      );
+      return;
+    }
+    updateInfo(`Error: ${escapeHtml(message)}`);
   }
 }
 
@@ -668,6 +710,31 @@ function wireTableEvents(t: DataTable): void {
   syncDataDependentBtns(t.state.tableName.get());
 }
 
+// ----- One load at a time -----
+// Two loads at once would mount two tables and DuckDB workers if the page
+// has none yet, and hold two large tables in memory if it has.
+const exampleChips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip[data-url]'));
+let loadRunning = false;
+
+function setLoadControlsDisabled(disabled: boolean): void {
+  loadFileBtn.disabled = disabled;
+  loadUrlBtn.disabled = disabled;
+  for (const chip of exampleChips) chip.disabled = disabled;
+}
+
+/** Run `task` unless a load is running, with the load controls off meanwhile. */
+async function exclusively(task: () => Promise<void>): Promise<void> {
+  if (loadRunning) return;
+  loadRunning = true;
+  setLoadControlsDisabled(true);
+  try {
+    await task();
+  } finally {
+    loadRunning = false;
+    setLoadControlsDisabled(false);
+  }
+}
+
 // ----- UI wiring -----
 exportBtn.addEventListener('click', () => table?.openExportDialog());
 undoBtn.addEventListener('click', () => table?.actions.undo());
@@ -691,27 +758,28 @@ clearSessionBtn.addEventListener('click', async () => {
 
 loadFileBtn.addEventListener('click', () => {
   const file = fileInput.files?.[0];
-  if (file) void loadSource(file);
+  if (file) void exclusively(() => loadSource(file));
 });
 loadUrlBtn.addEventListener('click', () => {
   const url = urlInput.value.trim();
-  if (url) void loadSource(url);
+  if (url) void exclusively(() => loadSource(url));
 });
+// The URL input stays enabled while a load runs; `exclusively` turns Enter away.
 urlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !loadUrlBtn.disabled) {
+  if (e.key === 'Enter') {
     const url = urlInput.value.trim();
-    if (url) void loadSource(url);
+    if (url) void exclusively(() => loadSource(url));
   }
 });
 
 // Example dataset chips — clicking loads the URL through the same path as the
 // URL input, so format auto-detection and `?url=` syncing both happen for free.
-for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]')) {
+for (const chip of exampleChips) {
   chip.addEventListener('click', () => {
     const url = chip.dataset.url;
-    if (!url || loadUrlBtn.disabled) return;
+    if (!url || loadRunning) return;
     urlInput.value = url;
-    void loadSource(url);
+    void exclusively(() => loadSource(url));
   });
 }
 
@@ -724,7 +792,11 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
   updateInfo('Load a file or URL to get started.');
 
   await sessionStore.open();
+  await exclusively(restoreSession);
+})();
 
+/** Load what the page was opened for: a shared `?url=`, or the last session. */
+async function restoreSession(): Promise<void> {
   // Shared `?url=` deep links take precedence over the localStorage
   // session-restore. A friend opening the link expects to see the dataset
   // referenced by the URL, not whatever happened to be in this browser's
@@ -776,7 +848,7 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
       urlInput.value = session.source;
       // No cache — re-fetch the URL. Hashing the fresh bytes lets us
       // detect content changes vs. the previous session.
-      void loadSource(session.source);
+      await loadSource(session.source);
     } else {
       updateInfo(
         `Previous session: <strong>${escapeHtml(session.source)}</strong> — ` +
@@ -796,4 +868,4 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
   } catch {
     /* localStorage unavailable */
   }
-})();
+}

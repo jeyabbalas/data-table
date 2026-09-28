@@ -7,8 +7,10 @@
  * must never read a dataset itself. These specs count every read of the
  * dataset's File on the page (`arrayBuffer`, `text`, `stream`, `bytes`),
  * and check what the refresh cache in IndexedDB holds: a Parquet source is
- * cached as the file itself, and restored from it unread; a small CSV as a
- * Parquet export, as before.
+ * cached as the file itself, and restored from it unread, with its session;
+ * a small CSV as a Parquet export, as before. And the demo runs one load at
+ * a time, clears a cached dataset it cannot restore, and shows what it did
+ * not write as text.
  */
 
 import { createHash } from 'node:crypto';
@@ -23,7 +25,7 @@ const PARQUET = fixture('parquet/titanic.parquet');
 const CSV = fixture('csv/titanic.csv');
 const ROWS = '891 rows';
 
-type Probe = { __reads: string[]; __injected: boolean };
+type Probe = { __reads: string[]; __injected: boolean; __infoTexts: string[] };
 
 /**
  * Count reads of the dataset's File named `name`, from before the demo's
@@ -71,6 +73,91 @@ async function sessionTableName(page: Page): Promise<string> {
   return (await handle.jsonValue())!;
 }
 
+/** Record whether markup ever lands in the info bar, from before the demo's scripts run. */
+async function watchInjection(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as Probe;
+    w.__injected = false;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const target = record.target as Element;
+        if (!target.closest?.('#table-info')) continue;
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches('img') || node.querySelector('img'))) {
+            w.__injected = true;
+          }
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+}
+
+async function injected(page: Page): Promise<boolean> {
+  return page.evaluate(() => (window as unknown as Probe).__injected);
+}
+
+const nameHeader = (page: Page) =>
+  page.locator('#table-container [role="columnheader"][data-column="Name"]');
+
+/** Sort by Name, and wait for the session snapshot to hold the sort. */
+async function sortByNameAndSave(page: Page, tableName: string): Promise<void> {
+  await nameHeader(page).locator('.dt-col-sort-btn').click();
+  await expect(nameHeader(page)).toHaveAttribute('aria-sort', 'ascending');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (key) => {
+          const db = await new Promise<IDBDatabase>((done, fail) => {
+            const req = indexedDB.open('dt-sessions', 1);
+            req.onsuccess = () => done(req.result);
+            req.onerror = () => fail(req.error);
+          });
+          const snapshot = await new Promise<{ sortColumns?: { column: string }[] } | undefined>(
+            (done, fail) => {
+              const get = db.transaction('sessions', 'readonly').objectStore('sessions').get(key);
+              get.onsuccess = () => done(get.result as { sortColumns?: { column: string }[] });
+              get.onerror = () => fail(get.error);
+            },
+          );
+          db.close();
+          return snapshot?.sortColumns?.map((s) => s.column) ?? [];
+        }, tableName),
+      { timeout: 30_000 },
+    )
+    .toEqual(['Name']);
+}
+
+/** Put a row in the refresh cache and point the last session at it, as a demo would have. */
+async function seedCache(
+  page: Page,
+  row: { tableName: string; bytes: number[]; format: string; sourceName: string },
+): Promise<void> {
+  await page.evaluate(async (row) => {
+    const db = await new Promise<IDBDatabase>((done, fail) => {
+      const req = indexedDB.open('dt-data-cache', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('data', { keyPath: 'tableName' });
+      req.onsuccess = () => done(req.result);
+      req.onerror = () => fail(req.error);
+    });
+    await new Promise<void>((done, fail) => {
+      const tx = db.transaction('data', 'readwrite');
+      tx.objectStore('data').put({
+        tableName: row.tableName,
+        data: new Blob([new Uint8Array(row.bytes)]),
+        format: row.format,
+        sourceName: row.sourceName,
+      });
+      tx.oncomplete = () => done();
+      tx.onerror = () => fail(tx.error);
+    });
+    db.close();
+    localStorage.setItem(
+      'dt-last-session',
+      JSON.stringify({ type: 'file', source: row.sourceName, tableName: row.tableName }),
+    );
+  }, row);
+}
+
 interface CacheRow {
   fields: string[];
   format: unknown;
@@ -115,9 +202,10 @@ async function cacheRow(page: Page, tableName: string): Promise<CacheRow> {
   return (await readCacheRow(page, tableName))!;
 }
 
-test('hands an uploaded Parquet file to the library unread, and caches the file itself', async ({
+test('hands an uploaded Parquet file to the library unread, and restores it from the cache with its session', async ({
   page,
 }) => {
+  test.slow();
   await countReads(page, 'titanic.parquet');
   await openDemo(page);
 
@@ -134,14 +222,19 @@ test('hands an uploaded Parquet file to the library unread, and caches the file 
     magic: 'PAR1',
   });
 
-  // A refresh restores the dataset from the cached file, again unread.
+  await sortByNameAndSave(page, tableName);
+
+  // A refresh restores the dataset from the cached file, again unread, and
+  // its session with it.
   await page.reload();
   await expectTable(page);
   expect(await sessionTableName(page)).toBe(tableName);
   expect(await reads(page)).toEqual([]);
+  await expect(nameHeader(page)).toHaveAttribute('aria-sort', 'ascending');
 });
 
 test('caches a small CSV as a Parquet export, and restores it', async ({ page }) => {
+  test.slow();
   await countReads(page, 'titanic.csv');
   await openDemo(page);
 
@@ -162,7 +255,10 @@ test('caches a small CSV as a Parquet export, and restores it', async ({ page })
   await expectTable(page);
 });
 
-test('names a URL dataset by its content hash, and caches the fetched file', async ({ page }) => {
+test('names a URL dataset by its content hash, caches it, and reopens its ?url= link with its session', async ({
+  page,
+}) => {
+  test.slow();
   await openDemo(page);
   const url = `${new URL(page.url()).origin}/fixtures/parquet/titanic.parquet`;
   const hash = createHash('sha256').update(readFileSync(PARQUET)).digest('hex').slice(0, 16);
@@ -180,6 +276,19 @@ test('names a URL dataset by its content hash, and caches the fetched file', asy
     size: readFileSync(PARQUET).byteLength,
     magic: 'PAR1',
   });
+
+  // The same content again is already loaded: nothing loads, and no time shows.
+  await page.click('#load-url-btn');
+  await expect(page.locator('#table-info')).toContainText(ROWS);
+  await expect(page.locator('#table-info')).not.toContainText('loaded in');
+
+  await sortByNameAndSave(page, tableName);
+  // The page's own address is now the shareable link to the dataset.
+  expect(new URL(page.url()).searchParams.get('url')).toBe(url);
+  await page.reload();
+  await expectTable(page);
+  expect(await sessionTableName(page)).toBe(tableName);
+  await expect(nameHeader(page)).toHaveAttribute('aria-sort', 'ascending');
 });
 
 test('restores a dataset an older demo cached as Parquet bytes', async ({ page }) => {
@@ -230,25 +339,124 @@ test('a failed load leaves the table in place for the next one', async ({ page }
   await expect(page.locator('#table-container .dt-root')).toHaveCount(1);
 });
 
-test('shows a shared ?url= link as text, not markup', async ({ page }) => {
-  await page.addInitScript(() => {
+test('runs one load at a time', async ({ page }) => {
+  await openDemo(page);
+  await page.setInputFiles('#file-input', PARQUET);
+
+  // The second click would mount a second table and DuckDB worker.
+  await page.locator('#load-file-btn').dblclick();
+  await expect(page.locator('#load-file-btn')).toBeDisabled();
+  await expect(page.locator('#load-url-btn')).toBeDisabled();
+  for (const chip of await page.locator('.chip[data-url]').all()) await expect(chip).toBeDisabled();
+  // The URL input stays enabled: Enter there must not start a load either.
+  await page.fill('#url-input', `${new URL(page.url()).origin}/fixtures/parquet/titanic.parquet`);
+  await page.press('#url-input', 'Enter');
+
+  await expectTable(page);
+  await expect(page.locator('#table-container .dt-root')).toHaveCount(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('dt-last-session')!).type)).toBe(
+    'file',
+  );
+  expect(new URL(page.url()).searchParams.has('url')).toBe(false);
+  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#load-url-btn')).toBeEnabled();
+});
+
+test('shows the loading file, not the last dataset, until the load ends', async ({ page }) => {
+  test.slow();
+  await openDemo(page);
+  await loadFile(page, PARQUET);
+  await expectTable(page);
+  await expect(page.locator('#table-info')).toContainText('loaded in');
+
+  await page.evaluate(() => {
     const w = window as unknown as Probe;
-    w.__injected = false;
-    new MutationObserver((records) => {
-      for (const record of records) {
-        const target = record.target as Element;
-        if (!target.closest?.('#table-info')) continue;
-        for (const node of record.addedNodes) {
-          if (node instanceof Element && (node.matches('img') || node.querySelector('img'))) {
-            w.__injected = true;
-          }
-        }
-      }
-    }).observe(document, { childList: true, subtree: true });
+    const info = document.querySelector('#table-info')!;
+    w.__infoTexts = [];
+    new MutationObserver(() => w.__infoTexts.push(info.textContent ?? '')).observe(info, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
   });
+  await loadFile(page, CSV);
+  await expectTable(page);
+  await expect(page.locator('#table-info')).toContainText('loaded in');
+
+  const texts = await page.evaluate(() => (window as unknown as Probe).__infoTexts);
+  const firstCounts = texts.findIndex((text) => text.includes('rows'));
+  expect(firstCounts).toBeGreaterThan(0);
+  for (const text of texts.slice(0, firstCounts)) expect(text).toMatch(/^Loading titanic\.csv \(/);
+  // Counts shown before the load ended would carry the last load's time, and
+  // on a first load that one included DuckDB's start-up.
+  expect(new Set(texts.slice(firstCounts)).size).toBe(1);
+  expect(texts.at(-1)).toMatch(/891 rows.*\| loaded in \d+\.\d s$/);
+});
+
+test('clears a cached dataset it cannot restore, instead of failing on every refresh', async ({
+  page,
+}) => {
+  await watchInjection(page);
+  await openDemo(page);
+  const sourceName = '<img src="x" alt="">.parquet';
+  await seedCache(page, {
+    tableName: 'dt_file_broken',
+    bytes: Array.from(Buffer.from('not a parquet file')),
+    format: 'parquet',
+    sourceName,
+  });
+
+  await page.reload();
+  await expect(page.locator('#table-info')).toContainText('Could not restore', { timeout: 90_000 });
+  await expect(page.locator('#table-info')).toContainText(sourceName);
+  expect(await injected(page)).toBe(false);
+  expect(await readCacheRow(page, 'dt_file_broken')).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('dt-last-session'))).toBeNull();
+
+  await page.reload();
+  await expect(page.locator('#table-info')).toHaveText('Load a file or URL to get started.');
+});
+
+test('shows a shared ?url= link as text, not markup', async ({ page }) => {
+  await watchInjection(page);
   const payload = '<img src="x" alt="">';
   await page.goto(`./?url=${encodeURIComponent(payload)}`);
 
   await expect(page.locator('#table-info')).toContainText('Error', { timeout: 90_000 });
-  expect(await page.evaluate(() => (window as unknown as Probe).__injected)).toBe(false);
+  expect(await injected(page)).toBe(false);
+});
+
+test('shows a failed load’s error as text, not markup', async ({ page }) => {
+  await watchInjection(page);
+  const message = '<img src="x" alt="">';
+  await page.addInitScript((message) => {
+    const fetchOriginal = window.fetch.bind(window);
+    window.fetch = (input, init) =>
+      String(input).includes('/refused/')
+        ? Promise.reject(new Error(message))
+        : fetchOriginal(input, init);
+  }, message);
+  await openDemo(page);
+
+  await page.fill('#url-input', `${new URL(page.url()).origin}/refused/data.parquet`);
+  await page.click('#load-url-btn');
+
+  await expect(page.locator('#table-info')).toHaveText(`Error: ${message}`, { timeout: 90_000 });
+  expect(await injected(page)).toBe(false);
+});
+
+test('shows a previous session’s file name as text, not markup', async ({ page }) => {
+  await watchInjection(page);
+  await openDemo(page);
+  const source = '<img src="x" alt="">.csv';
+  await page.evaluate((source) => {
+    localStorage.setItem(
+      'dt-last-session',
+      JSON.stringify({ type: 'file', source, tableName: 'dt_file_gone' }),
+    );
+  }, source);
+
+  await page.reload();
+  await expect(page.locator('#table-info')).toContainText(`Previous session: ${source}`);
+  expect(await injected(page)).toBe(false);
 });

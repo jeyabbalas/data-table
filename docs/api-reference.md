@@ -421,7 +421,9 @@ when assembling a custom container shell.
 function createDataTable(options: CreateDataTableOptions): Promise<DataTable>;
 ```
 
-Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, builds `TableState`/`StateActions`, mounts the UI into `options.container`, wires events/persistence/presets/undo-redo, and resolves once UI is mounted. If `options.source` is provided, the initial load begins asynchronously (not awaited by the returned promise — subscribe to `loadComplete` or `loadError` to observe it).
+Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, builds `TableState`/`StateActions`, mounts the UI into `options.container`, wires events/persistence/presets/undo-redo, and emits `ready`. Without `options.source` it then resolves. With it, it loads the source and resolves only once that load is done: the data loaded, any saved session restored, the first rows painted and the charts in view fetched.
+
+If that load fails, the promise rejects with the load's error (a `DataTableError`, usually `LoadError`; see [troubleshooting](./troubleshooting.md)). What was built is not torn down first: the UI stays mounted in `container`, and a worker or session store the table created stays open. The initial load's `loadStart` / `loadComplete` / `loadError` events fire before the promise settles, where no listener can see them; only `ready` is replayed to later subscribers. To observe the initial load, or to keep a handle on the table when it fails, omit `source`, subscribe, then `await table.loadData(source)`.
 
 ---
 

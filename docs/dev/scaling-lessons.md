@@ -11,6 +11,12 @@ About 200M cells in any shape, Parquet first: up to ~1,000 columns × ~200K rows
 dozen columns. The first attempt aimed at 1,000 × 5M (5 billion cells, ~40 GB uncompressed), which no
 user asked for and which only a direct-scan mode could reach.
 
+Dropped for this target after the memory spike ([memory-envelope.md](./memory-envelope.md)): the
+direct-scan mode, and with it converting CSV sources to Parquet (revisit only above ~250M cells); the
+archive's synthetic 1,000 × 5M TARGET tier; and its Phase 8 selection model. Arrow IPC for row blocks
+is deferred until a measured case needs it, though converting blocks to JS objects dominates their
+fetch time (below).
+
 ## Measured facts worth keeping
 
 Reference machine: macOS, 10 cores, Chromium. "WIDE" is 1,000 columns × 60,000 rows; "DEEP" is 20

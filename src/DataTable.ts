@@ -445,8 +445,11 @@ type VisualizationType =
  * Create a fully-wired data table mounted in `container`.
  *
  * Awaits worker initialization before returning so the caller can immediately
- * `loadData()` or rely on `state.schema` being populated (if `source` was
- * provided).
+ * `loadData()`. With `source`, it also awaits that first load until its rows
+ * are painted and the charts in view have their data, so `state.schema` is
+ * populated on return. If the load fails, the promise rejects with its error
+ * and the table, already mounted, is not torn down: omit `source` and call
+ * `loadData()` to keep a handle on it.
  *
  * @remarks Size the container before calling this. The table virtualizes
  * against the container's height, and an unbounded one silently renders every
@@ -1524,10 +1527,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   readyPayload = { bridgeReady: true };
   emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
-    // Do not await inside createDataTable — consumers can await the returned
-    // promise via `table.on('loadComplete', …)` or a subsequent state read.
-    // However, we DO await here so that `createDataTable` resolves with
-    // an already-populated table, matching most consumer expectations.
+    // Awaited, so createDataTable resolves with the table loaded and its
+    // first rows painted, and rejects with the load's error if it fails.
+    // The load's events fire before any consumer can subscribe; a consumer
+    // that needs them omits `source` and calls `loadData` itself.
     await loadDataImpl(opts.source, {
       tableName: opts.tableName,
       sourceFormat: opts.sourceFormat,

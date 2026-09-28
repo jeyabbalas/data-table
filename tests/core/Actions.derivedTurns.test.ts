@@ -9,6 +9,8 @@ import { StateActions } from '@/core/Actions';
 import { DerivedColumnError } from '@/core/errors';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { UndoManager } from '@/core/UndoManager';
+import { serializeFilter, type SessionStore } from '@/persistence/SessionStore';
+import { SNAPSHOT_VERSION, type SessionSnapshot } from '@/persistence/types';
 
 import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
 
@@ -86,6 +88,24 @@ function derivedNames(h: Harness): string[] {
     .get()
     .filter((c) => c.isDerived)
     .map((c) => c.name);
+}
+
+/** Hold the next load at the worker, as a large file does, until `finish()`. */
+function stubLoad(h: Harness) {
+  let finish!: () => void;
+  h.bridge.loadData.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = () =>
+          resolve({
+            tableName: 't2',
+            rowCount: 5,
+            columns: ['n'],
+            schema: [{ name: 'n', type: 'integer', nullable: true, originalType: 'INTEGER' }],
+          });
+      }),
+  );
+  return { finish: () => finish() };
 }
 
 describe('derived-column changes take turns', () => {
@@ -294,26 +314,69 @@ describe('derived-column changes take turns', () => {
     await answerAll(h);
     expect(derivedNames(h)).toEqual(['x2']);
   });
+
+  it('resolves an add, edit or replacement asked for after destroy at once', async () => {
+    const h = setup();
+    await landX2(h);
+    void h.actions.addDerivedColumn({ kind: 'expression', name: 'x3', expression: 'id * 3' });
+    await drain();
+    h.actions.markDestroyed();
+    const settled: unknown[] = [];
+    void h.actions
+      .addDerivedColumn({ kind: 'expression', name: 'x4', expression: 'id' })
+      .then((r) => settled.push(r));
+    void h.actions
+      .updateDerivedColumn('x2', { kind: 'expression', name: 'x2', expression: 'id' })
+      .then((r) => settled.push(r));
+    void h.actions
+      .replaceDerivedColumn('x2', { kind: 'expression', name: 'x2', expression: 'id' })
+      .then((r) => settled.push(r));
+    await drain();
+    // The add running ahead of them has not landed.
+    expect(settled).toEqual([
+      { success: false, error: 'DataTable is destroyed' },
+      { success: false, error: 'DataTable is destroyed' },
+      { success: false, error: expect.objectContaining({ code: 'DESTROYED' }) },
+    ]);
+  });
+
+  it('empties the table once a change running as the table is cleared has ended', async () => {
+    const h = setup(new UndoManager());
+    // Loaded through the actions, so that there is an initial state to forget.
+    h.bridge.loadData.mockResolvedValueOnce({
+      tableName: 't',
+      rowCount: 3,
+      columns: ['id'],
+      schema: [{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }],
+    });
+    await h.actions.loadData('id\n1\n2\n3', { format: 'csv' });
+    await landX2(h);
+    const add = h.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'x3',
+      expression: 'id * 3',
+    });
+    await drain();
+    const clearing = h.actions.clearData();
+    await answerAll(h);
+    await expect(add).resolves.toEqual({
+      success: false,
+      error: 'New data was loaded, or the table cleared, before the change was applied',
+    });
+    await clearing;
+
+    expect(h.state.tableName.get()).toBeNull();
+    expect(h.state.schema.get()).toEqual([]);
+    expect(h.state.visibleColumns.get()).toEqual([]);
+    expect(h.state.derivedColumns.get()).toEqual([]);
+    expect(h.actions.getUndoManager()!.canUndo).toBe(false);
+    await expect(h.actions.resetToInitial()).resolves.toBe(false);
+    // The derived columns' VIEW went with the rest.
+    expect(h.queries.at(-1)!.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
+  });
 });
 
 describe('a load while derived-column changes wait or run', () => {
-  function stubLoad(h: Harness) {
-    let finish!: () => void;
-    h.bridge.loadData.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finish = () =>
-            resolve({
-              tableName: 't2',
-              rowCount: 5,
-              columns: ['n'],
-              schema: [{ name: 'n', type: 'integer', nullable: true, originalType: 'INTEGER' }],
-            });
-        }),
-    );
-    return { finish: () => finish() };
-  }
-
   it('starts once the change running now has ended, which then writes no state', async () => {
     const h = setup(new UndoManager());
     const load = stubLoad(h);
@@ -331,7 +394,7 @@ describe('a load while derived-column changes wait or run', () => {
     await answerAll(h);
     await expect(add).resolves.toEqual({
       success: false,
-      error: 'New data was loaded before the change was applied',
+      error: 'New data was loaded, or the table cleared, before the change was applied',
     });
     await drain();
     expect(h.bridge.loadData).toHaveBeenCalledTimes(1);
@@ -385,7 +448,7 @@ describe('a load while derived-column changes wait or run', () => {
     await expect(running).resolves.toMatchObject({ success: false });
     await expect(waitingAdd).resolves.toEqual({
       success: false,
-      error: 'New data was loaded before the change was applied',
+      error: 'New data was loaded, or the table cleared, before the change was applied',
     });
     const removalError = await waitingRemoval.catch((err: unknown) => err);
     expect(removalError).toBeInstanceOf(DerivedColumnError);
@@ -434,6 +497,132 @@ describe('a load while derived-column changes wait or run', () => {
     await loading;
     expect(h.queries.at(-1)!.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
     expect(h.state.tableName.get()).toBe('t2');
+  });
+
+  /**
+   * Start `change` on landed x2, let its DuckDB work begin, ask for a load,
+   * and settle both. Returns how the change ended; it emits no
+   * `derivedChange`, and the state is the new data's.
+   */
+  async function loadWhileRunning(
+    h: Harness,
+    change: () => Promise<unknown>,
+  ): Promise<{ value?: unknown; error?: unknown }> {
+    const kinds: string[] = [];
+    h.actions.setOnDerivedChange(({ kind }) => kinds.push(kind));
+    const load = stubLoad(h);
+    const running = change();
+    await drain();
+    expect(pending(h).length).toBeGreaterThan(0);
+    const loading = h.actions.loadData('n\n1\n2', { format: 'csv' });
+    await answerAll(h);
+    const outcome = await running.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    load.finish();
+    await answerAll(h);
+    await loading;
+    expect(kinds).toEqual([]);
+    expect(h.state.tableName.get()).toBe('t2');
+    expect(h.state.derivedColumns.get()).toEqual([]);
+    return outcome;
+  }
+
+  it('leaves the state to the load when an edit is running as it is called', async () => {
+    const h = setup(new UndoManager());
+    await landX2(h);
+    const outcome = await loadWhileRunning(h, () =>
+      h.actions.updateDerivedColumn('x2', { kind: 'expression', name: 'x2', expression: 'id * 3' }),
+    );
+    expect(outcome.value).toEqual({
+      success: false,
+      error: 'New data was loaded, or the table cleared, before the change was applied',
+    });
+  });
+
+  it('leaves the state to the load when a replacement is running as it is called', async () => {
+    const h = setup(new UndoManager());
+    await landX2(h);
+    const outcome = await loadWhileRunning(h, () =>
+      h.actions.replaceDerivedColumn('x2', {
+        kind: 'expression',
+        name: 'x2',
+        expression: 'id * 3',
+      }),
+    );
+    expect(outcome.value).toMatchObject({ success: false, error: { code: 'NOT_FOUND' } });
+  });
+
+  it('leaves the state to the load when a removal is running as it is called', async () => {
+    const h = setup(new UndoManager());
+    await landX2(h);
+    const outcome = await loadWhileRunning(h, () => h.actions.removeDerivedColumn('x2'));
+    expect(outcome.error).toBeInstanceOf(DerivedColumnError);
+    expect(outcome.error).toMatchObject({ code: 'NOT_FOUND', details: { column: 'x2' } });
+  });
+
+  it('leaves the state to the load when an undo is rebuilding the VIEW as it is called', async () => {
+    const h = setup(new UndoManager());
+    await landX2(h);
+    const outcome = await loadWhileRunning(h, () => h.actions.undo());
+    expect(outcome.value).toBe(false);
+  });
+
+  it('leaves the state to the load when a reset is dropping the VIEW as it is called', async () => {
+    const h = setup(new UndoManager());
+    h.bridge.loadData.mockResolvedValueOnce({
+      tableName: 't',
+      rowCount: 3,
+      columns: ['id'],
+      schema: [{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }],
+    });
+    await h.actions.loadData('id\n1\n2\n3', { format: 'csv' });
+    await landX2(h);
+    const outcome = await loadWhileRunning(h, () => h.actions.resetToInitial());
+    expect(outcome.value).toBe(false);
+  });
+
+  it('refuses an undo, redo or reset asked for while a load restores a session', async () => {
+    const h = setup(new UndoManager());
+    const load = stubLoad(h);
+    const layout = {
+      sortColumns: [],
+      visibleColumns: ['n'],
+      columnOrder: ['n'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [],
+    };
+    const session: SessionSnapshot = {
+      ...layout,
+      version: SNAPSHOT_VERSION,
+      timestamp: Date.now(),
+      tableName: 't2',
+      filters: [serializeFilter({ type: 'range', column: 'n', min: 1, max: 3 })],
+      // Undoing the session's last step would take the filter away.
+      undoStack: [{ ...layout, filters: [] }],
+      redoStack: [{ ...layout, filters: [] }],
+    };
+    const sessionStore = { load: vi.fn().mockResolvedValue(session) } as unknown as SessionStore;
+
+    const loading = h.actions.loadData('n\n1\n2', { format: 'csv', sessionStore });
+    await drain();
+    // Cmd+Z, Cmd+Shift+Z and Reset while the file loads.
+    await expect(h.actions.undo()).resolves.toBe(false);
+    await expect(h.actions.redo()).resolves.toBe(false);
+    await expect(h.actions.resetToInitial()).resolves.toBe(false);
+    load.finish();
+    await loading;
+    await drain();
+
+    expect(h.state.filters.get()).toEqual([{ type: 'range', column: 'n', min: 1, max: 3 }]);
+    expect(h.actions.getUndoManager()!.canUndo).toBe(true);
+    expect(h.actions.getUndoManager()!.canRedo).toBe(true);
+    // Once the load has ended, they work again.
+    await expect(h.actions.undo()).resolves.toBe(true);
+    expect(h.state.filters.get()).toEqual([]);
   });
 });
 

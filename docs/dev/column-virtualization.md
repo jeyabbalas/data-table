@@ -174,6 +174,10 @@ panels and charts right across a trackpad sweep.
   hides each button. An edit gives focus back to the filter bar's Expression button: the chip that
   opened it takes no focus, and is rebuilt when the filter changes. Each dialog names its radio
   groups after its instance id, or an id of its own without one.
+  - Found in review of that fix, on main too, not fixed: the SQL modal's `.cm-placeholder` in
+    create mode is 3.54:1 (#888 on white, light theme); the derived-column editor and the preset
+    panel fail `aria-dialog-name`; the editor's name input (`.dt-filter-input`) has no `label`;
+    and the preset confirmation's button fails `color-contrast`.
 - **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
   header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
   scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and

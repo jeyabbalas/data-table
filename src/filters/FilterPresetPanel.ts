@@ -305,7 +305,19 @@ export class FilterPresetPanel {
   }
 
   private handleDelete(id: string): void {
+    const index = this.presetManager.getPresets().findIndex((preset) => preset.id === id);
     this.presetManager.delete(id);
+    // The list has been rebuilt, and the Yes button that had focus with it:
+    // focus would drop to the page, where Escape no longer reaches the panel.
+    // It goes to the Delete button of the preset now in the deleted one's
+    // place, else of the one before it, else to the name field.
+    const p = this.prefix;
+    const items = this.presetListEl.querySelectorAll(`.${p}-filter-preset-item`);
+    const neighbour = items[index] ?? items[index - 1];
+    const deleteBtn = neighbour?.querySelector<HTMLButtonElement>(
+      `.${p}-filter-preset-item-actions > .${p}-filter-preset-action-btn--delete`,
+    );
+    (deleteBtn ?? this.nameInput).focus();
   }
 
   // =========================================

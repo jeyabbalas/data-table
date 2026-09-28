@@ -452,7 +452,17 @@ interface LoadOptions {
   knownTableName?: string;
   /** Skip re-caching the dataset when restoring from the existing cache. */
   skipCache?: boolean;
+  /** A load at startup, for the session: it offers a way to skip it. */
+  restoring?: boolean;
 }
+
+/**
+ * A link that abandons the load at startup and reloads without it. The
+ * load controls are off meanwhile, and a load has no timeout (DuckDB's
+ * start-up fetches included), so without it a stalled restore would hold
+ * the page, and every reload would retry it.
+ */
+const SKIP_LINK = ' · <a href="#" data-action="skip">Skip</a>';
 
 /**
  * Cache a loaded dataset for refresh. Parquet is cached as the file
@@ -495,7 +505,8 @@ async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promis
   lastLoadSeconds = null;
   loadingMessage =
     `Loading <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
-    `(${formatSize(prepared.file.size)})...`;
+    `(${formatSize(prepared.file.size)})...` +
+    (opts.restoring ? SKIP_LINK : '');
   updateInfo(loadingMessage);
   try {
     await loadPreparedNow(prepared, opts);
@@ -648,23 +659,15 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
       return;
     }
     const message = error instanceof Error ? error.message : 'Unknown error';
-    // A restore from the cache that fails would fail on every refresh after
-    // it: forget the cached dataset, as above.
+    // A restore from the cache can fail for a reason that passes (DuckDB not
+    // starting, a network error, a busy machine), so the cached dataset and
+    // its session stay: try again, or forget them.
     if (opts.skipCache) {
-      try {
-        await clearCachedData(tableName);
-      } catch {
-        /* ignore */
-      }
-      try {
-        localStorage.removeItem(LAST_SESSION_KEY);
-      } catch {
-        /* ignore */
-      }
       updateInfo(
-        `Could not restore <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
-          `from this browser's cache, which has been cleared: ${escapeHtml(message)}. ` +
-          `Load a file or URL to continue.`,
+        `Could not restore <strong>${escapeHtml(prepared.sourceName)}</strong>: ` +
+          `${escapeHtml(message)}. ` +
+          `<a href="#" data-action="retry">Try again</a> · ` +
+          `<a href="#" data-action="forget">Forget it</a>`,
       );
       return;
     }
@@ -672,12 +675,12 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
   }
 }
 
-async function loadSource(source: File | string): Promise<void> {
+async function loadSource(source: File | string, { restoring = false } = {}): Promise<void> {
   try {
     const prepared = await prepareSource(source);
     const meta: LoadOptions['meta'] =
       source instanceof File ? { type: 'file', source: source.name } : { type: 'url', source };
-    await loadPrepared(prepared, { meta });
+    await loadPrepared(prepared, { meta, restoring });
     // Reset the file picker so the user can immediately re-select the same
     // file (browsers suppress the change event on identical reselection).
     if (source instanceof File) fileInput.value = '';
@@ -734,6 +737,39 @@ async function exclusively(task: () => Promise<void>): Promise<void> {
     setLoadControlsDisabled(false);
   }
 }
+
+// ----- Links in the info bar -----
+// Put there by the startup restore and its failure: try it again, forget
+// the last session and its cached dataset, or skip a restore in progress.
+tableInfoEl.addEventListener('click', (event) => {
+  const link = (event.target as Element | null)?.closest<HTMLElement>('a[data-action]');
+  if (!link) return;
+  event.preventDefault();
+  const action = link.dataset.action;
+  if (action === 'retry') {
+    void exclusively(restoreSession);
+    return;
+  }
+  const tableName = readPreviousTableName();
+  try {
+    localStorage.removeItem(LAST_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+  if (action === 'skip') {
+    setUrlParam(null);
+    window.location.reload();
+    return;
+  }
+  if (action === 'forget') {
+    if (tableName) {
+      clearCachedData(tableName).catch(() => {
+        /* best-effort */
+      });
+    }
+    updateInfo('Load a file or URL to get started.');
+  }
+});
 
 // ----- UI wiring -----
 exportBtn.addEventListener('click', () => table?.openExportDialog());
@@ -807,7 +843,7 @@ async function restoreSession(): Promise<void> {
   const sharedUrl = getUrlParam();
   if (sharedUrl) {
     urlInput.value = sharedUrl;
-    updateInfo(`Loading shared dataset: <strong>${escapeHtml(sharedUrl)}</strong>...`);
+    updateInfo(`Loading shared dataset: <strong>${escapeHtml(sharedUrl)}</strong>...${SKIP_LINK}`);
     let prepared: PreparedSource;
     try {
       prepared = await prepareSource(sharedUrl);
@@ -820,6 +856,7 @@ async function restoreSession(): Promise<void> {
     await loadPrepared(prepared, {
       meta: { type: 'url', source: sharedUrl },
       knownTableName: tableName,
+      restoring: true,
     });
     return;
   }
@@ -837,33 +874,28 @@ async function restoreSession(): Promise<void> {
     await pruneOrphans(session.tableName);
     const cached = await loadCachedSource(session.tableName);
     if (cached) {
-      updateInfo(`Restoring session: <strong>${escapeHtml(cached.sourceName)}</strong>...`);
+      updateInfo(
+        `Restoring session: <strong>${escapeHtml(cached.sourceName)}</strong>...${SKIP_LINK}`,
+      );
       await loadPrepared(preparedFromCache(cached), {
         meta: { type: session.type, source: session.source },
         knownTableName: session.tableName,
         // Cache hit — what we have IS the cache, no need to re-write.
         skipCache: true,
+        restoring: true,
       });
     } else if (session.type === 'url') {
       urlInput.value = session.source;
+      updateInfo(`Loading <strong>${escapeHtml(session.source)}</strong>...${SKIP_LINK}`);
       // No cache — re-fetch the URL. Hashing the fresh bytes lets us
       // detect content changes vs. the previous session.
-      await loadSource(session.source);
+      await loadSource(session.source, { restoring: true });
     } else {
       updateInfo(
         `Previous session: <strong>${escapeHtml(session.source)}</strong> — ` +
           `load the same file to restore your state, or ` +
-          `<a href="#" id="dismiss-session">dismiss</a>.`,
+          `<a href="#" data-action="forget">dismiss</a>.`,
       );
-      document.getElementById('dismiss-session')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        try {
-          localStorage.removeItem(LAST_SESSION_KEY);
-        } catch {
-          /* ignore */
-        }
-        updateInfo('Load a file or URL to get started.');
-      });
     }
   } catch {
     /* localStorage unavailable */

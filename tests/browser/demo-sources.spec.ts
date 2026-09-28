@@ -341,25 +341,35 @@ test('a failed load leaves the table in place for the next one', async ({ page }
 
 test('runs one load at a time', async ({ page }) => {
   await openDemo(page);
-  await page.setInputFiles('#file-input', PARQUET);
+  const url = `${new URL(page.url()).origin}/fixtures/parquet/titanic.parquet`;
+  let fetches = 0;
+  // Hold the first load open for 3 s, however fast the machine.
+  await page.route('**/fixtures/parquet/titanic.parquet', async (route) => {
+    fetches++;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await route.continue();
+  });
+  await page.setInputFiles('#file-input', CSV);
+  await page.fill('#url-input', url);
+  await page.click('#load-url-btn');
 
-  // The second click would mount a second table and DuckDB worker.
-  await page.locator('#load-file-btn').dblclick();
   await expect(page.locator('#load-file-btn')).toBeDisabled();
   await expect(page.locator('#load-url-btn')).toBeDisabled();
   for (const chip of await page.locator('.chip[data-url]').all()) await expect(chip).toBeDisabled();
-  // The URL input stays enabled: Enter there must not start a load either.
-  await page.fill('#url-input', `${new URL(page.url()).origin}/fixtures/parquet/titanic.parquet`);
+  // Neither starts a second load, which would mount a second table and
+  // DuckDB worker: Enter in the URL input, which stays enabled, and a click
+  // on Load File, forced as a user's would be.
   await page.press('#url-input', 'Enter');
+  await page.locator('#load-file-btn').click({ force: true });
 
   await expectTable(page);
-  await expect(page.locator('#table-container .dt-root')).toHaveCount(1);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('dt-last-session')!).type)).toBe(
-    'file',
-  );
-  expect(new URL(page.url()).searchParams.has('url')).toBe(false);
   await expect(page.locator('#load-file-btn')).toBeEnabled();
   await expect(page.locator('#load-url-btn')).toBeEnabled();
+  await expect(page.locator('#table-container .dt-root')).toHaveCount(1);
+  expect(fetches).toBe(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('dt-last-session')!).type)).toBe(
+    'url',
+  );
 });
 
 test('shows the loading file, not the last dataset, until the load ends', async ({ page }) => {
@@ -393,9 +403,7 @@ test('shows the loading file, not the last dataset, until the load ends', async 
   expect(texts.at(-1)).toMatch(/891 rows.*\| loaded in \d+\.\d s$/);
 });
 
-test('clears a cached dataset it cannot restore, instead of failing on every refresh', async ({
-  page,
-}) => {
+test('offers to forget a cached dataset it cannot restore', async ({ page }) => {
   await watchInjection(page);
   await openDemo(page);
   const sourceName = '<img src="x" alt="">.parquet';
@@ -407,14 +415,103 @@ test('clears a cached dataset it cannot restore, instead of failing on every ref
   });
 
   await page.reload();
-  await expect(page.locator('#table-info')).toContainText('Could not restore', { timeout: 90_000 });
-  await expect(page.locator('#table-info')).toContainText(sourceName);
+  const info = page.locator('#table-info');
+  await expect(info).toContainText('Could not restore', { timeout: 90_000 });
+  await expect(info).toContainText(sourceName);
   expect(await injected(page)).toBe(false);
-  expect(await readCacheRow(page, 'dt_file_broken')).toBeNull();
+  // Nothing is deleted on its own: the reason may pass.
+  expect(await readCacheRow(page, 'dt_file_broken')).not.toBeNull();
+  expect(await sessionTableName(page)).toBe('dt_file_broken');
+  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#load-url-btn')).toBeEnabled();
+
+  await info.getByRole('link', { name: 'Forget it' }).click();
+  await expect(info).toHaveText('Load a file or URL to get started.');
+  await expect.poll(() => readCacheRow(page, 'dt_file_broken')).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('dt-last-session'))).toBeNull();
 
   await page.reload();
-  await expect(page.locator('#table-info')).toHaveText('Load a file or URL to get started.');
+  await expect(info).toHaveText('Load a file or URL to get started.');
+});
+
+test('keeps a cached dataset through a restore that fails for a reason that passes', async ({
+  page,
+}) => {
+  test.slow();
+  // While the flag is set, the page cannot start DuckDB's worker.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __realWorker: typeof Worker };
+    w.__realWorker = window.Worker;
+    if (sessionStorage.getItem('dt-test-no-worker')) {
+      window.Worker = class {
+        constructor() {
+          throw new Error('Workers are blocked');
+        }
+      } as unknown as typeof Worker;
+    }
+  });
+  await openDemo(page);
+  await loadFile(page, PARQUET);
+  await expectTable(page);
+  const tableName = await sessionTableName(page);
+  await cacheRow(page, tableName);
+  const info = page.locator('#table-info');
+
+  await page.evaluate(() => sessionStorage.setItem('dt-test-no-worker', '1'));
+  await page.reload();
+  await expect(info).toContainText('Could not restore titanic.parquet', { timeout: 90_000 });
+  expect(await readCacheRow(page, tableName)).not.toBeNull();
+  expect(await sessionTableName(page)).toBe(tableName);
+  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#load-url-btn')).toBeEnabled();
+
+  // The next normal reload restores it.
+  await page.evaluate(() => sessionStorage.removeItem('dt-test-no-worker'));
+  await page.reload();
+  await expectTable(page);
+  expect(await sessionTableName(page)).toBe(tableName);
+
+  // And so does Try again, once the reason has passed.
+  await page.evaluate(() => sessionStorage.setItem('dt-test-no-worker', '1'));
+  await page.reload();
+  await expect(info).toContainText('Could not restore titanic.parquet', { timeout: 90_000 });
+  await page.evaluate(() => {
+    window.Worker = (window as unknown as { __realWorker: typeof Worker }).__realWorker;
+    sessionStorage.removeItem('dt-test-no-worker');
+  });
+  await info.getByRole('link', { name: 'Try again' }).click();
+  await expectTable(page);
+});
+
+test('offers to skip a restore that stalls', async ({ page }) => {
+  test.slow();
+  // While the flag is set, DuckDB's worker never answers.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('dt-test-silent-worker')) {
+      window.Worker = class {
+        postMessage(): void {}
+        terminate(): void {}
+        addEventListener(): void {}
+        removeEventListener(): void {}
+      } as unknown as typeof Worker;
+    }
+  });
+  await openDemo(page);
+  await loadFile(page, PARQUET);
+  await expectTable(page);
+  await cacheRow(page, await sessionTableName(page));
+  const info = page.locator('#table-info');
+
+  await page.evaluate(() => sessionStorage.setItem('dt-test-silent-worker', '1'));
+  await page.reload();
+  await expect(info).toContainText('Loading titanic.parquet');
+  await expect(page.locator('#load-file-btn')).toBeDisabled();
+
+  await page.evaluate(() => sessionStorage.removeItem('dt-test-silent-worker'));
+  await info.getByRole('link', { name: 'Skip' }).click();
+  await expect(info).toHaveText('Load a file or URL to get started.');
+  expect(await page.evaluate(() => localStorage.getItem('dt-last-session'))).toBeNull();
+  await expect(page.locator('#load-file-btn')).toBeEnabled();
 });
 
 test('shows a shared ?url= link as text, not markup', async ({ page }) => {

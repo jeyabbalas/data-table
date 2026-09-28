@@ -231,8 +231,16 @@ export abstract class SharedHistogramBase<
 
     this.isAllNullState = false;
 
-    // If no data at all, show empty state
-    if (!this.data || this.data.bins.length === 0) {
+    // Nothing to draw before the first fetch lands, or after one fails. The
+    // resize observer renders a new chart before its data arrives, and "No
+    // data" there would say the column is empty.
+    if (!this.data) {
+      this.clearLayout();
+      return;
+    }
+
+    // A fetch returned no values, and no nulls.
+    if (this.data.bins.length === 0) {
       this.clearLayout();
       this.drawEmptyState();
       return;

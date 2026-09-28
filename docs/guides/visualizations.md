@@ -67,6 +67,9 @@ What to expect:
 
 - **Loading.** `loadData`, and `await createDataTable({ source })`, wait
   for the charts in view to draw their first data, not for every column's.
+- **Before its data.** A new chart stays blank until its first query
+  returns, at load and when its column scrolls into view. "No data" means
+  the column has no values.
 - **Filtering.** A filter change refreshes only the charts that exist. A
   column scrolled into view later gets its chart built with the filters in
   force then, so it is correct when it appears. Until then its stats show
@@ -335,7 +338,8 @@ per page, no matter how many visualizations are on screen.
 
 If `fetchData()` or `render()` throws, the library catches it, routes it to
 the table's `error` event with `source: 'visualization'`, and keeps rendering
-the other visualizations. Subscribe to handle gracefully:
+the other visualizations. A built-in chart whose query fails stays blank.
+Subscribe to handle gracefully:
 
 ```ts
 table.on('error', ({ error, source }) => {

@@ -338,3 +338,12 @@ panels and charts right across a trackpad sweep.
   reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
   test double, the loop never yields. Not fixed here: body fetches should wait out a
   derived-column change, and a failed fetch should back off.
+- **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, pre-existing.** Every
+  histogram drew "No data" from the moment it was laid out until its first fetch landed.
+  `SharedHistogramBase.render` treated a chart with no data yet as a column with none, and a
+  chart's resize observer renders it as soon as it is laid out. Lazy charts made this visible on
+  every scroll, for seconds at 200K rows while chart fetches queued. Value counts already drew
+  nothing without data. Fixed: a histogram draws nothing until a fetch lands, and "No data" only
+  for a fetch that returned no values; one whose fetch fails draws nothing, as value counts do. A
+  browser test counts the "No data" draws in a sideways sweep: 46 in one run on main, none with the
+  fix.

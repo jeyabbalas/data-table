@@ -429,7 +429,7 @@ zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
 ([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:391-397`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:401-408`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 

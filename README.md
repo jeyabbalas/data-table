@@ -90,8 +90,8 @@ document.getElementById('file-picker')!.addEventListener('change', async (e) => 
 (`//host/…`), a root-relative path (`/data.csv`), a dot-prefixed relative
 path (`./data.csv`, `../data.csv`), an `ArrayBuffer`, a `Blob`, or inline
 CSV/JSON content (multi-line text, or a string starting with `[` / `{`).
-Relative URLs resolve against `window.location` — the same way `<img src>`
-and `fetch` behave. Ambiguous strings (a single-line `sample.csv` with no
+Relative URLs resolve against `window.location.href`, so a `<base href>` on
+the page does not apply to them. Ambiguous strings (a single-line `sample.csv` with no
 leading slash, for example) throw `LoadError` with code `SOURCE_AMBIGUOUS`
 rather than silently parsing the literal text as CSV content.
 

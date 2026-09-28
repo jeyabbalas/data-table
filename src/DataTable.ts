@@ -156,11 +156,23 @@ export interface CreateDataTableOptions {
    */
   container: HTMLElement;
 
-  /** Optional initial data source. If omitted, call `table.loadData(source)` later. */
+  /**
+   * Optional initial data source. If omitted, call
+   * `table.loadData(source, { tableName, sourceFormat })` later.
+   */
   source?: File | string | ArrayBuffer | Blob;
-  /** Override the format detected from the source (e.g., if URL has no extension). */
+  /**
+   * Override the format detected from `source` (e.g., if its URL has no
+   * extension). Applies to `source` only; pass `sourceFormat` to
+   * `table.loadData()` for a later load.
+   */
   sourceFormat?: DataFormat;
-  /** Table name used inside DuckDB. Auto-generated if omitted. */
+  /**
+   * Table name used inside DuckDB for `source`, which is also the key its
+   * saved session is stored under. Auto-generated if omitted. Applies to
+   * `source` only: a later `table.loadData()` without its own `tableName`
+   * loads under a generated name, so no saved session is restored.
+   */
   tableName?: string;
 
   // ---- Feature toggles ----
@@ -445,11 +457,13 @@ type VisualizationType =
  * Create a fully-wired data table mounted in `container`.
  *
  * Awaits worker initialization before returning so the caller can immediately
- * `loadData()`. With `source`, it also awaits that first load until its rows
- * are painted and the charts in view have their data, so `state.schema` is
- * populated on return. If the load fails, the promise rejects with its error
- * and the table, already mounted, is not torn down: omit `source` and call
- * `loadData()` to keep a handle on it.
+ * `loadData()`. With `source`, it also awaits that first load, and the first
+ * fetches of its rows and of the charts in view, so `state.schema` is
+ * populated on return. Those fetches are awaited, not required: one that
+ * fails is logged and leaves placeholders. If the load fails, the promise
+ * rejects with its error and the table, already mounted, is not torn down:
+ * omit `source` and call `loadData(source, { tableName, sourceFormat })` to
+ * keep a handle on it.
  *
  * @remarks Size the container before calling this. The table virtualizes
  * against the container's height, and an unbounded one silently renders every
@@ -1528,9 +1542,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
     // Awaited, so createDataTable resolves with the table loaded and its
-    // first rows painted, and rejects with the load's error if it fails.
+    // first rows fetched, and rejects with the load's error if it fails.
     // The load's events fire before any consumer can subscribe; a consumer
-    // that needs them omits `source` and calls `loadData` itself.
+    // that needs them omits `source` and calls `loadData` itself, with the
+    // `tableName` and `sourceFormat` it would have passed here.
     await loadDataImpl(opts.source, {
       tableName: opts.tableName,
       sourceFormat: opts.sourceFormat,

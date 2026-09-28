@@ -553,7 +553,7 @@ All values source `src/DataTable.ts:136-345`.
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 
-3. **Loading the initial `source` a second time.** `createDataTable({ source })` already loads `source`, and resolves only once its first rows are painted. Calling `loadData(source)` again resets the table's state and loads it again, so filters or sorts applied in between can be lost. Use `loadData()` only for subsequent swaps, or omit `source` and call `loadData()` yourself when you need the initial load's events (see [§8](#8-lifecycle-diagram)).
+3. **Loading the initial `source` a second time.** `createDataTable({ source })` already loads `source`, and resolves after it. Calling `loadData(source)` again resets the table's state and loads it again, so filters or sorts applied in between can be lost. Use `loadData()` only for subsequent swaps, or omit `source` and call `loadData(source, { tableName, sourceFormat })` yourself when you need the initial load's events (see [§8](#8-lifecycle-diagram)).
 
 4. **Forgetting `isDestroyed()` in async callbacks.** After `destroy()`, every public method throws `DestroyedError`. Always guard:
 
@@ -638,7 +638,7 @@ createDataTable(opts)
   ├─ VisualizationRegistry wiring            ← if visualizations
   ├─ emit('ready')
   ├─ [if opts.source] await loadData         ← blocks resolution; a failure rejects
-  └─ await createDataTable() resolves        ← first rows painted, charts in view fetched
+  └─ await createDataTable() resolves        ← first row and chart fetches settled
 
 // After resolution:
 table.state.*    ← read reactive state
@@ -650,7 +650,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 `ready` is replayed in a microtask to listeners subscribing after init (src/DataTable.ts, `on('ready', …)` path). No other event is: the initial load's `loadStart` / `loadComplete` / `loadError` fire before `createDataTable()` resolves, so no consumer listener sees them.
 
-If the initial load fails, `createDataTable()` rejects with the load's error (a `DataTableError`, usually `LoadError`) and does not tear down what it built: the table stays mounted in `container`, and a worker or session store it created stays open, with no handle to `destroy()` them. To watch the initial load, or to keep a handle when it fails, omit `source` and call `await table.loadData(source)` after subscribing, inside `try`.
+If the initial load fails, `createDataTable()` rejects with the load's error (a `DataTableError`, usually `LoadError`) and does not tear down what it built: the table stays mounted in `container`, and a worker or session store it created stays open, with no handle to `destroy()` them. To watch the initial load, or to keep a handle when it fails, omit `source` and call `await table.loadData(source, { tableName, sourceFormat })` after subscribing, inside `try`. The `tableName` and `sourceFormat` given to `createDataTable` apply to `source` only; a load without a `tableName` gets a generated one, so no saved session is restored.
 
 ---
 

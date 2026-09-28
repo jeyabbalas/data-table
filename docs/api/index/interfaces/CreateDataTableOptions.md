@@ -1516,7 +1516,8 @@ CSS-only change would move the rows and not the scroller.
 
 Defined in: [DataTable.ts:147](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L147)
 
-Optional initial data source. If omitted, call `table.loadData(source)` later.
+Optional initial data source. If omitted, call
+`table.loadData(source, { tableName, sourceFormat })` later.
 
 ***
 
@@ -1526,7 +1527,9 @@ Optional initial data source. If omitted, call `table.loadData(source)` later.
 
 Defined in: [DataTable.ts:149](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L149)
 
-Override the format detected from the source (e.g., if URL has no extension).
+Override the format detected from `source` (e.g., if its URL has no
+extension). Applies to `source` only; pass `sourceFormat` to
+`table.loadData()` for a later load.
 
 ***
 
@@ -1570,7 +1573,10 @@ dedicated "unsupported browser" screen instead of a half-mounted table.
 
 Defined in: [DataTable.ts:151](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L151)
 
-Table name used inside DuckDB. Auto-generated if omitted.
+Table name used inside DuckDB for `source`, which is also the key its
+saved session is stored under. Auto-generated if omitted. Applies to
+`source` only: a later `table.loadData()` without its own `tableName`
+loads under a generated name, so no saved session is restored.
 
 ***
 

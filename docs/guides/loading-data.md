@@ -52,8 +52,8 @@ System Access API.
 
 A string is a URL when it starts with a scheme (`https:`, `http:`, `file:`,
 `data:`, `blob:`, …), `//`, `/`, `./` or `../`. Relative ones resolve against
-the page's URL, as `fetch()` and `<img src>` do. A bare file name such as
-`'data.csv'` is not a URL; write `'./data.csv'`.
+`window.location.href`, so a `<base href>` on the page does not apply to them.
+A bare file name such as `'data.csv'` is not a URL; write `'./data.csv'`.
 
 Fetched with the platform `fetch()` — cross-origin URLs must send the
 appropriate CORS headers. A non-2xx response throws `LoadError` with
@@ -337,12 +337,12 @@ for a runnable demo.
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
 - **Large Parquet files need a `File`, `Blob`, or URL.** An `ArrayBuffer` is copied into DuckDB's memory whole, next to the table. A load that will not fit rejects with `LOAD_MEMORY_EXCEEDED`; see [Large Parquet files](#large-parquet-files).
-- **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are _not_ auto-fetched — read them yourself and pass the bytes.
+- **A bare file name is not a URL.** `'data.csv'` rejects with `SOURCE_AMBIGUOUS`; write `'./data.csv'` or `'/data.csv'`. Relative URLs resolve against `window.location.href`, not the page's `<base href>`. A `file:` URL is fetched like any other, which browsers refuse from a web page; pass the `File` instead.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
 - **Peak memory during a large swap.** `loadData()` drops the previous DuckDB base table after the new one is live (or replaces it atomically when the `tableName` matches), so the catalog stays clean across reloads. While the new load is in flight, both buffers coexist briefly — for very large dataset swaps where peak main-thread memory matters, `destroy()` + recreate releases the previous buffers earlier.
-- **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
+- **Progress is coarse.** There is one report per stage (`reading` 0%, `parsing` 25%, `indexing` 90%) and no byte or row counts, so a large file stays at 25% for most of its load.
 
 ## Related
 

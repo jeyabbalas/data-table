@@ -168,6 +168,13 @@ have a screen reader announce "row 3 of 5,001" on a five-row result.
 the first one, `←` / `→` cycle them, `↑` / `↓` leave and move the cursor, and
 `Escape` hands focus back to `.dt-grid`.
 
+A column narrower than its buttons (about 135 px at the default padding; a
+column can be 50 px) shows the buttons that fit and clips the rest at its
+edge, so none lies over the next header. The bar shows all of them while the
+pointer is on it or keyboard focus is in it, running on over the next header's
+bar: the pointer reaches the others along the bar, and a button `F2` focuses is
+always in view.
+
 Clicking parks real focus on whatever it hit — a cell, a scroll region — which
 would leave `aria-activedescendant` describing a cursor the focused element
 knows nothing about. The grid takes focus back on the next cursor keystroke

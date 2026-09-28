@@ -255,6 +255,29 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.25rem 0;
+  /* The buttons need about 135 px with the header's padding, and a column
+     can be 50 px wide. Past the header's edge they went under the next
+     header, which painted over them, or, from a pinned header, over the
+     first unpinned one, where they took its clicks. Clipped at the header's
+     padding instead. `clip`, not `hidden`: no scroll container to take the
+     wheel, and only sideways, so the multi-sort badge still rises above its
+     button. The margin keeps a focused edge button's outline. */
+  overflow-x: clip;
+  overflow-clip-margin: 3px;
+}
+
+/* Pointed at, or holding keyboard focus (F2), the bar shows every button,
+   running on over the next header's bar when the column is too narrow for
+   them, on the header's own background. The pointer reaches them along the
+   bar, so the neighbour's chart and stats are never covered. Focus from a
+   click does not hold it open once the pointer leaves. Above the unpinned
+   headers after it; a pinned header's bar stays within its own z-index. */
+.dt-col-action-panel:hover,
+.dt-col-action-panel:has(:focus-visible) {
+  position: relative;
+  z-index: calc(var(--dt-z-table-body, 1) + 1);
+  min-width: max-content;
+  background: inherit;
 }
 
 .dt-col-action-btn {

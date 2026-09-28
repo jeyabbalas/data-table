@@ -9,6 +9,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StateActions } from '@/core/Actions';
 import { createTableState } from '@/core/State';
+import { UndoManager } from '@/core/UndoManager';
+import type { FilterPresetManager } from '@/filters/FilterPresets';
 import type { ColumnSchema, Filter } from '@/core/types';
 import { serializeFilter, type SessionStore } from '@/persistence/SessionStore';
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '@/persistence/types';
@@ -43,7 +45,7 @@ function snapshotWith(
   };
 }
 
-function storeWith(snapshot: SessionSnapshot): SessionStore {
+function storeWith(snapshot: unknown): SessionStore {
   return {
     open: vi.fn().mockResolvedValue(true),
     save: vi.fn().mockResolvedValue(undefined),
@@ -156,6 +158,46 @@ describe('a session restore with derived columns, in steps', () => {
     expect(state.tableName.get()).toBe('t');
     coordinator.destroy();
   });
+
+  it('drops the tooltip, width, filter and sort of a derived column that does not come back', async () => {
+    const { state, actions, coordinator, queries } = setup();
+    const snapshot = {
+      ...snapshotWith(
+        { name: 'x2', expression: 'id * 2' },
+        { type: 'range', column: 'bad', min: 1, max: 9 },
+      ),
+      sortColumns: [{ column: 'bad', direction: 'asc' }],
+      visibleColumns: ['id', 'x2', 'bad'],
+      columnOrder: ['id', 'x2', 'bad'],
+      columnWidths: { bad: 200, x2: 120 },
+      columnHeaderTooltips: { bad: 'about bad', x2: 'about x2' },
+      derivedColumns: [
+        { kind: 'expression', name: 'x2', expression: 'id * 2' },
+        { kind: 'expression', name: 'bad', expression: 'nope * 2' },
+      ],
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loading = actions.loadData('id\n1', { format: 'csv', sessionStore: storeWith(snapshot) });
+    // x2: validation, type detection, the VIEW; then bad's validation fails.
+    for (const step of ['ok', 'type', 'ok', 'fail'] as const) {
+      await drain();
+      await vi.advanceTimersByTimeAsync(0);
+      const query = queries.at(-1)!;
+      if (step === 'fail') query.deferred.reject(new Error('Binder Error: nope'));
+      else query.deferred.resolve(step === 'type' ? [{ t: 'INTEGER' }] : []);
+    }
+    await loading;
+    warn.mockRestore();
+
+    expect(state.derivedColumns.get().map((d) => d.name)).toEqual(['x2']);
+    expect(state.tableName.get()).toBe('__dt_view_t__');
+    expect(state.filters.get()).toEqual([]);
+    expect(state.sortColumns.get()).toEqual([]);
+    expect(state.visibleColumns.get()).toEqual(['id', 'x2']);
+    expect([...state.columnWidths.get().keys()]).toEqual(['x2']);
+    expect([...state.columnHeaderTooltips.get().keys()]).toEqual(['x2']);
+    coordinator.destroy();
+  });
 });
 
 describe('a session restore with derived columns, against DuckDB', () => {
@@ -205,5 +247,127 @@ describe('a session restore with derived columns, against DuckDB', () => {
       error.mockRestore();
       coordinator.destroy();
     }
+  });
+});
+
+describe('a saved session that cannot be read', () => {
+  function setup() {
+    const state = createTableState();
+    const { bridge, queries } = makeRowFetchBridge();
+    bridge.loadData.mockResolvedValue({
+      tableName: 't',
+      rowCount: 20,
+      columns: ['id'],
+      schema: SCHEMA,
+    });
+    const undoManager = new UndoManager();
+    const actions = new StateActions(
+      state,
+      bridge as unknown as ConstructorParameters<typeof StateActions>[1],
+      undoManager,
+    );
+    return { state, actions, queries, undoManager };
+  }
+
+  /** Load with `snapshot`; returns the warnings logged, and fails on a rejected load. */
+  async function load(
+    snapshot: unknown,
+  ): Promise<{ h: ReturnType<typeof setup>; warnings: string[] }> {
+    const h = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await h.actions.loadData('id\n1', { format: 'csv', sessionStore: storeWith(snapshot) });
+      return { h, warnings: warn.mock.calls.map((call) => String(call[0])) };
+    } finally {
+      warn.mockRestore();
+    }
+  }
+
+  const malformed = {
+    ...snapshotWith({ name: 'x2', expression: 'id * 2' }, X2_FILTER),
+    columnWidths: null,
+  };
+
+  it.each([
+    ['with derived columns', malformed],
+    ['without derived columns', { ...malformed, filters: [], sortColumns: [], derivedColumns: [] }],
+    [
+      // Its derived columns are written before the undo stack is read.
+      'with derived columns, part-way',
+      { ...snapshotWith({ name: 'x2', expression: 'id * 2' }, X2_FILTER), undoStack: [null] },
+    ],
+  ])('loads without it, %s, and says so', async (_, snapshot) => {
+    const { h, warnings } = await load(snapshot);
+    expect(warnings).toEqual([
+      '[data-table] Could not restore the saved session; loading without it:',
+    ]);
+    expect(h.state.tableName.get()).toBe('t');
+    expect(h.state.derivedColumns.get()).toEqual([]);
+    expect(h.state.filters.get()).toEqual([]);
+    expect(h.state.visibleColumns.get()).toEqual(['id']);
+    // Nothing went to DuckDB for the derived column.
+    expect(h.queries).toEqual([]);
+  });
+
+  it('takes back what it had written when it fails part-way', async () => {
+    // The layout and filters are written before the undo stack is read.
+    const { h, warnings } = await load({
+      ...snapshotWith(
+        { name: 'x2', expression: 'id * 2' },
+        { type: 'range', column: 'id', min: 1, max: 9 },
+      ),
+      derivedColumns: [],
+      visibleColumns: ['id'],
+      columnOrder: ['id'],
+      columnHeaderTooltips: { id: 'the id' },
+      undoStack: [null],
+    });
+    expect(warnings).toHaveLength(1);
+    expect(h.state.filters.get()).toEqual([]);
+    expect(h.state.sortColumns.get()).toEqual([]);
+    expect(h.state.columnHeaderTooltips.get().size).toBe(0);
+    expect(h.undoManager.canUndo).toBe(false);
+    // And the load's own state is what a reset goes back to.
+    h.actions.addFilter({ type: 'range', column: 'id', min: 2, max: 5 });
+    await expect(h.actions.resetToInitial()).resolves.toBe(true);
+    expect(h.state.filters.get()).toEqual([]);
+  });
+
+  it('takes back the undo stacks it had loaded when a later part fails', async () => {
+    const h = setup();
+    const layout = {
+      sortColumns: [],
+      visibleColumns: ['id'],
+      columnOrder: ['id'],
+      columnWidths: {},
+      pinnedColumns: [],
+      hiddenColumnInfo: {},
+      derivedColumns: [],
+    };
+    const presetManager = {
+      loadPresets: vi.fn(() => {
+        throw new TypeError('malformed presets');
+      }),
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await h.actions.loadData('id\n1', {
+        format: 'csv',
+        sessionStore: storeWith({
+          ...layout,
+          version: SNAPSHOT_VERSION,
+          timestamp: Date.now(),
+          tableName: 't',
+          filters: [],
+          undoStack: [{ ...layout, filters: [] }],
+          filterPresets: [{ id: 'p', name: 'p', filters: [], createdAt: 0, updatedAt: 0 }],
+        }),
+        presetManager: presetManager as unknown as FilterPresetManager,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+    expect(presetManager.loadPresets).toHaveBeenCalled();
+    expect(h.undoManager.canUndo).toBe(false);
   });
 });

@@ -210,10 +210,10 @@ The VIEW is recreated without the column; `derivedChange` fires with
 
 ## Changes run one at a time
 
-Derived-column changes, `undo`, `redo`, `resetToInitial` and `loadData` run
-one at a time, in the order they were called. Each starts once the one before
-it has landed, and reads and validates the state that one left, so calls
-need not wait for each other:
+Derived-column changes, `undo`, `redo`, `resetToInitial`, `loadData` and
+`clearSession` run one at a time, in the order they were called. Each starts
+once the one before it has landed, and reads and validates the state that one
+left, so calls need not wait for each other:
 
 ```ts
 // Both land, in this order: `b` is validated once `a` exists.
@@ -223,11 +223,13 @@ await Promise.all([a, b]);
 ```
 
 An `undo` called while an add runs waits for the add and undoes it; another
-`undo` or `redo` called while one waits or runs resolves `false`. A change
-still waiting or running when `loadData` is called was meant for the old data
-and does not apply: an add or update resolves `{ success: false }`, a
-replacement resolves a `NOT_FOUND` error, a removal rejects with one, and an
-undo, redo or reset resolves `false`.
+`undo` or `redo` called while one waits or runs resolves `false`, and so do
+`undo`, `redo` and `resetToInitial` called while a load is under way, which
+would act on the session the load restores. A change still waiting or running
+when `loadData` or `clearSession` is called was meant for the old data and
+does not apply: an add or update resolves `{ success: false }`, a replacement
+resolves a `NOT_FOUND` error, a removal rejects with one, and an undo, redo or
+reset resolves `false`.
 
 ## How the VIEW works
 

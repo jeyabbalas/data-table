@@ -323,6 +323,7 @@ useEffect(() => {
 - **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many. When a save trips `QuotaExceededError`, AutoSave latches a one-shot circuit-breaker: the consumer's `onError` (or the facade's `error` event with `source: 'persistence'`) fires exactly once for that quota episode, and subsequent state mutations skip the save attempt. Calling `actions.clearSession()` (which deletes the snapshot) re-arms the breaker — saves resume on the next debounce tick.
 - **Private browsing silently fails.** No error, no exception — just a `warning` event. Your UI should handle the no-persist case gracefully.
 - **Session restore happens _after_ data load.** Filters/sort don't apply during the load progress stage; they snap into place on `loadComplete`.
+- **A snapshot that cannot be read is skipped.** If a `SessionStore` hands back a snapshot whose fields are malformed, the load logs `[data-table] Could not restore the saved session; loading without it` to the console and goes ahead with the fresh state, rather than rejecting.
 - **Snapshot version is bound to the library version.** `coerceLoadedSnapshot` rejects any snapshot whose `version` is not in `[1, SNAPSHOT_VERSION]`. Future-version blobs (e.g., a snapshot written by a newer library, then read by a downgraded build) load as `null`; the table boots fresh. Pre-1.0 has no migration framework — earlier versions load only by luck of optional-field absence. Treat the snapshot as bound to the major library version.
 
 ## Related

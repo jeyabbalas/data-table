@@ -452,7 +452,7 @@ export interface Strings {
     matchCount: (count: number) => string;
     /** Truncation suffix for a long multi-select value list (total = selected values). */
     valueListSuffix: (total: number) => string;
-    /** Drawn in a header chart whose data failed to load. */
+    /** Stats-slot line for a column whose chart's data failed to load. */
     chartFailed: string;
   };
 

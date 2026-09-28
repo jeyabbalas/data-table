@@ -9,9 +9,10 @@
  * before its first fetch lands. Histograms drew "No data" there, so every
  * chart created as its column scrolled into view flashed it.
  *
- * A chart whose fetch failed says so, and marks its canvas, until a fetch
- * lands: it looked like one still loading. With nothing drawn, it keeps no
- * hover, and no detail of a bar, a brush or a selection in the stats slot.
+ * A chart whose fetch failed marks its canvas until a fetch lands: it looked
+ * like one still loading (its stats slot says it failed, in text). With
+ * nothing drawn, it keeps no hover, and no detail of a bar, a brush or a
+ * selection in the stats slot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -111,7 +112,6 @@ vi.mock('../../src/visualizations/valuecounts/ValueCountsData', async (importAct
   fetchValueCountsData: deferredFetch,
 }));
 
-import { defaultStrings } from '../../src/core/Strings';
 import type { ColumnSchema } from '../../src/core/types';
 import type {
   BaseVisualization,
@@ -312,10 +312,6 @@ function drewNoData(): boolean {
   return mockContext.fillText.mock.calls.some(([text]) => text === 'No data');
 }
 
-function drewFailed(text = 'Failed to load'): boolean {
-  return mockContext.fillText.mock.calls.some(([drawn]) => drawn === text);
-}
-
 function markedFailed(chart: BaseVisualization): boolean {
   const canvas = (chart as unknown as { canvas: HTMLCanvasElement }).canvas;
   return canvas.hasAttribute('data-fetch-failed');
@@ -384,10 +380,9 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
 
     reportLayout();
 
-    // It rendered, and drew no "No data", and no failure.
+    // It rendered, and drew no "No data", and is not marked failed.
     expect(mockContext.clearRect).toHaveBeenCalled();
     expect(drewNoData()).toBe(false);
-    expect(drewFailed()).toBe(false);
     expect(markedFailed(chart)).toBe(false);
     chart.destroy();
   });
@@ -403,7 +398,7 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
     chart.destroy();
   });
 
-  it('says its fetch failed, and marks its canvas, after its fetch fails', async () => {
+  it('draws nothing, and marks its canvas, after its fetch fails', async () => {
     const chart = create(chartCase);
     reportLayout();
 
@@ -415,25 +410,8 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
       stage: 'fetch',
     });
     reportLayout();
-    expect(drewNoData()).toBe(false);
-    expect(drewFailed()).toBe(true);
+    expect(mockContext.fillText).not.toHaveBeenCalled();
     expect(markedFailed(chart)).toBe(true);
-    chart.destroy();
-  });
-
-  it('says so in the messages given', async () => {
-    const messages = {
-      ...defaultStrings,
-      statistics: { ...defaultStrings.statistics, chartFailed: 'Échec du chargement' },
-    };
-    const chart = create(chartCase, { messages });
-    reportLayout();
-
-    fetches[0]!.reject(new Error('Conversion Error'));
-    await chart.waitForData();
-
-    expect(drewFailed('Échec du chargement')).toBe(true);
-    expect(drewFailed()).toBe(false);
     chart.destroy();
   });
 
@@ -451,7 +429,6 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
     reportLayout();
 
     expect(markedFailed(chart)).toBe(false);
-    expect(drewFailed()).toBe(false);
     chart.destroy();
   });
 });

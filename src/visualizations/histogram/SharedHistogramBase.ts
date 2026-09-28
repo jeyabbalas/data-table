@@ -221,7 +221,7 @@ export abstract class SharedHistogramBase<
   render(): void {
     if (this.destroyed) return;
     // Tells a chart whose fetch failed from one whose first fetch is still
-    // in flight, both of which draw no bars.
+    // in flight, both of which draw no bars. The stats slot says it in text.
     this.canvas.toggleAttribute('data-fetch-failed', !this.data && this.fetchFailed);
     if (this.width === 0 || this.height === 0) return;
 
@@ -246,7 +246,6 @@ export abstract class SharedHistogramBase<
     // there would say the column is empty.
     if (!this.data) {
       this.clearLayout();
-      if (this.fetchFailed) this.drawFailedState();
       return;
     }
 
@@ -747,17 +746,6 @@ export abstract class SharedHistogramBase<
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('No data', this.width / 2, this.height / 2);
-  }
-
-  /** Say that the chart's data failed to load, where its bars would be. */
-  private drawFailedState(): void {
-    const ctx = this.ctx;
-    ctx.fillStyle = this.colors.axisText;
-    ctx.font = FONTS.axis;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const text = truncateText(ctx, this.statsMessages.chartFailed, this.width - 8);
-    ctx.fillText(text, this.width / 2, this.height / 2);
   }
 
   /**

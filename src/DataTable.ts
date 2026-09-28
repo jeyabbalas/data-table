@@ -683,17 +683,24 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
    * A chart's error with the column it came from on its `details`, and the
    * stage that failed when the chart says, as stats-panel errors carry
    * theirs: only some of the charts' queries name the column themselves. A
-   * copy, of the same class and with the same message, code, cause and
-   * stack: a chart can pass on an error it did not make, which other charts
-   * may be passing on too.
+   * copy, as a chart can pass on an error it did not make, which other
+   * charts may be passing on too. A native error, so that it logs, clones
+   * and reads as one, of the same class and with the same message, code,
+   * cause and stack.
    */
   const withChartContext = (
     err: DataTableError,
     column: string,
     stage?: 'fetch' | 'render' | 'filter',
-  ): DataTableError =>
-    Object.create(Object.getPrototypeOf(err) as object, {
-      ...Object.getOwnPropertyDescriptors(err),
+  ): DataTableError => {
+    const copy =
+      'cause' in err ? new Error(err.message, { cause: err.cause }) : new Error(err.message);
+    Object.setPrototypeOf(copy, Object.getPrototypeOf(err) as object);
+    const own: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(err);
+    delete own.message;
+    delete own.cause;
+    Object.defineProperties(copy, {
+      ...own,
       // An engine can keep `stack` as an accessor that reads only the error
       // it was made for.
       stack: { value: err.stack, writable: true, configurable: true },
@@ -703,7 +710,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         enumerable: true,
         configurable: true,
       },
-    }) as DataTableError;
+    });
+    return copy as DataTableError;
+  };
 
   /** Drop a column's interactions from the Escape stack (on filter removal). */
   const clearVisualizationState = (column: string): void => {
@@ -750,9 +759,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // slot, for a slot a panel was to take and did not.
   const chartStatsRenderers = new Map<string, () => void>();
 
-  // The columns whose live chart's latest fetch failed. Its slot shows the
-  // table-wide count, which `refreshNonVizStats` keeps current.
-  const failedCharts = new Set<string>();
+  // Per column whose live chart has no stats of its own, redraws its slot:
+  // before the chart's first stats land, after a fetch of it failed, and for
+  // a custom chart that reports none. The slot shows the table-wide count,
+  // which `refreshNonVizStats` keeps current.
+  const chartsWithoutStats = new Map<string, () => void>();
 
   // Columns whose custom stats panel threw while being built. As with a chart
   // that throws, the same header on the same relation would throw again, so
@@ -812,9 +823,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // dropped while interaction text is showing.
     let lastStats: ColumnStatsData | null = null;
     let detailHtml: string | null = null;
-    // Whether a fetch of the chart failed since it last reported stats: the
-    // slot says so, in text. Read only while there are no stats, which the
-    // chart's stats leave only by a fetch failing.
+    // Whether the chart has reported stats, and whether a fetch of it failed
+    // since it last did: the slot says so, in text. Read only while there
+    // are no stats, which the chart's stats leave only by a fetch failing.
+    let reportedStats = false;
     let fetchFailed = false;
 
     const renderStatsSlot = (): void => {
@@ -848,6 +860,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       tableContainer.getColumnWindow().mountedColumns.get().includes(column.name);
     // Only write the placeholder fallback when there's no panel taking the slot.
     if (!panelOf() && !panelComing()) renderStatsSlot();
+    const refreshSlotWithoutStats = (): void => {
+      if (!panelOf() && !panelComing()) renderStatsSlot();
+    };
 
     let viz: VisualizationType | undefined;
     const vizOptions = {
@@ -861,7 +876,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       onDefaultStatsChange: (stats: ColumnStatsData) => {
         latestStats.set(column.name, stats);
         lastStats = stats;
-        failedCharts.delete(column.name);
+        reportedStats = true;
+        chartsWithoutStats.delete(column.name);
         const panel = panelOf();
         if (panel) {
           try {
@@ -908,20 +924,31 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         },
       ) => {
         // A fetch that failed leaves the chart nothing to describe: the
-        // stats it reported before are for the filters then. Not so for a
-        // refetch a newer one superseded, or a chart already destroyed, whose
-        // column's slot may be its successor's.
+        // stats and the detail it reported before are for the filters then.
+        // Not so for a refetch a newer one superseded, or a chart already
+        // destroyed, whose column's slot may be its successor's.
         if (context.stage !== 'render' && !context.superseded && !viz?.isDestroyed()) {
-          fetchFailed = true;
-          failedCharts.add(column.name);
           lastStats = null;
+          detailHtml = null;
           latestStats.delete(column.name);
+          latestDetail.delete(column.name);
+          chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
+          // The slot says the chart failed until it reports stats again, so
+          // only for a chart that reports them: one that has before, or that
+          // reports its own failed fetches, as the built-in charts do and
+          // report stats once one lands.
+          if (reportedStats || context.stage === 'fetch') fetchFailed = true;
           const panel = panelOf();
           if (panel) {
             try {
               panel.update(null);
             } catch (panelErr) {
               emitStatsPanelError(panelErr, column.name, 'update');
+            }
+            try {
+              panel.setHoverStats(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'hover');
             }
           } else if (!panelComing()) {
             renderStatsSlot();
@@ -938,12 +965,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (!created) return null;
     viz = created as VisualizationType;
     chartStatsRenderers.set(column.name, renderStatsSlot);
+    chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
     // Once the chart is gone, its stats must not linger: a panel goes back
     // to its initial state, and the default slot to the table-wide count,
     // which `refreshNonVizStats` keeps current from then on.
     statsSlotResets.set(created, () => {
       chartStatsRenderers.delete(column.name);
-      failedCharts.delete(column.name);
+      chartsWithoutStats.delete(column.name);
       if (destroyed) return;
       latestStats.delete(column.name);
       latestDetail.delete(column.name);
@@ -1432,10 +1460,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (
         vizController ? vizController.hasLiveViz(column.name) : vizRegistry.isApplicable(column)
       ) {
-        // A live chart whose fetch failed shows the table-wide count too.
-        if (failedCharts.has(column.name) && !activeStatsPanels.has(column.name)) {
-          chartStatsRenderers.get(column.name)?.();
-        }
+        // A live chart without stats of its own shows the table-wide count
+        // too.
+        chartsWithoutStats.get(column.name)?.();
         continue;
       }
       // Panel-owned slot? Skip — except when the panel destroyed itself

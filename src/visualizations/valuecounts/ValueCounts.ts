@@ -382,7 +382,8 @@ export class ValueCounts extends BaseVisualization {
   render(): void {
     if (this.destroyed) return;
     // Tells a chart whose fetch failed from one whose first fetch is still
-    // in flight, both of which draw no segments.
+    // in flight, both of which draw no segments. The stats slot says it in
+    // text.
     this.canvas.toggleAttribute('data-fetch-failed', !this.data && this.fetchFailed);
 
     this.clear();
@@ -392,7 +393,6 @@ export class ValueCounts extends BaseVisualization {
     this.colors = getValueCountsColors(this.canvas);
 
     if (!this.data) {
-      if (this.fetchFailed) this.drawFailedState();
       return;
     }
 
@@ -1163,17 +1163,6 @@ export class ValueCounts extends BaseVisualization {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('No data', this.width / 2, this.height / 2);
-  }
-
-  /** Say that the chart's data failed to load, where its segments would be. */
-  private drawFailedState(): void {
-    const ctx = this.ctx;
-    ctx.fillStyle = this.colors.axisText;
-    ctx.font = FONTS.axis;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const text = truncateText(ctx, this.statsMessages.chartFailed, this.width - 8);
-    ctx.fillText(text, this.width / 2, this.height / 2);
   }
 
   /**

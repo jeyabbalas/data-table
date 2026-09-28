@@ -310,6 +310,19 @@ function recordingPanels(): StatsPanelRegistry {
   return registry;
 }
 
+/** A {@link CountPanel} that shows the hover or selection detail it is given. */
+class DetailPanel extends CountPanel {
+  private detail = '';
+  override update(stats: ColumnStatsData | null): void {
+    super.update(stats);
+    if (this.detail) this.container.append(` · ${this.detail}`);
+  }
+  override setHoverStats(html: string | null): void {
+    this.detail = html ?? '';
+    this.update(null);
+  }
+}
+
 /** A panel whose constructor throws. */
 class ThrowingPanel extends BaseStatsPanel {
   constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
@@ -338,12 +351,15 @@ class ThrowingChart extends BaseVisualization {
 /**
  * A custom chart whose fetches for c1 follow `script`, one step each:
  * `ok:<n>` reports stats with `n` rows through the filters (0 for none),
- * `wait` parks the fetch until the test settles it, `fail` throws.
+ * `detail:<n>` reports them and a hover detail too, `wait` parks the fetch
+ * until the test settles it, `fail` throws. With `silent`, a fetch that
+ * does not throw reports nothing, as a chart without stats of its own does.
  */
 class ScriptedChart extends BaseVisualization {
   static script: string[] = [];
   static parked: { resolve: () => void; reject: (error: unknown) => void }[] = [];
   static instances: ScriptedChart[] = [];
+  static silent = false;
 
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
@@ -351,10 +367,11 @@ class ScriptedChart extends BaseVisualization {
     this.dataPromise = this.fetchData();
   }
 
-  static reset(script: string[]): VisualizationRegistry {
+  static reset(script: string[], { silent = false } = {}): VisualizationRegistry {
     ScriptedChart.script = script;
     ScriptedChart.parked = [];
     ScriptedChart.instances = [];
+    ScriptedChart.silent = silent;
     const registry = new VisualizationRegistry();
     registry.register({
       name: 'scripted',
@@ -372,7 +389,9 @@ class ScriptedChart extends BaseVisualization {
       return;
     }
     if (step === 'fail') throw new Error('scripted failure');
+    if (ScriptedChart.silent) return;
     const filtered = Number(step.split(':')[1]);
+    if (step.startsWith('detail:')) this.options.onStatsChange?.('<b>Hovered</b> bar');
     this.options.onDefaultStatsChange?.({
       kind: 'categorical',
       totalRows: 999,
@@ -931,6 +950,187 @@ describe('lazy column charts (real DuckDB)', () => {
     expect(m.slot('c1')).toContain('444 / 999');
     expect(m.slot('c1')).not.toContain('Failed to load');
     expect(errors.map((error) => error.details?.column)).toEqual(['c1']);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('does not say a custom chart without stats of its own failed', async () => {
+    const m = await mount({ visualizationRegistry: ScriptedChart.reset([], { silent: true }) });
+    const errors = collectVizErrorEvents(m.table);
+    await waitForSlot(m, 'c1', /^20 rows$/);
+    ScriptedChart.script = ['fail'];
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await vi.waitFor(() => expect(errors).toHaveLength(1), { timeout: 5000 });
+    // As on main: the slot shows the table-wide count, which nothing would
+    // take back from "Failed to load" once the chart recovers.
+    await waitForSlot(m, 'c1', /^8 \/ 20 rows$/);
+
+    ScriptedChart.script = ['ok'];
+    m.table.actions.addFilter({ type: 'range', column: 'c3', min: 1, max: 4, maxInclusive: true });
+    await waitForSlot(m, 'c1', /^4 \/ 20 rows$/);
+    expect(errors).toHaveLength(1);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('keeps the count current for a custom chart without stats of its own', async () => {
+    const m = await mount({ visualizationRegistry: ScriptedChart.reset([], { silent: true }) });
+    await waitForSlot(m, 'c1', /^20 rows$/);
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', /^8 \/ 20 rows$/);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('says a built-in chart whose first fetch fails failed', async () => {
+    const m = await mount();
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
+    scrollTo(900);
+    await waitForSlot(m, 'c9', '20 rowsFailed to load');
+    failing.stop();
+    await m.table.destroy();
+  }, 20_000);
+
+  it("drops the detail a panel shows when a custom chart's fetch fails", async () => {
+    const statsPanelRegistry = new StatsPanelRegistry();
+    statsPanelRegistry.register({
+      name: 'detail',
+      isApplicable: (type) => type === 'integer',
+      constructor: DetailPanel,
+      priority: 10,
+    });
+    const m = await mount({
+      visualizationRegistry: ScriptedChart.reset(['detail:0']),
+      statsPanelRegistry,
+    });
+    await waitForSlot(m, 'c1', 'Hovered');
+    ScriptedChart.script = ['fail'];
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', /^panel …$/);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('gives a panel built after a custom chart failed no detail from before', async () => {
+    const statsPanelRegistry = new StatsPanelRegistry();
+    const m = await mount({
+      visualizationRegistry: ScriptedChart.reset(['detail:0']),
+      statsPanelRegistry,
+    });
+    await waitForSlot(m, 'c1', 'Hovered');
+    ScriptedChart.script = ['fail'];
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', '8 / 20 rowsFailed to load');
+
+    statsPanelRegistry.register({
+      name: 'detail',
+      isApplicable: (type) => type === 'integer',
+      constructor: DetailPanel,
+      priority: 10,
+    });
+    m.table.actions.hideColumn('c3');
+    await afterRebuild();
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
+    expect(m.slot('c1')).toBe('panel …');
+    await m.table.destroy();
+  }, 20_000);
+
+  it("drops a custom chart's hover detail when its fetch fails", async () => {
+    const m = await mount({ visualizationRegistry: ScriptedChart.reset(['detail:0']) });
+    await waitForSlot(m, 'c1', 'Hovered bar');
+    ScriptedChart.script = ['fail'];
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', '8 / 20 rowsFailed to load');
+    expect(m.slot('c1')).not.toContain('Hovered');
+    await m.table.destroy();
+  }, 20_000);
+
+  it('says a chart failed in the messages given', async () => {
+    const m = await mount({ messages: { statistics: { chartFailed: 'Échec du chargement' } } });
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', '8 / 20 rowsÉchec du chargement');
+    failing.stop();
+    await m.table.destroy();
+  }, 20_000);
+
+  it('emits a native error, of the class, code, cause and stack the chart reported', async () => {
+    const m = await mount();
+    const errors = collectVizErrorEvents(m.table);
+    await waitForSlot(m, 'c1', /min/);
+    const raw = new Error('Out of Memory Error');
+    const original = new QueryError('boom', {
+      code: 'QUERY_RUNTIME',
+      cause: raw,
+      details: { sql: 'x' },
+    });
+    const failing = m.fail(
+      (sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'),
+      original,
+    );
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await vi.waitFor(() => expect(errors.some((e) => e.message === 'boom')).toBe(true), {
+      timeout: 5000,
+    });
+    failing.stop();
+
+    const copy = errors.find((error) => error.message === 'boom')!;
+    expect(copy).not.toBe(original);
+    expect(copy).toBeInstanceOf(QueryError);
+    expect(copy).toBeInstanceOf(Error);
+    expect(Object.prototype.toString.call(copy)).toBe('[object Error]');
+    expect(copy.name).toBe('QueryError');
+    expect(copy.code).toBe('QUERY_RUNTIME');
+    expect(copy.cause).toBe(raw);
+    expect(copy.stack).toBe(original.stack);
+    expect(copy.details).toMatchObject({ sql: 'x', stage: 'fetch' });
+    expect(typeof copy.details?.column).toBe('string');
+    expect(original.details).toEqual({ sql: 'x' });
+    expect((structuredClone(copy) as Error).message).toBe('boom');
+    await m.table.destroy();
+  }, 20_000);
+
+  it("keeps a failed chart's count off a slot a panel is about to take", async () => {
+    const statsPanelRegistry = new StatsPanelRegistry();
+    const m = await mount({ statsPanelRegistry });
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', '8 / 20 rowsFailed to load');
+    failing.stop();
+
+    // A panel for c1 waits for the mounted columns to hold still.
+    statsPanelRegistry.register({
+      name: 'count',
+      isApplicable: (type) => type === 'integer',
+      constructor: CountPanel,
+      priority: 10,
+    });
+    m.table.actions.hideColumn('c3');
+    await afterRebuild();
+    m.table.state.filteredRows.set(3);
+    await sleep(0);
+    expect(m.slot('c1')).toBe('8 / 20 rowsFailed to load');
+    await sleep(STATS_PANEL_SETTLE_MS + 50);
+    expect(m.slot('c1')).toBe('panel …');
+    await m.table.destroy();
+  }, 20_000);
+
+  it("leaves the stats of a failed chart's successor alone", async () => {
+    const m = await mount();
+    await waitForSlot(m, 'c1', /^20 rows\S/);
+    const failing = m.fail((sql) => !sql.includes('"c5"') && !sql.startsWith('SELECT COUNT(*)'));
+    m.table.actions.addFilter({ type: 'point', column: 'c0', value: 'US' });
+    await waitForSlot(m, 'c1', '8 / 20 rowsFailed to load');
+    failing.stop();
+
+    // Scrolled out of the keep band, c1's chart goes; back, a new one lands.
+    scrollTo(1100);
+    await vi.waitFor(() => expect(m.charts()).not.toContain('c1'), { timeout: 5000 });
+    scrollTo(0);
+    await waitForSlot(m, 'c1', /^8 \/ 20 rows\S*min/);
+    m.table.state.filteredRows.set(3);
+    await sleep(0);
+    expect(m.slot('c1')).toMatch(/^8 \/ 20 rows\S*min/);
+    expect(m.slot('c1')).not.toContain('Failed to load');
     await m.table.destroy();
   }, 20_000);
 

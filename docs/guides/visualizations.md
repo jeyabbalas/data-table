@@ -350,14 +350,17 @@ fetch, or in `render()`, through `options.onError`. Each error names its
 column in `error.details.column`, and the stage that failed in
 `error.details.stage` when the chart reported one.
 
-A built-in chart whose query fails draws "Failed to load"
-(`messages.statistics.chartFailed`) where its bars would be, and its
-`<canvas>` carries a `data-fetch-failed` attribute. For any chart whose fetch
-failed, the stats slot drops what the chart reported before, and any hover or
-selection detail, and shows the table-wide row count with "Failed to load"
-beneath it, until a later fetch lands. A failure of a refetch a newer one
-superseded, or of a chart already destroyed, is reported but leaves the slot
-alone. Subscribe to handle gracefully:
+When a chart's fetch fails, its stats slot drops what the chart reported
+before, and any hover or selection detail, and shows the table-wide row
+count, kept current. Beneath the count it says "Failed to load"
+(`messages.statistics.chartFailed`) until the chart reports stats again: a
+built-in chart does when its next fetch lands, and so does a custom chart
+that reports its stats through `onDefaultStatsChange`. A custom chart that
+reports no stats of its own gets no such line, since nothing would take it
+back. A built-in chart draws nothing after a failed fetch, and its `<canvas>`
+carries a `data-fetch-failed` attribute until a fetch lands. A failure of a
+refetch a newer one superseded, or of a chart already destroyed, is reported
+but leaves the slot alone. Subscribe to handle gracefully:
 
 ```ts
 table.on('error', ({ error, source }) => {

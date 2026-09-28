@@ -1912,7 +1912,7 @@ Bold label prefix for a single selected category detail line.
 
 > **chartFailed**: `string`
 
-Drawn in a header chart whose data failed to load.
+Stats-slot line for a column whose chart's data failed to load.
 
 #### filteredRowCount
 

@@ -364,3 +364,59 @@ describe('BaseVisualization.updateFilters — shared-flag race', () => {
     expect(viz.options.filters).toEqual(F2);
   });
 });
+
+describe('updateFilters — which failures are superseded', () => {
+  /** Two overlapping filter updates of one chart, each settled by the test. */
+  function overlap() {
+    const onError = vi.fn();
+    const viz = new RethrowingFlagProbeViz(
+      mountContainer(),
+      makeColumn(),
+      makeOptions({ onError }),
+    );
+    created.push(viz);
+    const d1 = viz.enqueue();
+    const d2 = viz.enqueue();
+    const u1 = viz.updateFilters(F1);
+    const u2 = viz.updateFilters(F2);
+    const reported = (): [string, boolean][] =>
+      onError.mock.calls.map(([error, context]) => [
+        (error as Error).message,
+        (context as { superseded?: boolean }).superseded ?? false,
+      ]);
+    return { d1, d2, u1, u2, reported };
+  }
+
+  it('marks the older of two failures, the older first', async () => {
+    const { d1, d2, u1, u2, reported } = overlap();
+    d1.reject(new Error('one'));
+    await u1;
+    d2.reject(new Error('two'));
+    await u2;
+    expect(reported()).toEqual([
+      ['one', true],
+      ['two', false],
+    ]);
+  });
+
+  it('marks the older of two failures, the newer first', async () => {
+    const { d1, d2, u1, u2, reported } = overlap();
+    d2.reject(new Error('two'));
+    await u2;
+    d1.reject(new Error('one'));
+    await u1;
+    expect(reported()).toEqual([
+      ['two', false],
+      ['one', true],
+    ]);
+  });
+
+  it('marks an older failure after the newer update landed', async () => {
+    const { d1, d2, u1, u2, reported } = overlap();
+    d2.resolve();
+    await u2;
+    d1.reject(new Error('one'));
+    await u1;
+    expect(reported()).toEqual([['one', true]]);
+  });
+});

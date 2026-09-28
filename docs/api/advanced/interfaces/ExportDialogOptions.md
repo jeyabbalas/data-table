@@ -43,8 +43,8 @@ Defined in: [export/ExportDialog.ts:76](https://github.com/jeyabbalas/data-table
 Unique per-instance identifier mixed into element IDs and radio group
 names, so two tables on the same page don't collide on
 `aria-labelledby` targets or share a checked radio. Normally supplied
-by `createDataTable()`; defaults to `''` for standalone/test
-construction, and the radio groups then get a generated name.
+by `createDataTable()`; a dialog constructed without one generates its
+own.
 
 ***
 

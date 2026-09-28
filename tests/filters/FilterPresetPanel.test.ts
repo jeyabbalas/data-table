@@ -247,6 +247,30 @@ describe('FilterPresetPanel', () => {
       expect(confirmDiv?.style.display).toBe('none');
       expect(deleteBtn?.style.display).toBe('');
     });
+
+    // Each step hides the button it was taken on, which would drop focus out
+    // of the panel, and with it the focus trap and Escape.
+    it('keeps focus in the panel through the confirmation', async () => {
+      manager.save('P', [rangeFilter()]);
+      panel.toggle(anchor);
+      // The panel takes focus a frame after it opens.
+      await new Promise((r) => requestAnimationFrame(r));
+
+      const deleteBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
+      const noBtn = confirmDiv.querySelectorAll('button')[1] as HTMLButtonElement;
+
+      deleteBtn.focus();
+      deleteBtn.click();
+      expect(document.activeElement).toBe(noBtn);
+
+      noBtn.click();
+      expect(document.activeElement).toBe(deleteBtn);
+    });
   });
 
   // ==========================================

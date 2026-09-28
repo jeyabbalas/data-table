@@ -617,6 +617,76 @@ describe('SQLFilterModal', () => {
       expect(document.activeElement).toBe(removeBtn);
       expect(removeBtn.style.display).toBe('');
     });
+
+    it('opens again on Remove, not on a confirmation left open', () => {
+      const filter: RawSQLFilter = {
+        type: 'raw-sql',
+        column: '__raw_sql_rm-4__',
+        sql: 'x',
+        id: 'rm-4',
+      };
+      state.filters.set([filter]);
+      const el = modal.getElement();
+      const removeBtn = el.querySelector<HTMLButtonElement>('.dt-sql-filter-modal-remove')!;
+      const confirmDiv = el.querySelector<HTMLElement>('.dt-sql-filter-modal-remove-confirm')!;
+
+      modal.openForEdit('rm-4');
+      removeBtn.click();
+      modal.close();
+      modal.openForEdit('rm-4');
+
+      expect(confirmDiv.style.display).toBe('none');
+      expect(removeBtn.style.display).toBe('');
+    });
+
+    // With a class prefix of its own and no stylesheet for it, only `hidden`
+    // keeps the section out of create mode.
+    it('hides the Remove section with `hidden` outside edit mode', () => {
+      const bare = new SQLFilterModal(state, actions, { classPrefix: 'bare' });
+      document.body.appendChild(bare.getElement());
+      state.filters.set([
+        { type: 'raw-sql', column: '__raw_sql_rm-5__', sql: 'x', id: 'rm-5' } as RawSQLFilter,
+      ]);
+      const section = bare
+        .getElement()
+        .querySelector<HTMLElement>('.bare-sql-filter-modal-remove-section')!;
+
+      expect(section.hidden).toBe(true);
+      bare.openForEdit('rm-5');
+      expect(section.hidden).toBe(false);
+      bare.close();
+      bare.open();
+      expect(section.hidden).toBe(true);
+
+      bare.destroy();
+    });
+
+    // Updating or removing the filter rebuilds the filter bar's chips, so the
+    // element focused when the modal opened can be gone by the time it closes.
+    it('gives focus to `returnFocus` on close, though the opener is gone', () => {
+      const filter: RawSQLFilter = {
+        type: 'raw-sql',
+        column: '__raw_sql_rm-6__',
+        sql: 'x',
+        id: 'rm-6',
+      };
+      state.filters.set([filter]);
+      const opener = document.createElement('button');
+      const fallback = document.createElement('button');
+      document.body.append(opener, fallback);
+      opener.focus();
+
+      modal.openForEdit('rm-6', fallback);
+      opener.remove();
+      modal
+        .getElement()
+        .querySelector<HTMLButtonElement>('.dt-sql-filter-modal-remove-confirm-yes')!
+        .click();
+
+      expect(modal.getIsOpen()).toBe(false);
+      expect(document.activeElement).toBe(fallback);
+      fallback.remove();
+    });
   });
 
   // ==========================================

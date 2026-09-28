@@ -1899,7 +1899,12 @@ export class TableContainer {
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
-    modal.openForEdit(filterId);
+    // Focus goes back to the filter bar's Expression button: updating or
+    // removing the filter rebuilds its chip, and a chip label takes no focus.
+    const expressionBtn = this.filterBar
+      ?.getElement()
+      .querySelector<HTMLElement>(`.${this.resolvedOptions.classPrefix}-filter-expression-btn`);
+    modal.openForEdit(filterId, expressionBtn ?? undefined);
   }
 
   /**

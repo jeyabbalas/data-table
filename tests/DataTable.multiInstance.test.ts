@@ -109,6 +109,22 @@ describe('multi-instance ID isolation', () => {
     b.destroy();
   });
 
+  it('two dialogs built without instanceIds generate distinct ids', () => {
+    const dialogs = [
+      new ExportDialog(state1, mockBridge),
+      new ExportDialog(state2, mockBridge),
+      new DerivedColumnModal(state1, actions1),
+      new DerivedColumnModal(state2, actions2),
+    ];
+    for (const d of dialogs) document.body.appendChild(d.getElement());
+
+    const ids = Array.from(document.querySelectorAll('[id]'), (el) => el.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    for (const d of dialogs) d.destroy();
+  });
+
   it('two TableContainers with default options auto-generate distinct instance ids', () => {
     const host1 = document.createElement('div');
     const host2 = document.createElement('div');

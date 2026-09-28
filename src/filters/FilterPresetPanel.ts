@@ -452,9 +452,15 @@ export class FilterPresetPanel {
     cancelBtn.className = `${p}-filter-preset-action-btn`;
     cancelBtn.type = 'button';
     cancelBtn.textContent = this.messages.common.no;
+
+    // Each hides the button that was clicked, which takes focus out of the
+    // panel, and with it the focus trap and Escape. The confirmation puts
+    // focus on its No, the choice that changes nothing, and No puts it back
+    // on Delete.
     cancelBtn.addEventListener('click', () => {
       deleteConfirmDiv.style.display = 'none';
       deleteBtn.style.display = '';
+      deleteBtn.focus();
     });
 
     deleteConfirmDiv.appendChild(confirmText);
@@ -464,6 +470,7 @@ export class FilterPresetPanel {
     deleteBtn.addEventListener('click', () => {
       deleteBtn.style.display = 'none';
       deleteConfirmDiv.style.display = 'flex';
+      cancelBtn.focus();
     });
 
     actionsEl.appendChild(loadBtn);

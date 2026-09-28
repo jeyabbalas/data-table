@@ -1,14 +1,15 @@
 /**
- * Two modal bugs that need the library's stylesheet and a browser's radio
- * groups, which jsdom has only in part.
+ * Modal bugs that need the library's stylesheet, real focus and a browser's
+ * radio groups, which jsdom has only in part.
  *
  * The SQL filter modal's Remove section is hidden by the stylesheet, and was
  * never shown: editing a filter cleared an inline `display` the stylesheet
- * did not need. And radios that share a name and have no form are one group
- * across the whole document, which a browser enforces as soon as a checked
- * radio is added to it. Named per class prefix, a second table's export
- * dialog, added with its defaults checked, unchecked the first's format and
- * scope.
+ * did not need. Closing an edit dropped focus to the page, since the chip it
+ * was opened from takes no focus and is rebuilt when the filter changes. And
+ * radios that share a name and have no form are one group across the whole
+ * document, which a browser enforces as soon as a checked radio is added to
+ * it. Named per class prefix, a second table's export dialog, added with its
+ * defaults checked, unchecked the first's format and scope.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -58,6 +59,27 @@ test('the SQL filter modal offers Remove when editing a filter, and only then', 
     return w.__dt.state.filters.get().length;
   });
   expect(filters).toBe(0);
+  // The chip is gone; focus goes back to the filter bar, not the page.
+  await expect(page.locator('.dt-filter-expression-btn')).toBeFocused();
+});
+
+test('updating an expression filter gives focus back to the filter bar', async ({ page }) => {
+  await mountTable(page, { columns: 6, rows: 50 });
+  const modal = page.locator('.dt-sql-filter-modal-backdrop--open');
+  await page.evaluate(() => {
+    const w = window as unknown as { __dt: import('../../src/index').DataTable };
+    w.__dt.actions.addRawSQLFilter('"c0" > 10', 'c0 over 10');
+  });
+
+  await page.locator('.dt-filter-chip-label--sql').click();
+  await expect(modal).toBeVisible();
+  await modal.locator('.dt-sql-filter-modal-validate').click();
+  const update = modal.locator('.dt-sql-filter-modal-apply');
+  await expect(update).toBeEnabled();
+  await update.click();
+
+  await expect(modal).toHaveCount(0);
+  await expect(page.locator('.dt-filter-expression-btn')).toBeFocused();
 });
 
 /** Two tables on one page, on `window.__dtA` and `window.__dtB`. */

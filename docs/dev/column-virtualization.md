@@ -170,8 +170,10 @@ panels and charts right across a trackpad sweep.
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
   with two tables on a page the first table's export dialog opens with no format or scope checked.
   Fixed: `openForEdit` puts `--edit` on the dialog, under which the stylesheet shows the section,
-  and its confirmation keeps focus in the dialog as it hides each button. Each dialog names its
-  radio groups after its instance id, or an id of its own without one.
+  which is `hidden` outside edit mode too, and its confirmation keeps focus in the dialog as it
+  hides each button. An edit gives focus back to the filter bar's Expression button: the chip that
+  opened it takes no focus, and is rebuilt when the filter changes. Each dialog names its radio
+  groups after its instance id, or an id of its own without one.
 - **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
   header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
   scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and

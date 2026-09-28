@@ -51,9 +51,8 @@ Defined in: [derived/DerivedColumnModal.ts:27](https://github.com/jeyabbalas/dat
 Unique per-instance identifier mixed into element IDs and the radio
 group name, so two tables on the same page don't collide on
 `aria-labelledby` targets or share a checked radio. Normally supplied
-by `TableContainer`/`createDataTable()`; defaults to `''` for
-standalone/test construction, and the radio group then gets a
-generated name.
+by `TableContainer`/`createDataTable()`; a modal constructed without
+one generates its own.
 
 ***
 

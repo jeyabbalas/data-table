@@ -52,6 +52,7 @@ export class SQLFilterModal {
   private validateBtn!: HTMLButtonElement;
   private previewEl!: HTMLElement;
   private applyBtn!: HTMLButtonElement;
+  private removeSection!: HTMLElement;
   private removeBtn!: HTMLButtonElement;
   private removeConfirmDiv!: HTMLElement;
 
@@ -198,9 +199,11 @@ export class SQLFilterModal {
     actionsRow.appendChild(this.previewEl);
     body.appendChild(actionsRow);
 
-    // — Remove section: shown by the stylesheet in edit mode only (`--edit` on the dialog)
-    const removeSection = document.createElement('div');
-    removeSection.className = `${p}-sql-filter-modal-remove-section`;
+    // — Remove section, for edit mode only: `hidden` outside it, and shown by
+    // the stylesheet under `--edit` on the dialog
+    this.removeSection = document.createElement('div');
+    this.removeSection.className = `${p}-sql-filter-modal-remove-section`;
+    this.removeSection.hidden = true;
 
     const divider = document.createElement('hr');
     divider.className = `${p}-sql-filter-modal-divider`;
@@ -252,9 +255,9 @@ export class SQLFilterModal {
     dangerZone.appendChild(this.removeBtn);
     dangerZone.appendChild(this.removeConfirmDiv);
 
-    removeSection.appendChild(divider);
-    removeSection.appendChild(dangerZone);
-    body.appendChild(removeSection);
+    this.removeSection.appendChild(divider);
+    this.removeSection.appendChild(dangerZone);
+    body.appendChild(this.removeSection);
 
     return body;
   }
@@ -457,12 +460,20 @@ export class SQLFilterModal {
     this.titleEl.textContent = this.messages.filters.sqlFilter.createTitle;
     this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
     this.dialogEl.classList.remove(`${this.prefix}-sql-filter-modal-dialog--edit`);
+    this.removeSection.hidden = true;
 
     this.showModal(this.labelInput);
   }
 
-  /** Open the modal in edit mode (pre-populated from existing SQL filter) */
-  openForEdit(filterId: string): void {
+  /**
+   * Open the modal in edit mode (pre-populated from existing SQL filter)
+   *
+   * @param filterId - The raw-SQL filter to edit.
+   * @param returnFocus - Where focus goes when the modal closes, in place of
+   *   the element focused when it opened. Pass one that outlives the edit:
+   *   updating or removing the filter rebuilds the filter bar's chips.
+   */
+  openForEdit(filterId: string, returnFocus?: HTMLElement): void {
     if (this.destroyed || this.isOpen) return;
 
     // Find the filter
@@ -479,23 +490,32 @@ export class SQLFilterModal {
     // The stylesheet shows the Remove section only under this class. Clearing
     // an inline `display` could not: the stylesheet hides the section.
     this.dialogEl.classList.add(`${this.prefix}-sql-filter-modal-dialog--edit`);
+    this.removeSection.hidden = false;
 
     // Reset remove confirmation state
     this.removeBtn.style.display = '';
     this.removeConfirmDiv.style.display = 'none';
 
     // ensureEditor runs inside showModal; set the value and focus it.
-    this.showModal(null, () => {
-      this.labelInput.value = filter.label ?? '';
-      if (this.currentEditor) {
-        this.currentEditor.setValue(filter.sql);
-        this.currentEditor.focus();
-      }
-    });
+    this.showModal(
+      null,
+      () => {
+        this.labelInput.value = filter.label ?? '';
+        if (this.currentEditor) {
+          this.currentEditor.setValue(filter.sql);
+          this.currentEditor.focus();
+        }
+      },
+      returnFocus,
+    );
   }
 
   /** Shared open logic for both create and edit modes */
-  private showModal(initialFocus: HTMLElement | null, afterOpen?: () => void): void {
+  private showModal(
+    initialFocus: HTMLElement | null,
+    afterOpen?: () => void,
+    returnFocus?: HTMLElement,
+  ): void {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-sql-filter-modal-backdrop--open`);
 
@@ -509,6 +529,7 @@ export class SQLFilterModal {
       dialog: this.dialogEl,
       labelledBy: `${this.prefix}-${this.instanceId}-sql-filter-modal-title`,
       initialFocus,
+      returnFocus,
       // CodeMirror autocomplete handles its own Escape — don't let ModalHost
       // close the dialog when autocomplete is consuming the key.
       escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),

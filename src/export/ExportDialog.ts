@@ -72,8 +72,8 @@ export interface ExportDialogOptions {
    * Unique per-instance identifier mixed into element IDs and radio group
    * names, so two tables on the same page don't collide on
    * `aria-labelledby` targets or share a checked radio. Normally supplied
-   * by `createDataTable()`; defaults to `''` for standalone/test
-   * construction, and the radio groups then get a generated name.
+   * by `createDataTable()`; a dialog constructed without one generates its
+   * own.
    */
   instanceId?: string | undefined;
   /**
@@ -97,12 +97,6 @@ export class ExportDialog {
   private isOpen = false;
   private readonly prefix: string;
   private readonly instanceId: string;
-  /**
-   * Start of this dialog's radio group names. Radios that share a name and
-   * have no form are one group across the whole document, so it is per
-   * instance, like the element ids.
-   */
-  private readonly radioGroup: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
 
@@ -153,11 +147,11 @@ export class ExportDialog {
     options: ExportDialogOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
-    this.instanceId = options.instanceId ?? '';
-    // Named per prefix, two tables' format and scope radios were one group
-    // each: the second table's dialog, added with its defaults checked,
-    // unchecked the first's. A dialog without an `instanceId` gets its own.
-    this.radioGroup = `${this.prefix}-${this.instanceId || nextInstanceId()}`;
+    // Radios that share a name and have no form are one group across the
+    // whole document, so the radio names carry this too: named per prefix,
+    // a second table's dialog, added with its defaults checked, unchecked
+    // the first's.
+    this.instanceId = options.instanceId || nextInstanceId();
     this.colorSchemeSource = options.colorSchemeSource;
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
@@ -265,7 +259,7 @@ export class ExportDialog {
 
       const radio = document.createElement('input');
       radio.type = 'radio';
-      radio.name = `${this.radioGroup}-export-format`;
+      radio.name = `${p}-${this.instanceId}-export-format`;
       radio.value = fmt.value;
       if (fmt.value === 'csv') radio.checked = true;
       this.formatRadios.push(radio);
@@ -294,7 +288,7 @@ export class ExportDialog {
     allLabel.className = `${p}-export-option`;
     this.allRadio = document.createElement('input');
     this.allRadio.type = 'radio';
-    this.allRadio.name = `${this.radioGroup}-export-scope`;
+    this.allRadio.name = `${p}-${this.instanceId}-export-scope`;
     this.allRadio.value = 'all';
     this.allRadio.checked = true;
     this.allCountEl = document.createElement('span');
@@ -309,7 +303,7 @@ export class ExportDialog {
     filteredLabel.className = `${p}-export-option`;
     const filteredRadio = document.createElement('input');
     filteredRadio.type = 'radio';
-    filteredRadio.name = `${this.radioGroup}-export-scope`;
+    filteredRadio.name = `${p}-${this.instanceId}-export-scope`;
     filteredRadio.value = 'filtered';
     this.filteredCountEl = document.createElement('span');
     this.filteredCountEl.className = `${p}-export-count`;
@@ -323,7 +317,7 @@ export class ExportDialog {
     this.selectedOption.className = `${p}-export-option`;
     this.selectedRadio = document.createElement('input');
     this.selectedRadio.type = 'radio';
-    this.selectedRadio.name = `${this.radioGroup}-export-scope`;
+    this.selectedRadio.name = `${p}-${this.instanceId}-export-scope`;
     this.selectedRadio.value = 'selected';
     this.selectedCountEl = document.createElement('span');
     this.selectedCountEl.className = `${p}-export-count`;

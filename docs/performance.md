@@ -78,9 +78,9 @@ proportioned correctly (`setTotalRows`, `VirtualScroller.ts:434-443`). So
 `clientHeight` comes back as the height of the entire spacer, the computed
 visible range covers every row under the cap, and the body treats that
 range like any other: it builds a DOM row — or a placeholder row — for
-each index (`renderVisibleRows`, `src/table/TableBody.ts:1009`) and
+each index (`renderVisibleRows`, `src/table/TableBody.ts:1357`) and
 fetches the lot in 128-row blocks, at most 2 in flight (`ensureFetched`,
-`TableBody.ts:699`).
+`TableBody.ts:910`).
 
 The height cap saturates the damage rather than removing it: at the
 default 32 px the degenerate "viewport" tops out at ~468,750 rendered rows

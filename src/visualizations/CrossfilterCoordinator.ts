@@ -152,6 +152,15 @@ export class CrossfilterCoordinator {
       this.state.filteredRows.set(this.state.totalRows.get());
       return;
     }
+    // A derived-column change can be dropping or rebuilding the relation
+    // `state.tableName` names, and a count of it fails. Count once the change
+    // has settled, a task later, when the state update that follows a
+    // successful change has landed.
+    while (!this.actions.isRelationReadable()) {
+      await this.actions.whenRelationReadable();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (this.destroyed || seq !== this.filterSequence) return;
+    }
     const tableName = this.state.tableName.get();
     if (!tableName) return;
     try {

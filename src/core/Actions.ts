@@ -134,6 +134,8 @@ export class StateActions {
   /** Derived-column changes awaiting DuckDB; see {@link changeRelation}. */
   private relationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
+  /** Callers of {@link whenRelationSettled} waiting on the changes in flight. */
+  private relationWaiters: (() => void)[] = [];
   private destroyed = false;
 
   constructor(
@@ -205,6 +207,19 @@ export class StateActions {
     this.onRelationSettledCallback = callback;
   }
 
+  /**
+   * Resolves once no derived-column change is waiting on DuckDB, at once when
+   * none is. Like the callback of {@link setOnRelationSettled}, it settles
+   * before the state update that follows a successful change: a caller that
+   * reads the state waits a task more.
+   *
+   * @internal
+   */
+  whenRelationSettled(): Promise<void> {
+    if (this.relationChanges === 0) return Promise.resolve();
+    return new Promise((resolve) => this.relationWaiters.push(resolve));
+  }
+
   /** Run a DuckDB change to the derived-column relation, counted for {@link isRelationChanging}. */
   private async changeRelation<T>(change: () => Promise<T>): Promise<T> {
     this.relationChanges++;
@@ -212,7 +227,10 @@ export class StateActions {
       return await change();
     } finally {
       this.relationChanges--;
-      if (this.relationChanges === 0) this.onRelationSettledCallback?.();
+      if (this.relationChanges === 0) {
+        this.onRelationSettledCallback?.();
+        for (const resolve of this.relationWaiters.splice(0)) resolve();
+      }
     }
   }
 

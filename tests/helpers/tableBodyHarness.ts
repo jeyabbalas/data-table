@@ -39,6 +39,8 @@ export const HARNESS_COLUMNS = ['id', 'tag'];
 export interface TableBodyHarness {
   body: TableBody;
   state: TableState;
+  /** The body's actions, over the same mock bridge. */
+  actions: StateActions;
   queries: CapturedQuery[];
   container: HTMLElement;
   /** Set physical scrollTop to `row * rowHeight` and re-derive the range synchronously. */
@@ -98,5 +100,5 @@ export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBody
     for (let i = 0; i < times; i++) await Promise.resolve();
   };
 
-  return { body, state, queries, container, scrollToRow, drain };
+  return { body, state, actions, queries, container, scrollToRow, drain };
 }

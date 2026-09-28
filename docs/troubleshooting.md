@@ -660,6 +660,14 @@ Cause: header and body cells are now `box-sizing: border-box`, so a column's wid
 
 Fix: give the columns the width you want them to occupy, for example `table.actions.setColumnWidth('name', 175)` for the old default look at a 16 px root font size. Don't set `box-sizing: content-box` on `.dt-cell`, `.dt-col-header` or `.dt-row`; that brings the misplacement back.
 
+### 30. `Error fetching rows` in the console, and rows that stay placeholders
+
+Symptom: the console logs `Error fetching rows:` with a DuckDB error, and some rows show the loading placeholder, or some cells stay empty and busy.
+
+Cause: the query for a block of rows failed. The body logs the failure and tries the same query again after 250 ms, then twice as long after each failure in a row, up to every 8 s. It tries at once when the query changes: a scroll to other columns, a column hidden or shown. It starts afresh after a filter, sort or data change. The usual cause is a derived column whose expression fails on some rows only, such as `CAST(code AS INTEGER)` over text with a few values that are not numbers: adding the column checks the expression against the first rows only, and the others are read as blocks that hold them are fetched.
+
+Fix: find the values the expression fails on with a raw SQL filter, then write the expression so that it does not fail on them, for example with `TRY_CAST`, which gives `null` where `CAST` fails, or clean the data upstream.
+
 ---
 
 ## Browser support quick reference

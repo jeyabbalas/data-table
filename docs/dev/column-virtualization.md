@@ -22,7 +22,9 @@ documentation.
    publishes the columns to mount), #139 (body rows render only those), #141 (row fetches select
    only those) and #140 (pinned columns first in every column order).
 4. **4d: persistent header shells,** with the heavy parts built lazily, and column changes that
-   update the grid in place.
+   update the grid in place. Merged: #142 (the columns a drag or an open panel uses stay mounted),
+   #143 (header controls only for the columns near the view), #144 (column changes update the
+   header row and body in place) and #145 (charts and stats panels kept through column changes).
 
 ## 4d plan
 
@@ -336,5 +338,7 @@ panels and charts right across a trackpad sweep.
   change a sideways scroll makes the body read columns from the VIEW the change dropped, and every
   read fails: about 1,750 failed queries, each logged to the console, while a test held the DROP's
   reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
-  test double, the loop never yields. Not fixed here: body fetches should wait out a
-  derived-column change, and a failed fetch should back off.
+  test double, the loop never yields. Fixed after 4d: the same fetch now waits 250 ms, doubling up
+  to 8 s, before it is tried again, and no body fetch starts while a derived-column change is in
+  flight. The browser test that holds the DROP's reply saw 2,756 failed fetches on main, and none
+  with the fix.

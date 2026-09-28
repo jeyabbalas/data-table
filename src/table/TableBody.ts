@@ -173,6 +173,35 @@ function holdsAll(fetched: ReadonlySet<string> | undefined, columns: readonly st
   return true;
 }
 
+/** Whether two fetches select the same columns. */
+function sameColumns(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const column of a) {
+    if (!b.has(column)) return false;
+  }
+  return true;
+}
+
+/**
+ * How long a block whose fetch failed, or came back short, waits before the
+ * same fetch is tried again, in ms: this after the first, doubling with each
+ * one in a row, up to {@link FETCH_RETRY_MAX_MS}.
+ */
+const FETCH_RETRY_BASE_MS = 250;
+const FETCH_RETRY_MAX_MS = 8_000;
+
+/** A block whose last fetch ended without it. See `TableBody.failedBlocks`. */
+interface FailedBlock {
+  /** The columns that fetch selected. */
+  readonly columns: ReadonlySet<string>;
+  /** The rows it asked for. */
+  readonly limit: number;
+  /** How many fetches of the block in a row have ended without it. */
+  readonly failures: number;
+  /** The wait before the same fetch is tried again; null once it is over. */
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
 /**
  * TableBody renders data rows using virtual scrolling.
  *
@@ -209,9 +238,14 @@ export class TableBody {
   //   block completes (epoch matches, not aborted): write cache → evict →
   //     render if it intersects the viewport → deregister → reconcile.
   //   block completes stale (epoch mismatch): dropped entirely.
+  //   block fails, or comes back short: deregister → recorded in
+  //     `failedBlocks` → reconcile, which does not try the same fetch again
+  //     until a wait of 250 ms, doubling up to 8 s, is over.
   //   block aborted: rejection swallowed; deregistered in `finally`; the
   //     reconciler may legitimately re-issue the same block later as a
   //     fresh query.
+  //   derived-column change in flight: the reconciler starts nothing, and
+  //     runs again a task after the change settles.
   //   invalidation mid-fetch: epoch++ → abort all → clear caches → re-read
   //     the live range → placeholders → reconcile. (The filter-change
   //     scroll animation is unchanged: cache-only renders during the 300 ms
@@ -254,6 +288,15 @@ export class TableBody {
   // for those only: when rows render a column their block lacks, the block
   // reads it, and until then those cells are pending.
   private blockColumns = new Map<number, ReadonlySet<string>>();
+  // Blocks whose last fetch ended without them, failed or short, by block
+  // start. Until its wait is over, the reconciler does not try the same fetch
+  // again: it used to at once, as often as it ended, for as long as it kept
+  // failing. A fetch of other columns or rows goes ahead. A block that lands,
+  // and a change that empties the cache, clear it.
+  private failedBlocks = new Map<number, FailedBlock>();
+  // The reconcile that waits for a derived-column change to settle, shared by
+  // every call made meanwhile. See `ensureFetched`.
+  private relationWait: Promise<void> | null = null;
   private lastScrollDirection: 1 | -1 = 1;
   // Runtime safety valve for the __rowid__ range fast path: flipped (once,
   // with a console.warn) if a fast-path result ever violates the dense-rowid
@@ -622,6 +665,7 @@ export class TableBody {
     // Clear data cache
     this.rowDataCache.clear();
     this.blockColumns.clear();
+    this.clearFailedBlocks();
 
     // Clear row element map and return all rows to pool. Cleared before the
     // rows go: moving focus off one can set off a render, which must find
@@ -863,6 +907,22 @@ export class TableBody {
     if (!this.state.tableName.get()) return;
     if (this.state.visibleColumns.get().length === 0) return;
 
+    // A derived-column change is replacing the relation `state.tableName`
+    // names: until it settles, a read of it fails, or reads columns the
+    // change drops. Reconcile once it has, a task later, when the state
+    // update that follows a successful change has landed.
+    const actions = this.actions;
+    if (actions?.isRelationChanging()) {
+      this.relationWait ??= actions
+        .whenRelationSettled()
+        .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+        .then(() => {
+          this.relationWait = null;
+          return this.ensureFetched();
+        });
+      return this.relationWait;
+    }
+
     // The columns rows render, and the ones a fetch started now selects.
     const rendered = this.fetchableRenderedColumns();
     const columns = this.fetchColumns();
@@ -900,11 +960,12 @@ export class TableBody {
       }
     }
 
-    // Top up visible-block fetches. An in-flight block is never re-issued.
+    // Top up visible-block fetches. An in-flight block is never re-issued,
+    // nor one whose last fetch just ended without it.
     const started: Promise<void>[] = [];
     for (const blockStart of needed) {
       if (this.inFlightBlocks.size >= TableBody.MAX_INFLIGHT_BLOCK_FETCHES) break;
-      if (this.inFlightBlocks.has(blockStart)) continue;
+      if (this.inFlightBlocks.has(blockStart) || this.waitingToRetry(blockStart, columns)) continue;
       const controller = new AbortController();
       this.inFlightBlocks.set(blockStart, { controller, epoch: this.epoch });
       started.push(this.fetchBlock(blockStart, this.epoch, controller, false, columns));
@@ -926,7 +987,9 @@ export class TableBody {
       if (
         candidate >= 0 &&
         candidate < this.virtualScroller.getTotalRows() &&
-        (!this.rowDataCache.has(candidate) || !holdsAll(this.blockColumns.get(candidate), rendered))
+        (!this.rowDataCache.has(candidate) ||
+          !holdsAll(this.blockColumns.get(candidate), rendered)) &&
+        !this.waitingToRetry(candidate, columns)
       ) {
         const controller = new AbortController();
         this.prefetch = { blockStart: candidate, controller };
@@ -973,12 +1036,16 @@ export class TableBody {
     isPrefetch: boolean,
     columns: FetchColumns,
   ): Promise<void> {
+    let limit = 0;
+    // Whether the fetch ended with every row of the block, or without, failed
+    // or short. Null when it was dropped, or never asked.
+    let outcome: 'landed' | 'failed' | null = null;
     try {
       const tableName = this.state.tableName.get();
       if (!tableName) return;
       if (this.state.visibleColumns.get().length === 0) return;
 
-      const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
+      limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
       if (limit <= 0) return;
 
       const topUp = this.columnTopUp(blockStart, columns);
@@ -995,6 +1062,7 @@ export class TableBody {
         );
         if (this.destroyed || epochAtStart !== this.epoch || controller.signal.aborted) return;
         this.mergeColumns(blockStart, read, topUp.missing, columns);
+        outcome = this.holdsRows(blockStart, limit) ? 'landed' : 'failed';
         if (blockStart < this.currentRange.end && blockStart + limit > this.currentRange.start) {
           this.renderVisibleRows();
         }
@@ -1073,6 +1141,7 @@ export class TableBody {
         });
       }
       this.blockColumns.set(blockStart, columns.set);
+      outcome = this.holdsRows(blockStart, limit) ? 'landed' : 'failed';
 
       this.evictDistantBlocks(blockStart);
 
@@ -1086,6 +1155,9 @@ export class TableBody {
       // today's behavior.
       if (!isFetchCancellation(error)) {
         console.error('Error fetching rows:', error);
+        // A fetch dropped, by a scroll or a change, is not the block's
+        // failure: a double may reject one after the abort.
+        if (!controller.signal.aborted) outcome = 'failed';
       }
     } finally {
       // Deregister, guarded on controller identity: a block re-issued after
@@ -1099,10 +1171,68 @@ export class TableBody {
       }
       // Reconcile against the LIVE viewport — the replacement for the old
       // stored-pendingFetch replay, which could resurrect a stale range.
+      // Recorded first, a fetch that ended without the block is not tried
+      // again in the same pass.
       if (!this.destroyed) {
+        if (outcome === 'landed') this.clearFailedBlock(blockStart);
+        else if (outcome === 'failed') this.recordFailedBlock(blockStart, columns, limit);
         void this.ensureFetched();
       }
     }
+  }
+
+  /** Whether every row of the block at `blockStart`, `limit` rows long, is cached. */
+  private holdsRows(blockStart: number, limit: number): boolean {
+    for (let i = blockStart; i < blockStart + limit; i++) {
+      if (!this.rowDataCache.has(i)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Whether the block's last fetch ended without it, failed or short, and the
+   * wait before the same fetch is tried again is not over. A fetch of other
+   * columns, or of other rows, as when the row count changed meanwhile, goes
+   * ahead.
+   */
+  private waitingToRetry(blockStart: number, columns: FetchColumns): boolean {
+    const failed = this.failedBlocks.get(blockStart);
+    if (!failed || failed.timer === null) return false;
+    const limit = Math.min(this.fetchBlockSize, this.virtualScroller.getTotalRows() - blockStart);
+    return failed.limit === limit && sameColumns(failed.columns, columns.set);
+  }
+
+  /**
+   * Hold back the fetch that just ended without the block. Tried again at
+   * once, it would most likely end the same way, and it did, as fast as the
+   * worker answered, for as long as the failure lasted. The wait doubles with
+   * each failure in a row.
+   */
+  private recordFailedBlock(blockStart: number, columns: FetchColumns, limit: number): void {
+    const failures = (this.failedBlocks.get(blockStart)?.failures ?? 0) + 1;
+    this.clearFailedBlock(blockStart);
+    const failed: FailedBlock = { columns: columns.set, limit, failures, timer: null };
+    failed.timer = setTimeout(
+      () => {
+        failed.timer = null;
+        void this.ensureFetched();
+      },
+      Math.min(FETCH_RETRY_MAX_MS, FETCH_RETRY_BASE_MS * 2 ** (failures - 1)),
+    );
+    this.failedBlocks.set(blockStart, failed);
+  }
+
+  private clearFailedBlock(blockStart: number): void {
+    const failed = this.failedBlocks.get(blockStart);
+    if (failed && failed.timer !== null) clearTimeout(failed.timer);
+    this.failedBlocks.delete(blockStart);
+  }
+
+  private clearFailedBlocks(): void {
+    for (const failed of this.failedBlocks.values()) {
+      if (failed.timer !== null) clearTimeout(failed.timer);
+    }
+    this.failedBlocks.clear();
   }
 
   /**
@@ -2429,6 +2559,7 @@ export class TableBody {
     // Clear caches and pools
     this.rowDataCache.clear();
     this.blockColumns.clear();
+    this.clearFailedBlocks();
     this.rowElementMap.clear();
     this.rowPool = [];
 

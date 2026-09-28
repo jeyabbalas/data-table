@@ -113,8 +113,10 @@ export interface StatsPanelOptions {
  *
  * - The constructor is called with an empty `container` element (the
  *   `.dt-col-stats` slot inside a column header), when the column comes
- *   within about a viewport of the view. A panel lives while its column is
- *   near the view, through hides, shows and moves of other columns.
+ *   within about a viewport of the view and the columns there have held
+ *   still for 150 ms: a scroll builds no panel for the columns it passes. A
+ *   panel lives while its column is near the view, through hides, shows and
+ *   moves of other columns.
  * - {@link update} fires on mount, with the stats the column's chart last
  *   emitted if it has one, `null` otherwise; with `null` whenever the chart
  *   is removed; and with each `ColumnStatsData` the chart emits (and on data

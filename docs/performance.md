@@ -150,7 +150,8 @@ A column's chart is built only while its header is in view or within
 200 px of it, and removed once the header is 400 px away. Loading and filter
 changes therefore run chart queries for about a screen's worth of columns,
 however wide the table. A hide, show, move or pin keeps every other column's
-chart, and a custom stats panel lives while its column is near the view. On a
+chart, and a custom stats panel lives while its column is near the view, built
+once scrolling pauses rather than for every column a scroll passes. On a
 50,000-row × 1,000-column table, `loadData` dropped from 20.4 s to 6.2 s and
 a filter from 4.4 s to 0.5 s. See
 [Visualizations → Charts on wide tables](./guides/visualizations.md#charts-on-wide-tables).

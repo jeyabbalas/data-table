@@ -110,6 +110,14 @@ export type ColorScheme = 'light' | 'dark' | 'auto';
 
 const VALID_COLOR_SCHEMES: readonly ColorScheme[] = ['light', 'dark', 'auto'];
 
+/**
+ * How long, in ms, the mounted columns hold still before the columns that
+ * arrived get their custom stats panels.
+ *
+ * @internal
+ */
+export const STATS_PANEL_SETTLE_MS = 150;
+
 function validateColorScheme(value: unknown, origin: string): ColorScheme {
   if (value === undefined) return 'auto';
   if (typeof value === 'string' && (VALID_COLOR_SCHEMES as readonly string[]).includes(value)) {
@@ -718,6 +726,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // it is not tried again until one of them changes.
   const failedStatsPanels = new Set<string>();
 
+  // Builds the panels of the columns mounted since the last build, once the
+  // mounted columns hold still (see `syncStatsPanels`).
+  let statsPanelTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Holds a column's place on the Escape stack once its chart is destroyed.
    * Escape then removes the column's filter, which is what clearing the
@@ -784,8 +796,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
         : line1;
     };
+    // A custom stats panel is on its way while the column is mounted and waits
+    // for the mounted columns to hold still (see `syncStatsPanels`). The chart
+    // keeps its stats out of the slot meanwhile: the panel is given them once
+    // it is built, and the slot would only flash them before it.
+    const panelComing = (): boolean =>
+      statsPanelTimer !== null &&
+      !failedStatsPanels.has(column.name) &&
+      statsPanelRegistry.isApplicable(column) &&
+      tableContainer.getColumnWindow().mountedColumns.get().includes(column.name);
     // Only write the placeholder fallback when there's no panel taking the slot.
-    if (!panelOf()) renderStatsSlot();
+    if (!panelOf() && !panelComing()) renderStatsSlot();
 
     let viz: VisualizationType | undefined;
     const vizOptions = {
@@ -808,7 +829,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           }
           return;
         }
-        renderStatsSlot();
+        if (!panelComing()) renderStatsSlot();
       },
       onStatsChange: (stats: string | null) => {
         detailHtml = stats;
@@ -821,7 +842,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           }
           return;
         }
-        renderStatsSlot();
+        if (!panelComing()) renderStatsSlot();
       },
       onBrushCommit: (colName: string) => {
         if (viz) interactionManager?.pushBrush(colName, viz);
@@ -1220,36 +1241,63 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.tableName.subscribe(scheduleAttach));
 
   /**
-   * Give each mounted column its custom stats panel, and destroy those of the
-   * columns no longer mounted. Custom stats panels live while their column
-   * is mounted: built as it comes within about a viewport of the view,
-   * destroyed once it leaves, with the hysteresis the mounted columns have,
-   * so a scroll back and forth rebuilds none.
+   * The table the last attach pass built charts and panels for, while it is
+   * still the table's; `null` before that pass has run for the current table
+   * and schema, and once the table is destroyed.
+   */
+  const attachedTable = (): string | null => {
+    const tableName = state.tableName.get();
+    if (destroyed || !tableName || tableName !== attachedTableName) return null;
+    return state.schema.get() === attachedSchema ? tableName : null;
+  };
+
+  /** Give each mounted column without a custom stats panel its panel. */
+  const buildMountedStatsPanels = (): void => {
+    statsPanelTimer = null;
+    const tableName = attachedTable();
+    if (!tableName) return;
+    for (const columnName of tableContainer.getColumnWindow().mountedColumns.get()) {
+      const header = headersByName.get(columnName);
+      if (header && !activeStatsPanels.has(columnName)) createStatsPanel(header, tableName);
+    }
+  };
+
+  /**
+   * Keep the custom stats panels on the mounted columns. A panel lives while
+   * its column is mounted, within about a viewport of the view, with the
+   * hysteresis the mounted columns have, so a scroll back and forth rebuilds
+   * none.
+   *
+   * A column that leaves loses its panel at once. One that arrives gets its
+   * panel once the mounted columns have held still for
+   * {@link STATS_PANEL_SETTLE_MS}; its chart, if it has one by then, holds
+   * back its stats for the panel (see `createVizForColumn`). A smooth scroll
+   * across a wide table mounts nearly every column on the way, and a panel
+   * usually queries as it is built: the scroll to a derived column just
+   * added built about 500 panels, and the charts at the far end waited
+   * seconds behind their queries.
    *
    * Does nothing until an attach pass has run for the current table and
    * schema; that pass builds the panels of the columns mounted then.
    */
   const syncStatsPanels = (columns: readonly string[]): void => {
-    const tableName = state.tableName.get();
-    if (destroyed || !tableName || tableName !== attachedTableName) return;
-    if (state.schema.get() !== attachedSchema) return;
+    if (!attachedTable()) return;
     const mounted = new Set(columns);
     for (const columnName of [...activeStatsPanels.keys()]) {
       if (!mounted.has(columnName)) destroyStatsPanel(columnName);
     }
-    for (const columnName of columns) {
-      const header = headersByName.get(columnName);
-      if (header && !activeStatsPanels.has(columnName)) createStatsPanel(header, tableName);
-    }
+    if (statsPanelTimer !== null) clearTimeout(statsPanelTimer);
+    statsPanelTimer = setTimeout(buildMountedStatsPanels, STATS_PANEL_SETTLE_MS);
   };
   if (vizController) {
     const columnWindow = tableContainer.getColumnWindow();
     unsubscribes.push(columnWindow.mountedColumns.subscribe(syncStatsPanels));
-    // Build the charts and panels skipped during a derived-column change.
-    // After a success the attach pass that follows builds them anyway; after
-    // a failure nothing else would. A task rather than a microtask, so it
-    // runs after the state update that follows the change and the attach
-    // pass it schedules.
+    // Build the charts and panels skipped during a derived-column change: the
+    // charts now, the panels once the mounted columns hold still. After a
+    // success the attach pass that follows builds them anyway; after a
+    // failure nothing else would. A task rather than a microtask, so it runs
+    // after the state update that follows the change and the attach pass it
+    // schedules.
     actions.setOnRelationSettled(() => {
       setTimeout(() => {
         if (destroyed) return;
@@ -1479,6 +1527,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     vizController = null;
     interactionManager?.destroy();
     coordinator.destroy();
+
+    if (statsPanelTimer !== null) clearTimeout(statsPanelTimer);
+    statsPanelTimer = null;
 
     for (const [colName, panel] of activeStatsPanels) {
       try {

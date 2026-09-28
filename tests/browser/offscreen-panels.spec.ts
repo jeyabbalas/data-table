@@ -258,3 +258,40 @@ test('a custom stats panel is in place whenever its column is in view, and a dit
     expect(live.get(column), `${column} has one panel at most`).toBeLessThanOrEqual(1);
   }
 });
+
+test('a smooth scroll across the table builds stats panels where it stops, not on the way', async ({
+  page,
+}) => {
+  await mountTable(page, { statsPanel: true, visualizations: true });
+  await settle(page);
+  const log = () =>
+    page.evaluate(() => (window as unknown as TestWindow).__dtTest.panelLog.slice());
+  const mark = (await log()).length;
+
+  // The scroll the table makes to a derived column just added: smooth, from
+  // one end to the other, mounting nearly every column on the way.
+  const { max } = await probe(page, 'scroll');
+  await page.evaluate(
+    ({ hostId, max }) =>
+      document
+        .querySelector(`#${hostId} .dt-body-scroll`)!
+        .scrollTo({ left: max, behavior: 'smooth' }),
+    { hostId: HOST_ID, max },
+  );
+  await expect
+    .poll(async () => (await probe(page, 'scroll')).left, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(max - 1);
+  await settle(page);
+
+  const built = (await log())
+    .slice(mark)
+    .filter((e) => e.event === 'construct')
+    .map((e) => e.column);
+  const numericMounted = (await probe(page, 'mounted')).filter((c) => Number(c.slice(1)) % 3 !== 1);
+  // Where it stopped, every numeric column has its panel.
+  expect(built).toEqual(expect.arrayContaining(numericMounted));
+  // On the way, a panel for each of the ~190 numeric columns passed was built
+  // as its column mounted. Now only a pause longer than the settle time, such
+  // as a slow frame, builds any before the end: about 15 panels in all.
+  expect(built.length, 'panels the scroll built').toBeLessThan(60);
+});

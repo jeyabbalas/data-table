@@ -338,3 +338,12 @@ panels and charts right across a trackpad sweep.
   reply for about a second, on main as with 4d. With a bridge that answers in the same tick, a
   test double, the loop never yields. Not fixed here: body fetches should wait out a
   derived-column change, and a failed fetch should back off.
+- **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, on #145.** Stats panels
+  followed the mounted columns frame by frame, unlike charts. Adding a derived column with +
+  from the far left smooth-scrolls to it, which mounts nearly every column on the way: 533
+  panels built and 530 destroyed at 50K rows, 537 panel queries within 1.5 s against 30 chart
+  queries, and the charts at the new column done 14.1 s later (10.7 s at 200K). Fixed: a column
+  that leaves loses its panel at once, as before, but one that arrives gets its panel once the
+  mounted columns have held still for `STATS_PANEL_SETTLE_MS`, 150 ms. Meanwhile its chart keeps
+  its stats for the panel instead of writing them into the slot first. A browser test counts the
+  panels a smooth scroll across 300 columns builds: 187 to 189 on main, 14 to 31 with the fix.

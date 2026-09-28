@@ -1119,9 +1119,9 @@ abstract class BaseStatsPanel {
 
 ### Lifecycle ordering guarantees
 
-Quoted from `src/visualizations/BaseStatsPanel.ts:108-132`:
+Quoted from `src/visualizations/BaseStatsPanel.ts:108-134`:
 
-- The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header), when the column comes within about a viewport of the view. A panel lives while its column is near the view, through hides, shows and moves of other columns.
+- The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header), when the column comes within about a viewport of the view and the columns there have held still for 150 ms: a scroll builds no panel for the columns it passes. A panel lives while its column is near the view, through hides, shows and moves of other columns.
 - `update()` fires on mount, with the stats the column's chart last emitted if it has one, `null` otherwise; with `null` whenever the chart is removed; and with each `ColumnStatsData` the chart emits (and on data reload). Columns without a visualization receive `update(null)` only.
 - `updateFilters(filters)` fires every time the table's active filter array changes, before any subsequent `update(stats)` call from a viz refetch.
 - `setHoverStats(html | null)` fires when the column's visualization emits a hover snippet (and again with `null` to clear). Columns without a viz never trigger this.

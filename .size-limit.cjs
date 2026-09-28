@@ -40,8 +40,9 @@
  * and custom stats panels through column changes, and building panels only
  * for the columns near the view, took it from 9.00 to 9.38 kB, and the cap
  * from 9.3 to 9.8 kB. Showing a chart whose fetch failed as failed (its
- * stats slot's text, the error's column on a copy of the error) took it from
- * 9.68 to 9.89 kB, and the cap to 10.4 kB.
+ * stats slot's text, the error's column on a copy of the error, the table-wide
+ * count kept current for a chart without stats) took it from 9.68 to 9.97 kB,
+ * and the cap to 10.4 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,

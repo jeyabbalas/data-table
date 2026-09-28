@@ -162,6 +162,72 @@ describe('ColumnWindowController', () => {
     expect(bodyScroll.scrollLeft).toBe(180);
   });
 
+  it("drops the header's echo of a sync that the body has moved on from", () => {
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100);
+    // A smooth scroll moves the body on before the header's event for that
+    // sync arrives, as Chrome was seen to order them at device pixel ratio 2.
+    bodyScroll.scrollLeft = 150;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150);
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(150);
+  });
+
+  it("drops the body's echo of a sync that the header has moved on from", () => {
+    headerScroll.scrollLeft = 100;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(100);
+    // An animated scroll of the header moves it on first.
+    headerScroll.scrollLeft = 150;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(150);
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150);
+  });
+
+  it('follows either scroller back to where it last put it', () => {
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    headerScroll.scrollLeft = 60;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(60);
+    headerScroll.scrollLeft = 100;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(100);
+
+    bodyScroll.scrollLeft = 40;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(40);
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100);
+  });
+
+  it('pulls the header back to a body that cannot scroll as far', () => {
+    // A body that stops at 500, as when its viewport is still wider than a
+    // header whose gutter has not caught up with a scrollbar that went away.
+    let bodyLeft = 0;
+    Object.defineProperty(bodyScroll, 'scrollLeft', {
+      configurable: true,
+      get: () => bodyLeft,
+      set: (v: number) => {
+        bodyLeft = Math.min(v, 500);
+      },
+    });
+    bodyScroll.scrollLeft = 500;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(500);
+
+    // The header scrolls on past it. The body cannot follow, so it does not
+    // move, and fires no scroll event that could bring the header back.
+    headerScroll.scrollLeft = 520;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(500);
+    expect(headerScroll.scrollLeft).toBe(500);
+  });
+
   it('puts a saved position back on both scrollers', () => {
     bodyScroll.scrollLeft = 350;
     bodyScroll.scrollTop = 64;
@@ -192,7 +258,7 @@ describe('ColumnWindowController', () => {
       return scrollTo;
     }
 
-    it('scrolls the header at once and the body smoothly, two frames on', () => {
+    it('smooth-scrolls the body to the end two frames on, and the header follows it', () => {
       const scrollTo = stubScrollTo();
       Object.defineProperty(bodyScroll, 'scrollWidth', { configurable: true, value: 1000 });
       controller.scrollToEnd();
@@ -201,42 +267,39 @@ describe('ColumnWindowController', () => {
       vi.advanceTimersToNextFrame();
       vi.advanceTimersToNextFrame();
       expect(scrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
-      expect(headerScroll.scrollLeft).toBe(1000);
-    });
-
-    it("ignores the header's scroll while the body is still moving, and lines them up at the end", () => {
-      stubScrollTo();
-      controller.scrollToEnd();
-      vi.advanceTimersToNextFrame();
-      vi.advanceTimersToNextFrame();
-
-      // Mid-animation, the header's own scroll event must not pull the body
-      // back to where the header is.
       bodyScroll.scrollLeft = 300;
-      headerScroll.scrollLeft = 700;
-      headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(300);
-
-      bodyScroll.scrollLeft = 700;
-      bodyScroll.dispatchEvent(new Event('scrollend'));
-      expect(headerScroll.scrollLeft).toBe(700);
-      headerScroll.scrollLeft = 650;
-      headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(650);
+      bodyScroll.dispatchEvent(new Event('scroll'));
+      expect(headerScroll.scrollLeft).toBe(300);
     });
 
-    it('ends once the body has held still, where there is no scrollend', () => {
+    it("drops the header's echo mid-scroll, however long the body seems to stand still", () => {
       stubScrollTo();
       controller.scrollToEnd();
       vi.advanceTimersToNextFrame();
       vi.advanceTimersToNextFrame();
-      bodyScroll.scrollLeft = 700;
-      // Three still frames past the 100ms floor.
-      vi.advanceTimersByTime(200);
+      bodyScroll.scrollLeft = 300;
+      bodyScroll.dispatchEvent(new Event('scroll'));
 
-      headerScroll.scrollLeft = 650;
+      // Stalled frames on a loaded machine: the body reads the same for a
+      // while, then has moved on when the header's event for the last sync
+      // arrives.
+      vi.advanceTimersByTime(200);
+      bodyScroll.scrollLeft = 450;
       headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(650);
+      expect(bodyScroll.scrollLeft).toBe(450);
+    });
+
+    it("lets a scroll of the header's own take over from it", () => {
+      stubScrollTo();
+      controller.scrollToEnd();
+      vi.advanceTimersToNextFrame();
+      vi.advanceTimersToNextFrame();
+      bodyScroll.scrollLeft = 300;
+      bodyScroll.dispatchEvent(new Event('scroll'));
+
+      headerScroll.scrollLeft = 200;
+      headerScroll.dispatchEvent(new Event('scroll'));
+      expect(bodyScroll.scrollLeft).toBe(200);
     });
 
     it('does nothing once destroyed', () => {

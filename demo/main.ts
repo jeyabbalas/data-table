@@ -7,19 +7,27 @@
  * persistence convention so that a single dataset's history survives
  * page refresh.
  *
+ * The demo never reads a dataset itself. A file, or a URL's fetched bytes,
+ * goes to the library as a File, so a large Parquet file takes the
+ * library's large-file path: DuckDB reads it from disk as it loads, and
+ * nothing copies it into the page.
+ *
  * Persistence convention (demo-only — the library itself is general):
  * - File uploads use a fresh per-click `tableName`
  *   (`dt_file_${ts36}_${counter}`). Re-uploading the same file is a
  *   deliberate user action and always starts a fresh session, even when
  *   the bytes are identical to the prior upload.
  * - URL loads use a SHA-256 of the fetched bytes (truncated to 16 hex
- *   chars) as the `tableName`. Same content → same tableName → snapshot
- *   restored (or no-op if the same hash is already loaded). Different
- *   content → different tableName → fresh state, previous snapshot
- *   evicted. This makes URL refresh fool-proof against URLs whose
- *   contents change between visits.
- * - Only the most recent dataset's session and Parquet cache are kept;
- *   loading a different dataset deletes the previous IDB rows.
+ *   chars) as the `tableName`; see `fingerprint` for large ones. Same
+ *   content → same tableName → snapshot restored (or no-op if the same
+ *   hash is already loaded). Different content → different tableName →
+ *   fresh state, previous snapshot evicted. This makes URL refresh
+ *   fool-proof against URLs whose contents change between visits.
+ * - The loaded dataset is cached in IndexedDB so a refresh restores it
+ *   without a network round-trip or file picker prompt; see
+ *   `cacheLoadedSource`.
+ * - Only the most recent dataset's session and cache are kept; loading a
+ *   different dataset deletes the previous IDB rows.
  * - On boot, a one-shot migration prunes any orphan rows left behind by
  *   the legacy `table_${Date.now()}_${counter}` naming scheme.
  */
@@ -96,14 +104,28 @@ function setUrlParam(url: string | null): void {
   }
 }
 
-// ----- Parquet cache for the current dataset (demo-only) -----
-// Stores a Parquet snapshot of the active table in IndexedDB so a refresh
-// can restore the bytes without re-fetching the URL or re-prompting for a
-// file. Keyed by the same hash-based `tableName` the library uses for its
-// session snapshot.
+// ----- Dataset cache for the current dataset (demo-only) -----
+// Stores the active dataset in IndexedDB so a refresh can restore it
+// without re-fetching the URL or re-prompting for a file. Keyed by the same
+// `tableName` the library uses for its session snapshot.
 const DATA_CACHE_DB = 'dt-data-cache';
 const DATA_CACHE_STORE = 'data';
 const LAST_SESSION_KEY = 'dt-last-session';
+
+/**
+ * CSV and JSON up to this size are cached as a Parquet export of the
+ * loaded table, which restores faster than parsing the text again. The
+ * export copies the whole table out of DuckDB into the page, on top of the
+ * text the load itself read, so a larger file is cached as it is.
+ */
+const TEXT_EXPORT_LIMIT = 256 * 1024 * 1024;
+
+/**
+ * A URL's identity hashes every byte up to this size. Hashing reads the
+ * bytes into memory, so a larger one hashes a sample; see `fingerprint`.
+ */
+const FULL_HASH_LIMIT = 64 * 1024 * 1024;
+const HASH_SAMPLE_BYTES = 4 * 1024 * 1024;
 
 interface LastSession {
   type: 'url' | 'file';
@@ -132,25 +154,58 @@ function openDataCache(): Promise<IDBDatabase | null> {
   });
 }
 
-async function cacheTableData(
-  tableName: string,
-  buffer: Uint8Array,
-  sourceName: string,
-): Promise<void> {
+/** A cached dataset: what to hand the library on restore, and its format. */
+interface CachedSource {
+  tableName: string;
+  /**
+   * A Blob, which IndexedDB keeps on disk: storing or reading one copies
+   * nothing into the page.
+   */
+  data: Blob;
+  format: FileFormat;
+  sourceName: string;
+}
+
+async function cacheSource(entry: CachedSource): Promise<void> {
   const db = await openDataCache();
   if (!db) return;
   await new Promise<void>((resolve) => {
-    const tx = db.transaction(DATA_CACHE_STORE, 'readwrite');
-    tx.objectStore(DATA_CACHE_STORE).put({ tableName, buffer, sourceName });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => resolve();
+    try {
+      const tx = db.transaction(DATA_CACHE_STORE, 'readwrite');
+      tx.objectStore(DATA_CACHE_STORE).put(entry);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      // A dataset larger than the storage quota aborts the transaction.
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
   });
   db.close();
 }
 
-async function loadCachedData(
-  tableName: string,
-): Promise<{ buffer: Uint8Array; sourceName: string } | null> {
+/** A cache row as a {@link CachedSource}, including a row an older demo wrote. */
+function toCachedSource(row: unknown): CachedSource | null {
+  if (typeof row !== 'object' || row === null) return null;
+  const { tableName, data, format, sourceName, buffer } = row as Record<string, unknown>;
+  if (typeof tableName !== 'string') return null;
+  const name = typeof sourceName === 'string' ? sourceName : tableName;
+  if (data instanceof Blob && (format === 'csv' || format === 'json' || format === 'parquet')) {
+    return { tableName, data, format, sourceName: name };
+  }
+  // Older demos cached every dataset as the bytes of a Parquet export.
+  if (buffer instanceof Uint8Array) {
+    return {
+      tableName,
+      data: new Blob([new Uint8Array(buffer)]),
+      format: 'parquet',
+      sourceName: name,
+    };
+  }
+  return null;
+}
+
+async function loadCachedSource(tableName: string): Promise<CachedSource | null> {
   const db = await openDataCache();
   if (!db) return null;
   return new Promise((resolve) => {
@@ -158,7 +213,7 @@ async function loadCachedData(
     const req = tx.objectStore(DATA_CACHE_STORE).get(tableName);
     req.onsuccess = () => {
       db.close();
-      resolve(req.result ? { buffer: req.result.buffer, sourceName: req.result.sourceName } : null);
+      resolve(toCachedSource(req.result));
     };
     req.onerror = () => {
       db.close();
@@ -199,13 +254,26 @@ async function listCachedTableNames(): Promise<string[]> {
 // ----- Content-hash dataset identity (URL loads only) -----
 // SHA-256 (first 64 bits, 16 hex chars) over the fetched URL bytes. Same
 // content → same tableName regardless of URL, modification times, or
-// caching layers. ~50–200ms for a 100MB dataset via crypto.subtle.digest
-// (off main thread). File uploads bypass this and get a per-click unique
-// tableName — see `loadBytes` for the policy split.
-async function hashBytes(bytes: Uint8Array): Promise<string> {
-  const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  const view = new Uint8Array(digest);
+// caching layers. crypto.subtle.digest runs off the main thread. File
+// uploads bypass this and get a per-click unique tableName — see
+// `loadPrepared` for the policy split.
+//
+// Hashing reads the bytes into memory, all at once: crypto.subtle has no
+// streaming digest. Above FULL_HASH_LIMIT the hash covers the size and the
+// first and last HASH_SAMPLE_BYTES instead. A Parquet file ends with its
+// footer (schema, row-group offsets and column statistics), so a change to
+// its data almost always shows there; a same-size edit in the middle of a
+// large CSV does not, and restores the old session over the new content.
+async function fingerprint(blob: Blob): Promise<string> {
+  const bytes =
+    blob.size <= FULL_HASH_LIMIT
+      ? await blob.arrayBuffer()
+      : await new Blob([
+          String(blob.size),
+          blob.slice(0, HASH_SAMPLE_BYTES),
+          blob.slice(blob.size - HASH_SAMPLE_BYTES),
+        ]).arrayBuffer();
+  const view = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   let hex = '';
   for (let i = 0; i < 8; i++) {
     hex += view[i].toString(16).padStart(2, '0');
@@ -223,32 +291,40 @@ function detectFormatFromName(name: string): FileFormat {
 }
 
 interface PreparedSource {
-  bytes: Uint8Array;
+  /**
+   * The dataset, handed to the library unread. As a File it takes the
+   * library's File path: Parquet is read from disk as DuckDB loads it, CSV
+   * and JSON as text.
+   */
+  file: File;
   format: FileFormat;
   sourceName: string;
 }
 
 async function prepareSource(source: File | string): Promise<PreparedSource> {
   if (source instanceof File) {
-    const buf = await source.arrayBuffer();
-    return {
-      bytes: new Uint8Array(buf),
-      format: detectFormatFromName(source.name),
-      sourceName: source.name,
-    };
+    return { file: source, format: detectFormatFromName(source.name), sourceName: source.name };
   }
   const response = await fetch(source);
   if (!response.ok) {
     throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
   }
-  const buf = await response.arrayBuffer();
+  // A Blob, not an ArrayBuffer: the browser keeps a large one on disk.
+  const blob = await response.blob();
   const path = new URL(source).pathname;
   const fileSeg = path.split('/').pop() || '';
   return {
-    bytes: new Uint8Array(buf),
+    file: new File([blob], fileSeg || 'data', { type: blob.type }),
     format: detectFormatFromName(fileSeg),
     sourceName: source.split('/').pop() || source,
   };
+}
+
+/** A cached dataset as a {@link PreparedSource}, to restore it. */
+function preparedFromCache(cached: CachedSource): PreparedSource {
+  const file =
+    cached.data instanceof File ? cached.data : new File([cached.data], cached.sourceName);
+  return { file, format: cached.format, sourceName: cached.sourceName };
 }
 
 // ----- Demo-owned SessionStore -----
@@ -299,7 +375,37 @@ function updateInfo(message: string): void {
   tableInfoEl.innerHTML = message;
 }
 
+/**
+ * Text for {@link updateInfo}'s HTML. A shared `?url=` link, a file name, a
+ * column name or an error message is not the demo's to trust.
+ */
+function escapeHtml(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!,
+  );
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 2 ** 30) return `${(bytes / 2 ** 30).toFixed(1)} GB`;
+  if (bytes >= 2 ** 20) return `${(bytes / 2 ** 20).toFixed(1)} MB`;
+  return `${Math.ceil(bytes / 2 ** 10)} KB`;
+}
+
+/** How long the last load took, for the info bar; null while one runs. */
+let lastLoadSeconds: number | null = null;
+/**
+ * The info bar's text while a load runs. A load changes the table's state
+ * as it goes, and the counts that `updateTableInfo` would show meanwhile are
+ * the old dataset's or none.
+ */
+let loadingMessage: string | null = null;
+
 function updateTableInfo(): void {
+  if (loadingMessage !== null) {
+    updateInfo(loadingMessage);
+    return;
+  }
   if (!table) return;
   const { state } = table;
   const tableName = state.tableName.get();
@@ -330,26 +436,86 @@ function updateTableInfo(): void {
     const desc = sort
       .map(
         (s, i) =>
-          `${s.column} (${s.direction === 'asc' ? '▲' : '▼'}${sort.length > 1 ? ` #${i + 1}` : ''})`,
+          `${escapeHtml(s.column)} (${s.direction === 'asc' ? '▲' : '▼'}${sort.length > 1 ? ` #${i + 1}` : ''})`,
       )
       .join(', ');
     info += ` | <strong>Sort:</strong> ${desc}`;
   }
+  if (lastLoadSeconds !== null) info += ` | loaded in ${lastLoadSeconds.toFixed(1)} s`;
   updateInfo(info);
 }
 
-interface LoadBytesOptions {
+interface LoadOptions {
   /** localStorage label + URL-param sync. */
   meta: { type: 'file' | 'url'; source: string };
   /** Skip re-hashing when the caller already knows the tableName (cache hit). */
   knownTableName?: string;
-  /** Skip re-caching the Parquet bytes when restoring from the existing cache. */
-  skipParquetCache?: boolean;
+  /** Skip re-caching the dataset when restoring from the existing cache. */
+  skipCache?: boolean;
+  /** A load at startup, for the session: it offers a way to skip it. */
+  restoring?: boolean;
 }
 
-async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Promise<void> {
-  updateInfo('Loading data...');
+/**
+ * A link that abandons the load at startup and reloads without it. The
+ * load controls are off meanwhile, and a load has no timeout (DuckDB's
+ * start-up fetches included), so without it a stalled restore would hold
+ * the page, and every reload would retry it.
+ */
+const SKIP_LINK = ' · <a href="#" data-action="skip">Skip</a>';
 
+/**
+ * Cache a loaded dataset for refresh. Parquet is cached as the file
+ * itself: IndexedDB keeps the Blob on disk, and the restore reads it from
+ * there as lazily as the first load read the original. CSV and JSON up to
+ * TEXT_EXPORT_LIMIT are cached as a Parquet export of their source
+ * columns, which leaves out `__rowid__` (the loader rejects a source that
+ * has one) and derived columns; larger ones as the file itself.
+ */
+async function cacheLoadedSource(
+  t: DataTable,
+  tableName: string,
+  prepared: PreparedSource,
+): Promise<void> {
+  const { file, format, sourceName } = prepared;
+  if (format === 'parquet' || file.size > TEXT_EXPORT_LIMIT) {
+    await cacheSource({ tableName, data: file, format, sourceName });
+    return;
+  }
+  const baseTable = t.state.baseTableName.get() ?? t.state.tableName.get();
+  const columns = t.state.schema
+    .get()
+    .filter((c) => !c.system && !c.isDerived)
+    .map((c) => quoteIdentifier(c.name))
+    .join(', ');
+  if (!baseTable || !columns) return;
+  const bytes = await t.bridge.exportToBuffer(
+    `SELECT ${columns} FROM ${quoteIdentifier(baseTable)}`,
+    'parquet',
+  );
+  await cacheSource({
+    tableName,
+    data: new Blob([bytes as Uint8Array<ArrayBuffer>]),
+    format: 'parquet',
+    sourceName,
+  });
+}
+
+async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promise<void> {
+  lastLoadSeconds = null;
+  loadingMessage =
+    `Loading <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
+    `(${formatSize(prepared.file.size)})...` +
+    (opts.restoring ? SKIP_LINK : '');
+  updateInfo(loadingMessage);
+  try {
+    await loadPreparedNow(prepared, opts);
+  } finally {
+    loadingMessage = null;
+  }
+}
+
+async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Promise<void> {
   // tableName policy:
   // - knownTableName wins (boot-time restore paths pass the stored ID).
   // - File upload → unique per-click ID, so re-uploading the same file
@@ -363,7 +529,7 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
   } else if (opts.meta.type === 'file') {
     tableName = `dt_file_${Date.now().toString(36)}_${++fileUploadCounter}`;
   } else {
-    tableName = `dt_${await hashBytes(prepared.bytes)}`;
+    tableName = `dt_${await fingerprint(prepared.file)}`;
   }
   const previousTableName = readPreviousTableName();
 
@@ -388,29 +554,20 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
         /* localStorage unavailable */
       }
       setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null);
+      loadingMessage = null;
       updateTableInfo();
       return;
     }
   }
 
-  // The library's loader expects ArrayBuffer for Parquet and string for
-  // text formats. We already have the fetched / file-read bytes in hand,
-  // so passing them back to the library doesn't add I/O cost.
-  const librarySource: ArrayBuffer | string =
-    prepared.format === 'parquet'
-      ? prepared.bytes.buffer.slice(
-          prepared.bytes.byteOffset,
-          prepared.bytes.byteOffset + prepared.bytes.byteLength,
-        )
-      : new TextDecoder('utf-8').decode(prepared.bytes);
-
   try {
     if (!table) {
+      // Mount first, then load. `createDataTable` with a `source` rejects
+      // when that load fails and leaves its table and worker behind, and the
+      // next load would mount a second one; a table mounted empty stays, and
+      // takes the next load.
       table = await createDataTable({
         container: tableContainerEl,
-        source: librarySource,
-        sourceFormat: prepared.format,
-        tableName,
         persistence: { sessionStore },
         presets: true,
         undoRedo: true,
@@ -424,13 +581,16 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
       // `table` was still undefined and silently no-oped. Idempotent when
       // nothing changed mid-flight.
       table.setColorScheme(currentScheme);
-    } else {
-      await table.loadData(librarySource, {
-        tableName,
-        sourceFormat: prepared.format,
-      });
     }
+    // Timed from here: the first load's figure leaves out DuckDB's start-up.
+    const started = performance.now();
+    await table.loadData(prepared.file, {
+      tableName,
+      sourceFormat: prepared.format,
+    });
 
+    lastLoadSeconds = (performance.now() - started) / 1000;
+    loadingMessage = null;
     updateTableInfo();
 
     // Persist the localStorage pointer AFTER the load resolves — a failed
@@ -446,9 +606,9 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
       /* localStorage unavailable */
     }
 
-    // Evict the previous dataset's snapshot + Parquet cache only after the
-    // new load has succeeded. If the hash matches, no eviction is needed
-    // (same dataset, snapshot already restored).
+    // Evict the previous dataset's snapshot + cache only after the new load
+    // has succeeded. If the hash matches, no eviction is needed (same
+    // dataset, snapshot already restored).
     if (previousTableName && previousTableName !== tableName) {
       try {
         await sessionStore.delete(previousTableName);
@@ -468,30 +628,11 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
     // shared dataset on top of the user's local data.
     setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null);
 
-    // Cache the loaded table as Parquet so a refresh restores without a
-    // network round-trip or file picker prompt. Skipped when restoring
-    // from the existing cache (we already have those bytes). Export only
-    // original source columns — system columns (`__rowid__`) and derived
-    // columns are excluded so the round-tripped cache doesn't feed the
-    // loader's `__rowid__` back in on the next load.
-    if (!opts.skipParquetCache) {
-      const currentTableName = table.state.tableName.get();
-      const baseTable = table.state.baseTableName.get() ?? currentTableName;
-      if (currentTableName && baseTable) {
-        const cacheCols = table.state.schema
-          .get()
-          .filter((c) => !c.system && !c.isDerived)
-          .map((c) => quoteIdentifier(c.name))
-          .join(', ');
-        if (cacheCols) {
-          table.bridge
-            .exportToBuffer(`SELECT ${cacheCols} FROM ${quoteIdentifier(baseTable)}`, 'parquet')
-            .then((buffer) => cacheTableData(currentTableName, buffer, prepared.sourceName))
-            .catch(() => {
-              /* caching is best-effort */
-            });
-        }
-      }
+    // Skipped when restoring from the cache: it holds this dataset already.
+    if (!opts.skipCache) {
+      cacheLoadedSource(table, tableName, prepared).catch(() => {
+        /* caching is best-effort */
+      });
     }
   } catch (error) {
     // One-time recovery for users who have an older cache that still
@@ -517,21 +658,34 @@ async function loadBytes(prepared: PreparedSource, opts: LoadBytesOptions): Prom
       updateInfo('Cached session was stale and has been cleared. Load a file or URL to continue.');
       return;
     }
-    updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    // A restore from the cache can fail for a reason that passes (DuckDB not
+    // starting, a network error, a busy machine), so the cached dataset and
+    // its session stay: try again, or forget them.
+    if (opts.skipCache) {
+      updateInfo(
+        `Could not restore <strong>${escapeHtml(prepared.sourceName)}</strong>: ` +
+          `${escapeHtml(message)}. ` +
+          `<a href="#" data-action="retry">Try again</a> · ` +
+          `<a href="#" data-action="forget">Forget it</a>`,
+      );
+      return;
+    }
+    updateInfo(`Error: ${escapeHtml(message)}`);
   }
 }
 
-async function loadSource(source: File | string): Promise<void> {
+async function loadSource(source: File | string, { restoring = false } = {}): Promise<void> {
   try {
     const prepared = await prepareSource(source);
-    const meta: LoadBytesOptions['meta'] =
+    const meta: LoadOptions['meta'] =
       source instanceof File ? { type: 'file', source: source.name } : { type: 'url', source };
-    await loadBytes(prepared, { meta });
+    await loadPrepared(prepared, { meta, restoring });
     // Reset the file picker so the user can immediately re-select the same
     // file (browsers suppress the change event on identical reselection).
     if (source instanceof File) fileInput.value = '';
   } catch (error) {
-    updateInfo(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    updateInfo(`Error: ${escapeHtml(error instanceof Error ? error.message : 'Unknown error')}`);
   }
 }
 
@@ -559,6 +713,64 @@ function wireTableEvents(t: DataTable): void {
   syncDataDependentBtns(t.state.tableName.get());
 }
 
+// ----- One load at a time -----
+// Two loads at once would mount two tables and DuckDB workers if the page
+// has none yet, and hold two large tables in memory if it has.
+const exampleChips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip[data-url]'));
+let loadRunning = false;
+
+function setLoadControlsDisabled(disabled: boolean): void {
+  loadFileBtn.disabled = disabled;
+  loadUrlBtn.disabled = disabled;
+  for (const chip of exampleChips) chip.disabled = disabled;
+}
+
+/** Run `task` unless a load is running, with the load controls off meanwhile. */
+async function exclusively(task: () => Promise<void>): Promise<void> {
+  if (loadRunning) return;
+  loadRunning = true;
+  setLoadControlsDisabled(true);
+  try {
+    await task();
+  } finally {
+    loadRunning = false;
+    setLoadControlsDisabled(false);
+  }
+}
+
+// ----- Links in the info bar -----
+// Put there by the startup restore and its failure: try it again, forget
+// the last session and its cached dataset, or skip a restore in progress.
+tableInfoEl.addEventListener('click', (event) => {
+  const link = (event.target as Element | null)?.closest<HTMLElement>('a[data-action]');
+  if (!link) return;
+  event.preventDefault();
+  const action = link.dataset.action;
+  if (action === 'retry') {
+    void exclusively(restoreSession);
+    return;
+  }
+  const tableName = readPreviousTableName();
+  try {
+    localStorage.removeItem(LAST_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+  if (action === 'skip') {
+    setUrlParam(null);
+    window.location.reload();
+    return;
+  }
+  if (action === 'forget') {
+    if (tableName) {
+      clearCachedData(tableName).catch(() => {
+        /* best-effort */
+      });
+    }
+    updateInfo('Load a file or URL to get started.');
+  }
+});
+
 // ----- UI wiring -----
 exportBtn.addEventListener('click', () => table?.openExportDialog());
 undoBtn.addEventListener('click', () => table?.actions.undo());
@@ -582,27 +794,28 @@ clearSessionBtn.addEventListener('click', async () => {
 
 loadFileBtn.addEventListener('click', () => {
   const file = fileInput.files?.[0];
-  if (file) void loadSource(file);
+  if (file) void exclusively(() => loadSource(file));
 });
 loadUrlBtn.addEventListener('click', () => {
   const url = urlInput.value.trim();
-  if (url) void loadSource(url);
+  if (url) void exclusively(() => loadSource(url));
 });
+// The URL input stays enabled while a load runs; `exclusively` turns Enter away.
 urlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !loadUrlBtn.disabled) {
+  if (e.key === 'Enter') {
     const url = urlInput.value.trim();
-    if (url) void loadSource(url);
+    if (url) void exclusively(() => loadSource(url));
   }
 });
 
 // Example dataset chips — clicking loads the URL through the same path as the
 // URL input, so format auto-detection and `?url=` syncing both happen for free.
-for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]')) {
+for (const chip of exampleChips) {
   chip.addEventListener('click', () => {
     const url = chip.dataset.url;
-    if (!url || loadUrlBtn.disabled) return;
+    if (!url || loadRunning) return;
     urlInput.value = url;
-    void loadSource(url);
+    void exclusively(() => loadSource(url));
   });
 }
 
@@ -615,7 +828,11 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
   updateInfo('Load a file or URL to get started.');
 
   await sessionStore.open();
+  await exclusively(restoreSession);
+})();
 
+/** Load what the page was opened for: a shared `?url=`, or the last session. */
+async function restoreSession(): Promise<void> {
   // Shared `?url=` deep links take precedence over the localStorage
   // session-restore. A friend opening the link expects to see the dataset
   // referenced by the URL, not whatever happened to be in this browser's
@@ -626,19 +843,20 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
   const sharedUrl = getUrlParam();
   if (sharedUrl) {
     urlInput.value = sharedUrl;
-    updateInfo(`Loading shared dataset: <strong>${sharedUrl}</strong>...`);
+    updateInfo(`Loading shared dataset: <strong>${escapeHtml(sharedUrl)}</strong>...${SKIP_LINK}`);
     let prepared: PreparedSource;
     try {
       prepared = await prepareSource(sharedUrl);
     } catch (err) {
-      updateInfo(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      updateInfo(`Error: ${escapeHtml(err instanceof Error ? err.message : 'Unknown error')}`);
       return;
     }
-    const tableName = `dt_${await hashBytes(prepared.bytes)}`;
+    const tableName = `dt_${await fingerprint(prepared.file)}`;
     await pruneOrphans(tableName);
-    await loadBytes(prepared, {
+    await loadPrepared(prepared, {
       meta: { type: 'url', source: sharedUrl },
       knownTableName: tableName,
+      restoring: true,
     });
     return;
   }
@@ -654,41 +872,32 @@ for (const chip of document.querySelectorAll<HTMLButtonElement>('.chip[data-url]
     }
     const session: LastSession = JSON.parse(raw);
     await pruneOrphans(session.tableName);
-    const cached = await loadCachedData(session.tableName);
+    const cached = await loadCachedSource(session.tableName);
     if (cached) {
-      updateInfo(`Restoring session: <strong>${cached.sourceName}</strong>...`);
-      const bytes = new Uint8Array(cached.buffer as unknown as ArrayBufferLike);
-      await loadBytes(
-        { bytes, format: 'parquet', sourceName: cached.sourceName },
-        {
-          meta: { type: session.type, source: session.source },
-          knownTableName: session.tableName,
-          // Cache hit — the bytes we have ARE the cache, no need to re-write.
-          skipParquetCache: true,
-        },
+      updateInfo(
+        `Restoring session: <strong>${escapeHtml(cached.sourceName)}</strong>...${SKIP_LINK}`,
       );
+      await loadPrepared(preparedFromCache(cached), {
+        meta: { type: session.type, source: session.source },
+        knownTableName: session.tableName,
+        // Cache hit — what we have IS the cache, no need to re-write.
+        skipCache: true,
+        restoring: true,
+      });
     } else if (session.type === 'url') {
       urlInput.value = session.source;
+      updateInfo(`Loading <strong>${escapeHtml(session.source)}</strong>...${SKIP_LINK}`);
       // No cache — re-fetch the URL. Hashing the fresh bytes lets us
       // detect content changes vs. the previous session.
-      void loadSource(session.source);
+      await loadSource(session.source, { restoring: true });
     } else {
       updateInfo(
-        `Previous session: <strong>${session.source}</strong> — ` +
+        `Previous session: <strong>${escapeHtml(session.source)}</strong> — ` +
           `load the same file to restore your state, or ` +
-          `<a href="#" id="dismiss-session">dismiss</a>.`,
+          `<a href="#" data-action="forget">dismiss</a>.`,
       );
-      document.getElementById('dismiss-session')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        try {
-          localStorage.removeItem(LAST_SESSION_KEY);
-        } catch {
-          /* ignore */
-        }
-        updateInfo('Load a file or URL to get started.');
-      });
     }
   } catch {
     /* localStorage unavailable */
   }
-})();
+}

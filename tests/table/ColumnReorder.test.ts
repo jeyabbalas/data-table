@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ColumnLayout } from '../../src/table/ColumnLayout';
 import { ColumnReorder, clampUnpinnedIndex } from '../../src/table/ColumnReorder';
 
 describe('ColumnReorder', () => {
@@ -960,6 +961,432 @@ describe('ColumnReorder', () => {
       // Should not throw
       expect(true).toBe(true);
     });
+  });
+});
+
+describe('ColumnReorder: a release it never hears', () => {
+  let root: HTMLDivElement;
+  let headerRow: HTMLDivElement;
+  let onReorder: ReturnType<typeof vi.fn>;
+  let holds: string[];
+
+  beforeEach(() => {
+    root = document.createElement('div');
+    root.className = 'dt-root';
+    headerRow = document.createElement('div');
+    headerRow.className = 'dt-header';
+    const row = document.createElement('div');
+    row.className = 'dt-header-row';
+    for (const [i, name] of ['col1', 'col2', 'col3'].entries()) {
+      const header = document.createElement('div');
+      header.className = 'dt-col-header';
+      header.dataset.column = name;
+      header.getBoundingClientRect = () =>
+        ({
+          left: i * 150,
+          right: (i + 1) * 150,
+          width: 150,
+          top: 0,
+          bottom: 32,
+          height: 32,
+        }) as DOMRect;
+      const handle = document.createElement('button');
+      handle.className = 'dt-col-drag-handle';
+      header.appendChild(handle);
+      row.appendChild(header);
+    }
+    headerRow.appendChild(row);
+    root.appendChild(headerRow);
+    document.body.appendChild(root);
+    onReorder = vi.fn();
+    holds = [];
+  });
+
+  afterEach(() => {
+    root.remove();
+  });
+
+  function make(): ColumnReorder {
+    return new ColumnReorder(headerRow, onReorder, {
+      dragThreshold: 5,
+      holdColumn: (column) => {
+        holds.push(column);
+        return () => holds.splice(holds.indexOf(column), 1);
+      },
+    });
+  }
+
+  /** Press col1's handle and drag it past col2's middle. */
+  function dragCol1(): void {
+    headerRow
+      .querySelector('[data-column="col1"] .dt-col-drag-handle')!
+      .dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+    document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX: 90, clientY: 16 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX: 240, clientY: 16 }));
+  }
+
+  function expectEnded(reorder: ColumnReorder): void {
+    expect(reorder.isDraggingNow()).toBe(false);
+    expect(root.classList.contains('dt-column-dragging')).toBe(false);
+    expect(root.classList.contains('dt-column-potential-drag')).toBe(false);
+    expect(headerRow.querySelector('.dt-col-header--dragging')).toBeNull();
+    expect(headerRow.querySelector('.dt-drop-indicator')).toBeNull();
+    expect(holds).toEqual([]);
+    // Nothing is listening any more: a later move, such as a text selection
+    // elsewhere, goes ahead, and a release drops nothing.
+    const move = new MouseEvent('mousemove', {
+      buttons: 1,
+      clientX: 400,
+      clientY: 16,
+      cancelable: true,
+    });
+    document.dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(false);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 400, clientY: 16 }));
+    expect(onReorder).not.toHaveBeenCalled();
+  }
+
+  it('goes on through a synthetic move with no button held, as a test harness sends', () => {
+    // A real move with no button held ends the drag (see the browser test);
+    // a synthetic one says nothing about the button, whose `buttons` is 0.
+    const reorder = make();
+    dragCol1();
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240, clientY: 16 }));
+    expect(reorder.isDraggingNow()).toBe(true);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 240, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3'], 'col1');
+    expect(holds).toEqual([]);
+    reorder.destroy();
+  });
+
+  it.each([
+    ['the window loses focus', () => window.dispatchEvent(new Event('blur'))],
+    ['the pointer is cancelled', () => document.dispatchEvent(new Event('pointercancel'))],
+    [
+      'the page is hidden',
+      () => {
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'hidden',
+          configurable: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+        delete (document as { visibilityState?: unknown }).visibilityState;
+      },
+    ],
+  ])('ends the drag without a drop when %s', (_, lose) => {
+    const reorder = make();
+    dragCol1();
+    lose();
+    expectEnded(reorder);
+    reorder.destroy();
+  });
+
+  it('goes on when the page becomes visible, or something else loses focus', () => {
+    const reorder = make();
+    dragCol1();
+    document.dispatchEvent(new Event('visibilitychange'));
+    headerRow.querySelector('button')!.dispatchEvent(new Event('blur'));
+    expect(reorder.isDraggingNow()).toBe(true);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 240, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3'], 'col1');
+    reorder.destroy();
+  });
+
+  it('ends a press that never became a drag the same way', () => {
+    const reorder = make();
+    headerRow
+      .querySelector('[data-column="col1"] .dt-col-drag-handle')!
+      .dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 75, clientY: 16, bubbles: true, cancelable: true }),
+      );
+    expect(root.classList.contains('dt-column-potential-drag')).toBe(true);
+    window.dispatchEvent(new Event('blur'));
+    expectEnded(reorder);
+    reorder.destroy();
+  });
+
+  it('drags again on the next press', () => {
+    const reorder = make();
+    dragCol1();
+    window.dispatchEvent(new Event('blur'));
+    dragCol1();
+    expect(reorder.isDraggingNow()).toBe(true);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 240, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3'], 'col1');
+    expect(holds).toEqual([]);
+    reorder.destroy();
+  });
+});
+
+describe('ColumnReorder: a scaled host, without a layout', () => {
+  it('places the indicator in the header row’s own pixels', () => {
+    // Scaled by half: the rects of the row and its headers are halved, its
+    // own pixels, in which the indicator is placed, are not.
+    const root = document.createElement('div');
+    root.className = 'dt-root';
+    const headerRow = document.createElement('div');
+    headerRow.className = 'dt-header';
+    const row = document.createElement('div');
+    row.className = 'dt-header-row';
+    Object.defineProperty(row, 'offsetWidth', { value: 450, configurable: true });
+    row.getBoundingClientRect = () =>
+      ({ left: 0, right: 225, width: 225, top: 0, bottom: 16, height: 16 }) as DOMRect;
+    for (const [i, name] of ['col1', 'col2', 'col3'].entries()) {
+      const header = document.createElement('div');
+      header.className = 'dt-col-header';
+      header.dataset.column = name;
+      header.getBoundingClientRect = () =>
+        ({
+          left: i * 75,
+          right: (i + 1) * 75,
+          width: 75,
+          top: 0,
+          bottom: 16,
+          height: 16,
+        }) as DOMRect;
+      const handle = document.createElement('button');
+      handle.className = 'dt-col-drag-handle';
+      header.appendChild(handle);
+      row.appendChild(header);
+    }
+    headerRow.appendChild(row);
+    root.appendChild(headerRow);
+    document.body.appendChild(root);
+    const onReorder = vi.fn();
+    const reorder = new ColumnReorder(headerRow, onReorder, { dragThreshold: 5 });
+
+    row
+      .querySelector('[data-column="col1"] .dt-col-drag-handle')!
+      .dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 37, clientY: 8, bubbles: true, cancelable: true }),
+      );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 50, clientY: 8 }));
+    // Past col2's middle: the gap before col3, 150 px on screen, 300 in the row.
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 120, clientY: 8 }));
+    expect(row.querySelector<HTMLElement>('.dt-drop-indicator')!.style.left).toBe('300px');
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 120, clientY: 8 }));
+    expect(onReorder).toHaveBeenCalledWith(['col2', 'col1', 'col3'], 'col1');
+
+    reorder.destroy();
+    root.remove();
+  });
+});
+
+describe('ColumnReorder: drops from the column layout', () => {
+  // c00…c19. c00 (100 px) and c01 (300 px) are pinned, the rest are 100 px
+  // wide. The header viewport is 600 px wide and scrolled 1,030 px: the pinned
+  // block covers [0, 400) of it, c11 is wholly beneath it, c12 part-hidden
+  // (layout 1,400–1,500, on screen 370–470) and c13 the first wholly in view.
+  const names = Array.from({ length: 20 }, (_, i) => `c${String(i).padStart(2, '0')}`);
+  let root: HTMLDivElement;
+  let scroller: HTMLDivElement;
+  let headerRow: HTMLDivElement;
+  let row: HTMLDivElement;
+  let onReorder: ReturnType<typeof vi.fn>;
+  let layout: ColumnLayout;
+
+  function scrollTo(left: number): void {
+    Object.defineProperty(scroller, 'scrollLeft', { value: left, configurable: true });
+    row.getBoundingClientRect = () =>
+      ({
+        left: -left,
+        right: 3_000 - left,
+        width: 3_000,
+        top: 0,
+        bottom: 32,
+        height: 32,
+      }) as DOMRect;
+  }
+
+  beforeEach(() => {
+    root = document.createElement('div');
+    root.className = 'dt-root';
+    scroller = document.createElement('div');
+    scroller.className = 'dt-header-scroll';
+    Object.defineProperty(scroller, 'clientWidth', { value: 600, configurable: true });
+    headerRow = document.createElement('div');
+    headerRow.className = 'dt-header';
+    row = document.createElement('div');
+    row.className = 'dt-header-row';
+    for (const name of names) {
+      const header = document.createElement('div');
+      header.className = 'dt-col-header';
+      header.dataset.column = name;
+      const handle = document.createElement('button');
+      handle.className = 'dt-col-drag-handle';
+      header.appendChild(handle);
+      row.appendChild(header);
+    }
+    headerRow.appendChild(row);
+    scroller.appendChild(headerRow);
+    root.appendChild(scroller);
+    document.body.appendChild(root);
+    scrollTo(1_030);
+    layout = new ColumnLayout({
+      visibleColumns: names,
+      pinnedColumns: ['c00', 'c01'],
+      columnWidths: new Map([...names.map((n): [string, number] => [n, 100]), ['c01', 300]]),
+      columnOrder: names,
+      schema: names.map((name) => ({ name })),
+    });
+    onReorder = vi.fn();
+  });
+
+  afterEach(() => {
+    root.remove();
+  });
+
+  /** Drag `column` by its handle to `clientX`, and report the indicator's left edge. */
+  function drag(reorder: ColumnReorder, column: string, clientX: number): number {
+    row
+      .querySelector(`[data-column="${column}"] .dt-col-drag-handle`)!
+      .dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 500, clientY: 16, bubbles: true, cancelable: true }),
+      );
+    document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX: 520, clientY: 16 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX, clientY: 16 }));
+    // The indicator's `left` is in the row's coordinates; back to the screen's.
+    const left = parseFloat(row.querySelector<HTMLElement>('.dt-drop-indicator')!.style.left);
+    return left + row.getBoundingClientRect().left;
+  }
+
+  function make(): ColumnReorder {
+    return new ColumnReorder(headerRow, onReorder, {
+      dragThreshold: 5,
+      getPinnedColumns: () => ['c00', 'c01'],
+      getLayout: () => layout,
+    });
+  }
+
+  /** `names` with `column` moved to before `before`. */
+  function moved(column: string, before: string): string[] {
+    const order = names.filter((n) => n !== column);
+    order.splice(order.indexOf(before), 0, column);
+    return order;
+  }
+
+  it('drops an unpinned column let go on the pinned block beside it, not beneath it', () => {
+    const reorder = make();
+    // The right half of c01, over c11's middle (layout 1,350, on screen 320).
+    expect(drag(reorder, 'c15', 330)).toBe(400);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 330, clientY: 16 }));
+    // Before c12, the first unpinned column in view, part-hidden at the edge.
+    expect(onReorder).toHaveBeenCalledWith(moved('c15', 'c12'), 'c15');
+    reorder.destroy();
+  });
+
+  it('drops anywhere on the pinned block at its edge', () => {
+    const reorder = make();
+    expect(drag(reorder, 'c15', 20)).toBe(400);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 20, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c15', 'c12'), 'c15');
+    reorder.destroy();
+  });
+
+  it('finds the column under the pointer from the layout and the scroll', () => {
+    const reorder = make();
+    // Layout 1,551: past c13's middle, before c14's.
+    expect(drag(reorder, 'c17', 521)).toBe(570);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 521, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c14'), 'c17');
+    reorder.destroy();
+  });
+
+  it('drops before the part-hidden column at the edge when the pointer is on its visible half', () => {
+    const reorder = make();
+    // Layout 1,440: c12's first half, which is on screen right of the block.
+    expect(drag(reorder, 'c15', 410)).toBe(400);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 410, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c15', 'c12'), 'c15');
+    reorder.destroy();
+  });
+
+  it('keeps the indicator inside the viewport', () => {
+    scrollTo(1_080);
+    const reorder = make();
+    // The viewport's right edge is layout 1,680, past c14's middle: the gap
+    // after c14 is beyond it, so the indicator stops at the edge.
+    expect(drag(reorder, 'c17', 5_000)).toBe(600);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 5_000, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c15'), 'c17');
+    reorder.destroy();
+  });
+
+  it('keeps the pointer inside the viewport', () => {
+    const reorder = make();
+    // Far right of the viewport: its right edge, layout 1,630, before c14's middle.
+    expect(drag(reorder, 'c17', 5_000)).toBe(570);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 5_000, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c14'), 'c17');
+    reorder.destroy();
+  });
+
+  it('does not move a pinned column', () => {
+    const reorder = make();
+    row
+      .querySelector('[data-column="c01"] .dt-col-drag-handle')!
+      .dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 150, clientY: 16, bubbles: true, cancelable: true }),
+      );
+    for (const clientX of [170, 20, 521]) {
+      document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX, clientY: 16 }));
+      expect(row.querySelector('.dt-drop-indicator')).toBeNull();
+    }
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 521, clientY: 16 }));
+    expect(onReorder).not.toHaveBeenCalled();
+    reorder.destroy();
+  });
+
+  it('reads a scaled header row in its own pixels', () => {
+    // Scaled by half, as by a transform or CSS zoom on an ancestor: rects
+    // are halved, scroll positions and the layout's widths are not.
+    Object.defineProperty(row, 'offsetWidth', { value: 3_000, configurable: true });
+    row.getBoundingClientRect = () =>
+      ({ left: -515, right: 985, width: 1_500, top: 0, bottom: 16, height: 16 }) as DOMRect;
+    const reorder = make();
+    // 260.5 on screen is 521 into the viewport: before c14's middle.
+    drag(reorder, 'c17', 260.5);
+    expect(row.querySelector<HTMLElement>('.dt-drop-indicator')!.style.left).toBe('1600px');
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 260.5, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c14'), 'c17');
+    reorder.destroy();
+  });
+
+  it('counts a column whose right edge is at the pinned block’s as beneath it', () => {
+    scrollTo(1_100);
+    const reorder = make();
+    // c12 ends at layout 1,500, on screen at the block's edge: c13 is first.
+    expect(drag(reorder, 'c15', 330)).toBe(400);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 330, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c15', 'c13'), 'c15');
+    reorder.destroy();
+  });
+
+  it('takes the new order from the layout, whatever headers the row holds', () => {
+    // A row that holds only some headers, as a windowed one would.
+    for (const name of ['c03', 'c04', 'c05', 'c06'])
+      row.querySelector(`[data-column="${name}"]`)!.remove();
+    const reorder = make();
+    expect(drag(reorder, 'c17', 521)).toBe(570);
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 521, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c14'), 'c17');
+    reorder.destroy();
+  });
+
+  it('moves the drop with the header scroll', () => {
+    const reorder = make();
+    expect(drag(reorder, 'c17', 521)).toBe(570);
+    // 200 px further: layout 1,751, past c15's middle.
+    scrollTo(1_230);
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(parseFloat(row.querySelector<HTMLElement>('.dt-drop-indicator')!.style.left)).toBe(
+      1_800,
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 521, clientY: 16 }));
+    expect(onReorder).toHaveBeenCalledWith(moved('c17', 'c16'), 'c17');
+    reorder.destroy();
   });
 });
 

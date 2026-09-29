@@ -22,7 +22,8 @@ import {
 import { STATS_PANEL_SETTLE_MS } from '@/DataTable';
 import { QueryError } from '@/core/errors';
 import { initializeColumnsFromSchema } from '@/core/State';
-import type { ColumnSchema } from '@/core/types';
+import type { ColumnSchema, Filter } from '@/core/types';
+import { filtersToWhereClause, quoteIdentifier } from '@/filters/FilterSQL';
 import type { SessionStore } from '@/persistence/SessionStore';
 import type { ColumnStatsData } from '@/statistics/ColumnStatsTypes';
 import { BaseStatsPanel, type StatsPanelOptions } from '@/visualizations/BaseStatsPanel';
@@ -323,6 +324,40 @@ class DetailPanel extends CountPanel {
   }
 }
 
+/** A panel that counts its column's values under the filters, querying as it is built and on each filter change. */
+class QueryingPanel extends BaseStatsPanel {
+  constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
+    super(container, column, options);
+    void this.refresh();
+  }
+
+  update(): void {}
+
+  override async updateFilters(filters: Filter[]): Promise<void> {
+    await super.updateFilters(filters);
+    await this.refresh();
+  }
+
+  private async refresh(): Promise<void> {
+    const where = filtersToWhereClause(this.options.filters);
+    const sql =
+      `SELECT COUNT(${quoteIdentifier(this.column.name)}) AS n ` +
+      `FROM ${quoteIdentifier(this.options.tableName)}${where ? ` WHERE ${where}` : ''}`;
+    try {
+      const [row] = await this.options.bridge.query<{ n: number }>(sql);
+      if (!this.isDestroyed()) this.container.textContent = `panel ${Number(row?.n)} rows`;
+    } catch (err) {
+      this.options.onError?.(
+        new QueryError(err instanceof Error ? err.message : String(err), {
+          code: 'QUERY_RUNTIME',
+          cause: err,
+        }),
+        { source: 'stats-panel', column: this.column.name, phase: 'fetch' },
+      );
+    }
+  }
+}
+
 /** A panel whose constructor throws. */
 class ThrowingPanel extends BaseStatsPanel {
   constructor(container: HTMLElement, column: ColumnSchema, options: StatsPanelOptions) {
@@ -437,6 +472,17 @@ function collectVizErrors(table: DataTable): string[] {
   });
   return messages;
 }
+
+/** Messages of the `error` events with `source: 'stats-panel'`. */
+function collectPanelErrors(table: DataTable): string[] {
+  const messages: string[] = [];
+  table.on('error', ({ error, source }) => {
+    if (source === 'stats-panel') messages.push(error.message);
+  });
+  return messages;
+}
+
+const US: Filter = { type: 'point', column: 'c0', value: 'US' };
 
 describe('lazy column charts (real DuckDB)', () => {
   it('creates charts only for the columns in view', async () => {
@@ -677,6 +723,111 @@ describe('lazy column charts (real DuckDB)', () => {
       () => expect(m.charts()).toEqual(expect.arrayContaining(['c9', 'c10', 'c11'])),
       { timeout: 5000 },
     );
+    expect(errors).toEqual([]);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('refetches no chart against a VIEW a derived-column change is dropping', async () => {
+    const m = await mount();
+    await waitForSlot(m, 'c0', /^20 rows/);
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'd',
+      expression: 'c1 * 2',
+    });
+    expect(added.success).toBe(true);
+    await afterRebuild();
+    for (const column of ['c0', 'c1', 'c2', 'c3', 'c4']) await waitForSlot(m, column, /^20 rows\S/);
+    const errors = collectVizErrors(m.table);
+
+    // Filter while the DROP has run but the state still names the VIEW.
+    const gate = m.hold((sql) => sql.startsWith('DROP VIEW'), true);
+    const removing = m.table.actions.removeDerivedColumn('d');
+    await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
+    m.queries.length = 0;
+    m.table.actions.addFilter(US);
+    await sleep(50);
+    expect(m.queries).toEqual([]);
+
+    gate.release();
+    await removing;
+    await afterRebuild();
+    for (const column of ['c0', 'c1', 'c2', 'c3', 'c4']) {
+      await waitForSlot(m, column, /^8 \/ 20 rows\S/);
+    }
+    expect(errors).toEqual([]);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('refetches the charts with the filters set during a derived-column change that fails', async () => {
+    const m = await mount();
+    await waitForSlot(m, 'c0', /^20 rows/);
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'd',
+      expression: 'c1 * 2',
+    });
+    expect(added.success).toBe(true);
+    await afterRebuild();
+    for (const column of ['c0', 'c1', 'c2', 'c3', 'c4']) await waitForSlot(m, column, /^20 rows\S/);
+    const errors = collectVizErrors(m.table);
+
+    const gate = m.hold((sql) => sql.includes('no_such_col'));
+    const replacing = m.table.actions.replaceDerivedColumn('d', {
+      kind: 'expression',
+      name: 'd',
+      expression: 'no_such_col + 1',
+    });
+    await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
+    m.queries.length = 0;
+    m.table.actions.addFilter(US);
+    await sleep(50);
+    expect(m.queries).toEqual([]);
+
+    // No header rebuild follows a failed change: the charts it held refetch.
+    gate.release();
+    expect((await replacing).success).toBe(false);
+    for (const column of ['c0', 'c1', 'c2', 'c3', 'c4']) {
+      await waitForSlot(m, column, /^8 \/ 20 rows\S/);
+    }
+    expect(errors).toEqual([]);
+    await m.table.destroy();
+  }, 20_000);
+
+  it('updates no stats panel against a VIEW a derived-column change is dropping', async () => {
+    const statsPanelRegistry = new StatsPanelRegistry();
+    statsPanelRegistry.register({
+      name: 'querying',
+      isApplicable: (type) => type === 'integer',
+      constructor: QueryingPanel,
+      priority: 10,
+    });
+    const m = await mount({ statsPanelRegistry });
+    await waitForSlot(m, 'c1', 'panel 20 rows');
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'd',
+      expression: 'c1 * 2',
+    });
+    expect(added.success).toBe(true);
+    await afterRebuild();
+    await waitForSlot(m, 'c1', 'panel 20 rows');
+    await waitForSlot(m, 'c3', 'panel 20 rows');
+    const errors = collectPanelErrors(m.table);
+
+    const gate = m.hold((sql) => sql.startsWith('DROP VIEW'), true);
+    const removing = m.table.actions.removeDerivedColumn('d');
+    await vi.waitFor(() => expect(gate.held()).toBe(1), { timeout: 5000 });
+    m.queries.length = 0;
+    m.table.actions.addFilter(US);
+    await sleep(50);
+    expect(m.queries).toEqual([]);
+
+    gate.release();
+    await removing;
+    await afterRebuild();
+    await waitForSlot(m, 'c1', 'panel 8 rows');
+    await waitForSlot(m, 'c3', 'panel 8 rows');
     expect(errors).toEqual([]);
     await m.table.destroy();
   }, 20_000);

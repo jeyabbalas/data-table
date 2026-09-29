@@ -106,19 +106,17 @@ export class CrossfilterCoordinator {
 
   private async onFiltersChanged(filters: Filter[]): Promise<void> {
     const seq = ++this.filterSequence;
-
-    const vizTasks = [...this.visualizations.entries()]
-      .filter(([, viz]) => !viz.isDestroyed())
-      .map(
-        ([, viz]) =>
-          () =>
-            viz.updateFilters(filters),
-      );
+    // The charts to refetch are the ones live now: a chart made from here on
+    // is made with these filters.
+    const charts = [...this.visualizations.entries()];
 
     // Run visualization updates and filtered row count in parallel (independent
     // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
     // single-threaded worker on wide tables.
-    await Promise.all([this.runLimited(vizTasks), this.updateFilteredRowCount(filters, seq)]);
+    await Promise.all([
+      this.updateVisualizations(charts, filters, seq),
+      this.updateFilteredRowCount(filters, seq),
+    ]);
 
     // Trailing-edge hook: fires *after* state.filteredRows has settled so the
     // public `filterChange` event payload carries an up-to-date count. Skip
@@ -147,20 +145,49 @@ export class CrossfilterCoordinator {
     return results;
   }
 
+  /**
+   * Refetch the charts that were live when the filters changed and still
+   * are, each once the relation it queries can be read. That is checked as
+   * each refetch goes out: a cycle runs a few at a time, and a change can
+   * start while the rest wait their turn. Only the latest filter cycle
+   * refetches after a wait: a chart held through several filter changes
+   * refetches once, with the filters in force.
+   */
+  private async updateVisualizations(
+    charts: [string, BaseVisualization][],
+    filters: Filter[],
+    seq: number,
+  ): Promise<void> {
+    const vizTasks = charts.map(([columnName, viz]) => async () => {
+      if (!this.actions.isRelationReadable() && !(await this.waitForReadableRelation(seq))) return;
+      if (this.visualizations.get(columnName) !== viz || viz.isDestroyed()) return;
+      await viz.updateFilters(filters);
+    });
+    await this.runLimited(vizTasks);
+  }
+
+  /**
+   * Wait out a derived-column change that can be dropping or rebuilding the
+   * relation `state.tableName` names, which a query of fails meanwhile: until
+   * it has settled, and a task more, when the state update that follows a
+   * successful change has landed. False if a newer filter cycle started, or
+   * the coordinator was destroyed, meanwhile.
+   */
+  private async waitForReadableRelation(seq: number): Promise<boolean> {
+    while (!this.actions.isRelationReadable()) {
+      await this.actions.whenRelationReadable();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (this.destroyed || seq !== this.filterSequence) return false;
+    }
+    return true;
+  }
+
   private async updateFilteredRowCount(filters: Filter[], seq: number): Promise<void> {
     if (filters.length === 0) {
       this.state.filteredRows.set(this.state.totalRows.get());
       return;
     }
-    // A derived-column change can be dropping or rebuilding the relation
-    // `state.tableName` names, and a count of it fails. Count once the change
-    // has settled, a task later, when the state update that follows a
-    // successful change has landed.
-    while (!this.actions.isRelationReadable()) {
-      await this.actions.whenRelationReadable();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      if (this.destroyed || seq !== this.filterSequence) return;
-    }
+    if (!this.actions.isRelationReadable() && !(await this.waitForReadableRelation(seq))) return;
     const tableName = this.state.tableName.get();
     if (!tableName) return;
     try {

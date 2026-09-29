@@ -181,9 +181,12 @@ export interface ParquetFootprint {
   columns: number;
   /** Estimated size of the loaded table. */
   tableBytes: number;
-  /** Estimated scan memory for decoding the file, all columns together. */
+  /** Estimated scan memory for decoding the columns loaded, all together. */
   scanBytes: number;
-  /** Compressed size of the file's largest row group. */
+  /**
+   * Compressed size of the largest row group, counting the columns loaded:
+   * what DuckDB prefetches from it.
+   */
   largestRowGroupBytes: number;
   fileBytes: number;
 }
@@ -278,30 +281,100 @@ async function queryRows(conn: AsyncDuckDBConnection, sql: string) {
 }
 
 /**
+ * DuckDB prefetches a whole row group, not just the columns read, once they
+ * make up more than this share of its bytes (the Parquet reader's
+ * `WHOLE_GROUP_PREFETCH_MINIMUM_SCAN`).
+ */
+const WHOLE_GROUP_PREFETCH_SHARE = 0.95;
+
+/**
+ * The leaf columns (`parquet_metadata`'s `column_id`) under the top-level
+ * columns named, from the schema tree `parquet_schema` lists depth first.
+ * Null if a name is not a top-level column or the tree does not add up; the
+ * caller then counts every column. `path_in_schema` cannot say this: it
+ * joins path parts with `, `, which a column name may hold too.
+ */
+async function leafColumnIds(
+  conn: AsyncDuckDBConnection,
+  fileName: string,
+  names: readonly string[],
+): Promise<number[] | null> {
+  const nodes = await queryRows(
+    conn,
+    `SELECT name, num_children FROM parquet_schema('${fileName}')`,
+  );
+  let next = 1; // nodes[0] is the root
+  let leaf = 0;
+  // The leaf ids of the subtree at `next`, which it moves past.
+  const subtree = (): number[] | null => {
+    const node = nodes[next++];
+    if (!node) return null;
+    const children = Number(node['num_children'] ?? 0);
+    if (children <= 0) return [leaf++];
+    const ids: number[] = [];
+    for (let i = 0; i < children; i++) {
+      const child = subtree();
+      if (!child) return null;
+      ids.push(...child);
+    }
+    return ids;
+  };
+  const byName = new Map<string, number[]>();
+  const topLevel = Number(nodes[0]?.['num_children'] ?? 0);
+  for (let i = 0; i < topLevel; i++) {
+    const name = String(nodes[next]?.['name']);
+    const ids = subtree();
+    if (!ids) return null;
+    byName.set(name, ids);
+  }
+  if (next !== nodes.length) return null;
+  const ids: number[] = [];
+  for (const name of names) {
+    const own = byName.get(name);
+    if (!own) return null;
+    ids.push(...own);
+  }
+  return ids;
+}
+
+/**
  * Estimate the loaded size of `fileName` projected to `describeRows` (the
  * DESCRIBE of the load's SELECT, without `__rowid__`). Reads the footer and
  * the first {@link LENGTH_SAMPLE_ROWS} rows of text columns only.
+ *
+ * @param projection - The top-level columns a projection loads, if it does:
+ *   the scan and prefetch estimates then count only theirs, as DuckDB reads
+ *   only theirs. Without it, or if the schema cannot be matched to it, they
+ *   count every column, which only errs high.
  */
 export async function measureParquetFootprint(
   conn: AsyncDuckDBConnection,
   fileName: string,
   describeRows: Record<string, unknown>[],
+  projection?: readonly string[],
 ): Promise<ParquetFootprint> {
   const [file] = await queryRows(
     conn,
     `SELECT num_rows, file_size_bytes FROM parquet_file_metadata('${fileName}')`,
   );
+  const leaves = projection ? await leafColumnIds(conn, fileName, projection) : null;
+  const read = leaves ? `column_id IN (${leaves.join(', ') || 'NULL'})` : 'true';
+  // A row group's bytes that DuckDB prefetches: those of the columns read,
+  // or all of them once those are nearly all.
   const [rowGroup] = await queryRows(
     conn,
-    `SELECT max(bytes) AS bytes FROM (
-       SELECT sum(total_compressed_size) AS bytes FROM parquet_metadata('${fileName}') GROUP BY row_group_id
+    `SELECT max(CASE WHEN loaded > ${WHOLE_GROUP_PREFETCH_SHARE} * total THEN total ELSE loaded END) AS bytes
+     FROM (
+       SELECT sum(total_compressed_size) AS total,
+              coalesce(sum(total_compressed_size) FILTER (WHERE ${read}), 0) AS loaded
+       FROM parquet_metadata('${fileName}') GROUP BY row_group_id
      )`,
   );
-  // Each leaf column's largest chunk, which sets its scan memory. Columns a
-  // projection leaves out are counted too, which only errs high.
+  // Each leaf column's largest chunk, which sets its scan memory.
   const chunks = await queryRows(
     conn,
-    `SELECT max(total_uncompressed_size) AS bytes FROM parquet_metadata('${fileName}') GROUP BY column_id`,
+    `SELECT max(total_uncompressed_size) AS bytes FROM parquet_metadata('${fileName}')
+     WHERE ${read} GROUP BY column_id`,
   );
   const rows = Number(file?.['num_rows'] ?? 0);
 

@@ -105,6 +105,15 @@ export interface KeyboardNavigatorOptions {
    * @internal
    */
   revealColumn?: ((column: string) => boolean) | undefined;
+  /**
+   * Scroll sideways so a header control just focused in controls mode is in
+   * view: a narrow column's action bar runs on past its header while a
+   * button in it has focus. `TableContainer` passes its column window
+   * controller's. Without it, nothing scrolls.
+   *
+   * @internal
+   */
+  revealControl?: ((control: HTMLElement) => void) | undefined;
   /** Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op. */
   getBridge?: () => WorkerBridge | undefined;
   /**
@@ -134,6 +143,7 @@ export class KeyboardNavigator {
   private readonly getTableBody: () => TableBody | null;
   private readonly getColumnHeaders: (() => ColumnHeader[]) | undefined;
   private readonly revealColumn: (column: string) => boolean;
+  private readonly revealControl: ((control: HTMLElement) => void) | undefined;
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
   private readonly announceMessage: ((message: string) => void) | undefined;
   private readonly messages: Strings;
@@ -165,6 +175,7 @@ export class KeyboardNavigator {
     this.getColumnHeaders = opts.getColumnHeaders;
     this.revealColumn =
       opts.revealColumn ?? ((column) => revealColumnIn(this.bodyScroll, this.state, column));
+    this.revealControl = opts.revealControl;
     this.getBridge = opts.getBridge;
     this.announceMessage = opts.announce;
     this.messages = opts.messages ?? defaultStrings;
@@ -500,7 +511,7 @@ export class KeyboardNavigator {
     // The header first: focus moves without scrolling, so a cursor the user
     // had wheeled away from put focus on a button nobody could see.
     if (!this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, column)) {
-      first.focus({ preventScroll: true });
+      this.focusControl(first);
       return true;
     }
     // A control that opens a popover on focus (the column's tooltip, its
@@ -517,7 +528,7 @@ export class KeyboardNavigator {
           return;
         }
         if (document.activeElement !== this.gridElement) return;
-        first.focus({ preventScroll: true });
+        this.focusControl(first);
       });
     };
     focusLater(2);
@@ -576,11 +587,22 @@ export class KeyboardNavigator {
       e.preventDefault();
       const delta = e.key === 'ArrowLeft' ? -1 : 1;
       const next = (index + delta + controls.length) % controls.length;
-      controls[next]!.focus({ preventScroll: true });
+      this.focusControl(controls[next]!);
       return true;
     }
 
     return true;
+  }
+
+  /**
+   * Focus a header control without the browser scrolling, which would move
+   * the header apart from the body, then scroll the table so the control is
+   * in view: a narrow column's bar, showing every button while one has
+   * focus, runs on past its header.
+   */
+  private focusControl(control: HTMLElement): void {
+    control.focus({ preventScroll: true });
+    this.revealControl?.(control);
   }
 
   private findHeader(column: string): ColumnHeader | null {

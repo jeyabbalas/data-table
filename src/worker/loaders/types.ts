@@ -3,6 +3,11 @@
  */
 
 import type { ColumnSchema } from '../../core/types';
+import type {
+  CSVSourceOptions,
+  JSONSourceOptions,
+  ParquetSourceOptions,
+} from '../../data/sourceOptions';
 
 /**
  * Result from loading data into DuckDB
@@ -19,49 +24,34 @@ export interface LoadResult {
 }
 
 /**
- * Options for loading CSV data
+ * Options for loading CSV data: how it is read (see {@link CSVSourceOptions}),
+ * and the table it goes into.
  */
-export interface CSVLoadOptions {
+export interface CSVLoadOptions extends CSVSourceOptions {
   /** Table name to create (auto-generated if not provided) */
   tableName?: string | undefined;
-  /** Delimiter character (auto-detected if not provided) */
-  delimiter?: string | undefined;
-  /** Whether the first row is a header (default: true) */
-  header?: boolean | undefined;
-  /** Number of sample rows for type detection (default: 1000) */
-  sampleSize?: number | undefined;
-  /** Skip N rows at the start */
-  skip?: number | undefined;
-  /** Null value strings (default: ['', 'NULL', 'null', 'NA', 'N/A']) */
-  nullValues?: string[] | undefined;
-  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  /** DuckDB's session time zone, set for the load (default: 'UTC'); see `SourceOptions.timezone` */
   timezone?: string | undefined;
 }
 
 /**
- * Options for loading JSON data
+ * Options for loading JSON data: how it is read (see
+ * {@link JSONSourceOptions}), and the table it goes into.
  */
-export interface JSONLoadOptions {
+export interface JSONLoadOptions extends JSONSourceOptions {
   /** Table name to create (auto-generated if not provided) */
   tableName?: string | undefined;
-  /** JSON format: 'array' (array of objects) or 'ndjson' (newline-delimited) */
-  format?: 'array' | 'ndjson' | undefined;
-  /** Number of sample rows for type detection (default: 1000) */
-  sampleSize?: number | undefined;
-  /** Maximum depth for nested objects (default: unlimited) */
-  maxDepth?: number | undefined;
-  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  /** DuckDB's session time zone, set for the load (default: 'UTC'); see `SourceOptions.timezone` */
   timezone?: string | undefined;
 }
 
 /**
- * Options for loading Parquet data
+ * Options for loading Parquet data: how it is read (see
+ * {@link ParquetSourceOptions}), and the table it goes into.
  */
-export interface ParquetLoadOptions {
+export interface ParquetLoadOptions extends ParquetSourceOptions {
   /** Table name to create (auto-generated if not provided) */
   tableName?: string | undefined;
-  /** Columns to load (default: all columns) */
-  columns?: string[] | undefined;
-  /** Timezone for TIMESTAMPTZ columns (default: 'UTC') */
+  /** DuckDB's session time zone, set for the load (default: 'UTC'); see `SourceOptions.timezone` */
   timezone?: string | undefined;
 }

@@ -124,6 +124,9 @@ export interface StatsPanelOptions {
  *   reload). Columns without a visualization receive `update(null)` only.
  * - {@link updateFilters} fires every time the table's active filter array
  *   changes, before any subsequent `update(stats)` call from a viz refetch.
+ *   While a derived-column change that can drop or rebuild the relation
+ *   runs, it waits for the change to settle, then fires once, with the
+ *   filters in force then; a change that succeeds replaces the panel instead.
  * - {@link setHoverStats} fires when a viz emits a hover snippet for this
  *   column (and again with `null` to clear), and as the panel is built, with
  *   the snippet its column's chart shows then, if any. Columns without a viz

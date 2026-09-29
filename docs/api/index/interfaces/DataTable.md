@@ -170,6 +170,8 @@ Defined in: [DataTable.ts:362](https://github.com/jeyabbalas/data-table/blob/c94
 
 Load a new data source into the table. Re-uses the existing worker.
 Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
+`opts.sourceOptions` says how the source is read, as `sourceOptions`
+does for `createDataTable()`.
 
 #### Parameters
 

@@ -38,6 +38,21 @@ Defined in: [data/DataLoader.ts:26](https://github.com/jeyabbalas/data-table/blo
 
 ***
 
+### onProgress?
+
+> `optional` **onProgress?**: [`ProgressCallback`](../../index/type-aliases/ProgressCallback.md)
+
+Defined in: [data/DataLoader.ts:35](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/DataLoader.ts#L35)
+
+Called with each progress message the worker sends as the load runs.
+The table emits them as `loadProgress`.
+
+#### Inherited from
+
+`DataLoaderOptions.onProgress`
+
+***
+
 ### presetManager?
 
 > `optional` **presetManager?**: [`FilterPresetManager`](../../index/classes/FilterPresetManager.md)
@@ -55,6 +70,20 @@ If provided, restores saved filter presets after loading
 Defined in: [core/Actions.ts:70](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Actions.ts#L70)
 
 If provided, restores saved session state after loading
+
+***
+
+### sourceOptions?
+
+> `optional` **sourceOptions?**: [`SourceOptions`](../../index/interfaces/SourceOptions.md)
+
+Defined in: [data/DataLoader.ts:30](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/data/DataLoader.ts#L30)
+
+How the source is read, per format; see [SourceOptions](../../index/interfaces/SourceOptions.md).
+
+#### Inherited from
+
+`DataLoaderOptions.sourceOptions`
 
 ***
 

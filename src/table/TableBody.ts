@@ -149,6 +149,11 @@ function isFetchCancellation(error: unknown): boolean {
   return code === 'QUERY_ABORTED' || code === 'QUERY_CANCELLED';
 }
 
+/** Whether a row fetch failed because the bridge's worker did (`WORKER_CRASHED`). */
+function isWorkerFailure(error: unknown): boolean {
+  return (error as { code?: unknown } | null | undefined)?.code === 'WORKER_CRASHED';
+}
+
 /**
  * Column granularity of a row fetch. Around the columns rows render, a fetch
  * selects a run that far again either side, rounded out to multiples of this,
@@ -295,6 +300,10 @@ export class TableBody {
   // failing. A fetch of other columns or rows goes ahead. A block that lands,
   // and a change that empties the cache, clear it.
   private failedBlocks = new Map<number, FailedBlock>();
+  // The bridge's worker failed. Every fetch would fail the same way, at once,
+  // until the table loads again, which builds a new body: none is started or
+  // tried again, and the failure is logged once.
+  private workerFailed = false;
   // The reconcile that waits for a derived-column change to settle, shared by
   // every call made meanwhile. See `ensureFetched`.
   private relationWait: Promise<void> | null = null;
@@ -908,7 +917,7 @@ export class TableBody {
    * callers void-cast it.
    */
   private async ensureFetched(): Promise<void> {
-    if (this.destroyed) return;
+    if (this.destroyed || this.workerFailed) return;
     if (!this.state.tableName.get()) return;
     if (this.state.visibleColumns.get().length === 0) return;
     // During the filter-change scroll animation, fetch nothing: invalidation
@@ -1170,7 +1179,11 @@ export class TableBody {
       // past a window or invalidating state — silent. Anything else keeps
       // today's behavior.
       if (!isFetchCancellation(error)) {
-        console.error('Error fetching rows:', error);
+        if (!this.workerFailed) console.error('Error fetching rows:', error);
+        if (isWorkerFailure(error)) {
+          this.workerFailed = true;
+          this.clearFailedBlocks();
+        }
         // A fetch dropped, by a scroll or a change, is not the block's
         // failure: a double may reject one after the abort.
         if (!controller.signal.aborted) outcome = 'failed';
@@ -1191,7 +1204,9 @@ export class TableBody {
       // again in the same pass.
       if (!this.destroyed) {
         if (outcome === 'landed') this.clearFailedBlock(blockStart);
-        else if (outcome === 'failed') this.recordFailedBlock(blockStart, columns, limit);
+        else if (outcome === 'failed' && !this.workerFailed) {
+          this.recordFailedBlock(blockStart, columns, limit);
+        }
         void this.ensureFetched();
       }
     }

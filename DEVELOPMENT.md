@@ -132,7 +132,7 @@ on top of the existing snapshot without replacing it.
 npm run build
 ```
 
-Runs four steps in order:
+Runs five steps in order:
 
 1. **`check:css-vars`** — runs `scripts/check-css-vars.mjs`, which verifies that the `--dt-*` variable table in `docs/guides/theming.md` is in sync with the CSS sources under `src/styles/`. If it fails, the error message tells you exactly which variables are missing or extra.
 2. **`tsc --noEmit`** — full type-check using `tsconfig.json`.
@@ -142,6 +142,7 @@ Runs four steps in order:
    - `dist/data-table.css` (bundled stylesheet)
 4. **`tsc -p tsconfig.build.json`** — emits declaration files:
    - `dist/index.d.ts`, `dist/advanced.d.ts`, and subtree `.d.ts` files.
+5. **`check:dts`** — runs `scripts/check-dts.mjs`, which type-checks every emitted `.d.ts`. Step 2 checks `src/`, not what ships: the emit uses `stripInternal`, which drops whatever an `@internal` tag is attached to, and a tag in a file's opening comment (even mentioned in prose) is attached to the file's first statement, usually an import.
 
 Only the `dist/` directory ships to npm (`files: ["dist"]` in `package.json`).
 
@@ -150,6 +151,7 @@ Only the `dist/` directory ships to npm (`files: ["dist"]` in `package.json`).
 - `npm run build:demo` — builds the static demo site into `demo-dist/` (used by the Pages deploy workflow).
 - `npm run preview` — serves the built demo from `demo-dist/`.
 - `npm run check:css-vars` — runs the CSS-variable sync check in isolation (useful after editing `src/styles/`).
+- `npm run check:dts` — type-checks the declarations already in `dist/` (after a build).
 - `npm run docs:api` — regenerates [`docs/api/`](./docs/api/) from source JSDoc via [typedoc](https://typedoc.org/) + `typedoc-plugin-markdown`. Commit the resulting files alongside source changes so GitHub renders the refreshed reference without a build step.
 - `npm run docs:api:check` — runs typedoc in non-emit mode to verify that generation succeeds (useful in a pre-commit or CI step after JSDoc edits).
 
@@ -178,10 +180,10 @@ src/
   export/               # export dialog, CSV/JSON/Parquet writers
   styles/               # modular CSS (source of --dt-* variable truth)
 tests/                  # vitest suites mirroring src/
-examples/               # 9 runnable single-feature examples
+examples/               # 14 runnable single-feature examples
 docs/                   # API reference, guides, concepts, integrations, troubleshooting
 demo/                   # integrated showcase app
-scripts/                # build-support scripts (check-css-vars.mjs)
+scripts/                # build-support scripts (check-css-vars.mjs, check-dts.mjs)
 vite.config.ts          # library build (targets dist/)
 vite.demo.config.ts     # demo + examples dev/build (targets demo-dist/)
 vitest.config.ts        # test runner config
@@ -358,6 +360,7 @@ guard against publishing a broken artifact.
 ## Troubleshooting the dev loop
 
 - **`check:css-vars` fails after editing `src/styles/*`.** The script prints the exact list of missing or extra variables. Update the `--dt-*` reference table in `docs/guides/theming.md` to match, then re-run `npm run check:css-vars`.
+- **`check:dts` fails with `Cannot find name` in a `dist/` file.** An `@internal` tag stripped something a declaration still uses. If the file's opening comment has the tag, or mentions it, move it onto the declaration it describes or reword the comment.
 - **`tsc --noEmit` fails on CodeMirror or DuckDB imports.** Peer-dependency `devDependencies` weren't installed. Re-run `npm install`.
 - **Tests hang or fail on IndexedDB.** Import `fake-indexeddb/auto` _before_ the module under test; the library checks for `globalThis.indexedDB` at module load time.
 - **Demo server shows a 404 at `/`.** The base path is `/data-table/`, not `/`. Open `http://localhost:5173/data-table/`.

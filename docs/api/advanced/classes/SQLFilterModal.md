@@ -105,7 +105,7 @@ Open the modal in create mode (empty fields)
 
 ### openForEdit()
 
-> **openForEdit**(`filterId`): `void`
+> **openForEdit**(`filterId`, `returnFocus?`): `void`
 
 Defined in: [filters/SQLFilterModal.ts:459](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L459)
 
@@ -116,6 +116,16 @@ Open the modal in edit mode (pre-populated from existing SQL filter)
 ##### filterId
 
 `string`
+
+The raw-SQL filter to edit.
+
+##### returnFocus?
+
+`HTMLElement`
+
+Where focus goes when the modal closes, in place of
+the element focused when it opened. Pass one that outlives the edit:
+updating or removing the filter rebuilds the filter bar's chips.
 
 #### Returns
 

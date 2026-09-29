@@ -247,6 +247,90 @@ describe('TableBody after a block fetch ends without its block', () => {
   });
 });
 
+describe('TableBody after the worker failed', () => {
+  function workerFailure(): Error {
+    return Object.assign(new Error('The DuckDB worker failed (Worker error: boom)'), {
+      code: 'WORKER_CRASHED',
+    });
+  }
+
+  it('fetches nothing more, logs the failure once, and holds no timer', async () => {
+    const harness = setupTableBody({ totalRows: 100, body: { prefetch: false } });
+    const init = harness.body.initialize();
+    harness.queries[0]!.deferred.reject(workerFailure());
+    await init;
+    await harness.drain();
+
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(harness.queries).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledTimes(1);
+    harness.body.destroy();
+  });
+
+  it('starts nothing for a sort or a scroll after it', async () => {
+    const harness = setupTableBody({ totalRows: 10_000, body: { prefetch: false } });
+    const init = harness.body.initialize();
+    harness.queries[0]!.deferred.reject(workerFailure());
+    await init;
+    await harness.drain();
+
+    harness.state.sortColumns.set([{ column: 'id', direction: 'desc' }]);
+    harness.scrollToRow(5_000);
+    await harness.drain();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(harness.queries).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledTimes(1);
+    harness.body.destroy();
+  });
+
+  it('logs it once when both fetches in flight fail with it', async () => {
+    const harness = setupTableBody({
+      totalRows: 10_000,
+      clientHeight: 800,
+      body: { prefetch: false, fetchBlockSize: 16 },
+    });
+    const init = harness.body.initialize();
+    expect(harness.queries).toHaveLength(2);
+    harness.queries[0]!.deferred.reject(workerFailure());
+    harness.queries[1]!.deferred.reject(workerFailure());
+    await init;
+    await harness.drain();
+
+    expect(console.error).toHaveBeenCalledTimes(1);
+    harness.body.destroy();
+  });
+
+  it('drops the wait of a block that failed before it', async () => {
+    const harness = setupTableBody({
+      totalRows: 10_000,
+      clientHeight: 800,
+      body: { prefetch: false, fetchBlockSize: 16 },
+    });
+    const init = harness.body.initialize();
+    expect(harness.queries).toHaveLength(2);
+    harness.queries[0]!.deferred.reject(workerError());
+    await harness.drain();
+    expect(vi.getTimerCount()).toBe(1);
+
+    harness.queries[1]!.deferred.reject(workerFailure());
+    await init;
+    await harness.drain();
+
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(harness.queries).toHaveLength(2);
+    harness.body.destroy();
+  });
+
+  it('still tries again after another failure, which the worker may get over', async () => {
+    const harness = await failedFirstFetch();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(harness.queries).toHaveLength(2);
+    harness.body.destroy();
+  });
+});
+
 describe('TableBody after a column top-up ends without its columns', () => {
   /** Sixty-four columns, `c00`…`c63`; rows render the ones `mounted` holds. */
   const COLUMNS = Array.from({ length: 64 }, (_, i) => `c${String(i).padStart(2, '0')}`);

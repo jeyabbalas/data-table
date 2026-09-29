@@ -136,6 +136,21 @@ Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabba
 
 ***
 
+### reportsDefaultStats
+
+> `readonly` **reportsDefaultStats**: `boolean` = `false`
+
+Defined in: visualizations/BaseVisualization.ts
+
+Whether the chart reports its stats through `onDefaultStatsChange` each
+time a fetch lands, as the built-in charts do. The table's stats slot
+says a chart's fetch failed only for a chart that does, or that has
+reported stats before: nothing else would take the line back. A custom
+chart that reports its stats after every fetch can set it, to have a
+failure of its first fetch said too.
+
+***
+
 ### width
 
 > `protected` **width**: `number` = `0`
@@ -205,6 +220,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 > **categoryLabel**: `string`
 
 Bold label prefix for a single selected category detail line.
+
+###### chartFailed
+
+> **chartFailed**: `string`
+
+Stats-slot line for a column whose chart's data failed to load.
 
 ###### filteredRowCount
 

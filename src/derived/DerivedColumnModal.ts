@@ -7,6 +7,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -19,10 +20,11 @@ import type { DerivedColumnDef, VectorDataType } from './types';
 export interface DerivedColumnModalOptions {
   classPrefix?: string | undefined;
   /**
-   * Unique per-instance identifier mixed into element IDs so two tables on
-   * the same page don't collide on `aria-labelledby` targets. Normally
-   * supplied by `TableContainer`/`createDataTable()`; defaults to `''`
-   * for standalone/test construction.
+   * Unique per-instance identifier mixed into element IDs and the radio
+   * group name, so two tables on the same page don't collide on
+   * `aria-labelledby` targets or share a checked radio. Normally supplied
+   * by `TableContainer`/`createDataTable()`; a modal constructed without
+   * one generates its own.
    */
   instanceId?: string | undefined;
   /** Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEditor. */
@@ -88,7 +90,10 @@ export class DerivedColumnModal {
     options?: DerivedColumnModalOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
-    this.instanceId = options?.instanceId ?? '';
+    // Radios that share a name and have no form are one group across the
+    // whole document, so the radio name carries this too: named per prefix,
+    // resetting one table's modal to Expression unchecked the other's choice.
+    this.instanceId = options?.instanceId || nextInstanceId();
     this.messages = options?.messages ?? defaultStrings;
     this.editorFactory = options?.editorFactory;
     this.onCreated = options?.onCreated;
@@ -222,7 +227,7 @@ export class DerivedColumnModal {
     exprLabel.className = `${p}-derived-modal-mode-option`;
     this.expressionRadio = document.createElement('input');
     this.expressionRadio.type = 'radio';
-    this.expressionRadio.name = `${p}-derived-modal-mode`;
+    this.expressionRadio.name = `${p}-${this.instanceId}-derived-modal-mode`;
     this.expressionRadio.value = 'expression';
     this.expressionRadio.checked = true;
     this.expressionRadio.addEventListener('change', () => this.onModeChange('expression'));
@@ -235,7 +240,7 @@ export class DerivedColumnModal {
     vecLabel.className = `${p}-derived-modal-mode-option`;
     this.vectorRadio = document.createElement('input');
     this.vectorRadio.type = 'radio';
-    this.vectorRadio.name = `${p}-derived-modal-mode`;
+    this.vectorRadio.name = `${p}-${this.instanceId}-derived-modal-mode`;
     this.vectorRadio.value = 'vector';
     this.vectorRadio.addEventListener('change', () => this.onModeChange('vector'));
     vecLabel.appendChild(this.vectorRadio);

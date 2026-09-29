@@ -452,6 +452,8 @@ export interface Strings {
     matchCount: (count: number) => string;
     /** Truncation suffix for a long multi-select value list (total = selected values). */
     valueListSuffix: (total: number) => string;
+    /** Stats-slot line for a column whose chart's data failed to load. */
+    chartFailed: string;
   };
 
   // =========================================
@@ -831,6 +833,7 @@ export const defaultStrings: Strings = {
       `${count.toLocaleString()} ${count === 1 ? 'row' : 'rows'} (${pct})`,
     matchCount: (count) => `${count.toLocaleString()} match`,
     valueListSuffix: (total) => `, ... (${total.toLocaleString()} values)`,
+    chartFailed: 'Failed to load',
   },
 
   errors: {

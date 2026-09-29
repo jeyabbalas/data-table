@@ -35,8 +35,8 @@ Every event is strongly typed. The full map lives at
 | Event             | Payload                                          | Fires when                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ready`           | `{ bridgeReady: true }`                          | Worker is initialized; the table can accept queries.                                                                                                                                                                                                                                                                                                                                                          |
-| `loadStart`       | `{ source: string }`                             | `loadData()` begins. `source` is a short description (URL or `'<buffer>'`).                                                                                                                                                                                                                                                                                                                                   |
-| `loadProgress`    | `ProgressInfo`                                   | Per-chunk progress. See [Loading data — Progress](./loading-data.md#progress-reporting).                                                                                                                                                                                                                                                                                                                      |
+| `loadStart`       | `{ source: string }`                             | `loadData()` begins. `source` is the URL or inline string, the `File`'s name, or `'in-memory'`.                                                                                                                                                                                                                                                                                                               |
+| `loadProgress`    | `ProgressInfo`                                   | Load progress, one report per stage: `reading` (0%), `parsing` (25%), `indexing` (90%). See [Loading data — Progress](./loading-data.md#progress-reporting).                                                                                                                                                                                                                                                  |
 | `loadComplete`    | `{ tableName, rowCount, schema }`                | Data is loaded and schema is known.                                                                                                                                                                                                                                                                                                                                                                           |
 | `loadError`       | `{ error: Error }`                               | A load failed. `error` is always a `DataTableError` subclass.                                                                                                                                                                                                                                                                                                                                                 |
 | `error`           | `{ error: DataTableError, source }`              | Any recoverable typed error — see [Errors](#errors-warnings-and-load-failures).                                                                                                                                                                                                                                                                                                                               |
@@ -101,6 +101,15 @@ driven by `createDataTable({ source })`, `ready` fires _before_ `loadStart`.
 Raw `table.bridge.query()` calls made before `ready` will throw
 `ConfigurationError` with `code: 'BRIDGE_NOT_READY'`.
 
+With `createDataTable({ source })`, the whole initial load, from `loadStart` to
+`loadComplete` or `loadError`, happens before the returned promise settles, so
+a listener added after `await createDataTable(...)` sees none of it; only
+`ready` is replayed to late subscribers. To watch the initial load, create the
+table without `source`, subscribe, then call
+`loadData(source, { tableName, sourceFormat, sourceOptions })`, as
+[`examples/02-load-from-url`](../../examples/02-load-from-url/) does.
+`createDataTable`'s `tableName` and `sourceFormat` apply to `source` only.
+
 ## Errors, warnings, and load failures
 
 Three event channels carry failure information, each with different semantics.
@@ -140,8 +149,24 @@ table.on('error', ({ error, source }) => {
 ```
 
 `source` values: `'load' | 'query' | 'export' | 'persistence' |
-'visualization' | 'sql-validation' | 'derived-column' | 'listener' |
-'unknown'`.
+'visualization' | 'stats-panel' | 'sql-validation' | 'derived-column' |
+'listener' | 'unknown'`.
+
+A `'visualization'` error names its column in `error.details.column`, and,
+when the chart reported it, the stage that failed in `error.details.stage`:
+`'fetch'` for a built-in chart's query, `'filter'` for a custom chart's
+`fetchData()` that threw during a filter update, or whatever a custom chart
+reports itself. A `'stats-panel'` error names its column and `phase` the same
+way.
+
+A DuckDB worker that fails is reported once per table, as it happens: an
+`error` event whose `error.code` is `WORKER_CRASHED`, with `source: 'query'`.
+Every query after it fails the same way, so the table stops fetching rows and
+drops the errors that follow from it: those of the charts, panels and loads
+that fail after it, which carry the failure in their `cause` chain. A failed
+load still rejects and fires `loadError`. The data is gone with the worker:
+destroy the table and create it again, which starts a new one, whose own
+failure would be reported in turn.
 
 `loadError` is a strict subset of `error` — both fire for the same underlying
 failure. Handle one or the other, not both, unless you specifically want

@@ -169,6 +169,20 @@ Defined in: [visualizations/BaseVisualization.ts:185](https://github.com/jeyabba
 
 ***
 
+### reportsDefaultStats
+
+> `readonly` **reportsDefaultStats**: `boolean` = `true`
+
+Defined in: visualizations/valuecounts/ValueCounts.ts
+
+Value counts report their stats each time a fetch lands.
+
+#### Overrides
+
+[`BaseVisualization`](BaseVisualization.md).[`reportsDefaultStats`](BaseVisualization.md#reportsdefaultstats)
+
+***
+
 ### width
 
 > `protected` **width**: `number` = `0`
@@ -242,6 +256,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 > **categoryLabel**: `string`
 
 Bold label prefix for a single selected category detail line.
+
+###### chartFailed
+
+> **chartFailed**: `string`
+
+Stats-slot line for a column whose chart's data failed to load.
 
 ###### filteredRowCount
 

@@ -316,7 +316,12 @@ filter back and forth and the brush follows).
 ### Reactive updates
 
 The library calls `updateFilters(newFilters)` on every visualization that
-exists — the charts in or near view — when the active filter set changes. Subclasses usually don't need to override this —
+exists — the charts in or near view — when the active filter set changes.
+While a derived-column change that can drop or rebuild the table's relation
+runs (a removal, an edit or a replacement, an undo or redo, a reset or a
+restore), the call waits for the change to settle, and a chart whose filters
+changed more than once meanwhile gets one call, with the filters then in
+force. Subclasses usually don't need to override this —
 the default implementation triggers `fetchData()` + `render()` on any change.
 Override it if you want to skip re-renders when the filter is unrelated to
 your column.
@@ -336,15 +341,39 @@ per page, no matter how many visualizations are on screen.
 
 ## Error surfacing
 
-If `fetchData()` or `render()` throws, the library catches it, routes it to
-the table's `error` event with `source: 'visualization'`, and keeps rendering
-the other visualizations. A built-in chart whose query fails stays blank.
-Subscribe to handle gracefully:
+A chart's failures reach the table's `error` event with
+`source: 'visualization'`, and the other charts carry on:
+
+- a built-in chart reports each query that fails, with stage `'fetch'`;
+- a custom chart's `fetchData()` that throws during a filter update is
+  caught and reported for it, with stage `'filter'`;
+- a chart constructor that throws is caught, and the column gets no chart
+  until new data or a new header.
+
+Nothing else is caught for a custom chart: report a failure in its first
+fetch, or in `render()`, through `options.onError`. Each error names its
+column in `error.details.column`, and the stage that failed in
+`error.details.stage` when the chart reported one.
+
+When a chart's fetch fails, its stats slot drops what the chart reported
+before, and any hover or selection detail, and shows the table-wide row
+count, kept current. Beneath the count it says "Failed to load"
+(`messages.statistics.chartFailed`) until the chart reports stats again,
+for a chart that reports them: a built-in chart, which does each time a
+fetch lands, and a custom chart that has reported stats through
+`onDefaultStatsChange`, or that sets `reportsDefaultStats` to say it will
+after every fetch, its first included. A custom chart that reports no stats
+of its own gets no such line, whatever stage it reports, since nothing would
+take it back. A built-in chart draws nothing after a failed fetch, and its
+`<canvas>` carries a `data-fetch-failed` attribute until a fetch lands. A
+failure of a refetch a newer one superseded, or of a chart already
+destroyed, is reported but leaves the slot alone. Subscribe to handle
+gracefully:
 
 ```ts
 table.on('error', ({ error, source }) => {
   if (source === 'visualization') {
-    console.warn('Visualization failed:', error);
+    console.warn(`Chart for ${String(error.details?.column)} failed:`, error);
   }
 });
 ```

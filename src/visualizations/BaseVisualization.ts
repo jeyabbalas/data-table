@@ -119,12 +119,14 @@ export interface VisualizationOptions {
   /**
    * Callback invoked when the visualization fails to fetch, render, or
    * update filters. Receives a typed {@link DataTableError} and a context
-   * describing which stage failed. The facade routes these to the
-   * `error` event with `source: 'visualization'`.
+   * describing which stage failed. `superseded` is set on a filter update
+   * that failed after a newer one had started, which is what the chart will
+   * show. The facade routes these to the `error` event with
+   * `source: 'visualization'`.
    */
   onError?: (
     error: DataTableError,
-    context: { columnName?: string; stage: 'fetch' | 'render' | 'filter' },
+    context: { columnName?: string; stage: 'fetch' | 'render' | 'filter'; superseded?: boolean },
   ) => void;
 }
 
@@ -152,6 +154,16 @@ export abstract class BaseVisualization {
   protected dpr: number;
   protected destroyed = false;
   protected isFilterUpdate = false;
+
+  /**
+   * Whether the chart reports its stats through `onDefaultStatsChange` each
+   * time a fetch lands, as the built-in charts do. The table's stats slot
+   * says a chart's fetch failed only for a chart that does, or that has
+   * reported stats before: nothing else would take the line back. A custom
+   * chart that reports its stats after every fetch can set it, to have a
+   * failure of its first fetch said too.
+   */
+  readonly reportsDefaultStats: boolean = false;
   // Sequence token for `updateFilters` calls. Mirrors `fetchSequence` in
   // subclasses and `filterSequence` in CrossfilterCoordinator: only the
   // latest call's `finally` resets `isFilterUpdate`, so an older call that
@@ -482,6 +494,7 @@ export abstract class BaseVisualization {
       this.options.onError?.(typed, {
         columnName: this.column.name,
         stage: 'filter',
+        ...(seq !== this.filterUpdateSequence ? { superseded: true } : {}),
       });
     } finally {
       // Only the latest call resets the shared flag. An older call's `finally`

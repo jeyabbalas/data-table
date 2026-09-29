@@ -11,6 +11,7 @@ import {
   firstSegmentBytes,
   fitParquetRead,
   isOutOfMemoryError,
+  measureParquetFootprint,
   memoryExceededError,
   parseMemorySize,
   planParquetRead,
@@ -365,5 +366,48 @@ describe('memoryExceededError', () => {
     expect(error.details).toMatchObject({ stage: 'load', duckdbMessage: duckdb.message });
     expect(error.details).not.toHaveProperty('check');
     expect(error.cause).toBe(cause);
+  });
+});
+
+describe('measureParquetFootprint with a projection', () => {
+  /** A connection that answers the estimate's queries and records them. */
+  function fakeConnection(schema: Record<string, unknown>[]) {
+    const sql: string[] = [];
+    const conn = {
+      query: (query: string) => {
+        sql.push(query);
+        const rows = query.includes('parquet_schema')
+          ? schema
+          : query.includes('parquet_file_metadata')
+            ? [{ num_rows: 10, file_size_bytes: 1000 }]
+            : [{ bytes: 100 }];
+        return Promise.resolve({ toArray: () => rows.map((row) => ({ toJSON: () => row })) });
+      },
+    };
+    return { conn: conn as unknown as Parameters<typeof measureParquetFootprint>[0], sql };
+  }
+
+  const DESCRIBE = [{ column_name: 'b', column_type: 'DOUBLE' }];
+  const chunkQuery = (sql: string[]) => sql.find((q) => q.includes('GROUP BY column_id'));
+
+  it("reads only the projected columns' chunks", async () => {
+    const { conn, sql } = fakeConnection([
+      { name: 'duckdb_schema', num_children: 2 },
+      { name: 'a', num_children: null },
+      { name: 'b', num_children: null },
+    ]);
+    await measureParquetFootprint(conn, 'f.parquet', DESCRIBE, ['b']);
+    expect(chunkQuery(sql)).toContain('column_id IN (1)');
+  });
+
+  it('counts every column when the schema listing does not add up', async () => {
+    // One node more than the root's children account for.
+    const { conn, sql } = fakeConnection([
+      { name: 'duckdb_schema', num_children: 1 },
+      { name: 'a', num_children: null },
+      { name: 'b', num_children: null },
+    ]);
+    await measureParquetFootprint(conn, 'f.parquet', DESCRIBE, ['a']);
+    expect(chunkQuery(sql)).not.toContain('column_id IN');
   });
 });

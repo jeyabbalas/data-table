@@ -224,9 +224,7 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
         columnName: this.column.name,
         stage: 'fetch',
       });
-      this.data = null;
-      this.backgroundData = null;
-      this.render();
+      this.showFetchFailed();
     }
   }
 

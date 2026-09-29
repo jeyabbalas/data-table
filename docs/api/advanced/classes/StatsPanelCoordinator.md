@@ -18,7 +18,7 @@ orchestrating panels manually.
 
 ### Constructor
 
-> **new StatsPanelCoordinator**(`state`, `concurrency?`): `StatsPanelCoordinator`
+> **new StatsPanelCoordinator**(`state`, `concurrency?`, `actions?`): `StatsPanelCoordinator`
 
 Defined in: [visualizations/StatsPanelCoordinator.ts:67](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/StatsPanelCoordinator.ts#L67)
 
@@ -28,9 +28,24 @@ Defined in: [visualizations/StatsPanelCoordinator.ts:67](https://github.com/jeya
 
 [`TableState`](../interfaces/TableState.md)
 
+The table state whose `filters` are broadcast.
+
 ##### concurrency?
 
 `number` = `DEFAULT_PANEL_CONCURRENCY`
+
+The most `updateFilters` calls in flight at once.
+
+##### actions?
+
+[`StateActions`](StateActions.md)
+
+The table's actions. When given, a broadcast waits out a
+derived-column change that can drop or rebuild the relation panels
+query (a removal, an edit or a replacement, an undo or redo, a reset or
+a restore), as the facade's charts and filtered-row count do, and goes
+to the panels still registered once it has settled. A panel's query of
+the relation fails meanwhile.
 
 #### Returns
 

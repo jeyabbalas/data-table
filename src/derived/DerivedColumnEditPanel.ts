@@ -312,12 +312,6 @@ export class DerivedColumnEditPanel {
     // Update button
     this.updateBtn.addEventListener('click', () => void this.handleUpdate());
 
-    // Delete button
-    this.deleteBtn.addEventListener('click', () => {
-      this.deleteBtn.style.display = 'none';
-      this.deleteConfirmDiv.style.display = 'flex';
-    });
-
     // Delete confirm
     const confirmBtn = this.deleteConfirmDiv.querySelector(
       `.${this.prefix}-derived-edit-delete-confirm-yes`,
@@ -328,9 +322,20 @@ export class DerivedColumnEditPanel {
     const cancelBtn = this.deleteConfirmDiv.querySelector(
       `.${this.prefix}-derived-edit-delete-confirm-no`,
     ) as HTMLElement;
+
+    // Delete, and its cancel. Each hides the button that was clicked, which
+    // takes focus out of the panel, and with it the focus trap and Escape.
+    // The confirmation puts focus on its Cancel, the choice that changes
+    // nothing, and Cancel puts it back on Delete.
+    this.deleteBtn.addEventListener('click', () => {
+      this.deleteBtn.style.display = 'none';
+      this.deleteConfirmDiv.style.display = 'flex';
+      cancelBtn.focus();
+    });
     cancelBtn.addEventListener('click', () => {
       this.deleteConfirmDiv.style.display = 'none';
       this.deleteBtn.style.display = '';
+      this.deleteBtn.focus();
     });
   }
 
@@ -661,6 +666,7 @@ export class DerivedColumnEditPanel {
       // Reset delete confirmation back to button state
       this.deleteConfirmDiv.style.display = 'none';
       this.deleteBtn.style.display = '';
+      this.deleteBtn.focus();
     }
   }
 

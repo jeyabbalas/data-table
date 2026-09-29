@@ -676,6 +676,14 @@ Cause: DuckDB types each column from the first rows it reads, 20,480 by default.
 
 Fix: have DuckDB type the columns from every row with `sourceOptions: { csv: { sampleSize: -1 } }` (`json` for JSON), which reads the file once more to do it. If the odd values stand for missing ones (`n/a`, `-`), list them instead, with `''` to keep empty fields missing too: `sourceOptions: { csv: { nullValues: ['', 'n/a'] } }`. The column then stays a number column. See [How a source is read](./guides/loading-data.md#how-a-source-is-read).
 
+### 32. "too small to be a Parquet file", or "Prefetch registered for bytes outside file … file size: 0"
+
+Symptom: after a few large loads in one page, or while DuckDB holds a lot of data, loading a Parquet file fails with `Invalid Input Error: File '__dt_source_N.parquet' too small to be a Parquet file`, or `Invalid Error: Prefetch registered for bytes outside file: __dt_source_N.parquet, … file size: 0`, and so does every load after it.
+
+Cause: duckdb-wasm's browser runtime tells DuckDB a file's size by writing it through a signed shift of an address. Once DuckDB's memory has grown past 2 GiB, that address can be above 2 GiB, and the write is lost: DuckDB reads the file as 0 bytes.
+
+Fix: the library corrects this in DuckDB's worker, for the `mvp` and `eh` bundles it uses by default and for self-hosted ones. A `coi` bundle's pthread workers load their own script and are not corrected, so a cross-origin-isolated page that self-hosts `coi` can still see these errors: reload the page to start DuckDB afresh, or load less into it. If the DuckDB worker's console says `[data-table] DuckDB runs without the fix for files opened past 2 GiB of memory`, the duckdb-wasm build in use could not be corrected; report it with that build's version.
+
 ---
 
 ## Browser support quick reference

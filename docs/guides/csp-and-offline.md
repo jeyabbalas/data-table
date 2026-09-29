@@ -260,6 +260,7 @@ workers.
 - **Worker init timeout kills the bridge.** A 30-second failure is permanent for that instance. After `WORKER_INIT_TIMEOUT`, destroy the table and try again (possibly with a larger timeout).
 - **CSP `worker-src 'self'` must include your worker origin.** If your worker is cross-origin, `worker-src` needs that origin too.
 - **`coi` bundle requires COOP/COEP.** The cross-origin-isolated bundle uses `SharedArrayBuffer`, which requires specific response headers. If you don't set them, DuckDB falls back to `mvp`/`eh` automatically — but you get slower queries.
+- **`coi` bundle's pthread workers go without one of the library's fixes.** Once DuckDB's memory passes 2 GiB, duckdb-wasm can lose the size of a file it opens; the library corrects this in DuckDB's main worker, but not in the pthread workers, which load their own script. See [Troubleshooting FAQ §32](../troubleshooting.md#32-too-small-to-be-a-parquet-file-or-prefetch-registered-for-bytes-outside-file--file-size-0).
 - **Don't mix bundler-emitted and CDN-served WASM.** The versions must match. Use one or the other; the library doesn't cross-check.
 
 ## Related

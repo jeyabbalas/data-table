@@ -3,6 +3,7 @@
  */
 
 import * as duckdb from '@duckdb/duckdb-wasm';
+import { duckdbWorkerSource } from './openFileFix';
 
 let db: duckdb.AsyncDuckDB | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -25,9 +26,10 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
   // Select the best bundle for this browser
   const bundle = await duckdb.selectBundle(sourceBundles);
 
-  // Create worker (DuckDB uses its own internal worker for some operations)
+  // Create worker (DuckDB uses its own internal worker for some operations),
+  // with duckdb-wasm's runtime fixed for heaps past 2 GiB: see openFileFix.ts.
   const worker_url = URL.createObjectURL(
-    new Blob([`importScripts("${bundle.mainWorker!}");`], {
+    new Blob([duckdbWorkerSource(bundle.mainWorker!)], {
       type: 'text/javascript',
     }),
   );

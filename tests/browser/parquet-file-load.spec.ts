@@ -8,7 +8,8 @@
  * three things: the rows arrive intact (a text column of dates converted
  * from the file), the page never reads the File, and a load that cannot fit
  * rejects with LOAD_MEMORY_EXCEEDED while the DuckDB table already loaded
- * stays queryable.
+ * stays queryable. And a File still loads once DuckDB's heap has grown past
+ * 2 GiB, which duckdb-wasm's runtime mishandles; see src/worker/openFileFix.ts.
  */
 
 import { expect, test } from '@playwright/test';
@@ -150,4 +151,37 @@ test('rejects a Parquet File that cannot fit, keeping the loaded DuckDB table', 
   });
   expect(outcome.events).toEqual(['LOAD_MEMORY_EXCEEDED']);
   expect(outcome.rowsStillQueryable).toBe(10_000);
+});
+
+test('loads a Parquet File again and again once DuckDB’s heap is past 2 GiB', async ({ page }) => {
+  await makeParquetFile(page, 10_000);
+
+  const loads = await page.evaluate(async () => {
+    const w = window as unknown as Window & { __file: File };
+    const bridge = w.__t.bridge;
+    // About 2.2 GB of doubles, held while the File loads: DuckDB's heap grows
+    // past 2 GiB, and the few bytes duckdb-wasm allocates to describe each
+    // opened file come from above it. Without the fix, DuckDB then reads the
+    // File as 0 bytes, on this load and every one after it.
+    await bridge.query(
+      `CREATE TABLE ballast AS SELECT ${Array.from({ length: 8 }, (_, i) => `random() AS c${i}`).join(', ')}
+       FROM range(34000000)`,
+    );
+    const outcomes: (number | string)[] = [];
+    try {
+      for (let i = 0; i < 3; i++) {
+        try {
+          await w.__t.loadData(w.__file);
+          outcomes.push(w.__t.state.totalRows.get());
+        } catch (err) {
+          outcomes.push(String((err as Error).message).split('\n')[0]!);
+        }
+      }
+    } finally {
+      await bridge.query('DROP TABLE ballast');
+    }
+    return outcomes;
+  });
+
+  expect(loads).toEqual([10_000, 10_000, 10_000]);
 });

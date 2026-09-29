@@ -1,5 +1,289 @@
 # Changelog
 
+## 0.9.0-next.1
+
+### Minor Changes
+
+- dcf3f82: ### Changed
+
+  - Body rows render only the columns near the view. That is the pinned columns, the columns in view and a viewport's width either side, and the columns holding the keyboard cursor or DOM focus. A spacer stands in for the rest, so the scroll width and every column's position stay the same.
+    - **Fewer cells:** at 1,000 columns in a 1,200 px view, a row holds about two dozen cells instead of 1,000.
+    - **Scrolling sideways:** cells are added and removed as columns come within reach. The cells of columns that stay are left in place, and a reorder never moves the cell holding focus, so a clicked cell keeps focus through both.
+    - **Code that looks up body cells in the DOM** finds only these. The cursor's cell is among them whenever its row is rendered, so `aria-activedescendant` keeps resolving.
+
+- f374500: ### Fixed
+
+  - A header chart whose data fails to load no longer keeps the detail of the bar or segment under the pointer, or of its brush or selection, in its stats slot. Nothing is drawn after a failure, so nothing is hovered and no detail shows. A selection's detail comes back with the next fetch that lands.
+  - Its stats slot no longer keeps the stats the chart reported for the filters before. It shows the table-wide row count, kept current, until the chart reports stats again. A failure of a refetch a newer one superseded, or of a chart already destroyed, is reported but leaves the slot alone.
+  - A column whose custom chart reports no stats of its own keeps its table-wide row count current through filter changes. It kept the count from when the chart was made.
+  - `error` events with `source: 'visualization'` now always name the column, in `error.details.column`, and the stage that failed, when the chart reported it, in `error.details.stage`. Before, only some of the charts' queries put the column on the error, and a chart that threw while being built never did. The event carries a copy of the error the chart reported, a native error of the same class, so an error that several charts pass on names each one's column.
+
+  ### Added
+  - A chart whose data failed to load no longer looks like one still loading. Its stats slot says "Failed to load" (`messages.statistics.chartFailed`) beneath the row count until the chart reports stats again, for a chart that reports them, and a built-in chart's `<canvas>` carries a `data-fetch-failed` attribute until a fetch lands.
+  - `VisualizationOptions.onError`'s context has `superseded: true` for a filter update that failed after a newer one had started.
+  - `BaseVisualization.reportsDefaultStats`, true for the built-in charts, says a chart reports its stats through `onDefaultStatsChange` each time a fetch lands. The stats slot says a chart's fetch failed only for a chart that reports stats, since only new stats take the line back. A custom chart that reports its stats after every fetch can set it, so that a failure of its first fetch is said too.
+
+- bdbc4ec: ### Fixed
+
+  - Charts no longer refetch while a derived-column change can drop or rebuild the relation they query.
+    - **Before:** a filter changed during a removal, an edit or a replacement, an undo or redo, a reset or a session restore made every chart in view query the VIEW the change had dropped, and each reported an `error` event with `source: 'visualization'`.
+    - **Now:** their refetches wait for the change to settle, as the filtered-row count already did. A chart whose filters changed more than once meanwhile refetches once, with the filters in force then. Adding a derived column holds nothing back.
+  - Custom stats panels likewise: `updateFilters` waits out such a change, so a panel that queries the relation no longer reports an `error` event with `source: 'stats-panel'` for each filter change made during one.
+
+  ### Added
+  - `StatsPanelCoordinator` takes the table's actions as an optional third argument. Given them, as the facade gives them, a broadcast waits out a derived-column change that can drop or rebuild the relation, and then goes once to the panels still registered. For `/advanced` users who drive the coordinator directly.
+
+- f3bf86a: ### Changed
+
+  - Hiding, showing, moving or pinning a column keeps every other column's chart and custom stats panel. Only the column shown gets new ones.
+    - **What it saves:** a change queries only for the charts and panels of the columns it brings near the view, such as the column shown. Before, every change rebuilt every chart and panel near the view, about 20 queries at 1,000 columns.
+    - **Charts:** a brush or selection is never lost to another column's change.
+  - Custom stats panels live only while their column is near the view, the same columns body rows render.
+    - **Lifecycle:** a panel is built as its column comes within about a viewport of the view, and destroyed once the column moves away. It used to exist for every column, and every column change rebuilt them all.
+    - **`update()` on mount:** a panel built while its column's chart is live is passed the chart's latest stats, not `null`.
+    - **A panel that throws** in its constructor is not tried again until new data arrives or its column's header is rebuilt.
+
+- f851432: ### Changed
+
+  - Row fetches select only the columns near the view.
+    - **Which columns:** around the columns rows render, a fetch selects as many again on either side, rounded out to steps of 16 columns, so a short sideways scroll reuses rows already fetched.
+    - **At 1,000 columns:** in a 1,200 px view a fetch selects 32 to about 100 columns instead of 1,000. In Chrome, a 128-row block takes a median of 7.8 ms with 96 of 1,000 columns selected, against 76 ms with all of them. Most of that time went into converting the block to JavaScript objects.
+  - Scrolling sideways past what the rows were fetched with reads the new columns for those rows by their row id, without filtering or sorting the table again.
+    - **Until they arrive:** the cells stay empty with the class `dt-cell--pending`, and the row carries `aria-busy="true"`.
+    - **The keyboard cursor:** it is named by `aria-activedescendant` once its cell has its value, so a screen reader announces the value rather than an empty cell.
+
+- 34e040c: ### Changed
+
+  - Header cells, body cells, rows and the table root are `box-sizing: border-box`, so a column's width and a row's height include their padding and border. On a page without a global `box-sizing` reset, columns are narrower than before by their side padding and border: 25 px at the default 16 px root font size, so a column is 150 px wide by default where it took 175 px. Pages with a reset, such as Tailwind's or Bootstrap's, look the same.
+
+  ### Fixed
+  - On pages without a `box-sizing` reset, every calculation that places columns treated them as narrower than they drew, by 25 px per column at the default font size. `End` and the arrow keys could leave the cursor's column off-screen (on 1,000 columns, `End` stopped more than 100 columns short of the last); pinned columns overlapped and the pinned divider sat inside the last pinned column; with a filter matching no rows, the body scrolled only as far as the declared widths reached, well short of the last headers; and in a table narrower than 550 px, where the header padding shrinks, headers drifted 8 px per column from their cells.
+  - On pages without a reset, each row also took 1 px more than `rowHeight`, so rows drifted 1 px per row from where the scroller placed them and walking the cursor down with the arrow keys could leave its row partly below the view. The table overflowed its container by 2 px.
+  - Starting a resize drag no longer widens the column before the pointer moves. On pages without a reset it added the padding and border.
+
+- 92c2198: ### Changed
+
+  - Hiding, showing, moving or pinning a column updates the header and the body in place instead of rebuilding them.
+    - **Headers:** every other column keeps its `ColumnHeader`, and DOM focus on one of its buttons stays put. A column's header is rebuilt only when its schema entry changes, as when a derived column is edited or new data is loaded. Header ids and `aria-colindex` follow the columns to their new places.
+    - **Body:** the rows stay. A hide or a move fetches nothing, and a column shown is read by itself, by row id, for the rows already fetched.
+    - **At 1,000 columns:**
+      - Hiding a column takes 24 ms instead of 182 ms, and the next frame follows 59 ms after it instead of 830 ms.
+      - Moving a column takes 28 ms instead of 175 ms.
+      - Measured in Chrome on a 50K × 1,000 Parquet file.
+    - **Charts and custom stats panels** are still rebuilt on every column change.
+    - **Pinning** animates only the headers near the view.
+
+- 870cb19: ### Changed
+
+  - Column headers far from the view leave out their buttons. Every visible column keeps its header: name, type, stats line, chart slot, id, `aria-colindex`, label and sort state. Only the columns near the view, the ones body rows render cells for, get the pin, hide, filter and sort buttons and the drag and resize handles.
+    - **At 1,000 columns:** the header holds about 10,500 elements instead of 36,000, and switching the colour scheme restyles the table in 21 ms instead of 110 ms (Chrome, 50K × 1,000 Parquet file).
+    - **Where they are needed, they are there:** the keyboard cursor's column and the column holding DOM focus have their buttons wherever they are, and so does a column being resized or dragged, or whose filter panel or derived-column editor is open. Closing the panel gives focus back to the button that opened it.
+    - **Code that looks up header buttons in the DOM,** such as `.dt-col-sort-btn`, or `ColumnHeader.getControls()` through `TableContainer.getColumnHeaders()`, finds them only for those columns. `getStatsElement()` and `getVizContainer()` still answer for every column, and a `ColumnHeader` you create yourself still has all its buttons.
+
+- 84bc227: ### Added
+
+  - `sourceOptions` on `createDataTable()` and `table.loadData()` says how a source is read, per format: a CSV's `delimiter`, `header`, `skip`, `nullValues` and `sampleSize`; a JSON source's `format`, `sampleSize` and `maxDepth`; the Parquet `columns` to load; and the `timezone` DuckDB works in. `WorkerBridge.loadData()` takes the same fields next to `format`. The loaders had most of these options, but no public path reached them. New types: `SourceOptions`, `CSVSourceOptions`, `JSONSourceOptions` and `ParquetSourceOptions`.
+  - A `sampleSize` of `-1` has DuckDB type CSV or JSON columns from every row, for a file whose odd values come after the rows it samples by default.
+  - A load of some Parquet columns counts only those in the memory check before the load: the scan and prefetch estimates leave out the columns DuckDB does not read.
+
+  ### Fixed
+  - `LOAD_INVALID_OPTIONS` and `LOAD_INVALID_TIMEZONE`, documented but unreachable, now reject a bad `sourceOptions` value before the source is read, with `details.option` naming it, and the table keeps the data it had. A time zone DuckDB does not know rejects as `LOAD_INVALID_TIMEZONE`, listing the zones it suggests, and Parquet `columns` the file lacks as `LOAD_INVALID_OPTIONS`, naming them.
+  - `loadProgress` never fired: nothing passed the worker's progress messages on. The table now emits one per message, between `loadStart` and `loadComplete` or `loadError`, for the initial `source` load and for `table.loadData()`. An `onProgress` passed to `table.loadData()` or `actions.loadData()` is called with them too.
+
+### Patch Changes
+
+- b4ad31d: ### Fixed
+
+  - A `TableBody` used without `TableContainer` (from `/advanced`) fetches its rows again when the schema changes. Editing a derived column's expression used to leave the values fetched before it on screen.
+
+- 807818c: ### Fixed
+
+  - A request to the DuckDB worker no longer waits for good on a reply that will never come:
+    - An error the worker does not catch, during init or later, now rejects every pending request with a `WorkerInitError` whose code is `WORKER_CRASHED`, and terminates the worker. Every later call rejects at once with the same code, instead of being posted to a worker that will not answer, until `bridge.initialize()` starts a new one. Tables sharing the bridge all get this error.
+    - A message from the worker that cannot be deserialized (`messageerror`), or that has no string id, rejects every pending request with `WORKER_PROTOCOL_VIOLATION`, since there is no telling whose reply it was, and cancels them in the worker, which carries on. A load rejected this way may still have created its table in DuckDB.
+    - A result reply without its payload rejects its request with `WORKER_PROTOCOL_VIOLATION`.
+    - A request whose payload cannot be cloned, such as a detached `ArrayBuffer`, still rejects with the clone error, and no longer leaves its entry and its abort listener behind.
+    - `terminate()` while `initialize()` waits for the worker now rejects it at once with `WORKER_TERMINATED`, instead of leaving it to time out 30 s later.
+    - A worker script that fails to load now says so, with its URL when the bridge was given one, instead of "Worker error: undefined".
+  - A table whose worker fails reports it once, as an `error` event with `source: 'query'` and code `WORKER_CRASHED`, and stops fetching rows. It drops the errors that follow from it, those of the charts, panels and loads that fail after it, which carry the failure in their `cause` chain; a failed load still rejects and fires `loadError`. The data is gone with the worker: destroy the table and create it again, which starts a new one.
+
+- 529e430: ### Fixed
+
+  - Header histograms no longer show "No data" before their first query returns. Every histogram built at load, or as its column scrolled into view, showed it until its data arrived, which on a large table could take seconds. A chart's area now stays blank until its data lands, and "No data" appears only for a column with no values and no nulls.
+  - A histogram whose query fails now stays blank, as value counts already did, instead of showing "No data". The error still reaches the `error` event with `source: 'visualization'`.
+
+- dff2e7d: ### Fixed
+
+  - Hiding a pinned column no longer leaves the pinned columns after it offset by its width. The next pinned column stuck that far from the left edge, over the column beside it, and the pinned divider sat past the pinned block. With every pinned column hidden, the divider no longer stays on screen.
+  - Resizing a pinned column moves the pinned columns after it, and the divider, with it. They kept their old offsets, so when scrolled sideways they overlapped the resized column or left a gap beside it.
+  - Pinned columns are offset in the order they appear. The order they were pinned in was used instead, which differs once `setColumnOrder` has moved them.
+  - Keyboard navigation counts only visible pinned columns in the width of the pinned block, matching where the pinned columns are now drawn. Counting hidden ones scrolled a column that much too far.
+  - A column whose stored width is not a finite, non-negative number, for example from `setColumnWidth` or a restored session, is drawn 150 px wide in both the header and the body. The browser dropped the invalid width and left whatever width the element had before. Stored widths are drawn rounded to whole pixels.
+
+- a2105fe: ### Changed
+
+  - A column width under 50 px is drawn 50 px wide, the same minimum as resizing by drag or keyboard. Only `setColumnWidth` or a restored session can set such a width. A cell cannot be narrower than its padding and border, so a smaller width took more room than it said. With rows rendering only some columns, that left the cells after it out of line with their headers.
+
+- b4ad31d: ### Fixed
+
+  - `setColumnOrder` counts a column name given twice once, at its first place. A repeated name used to put the column in the order twice.
+
+- 24b2ed2: ### Fixed
+
+  - Keys that act on the keyboard cursor now scroll it into view. Once the user had scrolled away from the cursor with the mouse, `F2` put focus on a header button out of sight, `Shift+F2` opened column layout mode on a column nobody could see, and `Enter` or `Space` sorted a column, or `Enter` selected a row, off-screen.
+  - In column layout mode (`Shift+F2`), widening a column at the right edge no longer pushes it out of view, and `Escape` after moving a column scrolls back to where the column returns.
+  - A column wider than the table's view no longer jumps between its two edges on every key press that keeps the cursor on it; the view shows the column's start and stays put.
+
+- c3161a7: ### Fixed
+
+  - Derived-column changes no longer interfere when one starts before another has landed. Adds, edits, replacements and removals, `undo`, `redo`, `resetToInitial` and `loadData` now run one at a time, in call order, and each validates against the columns the one before it left. Previously a removal landing while a vector add was still inserting could leave `state.tableName` naming a VIEW not yet created, an edit could drop a column added while it ran from `state.schema`, and an undo pressed during an add undid the entry below it.
+  - An undo pressed while an add runs now waits for the add and undoes it. An edit made while a derived-column change runs, such as a filter added during a slow vector add, keeps its own undo entry.
+  - A derived-column change, undo, redo or reset that is still waiting or running when `loadData` or `clearSession` is called no longer applies to the new or emptied table. An add or update resolves `{ success: false }`, a replacement resolves a `NOT_FOUND` error, a removal rejects with one, and an undo, redo or reset resolves `false`. `loadData` also waits for the previous data's derived-column tables to be dropped before it resolves, and `clearSession` now drops them too.
+  - An `undo`, `redo` or `resetToInitial` called while a load is under way now resolves `false` instead of acting on the session the load restores.
+
+  ### Changed
+  - A second add of a name that an earlier add is still adding now waits for that add and gets `Column name "X" already exists`, instead of `is already being added` at once. The same applies to a rename to that name.
+
+- 56d3fae: ### Fixed
+
+  - A restored session whose filter or sort names a derived column now counts and reads its rows once that column is back. The filters, sort and column layout are restored in one change with the derived columns. Before, they were written first, so the filtered-row count and the first row reads ran against the base table, which lacks the column, and failed. With `visualizations: false` nothing counted again, and the rows past the true count stayed placeholders.
+  - A restored session none of whose derived columns can be rebuilt, for example because an expression names a column the data no longer has, no longer keeps filters, a sort or columns that name them.
+  - A saved session that cannot be read no longer makes the load reject. The load logs a console warning and goes ahead without the session, and whatever part of it was already written is taken back. Before, a snapshot with malformed fields rejected the load when it had no derived columns, and was reported as a derived-column failure when it had some.
+  - A derived column that a restored session cannot rebuild no longer leaves its header tooltip behind for a later column of the same name.
+
+- 9a6ca83: ### Fixed
+
+  - `createDataTable`'s documentation now says what it does with `source`: it awaits that first load, and the first fetches of its rows and of the charts in view, and rejects with the load's error if the load fails, without tearing down the table it mounted. The API reference and AGENTS.md said the initial load was not awaited. The `tableName` and `sourceFormat` options now say they apply to `source` only, and the docs that recommend loading with `loadData()` instead pass them to it.
+  - The loading guide's rules for string sources: a string is fetched when it looks like a URL or path (a scheme, `//`, `/`, `./` or `../`), loaded inline when it spans lines or starts with `[` or `{`, and otherwise rejected with `SOURCE_AMBIGUOUS`. It said any string not starting with `http` was parsed as CSV or JSON.
+  - The loading guide's `ProgressInfo` details: `percent` runs 0–100 (it said 0–1), and the worker's stages are `reading`, `parsing` and `indexing` (it listed `analyzing` too).
+
+- 8caa5d2: ### Fixed
+
+  - A column dragged by its handle now drops where the pointer is after the table scrolls beneath it. Wheeling or swiping sideways with the button held takes a column somewhere out of view; letting go without moving the pointer used to drop it where the pointer had been before the scroll, usually right back where it started. The drop indicator now stays under the pointer as the headers scroll, including in a table inside a shadow root.
+
+- 67e4dd1: ### Fixed
+
+  - A column let go over the pinned columns, while the table is scrolled sideways, now lands at the pinned block's edge, before the first unpinned column in view. It used to land among the columns scrolled out of view beneath the pinned block, wherever the pointer met their hidden headers, and so vanished from view. Drops are now found from the column layout and the header scroll rather than from header positions, and the drop indicator marks where the column will land.
+  - A drag whose mouse button is released outside the browser, after switching to another window, now ends without moving the column. It stayed alive, with its indicator following the pointer, until the next click anywhere dropped the column there. A drag also ends, without a drop, when the window loses focus, the page is hidden or the browser cancels the pointer.
+  - The drop indicator now marks the right place in a table inside a scaled element, under a CSS `transform` or `zoom`. It was placed in screen pixels inside the scaled header row, far from the gap it marked.
+
+- cf8d9ca: ### Changed
+
+  - The table's grid is laid out left to right on a right-to-left page too. Pinned columns, keyboard scrolling and sideways scrolling all place columns by their left offsets, which a right-to-left grid reversed. On a page marked right to left with a `dir` attribute, each cell value and column name still takes its direction from its own text, as with `dir="auto"`. Right-to-left layouts are still not supported.
+
+- 7abf85c: ### Fixed
+
+  - A smooth sideways scroll of the table body, such as a host's `scrollTo({ left, behavior: 'smooth' })`, no longer stops a pixel or two in. At a device pixel ratio of 2, Chrome can deliver the header's scroll event for a sync a frame late, after the body has moved on, and the table then wrote the header's older position back into the body, which cancelled the animation. The table now drops a scroll event that finds a scroller where the table itself last put it, to within a pixel, so the header follows the body without pulling it back. An animated scroll of the header, such as a fling over it or a host's `scrollTo` on it, is no longer pulled back by the body in the same way.
+  - The scroll to a derived column just added no longer stops short of it on a busy machine. It used to turn off the header's sync until the body seemed to stop, and stalled frames made it look stopped mid-way.
+
+- 47f1ac9: ### Fixed
+
+  - The column header now scrolls exactly as far as the body. The header keeps a gap beside it for the body's vertical scrollbar, and the gap was a fixed 17px whatever the scrollbar measured. Overlay scrollbars (the macOS default) take no width, and neither does a table with too few rows to scroll, so the header's viewport was up to 17px narrower than the body's (2px with classic 15px scrollbars). At the far right the last header was cut off, and moving the keyboard cursor onto a header at the right edge left part of it hidden. A scrollbar wider than 17px did the opposite: the header could not scroll as far as the body and pulled it back, so the last few pixels of the table could not be reached. The gap now matches the body's scrollbar as measured, before the first paint, so `--dt-scrollbar-width` no longer has a visible effect.
+
+- a5b9459: ### Fixed
+
+  - Hiding or removing the column the keyboard cursor is on moves the cursor to the column in its place, not to the first column. That is the next column still shown, or the one before it when it was the last. For a pinned column it is another pinned column, which is always in view, or with none left, the first column at the left of the view. A derived column renamed while the cursor is on it keeps the cursor. The first column was far from where the user was: hiding a column far to the right, from its header's hide button for example, left the cursor off-screen with the view unchanged, and the next arrow key jumped the table back to its start.
+
+- 97dd322: ### Fixed
+
+  - A `createDataTable({ source })` whose load fails no longer leaves the table behind. It used to reject with the table still mounted in the container and, when it had created them, its worker running and its session store open, and the caller never got a handle to `destroy()` them. It now tears the table down as `destroy()` would, then rejects with the load's error. A `bridge` or `persistence.sessionStore` passed in stays open, though a table the load finished creating in that bridge is dropped, and the saved session is not written. The container is left ready for another `createDataTable`.
+
+- c5778ae: ### Fixed
+
+  - The published `dist/visualizations/LazyVizController.d.ts` type-checks again. It had lost its `ColumnSchema` import, because the build drops whatever an `@internal` tag is attached to and a tag in a file's opening comment is attached to the first import. No public entry point reaches that module, so only code that imported it directly saw the error. `npm run build` now type-checks every emitted declaration file.
+
+- 15b5e66: ### Fixed
+
+  - The SQL filter modal shows its Remove section when it edits an expression filter. The stylesheet hid the section in both modes, and opening a filter for editing only cleared an inline style, so the modal never offered Remove; the filter's chip was the only way to remove it. The section is also `hidden` outside edit mode, so a table with a class prefix of its own never shows it when creating a filter.
+  - Closing the SQL filter modal after editing a filter gives focus back to the filter bar's Expression button. Focus used to drop to the page: the filter's chip, which opened the modal, takes no focus, and updating or removing the filter rebuilds it. `SQLFilterModal.openForEdit()` takes an optional `returnFocus` for hosts that open it themselves.
+  - Delete confirmations keep keyboard focus in their dialog, in the SQL filter modal, the derived-column editor and the filter-preset panel. The Remove or Delete button hides itself to show the confirmation, which took focus with it to the page, where `Tab` and `Escape` no longer reached the dialog. Focus now moves to the confirmation's Cancel or No, and back to Remove or Delete if you cancel, or if deleting a derived column fails. Deleting a filter preset, which rebuilds the list and leaves the panel open, puts focus on the next preset's Delete button, else the previous one's, else the name field.
+  - Two tables on one page no longer share the radio buttons of their dialogs. The export dialog's format and scope, and the derived-column modal's mode, were named after the class prefix alone, and radio buttons that share a name form one group across the page: adding the second table's export dialog, with its defaults checked, unchecked the first's, which then opened with no format or scope checked. Each dialog now names its radio groups after its table's instance id. An export dialog or derived-column modal constructed without an `instanceId` generates its own, for its element ids too.
+
+- d562f40: ### Fixed
+
+  - The action buttons of a column narrower than them no longer spill over the next header at rest. A header's five buttons need about 135 px, and a column can be 50 px wide. Past the header's edge, they sat under the next header, which covered them and took their clicks. A narrow pinned column was worse: its buttons lay over the first unpinned header and took the clicks meant for it. The action bar now clips its buttons at the header's edge.
+    - **Every action stays reachable.** Once the pointer has rested on the bar for 200 ms, or at once when keyboard focus is in it (`F2`), the bar shows every button, running on over the next header's bar. `F2` scrolls the table so the button it focuses is in view. The last column's bar runs on leftward instead, over its own header and the one before, so it neither leaves the view nor widens the header's scroll range.
+    - **While shown, a narrow column's bar sits on top of the next header's first buttons,** visibly, until the pointer leaves it. A pointer passing along the row of bars without pausing reveals nothing, so a click there lands on the button under it.
+
+- 8c751eb: ### Fixed
+
+  - Opening a filter panel now moves focus into it. The panel gave focus to its first control, the Clear button, which is hidden until the column has a filter, and focusing a hidden button does nothing, so focus stayed on the header's filter button, outside the panel. With the hidden button counted as the panel's first control, `Shift+Tab` from the Close button also walked out of the panel. Panels and dialogs now skip controls that a stylesheet hides, using `checkVisibility()` where the browser has it and computed styles where it does not.
+  - `Tab` no longer walks out of an open filter panel from its last control. The panel ends with the null filter's three radio buttons, which the browser treats as one stop, at the checked radio. The focus trap waited for focus on the group's last radio instead, so from any other one `Tab` left the panel.
+  - Clearing a column's filter with the keyboard no longer drops focus out of the filter panel. The Clear button hides itself, and it took focus with it to the page, where `Escape` no longer closed the panel; focus now moves to the Close button first.
+
+- 4058b57: ### Fixed
+
+  - Closing a filter panel or a derived-column editor gives focus back to the header button that opened it for the column it shows. After switching the panel to another column by clicking that column's button, focus used to go back to the first column's button, which could be far out of view.
+
+- 82a8adf: ### Fixed
+
+  - Showing a hidden column no longer puts it in front of a column pinned while it was hidden. It went back next to the neighbours it had when hidden; if one of them had been pinned since, the restored column landed before the pinned block, the pinned divider cut through it, and `aria-colindex` stopped ascending along the header row (3, 1, 4). An unpinned column now goes after the pinned columns, and a pinned one back to its place in pin order among them.
+  - A column shown back next to its old neighbours also moves there in `columnOrder` when a reorder since then had filed it elsewhere, so `visibleColumns` always follows `columnOrder`. `aria-colindex` is numbered from `columnOrder` and could descend after such a show.
+  - Pinning or unpinning a column changes `pinnedColumns`, `columnOrder` and `visibleColumns` in one update. A `pinnedColumns` subscriber no longer sees the pinned column outside the pinned block, and a `TableBody` used directly no longer fetches its rows again on a pin change.
+  - `toggleColumnPin` ignores a column name the table does not have. It pinned it and added it to `columnOrder`, where the phantom shifted every later column's `aria-colindex`. A stale pinned name is unpinned without being added.
+
+- 534055a: ### Fixed
+
+  - `setColumnOrder` keeps the pinned columns first, hidden pinned columns included.
+    - **What went wrong:** an order that put a pinned column after an unpinned one left it sticky at the left edge over another column, and out of step with the pinned divider.
+    - **How it happened:** besides code calling `setColumnOrder`, dragging or moving a column to the front with the keyboard while a pinned column was hidden did it. Pinning another column then put it after the moved one.
+    - **The pinned columns' order:** they keep the order given, and a pinned column hidden and shown again goes back to its place among them.
+    - **One update:** `columnOrder`, `visibleColumns` and `pinnedColumns` change together, so a subscriber to any of them sees the others already updated.
+  - A restored session keeps the pinned columns first too, and shows its columns in the order the table last showed them, with hidden ones kept beside their old neighbours.
+    - **Undo and redo:** the entries saved with the session get the same fix.
+    - **Old sessions:** sessions saved before the column actions kept pinned columns first could restore a pinned column out of place, or undo back to one, with `aria-colindex` descending along a row. A pinned column in such a session now moves into the pinned block.
+
+- cd45424: ### Fixed
+
+  - Loading a Parquet `File`, `Blob` or URL no longer fails once DuckDB's memory has grown past 2 GiB, which a few large loads in one page reach. Such a load failed with "too small to be a Parquet file" or "Prefetch registered for bytes outside file … file size: 0", and so did every load after it: duckdb-wasm's runtime lost the size of any file it opened at a memory address above 2 GiB. The library now corrects this in DuckDB's worker.
+
+- 16d217b: ### Fixed
+
+  - A row fetch that fails, or comes back short, is no longer issued again at once.
+    - **Before:** the body repeated it as fast as DuckDB answered, for as long as the failure lasted, and logged `Error fetching rows` each time: thousands of failed queries in a browser test that held a derived-column change for a second.
+    - **Now:** the same fetch waits 250 ms, then twice as long after each failure in a row, up to 8 s. A fetch of other columns or rows goes ahead at once, and a filter, sort or data change starts afresh.
+  - Rows are not fetched, and filtered rows not counted, while a derived-column change can drop or rebuild the relation they come from: a removal, an edit or a replacement, an undo or redo, a reset, or a session restore rebuilding its derived columns.
+    - **Before:** a scroll during one read from the VIEW it had dropped, or read a column it was removing, and every read failed. A filter added during one kept the row count from before it, and the rows past the true count stayed placeholders.
+    - **Now:** both run once the change settles, whether it succeeded or failed. Adding a derived column leaves the relation readable until its last statement, so rows scrolled to or sorted while one is added load at once.
+  - A table body whose row count dropped below the rows in view while its first fetch was in flight, as when a filter's count lands at zero, no longer asks for the same empty block over and over in one call stack until the stack overflows.
+  - A derived column added while another of the same name is still being added is refused. The two shared a vector column's helper table, each dropping the other's.
+
+- 5cc24ee: ### Fixed
+
+  - A sideways scroll right after a filter change now stays where the user put it. For a second after a filter change, a table scrolled sideways put its horizontal position back every frame, which undid any scroll made in that second. A wheel scroll straight after brushing a chart went nowhere, and moving the keyboard cursor with `End` could leave it off-screen. The hold now ends at the first wheel, key press, click or touch in the table.
+  - Hiding, showing, pinning or moving a column now puts the scroll position back as soon as the table is rebuilt, not a frame later. The table no longer flashes to its first column for a frame. The late restore also undid a scroll made right after the rebuild: moving a column to the far right with `Shift+F2` and then `Shift+End` left it off-screen. And it lost the position when the table was rebuilt twice in a row, as when a derived column is added: the table jumped back to its first column.
+  - Adding a column with the + button now scrolls the table all the way to it. The smooth scroll to the right end was cut off after 600ms, before a wide table got there, and the new column was left out of view.
+
+- f854109: ### Fixed
+
+  - The first time a column was hidden, shown or moved after scrolling sideways, every column header slid in from where it was when the data loaded. The pin animation's saved positions are now used only by the change that saved them.
+
+- 0e34cbe: ### Fixed
+
+  - A smooth sideways scroll no longer builds a custom stats panel for every column it passes. The scroll to a derived column just added, across a 1,000-column table, built about 500 panels, and the charts at the far end waited more than 10 seconds behind their queries. A panel is now built once the columns near the view have held still for 150 ms. A column that scrolls away still loses its panel at once.
+
+  ### Changed
+  - While a column's panel waits to be built, its stats slot shows the table-wide row count, and its chart keeps its stats out of the slot. The panel's first `update()` receives them, and `setHoverStats()` the detail the chart shows then, such as a committed selection's. The slot no longer shows the chart's stats just before the panel replaces them.
+  - A column that leaves the view's reach gets its stats slot back as it is without a panel, its chart's stats or the table-wide count, instead of whatever the destroyed panel left.
+
+- 90a6a79: ### Fixed
+
+  - Two tables sharing a `WorkerBridge`, each with a vector derived column of the same name, no longer share one DuckDB helper table. Before, the second add replaced the first table's values with its own, and removing the column from either table broke the other's VIEW. Helper tables are now named per derived-column manager, and a manager is numbered per bridge. That also keeps a table's new helper tables apart from those of the manager it replaced on a new load or an undo.
+  - Destroying a derived-column manager, which a reset, a new load or an undo of a derived column does, now drops a helper table left by a vector add or edit that failed part-way through, instead of leaving it in DuckDB.
+  - `destroy()` on a table sharing its bridge now drops the table's derived-column VIEW and vector helper tables as well as its base table. It waits for a derived-column change still running to finish first, so the change cannot rebuild one after the drop. Before, they stayed in DuckDB for as long as the bridge lived.
+  - A `loadData()` still in flight when `clearSession()` is called no longer fires `loadComplete` with an empty `tableName` and a `rowCount` of 0 after the clear. The clear now deletes the snapshot of the table it empties, which is the one the load made. That table is also dropped once a load lands or on `destroy()`, instead of being left in DuckDB for good.
+  - A load that a newer `loadData()` or `clearSession()` supersedes before it ends now fires neither `loadComplete` nor `loadError`. Its promise still resolves, or rejects if the load itself failed. Each `loadStart` is followed by at most one of the two.
+  - A load that a newer `loadData()` supersedes no longer leaves its base table in DuckDB for good, even after `destroy()`; with 200K rows × 1,000 columns that was about 1.5 GB. `destroy()` during a load in flight, on a shared bridge, now drops both the table the load was replacing and the one it makes once it lands, instead of leaving both. Each load now reports the table it replaces as its turn begins, so whatever happens to the load, the next successful load or `destroy()` drops it.
+  - Two loads of the same `tableName`, neither awaited, no longer risk one dropping the table the other has just made.
+  - A table destroyed while a session restore rebuilds its derived columns no longer logs "Failed to restore derived columns"; the load rejects with `DestroyedError`, as a load destroyed at any other point does.
+  - `clearSession()` and `resetToInitial()` now fire `derivedChange` (with `kind: 'updated'`) when they drop the derived columns, so a SQL editor refreshing its completions on that event no longer offers the dropped columns.
+
+- 0ad8272: ### Fixed
+
+  - The rows in view now follow the table body's height, not only its scroll position.
+    - **Before:** a container that grew taller showed blank space below the rows rendered for its old height until the next scroll, one that shrank went on rendering rows out of view, and a table mounted hidden, in a closed tab or a collapsed panel, showed no rows once it was shown.
+    - **Now:** the rows in view are worked out again whenever the body resizes, whatever resized it: the container, the window, or a filter bar that wraps onto another line.
+
 ## 0.9.0-next.0
 
 ### Minor Changes

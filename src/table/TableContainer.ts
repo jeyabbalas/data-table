@@ -418,6 +418,10 @@ export class TableContainer {
       scrollbarGutter: this.scrollbarGutter,
       bodyScroll: this.bodyScroll,
       gridElement: this.gridElement,
+      // The row range is read from the body's height, which changes with the
+      // container's and with what sits above the body, such as a filter bar
+      // that wraps. Nothing else re-reads it until the next scroll.
+      onBodyResize: () => this.tableBody?.getVirtualScroller().refresh(),
     });
 
     // Set up resize observer
@@ -435,6 +439,7 @@ export class TableContainer {
           classPrefix: this.resolvedOptions.classPrefix,
           getPinnedColumns: () => this.state.pinnedColumns.get(),
           holdColumn: (column) => this.columnWindow.hold(column),
+          getLayout: () => getColumnLayout(this.state),
         },
       );
     }
@@ -1900,7 +1905,12 @@ export class TableContainer {
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
-    modal.openForEdit(filterId);
+    // Focus goes back to the filter bar's Expression button: updating or
+    // removing the filter rebuilds its chip, and a chip label takes no focus.
+    const expressionBtn = this.filterBar
+      ?.getElement()
+      .querySelector<HTMLElement>(`.${this.resolvedOptions.classPrefix}-filter-expression-btn`);
+    modal.openForEdit(filterId, expressionBtn ?? undefined);
   }
 
   /**

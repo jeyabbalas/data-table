@@ -51,7 +51,7 @@ import {
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableState } from './core/State';
-import { createTableState, resetTableState } from './core/State';
+import { createTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import type { TableEvents } from './core/TableEvents';
@@ -398,7 +398,9 @@ export interface DataTable {
    * filter presets, and the bridge's query cache. After this call the table
    * behaves as if just constructed with no `source` — call {@link loadData}
    * to populate it again. Safe to call when persistence is disabled (only the
-   * IndexedDB delete is skipped).
+   * IndexedDB delete is skipped). It empties the table once a derived-column
+   * change running then has ended; a change asked for before the call does
+   * not apply, as with {@link loadData}.
    */
   clearSession(): Promise<void>;
 
@@ -621,6 +623,30 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // sits further down where the unsubscribe array is built. --------
   let destroyed = false;
 
+  // -------- Worker failure --------
+  // A failed worker fails every query after it. The table reports the
+  // failure once, when the bridge tells of it, with `source: 'query'`, and
+  // drops every error that follows from it: a chart's, a panel's or a load's,
+  // however it was wrapped. Each carries, in its `cause` chain, the error the
+  // bridge failed with, the deepest one whose code is `WORKER_CRASHED`. A new
+  // worker's failure is a new error, and is reported in its turn.
+  const reportedFailures = new WeakSet<object>();
+  const emitError = (payload: TableEvents['error']): void => {
+    let failure: object | null = null;
+    let link: unknown = payload.error;
+    for (let depth = 0; depth < 8 && typeof link === 'object' && link !== null; depth++) {
+      if (reportedFailures.has(link)) return;
+      if ((link as { code?: unknown }).code === 'WORKER_CRASHED') failure = link;
+      link = (link as { cause?: unknown }).cause;
+    }
+    if (failure) reportedFailures.add(failure);
+    emitter.emit('error', payload);
+  };
+  const offWorkerFailure =
+    typeof bridge.onWorkerFailure === 'function'
+      ? bridge.onWorkerFailure((error) => emitError({ error, source: 'query' }))
+      : () => undefined;
+
   // -------- Visualizations (auto-attach) --------
   const interactionManager = opts.visualizations === false ? null : new InteractionManager();
   // The crossfilter coordinator is the single source of `filterChange`
@@ -676,7 +702,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             cause: err,
             details: { column, phase },
           });
-    emitter.emit('error', { error: typed, source: 'stats-panel' });
+    emitError({ error: typed, source: 'stats-panel' });
   };
 
   /** Drop a column's interactions from the Escape stack (on filter removal). */
@@ -861,7 +887,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         else interactionManager?.removeColumn(colName);
       },
       onError: (err: DataTableError) => {
-        emitter.emit('error', { error: err, source: 'visualization' });
+        emitError({ error: err, source: 'visualization' });
       },
     };
 
@@ -915,7 +941,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
                   code: 'INVARIANT',
                   cause: err,
                 });
-          emitter.emit('error', { error: typed, source: 'visualization' });
+          emitError({ error: typed, source: 'visualization' });
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
@@ -965,7 +991,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           column: ctx.column,
           phase: ctx.phase,
         };
-        emitter.emit('error', { error: err, source: 'stats-panel' });
+        emitError({ error: err, source: 'stats-panel' });
       },
     };
     let panel: BaseStatsPanel | null = null;
@@ -1062,7 +1088,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // independent of the viz one.
     if (relationChanged || !statsPanelCoordinator) {
       statsPanelCoordinator?.destroy();
-      statsPanelCoordinator = new StatsPanelCoordinator(state);
+      statsPanelCoordinator = new StatsPanelCoordinator(state, undefined, actions);
     }
 
     // Per-column work (viz instances + custom stats panels) is gated by the
@@ -1512,7 +1538,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // the listener map and consumers no longer expect notifications.
       if (!destroyed) {
         emitter.emit('loadError', { error: typed });
-        emitter.emit('error', { error: typed, source: 'load' });
+        emitError({ error: typed, source: 'load' });
       }
       throw typed;
     } finally {
@@ -1538,6 +1564,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function destroy(): Promise<void> {
     if (destroyed) return;
     destroyed = true;
+    offWorkerFailure();
     // Mark the action layer destroyed first so any in-flight async action
     // (e.g. addDerivedColumn awaiting the worker) drops its post-await state
     // mutation rather than writing into the dead table.
@@ -1636,8 +1663,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
-      resetTableState(state);
-      undoManager?.clear();
+      // In its turn, after a derived-column change running now, which then
+      // writes nothing into the emptied table.
+      await actions.clearData();
       // Only clear presets we own. A user-supplied shared
       // `FilterPresetManager` (multi-table dashboards) outlives any
       // single table's session — clearing it here would wipe other

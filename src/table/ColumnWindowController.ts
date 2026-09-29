@@ -63,6 +63,12 @@ export interface ColumnWindowControllerOptions {
    * column, a header button or a clicked cell, that column stays mounted.
    */
   gridElement: HTMLElement;
+  /**
+   * Called when the body's size changes, once the columns to mount are
+   * worked out for it. The rows in view are the body's to work out again: a
+   * taller body shows rows it has not rendered.
+   */
+  onBodyResize?: (() => void) | undefined;
 }
 
 /** The body's scroll position, as {@link ColumnWindowController.savePosition} saw it. */
@@ -141,6 +147,17 @@ function sameColumns(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
+ * Whether two scroll positions are the same one. Chrome at a fractional
+ * device pixel ratio reports offsets in fractions of a pixel, and can read a
+ * scroller back a fraction away from where it was written, so positions less
+ * than a pixel apart count as one. A header that stops short of the body
+ * (see `ColumnWindowController.syncHeaderScroll`) stops a scrollbar short.
+ */
+function samePosition(a: number | null, b: number): boolean {
+  return a !== null && Math.abs(a - b) < 1;
+}
+
+/**
  * Keeps the header and body scrollers together, makes every programmatic
  * sideways scroll of the table, and publishes the columns to mount.
  *
@@ -162,20 +179,22 @@ export class ColumnWindowController {
   private readonly bodyScroll: HTMLElement;
   private readonly gridElement: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
+  private readonly onBodyResize: (() => void) | undefined;
   private readonly unsubscribes: (() => void)[] = [];
   private destroyed = false;
 
   /** A sync in progress, so the scroll it causes does not sync back. */
   private syncing = false;
 
-  /** Header→body sync is off while {@link scrollToEnd}'s smooth scroll runs. */
-  private suppressReverseSync = false;
-
   /**
-   * Where the header stopped short of the body on the last sync, until the
-   * header's scroll event for it arrives (see {@link syncHeaderScroll}).
+   * Where the controller last left the header, and where a scroll of the
+   * header's own last put the body. A scroll event that finds a scroller
+   * there is the echo of that write, and has nothing to pass on (see
+   * {@link handleHeaderScroll}). The body's is cleared by a sync from the
+   * body, whose own scrolls always take the header along.
    */
-  private headerEcho: number | null = null;
+  private headerAt: number | null = null;
+  private bodyAt: number | null = null;
 
   /** Ends the hold that follows a filter change, while one is running. */
   private releaseFilterHold: (() => void) | null = null;
@@ -221,6 +240,7 @@ export class ColumnWindowController {
     this.scrollbarGutter = options.scrollbarGutter;
     this.bodyScroll = options.bodyScroll;
     this.gridElement = options.gridElement;
+    this.onBodyResize = options.onBodyResize;
 
     this.bodyScroll.addEventListener('scroll', this.handleBodyScroll, { passive: true });
     this.headerScroll.addEventListener('scroll', this.handleHeaderScroll, { passive: true });
@@ -235,6 +255,7 @@ export class ColumnWindowController {
         if (entry.target !== this.bodyScroll) continue;
         this.syncScrollbarGutter(entry);
         this.update('kept');
+        this.onBodyResize?.();
       }
     });
     this.resizeObserver.observe(this.bodyScroll);
@@ -263,22 +284,44 @@ export class ColumnWindowController {
 
   private readonly handleBodyScroll = (): void => {
     if (this.destroyed || this.syncing) return;
-    this.syncing = true;
-    this.syncHeaderScroll();
-    this.syncing = false;
+    // A body still where a scroll of the header's put it is echoing that
+    // scroll, or scrolling straight down, and the header may have moved on
+    // since: syncing it then would pull it back.
+    if (!samePosition(this.bodyAt, this.bodyScroll.scrollLeft)) {
+      this.syncing = true;
+      this.syncHeaderScroll();
+      this.syncing = false;
+    }
     this.update('kept');
   };
 
+  /**
+   * The header moves the body only when it has moved from where the
+   * controller last left it.
+   *
+   * Its scroll event for a sync is the echo of the body's own scroll, and the
+   * body may have moved on by the time it arrives: Chrome at a device pixel
+   * ratio of 2 was seen firing it a frame late, in the middle of a smooth
+   * scroll of the body. Passing on the header's older position then pulled
+   * the body back, which stopped the scroll a pixel or two in. So the echo is
+   * dropped for where it finds the header, to within a pixel, whatever the
+   * body is doing. The same goes for a sync the header could not follow,
+   * which leaves it short of the body (see {@link syncHeaderScroll}).
+   */
   private readonly handleHeaderScroll = (): void => {
-    const echo = this.headerEcho;
-    this.headerEcho = null;
-    if (this.destroyed || this.syncing || this.suppressReverseSync) return;
+    if (this.destroyed || this.syncing) return;
     const left = this.headerScroll.scrollLeft;
-    // The echo of a sync the header could not follow, or of one it could:
-    // either way the body is where it should be.
-    if (left === echo || left === this.bodyScroll.scrollLeft) return;
+    if (samePosition(this.headerAt, left) || samePosition(this.bodyScroll.scrollLeft, left)) return;
     this.syncing = true;
     this.bodyScroll.scrollLeft = left;
+    const landed = this.bodyScroll.scrollLeft;
+    if (samePosition(landed, left)) {
+      this.headerAt = left;
+      this.bodyAt = landed;
+    } else {
+      // A body that cannot scroll as far takes the header back with it.
+      this.syncHeaderScroll();
+    }
     this.syncing = false;
     this.update('kept');
   };
@@ -288,15 +331,15 @@ export class ColumnWindowController {
    *
    * The header can stop short: its viewport is wider than the body's for the
    * frame between a vertical scrollbar appearing and the gutter being measured
-   * to match. Its scroll event then carries the shorter position, and syncing
-   * that back would pull the body away from its far right, so the header
-   * handler drops that one event.
+   * to match. Where it lands is where the controller leaves it, so its scroll
+   * event, carrying the shorter position, does not pull the body away from
+   * its far right.
    */
   private syncHeaderScroll(): void {
     const left = this.bodyScroll.scrollLeft;
     this.headerScroll.scrollLeft = left;
-    const landed = this.headerScroll.scrollLeft;
-    this.headerEcho = landed === left ? null : landed;
+    this.headerAt = this.headerScroll.scrollLeft;
+    this.bodyAt = null;
   }
 
   /** Scroll the body, and the header with it, to `left`. */
@@ -421,51 +464,19 @@ export class ColumnWindowController {
   /**
    * Smooth-scroll to the right end, where a column just added lands.
    *
-   * Waits two frames first, for the render the new column causes.
+   * Waits two frames first, for the render the new column causes. The header
+   * follows the body's scroll events as it goes, and the echoes of those
+   * syncs are dropped, so nothing the header does stops the scroll short,
+   * however long it takes or however its frames stall. Turning the
+   * header-to-body sync off until the body stopped did not: a loaded machine
+   * made the body look still mid-way, the sync came back on, and the next
+   * echo stopped the scroll there.
    */
   scrollToEnd(): void {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (this.destroyed) return;
-        const targetLeft = this.bodyScroll.scrollWidth;
-
-        // Suppress header→body sync so the smooth scroll animation isn't
-        // cancelled by stale scrollLeft values bouncing back from the header.
-        this.suppressReverseSync = true;
-
-        // Scroll the header instantly to the target, then smooth-scroll the body.
-        this.headerScroll.scrollLeft = targetLeft;
-        this.bodyScroll.scrollTo({ left: targetLeft, behavior: 'smooth' });
-
-        // Re-enable sync once the body has stopped, and align both
-        // scrollers: on `scrollend`, or where there is none, once the
-        // position has held for a few frames. Not after a fixed time: a wide
-        // table outlasted the 600ms that used to end this, and the header's
-        // position, synced back into the still-moving body, stopped it short
-        // of the column just added.
-        let ended = false;
-        const onEnd = (): void => {
-          if (ended) return;
-          ended = true;
-          this.bodyScroll.removeEventListener('scrollend', onEnd);
-          if (this.destroyed) return;
-          this.suppressReverseSync = false;
-          this.syncHeaderScroll();
-        };
-        this.bodyScroll.addEventListener('scrollend', onEnd, { once: true });
-        const started = performance.now();
-        let last = Number.NaN;
-        let still = 0;
-        const watch = (): void => {
-          if (ended || this.destroyed) return;
-          const left = this.bodyScroll.scrollLeft;
-          still = left === last ? still + 1 : 0;
-          last = left;
-          // The time floor covers a smooth scroll that has not started yet.
-          if (still >= 3 && performance.now() - started > 100) onEnd();
-          else requestAnimationFrame(watch);
-        };
-        requestAnimationFrame(watch);
+        this.bodyScroll.scrollTo({ left: this.bodyScroll.scrollWidth, behavior: 'smooth' });
       });
     });
   }

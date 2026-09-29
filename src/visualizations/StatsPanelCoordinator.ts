@@ -29,6 +29,7 @@
  * @see CrossfilterCoordinator
  */
 
+import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { BaseStatsPanel } from './BaseStatsPanel';
@@ -64,7 +65,21 @@ export class StatsPanelCoordinator {
    */
   private filterSequence = 0;
 
-  constructor(state: TableState, concurrency: number = DEFAULT_PANEL_CONCURRENCY) {
+  /**
+   * @param state - The table state whose `filters` are broadcast.
+   * @param concurrency - The most `updateFilters` calls in flight at once.
+   * @param actions - The table's actions. When given, a broadcast waits out a
+   *   derived-column change that can drop or rebuild the relation panels
+   *   query (a removal, an edit or a replacement, an undo or redo, a reset or
+   *   a restore), as the facade's charts and filtered-row count do, and goes
+   *   to the panels still registered once it has settled. A panel's query of
+   *   the relation fails meanwhile.
+   */
+  constructor(
+    state: TableState,
+    concurrency: number = DEFAULT_PANEL_CONCURRENCY,
+    private readonly actions?: StateActions,
+  ) {
     this.concurrency = Math.max(1, concurrency);
     this.unsubscribe = state.filters.subscribe((filters) => void this.onFiltersChanged(filters));
   }
@@ -110,21 +125,47 @@ export class StatsPanelCoordinator {
     if (this.destroyed) return;
 
     const seq = ++this.filterSequence;
-    const tasks = [...this.panels.values()]
-      .filter((p) => !p.isDestroyed())
-      .map((p) => () => this.callUpdateFilters(p, filters, seq));
+    // The panels to update are the ones registered now: a panel made from
+    // here on is made with these filters.
+    const tasks = [...this.panels.entries()].map(
+      ([columnName, p]) =>
+        () =>
+          this.callUpdateFilters(columnName, p, filters, seq),
+    );
 
     await this.runLimited(tasks);
   }
 
+  /**
+   * Wait out a derived-column change that can be dropping or rebuilding the
+   * relation panels query: until it has settled, and a task more, when the
+   * state update that follows a successful change has landed. False if a
+   * newer broadcast started, or the coordinator was destroyed, meanwhile.
+   * Mirrors `CrossfilterCoordinator`.
+   */
+  private async waitForReadableRelation(actions: StateActions, seq: number): Promise<boolean> {
+    while (!actions.isRelationReadable()) {
+      await actions.whenRelationReadable();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (this.destroyed || seq !== this.filterSequence) return false;
+    }
+    return true;
+  }
+
   private async callUpdateFilters(
+    columnName: string,
     panel: BaseStatsPanel,
     filters: Filter[],
     seq: number,
   ): Promise<void> {
+    // Checked as each update goes out: a broadcast runs a few at a time, and
+    // a derived-column change can start while the rest wait their turn.
+    if (this.actions && !this.actions.isRelationReadable()) {
+      if (!(await this.waitForReadableRelation(this.actions, seq))) return;
+    }
     if (this.destroyed) return;
     if (seq !== this.filterSequence) return;
-    if (panel.isDestroyed()) return;
+    if (this.panels.get(columnName) !== panel || panel.isDestroyed()) return;
     try {
       await panel.updateFilters(filters);
     } catch {

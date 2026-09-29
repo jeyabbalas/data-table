@@ -210,6 +210,109 @@ describe('DataTable — lifecycle (Phase 2)', () => {
       expect(table.state.visibleColumns.get()).toEqual([]);
       await table.destroy();
     });
+
+    it('reports a superseded load that fails only through its promise', async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const bridge = makeBridge();
+      let fail!: () => void;
+      vi.mocked(bridge.loadData)
+        .mockImplementationOnce(
+          () => new Promise((_, reject) => (fail = () => reject(new Error('boom')))),
+        )
+        .mockResolvedValueOnce({
+          tableName: 'b',
+          rowCount: 3,
+          columns: ['id'],
+          schema: [{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }],
+        } as never);
+      const table = await createDataTable({
+        container,
+        bridge,
+        persistence: false,
+        presets: false,
+        expressionFilter: false,
+        visualizations: false,
+        exportDialog: false,
+      });
+      const events: string[] = [];
+      table.on('loadStart', () => events.push('loadStart'));
+      table.on('loadComplete', ({ tableName }) => events.push(`loadComplete ${tableName}`));
+      table.on('loadError', () => events.push('loadError'));
+      table.on('error', () => events.push('error'));
+
+      const first = table.loadData('id\n1', { tableName: 'a' });
+      const second = table.loadData('id\n1', { tableName: 'b' });
+      await Promise.resolve();
+      fail();
+      await expect(first).rejects.toThrow('boom');
+      await second;
+      expect(events).toEqual(['loadStart', 'loadStart', 'loadComplete b']);
+      await table.destroy();
+    });
+
+    it('empties the table a load in flight lands, and drops it and its snapshot', async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const bridge = makeBridge();
+      const dropTable = vi.fn().mockResolvedValue(undefined);
+      (bridge as unknown as { dropTable: unknown }).dropTable = dropTable;
+      const schema = (name: string) => [
+        { name, type: 'integer', nullable: false, originalType: 'INTEGER' },
+      ];
+      let finish!: () => void;
+      vi.mocked(bridge.loadData)
+        .mockResolvedValueOnce({
+          tableName: 'old',
+          rowCount: 3,
+          columns: ['id'],
+          schema: schema('id'),
+        } as never)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = () =>
+                resolve({
+                  tableName: 'new',
+                  rowCount: 5,
+                  columns: ['n'],
+                  schema: schema('n'),
+                } as never);
+            }),
+        );
+      const store = makeSessionStore();
+      const table = await createDataTable({
+        container,
+        bridge,
+        persistence: { sessionStore: store },
+        presets: false,
+        expressionFilter: false,
+        visualizations: false,
+        exportDialog: false,
+      });
+      await table.loadData('id\n1\n2', { tableName: 'old' });
+      const events: string[] = [];
+      table.on('loadComplete', ({ tableName }) => events.push(`loadComplete ${tableName}`));
+      table.on('loadError', () => events.push('loadError'));
+
+      // Neither awaited: the clear waits for the load, which lands first.
+      const loading = table.loadData('n\n1\n2', { tableName: 'new' });
+      const clearing = table.clearSession();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      finish();
+      await Promise.all([loading, clearing]);
+
+      // The load was superseded: no loadComplete for the data the clear took.
+      expect(events).toEqual([]);
+      expect(table.state.tableName.get()).toBeNull();
+      expect(vi.mocked(store.delete)).toHaveBeenCalledWith('new');
+      // Nothing names the table the load replaced, nor the one it made:
+      // both are dropped, the latter by the load or on destroy at the
+      // latest, and each once.
+      expect(dropTable.mock.calls.map(([name]) => name)).toContain('old');
+      await table.destroy();
+      expect(dropTable.mock.calls.map(([name]) => name).sort()).toEqual(['new', 'old']);
+    });
   });
 
   describe('destroy idempotency', () => {

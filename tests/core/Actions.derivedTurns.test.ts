@@ -315,6 +315,37 @@ describe('derived-column changes take turns', () => {
     expect(derivedNames(h)).toEqual(['x2']);
   });
 
+  it('emits no derivedChange when it empties a table without derived columns', async () => {
+    const h = setup(new UndoManager());
+    const kinds: string[] = [];
+    h.actions.setOnDerivedChange(({ kind }) => kinds.push(kind));
+    await expect(h.actions.clearData()).resolves.toBe('t');
+    await expect(h.actions.clearData()).resolves.toBeNull();
+    expect(kinds).toEqual([]);
+  });
+
+  it('emits derivedChange when a reset drops the derived columns', async () => {
+    const h = setup(new UndoManager());
+    h.bridge.loadData.mockResolvedValueOnce({
+      tableName: 't',
+      rowCount: 3,
+      columns: ['id'],
+      schema: [{ name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' }],
+    });
+    await h.actions.loadData('id\n1\n2\n3', { format: 'csv' });
+    const kinds: string[] = [];
+    h.actions.setOnDerivedChange(({ kind }) => kinds.push(kind));
+    h.actions.addFilter({ type: 'range', column: 'id', min: 1, max: 2 });
+    await expect(h.actions.resetToInitial()).resolves.toBe(true);
+    expect(kinds).toEqual([]);
+
+    await landX2(h);
+    const reset = h.actions.resetToInitial();
+    await answerAll(h);
+    await expect(reset).resolves.toBe(true);
+    expect(kinds).toEqual(['added', 'updated']);
+  });
+
   it('resolves an add, edit or replacement asked for after destroy at once', async () => {
     const h = setup();
     await landX2(h);
@@ -357,13 +388,20 @@ describe('derived-column changes take turns', () => {
       expression: 'id * 3',
     });
     await drain();
+    const kinds: { kind: string; derivedColumns: unknown[] }[] = [];
+    h.actions.setOnDerivedChange(({ kind, derivedColumns }) =>
+      kinds.push({ kind, derivedColumns }),
+    );
     const clearing = h.actions.clearData();
     await answerAll(h);
     await expect(add).resolves.toEqual({
       success: false,
       error: 'New data was loaded, or the table cleared, before the change was applied',
     });
-    await clearing;
+    // It names the base table it emptied, for the facade to drop.
+    await expect(clearing).resolves.toBe('t');
+    // One derivedChange, for x2 going: the add turned away emits none.
+    expect(kinds).toEqual([{ kind: 'updated', derivedColumns: [] }]);
 
     expect(h.state.tableName.get()).toBeNull();
     expect(h.state.schema.get()).toEqual([]);
@@ -488,7 +526,7 @@ describe('a load while derived-column changes wait or run', () => {
     load.finish();
     await drain();
     const dropHelper = pending(h)[0]!;
-    expect(dropHelper.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_v_0__"/);
+    expect(dropHelper.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_0_v_0__"/);
     // A derived column added to the new data next would build a helper table
     // of the same name, which a DROP landing late would take away.
     expect(loaded).toBe(false);
@@ -623,6 +661,45 @@ describe('a load while derived-column changes wait or run', () => {
     // Once the load has ended, they work again.
     await expect(h.actions.undo()).resolves.toBe(true);
     expect(h.state.filters.get()).toEqual([]);
+  });
+});
+
+describe('dropping the derived columns of a destroyed table', () => {
+  it('waits for a change at work in DuckDB, then drops what it built', async () => {
+    const h = setup();
+    await landX2(h);
+    const { add, insert } = await vectorAddAtInsert(h, 'v');
+    h.actions.markDestroyed();
+    let dropped = false;
+    const dropping = h.actions.dropDerived().then(() => (dropped = true));
+    await drain();
+    // Nothing is dropped while the add can still build its VIEW.
+    expect(pending(h)).toEqual([insert]);
+    expect(dropped).toBe(false);
+
+    await answerAll(h);
+    await dropping;
+    await expect(add).resolves.toEqual({ success: false, error: 'DataTable is destroyed' });
+    const statements = h.queries.map((q) => q.sql.slice(0, 40));
+    // The add's CREATE VIEW, then the helper table's DROP and the VIEW's.
+    expect(statements.slice(-3)).toEqual([
+      expect.stringMatching(/^CREATE OR REPLACE VIEW/),
+      expect.stringMatching(/^DROP TABLE IF EXISTS "__dt_vec_0_v_0__"/),
+      expect.stringMatching(/^DROP VIEW IF EXISTS "__dt_view_t__"/),
+    ]);
+  });
+
+  it('does not wait for a load in flight, which stops before it builds any', async () => {
+    const h = setup();
+    await landX2(h);
+    h.bridge.loadData.mockImplementation(() => new Promise(() => {}));
+    void h.actions.loadData('n\n1', { format: 'csv' }).catch(() => {});
+    await drain();
+    h.actions.markDestroyed();
+    const dropping = h.actions.dropDerived();
+    await answerAll(h);
+    await dropping;
+    expect(h.queries.at(-1)!.sql).toMatch(/^DROP VIEW IF EXISTS "__dt_view_t__"/);
   });
 });
 

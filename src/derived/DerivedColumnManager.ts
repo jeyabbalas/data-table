@@ -43,6 +43,14 @@ import type {
 const VECTOR_BATCH_SIZE = 1000;
 
 /**
+ * The number the next manager made on each bridge takes, which its helper
+ * tables are named with. Per bridge, since a bridge is one DuckDB database:
+ * two tables sharing one must not share a helper table, nor must the
+ * managers one table goes through as it loads new data or undoes a change.
+ */
+const nextManagerNumbers = new WeakMap<object, number>();
+
+/**
  * Owns derived-column lifecycle: validates SQL expressions through DuckDB
  * (`PREPARE`-based syntax check), maintains a wrapper VIEW
  * (`__dt_view_<baseTableName>__`) over the source table, generates SELECT
@@ -60,6 +68,8 @@ export class DerivedColumnManager {
   private nextHelperTableId = 0;
   /** Maps column name → assigned helper table ID */
   private helperTableIds = new Map<string, number>();
+  /** `__dt_vec_<n>_`, `n` this manager's number on its bridge */
+  private readonly helperTablePrefix: string;
 
   constructor(
     private bridge: WorkerBridge,
@@ -67,6 +77,9 @@ export class DerivedColumnManager {
     private getTotalRows: () => number = () => 0,
   ) {
     this.viewName = `__dt_view_${baseTableName}__`;
+    const managerNumber = nextManagerNumbers.get(bridge) ?? 0;
+    nextManagerNumbers.set(bridge, managerNumber + 1);
+    this.helperTablePrefix = `__dt_vec_${managerNumber}_`;
   }
 
   // --- Public API ---
@@ -523,14 +536,13 @@ export class DerivedColumnManager {
 
   /** Clean up: drop VIEW, drop all helper tables */
   async destroy(): Promise<void> {
-    // Drop vector helper tables
-    for (const info of this.columns) {
-      if (info.def.kind === 'vector') {
-        try {
-          await this.dropVectorHelperTable(info.def.name);
-        } catch {
-          // Best-effort cleanup
-        }
+    // Drop every helper table this manager named: its vector columns', and
+    // one a failed add or edit left behind, which no column lists.
+    for (const name of [...this.helperTableIds.keys()]) {
+      try {
+        await this.dropVectorHelperTable(name);
+      } catch {
+        // Best-effort cleanup
       }
     }
 
@@ -866,7 +878,12 @@ export class DerivedColumnManager {
     this.helperTableIds.delete(name);
   }
 
-  /** Helper table name for a given column: __dt_vec_<sanitizedName>_<id>__ */
+  /**
+   * Helper table name for a given column: `__dt_vec_<manager>_<sanitizedName>_<id>__`,
+   * `<manager>` this manager's number on its bridge and `<id>` the column's
+   * number in this manager, so no two columns in one DuckDB database share
+   * one.
+   */
   private helperTableName(columnName: string): string {
     const id = this.helperTableIds.get(columnName);
     if (id === undefined) {
@@ -876,7 +893,7 @@ export class DerivedColumnManager {
       });
     }
     const sanitized = columnName.replace(/[^a-zA-Z0-9]/g, '_');
-    return `__dt_vec_${sanitized}_${id}__`;
+    return `${this.helperTablePrefix}${sanitized}_${id}__`;
   }
 
   /** Map VectorDataType to DuckDB type string */

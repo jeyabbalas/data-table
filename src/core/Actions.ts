@@ -157,8 +157,11 @@ export class StateActions {
   /** Those of them that can leave the relation unreadable meanwhile: all but adds. */
   private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
+  private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
+  /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
+  private idleWaiters: (() => void)[] = [];
   /** Turns requested and not yet ended, the running one included; see {@link inTurn}. */
   private openTurns = 0;
   /** Turns requested and not yet started. */
@@ -252,6 +255,20 @@ export class StateActions {
   }
 
   /**
+   * Set a callback told the name of each base table that a load or a clear
+   * leaves behind: the one in state as a load's turn begins, unless the load
+   * makes a table of that name again, and the one a clear empties. Nothing in
+   * the table names it after that. The facade drops it once the next load
+   * has landed, or on destroy.
+   *
+   * @internal
+   */
+  setOnBaseTableReplaced(callback: (tableName: string) => void): void {
+    this.throwIfDestroyed('setOnBaseTableReplaced');
+    this.onBaseTableReplacedCallback = callback;
+  }
+
+  /**
    * Whether the relation `state.tableName` names can be read as `state.schema`
    * describes it. Not while a derived-column change that can drop or rebuild
    * what those reads select from is waiting on DuckDB: a removal, an edit or
@@ -301,6 +318,9 @@ export class StateActions {
       } finally {
         if (this.unreadableRelationChanges === 0) {
           for (const resolve of this.readableWaiters.splice(0)) resolve();
+        }
+        if (this.relationChanges === 0) {
+          for (const resolve of this.idleWaiters.splice(0)) resolve();
         }
       }
     }
@@ -691,6 +711,7 @@ export class StateActions {
       if (epoch !== this.loadEpoch || !initialSnapshot) return false;
       this.suppressUndoCapture = true;
       const prevFilters = this.state.filters.get();
+      const hadDerived = this.state.derivedColumns.get().length > 0;
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
       const manager = this.derivedManager;
@@ -732,6 +753,7 @@ export class StateActions {
 
       this.notifyRemovedFilters(prevFilters, this.state.filters.get());
       this.undoManager?.clear();
+      if (hadDerived) this.emitDerivedChange('updated');
 
       return true;
     } finally {
@@ -777,15 +799,20 @@ export class StateActions {
    * derived-column change running now, if any, has ended, and, as for a load,
    * without applying the changes asked for before the call. Resets the state
    * and the undo stacks, forgets the initial state, and drops the derived
-   * columns' VIEW and helper tables.
+   * columns' VIEW and helper tables, emitting `derivedChange` when there
+   * were any. Resolves with the name of the base table it emptied, which a
+   * load in flight at the call may have made after it: `null` when none.
    *
    * @internal
    */
-  async clearData(): Promise<void> {
+  async clearData(): Promise<string | null> {
     this.throwIfDestroyed('clearData');
     this.loadEpoch++;
     return this.inTurn(async () => {
       this.throwIfDestroyed('clearData');
+      const baseTableName = this.state.baseTableName.get() ?? this.state.tableName.get();
+      if (baseTableName) this.onBaseTableReplacedCallback?.(baseTableName);
+      const hadDerived = this.state.derivedColumns.get().length > 0;
       resetTableState(this.state);
       this.undoManager?.clear();
       this.initialSnapshot = null;
@@ -798,7 +825,57 @@ export class StateActions {
           // Swallow — nothing reads its tables any more.
         }
       }
+      if (hadDerived) this.emitDerivedChange('updated');
+      return baseTableName;
     });
+  }
+
+  /**
+   * Drop the derived columns' VIEW and helper tables, once a change at work
+   * on them in DuckDB has ended, so that it cannot build one again after the
+   * DROP. For a table destroyed on a bridge that outlives it; called after
+   * {@link markDestroyed}, which turns away every change still in line and
+   * stops a load in flight before it touches them. It does not wait for that
+   * load, which may take seconds more.
+   *
+   * @internal
+   */
+  async dropDerived(): Promise<void> {
+    while (this.relationChanges > 0) {
+      await new Promise<void>((resolve) => this.idleWaiters.push(resolve));
+    }
+    const manager = this.derivedManager;
+    this.derivedManager = null;
+    try {
+      await manager?.destroy();
+    } catch {
+      // Best-effort: the table is going.
+    }
+  }
+
+  /**
+   * The count of loads and clears asked for so far. A load that finds it
+   * changed once it has ended was superseded by a newer load or a clear.
+   *
+   * @internal
+   */
+  getLoadEpoch(): number {
+    return this.loadEpoch;
+  }
+
+  /**
+   * Throw `DestroyedError` if the table was destroyed while a load ran,
+   * dropping first the base table the load made: nothing names it, and on a
+   * shared bridge it would outlive the table.
+   */
+  private async abandonIfDestroyed(tableName: string): Promise<void> {
+    if (!this.destroyed) return;
+    try {
+      await this.bridge.dropTable(tableName);
+    } catch {
+      // Best-effort: a terminated worker took it with it.
+    }
+    this.throwIfDestroyed('loadData');
   }
 
   /** The turn of {@link loadData}. */
@@ -807,13 +884,26 @@ export class StateActions {
     options: LoadDataOptions,
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
+    // The table this load replaces is left behind, for the facade to drop
+    // once a load has landed, or on destroy even if none does: unless the
+    // load makes a table of the same name, which replaces it in place, and
+    // is left behind only if the load fails.
+    const replaced = this.state.baseTableName.get() ?? this.state.tableName.get();
+    const replacedInPlace = replaced !== null && replaced === options.tableName;
+    if (replaced && !replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
     // Reset state for new data
     resetTableState(this.state);
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
-    const result = await this.loader.load(source, options);
-    this.throwIfDestroyed('loadData');
+    let result: Awaited<ReturnType<DataLoader['load']>>;
+    try {
+      result = await this.loader.load(source, options);
+    } catch (err) {
+      if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+      throw err;
+    }
+    await this.abandonIfDestroyed(result.tableName);
 
     // Clean up any previous derived column manager. Awaited, so that its
     // DROPs land before a restore below creates the new manager's tables:
@@ -827,7 +917,7 @@ export class StateActions {
       } catch {
         // Swallow — the previous manager is being replaced.
       }
-      this.throwIfDestroyed('loadData');
+      await this.abandonIfDestroyed(result.tableName);
     }
 
     // Update state with schema from loader result
@@ -918,6 +1008,8 @@ export class StateActions {
               });
             }
           } catch (err) {
+            // Destroyed during the rebuild: nothing to restore any more.
+            if (err instanceof DestroyedError) throw err;
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state
             const derivedNames = new Set(snapshot.derivedColumns.map((d) => d.name));

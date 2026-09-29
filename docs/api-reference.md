@@ -515,7 +515,7 @@ Returned by `createDataTable()`. Source: `src/DataTable.ts:350-439`.
 
 | Method                | Signature                                                     | Purpose                                                                                                             |
 | --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `loadData`            | `(source, opts?) => Promise<void>`                            | Load a new source. Emits `loadStart` → `loadProgress` → `loadComplete` (or `loadError`).                            |
+| `loadData`            | `(source, opts?) => Promise<void>`                            | Load a new source. Emits `loadStart` → `loadProgress` → `loadComplete` or `loadError` (see below).                  |
 | `on`                  | `<K extends keyof TableEvents>(event, handler) => () => void` | Subscribe. Returns an unsubscribe function.                                                                         |
 | `off`                 | `<K extends keyof TableEvents>(event, handler) => void`       | Unsubscribe.                                                                                                        |
 | `openExportDialog`    | `() => void`                                                  | Open the export dialog. No-op when `exportDialog: false`.                                                           |
@@ -525,6 +525,8 @@ Returned by `createDataTable()`. Source: `src/DataTable.ts:350-439`.
 | `isPersistenceActive` | `() => boolean`                                               | `false` if persistence disabled OR IndexedDB unavailable (watch for `warning` with code `PERSISTENCE_UNAVAILABLE`). |
 | `setColorScheme`      | `(scheme: ColorScheme) => void`                               | Switch light/dark at runtime.                                                                                       |
 | `getColorScheme`      | `() => ColorScheme`                                           | Currently-applied scheme.                                                                                           |
+
+Each `loadStart` is followed by at most one `loadComplete` or `loadError`. A load that a newer `loadData()` or `clearSession()` supersedes before it ends fires neither: its promise resolves, or rejects if the load itself failed, and the table shows the newer load or the cleared state.
 
 ---
 

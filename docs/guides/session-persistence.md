@@ -237,7 +237,12 @@ Effect:
 - The DuckDB table is **not** dropped — its rows remain queryable via
   `bridge.query()` until the next `loadData()` (or `destroy()` on a
   shared bridge) evicts it. Use `bridge.dropTable(tableName)` to
-  release that worker memory immediately if you need to.
+  release that worker memory immediately if you need to. The derived
+  columns' VIEW and helper tables are dropped, and `derivedChange` fires
+  when there were any.
+- A `loadData()` still in flight when `clearSession()` is called lands
+  first, and it is its table that is emptied, and its snapshot that is
+  deleted. That load fires no `loadComplete`.
 
 After `clearSession()`, the table is fresh. Call `loadData()` to re-populate
 it (or pass a new `source` and mount a new table).

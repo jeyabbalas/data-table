@@ -757,11 +757,11 @@ describe('TableBody during a derived-column change', () => {
       values: Array.from({ length: 1_000 }, (_, i) => i / 10),
     });
     await harness.drain();
-    expect(harness.queries.at(-1)!.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_v_0__"/);
+    expect(harness.queries.at(-1)!.sql).toMatch(/^DROP TABLE IF EXISTS "__dt_vec_0_v_0__"/);
     await answerLast(harness);
-    expect(harness.queries.at(-1)!.sql).toMatch(/^CREATE TABLE "__dt_vec_v_0__"/);
+    expect(harness.queries.at(-1)!.sql).toMatch(/^CREATE TABLE "__dt_vec_0_v_0__"/);
     await answerLast(harness);
-    expect(harness.queries.at(-1)!.sql).toMatch(/^INSERT INTO "__dt_vec_v_0__"/);
+    expect(harness.queries.at(-1)!.sql).toMatch(/^INSERT INTO "__dt_vec_0_v_0__"/);
     expect(harness.actions.isRelationChanging()).toBe(true);
     return { add };
   }

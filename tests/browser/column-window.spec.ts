@@ -304,13 +304,22 @@ test('on a sorted table, a fast sideways fling ends with every cell in view righ
 }) => {
   await mountTable(page, { columns: 400, rows: 3000 });
   await page.evaluate(() => (window as unknown as TestWindow).__dt.actions.toggleSort('c000'));
+  // Wait for the sorted rows. `c000` is 0 in rows 0, 1000 and 2000 only, so
+  // those three come first, in whatever order the sort leaves the ties. Row
+  // 0 alone cannot tell: the row query breaks ties by `__rowid__`, which
+  // puts row 0 first again, and a wait for it to change passed only while
+  // it was a placeholder, before the sorted rows landed.
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        document.querySelector('.dt-row[data-row-index="0"]')?.getAttribute('data-row-id'),
-      ),
+      page.evaluate((hostId) => {
+        const idAt = (index: number) =>
+          document
+            .querySelector(`#${hostId} .dt-row[data-row-index="${index}"]`)
+            ?.getAttribute('data-row-id') ?? null;
+        return [idAt(0), idAt(1), idAt(2)].sort();
+      }, HOST_ID),
     )
-    .not.toBe('0');
+    .toEqual(['0', '1000', '2000']);
   // Far past what the rows were fetched with, faster than a fetch: the
   // columns come by row id, without sorting the table again.
   const box = (await page.locator(`#${HOST_ID} .dt-body-scroll`).boundingBox())!;

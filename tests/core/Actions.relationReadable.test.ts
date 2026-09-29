@@ -129,7 +129,7 @@ describe('StateActions.whenRelationReadable', () => {
     expect(state.tableName.get()).toBe('t');
   });
 
-  it('waits for the last of two changes in flight that break reads', async () => {
+  it('holds again once a change that breaks reads, waiting behind another, starts', async () => {
     const harness = setup();
     const { actions, queries } = harness;
     await landDerivedColumn(harness);
@@ -143,19 +143,27 @@ describe('StateActions.whenRelationReadable', () => {
     const firstValidation = queries.at(-1)!;
     const second = actions.removeDerivedColumn('x2');
     await drain();
-    const drop = queries.at(-1)!;
-    expect(drop.sql).toMatch(/^DROP VIEW IF EXISTS/);
+    // The removal waits its turn: nothing of it has gone out.
+    expect(queries.at(-1)).toBe(firstValidation);
     const readable = watchReadable(actions);
 
     firstValidation.deferred.reject(new Error('Binder Error'));
     await expect(first).resolves.toMatchObject({ success: false });
     await drain();
-    expect(readable.resolved).toBe(false);
+    // Readable for the moment between the two: a reader checks again a task
+    // later, by when the removal has started.
+    expect(readable.resolved).toBe(true);
+    const drop = queries.at(-1)!;
+    expect(drop.sql).toMatch(/^DROP VIEW IF EXISTS/);
+    expect(actions.isRelationReadable()).toBe(false);
+    const readableAgain = watchReadable(actions);
+    await drain();
+    expect(readableAgain.resolved).toBe(false);
 
     drop.deferred.resolve([]);
     await second;
     await drain();
-    expect(readable.resolved).toBe(true);
+    expect(readableAgain.resolved).toBe(true);
   });
 
   it('does not hold for an add: the relation in force stays readable while it runs', async () => {
@@ -176,7 +184,7 @@ describe('StateActions.whenRelationReadable', () => {
     expect(actions.isRelationChanging()).toBe(false);
   });
 
-  it('resolves once a change that breaks reads settles, with an add still in flight', async () => {
+  it('lets reads go on while a change that breaks them waits behind an add', async () => {
     const harness = setup();
     const { actions, queries } = harness;
     await landDerivedColumn(harness);
@@ -190,16 +198,22 @@ describe('StateActions.whenRelationReadable', () => {
       expression: 'nope',
     });
     await drain();
+    expect(actions.isRelationReadable()).toBe(true);
+    expect(actions.isRelationChanging()).toBe(true);
     const readable = watchReadable(actions);
-
-    queries.at(-1)!.deferred.reject(new Error('Binder Error'));
-    await replace;
     await drain();
     expect(readable.resolved).toBe(true);
-    expect(actions.isRelationChanging()).toBe(true);
 
     addValidation.deferred.reject(new Error('Binder Error'));
     await expect(add).resolves.toMatchObject({ success: false });
+    await drain();
+    // The replacement's turn.
+    expect(actions.isRelationReadable()).toBe(false);
+    const readableAgain = watchReadable(actions);
+    queries.at(-1)!.deferred.reject(new Error('Binder Error'));
+    await expect(replace).resolves.toMatchObject({ success: false });
+    await drain();
+    expect(readableAgain.resolved).toBe(true);
     expect(actions.isRelationChanging()).toBe(false);
   });
 
@@ -218,31 +232,5 @@ describe('StateActions.whenRelationReadable', () => {
     await expect(removal).rejects.toThrow('settled callback');
     await drain();
     expect(readable.resolved).toBe(true);
-  });
-});
-
-describe('StateActions.addDerivedColumn with an add of the same name in flight', () => {
-  it('refuses the second: two adds of one vector column would share its helper table', async () => {
-    const { actions, queries } = setup();
-    const values = [1, 2, 3];
-    const vector = { kind: 'vector', name: 'v', vectorType: 'float', values } as const;
-    const first = actions.addDerivedColumn(vector);
-    await drain();
-    let second: unknown = null;
-    void actions.addDerivedColumn(vector).then((result) => (second = result));
-    await drain();
-    expect(second).toEqual({ success: false, error: 'Column name "v" is already being added' });
-    // Only the first add's statements went out.
-    expect(queries.map((q) => q.sql)).toEqual([expect.stringMatching(/^DROP TABLE IF EXISTS/)]);
-
-    queries.at(-1)!.deferred.reject(new Error('Out of Memory'));
-    await expect(first).resolves.toMatchObject({ success: false });
-    // Once it has failed, the name is free again.
-    const again = actions.addDerivedColumn(vector);
-    await drain();
-    expect(queries).toHaveLength(2);
-    expect(queries[1]!.sql).toMatch(/^DROP TABLE IF EXISTS/);
-    queries[1]!.deferred.reject(new Error('Out of Memory'));
-    await again;
   });
 });

@@ -176,6 +176,42 @@ describe('DataTable — lifecycle (Phase 2)', () => {
     });
   });
 
+  describe('clearSession', () => {
+    it('empties the table in its turn, after a derived-column change running then', async () => {
+      const { table, bridge } = await createTable();
+      table.state.tableName.set('t');
+      table.state.baseTableName.set('t');
+      table.state.totalRows.set(3);
+      table.state.schema.set([
+        { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      ]);
+      table.state.visibleColumns.set(['id']);
+      table.state.columnOrder.set(['id']);
+      // Hold the add's first query, its validation, until released.
+      let release!: () => void;
+      vi.mocked(bridge.query).mockImplementationOnce(
+        () => new Promise((resolve) => (release = () => resolve([]))),
+      );
+      const add = table.actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'x2',
+        expression: 'id * 2',
+      });
+      await Promise.resolve();
+      const clearing = table.clearSession();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      release();
+      await expect(add).resolves.toMatchObject({ success: false });
+      await clearing;
+
+      expect(table.state.tableName.get()).toBeNull();
+      expect(table.state.schema.get()).toEqual([]);
+      expect(table.state.derivedColumns.get()).toEqual([]);
+      expect(table.state.visibleColumns.get()).toEqual([]);
+      await table.destroy();
+    });
+  });
+
   describe('destroy idempotency', () => {
     it('double destroy emits `destroy` only once', async () => {
       const { table } = await createTable();

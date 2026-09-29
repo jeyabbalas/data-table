@@ -67,7 +67,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 Ask these **before writing integration code**, in order. The first answer often rules out later questions.
 
-1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed?
+1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed? A CSV in an unusual dialect (`;` between fields, no header row, `NA` for missing values), or a Parquet file of which only some columns are needed? Those go in `sourceOptions` ([`docs/guides/loading-data.md#how-a-source-is-read`](./docs/guides/loading-data.md#how-a-source-is-read)).
 2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency. The loaded table must fit in browser memory — about 2.5 GiB, or 200K rows × 1,000 numeric columns — and large Parquet files should arrive as a `File`, `Blob`, or URL, not an `ArrayBuffer` ([`docs/guides/loading-data.md#large-parquet-files`](./docs/guides/loading-data.md#large-parquet-files)).
 3. **Mount point and height.** Which `HTMLElement` does the table mount into (`container` takes an element, not a selector), and where does that element's height come from — an explicit `height`, a `flex: 1; min-height: 0` child, a grid track? It must be bounded. If the answer is "it grows with its content", fix that before writing any other integration code; see [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 4. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
@@ -441,7 +441,7 @@ statsPanelRegistry.register({
 const table = await createDataTable({ container, source: '/data.csv', statsPanelRegistry });
 ```
 
-The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:137-221` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
+The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:140-224` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
 
 ### (n) Standalone SQL editor — host-app embedded, schema-aware
 
@@ -549,11 +549,11 @@ All values source `src/DataTable.ts:136-345`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:391-398`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:401-408`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 
-3. **Loading the initial `source` a second time.** `createDataTable({ source })` already loads `source`, and resolves after it. Calling `loadData(source)` again resets the table's state and loads it again, so filters or sorts applied in between can be lost. Use `loadData()` only for subsequent swaps, or omit `source` and call `loadData(source, { tableName, sourceFormat })` yourself when you need the initial load's events (see [§8](#8-lifecycle-diagram)).
+3. **Loading the initial `source` a second time.** `createDataTable({ source })` already loads `source`, and resolves after it. Calling `loadData(source)` again resets the table's state and loads it again, so filters or sorts applied in between can be lost. Use `loadData()` only for subsequent swaps, or omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })` yourself when you need the initial load's events (see [§8](#8-lifecycle-diagram)).
 
 4. **Forgetting `isDestroyed()` in async callbacks.** After `destroy()`, every public method throws `DestroyedError`. Always guard:
 
@@ -650,7 +650,7 @@ table.destroy()  ← tear down DOM, worker (if owned), store (if owned)
 
 `ready` is replayed in a microtask to listeners subscribing after init (src/DataTable.ts, `on('ready', …)` path). No other event is: the initial load's `loadStart` / `loadComplete` / `loadError` fire before `createDataTable()` resolves, so no consumer listener sees them.
 
-If the initial load fails, `createDataTable()` first tears down what it built, as `destroy()` would: its DOM and listeners, and a worker or session store it created (a `bridge` or `sessionStore` you passed in stays open). Then it rejects with the load's error (a `DataTableError`, usually `LoadError`). The container is left as it was, ready for another `createDataTable()`. To watch the initial load, or to keep the table through a failed load and retry, omit `source` and call `await table.loadData(source, { tableName, sourceFormat })` after subscribing, inside `try`. The `tableName` and `sourceFormat` given to `createDataTable` apply to `source` only; a load without a `tableName` gets a generated one, so no saved session is restored.
+If the initial load fails, `createDataTable()` first tears down what it built, as `destroy()` would: its DOM and listeners, and a worker or session store it created (a `bridge` or `sessionStore` you passed in stays open). Then it rejects with the load's error (a `DataTableError`, usually `LoadError`). The container is left as it was, ready for another `createDataTable()`. To watch the initial load, or to keep the table through a failed load and retry, omit `source` and call `await table.loadData(source, { tableName, sourceFormat, sourceOptions })` after subscribing, inside `try`. The `tableName`, `sourceFormat` and `sourceOptions` given to `createDataTable` apply to `source` only; a load without a `tableName` gets a generated one, so no saved session is restored.
 
 ---
 

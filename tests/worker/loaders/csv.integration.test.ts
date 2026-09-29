@@ -188,6 +188,45 @@ describe('CSV loader — fixture integration', () => {
       }
     });
 
+    it.each([['\n'], ['\r'], ['\0']])(
+      'rejects the delimiter %j with LOAD_INVALID_OPTIONS',
+      async (delimiter) => {
+        await expect(
+          loadCSV('a,b\n1,2\n', { tableName: tableName('ctl'), delimiter }, ctx()),
+        ).rejects.toMatchObject({
+          code: 'LOAD_INVALID_OPTIONS',
+          details: { option: 'csv.delimiter' },
+        });
+      },
+    );
+
+    it('rejects a null value holding NUL with LOAD_INVALID_OPTIONS', async () => {
+      await expect(
+        loadCSV('a\n1\n', { tableName: tableName('nul'), nullValues: ['x\0'] }, ctx()),
+      ).rejects.toMatchObject({
+        code: 'LOAD_INVALID_OPTIONS',
+        details: { option: 'csv.nullValues' },
+      });
+    });
+
+    it('rejects an empty nullValues list with LOAD_INVALID_OPTIONS', async () => {
+      await expect(
+        loadCSV('a\n1\n', { tableName: tableName('nulls'), nullValues: [] }, ctx()),
+      ).rejects.toMatchObject({
+        code: 'LOAD_INVALID_OPTIONS',
+        details: { option: 'csv.nullValues' },
+      });
+    });
+
+    it('rejects a timezone DuckDB does not know with LOAD_INVALID_TIMEZONE', async () => {
+      await expect(
+        loadCSV('a\n1\n', { tableName: tableName('tz_unknown'), timezone: 'Nowhere/City' }, ctx()),
+      ).rejects.toMatchObject({
+        code: 'LOAD_INVALID_TIMEZONE',
+        details: { timezone: 'Nowhere/City' },
+      });
+    });
+
     it('rejects invalid timezone with LOAD_INVALID_TIMEZONE', async () => {
       try {
         await loadCSV('a\n1\n', { tableName: tableName('tz'), timezone: 'inva!id;tz' }, ctx());

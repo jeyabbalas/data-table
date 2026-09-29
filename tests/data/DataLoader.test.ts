@@ -330,4 +330,90 @@ describe('DataLoader', () => {
       expect(options).toMatchObject({ format: 'parquet' });
     });
   });
+
+  describe('load() source options', () => {
+    const ORIGINAL_FETCH = globalThis.fetch;
+    const SOURCE_OPTIONS = {
+      timezone: 'Asia/Tokyo',
+      csv: { delimiter: ';', header: false },
+      json: { format: 'ndjson' as const },
+      parquet: { columns: ['a'] },
+    };
+
+    afterEach(() => {
+      globalThis.fetch = ORIGINAL_FETCH;
+    });
+
+    function recordingBridge() {
+      const loadData = vi.fn().mockResolvedValue({
+        tableName: 't',
+        rowCount: 0,
+        columns: [],
+        schema: [],
+      });
+      return { bridge: { loadData } as unknown as WorkerBridge, loadData };
+    }
+
+    it.each<[string, () => File | Blob | string | ArrayBuffer]>([
+      ['a CSV File', () => new File(['a;b\n1;2'], 'data.csv')],
+      ['a Parquet File', () => new File([new Uint8Array([1])], 'data.parquet')],
+      ['a Blob', () => new Blob([new Uint8Array([1])])],
+      ['an ArrayBuffer', () => new ArrayBuffer(4)],
+      ['inline text', () => 'a;b\n1;2'],
+      ['a URL', () => 'https://example.com/data.parquet'],
+    ])('hands the options to the bridge for %s', async (_label, source) => {
+      globalThis.fetch = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(new Uint8Array([1]), { status: 200 }));
+      const { bridge, loadData } = recordingBridge();
+
+      await new DataLoader(bridge).load(source(), {
+        tableName: 'people',
+        sourceOptions: SOURCE_OPTIONS,
+      });
+
+      expect(loadData).toHaveBeenCalledTimes(1);
+      expect(loadData.mock.calls[0]![1]).toMatchObject({
+        tableName: 'people',
+        ...SOURCE_OPTIONS,
+      });
+    });
+
+    it('hands the bridge the progress callback, and none when there is none', async () => {
+      const { bridge, loadData } = recordingBridge();
+      const loader = new DataLoader(bridge);
+      const onProgress = vi.fn();
+
+      await loader.load('a,b\n1,2', { onProgress });
+      await loader.load('a,b\n1,2');
+
+      expect(loadData.mock.calls[0]).toHaveLength(3);
+      expect(loadData.mock.calls[0]![2]).toBe(onProgress);
+      expect(loadData.mock.calls[1]).toHaveLength(2);
+    });
+
+    it('rejects invalid options before reading or fetching the source', async () => {
+      const fetchSpy = vi.fn<typeof fetch>();
+      globalThis.fetch = fetchSpy;
+      const { bridge, loadData } = recordingBridge();
+      const loader = new DataLoader(bridge);
+      const file = new File(['a,b\n1,2'], 'data.csv');
+      const read = vi.spyOn(file, 'text');
+
+      await expect(
+        loader.load(file, { sourceOptions: { csv: { delimiter: 'ab' } } }),
+      ).rejects.toMatchObject({
+        constructor: LoadError,
+        code: 'LOAD_INVALID_OPTIONS',
+        details: { option: 'csv.delimiter' },
+      });
+      await expect(
+        loader.load('https://example.com/data.csv', { sourceOptions: { timezone: 'x y' } }),
+      ).rejects.toMatchObject({ code: 'LOAD_INVALID_TIMEZONE' });
+
+      expect(read).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(loadData).not.toHaveBeenCalled();
+    });
+  });
 });

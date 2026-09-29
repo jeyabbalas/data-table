@@ -192,7 +192,7 @@ describe('createDataTable — a failed initial load cleans up', () => {
     expect(sessionStore.delete).not.toHaveBeenCalled();
   });
 
-  it('leaves the saved session unwritten when a restore fails after its undo stacks', async () => {
+  it('does not save a session whose restore failed after its undo stacks', async () => {
     const container = mount();
     const bridge = makeBridge(() => Promise.resolve(LOADED));
     const entry = {
@@ -213,28 +213,29 @@ describe('createDataTable — a failed initial load cleans up', () => {
         undoStack: [entry],
         redoStack: [],
         // Not an array: the restore throws here, after it has loaded the
-        // undo stacks, which AutoSave saves as soon as it is enabled.
+        // undo stacks. The load goes on without the session, taking back
+        // what the restore wrote, stacks included, so AutoSave, enabled
+        // once the load succeeds, has nothing to save.
         filterPresets: 'broken',
       }),
     });
 
-    await expect(
-      createDataTable({
-        container,
-        bridge,
-        source: CSV,
-        ...baseOpts,
-        persistence: { sessionStore },
-        presets: true,
-        undoRedo: true,
-      }),
-    ).rejects.toMatchObject({ name: 'LoadError' });
+    const table = await createDataTable({
+      container,
+      bridge,
+      source: CSV,
+      ...baseOpts,
+      persistence: { sessionStore },
+      presets: true,
+      undoRedo: true,
+    });
     // Past AutoSave's 1 s debounce, so a save it scheduled would have run.
     await new Promise((resolve) => setTimeout(resolve, 1_200));
 
-    expect(container.childElementCount).toBe(0);
+    expect(table.actions.getUndoManager()?.canUndo).toBe(false);
     expect(sessionStore.saveSync).not.toHaveBeenCalled();
     expect(sessionStore.save).not.toHaveBeenCalled();
+    await table.destroy();
   });
 
   it('emits loadError and error before it tears down', async () => {

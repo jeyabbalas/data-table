@@ -18,7 +18,7 @@ fetches of its rows and of the charts in view, so `state.schema` is
 populated on return. Those fetches are awaited, not required: one that
 fails is logged and leaves placeholders. If the load fails, the table tears
 itself down as `destroy()` would, and the promise rejects with the load's
-error: omit `source` and call `loadData(source, { tableName, sourceFormat })`
+error: omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })`
 to keep the table through a failed load.
 
 ## Parameters

@@ -187,10 +187,10 @@ perfectly good non-zero height — it is just the wrong one.
 
 Give the container its height before mounting, and prefer a height that the
 browser resolves through CSS (`flex: 1`, `100%`, `vh`) over one you assign
-imperatively after the fact. The scroller recomputes its visible range on
-scroll and on state changes, so a container that changes height while idle
-can keep a stale range until the next interaction. Sizing it up front avoids
-the question.
+imperatively after the fact. A height that changes after mount is followed:
+the table works out which rows are in view whenever its body resizes, so a
+window resize, a panel collapsing above it, or a table mounted in a hidden
+tab and shown later fills with rows without a scroll.
 
 Every [runnable example](./examples/README.md) uses the flex pattern, and
 [`docs/integrations/cdn.md`](./docs/integrations/cdn.md) has a complete

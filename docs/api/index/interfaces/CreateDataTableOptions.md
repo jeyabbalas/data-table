@@ -1517,7 +1517,7 @@ CSS-only change would move the rows and not the scroller.
 Defined in: [DataTable.ts:147](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L147)
 
 Optional initial data source. If omitted, call
-`table.loadData(source, { tableName, sourceFormat })` later.
+`table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.
 
 ***
 
@@ -1530,6 +1530,19 @@ Defined in: [DataTable.ts:149](https://github.com/jeyabbalas/data-table/blob/c94
 Override the format detected from `source` (e.g., if its URL has no
 extension). Applies to `source` only; pass `sourceFormat` to
 `table.loadData()` for a later load.
+
+***
+
+### sourceOptions?
+
+> `optional` **sourceOptions?**: [`SourceOptions`](SourceOptions.md)
+
+Defined in: [DataTable.ts:170](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/DataTable.ts#L170)
+
+How `source` is read, per format: a CSV delimiter, header or null
+strings, the rows sampled to detect types, the Parquet columns to load,
+DuckDB's time zone. See [SourceOptions](SourceOptions.md). Applies to `source`
+only; pass `sourceOptions` to `table.loadData()` for a later load.
 
 ***
 

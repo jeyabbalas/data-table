@@ -95,6 +95,12 @@ export type {
 } from './data/WorkerBridge';
 export type { QueryCacheOptions } from './data/QueryCache';
 export type { DataFormat, LoadResult } from './data/DataLoader';
+export type {
+  SourceOptions,
+  CSVSourceOptions,
+  JSONSourceOptions,
+  ParquetSourceOptions,
+} from './data/sourceOptions';
 
 // ---- Persistence ----
 // `SessionStore` is injectable for apps that manage their own storage.

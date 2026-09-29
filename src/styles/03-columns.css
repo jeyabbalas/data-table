@@ -254,7 +254,77 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.25rem 0;
+  box-sizing: content-box;
+  /* The 3 px each side that the margin takes back keep a focused button's
+     outline inside the clip below. */
+  padding: 0.25rem 3px;
+  margin: 0 -3px;
+  /* The buttons need about 135 px with the header's padding, and a column
+     can be 50 px wide. Past the header's edge they went under the next
+     header, which painted over them, or, from a pinned header, over the
+     first unpinned one, where they took its clicks. Clipped at the header's
+     padding instead. `clip`, not `hidden`: no scroll container to take the
+     wheel, and only sideways, so the multi-sort badge still rises above its
+     button. */
+  overflow-x: clip;
+}
+
+/* Pointed at for a moment, the bar shows every button, running on over the
+   next header's bar when the column is too narrow for them, on the header's
+   own background, above the unpinned headers after it; a pinned header's bar
+   stays within its own z-index. The pointer reaches them along the bar, so
+   the neighbour's chart and stats are never covered, but the neighbour's
+   first buttons are, visibly, until the pointer leaves the bar. The 200 ms
+   wait is so a pointer passing along the row reveals nothing, and a click
+   there lands on the button under it. */
+.dt-col-action-panel:hover {
+  position: relative;
+  z-index: calc(var(--dt-z-table-body, 1) + 1);
+  min-width: max-content;
+  background: inherit;
+  transition: min-width 0s 200ms allow-discrete;
+}
+
+/* Holding keyboard focus (F2), at once: the bar shows every button, and the
+   table scrolls the one focused into view. Not focus from a click, which
+   would hold the bar open over the neighbour once the pointer left. Its own
+   rule: a browser without `:has()` drops a whole selector list with it. */
+.dt-col-action-panel:has(:focus-visible) {
+  position: relative;
+  z-index: calc(var(--dt-z-table-body, 1) + 1);
+  min-width: max-content;
+  background: inherit;
+  transition: none;
+}
+
+@supports not selector(:has(*)) {
+  .dt-col-action-panel:focus-within {
+    position: relative;
+    z-index: calc(var(--dt-z-table-body, 1) + 1);
+    min-width: max-content;
+    background: inherit;
+    transition: none;
+  }
+}
+
+/* The last column's bar shows its buttons leftward, over its own header and
+   the one before: rightward, they would run past the end of the header row,
+   out of view, and grow its scroll range, which the body's cannot follow. */
+.dt-col-header:last-child > .dt-col-action-panel:hover {
+  align-self: flex-end;
+  width: 100%;
+}
+
+.dt-col-header:last-child > .dt-col-action-panel:has(:focus-visible) {
+  align-self: flex-end;
+  width: 100%;
+}
+
+@supports not selector(:has(*)) {
+  .dt-col-header:last-child > .dt-col-action-panel:focus-within {
+    align-self: flex-end;
+    width: 100%;
+  }
 }
 
 .dt-col-action-btn {

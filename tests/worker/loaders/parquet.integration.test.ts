@@ -120,6 +120,35 @@ describe('Parquet loader — fixture integration', () => {
       }
     });
 
+    it('rejects a column named twice with LOAD_INVALID_OPTIONS', async () => {
+      const data = await readBinaryFixture('parquet', 'titanic');
+      await expect(
+        loadParquet(
+          data,
+          { tableName: tableName('titanic_twice'), columns: ['Name', 'Name'] },
+          ctx(),
+        ),
+      ).rejects.toMatchObject({
+        code: 'LOAD_INVALID_OPTIONS',
+        details: { option: 'parquet.columns' },
+      });
+    });
+
+    it('rejects columns the file lacks with LOAD_INVALID_OPTIONS, naming them', async () => {
+      const data = await readBinaryFixture('parquet', 'titanic');
+      await expect(
+        loadParquet(
+          data,
+          { tableName: tableName('titanic_missing'), columns: ['Name', 'age', 'Deck'] },
+          ctx(),
+        ),
+      ).rejects.toMatchObject({
+        code: 'LOAD_INVALID_OPTIONS',
+        message: 'Parquet columns not in the file: "age" (the file has "Age"), "Deck"',
+        details: { option: 'parquet.columns', missing: ['age', 'Deck'] },
+      });
+    });
+
     it('rejects invalid timezone with LOAD_INVALID_TIMEZONE', async () => {
       const data = await readBinaryFixture('parquet', 'titanic');
       try {

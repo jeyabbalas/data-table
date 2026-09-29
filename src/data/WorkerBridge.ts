@@ -19,16 +19,19 @@ import type {
   ExportPayload,
 } from '../worker/types';
 import { QueryCache, type QueryCacheOptions } from './QueryCache';
+import { validateSourceOptions, type SourceOptions } from './sourceOptions';
 
 // Re-export for convenience
 export type { ProgressInfo, ProgressCallback } from '../core/Progress';
 
 /**
- * Low-level options accepted by {@link WorkerBridge.loadData}. Most consumers
- * use the higher-level `table.loadData(source, opts?)` facade instead, which
- * builds these from a `File` / URL / Blob input.
+ * Low-level options accepted by {@link WorkerBridge.loadData}: the format,
+ * the table name, and how the source is read, per format (the fields of
+ * {@link SourceOptions}). Most consumers use the higher-level
+ * `table.loadData(source, opts?)` facade instead, which builds these from a
+ * `File` / URL / Blob input and its `sourceOptions`.
  */
-export interface LoadOptions {
+export interface LoadOptions extends SourceOptions {
   format: 'csv' | 'json' | 'parquet';
   tableName?: string | undefined;
 }
@@ -387,6 +390,12 @@ export class WorkerBridge {
    * reads it from disk as it loads, instead of holding the whole file in
    * memory next to the table. A load that would not fit in memory rejects
    * with a `LoadError` whose code is `LOAD_MEMORY_EXCEEDED`.
+   *
+   * How the source is read (`timezone`, `csv`, `json`, `parquet`) is checked
+   * before anything is sent: a bad value rejects with a `LoadError` whose
+   * code is `LOAD_INVALID_OPTIONS` or `LOAD_INVALID_TIMEZONE`. Each format's
+   * options go in its own entry, `{ format: 'csv', csv: { delimiter: ';' } }`:
+   * any other key here, such as a `delimiter` next to `format`, is ignored.
    */
   async loadData(
     source: ArrayBuffer | string | Blob,
@@ -396,11 +405,11 @@ export class WorkerBridge {
   ): Promise<LoadDataResult> {
     this.ensureInitialized();
 
-    const payload: LoadPayload = {
-      data: source,
-      format: options.format,
-      tableName: options.tableName,
-    };
+    // Only these four: other keys were always ignored here.
+    const { format, tableName, timezone, csv, json, parquet } = options;
+    const sourceOptions: SourceOptions = { timezone, csv, json, parquet };
+    validateSourceOptions(sourceOptions);
+    const payload: LoadPayload = { data: source, format, tableName, ...sourceOptions };
     const result = (await this.sendMessage('load', payload, onProgress, signal)) as {
       tableName: string;
       rowCount: number;

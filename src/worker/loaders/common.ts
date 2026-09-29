@@ -55,6 +55,51 @@ export async function dropSourceFile(db: AsyncDuckDB, fileName: string): Promise
 }
 
 /**
+ * A `LOAD_INVALID_OPTIONS` error naming the option, as `csv.delimiter`. The
+ * main thread checks options before a load (`validateSourceOptions`); these
+ * catch a loader called without that check.
+ */
+export function invalidOptionError(option: string, message: string): Error {
+  return Object.assign(new Error(message), {
+    code: 'LOAD_INVALID_OPTIONS',
+    details: { option },
+  });
+}
+
+/**
+ * Set DuckDB's session time zone for a load: `UTC` unless one is given. A
+ * value that is not a name never reaches SQL, and a name DuckDB does not
+ * know keeps the previous zone. Either rejects with `LOAD_INVALID_TIMEZONE`,
+ * the second with the zones DuckDB suggests.
+ */
+export async function setSessionTimeZone(
+  conn: AsyncDuckDBConnection,
+  timezone = 'UTC',
+): Promise<void> {
+  // The pattern of TIMEZONE_PATTERN in src/data/sourceOptions.ts: the name
+  // is spliced into a string literal.
+  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
+    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
+      code: 'LOAD_INVALID_TIMEZONE',
+      details: { timezone },
+    });
+  }
+  try {
+    await conn.query(`SET TimeZone = '${timezone}'`);
+  } catch (err) {
+    const duckdbMessage = err instanceof Error ? err.message : String(err);
+    if (!/unknown time ?zone/i.test(duckdbMessage)) throw err;
+    const candidates = /Candidate time zones:\s*(.+)/i.exec(duckdbMessage)?.[1]?.trim();
+    throw Object.assign(
+      new Error(
+        `Unknown timezone: ${timezone}` + (candidates ? `. Did you mean ${candidates}?` : ''),
+      ),
+      { code: 'LOAD_INVALID_TIMEZONE', details: { timezone, duckdbMessage }, cause: err },
+    );
+  }
+}
+
+/**
  * Build the canonical LOAD_RESERVED_COLUMN_NAME LoadError for a source that
  * already contains a `__rowid__` column.
  */

@@ -143,7 +143,8 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 | Symbol                | Kind      | Purpose                                                                                                                                                                                                                                                                |
 | --------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WorkerBridge`        | class     | DuckDB worker bridge; owns the worker and query cache; `query(sql, signal?, options?)` accepts per-query `QueryOptions` (cache bypass, priority); exposes `dropTable()` for ad-hoc table cleanup.                                                                      |
-| `LoadOptions`         | interface | CSV/JSON/Parquet per-format options.                                                                                                                                                                                                                                   |
+| `LoadOptions`         | interface | `WorkerBridge.loadData` options: `format`, `tableName`, and the fields of `SourceOptions`.                                                                                                                                                                             |
+| `SourceOptions`       | interface | How a source is read, per format: `timezone`, and the entries `csv` (`CSVSourceOptions`), `json` (`JSONSourceOptions`) and `parquet` (`ParquetSourceOptions`). A load reads its format's entry. See [loading data](./guides/loading-data.md#how-a-source-is-read).     |
 | `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initializeTimeoutMs`.                                                                                                                                                                                                  |
 | `QueryOptions`        | interface | Per-query options for `WorkerBridge.query` — `{ cache?: boolean; priority?: 'high' \| 'normal' }`. `cache: false` bypasses both the read and the write of the SQL result cache; `priority: 'high'` jumps queued `'normal'` work in the worker's serial dispatch queue. |
 | `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                                                                                                                                                                                                                        |
@@ -193,11 +194,11 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 
 ### Progress
 
-| Symbol             | Kind | Purpose                                                           |
-| ------------------ | ---- | ----------------------------------------------------------------- |
-| `ProgressInfo`     | type | `{ stage, bytesLoaded?, totalBytes?, percent? }`.                 |
-| `ProgressCallback` | type | `(info: ProgressInfo) => void`.                                   |
-| `ProgressStage`    | type | `'download' \| 'decode' \| 'register' \| 'ingest' \| 'finalize'`. |
+| Symbol             | Kind | Purpose                                                                                                                    |
+| ------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ProgressInfo`     | type | `{ stage, percent, cancelable, loaded?, total?, estimatedRemaining? }`; `percent` runs 0–100.                              |
+| `ProgressCallback` | type | `(info: ProgressInfo) => void`.                                                                                            |
+| `ProgressStage`    | type | `'reading' \| 'parsing' \| 'indexing' \| 'analyzing'`. A load sends the first three; `analyzing` is declared but not sent. |
 
 ### i18n
 
@@ -441,11 +442,12 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 
 ### Data
 
-| Field          | Type                                    | Required? | Default        | Description                                                           |
-| -------------- | --------------------------------------- | --------- | -------------- | --------------------------------------------------------------------- |
-| `source`       | `File \| string \| ArrayBuffer \| Blob` | no        | —              | Initial data source. If omitted, call `table.loadData(source)` later. |
-| `sourceFormat` | `DataFormat`                            | no        | auto-detect    | Override format when the URL/filename doesn't encode it.              |
-| `tableName`    | `string`                                | no        | auto-generated | DuckDB-side table name.                                               |
+| Field           | Type                                    | Required? | Default        | Description                                                           |
+| --------------- | --------------------------------------- | --------- | -------------- | --------------------------------------------------------------------- |
+| `source`        | `File \| string \| ArrayBuffer \| Blob` | no        | —              | Initial data source. If omitted, call `table.loadData(source)` later. |
+| `sourceFormat`  | `DataFormat`                            | no        | auto-detect    | Override format when the URL/filename doesn't encode it.              |
+| `sourceOptions` | `SourceOptions`                         | no        | detected       | How `source` is read, per format. See `SourceOptions`.                |
+| `tableName`     | `string`                                | no        | auto-generated | DuckDB-side table name.                                               |
 
 ### Features (all default to `true`)
 
@@ -791,7 +793,7 @@ Source: `src/core/TableEvents.ts`. Subscribe via `table.on(name, handler)`.
 | ----------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ready`           | `{ bridgeReady: true }`                                                                                              | After `initialize()` completes; late subscribers receive it in a microtask.                                                                                                                                                                         |
 | `loadStart`       | `{ source: string }`                                                                                                 | Load begins.                                                                                                                                                                                                                                        |
-| `loadProgress`    | `ProgressInfo`                                                                                                       | Per-chunk progress (`download` / `decode` / `register` / `ingest` / `finalize`).                                                                                                                                                                    |
+| `loadProgress`    | `ProgressInfo`                                                                                                       | The worker's progress through a load, between `loadStart` and `loadComplete` or `loadError`: `stage` `reading` (`percent` 0), `parsing` (25), `indexing` (90).                                                                                      |
 | `loadComplete`    | `{ tableName, rowCount, schema }`                                                                                    | Data loaded and schema known.                                                                                                                                                                                                                       |
 | `loadError`       | `{ error: Error }`                                                                                                   | Load failed.                                                                                                                                                                                                                                        |
 | `error`           | `{ error: DataTableError; source: TableErrorSource }`                                                                | Any recoverable typed error. `source` discriminates the subsystem.                                                                                                                                                                                  |
@@ -831,8 +833,8 @@ table.on('error', ({ error, source }) => {
 | `QUERY_ABORTED`           | `QueryError`            | `src/data/WorkerBridge.ts`                                                         | Query aborted via `AbortSignal` or bridge teardown.                                                                                                  |
 | `SQL_SYNTAX`              | `SQLValidationError`    | `src/core/Actions.ts`                                                              | Raw-SQL filter / derived-column expression failed WHERE-clause validation.                                                                           |
 | `LOAD_PARSE_FAILED`       | `LoadError`             | `src/worker/loaders/common.ts`                                                     | CSV/JSON/Parquet parse failed during timestamp/date/time coercion.                                                                                   |
-| `LOAD_INVALID_TIMEZONE`   | `LoadError`             | `src/worker/loaders/{csv,json,parquet}.ts`                                         | Invalid timezone in load options.                                                                                                                    |
-| `LOAD_INVALID_OPTIONS`    | `LoadError`             | `src/worker/loaders/{csv,json}.ts`                                                 | Incompatible load-option combination.                                                                                                                |
+| `LOAD_INVALID_TIMEZONE`   | `LoadError`             | `src/data/sourceOptions.ts`, `src/worker/loaders/common.ts`                        | `sourceOptions.timezone` is not a zone name, or one DuckDB does not know; the message lists the zones it suggests.                                   |
+| `LOAD_INVALID_OPTIONS`    | `LoadError`             | `src/data/sourceOptions.ts`, `src/worker/loaders/{csv,json,parquet}.ts`            | A `sourceOptions` value out of range, an unknown key, or Parquet `columns` the file lacks. `details.option` names it.                                |
 | `LOAD_FORMAT_UNSUPPORTED` | `LoadError`             | `src/worker/worker.ts`                                                             | Unknown/unsupported file format.                                                                                                                     |
 | `LOAD_MEMORY_EXCEEDED`    | `LoadError`             | `src/worker/loaders/memoryBudget.ts`                                               | A Parquet load would not fit in browser memory (`details.stage`: `'estimate'`, with `details.check`, or `'load'`, with `details.duckdbMessage`).     |
 | `FETCH_FAILED`            | `LoadError`             | `src/data/DataLoader.ts`                                                           | URL fetch failed.                                                                                                                                    |

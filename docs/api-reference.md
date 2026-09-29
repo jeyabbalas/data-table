@@ -1121,11 +1121,11 @@ abstract class BaseStatsPanel {
 
 ### Lifecycle ordering guarantees
 
-Quoted from `src/visualizations/BaseStatsPanel.ts:108-136`:
+Quoted from `src/visualizations/BaseStatsPanel.ts:108-139`:
 
 - The constructor is called with an empty `container` element (the `.dt-col-stats` slot inside a column header), when the column comes within about a viewport of the view and the columns there have held still for 150 ms: a scroll builds no panel for the columns it passes. Those near the view on load, new data or a derived-column change, and a column just shown, get theirs at once. A panel lives while its column is near the view, through hides, shows and moves of other columns.
 - `update()` fires on mount, with the stats the column's chart last emitted if it has one, `null` otherwise; with `null` whenever the chart is removed; and with each `ColumnStatsData` the chart emits (and on data reload). Columns without a visualization receive `update(null)` only.
-- `updateFilters(filters)` fires every time the table's active filter array changes, before any subsequent `update(stats)` call from a viz refetch.
+- `updateFilters(filters)` fires every time the table's active filter array changes, before any subsequent `update(stats)` call from a viz refetch. While a derived-column change that can drop or rebuild the relation runs, it waits for the change to settle, then fires once, with the filters in force then; a change that succeeds replaces the panel instead.
 - `setHoverStats(html | null)` fires when the column's visualization emits a hover snippet (and again with `null` to clear), and on mount with the snippet its chart shows then, if any. Columns without a viz never trigger this.
 - `destroy()` is called exactly once: when the column moves away from the view or is hidden, before the container is reused for a freshly-constructed panel (new data, a derived column changed), or when the table is destroyed.
 

@@ -395,7 +395,9 @@ panels and charts right across a trackpad sweep.
     back no longer keeps filters, sort and columns naming them.
   - A chart's refetch for a filter change is not held back during a removal: every live chart
     queries the dropped VIEW and reports an error, as on main. Fix: hold the charts' refetches as
-    the count is held.
+    the count is held. Fixed: `CrossfilterCoordinator` holds them, and `StatsPanelCoordinator` the
+    panels' `updateFilters`, until the change settles; those still live then go once, with the
+    filters in force.
 - **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, pre-existing.** Every
   histogram drew "No data" from the moment it was laid out until its first fetch landed.
   `SharedHistogramBase.render` treated a chart with no data yet as a column with none, and a

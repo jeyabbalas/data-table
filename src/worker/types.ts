@@ -3,6 +3,7 @@
  */
 
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
+import type { SourceOptions } from '../data/sourceOptions';
 
 // Message types from main thread to worker
 export type WorkerMessageType = 'init' | 'query' | 'load' | 'export' | 'cancel';
@@ -38,7 +39,11 @@ export interface QueryPayload {
   priority?: 'high' | 'normal';
 }
 
-export interface LoadPayload {
+/**
+ * A load, with how its source is read: the entry for `format`, and the time
+ * zone. The main thread has checked the options (`validateSourceOptions`).
+ */
+export interface LoadPayload extends SourceOptions {
   /** A Blob (or File) is read lazily from disk when the format is Parquet. */
   data: ArrayBuffer | string | Blob;
   format: 'csv' | 'json' | 'parquet';

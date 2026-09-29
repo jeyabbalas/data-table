@@ -156,13 +156,19 @@ describe('ExportDialog', () => {
     });
 
     it('should have format radio buttons', () => {
-      const radios = dialog.getElement().querySelectorAll('input[name="dt-export-format"]');
+      const radios = dialog
+        .getElement()
+        .querySelectorAll<HTMLInputElement>('input[type="radio"][name$="-export-format"]');
       expect(radios.length).toBe(3);
+      expect(new Set(Array.from(radios, (r) => r.name)).size).toBe(1);
     });
 
     it('should have scope radio buttons', () => {
-      const radios = dialog.getElement().querySelectorAll('input[name="dt-export-scope"]');
+      const radios = dialog
+        .getElement()
+        .querySelectorAll<HTMLInputElement>('input[type="radio"][name$="-export-scope"]');
       expect(radios.length).toBe(3);
+      expect(new Set(Array.from(radios, (r) => r.name)).size).toBe(1);
     });
 
     it('should have Download and Copy buttons', () => {

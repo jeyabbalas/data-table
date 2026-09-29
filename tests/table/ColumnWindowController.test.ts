@@ -61,6 +61,25 @@ function viewport(el: HTMLElement, width: number): void {
   Object.defineProperty(el, 'clientWidth', { configurable: true, value: width });
 }
 
+/**
+ * Give `el` a `scrollLeft` that reads back what was written until the
+ * returned `settle()` moves it to the nearest half pixel, as Chrome at a
+ * device pixel ratio of 2 can settle a scroller once it is drawn.
+ */
+function settlingScrollLeft(el: HTMLElement): () => void {
+  let left = 0;
+  Object.defineProperty(el, 'scrollLeft', {
+    configurable: true,
+    get: () => left,
+    set: (v: number) => {
+      left = v;
+    },
+  });
+  return () => {
+    left = Math.round(left * 2) / 2;
+  };
+}
+
 beforeEach(() => {
   MockResizeObserver.instances = [];
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -162,6 +181,135 @@ describe('ColumnWindowController', () => {
     expect(bodyScroll.scrollLeft).toBe(180);
   });
 
+  it("drops the header's echo of a sync that the body has moved on from", () => {
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100);
+    // A smooth scroll moves the body on before the header's event for that
+    // sync arrives, as Chrome was seen to order them at device pixel ratio 2.
+    bodyScroll.scrollLeft = 150;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150);
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(150);
+  });
+
+  it("drops the body's echo of a sync that the header has moved on from", () => {
+    headerScroll.scrollLeft = 100;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(100);
+    // An animated scroll of the header moves it on first.
+    headerScroll.scrollLeft = 150;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(150);
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150);
+  });
+
+  it('follows either scroller back to where it last put it', () => {
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    headerScroll.scrollLeft = 60;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(60);
+    headerScroll.scrollLeft = 100;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(100);
+
+    bodyScroll.scrollLeft = 40;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(40);
+    bodyScroll.scrollLeft = 100;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100);
+  });
+
+  it('takes positions less than a pixel apart for the same one', () => {
+    const settleHeader = settlingScrollLeft(headerScroll);
+    const settleBody = settlingScrollLeft(bodyScroll);
+
+    // A smooth scroll of the body. The header's echo reads where the header
+    // settled, a fraction from where it was written, and is still dropped.
+    bodyScroll.scrollLeft = 100.3;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(100.3);
+    settleHeader();
+    bodyScroll.scrollLeft = 112.7;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(112.7);
+
+    // An animated scroll of the header. The body's echo, the same.
+    headerScroll.scrollLeft = 150.3;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150.3);
+    settleBody();
+    headerScroll.scrollLeft = 160.2;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(160.2);
+  });
+
+  it('lets the body land a fraction of a pixel from the header, and passes on a whole pixel', () => {
+    // A body that settles on the half pixel as it is written.
+    let bodyLeft = 0;
+    Object.defineProperty(bodyScroll, 'scrollLeft', {
+      configurable: true,
+      get: () => bodyLeft,
+      set: (v: number) => {
+        bodyLeft = Math.round(v * 2) / 2;
+      },
+    });
+    headerScroll.scrollLeft = 150.3;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(150.5);
+    // Not pulled back to the body: writing the header would stop an animated
+    // scroll of it.
+    expect(headerScroll.scrollLeft).toBe(150.3);
+
+    // A header a fraction of a pixel from the body is where the body is.
+    bodyLeft = 171.8;
+    headerScroll.scrollLeft = 172;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(171.8);
+
+    // A whole pixel from both is a scroll of the header's own.
+    bodyLeft = 172;
+    headerScroll.scrollLeft = 173;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(173);
+  });
+
+  it('keeps the header on a body that scrolls a fraction of a pixel at a time', () => {
+    const steps = [100, 100.5, 101, 101.5];
+    for (const left of steps) {
+      bodyScroll.scrollLeft = left;
+      bodyScroll.dispatchEvent(new Event('scroll'));
+      expect(headerScroll.scrollLeft).toBe(left);
+    }
+  });
+
+  it('pulls the header back to a body that cannot scroll as far', () => {
+    // A body that stops at 500, as when its viewport is still wider than a
+    // header whose gutter has not caught up with a scrollbar that went away.
+    let bodyLeft = 0;
+    Object.defineProperty(bodyScroll, 'scrollLeft', {
+      configurable: true,
+      get: () => bodyLeft,
+      set: (v: number) => {
+        bodyLeft = Math.min(v, 500);
+      },
+    });
+    bodyScroll.scrollLeft = 500;
+    bodyScroll.dispatchEvent(new Event('scroll'));
+    expect(headerScroll.scrollLeft).toBe(500);
+
+    // The header scrolls on past it. The body cannot follow, so it does not
+    // move, and fires no scroll event that could bring the header back.
+    headerScroll.scrollLeft = 520;
+    headerScroll.dispatchEvent(new Event('scroll'));
+    expect(bodyScroll.scrollLeft).toBe(500);
+    expect(headerScroll.scrollLeft).toBe(500);
+  });
+
   it('puts a saved position back on both scrollers', () => {
     bodyScroll.scrollLeft = 350;
     bodyScroll.scrollTop = 64;
@@ -192,7 +340,7 @@ describe('ColumnWindowController', () => {
       return scrollTo;
     }
 
-    it('scrolls the header at once and the body smoothly, two frames on', () => {
+    it('smooth-scrolls the body to the end two frames on, and the header follows it', () => {
       const scrollTo = stubScrollTo();
       Object.defineProperty(bodyScroll, 'scrollWidth', { configurable: true, value: 1000 });
       controller.scrollToEnd();
@@ -201,42 +349,39 @@ describe('ColumnWindowController', () => {
       vi.advanceTimersToNextFrame();
       vi.advanceTimersToNextFrame();
       expect(scrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
-      expect(headerScroll.scrollLeft).toBe(1000);
-    });
-
-    it("ignores the header's scroll while the body is still moving, and lines them up at the end", () => {
-      stubScrollTo();
-      controller.scrollToEnd();
-      vi.advanceTimersToNextFrame();
-      vi.advanceTimersToNextFrame();
-
-      // Mid-animation, the header's own scroll event must not pull the body
-      // back to where the header is.
       bodyScroll.scrollLeft = 300;
-      headerScroll.scrollLeft = 700;
-      headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(300);
-
-      bodyScroll.scrollLeft = 700;
-      bodyScroll.dispatchEvent(new Event('scrollend'));
-      expect(headerScroll.scrollLeft).toBe(700);
-      headerScroll.scrollLeft = 650;
-      headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(650);
+      bodyScroll.dispatchEvent(new Event('scroll'));
+      expect(headerScroll.scrollLeft).toBe(300);
     });
 
-    it('ends once the body has held still, where there is no scrollend', () => {
+    it("drops the header's echo mid-scroll, however long the body seems to stand still", () => {
       stubScrollTo();
       controller.scrollToEnd();
       vi.advanceTimersToNextFrame();
       vi.advanceTimersToNextFrame();
-      bodyScroll.scrollLeft = 700;
-      // Three still frames past the 100ms floor.
-      vi.advanceTimersByTime(200);
+      bodyScroll.scrollLeft = 300;
+      bodyScroll.dispatchEvent(new Event('scroll'));
 
-      headerScroll.scrollLeft = 650;
+      // Stalled frames on a loaded machine: the body reads the same for a
+      // while, then has moved on when the header's event for the last sync
+      // arrives.
+      vi.advanceTimersByTime(200);
+      bodyScroll.scrollLeft = 450;
       headerScroll.dispatchEvent(new Event('scroll'));
-      expect(bodyScroll.scrollLeft).toBe(650);
+      expect(bodyScroll.scrollLeft).toBe(450);
+    });
+
+    it("lets a scroll of the header's own take over from it", () => {
+      stubScrollTo();
+      controller.scrollToEnd();
+      vi.advanceTimersToNextFrame();
+      vi.advanceTimersToNextFrame();
+      bodyScroll.scrollLeft = 300;
+      bodyScroll.dispatchEvent(new Event('scroll'));
+
+      headerScroll.scrollLeft = 200;
+      headerScroll.dispatchEvent(new Event('scroll'));
+      expect(bodyScroll.scrollLeft).toBe(200);
     });
 
     it('does nothing once destroyed', () => {
@@ -533,5 +678,128 @@ describe('the columns to mount, on a resize', () => {
     // A new width is worked out afresh.
     resize(290, 200);
     expect(controller.mountedColumns.get().join(' ')).toBe('a b c d e f g h');
+  });
+});
+
+describe('onBodyResize', () => {
+  function resize(target: Element, width: number, height: number): void {
+    viewport(bodyScroll, width);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    observer.callback(
+      [{ target, contentRect: { width, height } } as unknown as ResizeObserverEntry],
+      observer,
+    );
+  }
+
+  /** Swap the controller for one that records what `onBodyResize` sees. */
+  function withCallback(): string[] {
+    controller.destroy();
+    const seen: string[] = [];
+    controller = new ColumnWindowController({
+      state,
+      rootElement: root,
+      headerArea,
+      headerScroll,
+      scrollbarGutter: gutter,
+      bodyScroll,
+      gridElement: grid,
+      onBodyResize: () => seen.push(controller.mountedColumns.get().join(' ')),
+    });
+    return seen;
+  }
+
+  it('is called when the body resizes, once the columns are worked out for it', () => {
+    const seen = withCallback();
+    resize(bodyScroll, 600, 200);
+    // A 600px view: a…f in view, and a viewport's worth after them.
+    expect(seen).toEqual(['a b c d e f g h i j']);
+    // A height alone changes no column, and still calls it: the rows in view
+    // follow the height.
+    resize(bodyScroll, 600, 400);
+    expect(seen).toHaveLength(2);
+  });
+
+  it('is not called for another element, or once destroyed', () => {
+    const seen = withCallback();
+    resize(headerScroll, 600, 200);
+    expect(seen).toEqual([]);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    controller.destroy();
+    observer.callback(
+      [
+        {
+          target: bodyScroll,
+          contentRect: { width: 600, height: 400 },
+        } as unknown as ResizeObserverEntry,
+      ],
+      observer,
+    );
+    expect(seen).toEqual([]);
+  });
+});
+
+describe('revealing a header element', () => {
+  /** An element in `column`'s header at `[left, right)` of the header viewport, on screen. */
+  function element(column: string, left: number, right: number): HTMLElement {
+    const header = document.createElement('div');
+    header.dataset.column = column;
+    const el = document.createElement('button');
+    el.getBoundingClientRect = () =>
+      ({ left, right, width: right - left, top: 0, bottom: 22, height: 22 }) as DOMRect;
+    header.appendChild(el);
+    headerScroll.appendChild(header);
+    return el;
+  }
+
+  function view(width: number, onScreen = width): void {
+    viewport(headerScroll, width);
+    Object.defineProperty(headerScroll, 'offsetWidth', { configurable: true, value: width });
+    headerScroll.getBoundingClientRect = () =>
+      ({ left: 0, right: onScreen, width: onScreen, top: 0, bottom: 120, height: 120 }) as DOMRect;
+  }
+
+  beforeEach(() => view(300));
+
+  it('scrolls a control past the right edge into view, with room for its ring', () => {
+    expect(controller.revealHeaderElement(element('d', 290, 312))).toBe(true);
+    // 312 + 3 of room, less the 300 in view.
+    expect(bodyScroll.scrollLeft).toBe(15);
+    expect(headerScroll.scrollLeft).toBe(15);
+    expect(controller.revealHeaderElement(element('d', 200, 222))).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(15);
+  });
+
+  it('scrolls one beneath the pinned block back out from under it', () => {
+    actions.toggleColumnPin('a');
+    bodyScroll.scrollLeft = 200;
+    expect(controller.revealHeaderElement(element('e', 90, 112))).toBe(true);
+    // 90 - 3 is 13 short of the block's edge at 100.
+    expect(bodyScroll.scrollLeft).toBe(187);
+  });
+
+  it('leaves a pinned column’s controls, which do not scroll', () => {
+    actions.toggleColumnPin('a');
+    expect(controller.revealHeaderElement(element('a', 290, 312))).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(0);
+  });
+
+  it('reads the element in the header’s own pixels when the table is scaled', () => {
+    // Half size on screen: 145–156 is 290–312 of the header's own 300.
+    view(300, 150);
+    expect(controller.revealHeaderElement(element('d', 145, 156))).toBe(true);
+    expect(bodyScroll.scrollLeft).toBe(15);
+  });
+
+  it('does nothing for an element outside the header', () => {
+    // A body cell's, say: it belongs to a column, but not to the header.
+    const cell = document.createElement('div');
+    cell.dataset.column = 'd';
+    const outside = document.createElement('button');
+    outside.getBoundingClientRect = () =>
+      ({ left: 400, right: 422, width: 22, top: 0, bottom: 22, height: 22 }) as DOMRect;
+    cell.appendChild(outside);
+    document.body.appendChild(cell);
+    expect(controller.revealHeaderElement(outside)).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(0);
   });
 });

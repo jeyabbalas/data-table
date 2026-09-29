@@ -67,9 +67,10 @@ expression works, including:
 ### Validation
 
 - **Name uniqueness.** Duplicating an existing column name returns
-  `{ success: false, error: 'Column name "X" already exists' }`, and adding
-  a column while another of the same name is still being added returns
-  `{ success: false, error: 'Column name "X" is already being added' }`.
+  `{ success: false, error: 'Column name "X" already exists' }`. That
+  includes a name an earlier call is still adding: changes
+  [run one at a time](#changes-run-one-at-a-time), and the second add is
+  validated once the first has landed.
 - **Empty name.** Returns `{ success: false, error: 'Column name cannot be empty' }`.
 - **Syntax errors.** The library runs the VIEW creation and surfaces DuckDB's
   parse or type-inference error in the `error` string.
@@ -206,6 +207,29 @@ await table.actions.removeDerivedColumn('age_group');
 
 The VIEW is recreated without the column; `derivedChange` fires with
 `kind: 'removed'` and `columnName: 'age_group'`.
+
+## Changes run one at a time
+
+Derived-column changes, `undo`, `redo`, `resetToInitial`, `loadData` and
+`clearSession` run one at a time, in the order they were called. Each starts
+once the one before it has landed, and reads and validates the state that one
+left, so calls need not wait for each other:
+
+```ts
+// Both land, in this order: `b` is validated once `a` exists.
+const a = table.actions.addDerivedColumn({ kind: 'expression', name: 'a', expression: 'x * 2' });
+const b = table.actions.addDerivedColumn({ kind: 'expression', name: 'b', expression: 'a + 1' });
+await Promise.all([a, b]);
+```
+
+An `undo` called while an add runs waits for the add and undoes it; another
+`undo` or `redo` called while one waits or runs resolves `false`, and so do
+`undo`, `redo` and `resetToInitial` called while a load is under way, which
+would act on the session the load restores. A change still waiting or running
+when `loadData` or `clearSession` is called was meant for the old data and
+does not apply: an add or update resolves `{ success: false }`, a replacement
+resolves a `NOT_FOUND` error, a removal rejects with one, and an undo, redo or
+reset resolves `false`.
 
 ## How the VIEW works
 

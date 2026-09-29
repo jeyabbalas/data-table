@@ -100,7 +100,7 @@ With `createDataTable({ source })`, the whole initial load, from `loadStart` to
 a listener added after `await createDataTable(...)` sees none of it; only
 `ready` is replayed to late subscribers. To watch the initial load, create the
 table without `source`, subscribe, then call
-`loadData(source, { tableName, sourceFormat })`, as
+`loadData(source, { tableName, sourceFormat, sourceOptions })`, as
 [`examples/02-load-from-url`](../../examples/02-load-from-url/) does.
 `createDataTable`'s `tableName` and `sourceFormat` apply to `source` only.
 
@@ -145,6 +145,15 @@ table.on('error', ({ error, source }) => {
 `source` values: `'load' | 'query' | 'export' | 'persistence' |
 'visualization' | 'sql-validation' | 'derived-column' | 'listener' |
 'unknown'`.
+
+A DuckDB worker that fails is reported once per table, as it happens: an
+`error` event whose `error.code` is `WORKER_CRASHED`, with `source: 'query'`.
+Every query after it fails the same way, so the table stops fetching rows and
+drops the errors that follow from it: those of the charts, panels and loads
+that fail after it, which carry the failure in their `cause` chain. A failed
+load still rejects and fires `loadError`. The data is gone with the worker:
+destroy the table and create it again, which starts a new one, whose own
+failure would be reported in turn.
 
 `loadError` is a strict subset of `error` — both fire for the same underlying
 failure. Handle one or the other, not both, unless you specifically want

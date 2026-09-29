@@ -119,8 +119,8 @@ test('a derived column added from the + button is scrolled into view', async ({ 
   await create.click();
   await expect(modal).toBeHidden();
 
-  // The body smooth-scrolls to the right end once the column renders. The
-  // header jumps there at once, so wait for the body to arrive.
+  // The body smooth-scrolls to the right end once the column renders, and
+  // the header follows it. Wait for the body to arrive.
   await expect
     .poll(
       async () => {

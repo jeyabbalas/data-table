@@ -287,7 +287,10 @@ panels and charts right across a trackpad sweep.
   header-to-body sync back on and puts the header where the body is. On a loaded machine frames
   stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
   which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
-  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.
+  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Fixed with
+  the device pixel ratio 2 entry below: `scrollToEnd` only starts the smooth scroll, which the
+  header follows with its echoes dropped, so there is no end to guess. `scroll-echo.spec.ts`
+  stalls six frames mid-scroll, which left the body over 20,000 px short on main.
 - **Found building 4d PR 4, on main too.** Pinning slides headers from their old places to their
   new ones (FLIP), from positions saved when `pinnedColumns` changes. Loading data writes
   `pinnedColumns` after the columns in one batch, so the positions were saved after the render
@@ -444,6 +447,9 @@ panels and charts right across a trackpad sweep.
   back into the body, which cancels the animation. `scrollToEnd` turns the header-to-body sync
   off for its own scroll, and wheel, trackpad and keyboard scrolling were unaffected, as was a
   smooth scroll at device pixel ratio 1 in headless Chromium, so what stalls is host code calling
-  `scrollTo({ behavior: 'smooth' })` on the body. Not fixed here: a header event at the position
-  the controller itself last wrote is its own echo, whatever the body is doing, and could be
-  dropped as such.
+  `scrollTo({ behavior: 'smooth' })` on the body. Fixed, to be confirmed in desktop Chrome at
+  DPR 2: the controller keeps where it last left each scroller, and a scroll event that finds one
+  within a pixel of there is dropped as the echo of its own write, whatever the other is doing.
+  That covers the body's echo too, which, a frame late, stopped an animated scroll of the header
+  the same way. Headless Chromium fires each echo in the frame of the scroll that caused it, so
+  `scroll-echo.spec.ts` holds one scroller's events back a frame, as that Chrome did.

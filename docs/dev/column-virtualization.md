@@ -91,8 +91,8 @@ column. That is the shell 4d builds.
    Measured: the queries a hide, a show and a move cost.
 
 **Not in 4d:** hit-testing drops against the layout model, and ending a drag whose `mouseup` was
-lost (both in the log); dropping the filter hold (it needs Firefox and WebKit); a searchable column
-picker.
+lost (both in the log, both fixed since); dropping the filter hold (it needs Firefox and WebKit); a
+searchable column picker.
 
 **Budget.** The shared chunk (`VisualizationRegistry-*`, capped as the ExportDialog chunk) had
 526 B of its 78 kB cap left at the end of 4c. 4d will need more. The cap moves with a line of history in
@@ -254,7 +254,10 @@ panels and charts right across a trackpad sweep.
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the
   window (alt-tab mid-drag) keeps the drag alive until the next one. Both pre-existing; 4c's
-  controller, working from the layout model, is the place to hit-test drops.
+  controller, working from the layout model, is the place to hit-test drops. Both fixed after 4d:
+  `ColumnReorder` takes drops from `ColumnLayout` and the header scroll, keeping an unpinned column's
+  drop at or after the first unpinned column in view, and a real mousemove with no button held, a
+  window `blur`, a hidden page or `pointercancel` ends a drag without a drop.
 - **2026-09-27, the 4d spike.** The table in the 4d plan. Column changes cost more than scrolling:
   at 1,000 columns, hiding one column runs 182 ms of script and 830 ms before the next frame, and
   moving one 175 ms, each with 24 queries, all from rebuilding. The body refetches, and every chart

@@ -439,6 +439,7 @@ export class TableContainer {
           classPrefix: this.resolvedOptions.classPrefix,
           getPinnedColumns: () => this.state.pinnedColumns.get(),
           holdColumn: (column) => this.columnWindow.hold(column),
+          getLayout: () => getColumnLayout(this.state),
         },
       );
     }

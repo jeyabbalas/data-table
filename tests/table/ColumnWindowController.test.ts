@@ -535,3 +535,60 @@ describe('the columns to mount, on a resize', () => {
     expect(controller.mountedColumns.get().join(' ')).toBe('a b c d e f g h');
   });
 });
+
+describe('onBodyResize', () => {
+  function resize(target: Element, width: number, height: number): void {
+    viewport(bodyScroll, width);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    observer.callback(
+      [{ target, contentRect: { width, height } } as unknown as ResizeObserverEntry],
+      observer,
+    );
+  }
+
+  /** Swap the controller for one that records what `onBodyResize` sees. */
+  function withCallback(): string[] {
+    controller.destroy();
+    const seen: string[] = [];
+    controller = new ColumnWindowController({
+      state,
+      rootElement: root,
+      headerArea,
+      headerScroll,
+      scrollbarGutter: gutter,
+      bodyScroll,
+      gridElement: grid,
+      onBodyResize: () => seen.push(controller.mountedColumns.get().join(' ')),
+    });
+    return seen;
+  }
+
+  it('is called when the body resizes, once the columns are worked out for it', () => {
+    const seen = withCallback();
+    resize(bodyScroll, 600, 200);
+    // A 600px view: a…f in view, and a viewport's worth after them.
+    expect(seen).toEqual(['a b c d e f g h i j']);
+    // A height alone changes no column, and still calls it: the rows in view
+    // follow the height.
+    resize(bodyScroll, 600, 400);
+    expect(seen).toHaveLength(2);
+  });
+
+  it('is not called for another element, or once destroyed', () => {
+    const seen = withCallback();
+    resize(headerScroll, 600, 200);
+    expect(seen).toEqual([]);
+    const observer = MockResizeObserver.instances.find((o) => o.observed.has(bodyScroll))!;
+    controller.destroy();
+    observer.callback(
+      [
+        {
+          target: bodyScroll,
+          contentRect: { width: 600, height: 400 },
+        } as unknown as ResizeObserverEntry,
+      ],
+      observer,
+    );
+    expect(seen).toEqual([]);
+  });
+});

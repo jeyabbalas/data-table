@@ -549,7 +549,7 @@ All values source `src/DataTable.ts:136-345`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:391-398`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:401-408`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 

@@ -63,6 +63,12 @@ export interface ColumnWindowControllerOptions {
    * column, a header button or a clicked cell, that column stays mounted.
    */
   gridElement: HTMLElement;
+  /**
+   * Called when the body's size changes, once the columns to mount are
+   * worked out for it. The rows in view are the body's to work out again: a
+   * taller body shows rows it has not rendered.
+   */
+  onBodyResize?: (() => void) | undefined;
 }
 
 /** The body's scroll position, as {@link ColumnWindowController.savePosition} saw it. */
@@ -159,6 +165,7 @@ export class ColumnWindowController {
   private readonly bodyScroll: HTMLElement;
   private readonly gridElement: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
+  private readonly onBodyResize: (() => void) | undefined;
   private readonly unsubscribes: (() => void)[] = [];
   private destroyed = false;
 
@@ -218,6 +225,7 @@ export class ColumnWindowController {
     this.scrollbarGutter = options.scrollbarGutter;
     this.bodyScroll = options.bodyScroll;
     this.gridElement = options.gridElement;
+    this.onBodyResize = options.onBodyResize;
 
     this.bodyScroll.addEventListener('scroll', this.handleBodyScroll, { passive: true });
     this.headerScroll.addEventListener('scroll', this.handleHeaderScroll, { passive: true });
@@ -232,6 +240,7 @@ export class ColumnWindowController {
         if (entry.target !== this.bodyScroll) continue;
         this.syncScrollbarGutter(entry);
         this.update('kept');
+        this.onBodyResize?.();
       }
     });
     this.resizeObserver.observe(this.bodyScroll);

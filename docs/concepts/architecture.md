@@ -431,7 +431,7 @@ zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
 ([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:391-397`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:401-408`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 
@@ -447,11 +447,12 @@ only subtracts from the viewport. See
 layouts that produce a bounded height and the failure modes when neither
 is used.
 
-Re-measurement is interaction-driven. The visible range is recomputed on
-scroll and on state-change re-renders; nothing subscribes to the
-container's `ResizeObserver` to recompute it on resize alone, so a
-container whose height changes while the table is idle keeps a stale range
-until the next interaction. Size the container before mounting.
+The visible range is recomputed on scroll, on state-change re-renders,
+and whenever the body scroller resizes: `ColumnWindowController`'s
+`ResizeObserver` on it works out the columns to mount, then has
+`TableContainer` refresh the body's `VirtualScroller`. A container whose
+height changes after mount, or one mounted hidden and shown later, gets
+the rows its new height shows without a scroll.
 
 ### Fixed row heights
 

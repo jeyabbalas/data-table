@@ -472,10 +472,10 @@ type VisualizationType =
  * `loadData()`. With `source`, it also awaits that first load, and the first
  * fetches of its rows and of the charts in view, so `state.schema` is
  * populated on return. Those fetches are awaited, not required: one that
- * fails is logged and leaves placeholders. If the load fails, the promise
- * rejects with its error and the table, already mounted, is not torn down:
- * omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })` to
- * keep a handle on it.
+ * fails is logged and leaves placeholders. If the load fails, the table tears
+ * itself down as `destroy()` would, and the promise rejects with the load's
+ * error: omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })`
+ * to keep the table through a failed load.
  *
  * @remarks Size the container before calling this. The table virtualizes
  * against the container's height, and an unbounded one silently renders every
@@ -1451,6 +1451,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
+    { initial = false }: { initial?: boolean } = {},
   ): Promise<void> {
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
@@ -1464,6 +1465,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // `state.baseTableName` takes precedence so a derived-VIEW tableName
     // doesn't shadow the underlying physical table name.
     const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+    let failed = false;
     try {
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
@@ -1556,6 +1558,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         }
       }
     } catch (error) {
+      failed = true;
       // The previous table stays in DuckDB as a fallback, but state no
       // longer names it once `actions.loadData` has reset it. Remember it
       // so a later load or destroy() can still drop it.
@@ -1578,7 +1581,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       }
       throw typed;
     } finally {
-      if (!destroyed) autoSave?.enable();
+      // A failed initial load is followed by destroy(). Enabling AutoSave
+      // first would have it save a restore's undo stacks, and destroy()
+      // flushes that save: the half-restored state over the stored session.
+      if (!destroyed && !(initial && failed)) autoSave?.enable();
     }
   }
 
@@ -1586,16 +1592,32 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   readyPayload = { bridgeReady: true };
   emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
-    // Awaited, so createDataTable resolves with the table loaded and its
-    // first rows fetched, and rejects with the load's error if it fails.
-    // The load's events fire before any consumer can subscribe; a consumer
-    // that needs them omits `source` and calls `loadData` itself, with the
-    // `tableName` and `sourceFormat` it would have passed here.
-    await loadDataImpl(opts.source, {
-      tableName: opts.tableName,
-      sourceFormat: opts.sourceFormat,
-      sourceOptions: opts.sourceOptions,
-    });
+    // Awaited, so createDataTable resolves with the table loaded and the
+    // fetch of its first rows settled. The load's events fire before any
+    // consumer can subscribe; a consumer that needs them omits `source` and
+    // calls `loadData` itself, with the `tableName`, `sourceFormat` and
+    // `sourceOptions` it would have passed here.
+    try {
+      await loadDataImpl(
+        opts.source,
+        {
+          tableName: opts.tableName,
+          sourceFormat: opts.sourceFormat,
+          sourceOptions: opts.sourceOptions,
+        },
+        { initial: true },
+      );
+    } catch (error) {
+      // The caller never gets this table, so nothing else could destroy it:
+      // tear it down here, then reject with the load's own error, not one
+      // the teardown ran into.
+      try {
+        await destroy();
+      } catch (teardownError) {
+        console.warn('[data-table] Cleanup after a failed initial load failed:', teardownError);
+      }
+      throw error;
+    }
   }
 
   // -------- destroy --------

@@ -1139,7 +1139,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1170,6 +1170,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 `string`
 
 Bold label prefix for a single selected category detail line.
+
+#### statistics.chartFailed?
+
+`string`
+
+Stats-slot line for a column whose chart's data failed to load.
 
 #### statistics.filteredRowCount?
 

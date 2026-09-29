@@ -272,7 +272,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
           break;
         }
 
-        const { data, format, tableName } = payload as LoadPayload;
+        const { data, format, tableName, timezone, csv, json, parquet } = payload as LoadPayload;
 
         respond(id, 'progress', {
           stage: 'reading',
@@ -289,7 +289,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
-            result = await loadCSV(await readBlob(data), { tableName });
+            result = await loadCSV(await readBlob(data), { ...csv, tableName, timezone });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,
@@ -301,7 +301,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
               percent: 25,
               cancelable: true,
             });
-            result = await loadJSON(await readBlob(data), { tableName });
+            result = await loadJSON(await readBlob(data), { ...json, tableName, timezone });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,
@@ -316,7 +316,7 @@ async function runTask(entry: QueueEntry): Promise<void> {
             // A Blob goes through as is: the loader registers it as a file
             // handle, so DuckDB reads it from disk.
             const source = typeof data === 'string' ? new TextEncoder().encode(data).buffer : data;
-            result = await loadParquet(source, { tableName });
+            result = await loadParquet(source, { ...parquet, tableName, timezone });
             respond(id, 'progress', {
               stage: 'indexing',
               percent: 90,

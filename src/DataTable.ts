@@ -51,13 +51,14 @@ import {
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableState } from './core/State';
-import { createTableState, resetTableState } from './core/State';
+import { createTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import type { TableEvents } from './core/TableEvents';
 import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
+import { validateSourceOptions, type SourceOptions } from './data/sourceOptions';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
@@ -156,11 +157,30 @@ export interface CreateDataTableOptions {
    */
   container: HTMLElement;
 
-  /** Optional initial data source. If omitted, call `table.loadData(source)` later. */
+  /**
+   * Optional initial data source. If omitted, call
+   * `table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.
+   */
   source?: File | string | ArrayBuffer | Blob;
-  /** Override the format detected from the source (e.g., if URL has no extension). */
+  /**
+   * Override the format detected from `source` (e.g., if its URL has no
+   * extension). Applies to `source` only; pass `sourceFormat` to
+   * `table.loadData()` for a later load.
+   */
   sourceFormat?: DataFormat;
-  /** Table name used inside DuckDB. Auto-generated if omitted. */
+  /**
+   * How `source` is read, per format: a CSV delimiter, header or null
+   * strings, the rows sampled to detect types, the Parquet columns to load,
+   * DuckDB's time zone. See {@link SourceOptions}. Applies to `source`
+   * only; pass `sourceOptions` to `table.loadData()` for a later load.
+   */
+  sourceOptions?: SourceOptions;
+  /**
+   * Table name used inside DuckDB for `source`, which is also the key its
+   * saved session is stored under. Auto-generated if omitted. Applies to
+   * `source` only: a later `table.loadData()` without its own `tableName`
+   * loads under a generated name, so no saved session is restored.
+   */
   tableName?: string;
 
   // ---- Feature toggles ----
@@ -377,7 +397,12 @@ export interface DataTable {
 
   /**
    * Load a new data source into the table. Re-uses the existing worker.
-   * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`.
+   * Emits `loadStart` → (`loadProgress` …) → `loadComplete` or `loadError`:
+   * at most one of the two for each `loadStart`. A load that a newer
+   * `loadData()` or {@link clearSession} supersedes before it ends emits
+   * neither; its promise resolves, or rejects if the load itself failed.
+   * `opts.sourceOptions` says how the source is read, as `sourceOptions`
+   * does for `createDataTable()`.
    */
   loadData(
     source: File | string | ArrayBuffer | Blob,
@@ -398,7 +423,13 @@ export interface DataTable {
    * filter presets, and the bridge's query cache. After this call the table
    * behaves as if just constructed with no `source` — call {@link loadData}
    * to populate it again. Safe to call when persistence is disabled (only the
-   * IndexedDB delete is skipped).
+   * IndexedDB delete is skipped). It empties the table once a derived-column
+   * change running then has ended; a change asked for before the call does
+   * not apply, as with {@link loadData}. A load in flight lands first: its
+   * table is the one emptied and its snapshot the one deleted, and it fires
+   * no `loadComplete`. The derived columns' VIEW and helper tables are
+   * dropped, with a `derivedChange` when there were any; the base table
+   * stays queryable until the next load or `destroy()`.
    */
   clearSession(): Promise<void>;
 
@@ -445,8 +476,13 @@ type VisualizationType =
  * Create a fully-wired data table mounted in `container`.
  *
  * Awaits worker initialization before returning so the caller can immediately
- * `loadData()` or rely on `state.schema` being populated (if `source` was
- * provided).
+ * `loadData()`. With `source`, it also awaits that first load, and the first
+ * fetches of its rows and of the charts in view, so `state.schema` is
+ * populated on return. Those fetches are awaited, not required: one that
+ * fails is logged and leaves placeholders. If the load fails, the table tears
+ * itself down as `destroy()` would, and the promise rejects with the load's
+ * error: omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })`
+ * to keep the table through a failed load.
  *
  * @remarks Size the container before calling this. The table virtualizes
  * against the container's height, and an unbounded one silently renders every
@@ -621,6 +657,33 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // sits further down where the unsubscribe array is built. --------
   let destroyed = false;
 
+  // -------- Worker failure --------
+  // A failed worker fails every query after it. The table reports the
+  // failure once, when the bridge tells of it, with `source: 'query'`, and
+  // drops every error that follows from it: a chart's, a panel's or a load's,
+  // however it was wrapped. Each carries, in its `cause` chain, the error the
+  // bridge failed with, the deepest one whose code is `WORKER_CRASHED`. A new
+  // worker's failure is a new error, and is reported in its turn.
+  const reportedFailures = new WeakSet<object>();
+  // `origin` is the error the event's error was made from, when that is a
+  // copy (a chart's, with its column added), whose `cause` chain would
+  // skip the error it copies.
+  const emitError = (payload: TableEvents['error'], origin: unknown = payload.error): void => {
+    let failure: object | null = null;
+    let link: unknown = origin;
+    for (let depth = 0; depth < 8 && typeof link === 'object' && link !== null; depth++) {
+      if (reportedFailures.has(link)) return;
+      if ((link as { code?: unknown }).code === 'WORKER_CRASHED') failure = link;
+      link = (link as { cause?: unknown }).cause;
+    }
+    if (failure) reportedFailures.add(failure);
+    emitter.emit('error', payload);
+  };
+  const offWorkerFailure =
+    typeof bridge.onWorkerFailure === 'function'
+      ? bridge.onWorkerFailure((error) => emitError({ error, source: 'query' }))
+      : () => undefined;
+
   // -------- Visualizations (auto-attach) --------
   const interactionManager = opts.visualizations === false ? null : new InteractionManager();
   // The crossfilter coordinator is the single source of `filterChange`
@@ -676,7 +739,42 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             cause: err,
             details: { column, phase },
           });
-    emitter.emit('error', { error: typed, source: 'stats-panel' });
+    emitError({ error: typed, source: 'stats-panel' });
+  };
+
+  /**
+   * A chart's error with the column it came from on its `details`, and the
+   * stage that failed when the chart says, as stats-panel errors carry
+   * theirs: only some of the charts' queries name the column themselves. A
+   * copy, as a chart can pass on an error it did not make, which other
+   * charts may be passing on too. A native error, so that it logs, clones
+   * and reads as one, of the same class and with the same message, code,
+   * cause and stack.
+   */
+  const withChartContext = (
+    err: DataTableError,
+    column: string,
+    stage?: 'fetch' | 'render' | 'filter',
+  ): DataTableError => {
+    const copy =
+      'cause' in err ? new Error(err.message, { cause: err.cause }) : new Error(err.message);
+    Object.setPrototypeOf(copy, Object.getPrototypeOf(err) as object);
+    const own: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(err);
+    delete own.message;
+    delete own.cause;
+    Object.defineProperties(copy, {
+      ...own,
+      // An engine can keep `stack` as an accessor that reads only the error
+      // it was made for.
+      stack: { value: err.stack, writable: true, configurable: true },
+      details: {
+        value: { ...(err.details ?? {}), column, ...(stage ? { stage } : {}) },
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      },
+    });
+    return copy as DataTableError;
   };
 
   /** Drop a column's interactions from the Escape stack (on filter removal). */
@@ -723,6 +821,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // Per column with a live chart, draws the chart's stats into the stats
   // slot, for a slot a panel was to take and did not.
   const chartStatsRenderers = new Map<string, () => void>();
+
+  // Per column whose live chart has no stats of its own to show, redraws
+  // its slot: after a fetch of the chart failed, and for a chart that does
+  // not report stats each time a fetch lands until it has. The slot shows
+  // the table-wide count, which `refreshNonVizStats` keeps current. A chart
+  // that does report them each time, as the built-in ones do, shows its own
+  // count once its first fetch lands.
+  const chartsWithoutStats = new Map<string, () => void>();
 
   // Columns whose custom stats panel threw while being built. As with a chart
   // that throws, the same header on the same relation would throw again, so
@@ -782,6 +888,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // dropped while interaction text is showing.
     let lastStats: ColumnStatsData | null = null;
     let detailHtml: string | null = null;
+    // Whether the chart has reported stats, and whether a fetch of it failed
+    // since it last did: the slot says so, in text. Read only while there
+    // are no stats, which the chart's stats leave only by a fetch failing.
+    let reportedStats = false;
+    let fetchFailed = false;
 
     const renderStatsSlot = (): void => {
       const prefix = opts.classPrefix ?? 'dt';
@@ -794,7 +905,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         statsEl.innerHTML = `${line1}<br>${detailHtml}`;
         return;
       }
-      const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
+      const line2 = lastStats
+        ? formatStatsLine2(lastStats, column.type, messages)
+        : fetchFailed
+          ? escapeHtml(messages.statistics.chartFailed)
+          : '';
       statsEl.innerHTML = line2
         ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
         : line1;
@@ -810,6 +925,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       tableContainer.getColumnWindow().mountedColumns.get().includes(column.name);
     // Only write the placeholder fallback when there's no panel taking the slot.
     if (!panelOf() && !panelComing()) renderStatsSlot();
+    const refreshSlotWithoutStats = (): void => {
+      if (!panelOf() && !panelComing()) renderStatsSlot();
+    };
 
     let viz: VisualizationType | undefined;
     const vizOptions = {
@@ -823,6 +941,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       onDefaultStatsChange: (stats: ColumnStatsData) => {
         latestStats.set(column.name, stats);
         lastStats = stats;
+        reportedStats = true;
+        chartsWithoutStats.delete(column.name);
         const panel = panelOf();
         if (panel) {
           try {
@@ -860,8 +980,53 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         if (hasSelection) interactionManager?.pushSelection(colName, viz);
         else interactionManager?.removeColumn(colName);
       },
-      onError: (err: DataTableError) => {
-        emitter.emit('error', { error: err, source: 'visualization' });
+      onError: (
+        err: DataTableError,
+        // Optional here, though the type requires it: a chart written in
+        // plain JavaScript may leave it out.
+        context?: {
+          columnName?: string;
+          stage: 'fetch' | 'render' | 'filter';
+          superseded?: boolean;
+        },
+      ) => {
+        // A fetch that failed leaves the chart nothing to describe: the
+        // stats and the detail it reported before are for the filters then.
+        // Not so for a refetch a newer one superseded, or a chart already
+        // destroyed, whose column's slot may be its successor's.
+        if (context?.stage !== 'render' && !context?.superseded && !viz?.isDestroyed()) {
+          lastStats = null;
+          detailHtml = null;
+          latestStats.delete(column.name);
+          latestDetail.delete(column.name);
+          chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
+          // The slot says the chart failed until it reports stats again, so
+          // only for a chart that reports them: one that has before, or that
+          // says it does each time a fetch lands, as the built-in charts do.
+          if (reportedStats || viz?.reportsDefaultStats) fetchFailed = true;
+          const panel = panelOf();
+          if (panel) {
+            try {
+              panel.update(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'update');
+            }
+            try {
+              panel.setHoverStats(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'hover');
+            }
+          } else if (!panelComing()) {
+            renderStatsSlot();
+          }
+        }
+        emitError(
+          {
+            error: withChartContext(err, context?.columnName ?? column.name, context?.stage),
+            source: 'visualization',
+          },
+          err,
+        );
       },
     };
 
@@ -869,11 +1034,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (!created) return null;
     viz = created as VisualizationType;
     chartStatsRenderers.set(column.name, renderStatsSlot);
+    if (!created.reportsDefaultStats) chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
     // Once the chart is gone, its stats must not linger: a panel goes back
     // to its initial state, and the default slot to the table-wide count,
     // which `refreshNonVizStats` keeps current from then on.
     statsSlotResets.set(created, () => {
       chartStatsRenderers.delete(column.name);
+      chartsWithoutStats.delete(column.name);
       if (destroyed) return;
       latestStats.delete(column.name);
       latestDetail.delete(column.name);
@@ -907,7 +1074,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // A hidden or removed column leaves the Escape stack, as its chart
         // would when the header row is rebuilt without it.
         onColumnRemoved: (columnName) => interactionManager?.removeColumn(columnName),
-        onError: (err) => {
+        onError: (err, columnName) => {
           const typed =
             err instanceof DataTableError
               ? err
@@ -915,7 +1082,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
                   code: 'INVARIANT',
                   cause: err,
                 });
-          emitter.emit('error', { error: typed, source: 'visualization' });
+          emitError({ error: withChartContext(typed, columnName), source: 'visualization' }, typed);
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
@@ -965,7 +1132,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
           column: ctx.column,
           phase: ctx.phase,
         };
-        emitter.emit('error', { error: err, source: 'stats-panel' });
+        emitError({ error: err, source: 'stats-panel' });
       },
     };
     let panel: BaseStatsPanel | null = null;
@@ -1062,7 +1229,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // independent of the viz one.
     if (relationChanged || !statsPanelCoordinator) {
       statsPanelCoordinator?.destroy();
-      statsPanelCoordinator = new StatsPanelCoordinator(state);
+      statsPanelCoordinator = new StatsPanelCoordinator(state, undefined, actions);
     }
 
     // Per-column work (viz instances + custom stats panels) is gated by the
@@ -1359,6 +1526,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (
         vizController ? vizController.hasLiveViz(column.name) : vizRegistry.isApplicable(column)
       ) {
+        // A live chart without stats of its own shows the table-wide count
+        // too.
+        chartsWithoutStats.get(column.name)?.();
         continue;
       }
       // Panel-owned slot? Skip — except when the panel destroyed itself
@@ -1389,15 +1559,21 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   unsubscribes.push(state.filteredRows.subscribe(scheduleNonVizStatsRefresh));
 
   // -------- Public loadData --------
-  // Base tables that failed loads left behind. `actions.loadData` resets
-  // state before it loads, so after a failed load nothing points at the
-  // previous table, though DuckDB still holds it. The next successful load,
-  // or destroy() over a shared bridge, drops them.
+  // Base tables nothing names any more: the one each load replaces, which
+  // `actions` reports as the load's turn begins, and the one a clear
+  // empties. DuckDB still holds them. The next successful load, or
+  // destroy() over a shared bridge, drops them, whether the load that left
+  // one behind landed, failed or was superseded.
   const strandedTables = new Set<string>();
+  actions.setOnBaseTableReplaced((tableName) => strandedTables.add(tableName));
+  // The table names loads in flight are making. A reclaim leaves them alone:
+  // a stranded table of the same name is being replaced in place.
+  const loadingTableNames: string[] = [];
 
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
+    { initial = false }: { initial?: boolean } = {},
   ): Promise<void> {
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
@@ -1405,13 +1581,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // Disable auto-save while loading so we don't capture the transient
     // half-initialized state.
     autoSave?.disable();
-    // Capture the previous base table NOW, before `actions.loadData`
-    // resets state. We drop it AFTER the new load resolves successfully —
-    // a failed load leaves the previous data queryable as a fallback.
-    // `state.baseTableName` takes precedence so a derived-VIEW tableName
-    // doesn't shadow the underlying physical table name.
-    const previousBaseTableName = state.baseTableName.get() ?? state.tableName.get();
+    const targetTableName = loadOpts?.tableName;
+    if (targetTableName) loadingTableNames.push(targetTableName);
+    // `getLoadEpoch()` counts loads and clears: one asked for after this
+    // load, while it runs, supersedes it, and it then emits no more events.
+    let loadEpoch: number | null = null;
+    const superseded = (): boolean => loadEpoch !== null && actions.getLoadEpoch() !== loadEpoch;
+    let failed = false;
     try {
+      // A bad source option fails the load here, as loadError, and leaves
+      // the table as it was: everything below clears it for the new data.
+      validateSourceOptions(loadOpts?.sourceOptions);
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
@@ -1432,8 +1612,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         sessionStore: loadOpts?.sessionStore ?? sessionStore ?? undefined,
         presetManager: loadOpts?.presetManager ?? presetManager ?? undefined,
         annotationStore,
+        // The worker's progress messages, between loadStart and loadComplete
+        // or loadError.
+        onProgress: (info) => {
+          if (!destroyed) emitter.emit('loadProgress', info);
+          loadOpts?.onProgress?.(info);
+        },
       };
-      await actions.loadData(source, mergedOpts);
+      const loading = actions.loadData(source, mergedOpts);
+      loadEpoch = actions.getLoadEpoch();
+      await loading;
       if (destroyed) {
         // Tearing down — skip the loadComplete emit on a dead emitter and
         // surface a destroy error so consumers know the load was aborted.
@@ -1456,36 +1644,45 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // An attach pass that runs while this waits replaces `pendingVizInit`,
       // and settles the one it replaced without waiting for its charts, so
       // wait again for the pass that replaced it.
-      let vizInit: Promise<void>;
-      do {
-        vizInit = pendingVizInit;
+      //
+      // A load superseded by a newer load or a clear waits for none of it,
+      // and fires no `loadComplete`: the data it loaded is already going.
+      while (!superseded()) {
+        const vizInit = pendingVizInit;
         await Promise.all([tableContainer.whenBodyReady(), vizInit]);
-      } while (vizInit !== pendingVizInit && !destroyed);
+        if (vizInit === pendingVizInit || destroyed) break;
+      }
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; load aborted.');
       }
-      emitter.emit('loadComplete', {
-        tableName: state.tableName.get() ?? '',
-        rowCount: state.totalRows.get(),
-        // Defensive shallow clone — same contract as filterChange/sortChange/
-        // selectionChange/columnChange (Phase 8). Handlers that destructure
-        // and mutate `schema` cannot corrupt the live state signal value.
-        schema: [...state.schema.get()],
-      });
-      // Reclaim the previous base table now that the new one is live, and
-      // any that earlier failed loads left behind. Skip the new table's
-      // own name — `CREATE OR REPLACE TABLE` already replaced it
-      // atomically in the loader, and a redundant DROP would race with the
-      // live table. Best-effort: a DROP failure must not turn a successful
-      // load into a thrown error — we only leak one orphan in that worst
-      // case.
+      if (!superseded()) {
+        emitter.emit('loadComplete', {
+          tableName: state.tableName.get() ?? '',
+          rowCount: state.totalRows.get(),
+          // Defensive shallow clone — same contract as filterChange/sortChange/
+          // selectionChange/columnChange (Phase 8). Handlers that destructure
+          // and mutate `schema` cannot corrupt the live state signal value.
+          schema: [...state.schema.get()],
+        });
+      }
+      // Reclaim the base table the load replaced now that the new one is
+      // live, and any other left behind (see `strandedTables`), a
+      // superseded load's own included. Skip the live table's own name —
+      // `CREATE OR REPLACE TABLE` already replaced it atomically in the
+      // loader, and a redundant DROP would race with the live table — and
+      // any a load still in flight is making. Best-effort: a DROP failure
+      // must not turn a successful load into a thrown error — we only leak
+      // one orphan in that worst case.
       const newBaseTableName = state.baseTableName.get() ?? state.tableName.get();
       const reclaim = [...strandedTables];
-      if (previousBaseTableName) reclaim.push(previousBaseTableName);
       strandedTables.clear();
       if (typeof bridge.dropTable === 'function') {
-        for (const name of new Set(reclaim)) {
+        for (const name of reclaim) {
           if (name === newBaseTableName) continue;
+          if (loadingTableNames.includes(name) && name !== targetTableName) {
+            strandedTables.add(name);
+            continue;
+          }
           try {
             await bridge.dropTable(name);
           } catch (err) {
@@ -1494,13 +1691,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         }
       }
     } catch (error) {
-      // The previous table stays in DuckDB as a fallback, but state no
-      // longer names it once `actions.loadData` has reset it. Remember it
-      // so a later load or destroy() can still drop it.
-      const currentBaseTableName = state.baseTableName.get() ?? state.tableName.get();
-      if (previousBaseTableName && previousBaseTableName !== currentBaseTableName) {
-        strandedTables.add(previousBaseTableName);
-      }
+      failed = true;
+      // The table the load replaced is stranded already (see
+      // `strandedTables`): nothing names it after a failed load.
       const typed =
         error instanceof DataTableError
           ? error
@@ -1509,14 +1702,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
               cause: error,
             });
       // Skip event emission on a dead emitter — destroy() has already cleared
-      // the listener map and consumers no longer expect notifications.
-      if (!destroyed) {
+      // the listener map and consumers no longer expect notifications — and
+      // for a superseded load, whose failure the caller's promise still
+      // reports: events describe the load the table shows.
+      if (!destroyed && !superseded()) {
         emitter.emit('loadError', { error: typed });
-        emitter.emit('error', { error: typed, source: 'load' });
+        emitError({ error: typed, source: 'load' });
       }
       throw typed;
     } finally {
-      if (!destroyed) autoSave?.enable();
+      if (targetTableName) loadingTableNames.splice(loadingTableNames.indexOf(targetTableName), 1);
+      // A failed initial load is followed by destroy(). Enabling AutoSave
+      // first would have it save a restore's undo stacks, and destroy()
+      // flushes that save: the half-restored state over the stored session.
+      if (!destroyed && !(initial && failed)) autoSave?.enable();
     }
   }
 
@@ -1524,20 +1723,39 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   readyPayload = { bridgeReady: true };
   emitter.emit('ready', readyPayload);
   if (opts.source !== undefined) {
-    // Do not await inside createDataTable — consumers can await the returned
-    // promise via `table.on('loadComplete', …)` or a subsequent state read.
-    // However, we DO await here so that `createDataTable` resolves with
-    // an already-populated table, matching most consumer expectations.
-    await loadDataImpl(opts.source, {
-      tableName: opts.tableName,
-      sourceFormat: opts.sourceFormat,
-    });
+    // Awaited, so createDataTable resolves with the table loaded and the
+    // fetch of its first rows settled. The load's events fire before any
+    // consumer can subscribe; a consumer that needs them omits `source` and
+    // calls `loadData` itself, with the `tableName`, `sourceFormat` and
+    // `sourceOptions` it would have passed here.
+    try {
+      await loadDataImpl(
+        opts.source,
+        {
+          tableName: opts.tableName,
+          sourceFormat: opts.sourceFormat,
+          sourceOptions: opts.sourceOptions,
+        },
+        { initial: true },
+      );
+    } catch (error) {
+      // The caller never gets this table, so nothing else could destroy it:
+      // tear it down here, then reject with the load's own error, not one
+      // the teardown ran into.
+      try {
+        await destroy();
+      } catch (teardownError) {
+        console.warn('[data-table] Cleanup after a failed initial load failed:', teardownError);
+      }
+      throw error;
+    }
   }
 
   // -------- destroy --------
   async function destroy(): Promise<void> {
     if (destroyed) return;
     destroyed = true;
+    offWorkerFailure();
     // Mark the action layer destroyed first so any in-flight async action
     // (e.g. addDerivedColumn awaiting the worker) drops its post-await state
     // mutation rather than writing into the dead table.
@@ -1596,6 +1814,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // outlives this DataTable, and the table would orphan if we didn't
     // drop it here, along with any a failed load left behind. Best-effort:
     // a failure must not turn `destroy()` into a thrown error.
+    if (!ownsBridge) {
+      // First the derived columns' VIEW and helper tables, which read the
+      // base table: once a derived-column change running now has ended, so
+      // that it cannot build one again after the DROP.
+      await actions.dropDerived();
+    }
     if (!ownsBridge && typeof bridge.dropTable === 'function') {
       const baseToDrop = state.baseTableName.get() ?? state.tableName.get();
       const toDrop = new Set(strandedTables);
@@ -1626,18 +1850,19 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   async function clearSession(): Promise<void> {
     autoSave?.disable();
     try {
-      if (sessionStore) {
-        const key = state.baseTableName.get() ?? state.tableName.get();
-        if (key) await sessionStore.delete(key);
-      }
+      const key = state.baseTableName.get() ?? state.tableName.get();
+      if (sessionStore && key) await sessionStore.delete(key);
       // If destroy() raced ahead while we were awaiting the IDB delete, drop
       // the in-memory reset — the state slices are about to be torn down and
       // mutating them now would emit on a dying emitter.
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
-      resetTableState(state);
-      undoManager?.clear();
+      // In its turn, after a derived-column change running now, which then
+      // writes nothing into the emptied table. A load in flight lands first,
+      // and it is its table that is emptied, whose snapshot goes too.
+      const cleared = await actions.clearData();
+      if (sessionStore && cleared && cleared !== key) await sessionStore.delete(cleared);
       // Only clear presets we own. A user-supplied shared
       // `FilterPresetManager` (multi-table dashboards) outlives any
       // single table's session — clearing it here would wipe other
@@ -1645,6 +1870,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (ownsPresetManager) presetManager?.presets.set([]);
       annotationStore.clear('all');
       bridge.clearQueryCache();
+      // The emptied table stays queryable until the next load or destroy()
+      // drops it: `actions` reported it as stranded.
     } finally {
       if (!destroyed) autoSave?.enable();
     }

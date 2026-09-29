@@ -8,11 +8,12 @@ spike code and raw results are on branch `spike/memory-envelope` (`spike/memory/
 Can DuckDB-WASM hold the largest shapes users need, about 1,000 columns × 200K rows or ~40 columns ×
 5M rows (≈200M cells), in memory, and which way of loading the file makes that possible?
 
-**Yes, but not the way the library loads files today.** Copying the file into DuckDB's heap (today)
-tops out between 150K and 200K rows at 1,000 columns. Registering the file as a lazy handle
-instead loads 200K × 1,000 at 76% of the 4 GiB ceiling, and 250K at 90%. A direct-scan mode is not
-needed for the target shapes, so it is not on the roadmap. Separately, sorted scrolling on a
-~200M-cell deep table **runs out of memory on main today**; a two-phase sorted fetch fixes it.
+**Yes, but not the way the library loaded files at the time.** Copying the file into DuckDB's heap,
+as it did then, tops out between 150K and 200K rows at 1,000 columns. Registering the file as a lazy
+handle instead loads 200K × 1,000 at 76% of the 4 GiB ceiling, and 250K at 90%; since #120 the
+loader registers a Parquet `File` or `Blob` that way, and a Parquet URL, which it fetches as a
+`Blob`. A direct-scan mode is not needed for the target shapes, so it is not on the roadmap. Separately, sorted scrolling on a ~200M-cell deep table ran out
+of memory; #119 fixed it with a two-phase sorted fetch.
 
 ## Setup
 
@@ -114,9 +115,10 @@ Measured afterwards to design the load path (#120), same setup. `prefetch` is
 - **The table estimate needs block granularity.** DuckDB stores each column of each 122,880-row
   group in whole 256 KiB blocks, plus one block for its validity mask, so a short row group still
   pays for whole blocks. The flat 11.5 B per cell in recommendation 4 is over a quarter low for
-  short, wide tables: 548 MiB against the 756 MiB measured at 50K × 1,000. How closely the block
-  model matched `duckdb_memory()`, per type and per file, was not recorded in
-  `spike/memory/results`.
+  short, wide tables: 548 MiB against the 756 MiB measured at 50K × 1,000. #120 calibrated the block
+  model against `duckdb_memory()` and keeps the measurements as cases in
+  `tests/worker/loaders/memoryBudget.test.ts`: within 1% per type at 1M rows, within 3% per column
+  for short tables, and at least 95% of DuckDB's count for the wide files measured here.
 - **Do not retry after running out.** After an "Allocation failure", a lazy retry of the same file
   failed too, although new 100 MB and 1 GB tables still loaded. The estimate has to be the guard.
 - **The library's own load adds type detection.** At 200K × 1,000 it takes 2.6 s. When string

@@ -9,6 +9,8 @@ or a spinner.
 
 - Load data from each supported source (File, URL, Blob, ArrayBuffer)
 - Override format detection when the extension lies (or there isn't one)
+- Tell the reader what detection would guess: a CSV delimiter, header or null
+  values, a JSON layout, the Parquet columns to load
 - Show a progress bar from `loadStart` / `loadProgress` / `loadComplete`
 - Recover from a load failure and retry
 - Know when text columns of dates load as dates
@@ -31,9 +33,10 @@ const table = await createDataTable({
 });
 ```
 
-`source` accepts `File | string | ArrayBuffer | Blob`. When `source` is a
-string starting with `http`, the library fetches it; otherwise it treats the
-string as raw data.
+`source` accepts `File | string | ArrayBuffer | Blob`. A string that looks
+like a URL or a path is fetched; multi-line text, or text starting with `[` or
+`{`, is loaded as inline data; any other string is rejected (see
+[Raw `string`](#raw-string)).
 
 ## Source types
 
@@ -47,7 +50,12 @@ System Access API.
   the way to load large files; see [Large Parquet files](#large-parquet-files).
 - **CSV / JSON** — read with `file.text()`.
 
-### URL (`string` starting with `http`)
+### URL or path (`string`)
+
+A string is a URL when it starts with a scheme (`https:`, `http:`, `file:`,
+`data:`, `blob:`, …), `//`, `/`, `./` or `../`. Relative ones resolve against
+`window.location.href`, so a `<base href>` on the page does not apply to them.
+A bare file name such as `'data.csv'` is not a URL; write `'./data.csv'`.
 
 Fetched with the platform `fetch()` — cross-origin URLs must send the
 appropriate CORS headers. A non-2xx response throws `LoadError` with
@@ -69,20 +77,23 @@ A Parquet `Blob` is read from disk like a `File`. Without `sourceFormat`, a
 
 ### Raw `string`
 
-Any `string` that doesn't start with `http` is treated as raw data.
-Content sniffing looks at the first non-whitespace character — `[` or `{`
-means JSON; anything else is CSV.
+A string that is not a URL is loaded as inline data when it spans more than
+one line, or when its first non-whitespace character is `[` or `{`. That
+character also picks the format: `[` or `{` means JSON, anything else CSV.
+Any other string, a single line such as `'sample.csv'` or `'a,b'`, rejects
+with `LoadError` code `SOURCE_AMBIGUOUS` instead of being parsed as a
+one-line CSV.
 
 ## Format detection
 
 Detection order:
 
-| Source        | Signal used                                               |
-| ------------- | --------------------------------------------------------- |
-| `File`        | File extension (`.csv` / `.json` / `.parquet`)            |
-| URL           | `URL(source).pathname` extension                          |
-| `ArrayBuffer` | Assumed Parquet                                           |
-| Raw string    | First non-whitespace character — `[`/`{` → JSON, else CSV |
+| Source                       | Signal used                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| `File`                       | File extension (`.csv` / `.json` / `.parquet`)            |
+| URL                          | `URL(source).pathname` extension                          |
+| `ArrayBuffer`, `Blob`        | Assumed Parquet                                           |
+| Inline string (raw `string`) | First non-whitespace character — `[`/`{` → JSON, else CSV |
 
 An unknown extension falls back to CSV. Override detection with `sourceFormat`
 in `createDataTable`, or the `format` option in `loadData`:
@@ -97,6 +108,70 @@ await table.loadData(blob, { sourceFormat: 'json' });
   `sourceFormat`
 - File named `.txt` containing JSON → set `sourceFormat: 'json'`
 - `ArrayBuffer` containing CSV text (unusual) → set `sourceFormat: 'csv'`
+
+## How a source is read
+
+`sourceOptions` tells the reader what it would otherwise detect, per format.
+Pass it to `createDataTable` with `source`, or as an option of `loadData`:
+
+```ts
+const table = await createDataTable({
+  container,
+  source: '/exports/orders.csv',
+  sourceOptions: { csv: { delimiter: ';', nullValues: ['', 'NA'] } },
+});
+
+await table.loadData(file, {
+  sourceOptions: { parquet: { columns: ['pickup_at', 'fare', 'tip'] } },
+});
+```
+
+A load reads the entry for its source's format and ignores the others, so
+one object can go with sources of any format.
+
+| Option            | Default      | What it does                                                                                                                          |
+| ----------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `csv.delimiter`   | detected     | The one character between fields; not a line break or NUL.                                                                            |
+| `csv.header`      | detected     | Whether the first row names the columns. Without one, they are `column0`, `column1`, …, or `column00`, `column01`, … from 10 columns. |
+| `csv.skip`        | `0`          | Lines to skip before the header, such as a title line.                                                                                |
+| `csv.nullValues`  | `['']`       | Field values read as `null`. They replace the default: include `''` to keep empty fields `null`.                                      |
+| `csv.sampleSize`  | 20,480       | Rows DuckDB reads to detect the dialect and the column types; `-1` reads every row.                                                   |
+| `json.format`     | detected     | `'array'` for a JSON array of objects, `'ndjson'` for one object per line.                                                            |
+| `json.sampleSize` | 20,480       | Objects DuckDB reads to detect the column types; `-1` reads every one.                                                                |
+| `json.maxDepth`   | no limit     | Levels of nested objects that get types of their own. Deeper values load as JSON text.                                                |
+| `parquet.columns` | every column | The columns to load, by their names in the file (case-sensitive), in this order.                                                      |
+| `timezone`        | `'UTC'`      | The time zone DuckDB works in. See below.                                                                                             |
+
+A value of the wrong type or out of range, or a key the reader does not
+know, rejects the load before the source is read, with `LoadError` code
+`LOAD_INVALID_OPTIONS` and the option in `error.details.option`, such as
+`'csv.delimiter'`. The table keeps the data it had: its rows, filters and
+annotations stay as they were. A Parquet column the file lacks rejects the
+same way once the file is opened, with the names in
+`error.details.missing`; the message gives the file's own spelling when only
+the case differs.
+
+- **Types come from a sample.** DuckDB types CSV and JSON columns from the
+  first 20,480 rows it reads. A later value that does not fit, text in a
+  number column, fails the load with `Could not convert string …`. Set
+  `sampleSize: -1` to type from every row, which reads the file once more,
+  or list the placeholder in `nullValues` if it stands for a missing value.
+  See [Troubleshooting §31](../troubleshooting.md#31-a-csv-or-json-load-fails-with-could-not-convert-string--to-bigint).
+- **Loading some Parquet columns.** The columns left out are never read, and
+  the memory check before the load counts only those listed, so a file too
+  large to load whole may load in part. See [Large Parquet files](#large-parquet-files).
+- **The time zone.** SQL on `TIMESTAMP WITH TIME ZONE` values uses it: date
+  parts, truncation, and casts to `DATE` or text, as in derived columns, SQL
+  filters and the bins of a date histogram. In the text columns the loader
+  converts to dates and times, timestamps that carry the zone's own offset
+  load as plain timestamps, the local time as written, and other offsets
+  make the column `TIMESTAMP WITH TIME ZONE` (see
+  [Dates and times stored as text](#dates-and-times-stored-as-text)). Cells
+  show `TIMESTAMP WITH TIME ZONE` values in UTC either way. It is a setting
+  of the worker's DuckDB connection, so it holds for every table sharing a
+  `WorkerBridge`, and every load sets it, to UTC unless given. A name DuckDB
+  does not know rejects the load with `LOAD_INVALID_TIMEZONE`, listing the
+  zones it suggests.
 
 ## Progress reporting
 
@@ -138,12 +213,10 @@ table.on('loadError', ({ error }) => {
 });
 ```
 
-Stages progress roughly `reading → parsing → indexing → analyzing`, but not
-every source emits every stage (a small CSV may skip straight to `analyzing`).
-
-`ProgressInfo` carries enough data to format your own strings:
-`loaded` / `total` (bytes when known), `percent` (0–1 or `undefined`),
-`stage`, and an optional `estimatedRemaining` in milliseconds.
+The worker reports three stages for every source: `reading` at 0%, `parsing`
+at 25% and `indexing` at 90%; `loadComplete` marks the end. `percent` runs
+0–100 and is always set. The `analyzing` stage is never reported, and the
+optional `loaded`, `total` and `estimatedRemaining` fields are left out.
 
 ## Replacing the dataset
 
@@ -194,7 +267,9 @@ of its text columns, and picks how to read the file:
   slower but with the smallest peak. A 1.5 GB file of 200,000 rows × 1,000
   columns of random doubles loads this way in about 35 seconds.
 
-A load that will not fit rejects with `LoadError` code
+Loading only the columns you use, with `sourceOptions.parquet.columns`,
+shrinks the table and the estimate alike: the columns left out are never
+read. A load that will not fit rejects with `LoadError` code
 `LOAD_MEMORY_EXCEEDED` before anything is loaded. The message names the
 limit it hit — the table's share of DuckDB's free memory, or the load's peak
 against the 4 GiB — with the numbers compared, which `error.details` also
@@ -237,8 +312,10 @@ A column converts only if every value in it converts unchanged:
 - Blank values (empty or only spaces) count as missing and become `null`,
   as they do in a CSV file.
 - Timestamps with a UTC offset (`+05:30`) load as `TIMESTAMP WITH TIME ZONE`
-  and display in UTC, so the offset is not dropped. The loader works in UTC,
-  so in the columns it converts, `Z` and `+00:00` load as plain timestamps.
+  and display in UTC, so the offset is not dropped. The loader works in UTC
+  unless `sourceOptions.timezone` names another zone, and in the columns it
+  converts, timestamps with that zone's own offset (`Z` and `+00:00` in UTC)
+  load as plain timestamps.
   DuckDB's CSV reader types a column with `Z` or an offset as
   `TIMESTAMP WITH TIME ZONE` itself.
 - A column that is blank for its first 2,048 rows stays text.
@@ -330,12 +407,12 @@ for a runnable demo.
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
 - **Large Parquet files need a `File`, `Blob`, or URL.** An `ArrayBuffer` is copied into DuckDB's memory whole, next to the table. A load that will not fit rejects with `LOAD_MEMORY_EXCEEDED`; see [Large Parquet files](#large-parquet-files).
-- **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are _not_ auto-fetched — read them yourself and pass the bytes.
+- **A bare file name is not a URL.** `'data.csv'` rejects with `SOURCE_AMBIGUOUS`; write `'./data.csv'` or `'/data.csv'`. Relative URLs resolve against `window.location.href`, not the page's `<base href>`. A `file:` URL is fetched like any other, which browsers refuse from a web page; pass the `File` instead.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
 - **Peak memory during a large swap.** `loadData()` drops the previous DuckDB base table after the new one is live (or replaces it atomically when the `tableName` matches), so the catalog stays clean across reloads. While the new load is in flight, both buffers coexist briefly — for very large dataset swaps where peak main-thread memory matters, `destroy()` + recreate releases the previous buffers earlier.
-- **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
+- **Progress is coarse.** There is one report per stage (`reading` 0%, `parsing` 25%, `indexing` 90%) and no byte or row counts, so a large file stays at 25% for most of its load.
 
 ## Related
 

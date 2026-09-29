@@ -4,7 +4,7 @@
  * Multi-instance DOM ID isolation: when two tables coexist on the same page
  * using the default `classPrefix: 'dt'`, their modal title IDs must differ
  * and their `aria-labelledby` references must resolve inside the correct
- * modal.
+ * modal, and their dialogs' radio groups must stay apart.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { createTableState } from '@/core/State';
@@ -109,6 +109,22 @@ describe('multi-instance ID isolation', () => {
     b.destroy();
   });
 
+  it('two dialogs built without instanceIds generate distinct ids', () => {
+    const dialogs = [
+      new ExportDialog(state1, mockBridge),
+      new ExportDialog(state2, mockBridge),
+      new DerivedColumnModal(state1, actions1),
+      new DerivedColumnModal(state2, actions2),
+    ];
+    for (const d of dialogs) document.body.appendChild(d.getElement());
+
+    const ids = Array.from(document.querySelectorAll('[id]'), (el) => el.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    for (const d of dialogs) d.destroy();
+  });
+
   it('two TableContainers with default options auto-generate distinct instance ids', () => {
     const host1 = document.createElement('div');
     const host2 = document.createElement('div');
@@ -145,5 +161,73 @@ describe('multi-instance ID isolation', () => {
     m2.destroy();
     tc1.destroy();
     tc2.destroy();
+  });
+});
+
+// Radios that share a name and have no form are one group across the whole
+// document: checking one unchecks the rest. Named per class prefix, the
+// radios of two tables' dialogs were one group, and a choice in one dialog
+// unchecked the other's. In a browser the second dialog does it as soon as it
+// is added, with its defaults checked; jsdom only unchecks on a check.
+describe('multi-instance radio groups', () => {
+  let state1: TableState;
+  let state2: TableState;
+  let actions1: StateActions;
+  let actions2: StateActions;
+
+  beforeEach(() => {
+    state1 = createTableState();
+    state2 = createTableState();
+    actions1 = new StateActions(state1, mockBridge);
+    actions2 = new StateActions(state2, mockBridge);
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  function radio(root: HTMLElement, value: string): HTMLInputElement {
+    return root.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!;
+  }
+
+  it.each([
+    ['with instanceIds', { instanceId: 't1-aaaa' }, { instanceId: 't2-bbbb' }],
+    ['without instanceIds', {}, {}],
+  ])('two ExportDialogs keep their own format and scope, %s', (_, optsA, optsB) => {
+    const a = new ExportDialog(state1, mockBridge, optsA);
+    const b = new ExportDialog(state2, mockBridge, optsB);
+    document.body.appendChild(a.getElement());
+    document.body.appendChild(b.getElement());
+
+    radio(b.getElement(), 'json').click();
+    radio(b.getElement(), 'filtered').click();
+
+    expect(radio(a.getElement(), 'csv').checked).toBe(true);
+    expect(radio(a.getElement(), 'all').checked).toBe(true);
+    expect(radio(b.getElement(), 'json').checked).toBe(true);
+    expect(radio(b.getElement(), 'filtered').checked).toBe(true);
+
+    a.destroy();
+    b.destroy();
+  });
+
+  it.each([
+    ['with instanceIds', { instanceId: 't1-aaaa' }, { instanceId: 't2-bbbb' }],
+    ['without instanceIds', {}, {}],
+  ])('two DerivedColumnModals keep their own mode, %s', (_, optsA, optsB) => {
+    const a = new DerivedColumnModal(state1, actions1, optsA);
+    const b = new DerivedColumnModal(state2, actions2, optsB);
+    document.body.appendChild(a.getElement());
+    document.body.appendChild(b.getElement());
+
+    radio(a.getElement(), 'vector').click();
+    radio(b.getElement(), 'vector').click();
+    radio(b.getElement(), 'expression').click();
+
+    expect(radio(a.getElement(), 'vector').checked).toBe(true);
+    expect(radio(b.getElement(), 'expression').checked).toBe(true);
+
+    a.destroy();
+    b.destroy();
   });
 });

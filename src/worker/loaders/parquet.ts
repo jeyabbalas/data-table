@@ -13,6 +13,8 @@ import {
   wrapReservedColumnError,
   makeReservedColumnError,
   dropSourceFile,
+  invalidOptionError,
+  setSessionTimeZone,
   sourceFileName,
   type LoaderContext,
 } from './common';
@@ -65,6 +67,35 @@ function generateTableName(): string {
 }
 
 /**
+ * Reject a column list that names a column twice, or one the file lacks,
+ * before DuckDB's binder sees it: the binder matches names whatever their
+ * case, and would load a file's `Fare` as `fare` when asked for `fare`.
+ */
+async function checkColumnsInFile(
+  conn: AsyncDuckDBConnection,
+  source: string,
+  columns: readonly string[],
+): Promise<void> {
+  if (new Set(columns).size !== columns.length) {
+    throw invalidOptionError('parquet.columns', 'Parquet columns name a column more than once');
+  }
+  const result = await conn.query(`DESCRIBE SELECT * FROM ${source}`);
+  const names = result.toArray().map((row) => String(row.toJSON().column_name));
+  const inFile = new Set(names);
+  const missing = columns.filter((c) => !inFile.has(c));
+  if (missing.length === 0) return;
+  const byLowerCase = new Map(names.map((name) => [name.toLowerCase(), name]));
+  const listed = missing.map((c) => {
+    const near = byLowerCase.get(c.toLowerCase());
+    return near ? `"${c}" (the file has "${near}")` : `"${c}"`;
+  });
+  throw Object.assign(new Error(`Parquet columns not in the file: ${listed.join(', ')}`), {
+    code: 'LOAD_INVALID_OPTIONS',
+    details: { option: 'parquet.columns', missing },
+  });
+}
+
+/**
  * Load Parquet data into a DuckDB table
  *
  * A `Blob` (or `File`) is registered as a file handle, so DuckDB reads it
@@ -92,15 +123,8 @@ export async function loadParquet(
   const conn = context?.conn ?? getConnection();
   const tableName = options.tableName || generateTableName();
 
-  // Set timezone for TIMESTAMPTZ columns (default: UTC)
-  const timezone = options.timezone ?? 'UTC';
-  if (!/^[A-Za-z0-9_/+-]+$/.test(timezone)) {
-    throw Object.assign(new Error(`Invalid timezone: ${timezone}`), {
-      code: 'LOAD_INVALID_TIMEZONE',
-      details: { timezone },
-    });
-  }
-  await conn.query(`SET TimeZone = '${timezone}'`);
+  // DuckDB's session time zone, UTC unless given; see SourceOptions.timezone.
+  await setSessionTimeZone(conn, options.timezone);
 
   // Register file with DuckDB's virtual filesystem. A Blob stays on disk:
   // BROWSER_FILEREADER reads slices of it on demand, and direct I/O skips
@@ -125,8 +149,10 @@ export async function loadParquet(
 
     // The columns to load, as a relation to read from.
     const source = `read_parquet('${fileName}')`;
-    const projected = options.columns?.length
-      ? `(SELECT ${options.columns.map((c) => quoteIdentifier(c)).join(', ')} FROM ${source})`
+    const projection = options.columns?.length ? options.columns : undefined;
+    if (projection) await checkColumnsInFile(conn, source, projection);
+    const projected = projection
+      ? `(SELECT ${projection.map((c) => quoteIdentifier(c)).join(', ')} FROM ${source})`
       : source;
 
     // DESCRIBE the load's projection before building anything. It gives
@@ -148,7 +174,7 @@ export async function loadParquet(
       return type ? { ...row, column_type: type } : row;
     });
 
-    const footprint = await measureParquetFootprint(conn, fileName, loadedRows);
+    const footprint = await measureParquetFootprint(conn, fileName, loadedRows, projection);
     const budget = await readMemoryBudget(conn);
     const context = { footprint, budget, buffered: !fromFile };
     const plan = fitParquetRead(footprint, budget, fromFile);

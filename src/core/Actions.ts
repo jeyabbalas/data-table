@@ -49,6 +49,26 @@ import type { StateSnapshot, UndoManager } from './UndoManager';
 /** Shared empty "after" list for clearFilters' removal notification. */
 const EMPTY_FILTERS: readonly Filter[] = [];
 
+/** A derived-column change, undo, redo, reset or load in line; see `StateActions.inTurn`. */
+interface Turn {
+  /** It waited for the turn before it, and so counted for `isRelationChanging`. */
+  waited: boolean;
+  /** It ran a change through `changeRelation`, which reports its own settle. */
+  changedRelation: boolean;
+  ended: boolean;
+}
+
+/** Why a derived-column change asked for before a load or a clear did not apply. */
+const SUPERSEDED = 'New data was loaded, or the table cleared, before the change was applied';
+
+/**
+ * The error of a replacement or removal asked for before a load or a clear:
+ * the column it names is not among the derived columns that follow.
+ */
+function supersededError(column: string): DerivedColumnError {
+  return new DerivedColumnError(SUPERSEDED, { code: 'NOT_FOUND', details: { column } });
+}
+
 /**
  * Options for {@link StateActions.getColumnValues}.
  */
@@ -118,6 +138,7 @@ export class StateActions {
   private lastSelectedIndex: number | null = null;
   private undoManager: UndoManager | undefined;
   private suppressUndoCapture = false;
+  /** An undo or redo is waiting for its turn or running; another is dropped. */
   private undoRedoInProgress = false;
   private layoutGestureSnapshot: StateSnapshot | null = null;
   private layoutGestureActive = false;
@@ -136,10 +157,27 @@ export class StateActions {
   /** Those of them that can leave the relation unreadable meanwhile: all but adds. */
   private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
+  private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
-  /** Names of the derived columns being added, not yet in the schema. */
-  private derivedNamesBeingAdded = new Set<string>();
+  /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
+  private idleWaiters: (() => void)[] = [];
+  /** Turns requested and not yet ended, the running one included; see {@link inTurn}. */
+  private openTurns = 0;
+  /** Turns requested and not yet started. */
+  private waitingTurns = 0;
+  /** The last turn requested, settled either way: the next one starts after it. */
+  private lastTurn: Promise<unknown> = Promise.resolve();
+  /** The turn running now. Turns run one at a time. */
+  private currentTurn: Turn | null = null;
+  /** Counts loads and clears; a change asked for before the latest does not apply. */
+  private loadEpoch = 0;
+  /**
+   * Loads asked for and not yet ended. An undo, redo or reset asked for
+   * meanwhile is refused: it would act on the stacks and the initial state
+   * the load is about to replace, or restore from a saved session.
+   */
+  private openLoads = 0;
   private destroyed = false;
 
   constructor(
@@ -189,22 +227,25 @@ export class StateActions {
   }
 
   /**
-   * Whether a derived-column change is waiting on DuckDB, an add included.
-   * Charts and stats panels are built only when none is: one built meanwhile
-   * would be built again for the relation the change leaves. Whether reads of
-   * the relation `state.tableName` names can fail meanwhile is
-   * {@link isRelationReadable}.
+   * Whether a derived-column change is waiting on DuckDB, an add included, or
+   * waiting for its turn behind another (see {@link inTurn}). Charts and stats
+   * panels are built only when none is: one built meanwhile would be built
+   * again for the relation the changes leave. Whether reads of the relation
+   * `state.tableName` names can fail meanwhile is {@link isRelationReadable}.
    *
    * @internal
    */
   isRelationChanging(): boolean {
-    return this.relationChanges > 0;
+    return this.relationChanges > 0 || this.waitingTurns > 0;
   }
 
   /**
-   * Set a callback invoked when the last derived-column change in flight
-   * settles, whether it succeeded or failed. It runs before the state update
-   * that follows a successful change.
+   * Set a callback invoked when {@link isRelationChanging} stops holding,
+   * whether the last change succeeded or failed. That is when the DuckDB work
+   * of the last change in line settles, before the state update that follows
+   * a successful change; or, for a last change that waited for its turn and
+   * then touched nothing in DuckDB (an undo of a filter, an add refused for
+   * its name), when it ends. Not between two changes in line.
    *
    * @internal
    */
@@ -214,11 +255,26 @@ export class StateActions {
   }
 
   /**
+   * Set a callback told the name of each base table that a load or a clear
+   * leaves behind: the one in state as a load's turn begins, unless the load
+   * makes a table of that name again, and the one a clear empties. Nothing in
+   * the table names it after that. The facade drops it once the next load
+   * has landed, or on destroy.
+   *
+   * @internal
+   */
+  setOnBaseTableReplaced(callback: (tableName: string) => void): void {
+    this.throwIfDestroyed('setOnBaseTableReplaced');
+    this.onBaseTableReplacedCallback = callback;
+  }
+
+  /**
    * Whether the relation `state.tableName` names can be read as `state.schema`
    * describes it. Not while a derived-column change that can drop or rebuild
    * what those reads select from is waiting on DuckDB: a removal, an edit or
    * a replacement, an undo or redo, a reset, a restore. An add can not, and
-   * the relation stays readable while one runs.
+   * the relation stays readable while one runs. Nor does a change waiting for
+   * its turn: the relation in force can be read until its DuckDB work starts.
    *
    * @internal
    */
@@ -242,12 +298,14 @@ export class StateActions {
   /**
    * Run a DuckDB change to the derived-column relation, counted for
    * {@link isRelationChanging} and, unless the relation `state.tableName`
-   * names stays readable throughout, for {@link isRelationReadable}.
+   * names stays readable throughout, for {@link isRelationReadable}. Called
+   * only in a turn (see {@link inTurn}), so one runs at a time.
    */
   private async changeRelation<T>(
     change: () => Promise<T>,
     { staysReadable = false }: { staysReadable?: boolean } = {},
   ): Promise<T> {
+    if (this.currentTurn) this.currentTurn.changedRelation = true;
     this.relationChanges++;
     if (!staysReadable) this.unreadableRelationChanges++;
     try {
@@ -256,13 +314,82 @@ export class StateActions {
       this.relationChanges--;
       if (!staysReadable) this.unreadableRelationChanges--;
       try {
-        if (this.relationChanges === 0) this.onRelationSettledCallback?.();
+        this.notifyIfRelationSettled();
       } finally {
         if (this.unreadableRelationChanges === 0) {
           for (const resolve of this.readableWaiters.splice(0)) resolve();
         }
+        if (this.relationChanges === 0) {
+          for (const resolve of this.idleWaiters.splice(0)) resolve();
+        }
       }
     }
+  }
+
+  private notifyIfRelationSettled(): void {
+    if (!this.isRelationChanging()) this.onRelationSettledCallback?.();
+  }
+
+  /**
+   * Run `change` in its turn: once every derived-column change, undo, redo,
+   * reset and load asked for before it has ended. They run one at a time, in
+   * call order, and each reads and validates the state in its own turn, after
+   * the one before has written its changes. With no turn open, `change`
+   * starts at once, synchronously.
+   *
+   * Two changes running together would share the manager's list of columns
+   * and the VIEW: a removal landing while an add was at its last `INSERT`
+   * settled with `tableName` naming a VIEW the add had yet to create, and a
+   * change wrote `schema` from a copy read before another landed.
+   *
+   * A turn asked for while another is open counts for
+   * {@link isRelationChanging} while it waits, and not for
+   * {@link isRelationReadable} until its own DuckDB work starts.
+   *
+   * `change` must never ask for a turn and wait for it: that turn would wait
+   * for this one to end.
+   */
+  private inTurn<T>(change: (turn: Turn) => Promise<T>): Promise<T> {
+    const waits = this.openTurns > 0;
+    this.openTurns++;
+    let run: Promise<T>;
+    if (waits) {
+      this.waitingTurns++;
+      run = this.lastTurn.then(() => {
+        this.waitingTurns--;
+        return this.runTurn(change, true);
+      });
+    } else {
+      run = this.runTurn(change, false);
+    }
+    this.lastTurn = run.catch(() => undefined);
+    return run;
+  }
+
+  private async runTurn<T>(change: (turn: Turn) => Promise<T>, waited: boolean): Promise<T> {
+    const turn: Turn = { waited, changedRelation: false, ended: false };
+    this.currentTurn = turn;
+    try {
+      return await change(turn);
+    } finally {
+      this.endTurn(turn);
+    }
+  }
+
+  /**
+   * End a turn, once: the next may start. Awaiting a change ends its turn a
+   * microtask after it returns, so a change that can finish without awaiting
+   * (an undo of a filter) ends its own as it returns: a call made right after
+   * it then starts at once, as it did before changes took turns.
+   */
+  private endTurn(turn: Turn): void {
+    if (turn.ended) return;
+    turn.ended = true;
+    if (this.currentTurn === turn) this.currentTurn = null;
+    this.openTurns--;
+    // A turn counted for isRelationChanging while it waited. One that then
+    // touched nothing in DuckDB has no settle of its own to report that.
+    if (turn.waited && !turn.changedRelation) this.notifyIfRelationSettled();
   }
 
   // =========================================
@@ -374,20 +501,53 @@ export class StateActions {
    * Undo the last undoable action. Returns true if state was restored.
    * Async because derived column changes require DuckDB VIEW reconciliation.
    *
+   * Runs in its turn, after every derived-column change asked for before it
+   * has landed and pushed its undo entry: an undo pressed while an add runs
+   * undoes the add. Resolves `false`, restoring nothing, while another undo
+   * or redo waits or runs, while a load is under way (it would undo the
+   * session the load restores), and when new data is loaded before its turn.
+   *
    * @throws `DestroyedError` if the table was destroyed before or during
    *   the call.
    */
   async undo(): Promise<boolean> {
-    this.throwIfDestroyed('undo');
-    if (this.undoRedoInProgress) return false;
-    if (!this.undoManager?.canUndo) return false;
+    return this.undoOrRedo('undo');
+  }
+
+  /**
+   * Redo the last undone action. Returns true if state was restored.
+   * Async because derived column changes require DuckDB VIEW reconciliation.
+   * Runs in its turn, as {@link undo} does.
+   *
+   * @throws `DestroyedError` if the table was destroyed before or during
+   *   the call.
+   */
+  async redo(): Promise<boolean> {
+    return this.undoOrRedo('redo');
+  }
+
+  private async undoOrRedo(step: 'undo' | 'redo'): Promise<boolean> {
+    this.throwIfDestroyed(step);
+    if (this.undoRedoInProgress || !this.undoManager || this.openLoads > 0) return false;
     this.undoRedoInProgress = true;
-    this.suppressUndoCapture = true;
+    const epoch = this.loadEpoch;
+    return this.inTurn((turn) => this.applyUndoStep(step, epoch, turn));
+  }
+
+  /** The turn of an undo or redo. */
+  private async applyUndoStep(step: 'undo' | 'redo', epoch: number, turn: Turn): Promise<boolean> {
     try {
+      this.throwIfDestroyed(step);
+      const undoManager = this.undoManager!;
+      // New data cleared the stacks the step was asked of.
+      if (epoch !== this.loadEpoch) return false;
+      if (step === 'undo' ? !undoManager.canUndo : !undoManager.canRedo) return false;
+      this.suppressUndoCapture = true;
+
       const prevDerived = this.state.derivedColumns.get();
       const prevFilters = this.state.filters.get();
       const current = captureSnapshot(this.state);
-      const snapshot = this.undoManager.undo(current);
+      const snapshot = step === 'undo' ? undoManager.undo(current) : undoManager.redo(current);
       if (!snapshot) return false;
 
       const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
@@ -395,9 +555,10 @@ export class StateActions {
       // Reconcile DuckDB state BEFORE applying snapshot signals.
       // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
       if (derivedChanged) {
-        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
+        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot, epoch));
       }
-      this.throwIfDestroyed('undo');
+      this.throwIfDestroyed(step);
+      if (epoch !== this.loadEpoch) return false;
 
       // Apply view-state signals + tableName atomically in a single batch
       batch(() => {
@@ -415,55 +576,11 @@ export class StateActions {
       this.notifyRemovedFilters(prevFilters, this.state.filters.get());
       return true;
     } finally {
+      // Cleared as the step ends, not a microtask later: a second undo called
+      // right after one that restored no derived column goes ahead at once.
       this.suppressUndoCapture = false;
       this.undoRedoInProgress = false;
-    }
-  }
-
-  /**
-   * Redo the last undone action. Returns true if state was restored.
-   * Async because derived column changes require DuckDB VIEW reconciliation.
-   *
-   * @throws `DestroyedError` if the table was destroyed before or during
-   *   the call.
-   */
-  async redo(): Promise<boolean> {
-    this.throwIfDestroyed('redo');
-    if (this.undoRedoInProgress) return false;
-    if (!this.undoManager?.canRedo) return false;
-    this.undoRedoInProgress = true;
-    this.suppressUndoCapture = true;
-    try {
-      const prevDerived = this.state.derivedColumns.get();
-      const prevFilters = this.state.filters.get();
-      const current = captureSnapshot(this.state);
-      const snapshot = this.undoManager.redo(current);
-      if (!snapshot) return false;
-
-      const derivedChanged = !derivedColumnsEqual(prevDerived, snapshot.derivedColumns);
-
-      if (derivedChanged) {
-        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot));
-      }
-      this.throwIfDestroyed('redo');
-
-      batch(() => {
-        applySnapshot(this.state, snapshot);
-        if (derivedChanged) {
-          const baseTable = this.state.baseTableName.get();
-          this.state.tableName.set(
-            snapshot.derivedColumns.length > 0
-              ? this.derivedManager!.getEffectiveTableName()
-              : baseTable!,
-          );
-        }
-      });
-
-      this.notifyRemovedFilters(prevFilters, this.state.filters.get());
-      return true;
-    } finally {
-      this.suppressUndoCapture = false;
-      this.undoRedoInProgress = false;
+      this.endTurn(turn);
     }
   }
 
@@ -572,15 +689,29 @@ export class StateActions {
    * Clears all filters, sorts, column customizations, derived columns,
    * and the undo/redo stacks. Returns true if state was restored.
    *
+   * Runs in its turn, after the derived-column changes asked for before it
+   * (see {@link undo}). Resolves `false`, restoring nothing, while a load is
+   * under way, and when new data is loaded before it has run.
+   *
    * @throws `DestroyedError` if the table was destroyed before or during
    *   the call.
    */
   async resetToInitial(): Promise<boolean> {
     this.throwIfDestroyed('resetToInitial');
-    if (!this.initialSnapshot) return false;
-    this.suppressUndoCapture = true;
+    if (this.openLoads > 0) return false;
+    const epoch = this.loadEpoch;
+    return this.inTurn((turn) => this.resetInTurn(epoch, turn));
+  }
+
+  /** The turn of {@link resetToInitial}. It ends the turn itself, as an undo does. */
+  private async resetInTurn(epoch: number, turn: Turn): Promise<boolean> {
     try {
+      this.throwIfDestroyed('resetToInitial');
+      const initialSnapshot = this.initialSnapshot;
+      if (epoch !== this.loadEpoch || !initialSnapshot) return false;
+      this.suppressUndoCapture = true;
       const prevFilters = this.state.filters.get();
+      const hadDerived = this.state.derivedColumns.get().length > 0;
 
       // Destroy derived columns BEFORE batch (async DuckDB operation)
       const manager = this.derivedManager;
@@ -593,14 +724,15 @@ export class StateActions {
         this.derivedManager = null;
       }
       this.throwIfDestroyed('resetToInitial');
+      if (epoch !== this.loadEpoch) return false;
 
       // Collect derived column names from snapshot to strip after restore.
       // The initial snapshot may include derived columns from session restore.
-      const derivedNames = new Set(this.initialSnapshot.derivedColumns.map((d) => d.name));
+      const derivedNames = new Set(initialSnapshot.derivedColumns.map((d) => d.name));
 
       // Apply snapshot + clean up derived refs + reset tableName atomically
       batch(() => {
-        applySnapshot(this.state, this.initialSnapshot!);
+        applySnapshot(this.state, initialSnapshot);
 
         this.state.derivedColumns.set([]);
         this.state.schema.set(this.state.schema.get().filter((c) => !c.isDerived));
@@ -614,17 +746,19 @@ export class StateActions {
         this.stripDerivedColumnRefs(derivedNames);
 
         // Reset filteredRows when initial state has no filters
-        if (this.initialSnapshot!.filters.length === 0) {
+        if (initialSnapshot.filters.length === 0) {
           this.state.filteredRows.set(this.state.totalRows.get());
         }
       });
 
       this.notifyRemovedFilters(prevFilters, this.state.filters.get());
       this.undoManager?.clear();
+      if (hadDerived) this.emitDerivedChange('updated');
 
       return true;
     } finally {
       this.suppressUndoCapture = false;
+      this.endTurn(turn);
     }
   }
 
@@ -638,6 +772,11 @@ export class StateActions {
    * All metadata (row count, schema) is retrieved in the worker to avoid
    * blocking the main thread with sequential queries.
    *
+   * Starts once the derived-column change running now, if any, has ended. A
+   * change, undo, redo or reset asked for before the call does not apply:
+   * it is for the data this replaces. An undo, redo or reset asked for while
+   * the load is under way resolves `false`.
+   *
    * @param source - File, Blob, URL string, or raw data (ArrayBuffer for Parquet; string for CSV/JSON)
    * @param options - Loading options (tableName, format)
    */
@@ -646,21 +785,139 @@ export class StateActions {
     options: LoadDataOptions = {},
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
+    this.loadEpoch++;
+    this.openLoads++;
+    try {
+      return await this.inTurn(() => this.loadDataInTurn(source, options));
+    } finally {
+      this.openLoads--;
+    }
+  }
+
+  /**
+   * Empty the table, as `DataTable.clearSession` does, in its turn: once the
+   * derived-column change running now, if any, has ended, and, as for a load,
+   * without applying the changes asked for before the call. Resets the state
+   * and the undo stacks, forgets the initial state, and drops the derived
+   * columns' VIEW and helper tables, emitting `derivedChange` when there
+   * were any. Resolves with the name of the base table it emptied, which a
+   * load in flight at the call may have made after it: `null` when none.
+   *
+   * @internal
+   */
+  async clearData(): Promise<string | null> {
+    this.throwIfDestroyed('clearData');
+    this.loadEpoch++;
+    return this.inTurn(async () => {
+      this.throwIfDestroyed('clearData');
+      const baseTableName = this.state.baseTableName.get() ?? this.state.tableName.get();
+      if (baseTableName) this.onBaseTableReplacedCallback?.(baseTableName);
+      const hadDerived = this.state.derivedColumns.get().length > 0;
+      resetTableState(this.state);
+      this.undoManager?.clear();
+      this.initialSnapshot = null;
+      const manager = this.derivedManager;
+      if (manager) {
+        this.derivedManager = null;
+        try {
+          await manager.destroy();
+        } catch {
+          // Swallow — nothing reads its tables any more.
+        }
+      }
+      if (hadDerived) this.emitDerivedChange('updated');
+      return baseTableName;
+    });
+  }
+
+  /**
+   * Drop the derived columns' VIEW and helper tables, once a change at work
+   * on them in DuckDB has ended, so that it cannot build one again after the
+   * DROP. For a table destroyed on a bridge that outlives it; called after
+   * {@link markDestroyed}, which turns away every change still in line and
+   * stops a load in flight before it touches them. It does not wait for that
+   * load, which may take seconds more.
+   *
+   * @internal
+   */
+  async dropDerived(): Promise<void> {
+    while (this.relationChanges > 0) {
+      await new Promise<void>((resolve) => this.idleWaiters.push(resolve));
+    }
+    const manager = this.derivedManager;
+    this.derivedManager = null;
+    try {
+      await manager?.destroy();
+    } catch {
+      // Best-effort: the table is going.
+    }
+  }
+
+  /**
+   * The count of loads and clears asked for so far. A load that finds it
+   * changed once it has ended was superseded by a newer load or a clear.
+   *
+   * @internal
+   */
+  getLoadEpoch(): number {
+    return this.loadEpoch;
+  }
+
+  /**
+   * Throw `DestroyedError` if the table was destroyed while a load ran,
+   * dropping first the base table the load made: nothing names it, and on a
+   * shared bridge it would outlive the table.
+   */
+  private async abandonIfDestroyed(tableName: string): Promise<void> {
+    if (!this.destroyed) return;
+    try {
+      await this.bridge.dropTable(tableName);
+    } catch {
+      // Best-effort: a terminated worker took it with it.
+    }
+    this.throwIfDestroyed('loadData');
+  }
+
+  /** The turn of {@link loadData}. */
+  private async loadDataInTurn(
+    source: File | Blob | string | ArrayBuffer,
+    options: LoadDataOptions,
+  ): Promise<void> {
+    this.throwIfDestroyed('loadData');
+    // The table this load replaces is left behind, for the facade to drop
+    // once a load has landed, or on destroy even if none does: unless the
+    // load makes a table of the same name, which replaces it in place, and
+    // is left behind only if the load fails.
+    const replaced = this.state.baseTableName.get() ?? this.state.tableName.get();
+    const replacedInPlace = replaced !== null && replaced === options.tableName;
+    if (replaced && !replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
     // Reset state for new data
     resetTableState(this.state);
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
-    const result = await this.loader.load(source, options);
-    this.throwIfDestroyed('loadData');
+    let result: Awaited<ReturnType<DataLoader['load']>>;
+    try {
+      result = await this.loader.load(source, options);
+    } catch (err) {
+      if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+      throw err;
+    }
+    await this.abandonIfDestroyed(result.tableName);
 
-    // Clean up any previous derived column manager
-    if (this.derivedManager) {
-      this.derivedManager.destroy().catch(() => {
-        // Swallow — the previous manager is being replaced; restart races
-        // here are surfaced through the new manager's own error events.
-      });
+    // Clean up any previous derived column manager. Awaited, so that its
+    // DROPs land before a restore below creates the new manager's tables:
+    // a helper table is named by its column and a count that starts again at
+    // 0, and the VIEW by the table name, which a load can keep.
+    const previousManager = this.derivedManager;
+    if (previousManager) {
       this.derivedManager = null;
+      try {
+        await previousManager.destroy();
+      } catch {
+        // Swallow — the previous manager is being replaced.
+      }
+      await this.abandonIfDestroyed(result.tableName);
     }
 
     // Update state with schema from loader result
@@ -678,24 +935,56 @@ export class StateActions {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
       if (snapshot) {
-        restoreStateFromSnapshot(
-          this.state,
-          snapshot,
-          this.undoManager,
-          options.presetManager,
-          options.annotationStore,
-        );
+        // What the load set up, to go back to if the snapshot cannot be read.
+        const loaded = captureSnapshot(this.state);
+        const loadedTooltips = this.state.columnHeaderTooltips.get();
+        // Restore the snapshot's state. One that cannot be read (a store
+        // handing back a malformed snapshot) is warned about and dropped,
+        // with whatever part of it was written: it must not keep the data
+        // from loading. Returns whether the snapshot was restored.
+        const restoreState = (): boolean => {
+          try {
+            restoreStateFromSnapshot(
+              this.state,
+              snapshot,
+              this.undoManager,
+              options.presetManager,
+              options.annotationStore,
+            );
+            return true;
+          } catch (err) {
+            console.warn(
+              '[data-table] Could not restore the saved session; loading without it:',
+              err,
+            );
+            batch(() => {
+              applySnapshot(this.state, loaded);
+              this.state.derivedColumns.set([]);
+              this.state.columnHeaderTooltips.set(loadedTooltips);
+            });
+            this.undoManager?.clear();
+            return false;
+          }
+        };
 
         // Recreate derived columns (VIEW + helper tables) if snapshot has them
-        if (snapshot.derivedColumns && snapshot.derivedColumns.length > 0) {
+        if (!snapshot.derivedColumns || snapshot.derivedColumns.length === 0) {
+          restoreState();
+        } else {
           try {
             const manager = this.ensureDerivedManager();
-            const restoredSchemas = await this.changeRelation(() =>
-              manager.restoreColumns(this.state.derivedColumns.get()),
+            // One change with the rebuild: the filters, sort and columns the
+            // snapshot restores can name its derived columns, and the reads
+            // and the filtered count they start wait for the VIEW that brings
+            // those back, as for any change that rebuilds it.
+            const restoredSchemas = await this.changeRelation(async () =>
+              restoreState() ? manager.restoreColumns(this.state.derivedColumns.get()) : null,
             );
             this.throwIfDestroyed('loadData');
 
-            if (restoredSchemas.length > 0) {
+            // With the snapshot unread, no column was rebuilt, and the
+            // state is the load's already.
+            if (restoredSchemas) {
               // Compute values needed for the batch
               const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
               const restoredNames = new Set(restoredSchemas.map((s) => s.name));
@@ -706,7 +995,9 @@ export class StateActions {
 
               // Batch all state mutations so render() sees fully settled state.
               // Without this, schema.set triggers render() before tableName
-              // points to the VIEW, causing the initial fetch to fail.
+              // points to the VIEW, causing the initial fetch to fail. Also
+              // when no column came back: the filters, sort and columns
+              // restored above name them all.
               batch(() => {
                 this.state.schema.set([...baseSchema, ...restoredSchemas]);
                 this.state.tableName.set(manager.getEffectiveTableName());
@@ -717,6 +1008,8 @@ export class StateActions {
               });
             }
           } catch (err) {
+            // Destroyed during the rebuild: nothing to restore any more.
+            if (err instanceof DestroyedError) throw err;
             console.warn('Failed to restore derived columns:', err);
             // All derived columns failed — clean up all references from state
             const derivedNames = new Set(snapshot.derivedColumns.map((d) => d.name));
@@ -1395,7 +1688,8 @@ export class StateActions {
   // =========================================
 
   /**
-   * Remove all state references to the given column names.
+   * Remove all state references to the given column names, their header
+   * tooltips included: a later column of the same name would show them.
    * Used when derived columns fail to restore or are reset.
    * Caller must handle derivedColumns signal and schema separately.
    */
@@ -1425,6 +1719,10 @@ export class StateActions {
       }
       this.state.columnWidths.set(widths);
       this.state.hiddenColumnInfo.set(hidden);
+      const tooltips = new Map(this.state.columnHeaderTooltips.get());
+      let tooltipRemoved = false;
+      for (const name of names) tooltipRemoved = tooltips.delete(name) || tooltipRemoved;
+      if (tooltipRemoved) this.state.columnHeaderTooltips.set(tooltips);
     });
   }
 
@@ -1453,33 +1751,28 @@ export class StateActions {
    * Destroys the existing manager and either recreates with the snapshot's
    * derived columns, or leaves the table in base-table mode.
    */
-  private async reconcileDerivedColumns(snapshot: StateSnapshot): Promise<void> {
+  private async reconcileDerivedColumns(snapshot: StateSnapshot, epoch: number): Promise<void> {
     // 1. Destroy existing manager (drops VIEW + helper tables)
     if (this.derivedManager) {
       await this.derivedManager.destroy();
       this.derivedManager = null;
     }
 
-    // 2. Update schema: remove old derived entries
+    // 2. Create new manager, restore columns
+    const restoredSchemas =
+      snapshot.derivedColumns.length > 0
+        ? await this.ensureDerivedManager().restoreColumns(snapshot.derivedColumns)
+        : [];
+    // New data asked for meanwhile: the load sets the state.
+    if (epoch !== this.loadEpoch) return;
+
+    // 3. Update schema: old derived entries out, restored ones in
     const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
+    this.state.schema.set([...baseSchema, ...restoredSchemas]);
 
-    if (snapshot.derivedColumns.length > 0) {
-      // 3. Create new manager, restore columns
-      const manager = this.ensureDerivedManager();
-      const restoredSchemas = await manager.restoreColumns(snapshot.derivedColumns);
-
-      // 4. Update schema with restored derived entries
-      this.state.schema.set([...baseSchema, ...restoredSchemas]);
-
-      // 5. Update derivedColumns signal (filtered to only successfully restored)
-      const restoredNames = new Set(restoredSchemas.map((s) => s.name));
-      this.state.derivedColumns.set(
-        snapshot.derivedColumns.filter((d) => restoredNames.has(d.name)),
-      );
-    } else {
-      this.state.schema.set(baseSchema);
-      this.state.derivedColumns.set([]);
-    }
+    // 4. Update derivedColumns signal (filtered to only successfully restored)
+    const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+    this.state.derivedColumns.set(snapshot.derivedColumns.filter((d) => restoredNames.has(d.name)));
 
     // Bulk reconciliation (undo/redo/session restore): emit a single event
     // with no columnName since multiple columns may have changed at once.
@@ -1487,13 +1780,42 @@ export class StateActions {
   }
 
   /**
+   * Push the state a derived-column change is about to update, once its
+   * DuckDB work has succeeded. Captured then rather than when the change was
+   * asked for: an edit made meanwhile, such as a filter added while a vector
+   * add ran, has an undo entry of its own, and undoing the change keeps it.
+   */
+  private pushDerivedUndo(): void {
+    if (this.undoManager && !this.suppressUndoCapture) {
+      this.undoManager.push(captureSnapshot(this.state));
+    }
+  }
+
+  /**
    * Add a derived column (expression or vector).
    * Validates name uniqueness, creates VIEW, updates state.
+   *
+   * Runs in its turn: derived-column changes, undo, redo, reset and loads run
+   * one at a time, in call order, and an add is validated against the columns
+   * the changes ahead of it leave. A second add of one name gets `already
+   * exists` once the first lands. Resolves `{ success: false }` when new
+   * data is loaded before the add has landed.
    */
   async addDerivedColumn(def: DerivedColumnDef): Promise<{ success: boolean; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.addDerivedColumnInTurn(def, epoch));
+  }
+
+  /** The turn of {@link addDerivedColumn}. */
+  private async addDerivedColumnInTurn(
+    def: DerivedColumnDef,
+    epoch: number,
+  ): Promise<{ success: boolean; error?: string }> {
     if (this.destroyed) {
       return { success: false, error: 'DataTable is destroyed' };
     }
+    if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
     if (def.name === ROWID_COLUMN) {
       return {
         success: false,
@@ -1505,21 +1827,11 @@ export class StateActions {
     if (allColumnNames.includes(def.name)) {
       return { success: false, error: `Column name "${def.name}" already exists` };
     }
-    // And against the columns being added: two adds of one vector column
-    // would share its helper table, each dropping the other's.
-    if (this.derivedNamesBeingAdded.has(def.name)) {
-      return { success: false, error: `Column name "${def.name}" is already being added` };
-    }
 
     if (!def.name.trim()) {
       return { success: false, error: 'Column name cannot be empty' };
     }
 
-    // Capture undo snapshot locally — only push after success
-    const preSnapshot =
-      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
-
-    this.derivedNamesBeingAdded.add(def.name);
     try {
       const manager = this.ensureDerivedManager();
       // An add builds a vector column's helper table under a name of its
@@ -1530,16 +1842,15 @@ export class StateActions {
         staysReadable: true,
       });
 
-      // Drop the result if the table was destroyed during the await — do not
-      // touch state and do not push to the undo stack.
+      // Drop the result if the table was destroyed or given new data during
+      // the await — do not touch state and do not push to the undo stack.
       if (this.destroyed) {
         return { success: false, error: 'DataTable is destroyed' };
       }
+      if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
 
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
-      if (preSnapshot && this.undoManager) {
-        this.undoManager.push(preSnapshot);
-      }
+      this.pushDerivedUndo();
 
       batch(() => {
         // Switch tableName to the VIEW
@@ -1572,22 +1883,35 @@ export class StateActions {
         success: false,
         error: err instanceof Error ? err.message : String(err),
       };
-    } finally {
-      this.derivedNamesBeingAdded.delete(def.name);
     }
   }
 
   /**
    * Update a derived column's expression, name, or values.
    * Handles rename (updates all state references) and type change (removes stale filters).
+   *
+   * Runs in its turn, as {@link addDerivedColumn} does: a rename to a name an
+   * add ahead of it takes gets `already exists`.
    */
   async updateDerivedColumn(
     oldName: string,
     def: DerivedColumnDef,
   ): Promise<{ success: boolean; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.updateDerivedColumnInTurn(oldName, def, epoch));
+  }
+
+  /** The turn of {@link updateDerivedColumn}. */
+  private async updateDerivedColumnInTurn(
+    oldName: string,
+    def: DerivedColumnDef,
+    epoch: number,
+  ): Promise<{ success: boolean; error?: string }> {
     if (this.destroyed) {
       return { success: false, error: 'DataTable is destroyed' };
     }
+    if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
     // Validate target is derived
     const currentSchema = this.state.schema.get();
     const oldEntry = currentSchema.find((c) => c.name === oldName);
@@ -1614,23 +1938,19 @@ export class StateActions {
       return { success: false, error: 'Column name cannot be empty' };
     }
 
-    // Capture undo snapshot locally — only push after success
-    const preSnapshot =
-      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
-
     try {
       const manager = this.ensureDerivedManager();
       const info = await this.changeRelation(() => manager.updateColumn(oldName, def));
 
-      // Drop the result if the table was destroyed during the await.
+      // Drop the result if the table was destroyed or given new data during
+      // the await.
       if (this.destroyed) {
         return { success: false, error: 'DataTable is destroyed' };
       }
+      if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
 
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
-      if (preSnapshot && this.undoManager) {
-        this.undoManager.push(preSnapshot);
-      }
+      this.pushDerivedUndo();
 
       const typeChanged = oldEntry.type !== info.detectedType;
 
@@ -1774,6 +2094,25 @@ export class StateActions {
         error: new DerivedColumnError('DataTable is destroyed', { code: 'DESTROYED' }),
       };
     }
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.replaceDerivedColumnInTurn(name, newDef, epoch));
+  }
+
+  /** The turn of {@link replaceDerivedColumn}. */
+  private async replaceDerivedColumnInTurn(
+    name: string,
+    newDef: DerivedColumnDef,
+    epoch: number,
+  ): Promise<
+    { success: true; info: DerivedColumnInfo } | { success: false; error: DerivedColumnError }
+  > {
+    if (this.destroyed) {
+      return {
+        success: false,
+        error: new DerivedColumnError('DataTable is destroyed', { code: 'DESTROYED' }),
+      };
+    }
+    if (epoch !== this.loadEpoch) return { success: false, error: supersededError(name) };
     const currentSchema = this.state.schema.get();
     const oldEntry = currentSchema.find((c) => c.name === name);
     if (!oldEntry?.isDerived) {
@@ -1796,10 +2135,6 @@ export class StateActions {
       };
     }
 
-    // Capture undo snapshot locally — only push after success.
-    const preSnapshot =
-      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
-
     let info: DerivedColumnInfo;
     try {
       const manager = this.ensureDerivedManager();
@@ -1815,18 +2150,18 @@ export class StateActions {
       return { success: false, error: typedError };
     }
 
-    // Drop the result if the table was destroyed during the await.
+    // Drop the result if the table was destroyed or given new data during
+    // the await.
     if (this.destroyed) {
       return {
         success: false,
         error: new DerivedColumnError('DataTable is destroyed', { code: 'DESTROYED' }),
       };
     }
+    if (epoch !== this.loadEpoch) return { success: false, error: supersededError(name) };
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation.
-    if (preSnapshot && this.undoManager) {
-      this.undoManager.push(preSnapshot);
-    }
+    this.pushDerivedUndo();
 
     const typeChanged = oldEntry.type !== info.detectedType;
 
@@ -1862,9 +2197,20 @@ export class StateActions {
   /**
    * Remove a derived column.
    * Cleans up filters, sorts, pins, then delegates to manager.
+   *
+   * Runs in its turn, as {@link addDerivedColumn} does. Rejects with
+   * `NOT_FOUND` when new data is loaded before the removal has landed.
    */
   async removeDerivedColumn(name: string): Promise<void> {
     this.throwIfDestroyed('removeDerivedColumn');
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.removeDerivedColumnInTurn(name, epoch));
+  }
+
+  /** The turn of {@link removeDerivedColumn}. */
+  private async removeDerivedColumnInTurn(name: string, epoch: number): Promise<void> {
+    this.throwIfDestroyed('removeDerivedColumn');
+    if (epoch !== this.loadEpoch) throw supersededError(name);
     const currentSchema = this.state.schema.get();
     const entry = currentSchema.find((c) => c.name === name);
     if (!entry?.isDerived) {
@@ -1874,18 +2220,13 @@ export class StateActions {
       });
     }
 
-    // Capture undo snapshot locally — only push after success
-    const preSnapshot =
-      this.undoManager && !this.suppressUndoCapture ? captureSnapshot(this.state) : null;
-
     const manager = this.ensureDerivedManager();
     await this.changeRelation(() => manager.removeColumn(name));
     this.throwIfDestroyed('removeDerivedColumn');
+    if (epoch !== this.loadEpoch) throw supersededError(name);
 
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation
-    if (preSnapshot && this.undoManager) {
-      this.undoManager.push(preSnapshot);
-    }
+    this.pushDerivedUndo();
 
     batch(() => {
       // Remove from derivedColumns

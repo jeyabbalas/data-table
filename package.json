@@ -46,7 +46,7 @@
   },
   "scripts": {
     "dev": "vite --config vite.demo.config.ts",
-    "build": "npm run check:css-vars && tsc --noEmit && vite build && tsc -p tsconfig.build.json",
+    "build": "npm run check:css-vars && tsc --noEmit && vite build && tsc -p tsconfig.build.json && npm run check:dts",
     "build:demo": "vite build --config vite.demo.config.ts",
     "preview": "vite preview --config vite.demo.config.ts",
     "test": "vitest",
@@ -59,6 +59,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:css-vars": "node scripts/check-css-vars.mjs",
+    "check:dts": "node scripts/check-dts.mjs",
     "docs:api": "typedoc",
     "docs:api:check": "typedoc --emit none",
     "size": "size-limit",

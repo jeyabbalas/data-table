@@ -22,10 +22,10 @@ npm run dev
 
 ## What to observe
 
-1. The progress bar fills as the parquet file flows through `reading` → `parsing` → `indexing` → `analyzing` stages. The label shows `<stage> <percent>%` live.
+1. The progress bar fills as the parquet file flows through the `reading` → `parsing` → `indexing` stages (`analyzing` is declared in `ProgressStage` but not currently sent). The label shows `<stage> <percent>%` live.
 2. On completion the bar reaches 100 % and the label flips to `100,000 rows loaded`.
 3. Disable the network in DevTools then reload — the `loadError` event fires, the bar turns red, and the label shows the error message.
 
 ## Why listeners are wired before `loadData`
 
-`createDataTable({ source })` awaits the first load **internally** (`src/DataTable.ts`), so any listener attached after `await createDataTable(...)` resolves would miss every single `loadStart` / `loadProgress` / `loadComplete` tick for that initial load. This example constructs the table without `source`, attaches listeners, then calls `table.loadData(url)` — the same pattern you use for subsequent reloads.
+`createDataTable({ source })` awaits the first load **internally** (`src/DataTable.ts`), so any listener attached after `await createDataTable(...)` resolves would miss every single `loadStart` / `loadProgress` / `loadComplete` tick for that initial load. This example constructs the table without `source`, attaches listeners, then calls `table.loadData(url, { tableName, sourceFormat, sourceOptions })` — the same pattern you use for subsequent reloads. The load takes its own `tableName`: the one given to `createDataTable` applies only to its `source`.

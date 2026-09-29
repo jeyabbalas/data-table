@@ -16,7 +16,6 @@ let table: DataTable | undefined;
   // attach a handler. See examples/README.md for the full rationale.
   table = await createDataTable({
     container,
-    tableName: 'nyc_taxi',
     persistence: false,
   });
 
@@ -34,7 +33,9 @@ let table: DataTable | undefined;
     bar.style.background = 'var(--dt-error, #ef4444)';
   });
 
-  await table.loadData(DATA_URL, { sourceFormat: 'parquet' });
+  // The load's own options: createDataTable's `tableName` and
+  // `sourceFormat` apply only to its `source`.
+  await table.loadData(DATA_URL, { tableName: 'nyc_taxi', sourceFormat: 'parquet' });
 })();
 
 window.addEventListener('beforeunload', () => void table?.destroy());

@@ -91,8 +91,8 @@ column. That is the shell 4d builds.
    Measured: the queries a hide, a show and a move cost.
 
 **Not in 4d:** hit-testing drops against the layout model, and ending a drag whose `mouseup` was
-lost (both in the log); dropping the filter hold (it needs Firefox and WebKit); a searchable column
-picker.
+lost (both in the log, both fixed since); dropping the filter hold (it needs Firefox and WebKit); a
+searchable column picker.
 
 **Budget.** The shared chunk (`VisualizationRegistry-*`, capped as the ExportDialog chunk) had
 526 B of its 78 kB cap left at the end of 4c. 4d will need more. The cap moves with a line of history in
@@ -143,7 +143,16 @@ panels and charts right across a trackpad sweep.
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_
   column is worse: its sticky header sits on top, and its buttons take clicks meant for the first
-  unpinned header. Pre-existing; the resize minimum is 50 px.
+  unpinned header. Pre-existing; the resize minimum is 50 px. Fixed after 4d, at rest:
+  `.dt-col-action-panel` clips its buttons at the header's padding (`overflow-x: clip`), and shows
+  them all, over the next header's bar, once the pointer has rested on it for 200 ms, or at once for
+  keyboard focus, which `KeyboardNavigator` scrolls into view. While shown, a narrow column's bar,
+  pinned or not, sits on top of the next header's first buttons, visibly, until the pointer leaves
+  it. A menu for the actions a narrow column hides is the follow-up. Only the last header's bar
+  runs on leftward: with the last two columns 50 px wide at the far right, the one before the last
+  still runs past the end of the row, growing the header's scroll range by 25 px, and its drag
+  handle is out of the pointer's reach (`Shift+F2` still moves the column). A follow-up could turn
+  leftward any header whose remaining row is narrower than its bar.
 - **A width under the padding and border (25 px at a 16 px root) still occupies that much.** Only
   `setColumnWidth` can set one; the resize paths clamp to 50–500 px. The layout would then disagree
   with the DOM by the difference, which a windowed row's spacers turn into cells 25 px off their
@@ -165,10 +174,19 @@ panels and charts right across a trackpad sweep.
   count differed from `visibleColumns.length`, which a windowed row always does; it compares row
   shapes since #139. `ColumnReorder` takes the drop index and the new order from the header DOM,
   which will hold only mounted headers.
-- **Found in review, outside this work, not fixed.** The SQL filter modal's Remove section never
+- **Found in review, outside this work, fixed after 4d.** The SQL filter modal's Remove section never
   shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
   with two tables on a page the first table's export dialog opens with no format or scope checked.
+  Fixed: `openForEdit` puts `--edit` on the dialog, under which the stylesheet shows the section,
+  which is `hidden` outside edit mode too, and its confirmation keeps focus in the dialog as it
+  hides each button. An edit gives focus back to the filter bar's Expression button: the chip that
+  opened it takes no focus, and is rebuilt when the filter changes. Each dialog names its radio
+  groups after its instance id, or an id of its own without one.
+  - Found in review of that fix, on main too, not fixed: the SQL modal's `.cm-placeholder` in
+    create mode is 3.54:1 (#888 on white, light theme); the derived-column editor and the preset
+    panel fail `aria-dialog-name`; the editor's name input (`.dt-filter-input`) has no `label`;
+    and the preset confirmation's button fails `color-contrast`.
 - **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
   header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
   scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and
@@ -181,7 +199,10 @@ panels and charts right across a trackpad sweep.
   attaches a tag in the file's opening comment to the first statement, usually an import, and drops
   it: `dist/visualizations/LazyVizController.d.ts` loses its `ColumnSchema` import and fails to
   type-check. Nothing public reaches that file, so no consumer breaks. Found in review of #137, which
-  keeps the tag off `ColumnWindowController.ts`; `LazyVizController.ts` is not fixed.
+  keeps the tag off `ColumnWindowController.ts`. Fixed in `LazyVizController.ts` too. The tag's text
+  anywhere in that comment strips the import, even in prose, so the comment avoids it. The build
+  now type-checks every emitted declaration file (`scripts/check-dts.mjs`), which fails on the old
+  header.
 - **Found in review of #138.**
   - A change that shortens the table (hiding a wide column at the far right) reached the controller
     before the browser clamped `scrollLeft`, a frame later, and the set it worked out from the old
@@ -242,7 +263,10 @@ panels and charts right across a trackpad sweep.
   of the last pinned header while unpinned headers are scrolled underneath it, the drop lands among
   those unpinned columns; the pinned clamp in `endDrag` cannot see it. And a mouseup lost outside the
   window (alt-tab mid-drag) keeps the drag alive until the next one. Both pre-existing; 4c's
-  controller, working from the layout model, is the place to hit-test drops.
+  controller, working from the layout model, is the place to hit-test drops. Both fixed after 4d:
+  `ColumnReorder` takes drops from `ColumnLayout` and the header scroll, keeping an unpinned column's
+  drop at or after the first unpinned column in view, and a real mousemove with no button held, a
+  window `blur`, a hidden page or `pointercancel` ends a drag without a drop.
 - **2026-09-27, the 4d spike.** The table in the 4d plan. Column changes cost more than scrolling:
   at 1,000 columns, hiding one column runs 182 ms of script and 830 ms before the next frame, and
   moving one 175 ms, each with 24 queries, all from rebuilding. The body refetches, and every chart
@@ -275,7 +299,10 @@ panels and charts right across a trackpad sweep.
   header-to-body sync back on and puts the header where the body is. On a loaded machine frames
   stall, the scroll looks still mid-way, and the header's echo writes the body's `scrollLeft`,
   which stops the smooth scroll there: `offscreen-derived.spec.ts` ("scrolled into view") once
-  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Not fixed.
+  failed 16,458 px short of the end while other builds ran, and passed 5 of 5 alone. Fixed with
+  the device pixel ratio 2 entry below: `scrollToEnd` only starts the smooth scroll, which the
+  header follows with its echoes dropped, so there is no end to guess. `scroll-echo.spec.ts`
+  stalls six frames mid-scroll, which left the body over 20,000 px short on main.
 - **Found building 4d PR 4, on main too.** Pinning slides headers from their old places to their
   new ones (FLIP), from positions saved when `pinnedColumns` changes. Loading data writes
   `pinnedColumns` after the columns in one batch, so the positions were saved after the render
@@ -363,7 +390,7 @@ panels and charts right across a trackpad sweep.
   - A fetch left out of reach as the view moved during a change was not aborted, and the retry
     and relation waits reconciled during the filter-change scroll animation, reading rows it was
     about to scroll away from. Both fixed.
-- **Found in the second review of #151, not fixed.** Each is rare, bounded, and at least partly
+- **Found in the second review of #151, since fixed.** Each is rare, bounded, and at least partly
   pre-existing.
   - Derived-column changes are not serialized, and they share the manager's list of columns. A
     removal of the only derived column, landing while a vector add of another is at its last
@@ -371,14 +398,21 @@ panels and charts right across a trackpad sweep.
     reported readable; the body's first reads fail until the add lands, backing off meanwhile.
     The same lets an undo during an add rebuild the VIEW from a destroyed manager. Fix: run
     derived-column changes one at a time, which would also make the same-name refusal and the
-    rename caveat unnecessary.
+    rename caveat unnecessary. **Fixed:** derived-column changes, undo, redo, reset and loads
+    take turns (`StateActions.inTurn`), each validating against the state the one before it left,
+    so the same-name refusal is gone; a change asked for before a load does not apply.
   - A session restore applies its filters and sort before its derived columns are rebuilt, so
     the reads and the count they start are not held back. The count fails if a filter names a
     derived column, and with visualizations off nothing counts again, so rows past the true count
     stay placeholders. Fix: restore the filters, sort and derived columns in one change.
+    **Fixed:** the restore writes them inside the change that rebuilds the derived columns, so
+    the reads and the count wait for the VIEW; a snapshot none of whose derived columns come
+    back no longer keeps filters, sort and columns naming them.
   - A chart's refetch for a filter change is not held back during a removal: every live chart
     queries the dropped VIEW and reports an error, as on main. Fix: hold the charts' refetches as
-    the count is held.
+    the count is held. Fixed: `CrossfilterCoordinator` holds them, and `StatsPanelCoordinator` the
+    panels' `updateFilters`, until the change settles; those still live then go once, with the
+    filters in force.
 - **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, pre-existing.** Every
   histogram drew "No data" from the moment it was laid out until its first fetch landed.
   `SharedHistogramBase.render` treated a chart with no data yet as a column with none, and a
@@ -388,7 +422,7 @@ panels and charts right across a trackpad sweep.
   for a fetch that returned no values and no nulls; one whose fetch fails draws nothing, as value
   counts do. A browser test counts the "No data" draws at load and in two sideways sweeps: about
   45 to 55 on main, in each of 10 runs, and none with the fix.
-- **Found in review of #152, not fixed (pre-existing).**
+- **Found in review of #152 (pre-existing), since fixed.**
   - A histogram whose refetch fails keeps the detail of the bar under the pointer, or of its
     brush or selection, in the stats slot: the emitters that would replace it return early
     without data, so moving over the blank chart or leaving it changes nothing. Its hover state
@@ -398,7 +432,10 @@ panels and charts right across a trackpad sweep.
     both showed "No data"). The `error` event does not say which column failed:
     `createVizForColumn` drops the `columnName` the chart reports, and only the unfiltered fetch
     helpers put the column on the error. Fix: pass the column through, and consider marking a
-    failed chart's container.
+    failed chart's container. Both fixed as proposed, value counts too. A failed chart marks its
+    canvas `data-fetch-failed`, and its slot drops the stats and detail it reported before and
+    says `statistics.chartFailed` until the chart reports stats again; a failure of a superseded
+    refetch, or of a destroyed chart, leaves the slot alone.
 - **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, on #145.** Stats panels
   followed the mounted columns frame by frame, unlike charts. Adding a derived column with +
   from the far left smooth-scrolls to it, which mounts nearly every column on the way: 533
@@ -425,6 +462,9 @@ panels and charts right across a trackpad sweep.
   back into the body, which cancels the animation. `scrollToEnd` turns the header-to-body sync
   off for its own scroll, and wheel, trackpad and keyboard scrolling were unaffected, as was a
   smooth scroll at device pixel ratio 1 in headless Chromium, so what stalls is host code calling
-  `scrollTo({ behavior: 'smooth' })` on the body. Not fixed here: a header event at the position
-  the controller itself last wrote is its own echo, whatever the body is doing, and could be
-  dropped as such.
+  `scrollTo({ behavior: 'smooth' })` on the body. Fixed, to be confirmed in desktop Chrome at
+  DPR 2: the controller keeps where it last left each scroller, and a scroll event that finds one
+  within a pixel of there is dropped as the echo of its own write, whatever the other is doing.
+  That covers the body's echo too, which, a frame late, stopped an animated scroll of the header
+  the same way. Headless Chromium fires each echo in the frame of the scroll that caused it, so
+  `scroll-echo.spec.ts` holds one scroller's events back a frame, as that Chrome did.

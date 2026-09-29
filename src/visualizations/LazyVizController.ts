@@ -23,7 +23,10 @@
  * in smoothly is reported once, at the outer edge, and never again as it
  * moves closer — so its chart was never created.
  *
- * @internal
+ * Not exported from the package entry points. Keep the internal tag, at sign
+ * and all, out of this comment, even in prose: under `stripInternal`,
+ * TypeScript reads it in a file's opening comment as the first statement's,
+ * and drops that import from the emitted declarations.
  */
 
 import type { ColumnSchema } from '../core/types';

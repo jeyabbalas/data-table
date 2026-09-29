@@ -3,7 +3,9 @@
  */
 
 import { LoadError } from '../core/errors';
+import type { ProgressCallback } from '../core/Progress';
 import type { ColumnSchema } from '../core/types';
+import { validateSourceOptions, type SourceOptions } from './sourceOptions';
 import type { WorkerBridge } from './WorkerBridge';
 
 /** Recognized data formats for {@link createDataTable}'s `source` argument. */
@@ -24,6 +26,13 @@ export interface LoadResult {
 export interface DataLoaderOptions {
   tableName?: string | undefined;
   format?: DataFormat | undefined; // Override auto-detection
+  /** How the source is read, per format; see {@link SourceOptions}. */
+  sourceOptions?: SourceOptions | undefined;
+  /**
+   * Called with each progress message the worker sends as the load runs.
+   * The table emits them as `loadProgress`.
+   */
+  onProgress?: ProgressCallback | undefined;
 }
 
 /**
@@ -50,6 +59,10 @@ export class DataLoader {
     source: File | Blob | string | ArrayBuffer,
     options: DataLoaderOptions = {},
   ): Promise<LoadResult> {
+    // Before the source is read: a mistake here should not wait on a
+    // download or a large file's text.
+    validateSourceOptions(options.sourceOptions);
+
     let data: ArrayBuffer | string | Blob;
     let format: DataFormat;
 
@@ -107,10 +120,10 @@ export class DataLoader {
 
     // Load data and get metadata in a single worker call
     // No more blocking queries on the main thread!
-    const result = await this.bridge.loadData(data, {
-      format,
-      tableName: options.tableName,
-    });
+    const loadOptions = { format, tableName: options.tableName, ...options.sourceOptions };
+    const result = await (options.onProgress
+      ? this.bridge.loadData(data, loadOptions, options.onProgress)
+      : this.bridge.loadData(data, loadOptions));
 
     return {
       tableName: result.tableName,

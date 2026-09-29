@@ -231,10 +231,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         columnName: this.column.name,
         stage: 'fetch',
       });
-      this.data = null;
-      this.backgroundData = null;
       this.formatContext = null;
-      this.render();
+      this.showFetchFailed();
     }
   }
 

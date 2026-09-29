@@ -199,9 +199,11 @@ export class SQLFilterModal {
     actionsRow.appendChild(this.previewEl);
     body.appendChild(actionsRow);
 
-    // — Remove section (visible only in edit mode)
+    // — Remove section, for edit mode only: `hidden` outside it, and shown by
+    // the stylesheet under `--edit` on the dialog
     this.removeSection = document.createElement('div');
     this.removeSection.className = `${p}-sql-filter-modal-remove-section`;
+    this.removeSection.hidden = true;
 
     const divider = document.createElement('hr');
     divider.className = `${p}-sql-filter-modal-divider`;
@@ -213,10 +215,6 @@ export class SQLFilterModal {
     this.removeBtn.className = `${p}-sql-filter-modal-remove`;
     this.removeBtn.type = 'button';
     this.removeBtn.textContent = this.messages.filters.sqlFilter.removeButton;
-    this.removeBtn.addEventListener('click', () => {
-      this.removeBtn.style.display = 'none';
-      this.removeConfirmDiv.style.display = 'flex';
-    });
 
     this.removeConfirmDiv = document.createElement('div');
     this.removeConfirmDiv.className = `${p}-sql-filter-modal-remove-confirm`;
@@ -234,9 +232,20 @@ export class SQLFilterModal {
     cancelBtn.className = `${p}-sql-filter-modal-remove-confirm-btn ${p}-sql-filter-modal-remove-confirm-no`;
     cancelBtn.type = 'button';
     cancelBtn.textContent = this.messages.common.cancel;
+
+    // Each step hides the button that was clicked, which takes focus out of
+    // the dialog, and with it the focus trap and Escape. The confirmation
+    // puts focus on its Cancel, the choice that changes nothing, and Cancel
+    // puts it back on Remove.
+    this.removeBtn.addEventListener('click', () => {
+      this.removeBtn.style.display = 'none';
+      this.removeConfirmDiv.style.display = 'flex';
+      cancelBtn.focus();
+    });
     cancelBtn.addEventListener('click', () => {
       this.removeConfirmDiv.style.display = 'none';
       this.removeBtn.style.display = '';
+      this.removeBtn.focus();
     });
 
     this.removeConfirmDiv.appendChild(confirmText);
@@ -450,13 +459,21 @@ export class SQLFilterModal {
     this.currentFilterId = null;
     this.titleEl.textContent = this.messages.filters.sqlFilter.createTitle;
     this.applyBtn.textContent = this.messages.filters.sqlFilter.applyButton;
-    this.removeSection.style.display = 'none';
+    this.dialogEl.classList.remove(`${this.prefix}-sql-filter-modal-dialog--edit`);
+    this.removeSection.hidden = true;
 
     this.showModal(this.labelInput);
   }
 
-  /** Open the modal in edit mode (pre-populated from existing SQL filter) */
-  openForEdit(filterId: string): void {
+  /**
+   * Open the modal in edit mode (pre-populated from existing SQL filter)
+   *
+   * @param filterId - The raw-SQL filter to edit.
+   * @param returnFocus - Where focus goes when the modal closes, in place of
+   *   the element focused when it opened. Pass one that outlives the edit:
+   *   updating or removing the filter rebuilds the filter bar's chips.
+   */
+  openForEdit(filterId: string, returnFocus?: HTMLElement): void {
     if (this.destroyed || this.isOpen) return;
 
     // Find the filter
@@ -470,24 +487,35 @@ export class SQLFilterModal {
     this.currentFilterId = filterId;
     this.titleEl.textContent = this.messages.filters.sqlFilter.editTitle;
     this.applyBtn.textContent = this.messages.filters.sqlFilter.updateButton;
-    this.removeSection.style.display = '';
+    // The stylesheet shows the Remove section only under this class. Clearing
+    // an inline `display` could not: the stylesheet hides the section.
+    this.dialogEl.classList.add(`${this.prefix}-sql-filter-modal-dialog--edit`);
+    this.removeSection.hidden = false;
 
     // Reset remove confirmation state
     this.removeBtn.style.display = '';
     this.removeConfirmDiv.style.display = 'none';
 
     // ensureEditor runs inside showModal; set the value and focus it.
-    this.showModal(null, () => {
-      this.labelInput.value = filter.label ?? '';
-      if (this.currentEditor) {
-        this.currentEditor.setValue(filter.sql);
-        this.currentEditor.focus();
-      }
-    });
+    this.showModal(
+      null,
+      () => {
+        this.labelInput.value = filter.label ?? '';
+        if (this.currentEditor) {
+          this.currentEditor.setValue(filter.sql);
+          this.currentEditor.focus();
+        }
+      },
+      returnFocus,
+    );
   }
 
   /** Shared open logic for both create and edit modes */
-  private showModal(initialFocus: HTMLElement | null, afterOpen?: () => void): void {
+  private showModal(
+    initialFocus: HTMLElement | null,
+    afterOpen?: () => void,
+    returnFocus?: HTMLElement,
+  ): void {
     this.isOpen = true;
     this.element.classList.add(`${this.prefix}-sql-filter-modal-backdrop--open`);
 
@@ -501,6 +529,7 @@ export class SQLFilterModal {
       dialog: this.dialogEl,
       labelledBy: `${this.prefix}-${this.instanceId}-sql-filter-modal-title`,
       initialFocus,
+      returnFocus,
       // CodeMirror autocomplete handles its own Escape — don't let ModalHost
       // close the dialog when autocomplete is consuming the key.
       escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),

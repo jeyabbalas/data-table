@@ -51,7 +51,7 @@ import {
 } from './core/errors';
 import { EventEmitter } from './core/EventEmitter';
 import type { TableState } from './core/State';
-import { createTableState, resetTableState } from './core/State';
+import { createTableState } from './core/State';
 import { type Strings, type DeepPartial, defaultStrings, mergeStrings } from './core/Strings';
 import { isStylesheetLoaded } from './core/stylesheet';
 import type { TableEvents } from './core/TableEvents';
@@ -398,7 +398,9 @@ export interface DataTable {
    * filter presets, and the bridge's query cache. After this call the table
    * behaves as if just constructed with no `source` — call {@link loadData}
    * to populate it again. Safe to call when persistence is disabled (only the
-   * IndexedDB delete is skipped).
+   * IndexedDB delete is skipped). It empties the table once a derived-column
+   * change running then has ended; a change asked for before the call does
+   * not apply, as with {@link loadData}.
    */
   clearSession(): Promise<void>;
 
@@ -1636,8 +1638,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (destroyed) {
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
-      resetTableState(state);
-      undoManager?.clear();
+      // In its turn, after a derived-column change running now, which then
+      // writes nothing into the emptied table.
+      await actions.clearData();
       // Only clear presets we own. A user-supplied shared
       // `FilterPresetManager` (multi-table dashboards) outlives any
       // single table's session — clearing it here would wipe other

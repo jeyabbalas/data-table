@@ -143,7 +143,16 @@ panels and charts right across a trackpad sweep.
   22 px action buttons do not shrink, so a column under about 135 px (110 px of buttons plus padding
   and border) lets them overflow into the next header, which paints over them. A narrow _pinned_
   column is worse: its sticky header sits on top, and its buttons take clicks meant for the first
-  unpinned header. Pre-existing; the resize minimum is 50 px.
+  unpinned header. Pre-existing; the resize minimum is 50 px. Fixed after 4d, at rest:
+  `.dt-col-action-panel` clips its buttons at the header's padding (`overflow-x: clip`), and shows
+  them all, over the next header's bar, once the pointer has rested on it for 200 ms, or at once for
+  keyboard focus, which `KeyboardNavigator` scrolls into view. While shown, a narrow column's bar,
+  pinned or not, sits on top of the next header's first buttons, visibly, until the pointer leaves
+  it. A menu for the actions a narrow column hides is the follow-up. Only the last header's bar
+  runs on leftward: with the last two columns 50 px wide at the far right, the one before the last
+  still runs past the end of the row, growing the header's scroll range by 25 px, and its drag
+  handle is out of the pointer's reach (`Shift+F2` still moves the column). A follow-up could turn
+  leftward any header whose remaining row is narrower than its bar.
 - **A width under the padding and border (25 px at a 16 px root) still occupies that much.** Only
   `setColumnWidth` can set one; the resize paths clamp to 50–500 px. The layout would then disagree
   with the DOM by the difference, which a windowed row's spacers turn into cells 25 px off their

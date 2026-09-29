@@ -17,18 +17,18 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, re-measured with the scrollbar-gutter change on
- * top of 0.9.0-next.0, under Vite 8.0.13 / rolldown 1.0.1, which inlined the
+ * Current baseline (brotli, re-measured with the fixes after the column
+ * work merged together, under Vite 8.0.13 / rolldown 1.0.1, which inlined the
  * shared ModalHost code into each modal consumer and shifted some helper code
  * into VisualizationRegistry):
- *   root entry · ESM               10.17 kB   →  10.7 kB cap (5.2 %)
- *   advanced entry · ESM            2.46 kB   →   2.6 kB cap (5.7 %)
- *   stylesheet                     19.45 kB   →  20.4 kB cap (4.9 %)
- *   lazy ExportDialog chunk        78.21 kB   →  82 kB   cap (4.8 %)
- *   lazy SQLFilterModal chunk       2.49 kB   →   2.6 kB cap (4.4 %)
- *   lazy DerivedColumnModal         3.59 kB   →   3.8 kB cap (5.8 %)
- *   lazy DerivedColumnEditPanel     2.96 kB   →   3.1 kB cap (4.7 %)
- *   lazy FilterPresetPanel          2.52 kB   →   2.7 kB cap (7.1 %)
+ *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
+ *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
+ *   stylesheet                     20.51 kB   →  21.5 kB cap (4.8 %)
+ *   lazy ExportDialog chunk        81.35 kB   →  85 kB   cap (4.5 %)
+ *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
+ *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
+ *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
+ *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
@@ -39,10 +39,16 @@
  * controller there would not change what a page downloads. Keeping charts
  * and custom stats panels through column changes, and building panels only
  * for the columns near the view, took it from 9.00 to 9.38 kB, and the cap
- * from 9.3 to 9.8 kB. The fixes after that took it to 9.68 kB, and rejecting
+ * from 9.3 to 9.8 kB. The fixes after that took it to 9.68 kB. Rejecting
  * pending worker requests when the worker fails, instead of leaving them
- * waiting, and reporting that failure once from the table, to 10.17 kB, and
- * the cap to 10.7 kB.
+ * waiting, and reporting that failure once from the table, took it to
+ * 10.17 kB, and the cap to 10.7 kB. Showing a chart whose fetch failed as
+ * failed (its stats slot's text, the error's column on a copy of the error,
+ * the table-wide count kept current for a chart without stats) added 0.29 kB.
+ * Merged with the other fixes of that round (load options passed to the
+ * worker and `loadProgress` emitted, derived-column changes run one at a
+ * time, a failed initial load torn down, loads that report the tables they
+ * replace), it measured 10.85 kB, and the cap moved to 11.4 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
@@ -55,7 +61,11 @@
  * header row and body updated in place on a column change instead of
  * rebuilt. The cap moved from 78 to 82 kB then. The same work took the stylesheet
  * from 18.66 to 19.45 kB, mostly in comments (see below), and its cap from
- * 19.6 to 20.4 kB.
+ * 19.6 to 20.4 kB. The fixes after the column work took the chunk to
+ * 81.35 kB (drops hit-tested against the layout, the header's scroll echo,
+ * the viewport height, the dialogs' focus) and its cap to 85 kB, and the
+ * stylesheet to 20.51 kB (narrow headers' clipped controls, the SQL filter
+ * modal's Remove section, the failed chart's line) and its cap to 21.5 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -87,7 +97,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '10.7 kB',
+    limit: '11.4 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',
@@ -97,12 +107,12 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '20.4 kB',
+    limit: '21.5 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '82 kB',
+    limit: '85 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

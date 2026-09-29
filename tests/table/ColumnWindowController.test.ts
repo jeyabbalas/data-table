@@ -737,3 +737,69 @@ describe('onBodyResize', () => {
     expect(seen).toEqual([]);
   });
 });
+
+describe('revealing a header element', () => {
+  /** An element in `column`'s header at `[left, right)` of the header viewport, on screen. */
+  function element(column: string, left: number, right: number): HTMLElement {
+    const header = document.createElement('div');
+    header.dataset.column = column;
+    const el = document.createElement('button');
+    el.getBoundingClientRect = () =>
+      ({ left, right, width: right - left, top: 0, bottom: 22, height: 22 }) as DOMRect;
+    header.appendChild(el);
+    headerScroll.appendChild(header);
+    return el;
+  }
+
+  function view(width: number, onScreen = width): void {
+    viewport(headerScroll, width);
+    Object.defineProperty(headerScroll, 'offsetWidth', { configurable: true, value: width });
+    headerScroll.getBoundingClientRect = () =>
+      ({ left: 0, right: onScreen, width: onScreen, top: 0, bottom: 120, height: 120 }) as DOMRect;
+  }
+
+  beforeEach(() => view(300));
+
+  it('scrolls a control past the right edge into view, with room for its ring', () => {
+    expect(controller.revealHeaderElement(element('d', 290, 312))).toBe(true);
+    // 312 + 3 of room, less the 300 in view.
+    expect(bodyScroll.scrollLeft).toBe(15);
+    expect(headerScroll.scrollLeft).toBe(15);
+    expect(controller.revealHeaderElement(element('d', 200, 222))).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(15);
+  });
+
+  it('scrolls one beneath the pinned block back out from under it', () => {
+    actions.toggleColumnPin('a');
+    bodyScroll.scrollLeft = 200;
+    expect(controller.revealHeaderElement(element('e', 90, 112))).toBe(true);
+    // 90 - 3 is 13 short of the block's edge at 100.
+    expect(bodyScroll.scrollLeft).toBe(187);
+  });
+
+  it('leaves a pinned column’s controls, which do not scroll', () => {
+    actions.toggleColumnPin('a');
+    expect(controller.revealHeaderElement(element('a', 290, 312))).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(0);
+  });
+
+  it('reads the element in the header’s own pixels when the table is scaled', () => {
+    // Half size on screen: 145–156 is 290–312 of the header's own 300.
+    view(300, 150);
+    expect(controller.revealHeaderElement(element('d', 145, 156))).toBe(true);
+    expect(bodyScroll.scrollLeft).toBe(15);
+  });
+
+  it('does nothing for an element outside the header', () => {
+    // A body cell's, say: it belongs to a column, but not to the header.
+    const cell = document.createElement('div');
+    cell.dataset.column = 'd';
+    const outside = document.createElement('button');
+    outside.getBoundingClientRect = () =>
+      ({ left: 400, right: 422, width: 22, top: 0, bottom: 22, height: 22 }) as DOMRect;
+    cell.appendChild(outside);
+    document.body.appendChild(cell);
+    expect(controller.revealHeaderElement(outside)).toBe(false);
+    expect(bodyScroll.scrollLeft).toBe(0);
+  });
+});

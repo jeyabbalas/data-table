@@ -457,6 +457,7 @@ export class TableContainer {
         getTableBody: () => this.tableBody,
         getColumnHeaders: () => this.columnHeaders,
         revealColumn: (column) => this.columnWindow.revealColumn(column),
+        revealControl: (control) => this.columnWindow.revealHeaderElement(control),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,

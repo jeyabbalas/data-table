@@ -165,10 +165,19 @@ panels and charts right across a trackpad sweep.
   count differed from `visibleColumns.length`, which a windowed row always does; it compares row
   shapes since #139. `ColumnReorder` takes the drop index and the new order from the header DOM,
   which will hold only mounted headers.
-- **Found in review, outside this work, not fixed.** The SQL filter modal's Remove section never
+- **Found in review, outside this work, fixed after 4d.** The SQL filter modal's Remove section never
   shows in edit mode: the stylesheet hides it and `openForEdit` only clears an inline style. The
   export dialog's and derived-column modal's radio groups are named per prefix, not per instance, so
   with two tables on a page the first table's export dialog opens with no format or scope checked.
+  Fixed: `openForEdit` puts `--edit` on the dialog, under which the stylesheet shows the section,
+  which is `hidden` outside edit mode too, and its confirmation keeps focus in the dialog as it
+  hides each button. An edit gives focus back to the filter bar's Expression button: the chip that
+  opened it takes no focus, and is rebuilt when the filter changes. Each dialog names its radio
+  groups after its instance id, or an id of its own without one.
+  - Found in review of that fix, on main too, not fixed: the SQL modal's `.cm-placeholder` in
+    create mode is 3.54:1 (#888 on white, light theme); the derived-column editor and the preset
+    panel fail `aria-dialog-name`; the editor's name input (`.dt-filter-input`) has no `label`;
+    and the preset confirmation's button fails `color-contrast`.
 - **Bugs the 4b matrix found on main,** each fixed in its own PR with the tests that caught it. The
   header's scrollbar gutter was a fixed 17 px (#130). The table's own scroll writers undid other
   scrolls (#132): the filter hold undid a wheel, `render()` restored the position a frame late and

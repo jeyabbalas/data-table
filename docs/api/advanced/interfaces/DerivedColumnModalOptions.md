@@ -48,10 +48,11 @@ Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEdit
 
 Defined in: [derived/DerivedColumnModal.ts:27](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/derived/DerivedColumnModal.ts#L27)
 
-Unique per-instance identifier mixed into element IDs so two tables on
-the same page don't collide on `aria-labelledby` targets. Normally
-supplied by `TableContainer`/`createDataTable()`; defaults to `''`
-for standalone/test construction.
+Unique per-instance identifier mixed into element IDs and the radio
+group name, so two tables on the same page don't collide on
+`aria-labelledby` targets or share a checked radio. Normally supplied
+by `TableContainer`/`createDataTable()`; a modal constructed without
+one generates its own.
 
 ***
 

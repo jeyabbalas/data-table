@@ -247,6 +247,68 @@ describe('FilterPresetPanel', () => {
       expect(confirmDiv?.style.display).toBe('none');
       expect(deleteBtn?.style.display).toBe('');
     });
+
+    // Each step hides the button it was taken on, which would drop focus out
+    // of the panel, and with it the focus trap and Escape.
+    it('keeps focus in the panel through the confirmation', async () => {
+      manager.save('P', [rangeFilter()]);
+      panel.toggle(anchor);
+      // The panel takes focus a frame after it opens.
+      await new Promise((r) => requestAnimationFrame(r));
+
+      const deleteBtn = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-action-btn--delete"]') as HTMLButtonElement;
+      const confirmDiv = panel
+        .getElement()
+        .querySelector('[class$="filter-preset-delete-confirm"]') as HTMLElement;
+      const noBtn = confirmDiv.querySelectorAll('button')[1] as HTMLButtonElement;
+
+      deleteBtn.focus();
+      deleteBtn.click();
+      expect(document.activeElement).toBe(noBtn);
+
+      noBtn.click();
+      expect(document.activeElement).toBe(deleteBtn);
+    });
+
+    // Deleting rebuilds the list, and the focused Yes button with it; the
+    // panel stays open, and focus left on the page would put it out of reach
+    // of Escape.
+    it('keeps focus in the panel after a preset is deleted', async () => {
+      for (const name of ['P1', 'P2', 'P3']) manager.save(name, [rangeFilter()]);
+      panel.toggle(anchor);
+      await new Promise((r) => requestAnimationFrame(r));
+      const el = panel.getElement();
+      const deleteOf = (name: string): HTMLButtonElement => {
+        const item = Array.from(el.querySelectorAll('.dt-filter-preset-item')).find(
+          (i) => i.querySelector('.dt-filter-preset-item-name')?.textContent === name,
+        )!;
+        return item.querySelector<HTMLButtonElement>(
+          '.dt-filter-preset-item-actions > .dt-filter-preset-action-btn--delete',
+        )!;
+      };
+      const confirmDelete = (name: string): void => {
+        const deleteBtn = deleteOf(name);
+        deleteBtn.click();
+        const yesBtn = deleteBtn.parentElement!.querySelector<HTMLButtonElement>(
+          '.dt-filter-preset-delete-confirm button',
+        )!;
+        yesBtn.focus();
+        yesBtn.click();
+      };
+
+      // The next preset takes the deleted one's place.
+      confirmDelete('P2');
+      expect(document.activeElement).toBe(deleteOf('P3'));
+      // The last one: the one before it.
+      confirmDelete('P3');
+      expect(document.activeElement).toBe(deleteOf('P1'));
+      // The only one: the name field.
+      confirmDelete('P1');
+      expect(document.activeElement).toBe(el.querySelector('.dt-filter-input'));
+      expect(panel.getIsOpen()).toBe(true);
+    });
   });
 
   // ==========================================

@@ -441,7 +441,7 @@ statsPanelRegistry.register({
 const table = await createDataTable({ container, source: '/data.csv', statsPanelRegistry });
 ```
 
-The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:137-221` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
+The registry is empty by default — leaving a column type unregistered falls back to the library's built-in two-region rendering (line 1 = `formatStatsLine1` row counts, always visible; detail region = `formatStatsLine2` type summary or the viz's selection/hover text — semantics in [`docs/guides/visualizations.md#reading-the-column-stats`](./docs/guides/visualizations.md#reading-the-column-stats)), so opt-in is granular. Errors thrown inside `update` / `updateFilters` / `fetch` should route through `options.onError(err, { source: 'stats-panel', column, phase })`; the facade re-emits these on `table.on('error', …)` with `source: 'stats-panel'`. See `src/visualizations/BaseStatsPanel.ts:140-224` for the abstract contract and `examples/13-custom-stats-panel/main.ts:107-143` for the canonical `fetchSeq` stale-result pattern.
 
 ### (n) Standalone SQL editor — host-app embedded, schema-aware
 
@@ -549,7 +549,7 @@ All values source `src/DataTable.ts:136-345`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:391-398`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:401-408`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 

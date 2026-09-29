@@ -104,13 +104,9 @@ will not shrink below its content, which reproduces the unbounded case
 inside a container that looks correctly sized. Full detail and copy-
 pasteable CSS in [Sizing the container](../README.md#sizing-the-container).
 
-One consequence worth knowing: nothing in the library subscribes to the
-container's `ResizeObserver` to recompute the range, so the visible range
-is refreshed on scroll and on state changes rather than on resize alone. A
-container that changes height while the table sits idle can hold a stale
-range until the next interaction. Sizing the container before mount, and
-letting CSS resolve the height rather than assigning it imperatively
-afterwards, sidesteps this.
+The visible range is worked out again on scroll, on state changes, and
+whenever the body resizes, so a container whose height changes after mount
+gets the rows its new height shows without a scroll.
 
 ### DuckDB in WASM
 

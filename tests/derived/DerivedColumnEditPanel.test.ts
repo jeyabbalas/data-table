@@ -687,6 +687,50 @@ describe('DerivedColumnEditPanel', () => {
 
       panel.destroy();
     });
+
+    // Each step hides the button it was taken on, which would drop focus out
+    // of the panel, and with it the focus trap and Escape.
+    it('keeps focus in the panel through the confirmation', async () => {
+      const panel = createPanel();
+      panel.open('total', anchorEl);
+      // The panel takes focus a frame after it opens.
+      await new Promise((r) => requestAnimationFrame(r));
+      const el = panel.getElement();
+      const deleteBtn = el.querySelector<HTMLButtonElement>('.dt-derived-edit-delete')!;
+      const cancelBtn = el.querySelector<HTMLButtonElement>('.dt-derived-edit-delete-confirm-no')!;
+
+      deleteBtn.focus();
+      deleteBtn.click();
+      expect(document.activeElement).toBe(cancelBtn);
+
+      cancelBtn.click();
+      expect(document.activeElement).toBe(deleteBtn);
+
+      panel.destroy();
+    });
+
+    it('puts focus back on Delete when the delete fails', async () => {
+      const panel = createPanel();
+      panel.open('total', anchorEl);
+      await new Promise((r) => requestAnimationFrame(r));
+      vi.spyOn(actions, 'removeDerivedColumn').mockRejectedValue(new Error('boom'));
+      const el = panel.getElement();
+      const deleteBtn = el.querySelector<HTMLButtonElement>('.dt-derived-edit-delete')!;
+      const confirmBtn = el.querySelector<HTMLButtonElement>(
+        '.dt-derived-edit-delete-confirm-yes',
+      )!;
+
+      deleteBtn.click();
+      confirmBtn.focus();
+      confirmBtn.click();
+
+      await vi.waitFor(() => {
+        expect(deleteBtn.style.display).toBe('');
+      });
+      expect(document.activeElement).toBe(deleteBtn);
+
+      panel.destroy();
+    });
   });
 
   describe('Close handlers', () => {
